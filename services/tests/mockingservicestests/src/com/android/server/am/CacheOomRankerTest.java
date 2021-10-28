@@ -24,6 +24,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
+import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.content.ComponentName;
 import android.content.Context;
@@ -56,6 +57,9 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +70,7 @@ import java.util.concurrent.TimeUnit;
  * Build/Install/Run:
  * atest FrameworksMockingServicesTests:CacheOomRankerTest
  */
+@SuppressWarnings("GuardedBy") // No tests are concurrent, so no need to test locking.
 @RunWith(MockitoJUnitRunner.class)
 public class CacheOomRankerTest {
     private static final Instant NOW = LocalDate.of(2021, 1, 1).atStartOfDay(
@@ -90,6 +95,7 @@ public class CacheOomRankerTest {
     private int mNextUid = 30000;
     private int mNextPackageUid = 40000;
     private int mNextPackageName = 1;
+    private Map<Integer, Long> mPidToRss;
 
     private TestExecutor mExecutor = new TestExecutor();
     private CacheOomRanker mCacheOomRanker;
@@ -115,7 +121,15 @@ public class CacheOomRankerTest {
         LocalServices.removeServiceForTest(PackageManagerInternal.class);
         LocalServices.addService(PackageManagerInternal.class, mPackageManagerInt);
 
-        mCacheOomRanker = new CacheOomRanker(mAms);
+        mPidToRss = new HashMap<>();
+        mCacheOomRanker = new CacheOomRanker(
+                mAms,
+                pid -> {
+                    Long rss = mPidToRss.get(pid);
+                    assertThat(rss).isNotNull();
+                    return new long[]{rss};
+                }
+        );
         mCacheOomRanker.init(mExecutor);
     }
 
@@ -183,6 +197,8 @@ public class CacheOomRankerTest {
     public void reRankLruCachedApps_lruImpactsOrdering() throws InterruptedException {
         setConfig(/* numberToReRank= */ 5,
                 /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 0.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */1.0f);
@@ -222,6 +238,8 @@ public class CacheOomRankerTest {
     public void reRankLruCachedApps_rssImpactsOrdering() throws InterruptedException {
         setConfig(/* numberToReRank= */ 6,
                 /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 0.0f,
                 /* pssWeight= */ 1.0f,
                 /* lruWeight= */ 0.0f);
@@ -260,9 +278,128 @@ public class CacheOomRankerTest {
     }
 
     @Test
+    public void reRankLruCachedApps_rssImpactsOrdering_cachedRssValues()
+            throws InterruptedException {
+        setConfig(/* numberToReRank= */ 6,
+                /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 10000000,
+                /* usesWeight= */ 0.0f,
+                /* pssWeight= */ 1.0f,
+                /* lruWeight= */ 0.0f);
+
+        ProcessList list = new ProcessList();
+        ArrayList<ProcessRecord> processList = list.getLruProcessesLSP();
+        ProcessRecord rss10k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(40, ChronoUnit.MINUTES).toEpochMilli(), 10 * 1024L, 1000);
+        processList.add(rss10k);
+        ProcessRecord rss20k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(42, ChronoUnit.MINUTES).toEpochMilli(), 20 * 1024L, 2000);
+        processList.add(rss20k);
+        ProcessRecord rss1k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(60, ChronoUnit.MINUTES).toEpochMilli(), 1024L, 10000);
+        processList.add(rss1k);
+        ProcessRecord rss100k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(15, ChronoUnit.MINUTES).toEpochMilli(), 100 * 1024L, 10);
+        processList.add(rss100k);
+        ProcessRecord rss2k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(17, ChronoUnit.MINUTES).toEpochMilli(), 2 * 1024L, 20);
+        processList.add(rss2k);
+        ProcessRecord rss15k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(30, ChronoUnit.MINUTES).toEpochMilli(), 15 * 1024L, 20);
+        processList.add(rss15k);
+        // Only re-ranking 6 entries so this should stay in most recent position.
+        ProcessRecord rss16k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(30, ChronoUnit.MINUTES).toEpochMilli(), 16 * 1024L, 20);
+        processList.add(rss16k);
+        list.setLruProcessServiceStartLSP(processList.size());
+
+        mCacheOomRanker.reRankLruCachedAppsLSP(processList, list.getLruProcessServiceStartLOSP());
+        // First 6 ordered by largest pss, then last processes position unchanged.
+        assertThat(processList).containsExactly(rss100k, rss20k, rss15k, rss10k, rss2k, rss1k,
+                rss16k).inOrder();
+
+        // Clear mPidToRss so that Process.getRss calls fail.
+        mPidToRss.clear();
+        // Mix up the process list to ensure that CacheOomRanker actually re-ranks.
+        Collections.swap(processList, 0, 1);
+
+        mCacheOomRanker.reRankLruCachedAppsLSP(processList, list.getLruProcessServiceStartLOSP());
+        // Re ranking is the same.
+        assertThat(processList).containsExactly(rss100k, rss20k, rss15k, rss10k, rss2k, rss1k,
+                rss16k).inOrder();
+    }
+
+    @Test
+    public void reRankLruCachedApps_rssImpactsOrdering_profileRss()
+            throws InterruptedException {
+        setConfig(/* numberToReRank= */ 6,
+                /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ false,
+                /* rssUpdateRateMs= */ 10000000,
+                /* usesWeight= */ 0.0f,
+                /* pssWeight= */ 1.0f,
+                /* lruWeight= */ 0.0f);
+
+        ProcessList list = new ProcessList();
+        ArrayList<ProcessRecord> processList = list.getLruProcessesLSP();
+        ProcessRecord rss10k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(40, ChronoUnit.MINUTES).toEpochMilli(), 0L, 1000);
+        rss10k.mProfile.setLastRss(10 * 1024L);
+        processList.add(rss10k);
+        ProcessRecord rss20k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(42, ChronoUnit.MINUTES).toEpochMilli(), 0L, 2000);
+        rss20k.mProfile.setLastRss(20 * 1024L);
+        processList.add(rss20k);
+        ProcessRecord rss1k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(60, ChronoUnit.MINUTES).toEpochMilli(), 0L, 10000);
+        rss1k.mProfile.setLastRss(1024L);
+        processList.add(rss1k);
+        ProcessRecord rss100k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(15, ChronoUnit.MINUTES).toEpochMilli(), 0L, 10);
+        rss100k.mProfile.setLastRss(100 * 1024L);
+        processList.add(rss100k);
+        ProcessRecord rss2k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(17, ChronoUnit.MINUTES).toEpochMilli(), 0L, 20);
+        rss2k.mProfile.setLastRss(2 * 1024L);
+        processList.add(rss2k);
+        ProcessRecord rss15k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(30, ChronoUnit.MINUTES).toEpochMilli(), 15 * 1024L, 20);
+        rss15k.mProfile.setLastRss(15 * 1024L);
+        processList.add(rss15k);
+        // Only re-ranking 6 entries so this should stay in most recent position.
+        ProcessRecord rss16k = nextProcessRecord(ProcessList.UNKNOWN_ADJ,
+                NOW.minus(30, ChronoUnit.MINUTES).toEpochMilli(), 16 * 1024L, 20);
+        rss16k.mProfile.setLastRss(16 * 1024L);
+        processList.add(rss16k);
+        list.setLruProcessServiceStartLSP(processList.size());
+
+        // This should not be used, as RSS values are taken from mProfile.
+        mPidToRss.clear();
+
+        mCacheOomRanker.reRankLruCachedAppsLSP(processList, list.getLruProcessServiceStartLOSP());
+        // First 6 ordered by largest pss, then last processes position unchanged.
+        assertThat(processList).containsExactly(rss100k, rss20k, rss15k, rss10k, rss2k, rss1k,
+                rss16k).inOrder();
+
+        // Clear mPidToRss so that Process.getRss calls fail.
+        mPidToRss.clear();
+        // Mix up the process list to ensure that CacheOomRanker actually re-ranks.
+        Collections.swap(processList, 0, 1);
+
+        mCacheOomRanker.reRankLruCachedAppsLSP(processList, list.getLruProcessServiceStartLOSP());
+        // Re ranking is the same.
+        assertThat(processList).containsExactly(rss100k, rss20k, rss15k, rss10k, rss2k, rss1k,
+                rss16k).inOrder();
+    }
+
+
+    @Test
     public void reRankLruCachedApps_usesImpactsOrdering() throws InterruptedException {
         setConfig(/* numberToReRank= */ 4,
                 /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 1.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */ 0.0f);
@@ -301,6 +438,8 @@ public class CacheOomRankerTest {
     public void reRankLruCachedApps_fewProcesses() throws InterruptedException {
         setConfig(/* numberToReRank= */ 4,
                 /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 1.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */ 0.0f);
@@ -338,6 +477,8 @@ public class CacheOomRankerTest {
     public void reRankLruCachedApps_fewNonServiceProcesses() throws InterruptedException {
         setConfig(/* numberToReRank= */ 4,
                 /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 1.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */ 0.0f);
@@ -375,6 +516,8 @@ public class CacheOomRankerTest {
     public void reRankLruCachedApps_manyProcessesThenFew() throws InterruptedException {
         setConfig(/* numberToReRank= */ 6,
                 /* preserveTopNApps= */ 0,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 1.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */ 0.0f);
@@ -438,6 +581,8 @@ public class CacheOomRankerTest {
     public void reRankLruCachedApps_preservesTopNApps() throws InterruptedException {
         setConfig(/* numberToReRank= */ 6,
                 /* preserveTopNApps= */ 3,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 1.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */ 0.0f);
@@ -477,6 +622,8 @@ public class CacheOomRankerTest {
             throws InterruptedException {
         setConfig(/* numberToReRank= */ 6,
                 /* preserveTopNApps= */ 100,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 1.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */ 0.0f);
@@ -515,6 +662,8 @@ public class CacheOomRankerTest {
             throws InterruptedException {
         setConfig(/* numberToReRank= */ 6,
                 /* preserveTopNApps= */ -100,
+                /* useFrequentRss= */ true,
+                /* rssUpdateRateMs= */ 0,
                 /* usesWeight= */ 1.0f,
                 /* pssWeight= */ 0.0f,
                 /* lruWeight= */ 0.0f);
@@ -549,8 +698,8 @@ public class CacheOomRankerTest {
                 used200).inOrder();
     }
 
-    private void setConfig(int numberToReRank, int preserveTopNApps, float usesWeight,
-            float pssWeight, float lruWeight)
+    private void setConfig(int numberToReRank, int preserveTopNApps, boolean useFrequentRss,
+            long rssUpdateRateMs, float usesWeight, float pssWeight, float lruWeight)
             throws InterruptedException {
         mExecutor.init(4);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
@@ -560,6 +709,14 @@ public class CacheOomRankerTest {
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 CacheOomRanker.KEY_OOM_RE_RANKING_PRESERVE_TOP_N_APPS,
                 Integer.toString(preserveTopNApps),
+                false);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CacheOomRanker.KEY_OOM_RE_RANKING_USE_FREQUENT_RSS,
+                Boolean.toString(useFrequentRss),
+                false);
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                CacheOomRanker.KEY_OOM_RE_RANKING_RSS_UPDATE_RATE_MS,
+                Long.toString(rssUpdateRateMs),
                 false);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 CacheOomRanker.KEY_OOM_RE_RANKING_LRU_WEIGHT,
@@ -575,13 +732,15 @@ public class CacheOomRankerTest {
                 false);
         mExecutor.waitForLatch();
         assertThat(mCacheOomRanker.getNumberToReRank()).isEqualTo(numberToReRank);
+        assertThat(mCacheOomRanker.mUseFrequentRss).isEqualTo(useFrequentRss);
+        assertThat(mCacheOomRanker.mRssUpdateRateMs).isEqualTo(rssUpdateRateMs);
         assertThat(mCacheOomRanker.mRssWeight).isEqualTo(pssWeight);
         assertThat(mCacheOomRanker.mUsesWeight).isEqualTo(usesWeight);
         assertThat(mCacheOomRanker.mLruWeight).isEqualTo(lruWeight);
     }
 
     private ProcessRecord nextProcessRecord(int setAdj, long lastActivityTime, long lastRss,
-            int returnedToCacheCount) {
+            int wentToForegroundCount) {
         ApplicationInfo ai = new ApplicationInfo();
         ai.packageName = "a.package.name" + mNextPackageName++;
         ProcessRecord app = new ProcessRecord(mAms, ai, ai.packageName + ":process", mNextUid++);
@@ -591,11 +750,11 @@ public class CacheOomRankerTest {
         app.mState.setSetProcState(PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
         app.mState.setCurAdj(setAdj);
         app.setLastActivityTime(lastActivityTime);
-        app.mProfile.setLastRss(lastRss);
+        mPidToRss.put(app.getPid(), lastRss);
         app.mState.setCached(false);
-        for (int i = 0; i < returnedToCacheCount; ++i) {
-            app.mState.setCached(false);
-            app.mState.setCached(true);
+        for (int i = 0; i < wentToForegroundCount; ++i) {
+            app.mState.setSetProcState(ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+            app.mState.setSetProcState(ActivityManager.PROCESS_STATE_CACHED_RECENT);
         }
         // Sets the thread returned by ProcessRecord#getThread, which we use to check whether the
         // app is currently launching.

@@ -30,6 +30,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -40,8 +41,10 @@ import static org.mockito.Mockito.timeout;
 
 import android.app.WaitResult;
 import android.content.ComponentName;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.os.ConditionVariable;
+import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.view.Display;
 
@@ -49,6 +52,7 @@ import androidx.test.filters.MediumTest;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentMatchers;
 
 import java.util.concurrent.TimeUnit;
 
@@ -108,16 +112,18 @@ public class ActivityTaskSupervisorTests extends WindowTestsBase {
         final ActivityMetricsLogger.LaunchingState launchingState =
                 new ActivityMetricsLogger.LaunchingState();
         spyOn(launchingState);
-        doReturn(true).when(launchingState).contains(eq(secondActivity));
+        doReturn(true).when(launchingState).hasActiveTransitionInfo();
+        doReturn(true).when(launchingState).contains(
+                ArgumentMatchers.argThat(r -> r == firstActivity || r == secondActivity));
         // The test case already runs inside global lock, so above thread can only execute after
         // this waiting method that releases the lock.
         mSupervisor.waitActivityVisibleOrLaunched(taskToFrontWait, firstActivity, launchingState);
 
         // Assert that the thread is finished.
         assertTrue(condition.block(TIMEOUT_MS));
-        assertEquals(taskToFrontWait.result, START_TASK_TO_FRONT);
-        assertEquals(taskToFrontWait.who, secondActivity.mActivityComponent);
-        assertEquals(taskToFrontWait.launchState, WaitResult.LAUNCH_STATE_HOT);
+        assertEquals(START_TASK_TO_FRONT, taskToFrontWait.result);
+        assertEquals(secondActivity.mActivityComponent, taskToFrontWait.who);
+        assertEquals(WaitResult.LAUNCH_STATE_HOT, taskToFrontWait.launchState);
         // START_TASK_TO_FRONT means that another component will be visible, so the component
         // should not be assigned as the first activity.
         assertNull(launchedComponent[0]);
@@ -185,6 +191,24 @@ public class ActivityTaskSupervisorTests extends WindowTestsBase {
         verify(taskChangeNotifier, never()).notifyActivityForcedResizable(anyInt() /* taskId */,
                 anyInt() /* reason */, anyString() /* packageName */);
         verify(taskChangeNotifier, never()).notifyActivityDismissingDockedRootTask();
+    }
+
+    /** Ensures that the calling package name passed to client complies with package visibility. */
+    @Test
+    public void testFilteredReferred() {
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setLaunchedFromPackage("other.package").setCreateTask(true).build();
+        assertNotNull(activity.launchedFromPackage);
+        try {
+            mSupervisor.realStartActivityLocked(activity, activity.app, false /* andResume */,
+                    false /* checkConfig */);
+        } catch (RemoteException ignored) {
+        }
+        verify(activity).getFilteredReferrer(eq(activity.launchedFromPackage));
+
+        activity.deliverNewIntentLocked(ActivityBuilder.DEFAULT_FAKE_UID,
+                new Intent(), null /* intentGrants */, "other.package2");
+        verify(activity).getFilteredReferrer(eq("other.package2"));
     }
 
     /**

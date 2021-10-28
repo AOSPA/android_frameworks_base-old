@@ -111,6 +111,20 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
      */
     private boolean mTransitioningToFullShade;
 
+    /**
+     * Is there currently an unocclusion animation running. Used to avoid bright flickers
+     * of the notification scrim.
+     */
+    private boolean mUnOcclusionAnimationRunning;
+
+    /**
+     * Set whether an unocclusion animation is currently running on the notification panel. Used
+     * to avoid bright flickers of the notification scrim.
+     */
+    public void setUnocclusionAnimationRunning(boolean unocclusionAnimationRunning) {
+        mUnOcclusionAnimationRunning = unocclusionAnimationRunning;
+    }
+
     @IntDef(prefix = {"VISIBILITY_"}, value = {
             TRANSPARENT,
             SEMI_TRANSPARENT,
@@ -388,7 +402,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         if (mKeyguardUpdateMonitor.needsSlowUnlockTransition() && mState == ScrimState.UNLOCKED) {
             mAnimationDelay = StatusBar.FADE_KEYGUARD_START_DELAY;
             scheduleUpdate();
-        } else if ((oldState == ScrimState.AOD  // leaving doze
+        } else if (((oldState == ScrimState.AOD || oldState == ScrimState.PULSING)  // leaving doze
                 && (!mDozeParameters.getAlwaysOn() || mState == ScrimState.UNLOCKED))
                 || (mState == ScrimState.AOD && !mDozeParameters.getDisplayNeedsBlanking())) {
             // Scheduling a frame isn't enough when:
@@ -436,6 +450,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
 
     public void onExpandingFinished() {
         mTracking = false;
+        setUnocclusionAnimationRunning(false);
     }
 
     @VisibleForTesting
@@ -541,6 +556,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         if (isNaN(expansionFraction)) {
             return;
         }
+        expansionFraction = Interpolators
+                .getNotificationScrimAlpha(expansionFraction, false /* notification */);
         boolean qsBottomVisible = qsPanelBottomY > 0;
         if (mQsExpansion != expansionFraction || mQsBottomVisible != qsBottomVisible) {
             mQsExpansion = expansionFraction;
@@ -671,6 +688,18 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                 }
                 mNotificationsTint = mState.getNotifTint();
                 mBehindTint = behindTint;
+            }
+
+            // At the end of a launch animation over the lockscreen, the state is either KEYGUARD or
+            // SHADE_LOCKED and this code is called. We have to set the notification alpha to 0
+            // otherwise there is a flicker to its previous value.
+            if (mKeyguardOccluded) {
+                mNotificationsAlpha = 0;
+            }
+            if (mUnOcclusionAnimationRunning && mState == ScrimState.KEYGUARD) {
+                // We're unoccluding the keyguard and don't want to have a bright flash.
+                mNotificationsAlpha = KEYGUARD_SCRIM_ALPHA;
+                mNotificationsTint = ScrimState.KEYGUARD.getNotifTint();
             }
         }
 
@@ -1201,6 +1230,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         pw.println(mDefaultScrimAlpha);
         pw.print("  mExpansionFraction=");
         pw.println(mPanelExpansion);
+        pw.print("  mExpansionAffectsAlpha=");
+        pw.println(mExpansionAffectsAlpha);
 
         pw.print("  mState.getMaxLightRevealScrimAlpha=");
         pw.println(mState.getMaxLightRevealScrimAlpha());

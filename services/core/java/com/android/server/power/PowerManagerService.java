@@ -31,6 +31,8 @@ import static android.os.PowerManagerInternal.WAKEFULNESS_DOZING;
 import static android.os.PowerManagerInternal.WAKEFULNESS_DREAMING;
 import static android.os.PowerManagerInternal.wakefulnessToString;
 
+import static com.android.internal.util.LatencyTracker.ACTION_TURN_ON_SCREEN;
+
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -104,6 +106,7 @@ import com.android.internal.display.BrightnessSynchronizer;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.LatencyTracker;
 import com.android.internal.util.Preconditions;
 import com.android.server.EventLogTags;
 import com.android.server.LockGuard;
@@ -129,6 +132,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 
 /**
@@ -1506,7 +1510,11 @@ public final class PowerManagerService extends SystemService
                 mRequestWaitForNegativeProximity = true;
             }
 
-            wakeLock.mLock.unlinkToDeath(wakeLock, 0);
+            try {
+                wakeLock.mLock.unlinkToDeath(wakeLock, 0);
+            } catch (NoSuchElementException e) {
+                Slog.wtf(TAG, "Failed to unlink wakelock", e);
+            }
             removeWakeLockLocked(wakeLock, index);
         }
     }
@@ -1844,6 +1852,9 @@ public final class PowerManagerService extends SystemService
                     + ", details=" + details
                     + ")...");
             Trace.asyncTraceBegin(Trace.TRACE_TAG_POWER, TRACE_SCREEN_ON, groupId);
+            // The instrument will be timed out automatically after 2 seconds.
+            LatencyTracker.getInstance(mContext)
+                    .onActionStart(ACTION_TURN_ON_SCREEN, String.valueOf(groupId));
 
             setWakefulnessLocked(groupId, WAKEFULNESS_AWAKE, eventTime, uid, reason, opUid,
                     opPackageName, details);
@@ -3227,6 +3238,7 @@ public final class PowerManagerService extends SystemService
                         && mDisplayGroupPowerStateMapper.getWakefulnessLocked(
                         groupId) == WAKEFULNESS_AWAKE) {
                     mDisplayGroupPowerStateMapper.setPoweringOnLocked(groupId, false);
+                    LatencyTracker.getInstance(mContext).onActionEnd(ACTION_TURN_ON_SCREEN);
                     Trace.asyncTraceEnd(Trace.TRACE_TAG_POWER, TRACE_SCREEN_ON, groupId);
                     final int latencyMs = (int) (mClock.uptimeMillis()
                             - mDisplayGroupPowerStateMapper.getLastPowerOnTimeLocked(groupId));
@@ -4107,7 +4119,10 @@ public final class PowerManagerService extends SystemService
         if (sQuiescent) {
             // Pass the optional "quiescent" argument to the bootloader to let it know
             // that it should not turn the screen/lights on.
-            reason = reason + ",quiescent";
+            if (reason != ""){
+                reason += ",";
+            }
+            reason = reason + "quiescent";
         }
 
         SystemProperties.set("sys.powerctl", "reboot," + reason);

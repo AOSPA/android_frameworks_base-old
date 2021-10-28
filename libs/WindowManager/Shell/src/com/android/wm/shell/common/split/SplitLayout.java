@@ -23,6 +23,7 @@ import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.DOCKED_LEFT;
 import static android.view.WindowManager.DOCKED_RIGHT;
 import static android.view.WindowManager.DOCKED_TOP;
+import static android.view.WindowManagerPolicyConstants.SPLIT_DIVIDER_LAYER;
 
 import static com.android.internal.policy.DividerSnapAlgorithm.SnapTarget.FLAG_DISMISS_END;
 import static com.android.internal.policy.DividerSnapAlgorithm.SnapTarget.FLAG_DISMISS_START;
@@ -39,6 +40,8 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.view.InsetsSourceControl;
+import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -49,15 +52,17 @@ import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.DividerSnapAlgorithm;
+import com.android.internal.policy.DockedDividerUtils;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.animation.Interpolators;
 import com.android.wm.shell.common.DisplayImeController;
+import com.android.wm.shell.common.DisplayInsetsController;
 
 /**
  * Records and handles layout of splits. Helps to calculate proper bounds when configuration or
  * divide position changes.
  */
-public final class SplitLayout {
+public final class SplitLayout implements DisplayInsetsController.OnInsetsChangedListener {
     /**
      * Split position isn't specified normally meaning to use what ever it is currently set to.
      */
@@ -92,15 +97,20 @@ public final class SplitLayout {
     private final Rect mDividerBounds = new Rect();
     private final Rect mBounds1 = new Rect();
     private final Rect mBounds2 = new Rect();
+    private final Rect mWinBounds1 = new Rect();
+    private final Rect mWinBounds2 = new Rect();
     private final SplitLayoutHandler mSplitLayoutHandler;
     private final SplitWindowManager mSplitWindowManager;
     private final DisplayImeController mDisplayImeController;
     private final ImePositionProcessor mImePositionProcessor;
     private final DismissingParallaxPolicy mDismissingParallaxPolicy;
     private final ShellTaskOrganizer mTaskOrganizer;
+    private final InsetsState mInsetsState = new InsetsState();
 
     private Context mContext;
     private DividerSnapAlgorithm mDividerSnapAlgorithm;
+    private WindowContainerToken mWinToken1;
+    private WindowContainerToken mWinToken2;
     private int mDividePosition;
     private boolean mInitialized = false;
     private int mOrientation;
@@ -115,8 +125,8 @@ public final class SplitLayout {
         mRotation = configuration.windowConfiguration.getRotation();
         mSplitLayoutHandler = splitLayoutHandler;
         mDisplayImeController = displayImeController;
-        mSplitWindowManager = new SplitWindowManager(
-                windowName, mContext, configuration, parentContainerCallbacks);
+        mSplitWindowManager = new SplitWindowManager(windowName, mContext, configuration,
+                parentContainerCallbacks);
         mTaskOrganizer = taskOrganizer;
         mImePositionProcessor = new ImePositionProcessor(mContext.getDisplayId());
         mDismissingParallaxPolicy = new DismissingParallaxPolicy();
@@ -158,38 +168,62 @@ public final class SplitLayout {
         return mDividePosition;
     }
 
+    /**
+     * Returns the divider position as a fraction from 0 to 1.
+     */
+    public float getDividerPositionAsFraction() {
+        return Math.min(1f, Math.max(0f, isLandscape()
+                ? (float) ((mBounds1.right + mBounds2.left) / 2f) / mBounds2.right
+                : (float) ((mBounds1.bottom + mBounds2.top) / 2f) / mBounds2.bottom));
+    }
+
     /** Applies new configuration, returns {@code false} if there's no effect to the layout. */
     public boolean updateConfiguration(Configuration configuration) {
         boolean affectsLayout = false;
 
-        // Make sure to render the divider bar with proper resources that matching the screen
-        // orientation.
-        final int orientation = configuration.orientation;
-        if (orientation != mOrientation) {
-            mOrientation = orientation;
-            mContext = mContext.createConfigurationContext(configuration);
-            mSplitWindowManager.setConfiguration(configuration);
-            affectsLayout = true;
-        }
-
         // Update the split bounds when necessary. Besides root bounds changed, split bounds need to
         // be updated when the rotation changed to cover the case that users rotated the screen 180
         // degrees.
+        // Make sure to render the divider bar with proper resources that matching the screen
+        // orientation.
         final int rotation = configuration.windowConfiguration.getRotation();
         final Rect rootBounds = configuration.windowConfiguration.getBounds();
-        if (rotation != mRotation || !mRootBounds.equals(rootBounds)) {
-            mRootBounds.set(rootBounds);
-            mDividerSnapAlgorithm = getSnapAlgorithm(mContext, mRootBounds);
-            resetDividerPosition();
-            affectsLayout = true;
+        final int orientation = configuration.orientation;
+
+        if (mOrientation == orientation
+                && rotation == mRotation
+                && mRootBounds.equals(rootBounds)) {
+            return false;
         }
+
+        mContext = mContext.createConfigurationContext(configuration);
+        mSplitWindowManager.setConfiguration(configuration);
+        mOrientation = orientation;
+        mTempRect.set(mRootBounds);
+        mRootBounds.set(rootBounds);
+        mRotation = rotation;
+        mDividerSnapAlgorithm = getSnapAlgorithm(mContext, mRootBounds);
+        initDividerPosition(mTempRect);
 
         if (mInitialized) {
             release();
             init();
         }
 
-        return affectsLayout;
+        return true;
+    }
+
+    private void initDividerPosition(Rect oldBounds) {
+        final float snapRatio = (float) mDividePosition
+                / (float) (isLandscape(oldBounds) ? oldBounds.width() : oldBounds.height());
+        // Estimate position by previous ratio.
+        final float length =
+                (float) (isLandscape() ? mRootBounds.width() : mRootBounds.height());
+        final int estimatePosition = (int) (length * snapRatio);
+        // Init divider position by estimated position using current bounds snap algorithm.
+        mDividePosition = mDividerSnapAlgorithm.calculateNonDismissingSnapTarget(
+                estimatePosition).position;
+        updateBounds(mDividePosition);
     }
 
     /** Updates recording bounds of divider window and both of the splits. */
@@ -211,6 +245,8 @@ public final class SplitLayout {
             mBounds1.bottom = position;
             mBounds2.top = mBounds1.bottom + mDividerSize;
         }
+        DockedDividerUtils.sanitizeStackBounds(mBounds1, true /** topLeft */);
+        DockedDividerUtils.sanitizeStackBounds(mBounds2, false /** topLeft */);
         mDismissingParallaxPolicy.applyDividerPosition(position, isLandscape);
     }
 
@@ -218,7 +254,7 @@ public final class SplitLayout {
     public void init() {
         if (mInitialized) return;
         mInitialized = true;
-        mSplitWindowManager.init(this);
+        mSplitWindowManager.init(this, mInsetsState);
         mDisplayImeController.addPositionProcessor(mImePositionProcessor);
     }
 
@@ -229,6 +265,23 @@ public final class SplitLayout {
         mSplitWindowManager.release();
         mDisplayImeController.removePositionProcessor(mImePositionProcessor);
         mImePositionProcessor.reset();
+    }
+
+    @Override
+    public void insetsChanged(InsetsState insetsState) {
+        mInsetsState.set(insetsState);
+        if (!mInitialized) {
+            return;
+        }
+        mSplitWindowManager.onInsetsChanged(insetsState);
+    }
+
+    @Override
+    public void insetsControlChanged(InsetsState insetsState,
+            InsetsSourceControl[] activeControls) {
+        if (!mInsetsState.equals(insetsState)) {
+            insetsChanged(insetsState);
+        }
     }
 
     /**
@@ -253,6 +306,10 @@ public final class SplitLayout {
         mDividePosition = mDividerSnapAlgorithm.getMiddleTarget().position;
         mSplitWindowManager.setResizingSplits(false);
         updateBounds(mDividePosition);
+        mWinToken1 = null;
+        mWinToken2 = null;
+        mWinBounds1.setEmpty();
+        mWinBounds2.setEmpty();
     }
 
     /**
@@ -342,6 +399,13 @@ public final class SplitLayout {
         return bounds.width() > bounds.height();
     }
 
+    /**
+     * Return if this layout is landscape.
+     */
+    public boolean isLandscape() {
+        return isLandscape(mRootBounds);
+    }
+
     /** Apply recorded surface layout to the {@link SurfaceControl.Transaction}. */
     public void applySurfaceChanges(SurfaceControl.Transaction t, SurfaceControl leash1,
             SurfaceControl leash2, SurfaceControl dimLayer1, SurfaceControl dimLayer2) {
@@ -349,7 +413,7 @@ public final class SplitLayout {
         if (dividerLeash != null) {
             t.setPosition(dividerLeash, mDividerBounds.left, mDividerBounds.top);
             // Resets layer of divider bar to make sure it is always on top.
-            t.setLayer(dividerLeash, Integer.MAX_VALUE);
+            t.setLayer(dividerLeash, SPLIT_DIVIDER_LAYER);
         }
         t.setPosition(leash1, mBounds1.left, mBounds1.top)
                 .setWindowCrop(leash1, mBounds1.width(), mBounds1.height());
@@ -371,8 +435,16 @@ public final class SplitLayout {
             return;
         }
 
-        wct.setBounds(task1.token, mBounds1)
-                .setBounds(task2.token, mBounds2);
+        if (!mBounds1.equals(mWinBounds1) || !task1.token.equals(mWinToken1)) {
+            wct.setBounds(task1.token, mBounds1);
+            mWinBounds1.set(mBounds1);
+            mWinToken1 = task1.token;
+        }
+        if (!mBounds2.equals(mWinBounds2) || !task2.token.equals(mWinToken2)) {
+            wct.setBounds(task2.token, mBounds2);
+            mWinBounds2.set(mBounds2);
+            mWinToken2 = task2.token;
+        }
     }
 
     /**
@@ -460,7 +532,7 @@ public final class SplitLayout {
         /**
          * Applies a parallax to the task to hint dismissing progress.
          *
-         * @param position the split position to apply dismissing parallax effect
+         * @param position    the split position to apply dismissing parallax effect
          * @param isLandscape indicates whether it's splitting horizontally or vertically
          */
         void applyDividerPosition(int position, boolean isLandscape) {
@@ -472,11 +544,11 @@ public final class SplitLayout {
             if (position <= mDividerSnapAlgorithm.getFirstSplitTarget().position) {
                 mDismissingSide = isLandscape ? DOCKED_LEFT : DOCKED_TOP;
                 totalDismissingDistance = mDividerSnapAlgorithm.getDismissStartTarget().position
-                                - mDividerSnapAlgorithm.getFirstSplitTarget().position;
+                        - mDividerSnapAlgorithm.getFirstSplitTarget().position;
             } else if (position >= mDividerSnapAlgorithm.getLastSplitTarget().position) {
                 mDismissingSide = isLandscape ? DOCKED_RIGHT : DOCKED_BOTTOM;
                 totalDismissingDistance = mDividerSnapAlgorithm.getLastSplitTarget().position
-                                - mDividerSnapAlgorithm.getDismissEndTarget().position;
+                        - mDividerSnapAlgorithm.getDismissEndTarget().position;
             }
 
             if (mDismissingSide != DOCKED_INVALID) {
@@ -708,26 +780,31 @@ public final class SplitLayout {
         boolean adjustSurfaceLayoutForIme(SurfaceControl.Transaction t,
                 SurfaceControl dividerLeash, SurfaceControl leash1, SurfaceControl leash2,
                 SurfaceControl dimLayer1, SurfaceControl dimLayer2) {
-            if (mYOffsetForIme == 0) return false;
+            final boolean showDim = mDimValue1 > 0.001f || mDimValue2 > 0.001f;
+            boolean adjusted = false;
+            if (mYOffsetForIme != 0) {
+                if (dividerLeash != null) {
+                    mTempRect.set(mDividerBounds);
+                    mTempRect.offset(0, mYOffsetForIme);
+                    t.setPosition(dividerLeash, mTempRect.left, mTempRect.top);
+                }
 
-            if (dividerLeash != null) {
-                mTempRect.set(mDividerBounds);
+                mTempRect.set(mBounds1);
                 mTempRect.offset(0, mYOffsetForIme);
-                t.setPosition(dividerLeash, mTempRect.left, mTempRect.top);
+                t.setPosition(leash1, mTempRect.left, mTempRect.top);
+
+                mTempRect.set(mBounds2);
+                mTempRect.offset(0, mYOffsetForIme);
+                t.setPosition(leash2, mTempRect.left, mTempRect.top);
+                adjusted = true;
             }
 
-            mTempRect.set(mBounds1);
-            mTempRect.offset(0, mYOffsetForIme);
-            t.setPosition(leash1, mTempRect.left, mTempRect.top);
-
-            mTempRect.set(mBounds2);
-            mTempRect.offset(0, mYOffsetForIme);
-            t.setPosition(leash2, mTempRect.left, mTempRect.top);
-
-            t.setAlpha(dimLayer1, mDimValue1).setVisibility(dimLayer1, mDimValue1 > 0.001f);
-            t.setAlpha(dimLayer2, mDimValue2).setVisibility(dimLayer2, mDimValue2 > 0.001f);
-
-            return true;
+            if (showDim) {
+                t.setAlpha(dimLayer1, mDimValue1).setVisibility(dimLayer1, mDimValue1 > 0.001f);
+                t.setAlpha(dimLayer2, mDimValue2).setVisibility(dimLayer2, mDimValue2 > 0.001f);
+                adjusted = true;
+            }
+            return adjusted;
         }
     }
 }

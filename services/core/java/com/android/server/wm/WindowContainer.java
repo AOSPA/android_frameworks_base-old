@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
@@ -30,6 +31,11 @@ import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.SurfaceControl.Transaction;
 import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
+import static android.view.WindowManager.TRANSIT_CHANGE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_TO_BACK;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_TO_FRONT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
@@ -51,6 +57,7 @@ import static com.android.server.wm.WindowContainerProto.CONFIGURATION_CONTAINER
 import static com.android.server.wm.WindowContainerProto.IDENTIFIER;
 import static com.android.server.wm.WindowContainerProto.ORIENTATION;
 import static com.android.server.wm.WindowContainerProto.SURFACE_ANIMATOR;
+import static com.android.server.wm.WindowContainerProto.SURFACE_CONTROL;
 import static com.android.server.wm.WindowContainerProto.VISIBLE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -59,10 +66,13 @@ import static com.android.server.wm.WindowManagerService.logWithStack;
 import static com.android.server.wm.WindowStateAnimator.ROOT_TASK_CLIP_AFTER_ANIM;
 
 import android.annotation.CallSuper;
+import android.annotation.ColorInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityThread;
 import android.app.WindowConfiguration;
+import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
@@ -88,6 +98,7 @@ import android.view.animation.Animation;
 import android.window.IWindowContainerToken;
 import android.window.WindowContainerToken;
 
+import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ToBooleanFunction;
@@ -187,10 +198,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * Applied as part of the animation pass in "prepareSurfaces".
      */
     protected final SurfaceAnimator mSurfaceAnimator;
-    private boolean mAnyParentAnimating;
 
     final SurfaceFreezer mSurfaceFreezer;
     protected final WindowManagerService mWmService;
+    final TransitionController mTransitionController;
 
     /**
      * Sources which triggered a surface animation on this container. An animation target can be
@@ -321,6 +332,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
+        mTransitionController = mWmService.mAtmService.getTransitionController();
         mPendingTransaction = wms.mTransactionFactory.get();
         mSyncTransaction = wms.mTransactionFactory.get();
         mSurfaceAnimator = new SurfaceAnimator(this, this::onAnimationFinished, wms);
@@ -352,6 +364,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void reparent(WindowContainer newParent, int position) {
         if (newParent == null) {
             throw new IllegalArgumentException("reparent: can't reparent to null " + this);
+        }
+
+        if (newParent == this) {
+            throw new IllegalArgumentException("Can not reparent to itself " + this);
         }
 
         final WindowContainer oldParent = mParent;
@@ -850,6 +866,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return parent != null ? parent.getRootDisplayArea() : null;
     }
 
+    @Nullable
+    TaskDisplayArea getTaskDisplayArea() {
+        WindowContainer parent = getParent();
+        return parent != null ? parent.getTaskDisplayArea() : null;
+    }
+
     boolean isAttached() {
         WindowContainer parent = getParent();
         return parent != null && parent.isAttached();
@@ -985,6 +1007,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     boolean isChangingAppTransition() {
         return mDisplayContent != null && mDisplayContent.mChangingContainers.contains(this);
+    }
+
+    boolean inTransition() {
+        return mTransitionController.inTransition(this);
     }
 
     void sendAppVisibilityToClients() {
@@ -1376,6 +1402,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
+    /** Returns whether the window should be shown for current user. */
     boolean showToCurrentUser() {
         return true;
     }
@@ -2285,7 +2312,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void assignLayer(Transaction t, int layer) {
         // Don't assign layers while a transition animation is playing
         // TODO(b/173528115): establish robust best-practices around z-order fighting.
-        if (mWmService.mAtmService.getTransitionController().isPlaying()) return;
+        if (mTransitionController.isPlaying()) return;
         final boolean changed = layer != mLastLayer || mLastRelativeToLayer != null;
         if (mSurfaceControl != null && changed) {
             setLayer(t, layer);
@@ -2309,10 +2336,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     protected void setLayer(Transaction t, int layer) {
-
-        // Route through surface animator to accommodate that our surface control might be
-        // attached to the leash, and leash is attached to parent container.
-        mSurfaceAnimator.setLayer(t, layer);
+        if (mSurfaceFreezer.hasLeash()) {
+            // When the freezer has created animation leash parent for the window, set the layer
+            // there instead.
+            mSurfaceFreezer.setLayer(t, layer);
+        } else {
+            // Route through surface animator to accommodate that our surface control might be
+            // attached to the leash, and leash is attached to parent container.
+            mSurfaceAnimator.setLayer(t, layer);
+        }
     }
 
     int getLastLayer() {
@@ -2320,10 +2352,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     protected void setRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer) {
-
-        // Route through surface animator to accommodate that our surface control might be
-        // attached to the leash, and leash is attached to parent container.
-        mSurfaceAnimator.setRelativeLayer(t, relativeTo, layer);
+        if (mSurfaceFreezer.hasLeash()) {
+            // When the freezer has created animation leash parent for the window, set the layer
+            // there instead.
+            mSurfaceFreezer.setRelativeLayer(t, relativeTo, layer);
+        } else {
+            // Route through surface animator to accommodate that our surface control might be
+            // attached to the leash, and leash is attached to parent container.
+            mSurfaceAnimator.setRelativeLayer(t, relativeTo, layer);
+        }
     }
 
     protected void reparentSurfaceControl(Transaction t, SurfaceControl newParent) {
@@ -2392,6 +2429,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         writeIdentifierToProto(proto, IDENTIFIER);
         if (mSurfaceAnimator.isAnimating()) {
             mSurfaceAnimator.dumpDebug(proto, SURFACE_ANIMATOR);
+        }
+        if (mSurfaceControl != null) {
+            mSurfaceControl.dumpDebug(proto, SURFACE_CONTROL);
         }
 
         // add children to proto
@@ -2540,10 +2580,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *               some point but the meaning is too weird to work for all containers.
      * @param type The type of animation defined as {@link AnimationType}.
      * @param animationFinishedCallback The callback being triggered when the animation finishes.
+     * @param animationCancelledCallback The callback is triggered after the SurfaceAnimator sends a
+     *                                   cancel call to the underlying AnimationAdapter.
      */
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
             @AnimationType int type,
-            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
+            @Nullable OnAnimationFinishedCallback animationFinishedCallback,
+            @Nullable Runnable animationCancelledCallback) {
         if (DEBUG_ANIM) {
             Slog.v(TAG, "Starting animation on " + this + ": type=" + type + ", anim=" + anim);
         }
@@ -2551,7 +2594,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // TODO: This should use isVisible() but because isVisible has a really weird meaning at
         // the moment this doesn't work for all animatable window containers.
         mSurfaceAnimator.startAnimation(t, anim, hidden, type, animationFinishedCallback,
-                mSurfaceFreezer);
+                animationCancelledCallback, mSurfaceFreezer);
+    }
+
+    void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
+            @AnimationType int type,
+            @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
+        startAnimation(t, anim, hidden, type, animationFinishedCallback,
+                null /* adapterAnimationCancelledCallback */);
     }
 
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
@@ -2569,13 +2619,47 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         mSurfaceFreezer.unfreeze(getPendingTransaction());
     }
 
+    /**
+     * Initializes a change transition. See {@link SurfaceFreezer} for more information.
+     *
+     * For now, this will only be called for the following cases:
+     * 1. {@link Task} is changing windowing mode between fullscreen and freeform.
+     * 2. {@link TaskFragment} is organized and is changing window bounds.
+     * 3. {@link ActivityRecord} is reparented into an organized {@link TaskFragment}. (The
+     *    transition will happen on the {@link TaskFragment} for this case).
+     *
+     * This shouldn't be called on other {@link WindowContainer} unless there is a valid
+     * use case.
+     *
+     * @param startBounds The original bounds (on screen) of the surface we are snapshotting.
+     * @param freezeTarget The surface to take snapshot from. If {@code null}, we will take a
+     *                     snapshot from {@link #getFreezeSnapshotTarget()}.
+     */
+    void initializeChangeTransition(Rect startBounds, @Nullable SurfaceControl freezeTarget) {
+        mDisplayContent.prepareAppTransition(TRANSIT_CHANGE);
+        mDisplayContent.mChangingContainers.add(this);
+        // Calculate the relative position in parent container.
+        final Rect parentBounds = getParent().getBounds();
+        mTmpPoint.set(startBounds.left - parentBounds.left, startBounds.top - parentBounds.top);
+        mSurfaceFreezer.freeze(getSyncTransaction(), startBounds, mTmpPoint, freezeTarget);
+    }
+
+    void initializeChangeTransition(Rect startBounds) {
+        initializeChangeTransition(startBounds, null /* freezeTarget */);
+    }
+
     ArraySet<WindowContainer> getAnimationSources() {
         return mSurfaceAnimationSources;
     }
 
     @Override
     public SurfaceControl getFreezeSnapshotTarget() {
-        return null;
+        // Only allow freezing if this window is in a TRANSIT_CHANGE
+        if (!mDisplayContent.mAppTransition.containsTransitRequest(TRANSIT_CHANGE)
+                || !mDisplayContent.mChangingContainers.contains(this)) {
+            return null;
+        }
+        return getSurfaceControl();
     }
 
     @Override
@@ -2689,6 +2773,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             final RemoteAnimationController.RemoteAnimationRecord adapters =
                     controller.createRemoteAnimationRecord(this, mTmpPoint, localBounds,
                             screenBounds, (isChanging ? mSurfaceFreezer.mFreezeBounds : null));
+            if (!isChanging) {
+                adapters.setMode(enter
+                        ? RemoteAnimationTarget.MODE_OPENING
+                        : RemoteAnimationTarget.MODE_CLOSING);
+            }
             resultAdapters = new Pair<>(adapters.mAdapter, adapters.mThumbnailAdapter);
         } else if (isChanging) {
             final float durationScale = mWmService.getTransitionAnimationScaleLocked();
@@ -2759,8 +2848,26 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             if (sources != null) {
                 mSurfaceAnimationSources.addAll(sources);
             }
+
+            TaskDisplayArea taskDisplayArea = getTaskDisplayArea();
+            boolean isSettingBackgroundColor = taskDisplayArea != null
+                    && isTransitionWithBackgroundColor(transit);
+
+            if (isSettingBackgroundColor) {
+                Context uiContext = ActivityThread.currentActivityThread().getSystemUiContext();
+                @ColorInt int backgroundColor = uiContext.getColor(R.color.overview_background);
+
+                taskDisplayArea.setBackgroundColor(backgroundColor);
+            }
+
+            final Runnable cleanUpCallback = isSettingBackgroundColor
+                    ? taskDisplayArea::clearBackgroundColor : () -> {};
+
             startAnimation(getPendingTransaction(), adapter, !isVisible(),
-                    ANIMATION_TYPE_APP_TRANSITION);
+                    ANIMATION_TYPE_APP_TRANSITION,
+                    (type, anim) -> cleanUpCallback.run(),
+                    cleanUpCallback);
+
             if (adapter.getShowWallpaper()) {
                 getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
             }
@@ -2771,6 +2878,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
+    private boolean isTransitionWithBackgroundColor(@TransitionOldType int transit) {
+        return transit == TRANSIT_OLD_TASK_OPEN
+                || transit == TRANSIT_OLD_TASK_CLOSE
+                || transit == TRANSIT_OLD_TASK_TO_FRONT
+                || transit == TRANSIT_OLD_TASK_TO_BACK;
+    }
+
     final SurfaceAnimationRunner getSurfaceAnimationRunner() {
         return mWmService.mSurfaceAnimationRunner;
     }
@@ -2779,7 +2893,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                                     boolean isVoiceInteraction) {
         if (isOrganized()
                 // TODO(b/161711458): Clean-up when moved to shell.
-                && getWindowingMode() != WINDOWING_MODE_FULLSCREEN) {
+                && getWindowingMode() != WINDOWING_MODE_FULLSCREEN
+                && getWindowingMode() != WINDOWING_MODE_FREEFORM) {
             return null;
         }
 
@@ -2839,6 +2954,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     boolean canCreateRemoteAnimationTarget() {
+        return false;
+    }
+
+    /**
+     * {@code true} to indicate that this container can be a candidate of
+     * {@link AppTransitionController#getAnimationTargets(ArraySet, ArraySet, boolean) animation
+     * target}. */
+    boolean canBeAnimationTarget() {
         return false;
     }
 
@@ -3045,7 +3168,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PROTECTED)
     void updateSurfacePosition(Transaction t) {
-        if (mSurfaceControl == null || mSurfaceAnimator.hasLeash()) {
+        if (mSurfaceControl == null || mSurfaceAnimator.hasLeash() || mSurfaceFreezer.hasLeash()) {
             return;
         }
 
@@ -3164,6 +3287,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *          {@link android.window.WindowOrganizer}
      */
     boolean isOrganized() {
+        return false;
+    }
+
+    /** @return {@code true} if this is a container for embedded activities or tasks. */
+    boolean isEmbedded() {
         return false;
     }
 

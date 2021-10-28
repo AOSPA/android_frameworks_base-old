@@ -230,6 +230,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.HashSet;
+import java.util.List;
 
 /**
  * WindowManagerPolicy implementation for the Android phone UI.  This
@@ -390,12 +391,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Assigned on main thread, accessed on UI thread
     volatile VrManagerInternal mVrManagerInternal;
 
-    // Vibrator pattern for haptic feedback of a long press.
-    long[] mLongPressVibePattern;
-
-    // Vibrator pattern for a short vibration when tapping on a day/month/year date of a Calendar.
-    long[] mCalendarDateVibePattern;
-
     // Vibrator pattern for haptic feedback during boot when safe mode is enabled.
     long[] mSafeModeEnabledVibePattern;
 
@@ -485,6 +480,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mLidNavigationAccessibility;
     int mShortPressOnPowerBehavior;
     int mLongPressOnPowerBehavior;
+    long mLongPressOnPowerAssistantTimeoutMs;
     int mVeryLongPressOnPowerBehavior;
     int mDoublePressOnPowerBehavior;
     int mTriplePressOnPowerBehavior;
@@ -508,7 +504,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mKeyguardOccludedChanged;
 
     private ActivityTaskManagerInternal.SleepTokenAcquirer mScreenOffSleepTokenAcquirer;
-    volatile boolean mKeyguardOccluded;
     Intent mHomeIntent;
     Intent mCarDockIntent;
     Intent mDeskDockIntent;
@@ -747,6 +742,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.POWER_BUTTON_LONG_PRESS), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.POWER_BUTTON_LONG_PRESS_DURATION_MS), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.POWER_BUTTON_VERY_LONG_PRESS), false, this,
@@ -1757,6 +1755,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 com.android.internal.R.integer.config_shortPressOnPowerBehavior);
         mLongPressOnPowerBehavior = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_longPressOnPowerBehavior);
+        mLongPressOnPowerAssistantTimeoutMs = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_longPressOnPowerDurationMs);
         mVeryLongPressOnPowerBehavior = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_veryLongPressOnPowerBehavior);
         mDoublePressOnPowerBehavior = mContext.getResources().getInteger(
@@ -1814,10 +1814,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         context.registerReceiver(mMultiuserReceiver, filter);
 
         mVibrator = (Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
-        mLongPressVibePattern = getLongIntArray(mContext.getResources(),
-                com.android.internal.R.array.config_longPressVibePattern);
-        mCalendarDateVibePattern = getLongIntArray(mContext.getResources(),
-                com.android.internal.R.array.config_calendarDateVibePattern);
         mSafeModeEnabledVibePattern = getLongIntArray(mContext.getResources(),
                 com.android.internal.R.array.config_safeModeEnabledVibePattern);
 
@@ -1836,7 +1832,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             @Override
             public int onAppTransitionStartingLocked(boolean keyguardGoingAway, long duration,
                     long statusBarAnimationStartTime, long statusBarAnimationDuration) {
-                return handleStartTransitionForKeyguardLw(keyguardGoingAway, duration);
+                // When remote animation is enabled for KEYGUARD_GOING_AWAY transition, SysUI
+                // receives IRemoteAnimationRunner#onAnimationStart to start animation, so we don't
+                // need to call IKeyguardService#keyguardGoingAway here.
+                return handleStartTransitionForKeyguardLw(keyguardGoingAway
+                        && !WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation, duration);
             }
 
             @Override
@@ -1980,7 +1980,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      */
     private final class PowerKeyRule extends SingleKeyGestureDetector.SingleKeyRule {
         PowerKeyRule(int gestures) {
-            super(KEYCODE_POWER, gestures);
+            super(mContext, KEYCODE_POWER, gestures);
         }
 
         @Override
@@ -1992,6 +1992,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         void onPress(long downTime) {
             powerPress(downTime, 1 /*count*/,
                     mSingleKeyGestureDetector.beganFromNonInteractive());
+        }
+
+        @Override
+        long getLongPressTimeoutMs() {
+            if (getResolvedLongPressOnPowerBehavior() == LONG_PRESS_POWER_ASSISTANT) {
+                return mLongPressOnPowerAssistantTimeoutMs;
+            } else {
+                return super.getLongPressTimeoutMs();
+            }
         }
 
         @Override
@@ -2022,7 +2031,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      */
     private final class BackKeyRule extends SingleKeyGestureDetector.SingleKeyRule {
         BackKeyRule(int gestures) {
-            super(KEYCODE_BACK, gestures);
+            super(mContext, KEYCODE_BACK, gestures);
         }
 
         @Override
@@ -2042,7 +2051,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void initSingleKeyGestureRules() {
-        mSingleKeyGestureDetector = new SingleKeyGestureDetector(mContext);
+        mSingleKeyGestureDetector = new SingleKeyGestureDetector();
 
         int powerKeyGestures = 0;
         if (hasVeryLongPressOnPowerBehavior()) {
@@ -2140,6 +2149,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Global.POWER_BUTTON_LONG_PRESS,
                     mContext.getResources().getInteger(
                             com.android.internal.R.integer.config_longPressOnPowerBehavior));
+            mLongPressOnPowerAssistantTimeoutMs = Settings.Global.getLong(
+                    mContext.getContentResolver(),
+                    Settings.Global.POWER_BUTTON_LONG_PRESS_DURATION_MS,
+                    mContext.getResources().getInteger(
+                            com.android.internal.R.integer.config_longPressOnPowerDurationMs));
             mVeryLongPressOnPowerBehavior = Settings.Global.getInt(resolver,
                     Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
                     mContext.getResources().getInteger(
@@ -2404,7 +2418,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // the keyguard is being hidden. This is okay because starting windows never show
                 // secret information.
                 // TODO(b/113840485): Occluded may not only happen on default display
-                if (displayId == DEFAULT_DISPLAY && mKeyguardOccluded) {
+                if (displayId == DEFAULT_DISPLAY && isKeyguardOccluded()) {
                     windowFlags |= FLAG_SHOW_WHEN_LOCKED;
                 }
             }
@@ -2814,9 +2828,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         mInputManagerInternal.toggleCapsLock(event.getDeviceId());
                         mPendingCapsLockToggle = false;
                     } else if (mPendingMetaAction) {
-                        launchAssistAction(Intent.EXTRA_ASSIST_INPUT_HINT_KEYBOARD,
-                                event.getDeviceId(),
-                                event.getEventTime(), AssistUtils.INVOCATION_TYPE_UNKNOWN);
+                        if (!canceled) {
+                            launchAssistAction(Intent.EXTRA_ASSIST_INPUT_HINT_KEYBOARD,
+                                    event.getDeviceId(),
+                                    event.getEventTime(), AssistUtils.INVOCATION_TYPE_UNKNOWN);
+                        }
                         mPendingMetaAction = false;
                     }
                 }
@@ -3070,7 +3086,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private int handleStartTransitionForKeyguardLw(boolean keyguardGoingAway, long duration) {
         final int res = applyKeyguardOcclusionChange();
         if (res != 0) return res;
-        if (!WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation && keyguardGoingAway) {
+        if (keyguardGoingAway) {
             if (DEBUG_KEYGUARD) Slog.d(TAG, "Starting keyguard exit animation");
             startKeyguardExitAnimation(SystemClock.uptimeMillis(), duration);
         }
@@ -3220,7 +3236,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return;
             }
 
-            if (!mKeyguardOccluded && mKeyguardDelegate.isInputRestricted()) {
+            if (!isKeyguardOccluded() && mKeyguardDelegate.isInputRestricted()) {
                 // when in keyguard restricted mode, must first verify unlock
                 // before launching home
                 mKeyguardDelegate.verifyUnlock(new OnKeyguardExitResult() {
@@ -3271,42 +3287,38 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void setKeyguardCandidateLw(WindowState win) {
         mKeyguardCandidate = win;
-        setKeyguardOccludedLw(mKeyguardOccluded, true /* force */);
+        setKeyguardOccludedLw(isKeyguardOccluded(), true /* force */);
     }
 
     /**
      * Updates the occluded state of the Keyguard.
      *
+     * @param isOccluded Whether the Keyguard is occluded by another window.
+     * @param force notify the occluded status to KeyguardService and update flags even though
+     *             occlude status doesn't change.
      * @return Whether the flags have changed and we have to redo the layout.
      */
     private boolean setKeyguardOccludedLw(boolean isOccluded, boolean force) {
         if (DEBUG_KEYGUARD) Slog.d(TAG, "setKeyguardOccluded occluded=" + isOccluded);
-        final boolean wasOccluded = mKeyguardOccluded;
-        final boolean showing = mKeyguardDelegate.isShowing();
-        final boolean changed = wasOccluded != isOccluded || force;
-        if (!isOccluded && changed && showing) {
-            mKeyguardOccluded = false;
-            mKeyguardDelegate.setOccluded(false, true /* animate */);
-            if (mKeyguardCandidate != null) {
-                if (!mKeyguardDelegate.hasLockscreenWallpaper()) {
-                    mKeyguardCandidate.getAttrs().flags |= FLAG_SHOW_WALLPAPER;
-                }
-            }
-            return true;
-        } else if (isOccluded && changed && showing) {
-            mKeyguardOccluded = true;
-            mKeyguardDelegate.setOccluded(true, false /* animate */);
-            if (mKeyguardCandidate != null) {
-                mKeyguardCandidate.getAttrs().flags &= ~FLAG_SHOW_WALLPAPER;
-            }
-            return true;
-        } else if (changed) {
-            mKeyguardOccluded = isOccluded;
-            mKeyguardDelegate.setOccluded(isOccluded, false /* animate */);
-            return false;
-        } else {
+        if (isKeyguardOccluded() == isOccluded && !force) {
             return false;
         }
+
+        final boolean showing = mKeyguardDelegate.isShowing();
+        final boolean animate = showing && !isOccluded;
+        mKeyguardDelegate.setOccluded(isOccluded, animate);
+
+        if (!showing) {
+            return false;
+        }
+        if (mKeyguardCandidate != null) {
+            if (isOccluded) {
+                mKeyguardCandidate.getAttrs().flags &= ~FLAG_SHOW_WALLPAPER;
+            } else if (!mKeyguardDelegate.hasLockscreenWallpaper()) {
+                mKeyguardCandidate.getAttrs().flags |= FLAG_SHOW_WALLPAPER;
+            }
+        }
+        return true;
     }
 
     /** {@inheritDoc} */
@@ -3391,13 +3403,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
             }
-        } else if (ExtconUEventObserver.extconExists()
-                && ExtconUEventObserver.namedExtconDirExists(HdmiVideoExtconUEventObserver.NAME)) {
-            HdmiVideoExtconUEventObserver observer = new HdmiVideoExtconUEventObserver();
-            plugged = observer.init();
-            mHDMIObserver = observer;
-        } else if (localLOGV) {
-            Slog.v(TAG, "Not observing HDMI plug state because HDMI was not found.");
+        } else {
+            final List<ExtconUEventObserver.ExtconInfo> extcons =
+                    ExtconUEventObserver.ExtconInfo.getExtconInfoForTypes(
+                            new String[] {ExtconUEventObserver.ExtconInfo.EXTCON_HDMI});
+            if (!extcons.isEmpty()) {
+                // TODO: handle more than one HDMI
+                HdmiVideoExtconUEventObserver observer = new HdmiVideoExtconUEventObserver();
+                plugged = observer.init(extcons.get(0));
+                mHDMIObserver = observer;
+            } else if (localLOGV) {
+                Slog.v(TAG, "Not observing HDMI plug state because HDMI was not found.");
+            }
         }
 
         // This dance forces the code in setHdmiPlugged to run.
@@ -4603,7 +4620,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public boolean isKeyguardShowingAndNotOccluded() {
         if (mKeyguardDelegate == null) return false;
-        return mKeyguardDelegate.isShowing() && !mKeyguardOccluded;
+        return mKeyguardDelegate.isShowing() && !isKeyguardOccluded();
     }
 
     @Override
@@ -4629,7 +4646,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public boolean isKeyguardOccluded() {
         if (mKeyguardDelegate == null) return false;
-        return mKeyguardOccluded;
+        return mKeyguardDelegate.isOccluded();
     }
 
     /** {@inheritDoc} */
@@ -5315,7 +5332,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         proto.write(KEYGUARD_DRAW_COMPLETE, mDefaultDisplayPolicy.isKeyguardDrawComplete());
         proto.write(WINDOW_MANAGER_DRAW_COMPLETE,
                 mDefaultDisplayPolicy.isWindowManagerDrawComplete());
-        proto.write(KEYGUARD_OCCLUDED, mKeyguardOccluded);
+        proto.write(KEYGUARD_OCCLUDED, isKeyguardOccluded());
         proto.write(KEYGUARD_OCCLUDED_CHANGED, mKeyguardOccludedChanged);
         proto.write(KEYGUARD_OCCLUDED_PENDING, mPendingKeyguardOccluded);
         if (mKeyguardDelegate != null) {
@@ -5358,6 +5375,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 pw.print("mLongPressOnPowerBehavior=");
                 pw.println(longPressOnPowerBehaviorToString(mLongPressOnPowerBehavior));
         pw.print(prefix);
+        pw.print("mLongPressOnPowerAssistantTimeoutMs=");
+        pw.println(mLongPressOnPowerAssistantTimeoutMs);
+        pw.print(prefix);
                 pw.print("mVeryLongPressOnPowerBehavior=");
                 pw.println(veryLongPressOnPowerBehaviorToString(mVeryLongPressOnPowerBehavior));
         pw.print(prefix);
@@ -5397,7 +5417,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             final int key = mDisplayHomeButtonHandlers.keyAt(i);
             pw.println(mDisplayHomeButtonHandlers.get(key));
         }
-        pw.print(prefix); pw.print("mKeyguardOccluded="); pw.print(mKeyguardOccluded);
+        pw.print(prefix); pw.print("mKeyguardOccluded="); pw.print(isKeyguardOccluded());
                 pw.print(" mKeyguardOccludedChanged="); pw.print(mKeyguardOccludedChanged);
                 pw.print(" mPendingKeyguardOccluded="); pw.println(mPendingKeyguardOccluded);
         pw.print(prefix); pw.print("mAllowLockscreenWhenOnDisplays=");
@@ -5607,23 +5627,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private class HdmiVideoExtconUEventObserver extends ExtconStateObserver<Boolean> {
         private static final String HDMI_EXIST = "HDMI=1";
         private static final String NAME = "hdmi";
-        private final ExtconInfo mHdmi = new ExtconInfo(NAME);
 
-        private boolean init() {
+        private boolean init(ExtconInfo hdmi) {
             boolean plugged = false;
             try {
-                plugged = parseStateFromFile(mHdmi);
+                plugged = parseStateFromFile(hdmi);
             } catch (FileNotFoundException e) {
-                Slog.w(TAG, mHdmi.getStatePath()
-                        + " not found while attempting to determine initial state", e);
+                Slog.w(TAG,
+                        hdmi.getStatePath()
+                                + " not found while attempting to determine initial state",
+                        e);
             } catch (IOException e) {
-                Slog.e(
-                        TAG,
-                        "Error reading " + mHdmi.getStatePath()
+                Slog.e(TAG,
+                        "Error reading " + hdmi.getStatePath()
                                 + " while attempting to determine initial state",
                         e);
             }
-            startObserving(mHdmi);
+            startObserving(hdmi);
             return plugged;
         }
 

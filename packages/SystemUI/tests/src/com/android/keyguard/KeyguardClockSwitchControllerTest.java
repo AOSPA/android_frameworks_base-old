@@ -19,6 +19,7 @@ package com.android.keyguard;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -28,7 +29,6 @@ import static org.mockito.Mockito.when;
 import android.content.res.Resources;
 import android.testing.AndroidTestingRunner;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
@@ -104,8 +104,6 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
     private AnimatableClockView mLargeClockView;
     @Mock
     private FrameLayout mLargeClockFrame;
-    @Mock
-    private ViewGroup mSmartspaceContainer;
 
     private final View mFakeSmartspaceView = new View(mContext);
 
@@ -121,17 +119,15 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
         when(mNotificationIcons.getLayoutParams()).thenReturn(
                 mock(RelativeLayout.LayoutParams.class));
         when(mView.getContext()).thenReturn(getContext());
+        when(mView.getResources()).thenReturn(mResources);
 
         when(mView.findViewById(R.id.animatable_clock_view)).thenReturn(mClockView);
         when(mView.findViewById(R.id.animatable_clock_view_large)).thenReturn(mLargeClockView);
         when(mView.findViewById(R.id.lockscreen_clock_view_large)).thenReturn(mLargeClockFrame);
-        when(mView.findViewById(R.id.keyguard_smartspace_container))
-                .thenReturn(mSmartspaceContainer);
         when(mClockView.getContext()).thenReturn(getContext());
         when(mLargeClockView.getContext()).thenReturn(getContext());
 
         when(mView.isAttachedToWindow()).thenReturn(true);
-        when(mResources.getString(anyInt())).thenReturn("h:mm");
         when(mSmartspaceController.buildAndConnectView(any())).thenReturn(mFakeSmartspaceView);
         mController = new KeyguardClockSwitchController(
                 mView,
@@ -214,7 +210,7 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
 
     @Test
     public void testSmartspaceEnabledRemovesKeyguardStatusArea() {
-        when(mSmartspaceController.isSmartspaceEnabled()).thenReturn(true);
+        when(mSmartspaceController.isEnabled()).thenReturn(true);
         when(mSmartspaceController.buildAndConnectView(any())).thenReturn(mFakeSmartspaceView);
         mController.init();
 
@@ -223,24 +219,25 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
 
     @Test
     public void testSmartspaceDisabledShowsKeyguardStatusArea() {
-        when(mSmartspaceController.isSmartspaceEnabled()).thenReturn(false);
+        when(mSmartspaceController.isEnabled()).thenReturn(false);
         mController.init();
 
         assertEquals(View.VISIBLE, mStatusArea.getVisibility());
     }
 
     @Test
-    public void testDetachRemovesSmartspaceView() {
-        when(mSmartspaceController.isSmartspaceEnabled()).thenReturn(true);
+    public void testDetachDisconnectsSmartspace() {
+        when(mSmartspaceController.isEnabled()).thenReturn(true);
         when(mSmartspaceController.buildAndConnectView(any())).thenReturn(mFakeSmartspaceView);
         mController.init();
+        verify(mView).addView(eq(mFakeSmartspaceView), anyInt(), any());
 
         ArgumentCaptor<View.OnAttachStateChangeListener> listenerArgumentCaptor =
                 ArgumentCaptor.forClass(View.OnAttachStateChangeListener.class);
         verify(mView).addOnAttachStateChangeListener(listenerArgumentCaptor.capture());
 
         listenerArgumentCaptor.getValue().onViewDetachedFromWindow(mView);
-        verify(mSmartspaceContainer).removeAllViews();
+        verify(mSmartspaceController).disconnect();
     }
 
     @Test

@@ -150,6 +150,7 @@ public class ParsingPackageUtils {
     public static final boolean DEBUG_JAR = false;
     public static final boolean DEBUG_BACKUP = false;
     public static final float DEFAULT_PRE_O_MAX_ASPECT_RATIO = 1.86f;
+    public static final float ASPECT_RATIO_NOT_SET = -1f;
 
     /** File name in an APK for the Android manifest. */
     public static final String ANDROID_MANIFEST_FILENAME = "AndroidManifest.xml";
@@ -216,6 +217,11 @@ public class ParsingPackageUtils {
     public static final int PARSE_IS_SYSTEM_DIR = 1 << 4;
     public static final int PARSE_COLLECT_CERTIFICATES = 1 << 5;
     public static final int PARSE_ENFORCE_CODE = 1 << 6;
+    /**
+     * This flag is applied in the ApkLiteParser. Used by OverlayConfigParser to ignore the
+     * checks of required system property within the overlay tag.
+     */
+    public static final int PARSE_IGNORE_OVERLAY_REQUIRED_SYSTEM_PROPERTY = 1 << 7;
     public static final int PARSE_CHATTY = 1 << 31;
 
     @IntDef(flag = true, prefix = { "PARSE_" }, value = {
@@ -226,6 +232,7 @@ public class ParsingPackageUtils {
             PARSE_IGNORE_PROCESSES,
             PARSE_IS_SYSTEM_DIR,
             PARSE_MUST_BE_APK,
+            PARSE_IGNORE_OVERLAY_REQUIRED_SYSTEM_PROPERTY,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ParseFlags {}
@@ -234,7 +241,7 @@ public class ParsingPackageUtils {
      * For those names would be used as a part of the file name. Limits size to 223 and reserves 32
      * for the OS.
      */
-    private static final int MAX_FILE_NAME_SIZE = 223;
+    static final int MAX_FILE_NAME_SIZE = 223;
 
     /**
      * @see #parseDefault(ParseInput, File, int, List, boolean)
@@ -996,6 +1003,11 @@ public class ParsingPackageUtils {
 
     private static ParseResult<ParsingPackage> parseSharedUser(ParseInput input,
             ParsingPackage pkg, TypedArray sa) {
+        int maxSdkVersion = anInteger(0, R.styleable.AndroidManifest_sharedUserMaxSdkVersion, sa);
+        if ((maxSdkVersion != 0) && maxSdkVersion < Build.VERSION.RESOURCES_SDK_INT) {
+            return input.success(pkg);
+        }
+
         String str = nonConfigString(0, R.styleable.AndroidManifest_sharedUserId, sa);
         if (TextUtils.isEmpty(str)) {
             return input.success(pkg);
@@ -2091,7 +2103,7 @@ public class ParsingPackageUtils {
             pkg.setGwpAsanMode(sa.getInt(R.styleable.AndroidManifestApplication_gwpAsanMode, -1));
             pkg.setMemtagMode(sa.getInt(R.styleable.AndroidManifestApplication_memtagMode, -1));
             if (sa.hasValue(R.styleable.AndroidManifestApplication_nativeHeapZeroInitialized)) {
-                Boolean v = sa.getBoolean(
+                final boolean v = sa.getBoolean(
                         R.styleable.AndroidManifestApplication_nativeHeapZeroInitialized, false);
                 pkg.setNativeHeapZeroInitialized(
                         v ? ApplicationInfo.ZEROINIT_ENABLED : ApplicationInfo.ZEROINIT_DISABLED);
@@ -2672,7 +2684,7 @@ public class ParsingPackageUtils {
         for (int index = 0; index < activitiesSize; index++) {
             ParsedActivity activity = activities.get(index);
             // If the max aspect ratio for the activity has already been set, skip.
-            if (activity.getMaxAspectRatio() != null) {
+            if (activity.getMaxAspectRatio() != ASPECT_RATIO_NOT_SET) {
                 continue;
             }
 
@@ -2701,7 +2713,7 @@ public class ParsingPackageUtils {
         int activitiesSize = activities.size();
         for (int index = 0; index < activitiesSize; index++) {
             ParsedActivity activity = activities.get(index);
-            if (activity.getMinAspectRatio() == null) {
+            if (activity.getMinAspectRatio() == ASPECT_RATIO_NOT_SET) {
                 activity.setMinAspectRatio(activity.getResizeMode(), minAspectRatio);
             }
         }
@@ -2754,7 +2766,7 @@ public class ParsingPackageUtils {
             return input.success(pkg.setOverlay(true)
                     .setOverlayTarget(target)
                     .setOverlayPriority(priority)
-                    .setOverlayTargetName(
+                    .setOverlayTargetOverlayableName(
                             sa.getString(R.styleable.AndroidManifestResourceOverlay_targetName))
                     .setOverlayCategory(
                             sa.getString(R.styleable.AndroidManifestResourceOverlay_category))
@@ -2834,9 +2846,6 @@ public class ParsingPackageUtils {
                     R.styleable.AndroidManifestOriginalPackage_name,
                     0);
             if (!pkg.getPackageName().equals(orig)) {
-                if (pkg.getOriginalPackages().isEmpty()) {
-                    pkg.setRealPackage(pkg.getPackageName());
-                }
                 pkg.addOriginalPackage(orig);
             }
             return input.success(pkg);

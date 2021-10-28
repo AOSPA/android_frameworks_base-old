@@ -28,6 +28,8 @@ import static com.android.wm.shell.bubbles.BubblePositioner.NUM_VISIBLE_WHEN_RES
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.ContentResolver;
@@ -188,6 +190,7 @@ public class BubbleStackView extends FrameLayout
     };
     private final BubbleController mBubbleController;
     private final BubbleData mBubbleData;
+    private StackViewState mStackViewState = new StackViewState();
 
     private final ValueAnimator mDismissBubbleAnimator;
 
@@ -246,7 +249,6 @@ public class BubbleStackView extends FrameLayout
     private int mBubbleTouchPadding;
     private int mExpandedViewPadding;
     private int mCornerRadius;
-    private int mImeOffset;
     @Nullable private BubbleViewProvider mExpandedBubble;
     private boolean mIsExpanded;
 
@@ -757,7 +759,6 @@ public class BubbleStackView extends FrameLayout
         mBubbleSize = res.getDimensionPixelSize(R.dimen.bubble_size);
         mBubbleElevation = res.getDimensionPixelSize(R.dimen.bubble_elevation);
         mBubbleTouchPadding = res.getDimensionPixelSize(R.dimen.bubble_touch_padding);
-        mImeOffset = res.getDimensionPixelSize(R.dimen.pip_ime_offset);
 
         mExpandedViewPadding = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_padding);
         int elevation = res.getDimensionPixelSize(R.dimen.bubble_elevation);
@@ -778,8 +779,8 @@ public class BubbleStackView extends FrameLayout
                 floatingContentCoordinator, this::getBubbleCount, onBubbleAnimatedOut,
                 this::animateShadows /* onStackAnimationFinished */, mPositioner);
 
-        mExpandedAnimationController = new ExpandedAnimationController(
-                mPositioner, mExpandedViewPadding, onBubbleAnimatedOut);
+        mExpandedAnimationController = new ExpandedAnimationController(mPositioner,
+                onBubbleAnimatedOut, this);
         mSurfaceSynchronizer = synchronizer != null ? synchronizer : DEFAULT_SURFACE_SYNCHRONIZER;
 
         // Force LTR by default since most of the Bubbles UI is positioned manually by the user, or
@@ -890,7 +891,7 @@ public class BubbleStackView extends FrameLayout
                         // Re-draw bubble row and pointer for new orientation.
                         beforeExpandedViewAnimation();
                         updateOverflowVisibility();
-                        updatePointerPosition();
+                        updatePointerPosition(false /* forIme */);
                         mExpandedAnimationController.expandFromStack(() -> {
                             afterExpandedViewAnimation();
                         } /* after */);
@@ -967,8 +968,9 @@ public class BubbleStackView extends FrameLayout
             }
         });
         mExpandedViewAlphaAnimator.addUpdateListener(valueAnimator -> {
-            if (mExpandedBubble != null) {
-                mExpandedBubble.setExpandedContentAlpha((float) valueAnimator.getAnimatedValue());
+            if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
+                mExpandedBubble.getExpandedView().setTaskViewAlpha(
+                        (float) valueAnimator.getAnimatedValue());
             }
         });
 
@@ -1315,6 +1317,7 @@ public class BubbleStackView extends FrameLayout
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        mPositioner.update();
         getViewTreeObserver().addOnComputeInternalInsetsListener(this);
         getViewTreeObserver().addOnDrawListener(mSystemGestureExcludeUpdater);
     }
@@ -1557,7 +1560,7 @@ public class BubbleStackView extends FrameLayout
                 } else {
                     bubble.cleanupViews();
                 }
-                updatePointerPosition();
+                updatePointerPosition(false /* forIme */);
                 updateExpandedView();
                 logBubbleEvent(bubble, FrameworkStatsLog.BUBBLE_UICHANGED__ACTION__DISMISSED);
                 return;
@@ -1598,7 +1601,7 @@ public class BubbleStackView extends FrameLayout
                     .map(b -> b.getIconView()).collect(Collectors.toList());
             mStackAnimationController.animateReorder(bubbleViews, reorder);
         }
-        updatePointerPosition();
+        updatePointerPosition(false /* forIme */);
     }
 
     /**
@@ -1669,7 +1672,6 @@ public class BubbleStackView extends FrameLayout
     private void showNewlySelectedBubble(BubbleViewProvider bubbleToSelect) {
         final BubbleViewProvider previouslySelected = mExpandedBubble;
         mExpandedBubble = bubbleToSelect;
-        updatePointerPosition();
 
         if (mIsExpanded) {
             hideCurrentInputMethod();
@@ -1761,6 +1763,7 @@ public class BubbleStackView extends FrameLayout
      * not.
      */
     void hideCurrentInputMethod() {
+        mPositioner.setImeVisible(false, 0);
         mBubbleController.hideCurrentInputMethod();
     }
 
@@ -1863,34 +1866,33 @@ public class BubbleStackView extends FrameLayout
         updateBadges(false /* setBadgeForCollapsedStack */);
         mBubbleContainer.setActiveController(mExpandedAnimationController);
         updateOverflowVisibility();
-        updatePointerPosition();
+        updatePointerPosition(false /* forIme */);
         mExpandedAnimationController.expandFromStack(() -> {
             if (mIsExpanded && mExpandedBubble.getExpandedView() != null) {
                 maybeShowManageEdu();
             }
         } /* after */);
-
-        final float translationY = mPositioner.getExpandedViewY(mExpandedBubble,
-                getBubbleIndex(mExpandedBubble));
-        mExpandedViewContainer.setTranslationX(0f);
-        mExpandedViewContainer.setTranslationY(translationY);
-        mExpandedViewContainer.setAlpha(1f);
-
         int index;
         if (mExpandedBubble != null && BubbleOverflow.KEY.equals(mExpandedBubble.getKey())) {
             index = mBubbleData.getBubbles().size();
         } else {
             index = getBubbleIndex(mExpandedBubble);
         }
-        // Position of the bubble we're expanding, once it's settled in its row.
-        final float bubbleWillBeAt =
-                mExpandedAnimationController.getBubbleXOrYForOrientation(index);
+        PointF p = mPositioner.getExpandedBubbleXY(index, getState());
+        final float translationY = mPositioner.getExpandedViewY(mExpandedBubble,
+                mPositioner.showBubblesVertically() ? p.y : p.x);
+        mExpandedViewContainer.setTranslationX(0f);
+        mExpandedViewContainer.setTranslationY(translationY);
+        mExpandedViewContainer.setAlpha(1f);
 
         // How far horizontally the bubble will be animating. We'll wait a bit longer for bubbles
         // that are animating farther, so that the expanded view doesn't move as much.
         final float relevantStackPosition = showVertically
                 ? mStackAnimationController.getStackPosition().y
                 : mStackAnimationController.getStackPosition().x;
+        final float bubbleWillBeAt = showVertically
+                ? p.y
+                : p.x;
         final float distanceAnimated = Math.abs(bubbleWillBeAt - relevantStackPosition);
 
         // Wait for the path animation target to reach its end, and add a small amount of extra time
@@ -1907,27 +1909,27 @@ public class BubbleStackView extends FrameLayout
         // Set the pivot point for the scale, so the expanded view animates out from the bubble.
         if (showVertically) {
             float pivotX;
-            float pivotY = bubbleWillBeAt + mBubbleSize / 2f;
             if (mStackOnLeftOrWillBe) {
-                pivotX = mPositioner.getAvailableRect().left + mBubbleSize + mExpandedViewPadding;
+                pivotX = p.x + mBubbleSize + mExpandedViewPadding;
             } else {
-                pivotX = mPositioner.getAvailableRect().right - mBubbleSize - mExpandedViewPadding;
+                pivotX = p.x - mExpandedViewPadding;
             }
             mExpandedViewContainerMatrix.setScale(
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
-                    pivotX, pivotY);
+                    pivotX,
+                    p.y + mBubbleSize / 2f);
         } else {
             mExpandedViewContainerMatrix.setScale(
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
-                    bubbleWillBeAt + mBubbleSize / 2f,
-                    translationY);
+                    p.x + mBubbleSize / 2f,
+                    p.y + mBubbleSize + mExpandedViewPadding);
         }
         mExpandedViewContainer.setAnimationMatrix(mExpandedViewContainerMatrix);
 
         if (mExpandedBubble.getExpandedView() != null) {
-            mExpandedBubble.setExpandedContentAlpha(0f);
+            mExpandedBubble.getExpandedView().setTaskViewAlpha(0f);
 
             // We'll be starting the alpha animation after a slight delay, so set this flag early
             // here.
@@ -1959,6 +1961,7 @@ public class BubbleStackView extends FrameLayout
                                 mExpandedViewContainerMatrix);
                     })
                     .withEndActions(() -> {
+                        mExpandedViewContainer.setAnimationMatrix(null);
                         afterExpandedViewAnimation();
                         if (mExpandedBubble != null
                                 && mExpandedBubble.getExpandedView() != null) {
@@ -2009,12 +2012,10 @@ public class BubbleStackView extends FrameLayout
             index = mBubbleData.getBubbles().indexOf(mExpandedBubble);
         }
         // Value the bubble is animating from (back into the stack).
-        final float expandingFromBubbleAt =
-                mExpandedAnimationController.getBubbleXOrYForOrientation(index);
-        final boolean showVertically = mPositioner.showBubblesVertically();
+        final PointF p = mPositioner.getExpandedBubbleXY(index, getState());
         if (mPositioner.showBubblesVertically()) {
             float pivotX;
-            float pivotY = expandingFromBubbleAt + mBubbleSize / 2f;
+            float pivotY = p.y + mBubbleSize / 2f;
             if (mStackOnLeftOrWillBe) {
                 pivotX = mPositioner.getAvailableRect().left + mBubbleSize + mExpandedViewPadding;
             } else {
@@ -2026,8 +2027,8 @@ public class BubbleStackView extends FrameLayout
         } else {
             mExpandedViewContainerMatrix.setScale(
                     1f, 1f,
-                    expandingFromBubbleAt + mBubbleSize / 2f,
-                    mPositioner.getExpandedViewY(mExpandedBubble, index));
+                    p.x + mBubbleSize / 2f,
+                    p.y + mBubbleSize + mExpandedViewPadding);
         }
 
         mExpandedViewAlphaAnimator.reverse();
@@ -2105,32 +2106,31 @@ public class BubbleStackView extends FrameLayout
 
         boolean isOverflow = mExpandedBubble != null
                 && mExpandedBubble.getKey().equals(BubbleOverflow.KEY);
-        float expandingFromBubbleDestination =
-                mExpandedAnimationController.getBubbleXOrYForOrientation(isOverflow
-                        ? getBubbleCount()
-                        : mBubbleData.getBubbles().indexOf(mExpandedBubble));
-
+        PointF p = mPositioner.getExpandedBubbleXY(isOverflow
+                        ? mBubbleContainer.getChildCount() - 1
+                        : mBubbleData.getBubbles().indexOf(mExpandedBubble),
+                getState());
         mExpandedViewContainer.setAlpha(1f);
         mExpandedViewContainer.setVisibility(View.VISIBLE);
 
         if (mPositioner.showBubblesVertically()) {
             float pivotX;
-            float pivotY = expandingFromBubbleDestination + mBubbleSize / 2f;
+            float pivotY = p.y + mBubbleSize / 2f;
             if (mStackOnLeftOrWillBe) {
-                pivotX = mPositioner.getAvailableRect().left + mBubbleSize + mExpandedViewPadding;
+                pivotX = p.x + mBubbleSize + mExpandedViewPadding;
             } else {
-                pivotX = mPositioner.getAvailableRect().right - mBubbleSize - mExpandedViewPadding;
-
+                pivotX = p.x - mExpandedViewPadding;
             }
             mExpandedViewContainerMatrix.setScale(
-                    0f, 0f,
+                    1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
+                    1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     pivotX, pivotY);
         } else {
             mExpandedViewContainerMatrix.setScale(
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
-                    expandingFromBubbleDestination + mBubbleSize / 2f,
-                    mPositioner.getExpandedViewY(mExpandedBubble, expandingFromBubbleDestination));
+                    p.x + mBubbleSize / 2f,
+                    p.y + mBubbleSize + mExpandedViewPadding);
         }
 
         mExpandedViewContainer.setAnimationMatrix(mExpandedViewContainerMatrix);
@@ -2155,6 +2155,7 @@ public class BubbleStackView extends FrameLayout
                     .withEndActions(() -> {
                         mExpandedViewTemporarilyHidden = false;
                         mIsBubbleSwitchAnimating = false;
+                        mExpandedViewContainer.setAnimationMatrix(null);
                     })
                     .start();
         }, 25);
@@ -2186,9 +2187,20 @@ public class BubbleStackView extends FrameLayout
         }
     }
 
-    /** Moves the bubbles out of the way if they're going to be over the keyboard. */
-    public void onImeVisibilityChanged(boolean visible, int height) {
-        mStackAnimationController.setImeHeight(visible ? height + mImeOffset : 0);
+    /**
+     * Updates the stack based for IME changes. When collapsed it'll move the stack if it
+     * overlaps where they IME would be. When expanded it'll shift the expanded bubbles
+     * if they might overlap with the IME (this only happens for large screens).
+     */
+    public void animateForIme(boolean visible) {
+        if ((mIsExpansionAnimating || mIsBubbleSwitchAnimating) && mIsExpanded) {
+            // This will update the animation so the bubbles move to position for the IME
+            mExpandedAnimationController.expandFromStack(() -> {
+                updatePointerPosition(false /* forIme */);
+                afterExpandedViewAnimation();
+            } /* after */);
+            return;
+        }
 
         if (!mIsExpanded && getBubbleCount() > 0) {
             final float stackDestinationY =
@@ -2207,9 +2219,20 @@ public class BubbleStackView extends FrameLayout
                                 FLYOUT_IME_ANIMATION_SPRING_CONFIG)
                         .start();
             }
-        } else if (mIsExpanded && mExpandedBubble != null
-                && mExpandedBubble.getExpandedView() != null) {
+        } else if (mPositioner.showBubblesVertically() && mIsExpanded
+                && mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
             mExpandedBubble.getExpandedView().setImeVisible(visible);
+            List<Animator> animList = new ArrayList();
+            for (int i = 0; i < mBubbleContainer.getChildCount(); i++) {
+                View child = mBubbleContainer.getChildAt(i);
+                float transY = mPositioner.getExpandedBubbleXY(i, getState()).y;
+                ObjectAnimator anim = ObjectAnimator.ofFloat(child, TRANSLATION_Y, transY);
+                animList.add(anim);
+            }
+            updatePointerPosition(true /* forIme */);
+            AnimatorSet set = new AnimatorSet();
+            set.playTogether(animList);
+            set.start();
         }
     }
 
@@ -2513,7 +2536,7 @@ public class BubbleStackView extends FrameLayout
             // Account for the IME in the touchable region so that the touchable region of the
             // Bubble window doesn't obscure the IME. The touchable region affects which areas
             // of the screen can be excluded by lower windows (IME is just above the embedded task)
-            outRect.bottom -= (int) mStackAnimationController.getImeHeight();
+            outRect.bottom -= mPositioner.getImeHeight();
         }
 
         if (mFlyout.getVisibility() == View.VISIBLE) {
@@ -2764,20 +2787,21 @@ public class BubbleStackView extends FrameLayout
         }
         boolean isOverflowExpanded = mExpandedBubble != null
                 && BubbleOverflow.KEY.equals(mExpandedBubble.getKey());
-        int[] paddings = mPositioner.getExpandedViewPadding(
+        int[] paddings = mPositioner.getExpandedViewContainerPadding(
                 mStackAnimationController.isStackOnLeftSide(), isOverflowExpanded);
         mExpandedViewContainer.setPadding(paddings[0], paddings[1], paddings[2], paddings[3]);
         if (mIsExpansionAnimating) {
             mExpandedViewContainer.setVisibility(mIsExpanded ? VISIBLE : GONE);
         }
         if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
+            PointF p = mPositioner.getExpandedBubbleXY(getBubbleIndex(mExpandedBubble),
+                    getState());
             mExpandedViewContainer.setTranslationY(mPositioner.getExpandedViewY(mExpandedBubble,
-                    mExpandedAnimationController.getBubbleXOrYForOrientation(
-                            getBubbleIndex(mExpandedBubble))));
+                    mPositioner.showBubblesVertically() ? p.y : p.x));
             mExpandedViewContainer.setTranslationX(0f);
             mExpandedBubble.getExpandedView().updateView(
                     mExpandedViewContainer.getLocationOnScreen());
-            updatePointerPosition();
+            updatePointerPosition(false /* forIme */);
         }
 
         mStackOnLeftOrWillBe = mStackAnimationController.isStackOnLeftSide();
@@ -2848,7 +2872,13 @@ public class BubbleStackView extends FrameLayout
         }
     }
 
-    private void updatePointerPosition() {
+    /**
+     * Updates the position of the pointer based on the expanded bubble.
+     *
+     * @param forIme whether the position is being updated due to the ime appearing, in this case
+     *               the pointer is animated to the location.
+     */
+    private void updatePointerPosition(boolean forIme) {
         if (mExpandedBubble == null || mExpandedBubble.getExpandedView() == null) {
             return;
         }
@@ -2856,8 +2886,12 @@ public class BubbleStackView extends FrameLayout
         if (index == -1) {
             return;
         }
-        float bubblePosition = mExpandedAnimationController.getBubbleXOrYForOrientation(index);
-        mExpandedBubble.getExpandedView().setPointerPosition(bubblePosition, mStackOnLeftOrWillBe);
+        PointF position = mPositioner.getExpandedBubbleXY(index, getState());
+        float bubblePosition = mPositioner.showBubblesVertically()
+                ? position.y
+                : position.x;
+        mExpandedBubble.getExpandedView().setPointerPosition(bubblePosition,
+                mStackOnLeftOrWillBe, forIme /* animate */);
     }
 
     /**
@@ -2938,6 +2972,26 @@ public class BubbleStackView extends FrameLayout
             }
         }
         return bubbles;
+    }
+
+    /** @return the current stack state. */
+    public StackViewState getState() {
+        mStackViewState.numberOfBubbles = mBubbleContainer.getChildCount();
+        mStackViewState.selectedIndex = getBubbleIndex(mExpandedBubble);
+        mStackViewState.onLeft = mStackOnLeftOrWillBe;
+        return mStackViewState;
+    }
+
+    /**
+     * Holds some commonly queried information about the stack.
+     */
+    public static class StackViewState {
+        // Number of bubbles (including the overflow itself) in the stack.
+        public int numberOfBubbles;
+        // The selected index if the stack is expanded.
+        public int selectedIndex;
+        // Whether the stack is resting on the left or right side of the screen when collapsed.
+        public boolean onLeft;
     }
 
     /**

@@ -131,13 +131,12 @@ final class VerificationParams extends HandlerParams {
     private String mErrorMessage = null;
 
     final PackageLite mPackageLite;
-    final PackageManagerService mPm;
 
     VerificationParams(UserHandle user, File stagedDir, IPackageInstallObserver2 observer,
             PackageInstaller.SessionParams sessionParams, InstallSource installSource,
             int installerUid, SigningDetails signingDetails, int sessionId, PackageLite lite,
             PackageManagerService pm) {
-        super(user);
+        super(user, pm);
         mOriginInfo = OriginInfo.fromStagedFile(stagedDir);
         mObserver = observer;
         mInstallFlags = sessionParams.installFlags;
@@ -155,7 +154,6 @@ final class VerificationParams extends HandlerParams {
                 ? sessionParams.dataLoaderParams.getType() : DataLoaderType.NONE;
         mSessionId = sessionId;
         mPackageLite = lite;
-        mPm = pm;
     }
 
     @Override
@@ -168,7 +166,7 @@ final class VerificationParams extends HandlerParams {
         PackageInfoLite pkgLite = PackageManagerServiceUtils.getMinimalPackageInfo(mPm.mContext,
                 mPackageLite, mOriginInfo.mResolvedPath, mInstallFlags, mPackageAbiOverride);
 
-        Pair<Integer, String> ret = mPm.verifyReplacingVersionCode(
+        Pair<Integer, String> ret = verifyReplacingVersionCode(
                 pkgLite, mRequiredInstalledVersionCode, mInstallFlags);
         setReturnCode(ret.first, ret.second);
         if (mRet != INSTALL_SUCCEEDED) {
@@ -406,7 +404,7 @@ final class VerificationParams extends HandlerParams {
 
             DeviceIdleInternal idleController =
                     mPm.mInjector.getLocalService(DeviceIdleInternal.class);
-            final long idleDuration = mPm.getVerificationTimeout();
+            final long idleDuration = mVerificationHelper.getVerificationTimeout();
             final BroadcastOptions options = BroadcastOptions.makeBasic();
             options.setTemporaryAppAllowlist(idleDuration,
                     TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED,
@@ -462,7 +460,8 @@ final class VerificationParams extends HandlerParams {
                                 final Message msg = mPm.mHandler
                                         .obtainMessage(CHECK_PENDING_VERIFICATION);
                                 msg.arg1 = verificationId;
-                                mPm.mHandler.sendMessageDelayed(msg, mPm.getVerificationTimeout());
+                                mPm.mHandler.sendMessageDelayed(msg,
+                                        mVerificationHelper.getVerificationTimeout());
                             }
                         }, null, 0, null, null);
 
@@ -707,7 +706,7 @@ final class VerificationParams extends HandlerParams {
     public void verifyStage(List<VerificationParams> children)
             throws PackageManagerException {
         final MultiPackageVerificationParams params =
-                new MultiPackageVerificationParams(this, children);
+                new MultiPackageVerificationParams(this, children, mPm);
         mPm.mHandler.post(params::startCopy);
     }
 
@@ -720,9 +719,9 @@ final class VerificationParams extends HandlerParams {
         private final List<VerificationParams> mChildParams;
         private final Map<VerificationParams, Integer> mVerificationState;
 
-        MultiPackageVerificationParams(VerificationParams parent, List<VerificationParams> children)
-                throws PackageManagerException {
-            super(parent.getUser());
+        MultiPackageVerificationParams(VerificationParams parent, List<VerificationParams> children,
+                PackageManagerService pm) throws PackageManagerException {
+            super(parent.getUser(), pm);
             if (children.size() == 0) {
                 throw new PackageManagerException("No child sessions found!");
             }

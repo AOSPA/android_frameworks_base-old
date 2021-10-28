@@ -42,6 +42,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityManagerService.DISPATCH_PROCESSES_CHANGED_UI_MSG;
 import static com.android.server.am.ActivityManagerService.DISPATCH_PROCESS_DIED_UI_MSG;
+import static com.android.server.am.ActivityManagerService.IDLE_UIDS_MSG;
 import static com.android.server.am.ActivityManagerService.KILL_APP_ZYGOTE_DELAY_MS;
 import static com.android.server.am.ActivityManagerService.KILL_APP_ZYGOTE_MSG;
 import static com.android.server.am.ActivityManagerService.PERSISTENT_MASK;
@@ -127,6 +128,7 @@ import com.android.internal.os.Zygote;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.MemInfoReader;
+import com.android.server.AppStateTracker;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.SystemConfig;
@@ -361,11 +363,6 @@ public final class ProcessList {
     private static final long LMKD_RECONNECT_DELAY_MS = 1000;
 
     /**
-     * How long between a process kill and we actually receive its death recipient
-     */
-    static final int PROC_KILL_TIMEOUT = 2000; // 2 seconds;
-
-    /**
      * Native heap allocations will now have a non-zero tag in the most significant byte.
      * @see <a href="https://source.android.com/devices/tech/debug/tagged-pointers">Tagged
      * Pointers</a>
@@ -544,6 +541,12 @@ public final class ProcessList {
     @GuardedBy("mService")
     final ArrayMap<AppZygote, ArrayList<ProcessRecord>> mAppZygoteProcesses =
             new ArrayMap<AppZygote, ArrayList<ProcessRecord>>();
+
+    /**
+     * The list of apps in background restricted mode.
+     */
+    @GuardedBy("mService")
+    final ArraySet<ProcessRecord> mAppsInBackgroundRestricted = new ArraySet<>();
 
     private PlatformCompat mPlatformCompat = null;
 
@@ -2111,65 +2114,94 @@ public final class ProcessList {
             final int[] gids, final int runtimeFlags, int zygotePolicyFlags,
             final int mountExternal, final String requiredAbi, final String instructionSet,
             final String invokeWith, final long startSeq) {
-        // If there is a preceding instance of the process, wait for its death with a timeout.
+        final Runnable startRunnable = () -> {
+            try {
+                final Process.ProcessStartResult startResult = startProcess(app.getHostingRecord(),
+                        entryPoint, app, app.getStartUid(), gids, runtimeFlags, zygotePolicyFlags,
+                        mountExternal, app.getSeInfo(), requiredAbi, instructionSet, invokeWith,
+                        app.getStartTime());
+
+                synchronized (mService) {
+                    handleProcessStartedLocked(app, startResult, startSeq);
+                }
+            } catch (RuntimeException e) {
+                synchronized (mService) {
+                    Slog.e(ActivityManagerService.TAG, "Failure starting process "
+                            + app.processName, e);
+                    mPendingStarts.remove(startSeq);
+                    app.setPendingStart(false);
+                    mService.forceStopPackageLocked(app.info.packageName,
+                            UserHandle.getAppId(app.uid),
+                            false, false, true, false, false, app.userId, "start failure");
+                }
+            }
+        };
         // Use local reference since we are not using locks here
         final ProcessRecord predecessor = app.mPredecessor;
-        int prevPid;
-        if (predecessor != null && (prevPid = predecessor.getDyingPid()) > 0) {
-            long now = System.currentTimeMillis();
-            final long end = now + PROC_KILL_TIMEOUT;
-            final int oldPolicy = StrictMode.getThreadPolicyMask();
-            try {
-                StrictMode.setThreadPolicyMask(0);
-                Process.waitForProcessDeath(prevPid, PROC_KILL_TIMEOUT);
-                // It's killed successfully, but we'd make sure the cleanup work is done.
-                synchronized (predecessor) {
-                    if (app.mPredecessor != null) {
-                        now = System.currentTimeMillis();
-                        if (now < end) {
-                            try {
-                                predecessor.wait(end - now);
-                            } catch (InterruptedException e) {
-                            }
-                            if (System.currentTimeMillis() >= end) {
-                                Slog.w(TAG, predecessor + " " + prevPid
-                                        + " has died but its obituary delivery is slow.");
-                            }
-                        }
-                    }
-                    if (app.mPredecessor != null && app.mPredecessor.getPid() > 0) {
-                        // The cleanup work hasn't be done yet, let's log it and continue.
-                        Slog.w(TAG, predecessor + " " + prevPid
-                                + " has died, but its cleanup isn't done");
-                    }
-                }
-            } catch (Exception e) {
-                // It's still alive... maybe blocked at uninterruptible sleep ?
-                Slog.wtf(TAG, predecessor.toString() + " " + prevPid
-                        + " refused to die, but we need to launch " + app, e);
-            } finally {
-                StrictMode.setThreadPolicyMask(oldPolicy);
+        if (predecessor != null && predecessor.getDyingPid() > 0) {
+            handleProcessStartWithPredecessor(predecessor, startRunnable);
+        } else {
+            // Kick off the process start for real.
+            startRunnable.run();
+        }
+    }
+
+    /**
+     * Handle the case where the given process is killed but still not gone, but we'd need to start
+     * the new instance of it.
+     */
+    private void handleProcessStartWithPredecessor(final ProcessRecord predecessor,
+            final Runnable successorStartRunnable) {
+        // If there is a preceding instance of the process, wait for its death with a timeout.
+        if (predecessor.mSuccessorStartRunnable != null) {
+            // It's been watched already, this shouldn't happen.
+            Slog.wtf(TAG, "We've been watching for the death of " + predecessor);
+            return;
+        }
+        predecessor.mSuccessorStartRunnable = successorStartRunnable;
+        mService.mProcStartHandler.sendMessageDelayed(mService.mProcStartHandler.obtainMessage(
+                ProcStartHandler.MSG_PROCESS_KILL_TIMEOUT, predecessor),
+                mService.mConstants.mProcessKillTimeoutMs);
+    }
+
+    static final class ProcStartHandler extends Handler {
+        static final int MSG_PROCESS_DIED = 1;
+        static final int MSG_PROCESS_KILL_TIMEOUT = 2;
+
+        private final ActivityManagerService mService;
+
+        ProcStartHandler(ActivityManagerService service, Looper looper) {
+            super(looper);
+            mService = service;
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_PROCESS_DIED:
+                    mService.mProcessList.handlePredecessorProcDied((ProcessRecord) msg.obj);
+                    break;
+                case MSG_PROCESS_KILL_TIMEOUT:
+                    mService.handleProcessStartOrKillTimeoutLocked((ProcessRecord) msg.obj,
+                            /* isKillTimeout */ true);
+                    break;
             }
         }
-        try {
-            final Process.ProcessStartResult startResult = startProcess(app.getHostingRecord(),
-                    entryPoint, app, app.getStartUid(), gids, runtimeFlags, zygotePolicyFlags,
-                    mountExternal, app.getSeInfo(), requiredAbi, instructionSet, invokeWith,
-                    app.getStartTime());
+    }
 
-            synchronized (mService) {
-                handleProcessStartedLocked(app, startResult, startSeq);
-            }
-        } catch (RuntimeException e) {
-            synchronized (mService) {
-                Slog.e(ActivityManagerService.TAG, "Failure starting process "
-                        + app.processName, e);
-                mPendingStarts.remove(startSeq);
-                app.setPendingStart(false);
-                mService.forceStopPackageLocked(app.info.packageName,
-                        UserHandle.getAppId(app.uid),
-                        false, false, true, false, false, app.userId, "start failure");
-            }
+    /**
+     * Called when the dying process we're waiting for is really gone.
+     */
+    private void handlePredecessorProcDied(ProcessRecord app) {
+        if (DEBUG_PROCESSES) {
+            Slog.i(TAG, app.toString() + " is really gone now");
+        }
+
+        // Now kick off the subsequent process start if there is any.
+        final Runnable start = app.mSuccessorStartRunnable;
+        if (start != null) {
+            app.mSuccessorStartRunnable = null;
+            start.run();
         }
     }
 
@@ -2374,6 +2406,16 @@ public final class ProcessList {
             if (app.isolated) {
                 pkgDataInfoMap = null;
                 allowlistedAppDataInfoMap = null;
+            }
+
+            AppStateTracker ast = mService.mServices.mAppStateTracker;
+            if (ast != null) {
+                final boolean inBgRestricted = ast.isAppBackgroundRestricted(
+                        app.info.uid, app.info.packageName);
+                if (inBgRestricted) {
+                    mAppsInBackgroundRestricted.add(app);
+                }
+                app.mState.setBackgroundRestricted(inBgRestricted);
             }
 
             final Process.ProcessStartResult startResult;
@@ -3120,6 +3162,7 @@ public final class ProcessList {
         if (record != null && record.appZygote) {
             removeProcessFromAppZygoteLocked(record);
         }
+        mAppsInBackgroundRestricted.remove(record);
 
         return old;
     }
@@ -4726,7 +4769,7 @@ public final class ProcessList {
                         if (ai != null) {
                             if (ai.packageName.equals(app.info.packageName)) {
                                 app.info = ai;
-                                mService.mOomAdjuster.mPlatformCompatCache
+                                PlatformCompatCache.getInstance()
                                         .onApplicationInfoChanged(ai);
                             }
                             app.getThread().scheduleApplicationInfoChanged(ai);
@@ -4998,10 +5041,10 @@ public final class ProcessList {
             // App has been removed already, meaning cleanup has done.
             Slog.v(TAG, "Got obituary of " + pid + ":" + app.processName);
             app.unlinkDeathRecipient();
-            handlePrecedingAppDiedLocked(app);
             // It's really gone now, let's remove from the dying process list.
             mDyingProcesses.remove(app.processName, app.uid);
             app.setDyingPid(0);
+            handlePrecedingAppDiedLocked(app);
             return true;
         }
         return false;
@@ -5014,25 +5057,96 @@ public final class ProcessList {
      */
     @GuardedBy("mService")
     boolean handlePrecedingAppDiedLocked(ProcessRecord app) {
-        synchronized (app) {
-            if (app.mSuccessor != null) {
-                // We don't allow restart with this ProcessRecord now,
-                // because we have created a new one already.
-                // If it's persistent, add the successor to mPersistentStartingProcesses
-                if (app.isPersistent() && !app.isRemoved()) {
-                    if (mService.mPersistentStartingProcesses.indexOf(app.mSuccessor) < 0) {
-                        mService.mPersistentStartingProcesses.add(app.mSuccessor);
-                    }
+        if (app.mSuccessor != null) {
+            // We don't allow restart with this ProcessRecord now,
+            // because we have created a new one already.
+            // If it's persistent, add the successor to mPersistentStartingProcesses
+            if (app.isPersistent() && !app.isRemoved()) {
+                if (mService.mPersistentStartingProcesses.indexOf(app.mSuccessor) < 0) {
+                    mService.mPersistentStartingProcesses.add(app.mSuccessor);
                 }
-                // clean up the field so the successor's proc starter could proceed.
-                app.mSuccessor.mPredecessor = null;
-                app.mSuccessor = null;
-                // Notify if anyone is waiting for it.
-                app.notifyAll();
-                return false;
             }
+            // clean up the field so the successor's proc starter could proceed.
+            app.mSuccessor.mPredecessor = null;
+            app.mSuccessor = null;
+            // Remove any pending timeout msg.
+            mService.mProcStartHandler.removeMessages(
+                    ProcStartHandler.MSG_PROCESS_KILL_TIMEOUT, app);
+            // Kick off the proc start for the succeeding instance
+            mService.mProcStartHandler.obtainMessage(
+                    ProcStartHandler.MSG_PROCESS_DIED, app).sendToTarget();
+            return false;
         }
         return true;
+    }
+
+    @GuardedBy("mService")
+    void updateBackgroundRestrictedForUidPackageLocked(int uid, String packageName,
+            boolean restricted) {
+        final UidRecord uidRec = getUidRecordLOSP(uid);
+        if (uidRec != null) {
+            final long nowElapsed = SystemClock.elapsedRealtime();
+            uidRec.forEachProcess(app -> {
+                if (TextUtils.equals(app.info.packageName, packageName)) {
+                    app.mState.setBackgroundRestricted(restricted);
+                    if (restricted) {
+                        mAppsInBackgroundRestricted.add(app);
+                        final long future = killAppIfBgRestrictedAndCachedIdleLocked(
+                                app, nowElapsed);
+                        if (future > 0 && !mService.mHandler.hasMessages(IDLE_UIDS_MSG)) {
+                            mService.mHandler.sendEmptyMessageDelayed(IDLE_UIDS_MSG,
+                                    future - nowElapsed);
+                        }
+                    } else {
+                        mAppsInBackgroundRestricted.remove(app);
+                    }
+                    if (!app.isKilledByAm()) {
+                        mService.enqueueOomAdjTargetLocked(app);
+                    }
+                }
+            });
+            /* Will be a no-op if nothing pending */
+            mService.updateOomAdjPendingTargetsLocked(OomAdjuster.OOM_ADJ_REASON_NONE);
+        }
+    }
+
+    /**
+     * Kill the given app if it's in cached idle and background restricted mode.
+     *
+     * @return A future timestamp when the app should be killed at, or a 0 if it shouldn't
+     * be killed or it has been killed.
+     */
+    @GuardedBy("mService")
+    long killAppIfBgRestrictedAndCachedIdleLocked(ProcessRecord app, long nowElapsed) {
+        final UidRecord uidRec = app.getUidRecord();
+        final long lastCanKillTime = app.mState.getLastCanKillOnBgRestrictedAndIdleTime();
+        if (!mService.mConstants.mKillBgRestrictedAndCachedIdle
+                || app.isKilled() || app.getThread() == null || uidRec == null || !uidRec.isIdle()
+                || !app.isCached() || app.mState.shouldNotKillOnBgRestrictedAndIdle()
+                || !app.mState.isBackgroundRestricted() || lastCanKillTime == 0) {
+            return 0;
+        }
+        final long future = lastCanKillTime
+                + mService.mConstants.mKillBgRestrictedAndCachedIdleSettleTimeMs;
+        if (future <= nowElapsed) {
+            app.killLocked("cached idle & background restricted",
+                    ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_CACHED_IDLE_FORCED_APP_STANDBY,
+                    true);
+            return 0;
+        }
+        return future;
+    }
+
+    /**
+     * Called by {@link ActivityManagerService#enqueueUidChangeLocked} only, it doesn't schedule
+     * the standy killing checks because it should have been scheduled before enqueueing UID idle
+     * changed.
+     */
+    @GuardedBy("mService")
+    void killAppIfBgRestrictedAndCachedIdleLocked(UidRecord uidRec) {
+        final long nowElapsed = SystemClock.elapsedRealtime();
+        uidRec.forEachProcess(app -> killAppIfBgRestrictedAndCachedIdleLocked(app, nowElapsed));
     }
 
     /**

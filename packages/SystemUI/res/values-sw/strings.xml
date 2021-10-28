@@ -77,11 +77,12 @@
     <string name="compat_mode_on" msgid="4963711187149440884">"Kuza ili kujaza skrini"</string>
     <string name="compat_mode_off" msgid="7682459748279487945">"Tanua ili kujaza skrini"</string>
     <string name="global_action_screenshot" msgid="2760267567509131654">"Picha ya skrini"</string>
+    <string name="global_action_smart_lock_disabled" msgid="9097102067802412936">"Kipengele cha Smart Lock kimezimwa"</string>
     <string name="remote_input_image_insertion_text" msgid="4850791636452521123">"imetuma picha"</string>
     <string name="screenshot_saving_ticker" msgid="6519186952674544916">"Inahifadhi picha ya skrini..."</string>
     <string name="screenshot_saving_title" msgid="2298349784913287333">"Inahifadhi picha ya skrini..."</string>
     <string name="screenshot_saved_title" msgid="8893267638659083153">"Imehifadhi picha ya skrini"</string>
-    <string name="screenshot_saved_text" msgid="7778833104901642442">"Gusa ili utazame picha ya skrini uliyohifadhi"</string>
+    <string name="screenshot_saved_text" msgid="7778833104901642442">"Gusa ili uone picha ya skrini uliyohifadhi"</string>
     <string name="screenshot_failed_title" msgid="3259148215671936891">"Imeshindwa kuhifadhi picha ya skrini"</string>
     <string name="screenshot_failed_to_save_user_locked_text" msgid="6156607948256936920">"Ni sharti ufungue kifaa kabla ya kuhifadhi picha ya skrini"</string>
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Jaribu kupiga picha ya skrini tena"</string>
@@ -434,7 +435,7 @@
     <string name="sensor_privacy_start_use_mic_dialog_content" msgid="1624701280680913717">"Hatua hii huruhusu programu na huduma zote zenye idhini zitumie maikrofoni yako."</string>
     <string name="sensor_privacy_start_use_camera_dialog_content" msgid="4704948062372435963">"Hatua hii huruhusu programu na huduma zote zenye idhini zitumie kamera yako."</string>
     <string name="sensor_privacy_start_use_mic_camera_dialog_content" msgid="3577642558418404919">"Hatua hii huruhusu programu na huduma zote zenye idhini zitumie kamera au maikrofoni yako."</string>
-    <string name="media_seamless_remote_device" msgid="177033467332920464">"Kifaa"</string>
+    <string name="media_seamless_other_device" msgid="4654849800789196737">"Kifaa kingine"</string>
     <string name="quick_step_accessibility_toggle_overview" msgid="7908949976727578403">"Washa Muhtasari"</string>
     <string name="expanded_header_battery_charged" msgid="5307907517976548448">"Betri imejaa"</string>
     <string name="expanded_header_battery_charging" msgid="1717522253171025549">"Inachaji"</string>
@@ -1161,11 +1162,10 @@
     <string name="keyguard_try_fingerprint" msgid="2825130772993061165">"Tumia alama ya kidole kufungua"</string>
     <string name="accessibility_fingerprint_bouncer" msgid="7189102492498735519">"Uthibitishaji unahitajika. Gusa kitambua alama ya kidole ili uthibitishe."</string>
     <string name="ongoing_phone_call_content_description" msgid="5332334388483099947">"Simu inayoendelea"</string>
-    <string name="airplane_mode" msgid="2536350001462130668">"Hali ya ndegeni"</string>
     <string name="mobile_data_settings_title" msgid="3955246641380064901">"Data ya mtandao wa simu"</string>
     <string name="preference_summary_default_combination" msgid="8453246369903749670">"<xliff:g id="STATE">%1$s</xliff:g> / <xliff:g id="NETWORKMODE">%2$s</xliff:g>"</string>
     <string name="mobile_data_connection_active" msgid="944490013299018227">"Imeunganishwa"</string>
-    <string name="mobile_data_off_summary" msgid="5621158216585822679">"Intaneti haitaunganishwa kiotomatiki"</string>
+    <string name="mobile_data_off_summary" msgid="3663995422004150567">"Data ya mtandao wa simu haitaunganishwa kiotomatiki"</string>
     <string name="mobile_data_no_connection" msgid="1713872434869947377">"Hakuna muunganisho"</string>
     <string name="non_carrier_network_unavailable" msgid="770049357024492372">"Hakuna mitandao mingine inayopatikana"</string>
     <string name="all_network_unavailable" msgid="4112774339909373349">"Hakuna mitandao inayopatikana"</string>
@@ -1175,5 +1175,11 @@
     <string name="unlock_to_view_networks" msgid="5072880496312015676">"Fungua ili uangalie mitandao"</string>
     <string name="wifi_empty_list_wifi_on" msgid="3864376632067585377">"Inatafuta mitandao…"</string>
     <string name="wifi_failed_connect_message" msgid="4161863112079000071">"Imeshindwa kuunganisha kwenye mtandao"</string>
+    <string name="wifi_wont_autoconnect_for_now" msgid="5782282612749867762">"Wi-Fi haitaunganishwa kiotomatiki kwa sasa"</string>
     <string name="see_all_networks" msgid="3773666844913168122">"Angalia yote"</string>
+    <string name="to_switch_networks_disconnect_ethernet" msgid="6698111101156951955">"Ili kubadili mitandao, tenganisha ethaneti"</string>
+    <string name="qs_tile_request_dialog_text" msgid="3501359944139877694">"<xliff:g id="APPNAME">%1$s</xliff:g> ingependa kuongeza kigae kifuatacho kwenye Mipangilio ya Haraka"</string>
+    <string name="qs_tile_request_dialog_add" msgid="4888460910694986304">"Ongeza kigae"</string>
+    <string name="qs_tile_request_dialog_not_add" msgid="4168716573114067296">"Usiongeze kigae"</string>
+    <string name="qs_user_switch_dialog_title" msgid="3045189293587781366">"Chagua mtumiaji"</string>
 </resources>

@@ -61,7 +61,7 @@ public final class WindowContainerTransaction implements Parcelable {
 
     private WindowContainerTransaction(Parcel in) {
         in.readMap(mChanges, null /* loader */);
-        in.readList(mHierarchyOps, null /* loader */);
+        in.readTypedList(mHierarchyOps, HierarchyOp.CREATOR);
         mErrorCallbackToken = in.readStrongBinder();
         mTaskFragmentOrganizer = ITaskFragmentOrganizer.Stub.asInterface(in.readStrongBinder());
     }
@@ -512,15 +512,16 @@ public final class WindowContainerTransaction implements Parcelable {
      * @param fragmentToken2    client assigned unique token to create TaskFragment with specified
      *                          in {@link TaskFragmentCreationParams#getFragmentToken()}. If it is
      *                          {@code null}, the transaction will reset the adjacent TaskFragment.
-     * @hide
      */
     @NonNull
     public WindowContainerTransaction setAdjacentTaskFragments(
-            @NonNull IBinder fragmentToken1, @Nullable IBinder fragmentToken2) {
+            @NonNull IBinder fragmentToken1, @Nullable IBinder fragmentToken2,
+            @Nullable TaskFragmentAdjacentParams params) {
         final HierarchyOp hierarchyOp =
                 new HierarchyOp.Builder(HierarchyOp.HIERARCHY_OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS)
                         .setContainer(fragmentToken1)
                         .setReparentContainer(fragmentToken2)
+                        .setLaunchOptions(params != null ? params.toBundle() : null)
                         .build();
         mHierarchyOps.add(hierarchyOp);
         return this;
@@ -641,7 +642,7 @@ public final class WindowContainerTransaction implements Parcelable {
     /** @hide */
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeMap(mChanges);
-        dest.writeList(mHierarchyOps);
+        dest.writeTypedList(mHierarchyOps);
         dest.writeStrongBinder(mErrorCallbackToken);
         dest.writeStrongInterface(mTaskFragmentOrganizer);
     }
@@ -914,7 +915,7 @@ public final class WindowContainerTransaction implements Parcelable {
      * Changes because they must be executed in the same order that they are added.
      * @hide
      */
-    public static class HierarchyOp implements Parcelable {
+    public static final class HierarchyOp implements Parcelable {
         public static final int HIERARCHY_OP_TYPE_REPARENT = 0;
         public static final int HIERARCHY_OP_TYPE_REORDER = 1;
         public static final int HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT = 2;
@@ -1296,6 +1297,67 @@ public final class WindowContainerTransaction implements Parcelable {
 
                 return hierarchyOp;
             }
+        }
+    }
+
+    /**
+     * Helper class for building an options Bundle that can be used to set adjacent rules of
+     * TaskFragments.
+     */
+    public static class TaskFragmentAdjacentParams {
+        private static final String DELAY_PRIMARY_LAST_ACTIVITY_REMOVAL =
+                "android:transaction.adjacent.option.delay_primary_removal";
+        private static final String DELAY_SECONDARY_LAST_ACTIVITY_REMOVAL =
+                "android:transaction.adjacent.option.delay_secondary_removal";
+
+        private boolean mDelayPrimaryLastActivityRemoval;
+        private boolean mDelaySecondaryLastActivityRemoval;
+
+        public TaskFragmentAdjacentParams() {
+        }
+
+        public TaskFragmentAdjacentParams(@NonNull Bundle bundle) {
+            mDelayPrimaryLastActivityRemoval = bundle.getBoolean(
+                    DELAY_PRIMARY_LAST_ACTIVITY_REMOVAL);
+            mDelaySecondaryLastActivityRemoval = bundle.getBoolean(
+                    DELAY_SECONDARY_LAST_ACTIVITY_REMOVAL);
+        }
+
+        /** @see #shouldDelayPrimaryLastActivityRemoval() */
+        public void setShouldDelayPrimaryLastActivityRemoval(boolean delay) {
+            mDelayPrimaryLastActivityRemoval = delay;
+        }
+
+        /** @see #shouldDelaySecondaryLastActivityRemoval() */
+        public void setShouldDelaySecondaryLastActivityRemoval(boolean delay) {
+            mDelaySecondaryLastActivityRemoval = delay;
+        }
+
+        /**
+         * Whether to delay the last activity of the primary adjacent TaskFragment being immediately
+         * removed while finishing.
+         * <p>
+         * It is usually set to {@code true} to give organizer an opportunity to perform other
+         * actions or animations. An example is to finish together with the adjacent TaskFragment.
+         * </p>
+         */
+        public boolean shouldDelayPrimaryLastActivityRemoval() {
+            return mDelayPrimaryLastActivityRemoval;
+        }
+
+        /**
+         * Similar to {@link #shouldDelayPrimaryLastActivityRemoval()}, but for the secondary
+         * TaskFragment.
+         */
+        public boolean shouldDelaySecondaryLastActivityRemoval() {
+            return mDelaySecondaryLastActivityRemoval;
+        }
+
+        Bundle toBundle() {
+            final Bundle b = new Bundle();
+            b.putBoolean(DELAY_PRIMARY_LAST_ACTIVITY_REMOVAL, mDelayPrimaryLastActivityRemoval);
+            b.putBoolean(DELAY_SECONDARY_LAST_ACTIVITY_REMOVAL, mDelaySecondaryLastActivityRemoval);
+            return b;
         }
     }
 }

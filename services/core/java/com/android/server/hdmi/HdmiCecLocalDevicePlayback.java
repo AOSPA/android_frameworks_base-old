@@ -105,7 +105,40 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
                         }
                     });
         }
+        launchDeviceDiscovery();
         startQueuedActions();
+    }
+
+    @ServiceThreadOnly
+    private void launchDeviceDiscovery() {
+        assertRunOnServiceThread();
+        clearDeviceInfoList();
+        DeviceDiscoveryAction action = new DeviceDiscoveryAction(this,
+                new DeviceDiscoveryAction.DeviceDiscoveryCallback() {
+                    @Override
+                    public void onDeviceDiscoveryDone(List<HdmiDeviceInfo> deviceInfos) {
+                        for (HdmiDeviceInfo info : deviceInfos) {
+                            mService.getHdmiCecNetwork().addCecDevice(info);
+                        }
+
+                        // Since we removed all devices when it starts and device discovery action
+                        // does not poll local devices, we should put device info of local device
+                        // manually here.
+                        for (HdmiCecLocalDevice device : mService.getAllLocalDevices()) {
+                            synchronized (device.mLock) {
+                                mService.getHdmiCecNetwork().addCecDevice(device.getDeviceInfo());
+                            }
+                        }
+
+                        List<HotplugDetectionAction> hotplugActions =
+                                getActions(HotplugDetectionAction.class);
+                        if (hotplugActions.isEmpty()) {
+                            addAndStartAction(
+                                    new HotplugDetectionAction(HdmiCecLocalDevicePlayback.this));
+                        }
+                    }
+                });
+        addAndStartAction(action);
     }
 
     @Override
@@ -122,6 +155,39 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
         assertRunOnServiceThread();
         mService.writeStringSystemProperty(Constants.PROPERTY_PREFERRED_ADDRESS_PLAYBACK,
                 String.valueOf(addr));
+    }
+
+    /**
+     * Performs the action 'device select' or 'one touch play' initiated by a Playback device.
+     *
+     * @param id id of HDMI device to select
+     * @param callback callback object to report the result with
+     */
+    @ServiceThreadOnly
+    void deviceSelect(int id, IHdmiControlCallback callback) {
+        assertRunOnServiceThread();
+        synchronized (mLock) {
+            if (id == getDeviceInfo().getId()) {
+                mService.oneTouchPlay(callback);
+                return;
+            }
+        }
+        HdmiDeviceInfo targetDevice = mService.getHdmiCecNetwork().getDeviceInfo(id);
+        if (targetDevice == null) {
+            invokeCallback(callback, HdmiControlManager.RESULT_TARGET_NOT_AVAILABLE);
+            return;
+        }
+        int targetAddress = targetDevice.getLogicalAddress();
+        if (isAlreadyActiveSource(targetDevice, targetAddress, callback)) {
+            return;
+        }
+        if (!mService.isControlEnabled()) {
+            setActiveSource(targetDevice, "HdmiCecLocalDevicePlayback#deviceSelect()");
+            invokeCallback(callback, HdmiControlManager.RESULT_INCORRECT_MODE);
+            return;
+        }
+        removeAction(DeviceSelectActionFromPlayback.class);
+        addAndStartAction(new DeviceSelectActionFromPlayback(this, targetDevice, callback));
     }
 
     @Override
@@ -417,9 +483,12 @@ public class HdmiCecLocalDevicePlayback extends HdmiCecLocalDeviceSource {
     @Override
     @ServiceThreadOnly
     protected void disableDevice(boolean initiatedByCec, PendingActionClearedCallback callback) {
-        super.disableDevice(initiatedByCec, callback);
-
         assertRunOnServiceThread();
+        removeAction(DeviceDiscoveryAction.class);
+        removeAction(HotplugDetectionAction.class);
+        removeAction(NewDeviceAction.class);
+        super.disableDevice(initiatedByCec, callback);
+        clearDeviceInfoList();
         checkIfPendingActionsCleared();
     }
 

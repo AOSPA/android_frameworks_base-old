@@ -1739,10 +1739,24 @@ class ContextImpl extends Context {
     }
 
     @Override
+    public Intent registerReceiverForAllUsers(BroadcastReceiver receiver,
+            IntentFilter filter, String broadcastPermission, Handler scheduler, int flags) {
+        return registerReceiverAsUser(receiver, UserHandle.ALL,
+                filter, broadcastPermission, scheduler, flags);
+    }
+
+    @Override
     public Intent registerReceiverAsUser(BroadcastReceiver receiver, UserHandle user,
             IntentFilter filter, String broadcastPermission, Handler scheduler) {
         return registerReceiverInternal(receiver, user.getIdentifier(),
                 filter, broadcastPermission, scheduler, getOuterContext(), 0);
+    }
+
+    @Override
+    public Intent registerReceiverAsUser(BroadcastReceiver receiver, UserHandle user,
+            IntentFilter filter, String broadcastPermission, Handler scheduler, int flags) {
+        return registerReceiverInternal(receiver, user.getIdentifier(),
+                filter, broadcastPermission, scheduler, getOuterContext(), flags);
     }
 
     private Intent registerReceiverInternal(BroadcastReceiver receiver, int userId,
@@ -1766,6 +1780,12 @@ class ContextImpl extends Context {
             }
         }
         try {
+            ActivityThread thread = ActivityThread.currentActivityThread();
+            Instrumentation instrumentation = thread.getInstrumentation();
+            if (instrumentation.isInstrumenting()
+                    && ((flags & Context.RECEIVER_NOT_EXPORTED) == 0)) {
+                flags = flags | Context.RECEIVER_EXPORTED;
+            }
             final Intent intent = ActivityManager.getService().registerReceiverWithFeature(
                     mMainThread.getApplicationThread(), mBasePackageName, getAttributionTag(),
                     AppOpsManager.toReceiverId(receiver), rd, filter, broadcastPermission, userId,
@@ -3124,6 +3144,7 @@ class ContextImpl extends Context {
             mIsConfigurationBasedContext = container.mIsConfigurationBasedContext;
             mContextType = container.mContextType;
             mContentCaptureOptions = container.mContentCaptureOptions;
+            mAutofillOptions = container.mAutofillOptions;
         } else {
             mBasePackageName = packageInfo.mPackageName;
             ApplicationInfo ainfo = packageInfo.getApplicationInfo();

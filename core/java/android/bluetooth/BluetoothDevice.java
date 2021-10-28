@@ -145,7 +145,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * <p>Sent when a remote device is found during discovery.
      * <p>Always contains the extra fields {@link #EXTRA_DEVICE} and {@link
      * #EXTRA_CLASS}. Can contain the extra fields {@link #EXTRA_NAME} and/or
-     * {@link #EXTRA_RSSI} if they are available.
+     * {@link #EXTRA_RSSI} and/or {@link #EXTRA_IS_COORDINATED_SET_MEMBER} if they are available.
      */
     // TODO: Change API to not broadcast RSSI if not available (incoming connection)
     @RequiresLegacyBluetoothPermission
@@ -406,6 +406,15 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * Bluetooth hardware.
      */
     public static final String EXTRA_RSSI = "android.bluetooth.device.extra.RSSI";
+
+    /**
+    * Used as an bool extra field in {@link #ACTION_FOUND} intents.
+    * It contains the information if device is discovered as member of a coordinated set or not.
+    * Pairing with device that belongs to a set would trigger pairing with the rest of set members.
+    * See Bluetooth CSIP specification for more details.
+    */
+    public static final String EXTRA_IS_COORDINATED_SET_MEMBER =
+            "android.bluetooth.extra.IS_COORDINATED_SET_MEMBER";
 
     /**
      * Used as a Parcelable {@link BluetoothClass} extra field in {@link
@@ -1480,7 +1489,10 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             if (alias == null) {
                 return getName();
             }
-            return alias;
+            return alias
+                    .replace('\t', ' ')
+                    .replace('\n', ' ')
+                    .replace('\r', ' ');
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
@@ -1594,7 +1606,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * @throws IllegalArgumentException if an invalid transport was specified
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -1856,6 +1868,90 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         return false;
     }
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
+            BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
+            BluetoothStatusCodes.ERROR_DEVICE_NOT_BONDED
+    })
+    public @interface ConnectionReturnValues{}
+
+    /**
+     * Connects all user enabled and supported bluetooth profiles between the local and remote
+     * device. If no profiles are user enabled (e.g. first connection), we connect all supported
+     * profiles. If the device is not already connected, this will page the device before initiating
+     * profile connections. Connection is asynchronous and you should listen to each profile's
+     * broadcast intent ACTION_CONNECTION_STATE_CHANGED to verify whether connection was successful.
+     * For example, to verify a2dp is connected, you would listen for
+     * {@link BluetoothA2dp#ACTION_CONNECTION_STATE_CHANGED}
+     *
+     * @return whether the messages were successfully sent to try to connect all profiles
+     * @throws IllegalArgumentException if the device address is invalid
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+            android.Manifest.permission.MODIFY_PHONE_STATE,
+    })
+    public @ConnectionReturnValues int connect() {
+        if (!BluetoothAdapter.checkBluetoothAddress(getAddress())) {
+            throw new IllegalArgumentException("device cannot have an invalid address");
+        }
+
+        try {
+            if (sService == null) {
+                Log.e(TAG, "BT not enabled. Cannot connect to remote device.");
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            }
+            return sService.connectAllEnabledProfiles(this, mAttributionSource);
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Disconnects all connected bluetooth profiles between the local and remote device.
+     * Disconnection is asynchronous and you should listen to each profile's broadcast intent
+     * ACTION_CONNECTION_STATE_CHANGED to verify whether disconnection was successful. For example,
+     * to verify a2dp is disconnected, you would listen for
+     * {@link BluetoothA2dp#ACTION_CONNECTION_STATE_CHANGED}
+     *
+     * @return whether the messages were successfully sent to try to disconnect all profiles
+     * @throws IllegalArgumentException if the device address is invalid
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public @ConnectionReturnValues int disconnect() {
+        if (!BluetoothAdapter.checkBluetoothAddress(getAddress())) {
+            throw new IllegalArgumentException("device cannot have an invalid address");
+        }
+
+        try {
+            if (sService == null) {
+                Log.e(TAG, "BT not enabled. Cannot disconnect from remote device.");
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            }
+            return sService.disconnectAllEnabledProfiles(this, mAttributionSource);
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     /**
      * Returns whether there is an open connection to this device.
      *
@@ -1976,13 +2072,41 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean fetchUuidsWithSdp() {
+        return fetchUuidsWithSdp(TRANSPORT_AUTO);
+    }
+
+    /**
+     * Perform a service discovery on the remote device to get the UUIDs supported with the
+     * specific transport.
+     *
+     * <p>This API is asynchronous and {@link #ACTION_UUID} intent is sent,
+     * with the UUIDs supported by the remote end. If there is an error
+     * in getting the SDP or GATT records or if the process takes a long time, or the device
+     * is bonding and we have its UUIDs cached, {@link #ACTION_UUID} intent is sent with the
+     * UUIDs that is currently present in the cache. Clients should use the {@link #getUuids}
+     * to get UUIDs if service discovery is not to be performed. If there is an ongoing bonding
+     * process, service discovery or device inquiry, the request will be queued.
+     *
+     * @param transport - provide type of transport (e.g. LE or Classic).
+     * @return False if the check fails, True if the process of initiating an ACL connection
+     * to the remote device was started or cached UUIDs will be broadcast with the specific
+     * transport.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public boolean fetchUuidsWithSdp(@Transport int transport) {
         final IBluetooth service = sService;
         if (service == null || !isBluetoothEnabled()) {
             Log.e(TAG, "BT not enabled. Cannot fetchUuidsWithSdp");
             return false;
         }
         try {
-            return service.fetchRemoteUuidsWithAttribution(this, mAttributionSource);
+            return service.fetchRemoteUuidsWithAttribution(this, transport, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }

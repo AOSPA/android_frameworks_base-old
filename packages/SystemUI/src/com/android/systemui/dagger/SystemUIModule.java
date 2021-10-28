@@ -18,6 +18,7 @@ package com.android.systemui.dagger;
 
 import android.app.INotificationManager;
 import android.content.Context;
+import android.view.LayoutInflater;
 
 import androidx.annotation.Nullable;
 
@@ -26,6 +27,7 @@ import com.android.keyguard.clock.ClockModule;
 import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
+import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
@@ -37,7 +39,10 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.demomode.dagger.DemoModeModule;
 import com.android.systemui.doze.dagger.DozeComponent;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlagManager;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.FlagReader;
+import com.android.systemui.flags.FlagWriter;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.model.SysUiState;
@@ -62,6 +67,7 @@ import com.android.systemui.statusbar.notification.row.dagger.NotificationRowCom
 import com.android.systemui.statusbar.notification.row.dagger.NotificationShelfComponent;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.StatusBarWindowView;
 import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
@@ -70,13 +76,13 @@ import com.android.systemui.statusbar.policy.dagger.SmartRepliesInflationModule;
 import com.android.systemui.statusbar.policy.dagger.StatusBarPolicyModule;
 import com.android.systemui.tuner.dagger.TunerModule;
 import com.android.systemui.user.UserModule;
+import com.android.systemui.util.InjectionInflationController;
 import com.android.systemui.util.concurrency.SysUIConcurrencyModule;
 import com.android.systemui.util.dagger.UtilModule;
 import com.android.systemui.util.sensors.SensorModule;
 import com.android.systemui.util.settings.SettingsUtilModule;
 import com.android.systemui.util.time.SystemClock;
 import com.android.systemui.util.time.SystemClockImpl;
-import com.android.systemui.volume.dagger.VolumeModule;
 import com.android.systemui.wallet.dagger.WalletModule;
 import com.android.systemui.wmshell.BubblesManager;
 import com.android.wm.shell.bubbles.Bubbles;
@@ -114,7 +120,6 @@ import dagger.Provides;
             TunerModule.class,
             UserModule.class,
             UtilModule.class,
-            VolumeModule.class,
             WalletModule.class
         },
         subcomponents = {
@@ -143,9 +148,17 @@ public abstract class SystemUIModule {
 
     @SysUISingleton
     @Provides
-    static SysUiState provideSysUiState() {
-        return new SysUiState();
+    static SysUiState provideSysUiState(DumpManager dumpManager) {
+        final SysUiState state = new SysUiState();
+        dumpManager.registerDumpable(state);
+        return state;
     }
+
+    @Binds
+    abstract FlagReader provideFlagReader(FeatureFlagManager impl);
+
+    @Binds
+    abstract FlagWriter provideFlagWriter(FeatureFlagManager impl);
 
     @BindsOptionalOf
     abstract CommandQueue optionalCommandQueue();
@@ -201,5 +214,20 @@ public abstract class SystemUIModule {
                 interruptionStateProvider, zenModeController, notifUserManager,
                 groupManager, entryManager, notifPipeline, sysUiState, featureFlags, dumpManager,
                 sysuiMainExecutor));
+    }
+
+    @Provides
+    @SysUISingleton
+    static StatusBarWindowView providesStatusBarWindowView(Context context,
+            InjectionInflationController injectionInflationController) {
+        StatusBarWindowView view =
+                (StatusBarWindowView) injectionInflationController.injectable(
+                        LayoutInflater.from(context)).inflate(R.layout.super_status_bar,
+                        /* root= */ null);
+        if (view == null) {
+            throw new IllegalStateException(
+                    "R.layout.super_status_bar could not be properly inflated");
+        }
+        return view;
     }
 }

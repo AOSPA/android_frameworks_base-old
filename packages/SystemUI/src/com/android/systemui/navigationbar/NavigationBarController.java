@@ -17,7 +17,6 @@
 package com.android.systemui.navigationbar;
 
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
 
 import static com.android.systemui.shared.recents.utilities.Utilities.isTablet;
 
@@ -52,6 +51,7 @@ import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.recents.OverviewProxyService;
@@ -81,9 +81,11 @@ import dagger.Lazy;
 
 /** A controller to handle navigation bars. */
 @SysUISingleton
-public class NavigationBarController implements Callbacks,
+public class NavigationBarController implements
+        Callbacks,
         ConfigurationController.ConfigurationListener,
-        NavigationModeController.ModeChangedListener, Dumpable {
+        NavigationModeController.ModeChangedListener,
+        Dumpable {
 
     private static final String TAG = NavigationBarController.class.getSimpleName();
 
@@ -157,7 +159,8 @@ public class NavigationBarController implements Callbacks,
             ConfigurationController configurationController,
             NavigationBarA11yHelper navigationBarA11yHelper,
             TaskbarDelegate taskbarDelegate,
-            UserTracker userTracker) {
+            UserTracker userTracker,
+            DumpManager dumpManager) {
         mContext = context;
         mWindowManager = windowManager;
         mAssistManagerLazy = assistManagerLazy;
@@ -191,16 +194,19 @@ public class NavigationBarController implements Callbacks,
         mNavMode = mNavigationModeController.addListener(this);
         mNavigationModeController.addListener(this);
         mTaskbarDelegate = taskbarDelegate;
-        mTaskbarDelegate.setOverviewProxyService(overviewProxyService,
-                navigationBarA11yHelper, mSysUiFlagsContainer);
+        mTaskbarDelegate.setOverviewProxyService(commandQueue, overviewProxyService,
+                navigationBarA11yHelper, navigationModeController, sysUiFlagsContainer,
+                dumpManager);
         mIsTablet = isTablet(mContext);
         mUserTracker = userTracker;
+
+        dumpManager.registerDumpable(this);
     }
 
     @Override
     public void onConfigChanged(Configuration newConfig) {
         boolean isOldConfigTablet = mIsTablet;
-        mIsTablet = isTablet(newConfig, mContext);
+        mIsTablet = isTablet(mContext);
         boolean largeScreenChanged = mIsTablet != isOldConfigTablet;
         // If we folded/unfolded while in 3 button, show navbar in folded state, hide in unfolded
         if (largeScreenChanged && updateNavbarForTaskbar()) {
@@ -251,17 +257,14 @@ public class NavigationBarController implements Callbacks,
 
     /** @return {@code true} if taskbar is enabled, false otherwise */
     private boolean initializeTaskbarIfNecessary() {
-        boolean isShowingTaskbar = mIsTablet && mNavMode == NAV_BAR_MODE_3BUTTON;
-        if (isShowingTaskbar) {
-            // Remove navigation bar when taskbar is showing, currently only for 3 button mode
+        if (mIsTablet) {
+            // Remove navigation bar when taskbar is showing
             removeNavigationBar(mContext.getDisplayId());
-            mCommandQueue.addCallback(mTaskbarDelegate);
             mTaskbarDelegate.init(mContext.getDisplayId());
         } else {
-            mCommandQueue.removeCallback(mTaskbarDelegate);
             mTaskbarDelegate.destroy();
         }
-        return isShowingTaskbar;
+        return mIsTablet;
     }
 
     @Override
@@ -332,7 +335,7 @@ public class NavigationBarController implements Callbacks,
             return;
         }
 
-        if (mIsTablet && mNavMode == NAV_BAR_MODE_3BUTTON) {
+        if (mIsTablet) {
             return;
         }
 

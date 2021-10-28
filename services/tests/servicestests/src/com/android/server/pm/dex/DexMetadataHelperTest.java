@@ -140,7 +140,7 @@ public class DexMetadataHelperTest {
         Collection<String> apkToDexMetadataList =
                 AndroidPackageUtils.getPackageDexMetadata(pkg).values();
         String packageName = pkg.getPackageName();
-        long versionCode = pkg.toAppInfoWithoutState().longVersionCode;
+        long versionCode = pkg.getLongVersionCode();
         final ParseTypeImpl input = ParseTypeImpl.forDefaultParsing();
         for (String dexMetadata : apkToDexMetadataList) {
             final ParseResult result = DexMetadataHelper.validateDexMetadataFile(
@@ -416,8 +416,11 @@ public class DexMetadataHelperTest {
                         result.getErrorMessage(), result.getException());
             }
             final ApkLite baseApk = result.getResult();
-            final PackageLite pkgLite = new PackageLite(null, baseApk.getPath(), baseApk, null,
-                    null, null, null, null, null, baseApk.getTargetSdkVersion());
+            final PackageLite pkgLite = new PackageLite(null, baseApk.getPath(), baseApk,
+                    null /* splitNames */, null /* isFeatureSplits */, null /* usesSplitNames */,
+                    null /* configForSplit */, null /* splitApkPaths */,
+                    null /* splitRevisionCodes */, baseApk.getTargetSdkVersion(),
+                    null /* requiredSplitTypes */, null /* splitTypes */);
             Assert.assertEquals(dm.length(), DexMetadataHelper.getPackageDexMetadataSize(pkgLite));
         }
 

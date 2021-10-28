@@ -230,6 +230,10 @@ public final class BroadcastQueue {
         return mPendingBroadcast != null && mPendingBroadcast.curApp.getPid() == pid;
     }
 
+    boolean isPendingBroadcastProcessLocked(ProcessRecord app) {
+        return mPendingBroadcast != null && mPendingBroadcast.curApp == app;
+    }
+
     public void enqueueParallelBroadcastLocked(BroadcastRecord r) {
         mParallelBroadcasts.add(r);
         enqueueBroadcastHelper(r);
@@ -773,6 +777,22 @@ public final class BroadcastQueue {
                     + " due to sender " + r.callerPackage
                     + " (uid " + r.callingUid + ")");
             skip = true;
+        }
+
+        // Ensure that broadcasts are only sent to other apps if they are explicitly marked as
+        // exported, or are System level broadcasts
+        if (!skip && !filter.exported && Process.SYSTEM_UID != r.callingUid
+                && filter.receiverList.uid != r.callingUid) {
+
+            Slog.w(TAG, "Exported Denial: sending "
+                    + r.intent.toString()
+                    + ", action: " + r.intent.getAction()
+                    + " from " + r.callerPackage
+                    + " (uid=" + r.callingUid + ")"
+                    + " due to receiver " + filter.receiverList.app
+                    + " (uid " + filter.receiverList.uid + ")"
+                    + " not specifying RECEIVER_EXPORTED");
+            // skip = true;
         }
 
         if (skip) {

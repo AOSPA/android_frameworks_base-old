@@ -57,6 +57,7 @@ import android.content.res.Configuration;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.LocaleList;
 import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
@@ -263,7 +264,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         }
 
         onConfigurationChanged(atm.getGlobalConfiguration());
-        mAtm.mPackageConfigPersister.updateConfigIfNeeded(this, mUserId, mName);
+        mAtm.mPackageConfigPersister.updateConfigIfNeeded(this, mUserId, mInfo.packageName);
     }
 
     public void setPid(int pid) {
@@ -730,11 +731,14 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             canUpdate = true;
         }
 
-        // Compare the z-order of ActivityStacks if both activities landed on same display.
-        if (display == topDisplay
-                && mPreQTopResumedActivity.getRootTask().compareTo(
-                        activity.getRootTask()) <= 0) {
-            canUpdate = true;
+        // Update the topmost activity if the activity has higher z-order than the current
+        // top-resumed activity.
+        if (!canUpdate) {
+            final ActivityRecord ar = topDisplay.getActivity(r -> r == activity,
+                    true /* traverseTopToBottom */, mPreQTopResumedActivity);
+            if (ar != null && ar != mPreQTopResumedActivity) {
+                canUpdate = true;
+            }
         }
 
         if (canUpdate) {
@@ -814,10 +818,13 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return false;
     }
 
-    void updateNightModeForAllActivities(int nightMode) {
+    // TODO(b/199277065): Re-assess how app-specific locales are applied based on UXR
+    // TODO(b/199277729): Consider whether we need to add special casing for edge cases like
+    //  activity-embeddings etc.
+    void updateAppSpecificSettingsForAllActivities(Integer nightMode, LocaleList localesOverride) {
         for (int i = mActivities.size() - 1; i >= 0; --i) {
             final ActivityRecord r = mActivities.get(i);
-            if (r.setOverrideNightMode(nightMode) && r.mVisibleRequested) {
+            if (r.applyAppSpecificConfig(nightMode, localesOverride) && r.mVisibleRequested) {
                 r.ensureActivityConfiguration(0 /* globalChanges */, true /* preserveWindow */);
             }
         }
@@ -945,7 +952,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 final int displayId = r.getDisplayId();
                 final Context c = root.getDisplayUiContext(displayId);
 
-                if (r.mVisibleRequested && !displayContexts.contains(c)) {
+                if (c != null && r.mVisibleRequested && !displayContexts.contains(c)) {
                     displayContexts.add(c);
                 }
             }

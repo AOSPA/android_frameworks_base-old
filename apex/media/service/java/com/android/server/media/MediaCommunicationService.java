@@ -31,6 +31,7 @@ import android.media.MediaController2;
 import android.media.MediaParceledListSlice;
 import android.media.Session2CommandGroup;
 import android.media.Session2Token;
+import android.media.session.MediaSessionManager;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
@@ -42,6 +43,7 @@ import android.os.UserManager;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+import android.view.KeyEvent;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.server.SystemService;
@@ -52,7 +54,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
 
 /**
  * A system service that manages {@link android.media.MediaSession2} creations
@@ -60,7 +61,7 @@ import java.util.stream.Collectors;
  * @hide
  */
 public class MediaCommunicationService extends SystemService {
-    private static final String TAG = "MediaCommunicationService";
+    private static final String TAG = "MediaCommunicationSrv";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     final Context mContext;
@@ -77,6 +78,7 @@ public class MediaCommunicationService extends SystemService {
     @GuardedBy("mLock")
     final List<CallbackRecord> mCallbackRecords = new ArrayList<>();
     final NotificationManager mNotificationManager;
+    MediaSessionManager mSessionManager;
 
     public MediaCommunicationService(Context context) {
         super(context);
@@ -88,6 +90,17 @@ public class MediaCommunicationService extends SystemService {
     public void onStart() {
         publishBinderService(Context.MEDIA_COMMUNICATION_SERVICE, new Stub());
         updateUser();
+    }
+
+    @Override
+    public void onBootPhase(int phase) {
+        super.onBootPhase(phase);
+        switch (phase) {
+            // This ensures MediaSessionService is started
+            case PHASE_BOOT_COMPLETED:
+                mSessionManager = mContext.getSystemService(MediaSessionManager.class);
+                break;
+        }
     }
 
     @Override
@@ -267,6 +280,34 @@ public class MediaCommunicationService extends SystemService {
         session.close();
     }
 
+    void onSessionPlaybackStateChanged(Session2Record session, boolean promotePriority) {
+        FullUserRecord user = session.getFullUser();
+        if (user == null || !user.containsSession(session)) {
+            Log.d(TAG, "Unknown session changed playback state. Ignoring.");
+            return;
+        }
+        user.onPlaybackStateChanged(session, promotePriority);
+    }
+
+
+    static boolean isMediaSessionKey(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_MUTE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+            case KeyEvent.KEYCODE_MEDIA_NEXT:
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_RECORD:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                return true;
+        }
+        return false;
+    }
+
     private class Stub extends IMediaCommunicationService.Stub {
         @Override
         public void notifySession2Created(Session2Token sessionToken) {
@@ -345,6 +386,25 @@ public class MediaCommunicationService extends SystemService {
                 MediaParceledListSlice parceledListSlice = new MediaParceledListSlice<>(result);
                 parceledListSlice.setInlineCountLimit(1);
                 return parceledListSlice;
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void dispatchMediaKeyEvent(String packageName, KeyEvent keyEvent,
+                boolean asSystemService) {
+            if (keyEvent == null || !isMediaSessionKey(keyEvent.getKeyCode())) {
+                Log.w(TAG, "Attempted to dispatch null or non-media key event.");
+                return;
+            }
+
+            final int pid = Binder.getCallingPid();
+            final int uid = Binder.getCallingUid();
+            final long token = Binder.clearCallingIdentity();
+            try {
+                //TODO: Dispatch key event to media session 2 if required
+                mSessionManager.dispatchMediaKeyEvent(keyEvent, asSystemService);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -469,26 +529,20 @@ public class MediaCommunicationService extends SystemService {
 
     final class FullUserRecord {
         private final int mFullUserId;
-        private final Object mUserLock = new Object();
-        @GuardedBy("mUserLock")
-        private final List<Session2Record> mSessionRecords = new ArrayList<>();
+        private final SessionPriorityList mSessionPriorityList = new SessionPriorityList();
 
         FullUserRecord(int fullUserId) {
             mFullUserId = fullUserId;
         }
 
         public void addSession(Session2Record record) {
-            synchronized (mUserLock) {
-                mSessionRecords.add(record);
-            }
+            mSessionPriorityList.addSession(record);
             mHandler.post(() -> dispatchSession2Created(record.mSessionToken));
             mHandler.post(() -> dispatchSession2Changed(mFullUserId));
         }
 
         private void removeSession(Session2Record record) {
-            synchronized (mUserLock) {
-                mSessionRecords.remove(record);
-            }
+            mSessionPriorityList.removeSession(record);
             mHandler.post(() -> dispatchSession2Changed(mFullUserId));
             //TODO: Handle if the removed session was the media button session.
         }
@@ -498,47 +552,30 @@ public class MediaCommunicationService extends SystemService {
         }
 
         public List<Session2Token> getAllSession2Tokens() {
-            synchronized (mUserLock) {
-                return mSessionRecords.stream()
-                        .map(Session2Record::getSessionToken)
-                        .collect(Collectors.toList());
-            }
+            return mSessionPriorityList.getAllTokens();
         }
 
         public List<Session2Token> getSession2Tokens(int userId) {
-            synchronized (mUserLock) {
-                return mSessionRecords.stream()
-                        .filter(record -> record.getUserId() == userId)
-                        .map(Session2Record::getSessionToken)
-                        .collect(Collectors.toList());
-            }
+            return mSessionPriorityList.getTokensByUserId(userId);
         }
 
         public void destroyAllSessions() {
-            synchronized (mUserLock) {
-                for (Session2Record session : mSessionRecords) {
-                    session.close();
-                }
-                mSessionRecords.clear();
-            }
+            mSessionPriorityList.destroyAllSessions();
             mHandler.post(() -> dispatchSession2Changed(mFullUserId));
         }
 
         public void destroySessionsForUser(int userId) {
-            boolean changed = false;
-            synchronized (mUserLock) {
-                for (int i = mSessionRecords.size() - 1; i >= 0; i--) {
-                    Session2Record session = mSessionRecords.get(i);
-                    if (session.getUserId() == userId) {
-                        mSessionRecords.remove(i);
-                        session.close();
-                        changed = true;
-                    }
-                }
-            }
-            if (changed) {
+            if (mSessionPriorityList.destroySessionsByUserId(userId)) {
                 mHandler.post(() -> dispatchSession2Changed(mFullUserId));
             }
+        }
+
+        public boolean containsSession(Session2Record session) {
+            return mSessionPriorityList.contains(session);
+        }
+
+        public void onPlaybackStateChanged(Session2Record session, boolean promotePriority) {
+            mSessionPriorityList.onPlaybackStateChanged(session, promotePriority);
         }
     }
 
@@ -555,6 +592,7 @@ public class MediaCommunicationService extends SystemService {
         @GuardedBy("mSession2RecordLock")
         private boolean mIsClosed;
 
+        //TODO: introduce policy (See MediaSessionPolicyProvider)
         Session2Record(MediaCommunicationService service, FullUserRecord fullUser,
                 Session2Token token, Executor controllerExecutor) {
             mServiceRef = new WeakReference<>(service);
@@ -590,6 +628,12 @@ public class MediaCommunicationService extends SystemService {
             return mSessionToken;
         }
 
+        public boolean checkPlaybackActiveState(boolean expected) {
+            synchronized (mSession2RecordLock) {
+                return mIsConnected && mController.isPlaybackActive() == expected;
+            }
+        }
+
         private class Controller2Callback extends MediaController2.ControllerCallback {
             @Override
             public void onConnected(MediaController2 controller,
@@ -613,6 +657,20 @@ public class MediaCommunicationService extends SystemService {
                 MediaCommunicationService service = mServiceRef.get();
                 if (service != null) {
                     service.onSessionDied(Session2Record.this);
+                }
+            }
+
+            @Override
+            public void onPlaybackActiveChanged(
+                    @NonNull MediaController2 controller,
+                    boolean playbackActive) {
+                if (DEBUG) {
+                    Log.d(TAG, "playback active changed, " + mSessionToken + ", active="
+                            + playbackActive);
+                }
+                MediaCommunicationService service = mServiceRef.get();
+                if (service != null) {
+                    service.onSessionPlaybackStateChanged(Session2Record.this, playbackActive);
                 }
             }
         }

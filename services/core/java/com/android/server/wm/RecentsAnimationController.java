@@ -123,6 +123,7 @@ public class RecentsAnimationController implements DeathRecipient {
     private final int mDisplayId;
     private boolean mWillFinishToHome = false;
     private final Runnable mFailsafeRunnable = this::onFailsafe;
+    private Runnable mCheckRotationAfterCleanup;
 
     // The recents component app token that is shown behind the visibile tasks
     private ActivityRecord mTargetActivityRecord;
@@ -581,7 +582,7 @@ public class RecentsAnimationController implements DeathRecipient {
                 contentInsets = targetAppMainWindow
                         .getInsetsStateWithVisibilityOverride()
                         .calculateInsets(mTargetActivityRecord.getBounds(), Type.systemBars(),
-                                false /* ignoreVisibility */);
+                                false /* ignoreVisibility */).toRect();
             } else {
                 // If the window for the activity had not yet been created, use the display insets.
                 mService.getStableInsets(mDisplayId, mTmpRect);
@@ -921,6 +922,24 @@ public class RecentsAnimationController implements DeathRecipient {
     }
 
     /**
+     * If the display rotation change is ignored while recents animation is running, make sure that
+     * the pending rotation change will be applied after the animation finishes.
+     */
+    void setCheckRotationAfterCleanup() {
+        if (mCheckRotationAfterCleanup != null) return;
+        mCheckRotationAfterCleanup = () -> {
+            synchronized (mService.mGlobalLock) {
+                if (mDisplayContent.getDisplayRotation()
+                        .updateRotationAndSendNewConfigIfChanged()) {
+                    if (mTargetActivityRecord != null) {
+                        mTargetActivityRecord.finishFixedRotationTransform();
+                    }
+                }
+            }
+        };
+    }
+
+    /**
      * @return Whether we should defer the cancel from a root task order change until the next app
      * transition.
      */
@@ -1006,6 +1025,10 @@ public class RecentsAnimationController implements DeathRecipient {
         // Notify that the animation has ended
         if (mStatusBar != null) {
             mStatusBar.onRecentsAnimationStateChanged(false /* running */);
+        }
+        if (mCheckRotationAfterCleanup != null) {
+            mService.mH.post(mCheckRotationAfterCleanup);
+            mCheckRotationAfterCleanup = null;
         }
     }
 
@@ -1102,21 +1125,11 @@ public class RecentsAnimationController implements DeathRecipient {
         return mTargetActivityRecord.findMainWindow();
     }
 
-    /**
-     * Returns the task with the highest layer, or null if none is found.
-     */
-    public Task getHighestLayerTask() {
-        int highestLayer = Integer.MIN_VALUE;
-        Task highestLayerTask = null;
-        for (int i = mPendingAnimations.size() - 1; i >= 0; i--) {
-            TaskAnimationAdapter adapter = mPendingAnimations.get(i);
-            int layer = adapter.mTask.getPrefixOrderIndex();
-            if (layer > highestLayer) {
-                highestLayer = layer;
-                highestLayerTask = adapter.mTask;
-            }
+    DisplayArea getTargetAppDisplayArea() {
+        if (mTargetActivityRecord == null) {
+            return null;
         }
-        return highestLayerTask;
+        return mTargetActivityRecord.getDisplayArea();
     }
 
     boolean isAnimatingTask(Task task) {
@@ -1209,7 +1222,7 @@ public class RecentsAnimationController implements DeathRecipient {
                 return null;
             }
             final Rect insets = mainWindow.getInsetsStateWithVisibilityOverride().calculateInsets(
-                    mBounds, Type.systemBars(), false /* ignoreVisibility */);
+                    mBounds, Type.systemBars(), false /* ignoreVisibility */).toRect();
             InsetUtils.addInsets(insets, mainWindow.mActivityRecord.getLetterboxInsets());
             final int mode = topApp.getActivityType() == mTargetActivityType
                     ? MODE_OPENING

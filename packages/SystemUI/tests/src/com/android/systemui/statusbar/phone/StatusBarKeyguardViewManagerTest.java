@@ -45,6 +45,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dock.DockManager;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.keyguard.FaceAuthScreenBrightnessController;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
@@ -63,6 +64,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Optional;
+
+import dagger.Lazy;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -103,6 +106,8 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
     @Mock
     private KeyguardMessageArea mKeyguardMessageArea;
+    @Mock
+    private Lazy<ShadeController> mShadeController;
 
     private WakefulnessLifecycle mWakefulnessLifecycle;
     private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
@@ -116,7 +121,10 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
                 .thenReturn(mBouncer);
 
         when(mContainer.findViewById(anyInt())).thenReturn(mKeyguardMessageArea);
-        mWakefulnessLifecycle = new WakefulnessLifecycle(getContext(), null);
+        mWakefulnessLifecycle = new WakefulnessLifecycle(
+                getContext(),
+                null,
+                mock(DumpManager.class));
         mStatusBarKeyguardViewManager = new StatusBarKeyguardViewManager(
                 getContext(),
                 mViewMediatorCallback,
@@ -133,7 +141,8 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
                 mKeyguardBouncerFactory,
                 mWakefulnessLifecycle,
                 mUnlockedScreenOffAnimationController,
-                mKeyguardMessageAreaFactory);
+                mKeyguardMessageAreaFactory,
+                mShadeController);
         mStatusBarKeyguardViewManager.registerStatusBar(mStatusBar, mContainer,
                 mNotificationPanelView, mBiometrucUnlockController,
                 mNotificationContainer, mBypassController);
@@ -298,19 +307,5 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         mStatusBarKeyguardViewManager.updateKeyguardPosition(1.0f);
 
         verify(mBouncer).updateKeyguardPosition(1.0f);
-    }
-
-    @Test
-    public void testNavBarHiddenWhenSleepAnimationStarts() {
-        mStatusBarKeyguardViewManager.hide(0 /* startTime */, 0 /* fadeoutDuration */);
-        assertTrue(mStatusBarKeyguardViewManager.isNavBarVisible());
-
-        // Verify that the nav bar is hidden when the screen off animation starts
-        doReturn(true).when(mUnlockedScreenOffAnimationController).isScreenOffAnimationPlaying();
-        mWakefulnessLifecycle.dispatchFinishedGoingToSleep();
-        assertFalse(mStatusBarKeyguardViewManager.isNavBarVisible());
-
-        mWakefulnessLifecycle.dispatchFinishedWakingUp();
-        assertTrue(mStatusBarKeyguardViewManager.isNavBarVisible());
     }
 }

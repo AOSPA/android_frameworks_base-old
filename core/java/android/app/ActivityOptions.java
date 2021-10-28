@@ -26,6 +26,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.app.ExitTransitionCoordinator.ActivityExitTransitionCallbacks;
 import android.app.ExitTransitionCoordinator.ExitTransitionCallbacks;
@@ -55,7 +56,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.window.IRemoteTransition;
+import android.window.RemoteTransition;
 import android.window.SplashScreen;
 import android.window.WindowContainerToken;
 
@@ -166,6 +167,14 @@ public class ActivityOptions {
      */
     public static final String KEY_SPLASH_SCREEN_THEME = "android.activity.splashScreenTheme";
 
+    /**
+     * PendingIntent caller allows activity start even if PendingIntent creator is in background.
+     * This only works if the PendingIntent caller is allowed to start background activities,
+     * for example if it's in the foreground, or has BAL permission.
+     * @hide
+     */
+    public static final String KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED =
+            "android.pendingIntent.backgroundActivityAllowed";
     /**
      * Callback for when the last frame of the animation is played.
      * @hide
@@ -380,6 +389,12 @@ public class ActivityOptions {
     /** @hide */
     public static final int ANIM_REMOTE_ANIMATION = 13;
 
+    /**
+     * Default value for KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED.
+     * @hide
+     **/
+    public static final boolean PENDING_INTENT_BAL_ALLOWED_DEFAULT = true;
+
     private String mPackageName;
     private Rect mLaunchBounds;
     private int mAnimationType = ANIM_UNDEFINED;
@@ -426,11 +441,12 @@ public class ActivityOptions {
     private IAppTransitionAnimationSpecsFuture mSpecsFuture;
     private RemoteAnimationAdapter mRemoteAnimationAdapter;
     private IBinder mLaunchCookie;
-    private IRemoteTransition mRemoteTransition;
+    private RemoteTransition mRemoteTransition;
     private boolean mOverrideTaskTransition;
     private String mSplashScreenThemeResName;
     @SplashScreen.SplashScreenStyle
     private int mSplashScreenStyle;
+    private boolean mPendingIntentBalAllowed = PENDING_INTENT_BAL_ALLOWED_DEFAULT;
     private boolean mRemoveWithTaskOrganizer;
     private boolean mLaunchedFromBubble;
     private boolean mTransientLaunch;
@@ -1054,7 +1070,7 @@ public class ActivityOptions {
      */
     @RequiresPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
     public static ActivityOptions makeRemoteAnimation(RemoteAnimationAdapter remoteAnimationAdapter,
-            IRemoteTransition remoteTransition) {
+            RemoteTransition remoteTransition) {
         final ActivityOptions opts = new ActivityOptions();
         opts.mRemoteAnimationAdapter = remoteAnimationAdapter;
         opts.mAnimationType = ANIM_REMOTE_ANIMATION;
@@ -1064,11 +1080,11 @@ public class ActivityOptions {
 
     /**
      * Create an {@link ActivityOptions} instance that lets the application control the entire
-     * transition using a {@link IRemoteTransition}.
+     * transition using a {@link RemoteTransition}.
      * @hide
      */
     @RequiresPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
-    public static ActivityOptions makeRemoteTransition(IRemoteTransition remoteTransition) {
+    public static ActivityOptions makeRemoteTransition(RemoteTransition remoteTransition) {
         final ActivityOptions opts = new ActivityOptions();
         opts.mRemoteTransition = remoteTransition;
         return opts;
@@ -1181,10 +1197,11 @@ public class ActivityOptions {
         }
         mRemoteAnimationAdapter = opts.getParcelable(KEY_REMOTE_ANIMATION_ADAPTER);
         mLaunchCookie = opts.getBinder(KEY_LAUNCH_COOKIE);
-        mRemoteTransition = IRemoteTransition.Stub.asInterface(opts.getBinder(
-                KEY_REMOTE_TRANSITION));
+        mRemoteTransition = opts.getParcelable(KEY_REMOTE_TRANSITION);
         mOverrideTaskTransition = opts.getBoolean(KEY_OVERRIDE_TASK_TRANSITION);
         mSplashScreenThemeResName = opts.getString(KEY_SPLASH_SCREEN_THEME);
+        mPendingIntentBalAllowed = opts.getBoolean(KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED,
+                PENDING_INTENT_BAL_ALLOWED_DEFAULT);
         mRemoveWithTaskOrganizer = opts.getBoolean(KEY_REMOVE_WITH_TASK_ORGANIZER);
         mLaunchedFromBubble = opts.getBoolean(KEY_LAUNCHED_FROM_BUBBLE);
         mTransientLaunch = opts.getBoolean(KEY_TRANSIENT_LAUNCH);
@@ -1348,13 +1365,21 @@ public class ActivityOptions {
     }
 
     /** @hide */
-    public IRemoteTransition getRemoteTransition() {
+    public RemoteTransition getRemoteTransition() {
         return mRemoteTransition;
     }
 
-    /** @hide */
-    public static ActivityOptions fromBundle(Bundle bOptions) {
-        return bOptions != null ? new ActivityOptions(bOptions) : null;
+    /**
+     * Creates an ActivityOptions from the Bundle generated from {@link ActivityOptions#toBundle()}.
+     * Returns an instance of ActivityOptions populated with options with known keys from the
+     * provided Bundle, stripping out unknown entries.
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    @NonNull
+    public static ActivityOptions fromBundle(@NonNull Bundle bOptions) {
+        return new ActivityOptions(bOptions);
     }
 
     /** @hide */
@@ -1398,6 +1423,24 @@ public class ActivityOptions {
     @SplashScreen.SplashScreenStyle
     public int getSplashScreenStyle() {
         return mSplashScreenStyle;
+    }
+
+    /**
+     * Set PendingIntent activity is allowed to be started in the background if the caller
+     * can start background activities.
+     * @hide
+     */
+    public void setPendingIntentBackgroundActivityLaunchAllowed(boolean allowed) {
+        mPendingIntentBalAllowed = allowed;
+    }
+
+    /**
+     * Get PendingIntent activity is allowed to be started in the background if the caller
+     * can start background activities.
+     * @hide
+     */
+    public boolean isPendingIntentBackgroundActivityLaunchAllowed() {
+        return mPendingIntentBalAllowed;
     }
 
     /**
@@ -1965,7 +2008,7 @@ public class ActivityOptions {
             b.putBinder(KEY_LAUNCH_COOKIE, mLaunchCookie);
         }
         if (mRemoteTransition != null) {
-            b.putBinder(KEY_REMOTE_TRANSITION, mRemoteTransition.asBinder());
+            b.putParcelable(KEY_REMOTE_TRANSITION, mRemoteTransition);
         }
         if (mOverrideTaskTransition) {
             b.putBoolean(KEY_OVERRIDE_TASK_TRANSITION, mOverrideTaskTransition);
@@ -1973,6 +2016,7 @@ public class ActivityOptions {
         if (mSplashScreenThemeResName != null && !mSplashScreenThemeResName.isEmpty()) {
             b.putString(KEY_SPLASH_SCREEN_THEME, mSplashScreenThemeResName);
         }
+        b.putBoolean(KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED, mPendingIntentBalAllowed);
         if (mRemoveWithTaskOrganizer) {
             b.putBoolean(KEY_REMOVE_WITH_TASK_ORGANIZER, mRemoveWithTaskOrganizer);
         }

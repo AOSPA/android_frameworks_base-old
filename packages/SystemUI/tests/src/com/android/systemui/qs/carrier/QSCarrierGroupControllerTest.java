@@ -39,8 +39,8 @@ import androidx.test.filters.SmallTest;
 import com.android.keyguard.CarrierTextManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.ActivityStarter;
-import com.android.systemui.statusbar.policy.NetworkController;
-import com.android.systemui.statusbar.policy.NetworkController.MobileDataIndicators;
+import com.android.systemui.statusbar.connectivity.NetworkController;
+import com.android.systemui.statusbar.connectivity.NetworkController.MobileDataIndicators;
 import com.android.systemui.util.CarrierConfigTracker;
 import com.android.systemui.utils.leaks.LeakCheckedTest;
 import com.android.systemui.utils.os.FakeHandler;
@@ -232,7 +232,7 @@ public class QSCarrierGroupControllerTest extends LeakCheckedTest {
         MobileDataIndicators indicators = new MobileDataIndicators(
                 mock(NetworkController.IconState.class),
                 mock(NetworkController.IconState.class),
-                0, 0, true, true, 0, "", "", "", true, 0, true, true);
+                0, 0, true, true, 0, "", "", "", 0, true, true);
         mSignalCallback.setMobileDataIndicators(indicators);
     }
 

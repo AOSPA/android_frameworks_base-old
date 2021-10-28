@@ -404,6 +404,7 @@ public class ActivityMetricsLaunchObserverTests extends WindowTestsBase {
 
         // Another round without setting visibility of the trampoline activity.
         onActivityLaunchedTrampoline();
+        mTrampolineActivity.setState(ActivityRecord.State.PAUSING, "test");
         notifyWindowsDrawn(mTopActivity);
         // If the transition can start, the invisible activities should be discarded and the launch
         // event be reported successfully.
@@ -471,6 +472,16 @@ public class ActivityMetricsLaunchObserverTests extends WindowTestsBase {
         transitToDrawnAndVerifyOnLaunchFinished(otherActivity);
 
         // The first transition should still be valid.
+        transitToDrawnAndVerifyOnLaunchFinished(mTopActivity);
+    }
+
+    @Test
+    public void testConsecutiveLaunch() {
+        mTrampolineActivity.setState(ActivityRecord.State.INITIALIZING, "test");
+        onActivityLaunched(mTrampolineActivity);
+        mActivityMetricsLogger.notifyActivityLaunching(mTopActivity.intent,
+                mTrampolineActivity /* caller */, mTrampolineActivity.getUid());
+        notifyActivityLaunched(START_SUCCESS, mTopActivity);
         transitToDrawnAndVerifyOnLaunchFinished(mTopActivity);
     }
 

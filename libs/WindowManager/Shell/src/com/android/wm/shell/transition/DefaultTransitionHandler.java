@@ -29,7 +29,6 @@ import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLES
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_UNSPECIFIED;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_RELAUNCH;
@@ -142,8 +141,9 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
     static boolean isRotationSeamless(@NonNull TransitionInfo info,
             DisplayController displayController) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
-                "Display is rotating, check if it should be seamless.");
+                "Display is changing, check if it should be seamless.");
         boolean checkedDisplayLayout = false;
+        boolean hasTask = false;
         for (int i = info.getChanges().size() - 1; i >= 0; --i) {
             final TransitionInfo.Change change = info.getChanges().get(i);
 
@@ -167,6 +167,7 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                     return false;
                 }
             } else if (change.getTaskInfo() != null) {
+                hasTask = true;
                 // We only enable seamless rotation if all the visible task windows requested it.
                 if (change.getRotationAnimation() != ROTATION_ANIMATION_SEAMLESS) {
                     ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
@@ -210,8 +211,12 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
             }
         }
 
-        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  Rotation IS seamless.");
-        return true;
+        // ROTATION_ANIMATION_SEAMLESS can only be requested by task.
+        if (hasTask) {
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  Rotation IS seamless.");
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -249,10 +254,9 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
             @NonNull Transitions.TransitionFinishCallback finishCallback) {
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
                 "start default transition animation, info = %s", info);
-
-        // Fallback for screen wake. This just immediately finishes since there is no
-        // animation for screen-wake.
-        if (info.getType() == WindowManager.TRANSIT_WAKE) {
+        // If keyguard goes away, we should loadKeyguardExitAnimation. Otherwise this just
+        // immediately finishes since there is no animation for screen-wake.
+        if (info.getType() == WindowManager.TRANSIT_WAKE && !info.isKeyguardGoingAway()) {
             startTransaction.apply();
             finishCallback.onTransitionFinished(null /* wct */, null /* wctCB */);
             return true;
@@ -282,7 +286,6 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
             final TransitionInfo.Change change = info.getChanges().get(i);
 
             if (info.getType() == TRANSIT_CHANGE && change.getMode() == TRANSIT_CHANGE
-                    && (change.getEndRotation() != change.getStartRotation())
                     && (change.getFlags() & FLAG_IS_DISPLAY) != 0) {
                 boolean isSeamless = isRotationSeamless(info, mDisplayController);
                 final int anim = getRotationAnimation(info);
@@ -354,7 +357,7 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
         final int overrideType = options != null ? options.getType() : ANIM_NONE;
         final boolean canCustomContainer = isTask ? !sDisableCustomTaskAnimationProperty : true;
 
-        if (type == TRANSIT_KEYGUARD_GOING_AWAY) {
+        if (info.isKeyguardGoingAway()) {
             a = mTransitionAnimation.loadKeyguardExitAnimation(flags,
                     (changeFlags & FLAG_SHOW_WALLPAPER) != 0);
         } else if (type == TRANSIT_KEYGUARD_UNOCCLUDE) {

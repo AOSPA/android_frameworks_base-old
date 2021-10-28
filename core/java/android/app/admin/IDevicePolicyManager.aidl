@@ -159,7 +159,7 @@ interface IDevicePolicyManager {
     void reportKeyguardDismissed(int userHandle);
     void reportKeyguardSecured(int userHandle);
 
-    boolean setDeviceOwner(in ComponentName who, String ownerName, int userId);
+    boolean setDeviceOwner(in ComponentName who, String ownerName, int userId, boolean setProfileOwnerOnCurrentUserIfNecessary);
     ComponentName getDeviceOwnerComponent(boolean callingUserOnly);
     boolean hasDeviceOwner();
     String getDeviceOwnerName();
@@ -236,14 +236,14 @@ interface IDevicePolicyManager {
     void addCrossProfileIntentFilter(in ComponentName admin, in IntentFilter filter, int flags);
     void clearCrossProfileIntentFilters(in ComponentName admin);
 
-    boolean setPermittedAccessibilityServices(in ComponentName admin,in List packageList);
-    List getPermittedAccessibilityServices(in ComponentName admin);
-    List getPermittedAccessibilityServicesForUser(int userId);
+    boolean setPermittedAccessibilityServices(in ComponentName admin,in List<String> packageList);
+    List<String> getPermittedAccessibilityServices(in ComponentName admin);
+    List<String> getPermittedAccessibilityServicesForUser(int userId);
     boolean isAccessibilityServicePermittedByAdmin(in ComponentName admin, String packageName, int userId);
 
-    boolean setPermittedInputMethods(in ComponentName admin,in List packageList, boolean parent);
-    List getPermittedInputMethods(in ComponentName admin, boolean parent);
-    List getPermittedInputMethodsForCurrentUser();
+    boolean setPermittedInputMethods(in ComponentName admin,in List<String> packageList, boolean parent);
+    List<String> getPermittedInputMethods(in ComponentName admin, boolean parent);
+    List<String> getPermittedInputMethodsForCurrentUser();
     boolean isInputMethodPermittedByAdmin(in ComponentName admin, String packageName, int userId, boolean parent);
 
     boolean setPermittedCrossProfileNotificationListeners(in ComponentName admin, in List<String> packageList);
@@ -251,6 +251,7 @@ interface IDevicePolicyManager {
     boolean isNotificationListenerServicePermitted(in String packageName, int userId);
 
     Intent createAdminSupportIntent(in String restriction);
+    Bundle getEnforcingAdminAndUserDetails(int userId,String restriction);
     boolean setApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName, boolean hidden, boolean parent);
     boolean isApplicationHidden(in ComponentName admin, in String callerPackage, in String packageName, boolean parent);
 
@@ -373,10 +374,9 @@ interface IDevicePolicyManager {
     CharSequence getShortSupportMessageForUser(in ComponentName admin, int userHandle);
     CharSequence getLongSupportMessageForUser(in ComponentName admin, int userHandle);
 
-    boolean isSeparateProfileChallengeAllowed(int userHandle);
-
     void setOrganizationColor(in ComponentName admin, in int color);
     void setOrganizationColorForUser(in int color, in int userId);
+    void clearOrganizationIdForUser(int userHandle);
     int getOrganizationColor(in ComponentName admin);
     int getOrganizationColorForUser(int userHandle);
 

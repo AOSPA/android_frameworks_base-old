@@ -38,7 +38,6 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -169,6 +168,29 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void enableWindowMagnification_LargeScreen_windowSizeIsConstrained() {
+        final int screenSize = mContext.getResources().getDimensionPixelSize(
+                R.dimen.magnification_max_frame_size) * 10;
+        mWindowManager.setWindowBounds(new Rect(0, 0, screenSize, screenSize));
+        //We need to initialize new one because the window size is determined when initialization.
+        final WindowMagnificationController controller = new WindowMagnificationController(mContext,
+                mHandler, mSfVsyncFrameProvider,
+                mMirrorWindowControl, mTransaction, mWindowMagnifierCallback, mSysUiState);
+
+        mInstrumentation.runOnMainSync(() -> {
+            controller.enableWindowMagnification(Float.NaN, Float.NaN,
+                    Float.NaN);
+        });
+
+        final int halfScreenSize = screenSize / 2;
+        WindowManager.LayoutParams params = mWindowManager.getLayoutParamsFromAttachedView();
+        // The frame size should be the half of smaller value of window height/width unless it
+        //exceed the max frame size.
+        assertTrue(params.width < halfScreenSize);
+        assertTrue(params.height < halfScreenSize);
+    }
+
+    @Test
     public void deleteWindowMagnification_destroyControl() {
         mInstrumentation.runOnMainSync(() -> {
             mWindowMagnificationController.enableWindowMagnification(Float.NaN, Float.NaN,
@@ -186,6 +208,7 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
     public void deleteWindowMagnification_enableAtTheBottom_overlapFlagIsFalse() {
         final WindowManager wm = mContext.getSystemService(WindowManager.class);
         final Rect bounds = wm.getCurrentWindowMetrics().getBounds();
+        setSystemGestureInsets();
 
         mInstrumentation.runOnMainSync(() -> {
             mWindowMagnificationController.enableWindowMagnification(Float.NaN, Float.NaN,
@@ -249,29 +272,33 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
     @Test
     public void onOrientationChanged_enabled_updateDisplayRotationAndCenterStayAtSamePosition() {
         final Display display = Mockito.spy(mContext.getDisplay());
-        when(display.getRotation()).thenReturn(Surface.ROTATION_90);
+        final int currentRotation = display.getRotation();
+        final int newRotation = (currentRotation + 1) % 4;
+        when(display.getRotation()).thenReturn(newRotation);
         when(mContext.getDisplay()).thenReturn(display);
-        mInstrumentation.runOnMainSync(() -> {
-            mWindowMagnificationController.enableWindowMagnification(Float.NaN, Float.NaN,
-                    Float.NaN);
-        });
-        final PointF expectedCenter = new PointF(mWindowMagnificationController.getCenterY(),
-                mWindowMagnificationController.getCenterX());
         final Rect windowBounds = new Rect(mWindowManager.getCurrentWindowMetrics().getBounds());
-        // Rotate the window 90 degrees.
+        final float center = Math.min(windowBounds.exactCenterX(), windowBounds.exactCenterY());
+        final PointF magnifiedCenter = new PointF(center, center + 5f);
+        mInstrumentation.runOnMainSync(() -> {
+            mWindowMagnificationController.enableWindowMagnification(Float.NaN, magnifiedCenter.x,
+                    magnifiedCenter.y);
+            // Get the center again in case the center we set is out of screen.
+            magnifiedCenter.set(mWindowMagnificationController.getCenterX(),
+                    mWindowMagnificationController.getCenterY());
+        });
+        // Rotate the window clockwise 90 degree.
         windowBounds.set(windowBounds.top, windowBounds.left, windowBounds.bottom,
                 windowBounds.right);
         mWindowManager.setWindowBounds(windowBounds);
 
-        mInstrumentation.runOnMainSync(() -> {
-            mWindowMagnificationController.onConfigurationChanged(ActivityInfo.CONFIG_ORIENTATION);
-        });
+        mInstrumentation.runOnMainSync(() -> mWindowMagnificationController.onConfigurationChanged(
+                ActivityInfo.CONFIG_ORIENTATION));
 
-        assertEquals(Surface.ROTATION_90, mWindowMagnificationController.mRotation);
+        assertEquals(newRotation, mWindowMagnificationController.mRotation);
+        final PointF expectedCenter = new PointF(magnifiedCenter.y, magnifiedCenter.x);
         final PointF actualCenter = new PointF(mWindowMagnificationController.getCenterX(),
                 mWindowMagnificationController.getCenterY());
         assertEquals(expectedCenter, actualCenter);
-        verify(mWindowManager, times(2)).updateViewLayout(any(), any());
     }
 
     @Test
@@ -312,6 +339,27 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
         assertEquals(expectedRatio,
                 mWindowMagnificationController.getCenterY() / testWindowBounds.height(),
                 0);
+    }
+    @Test
+    public void screenSizeIsChangedToLarge_enabled_windowSizeIsConstrained() {
+        mInstrumentation.runOnMainSync(() -> {
+            mWindowMagnificationController.enableWindowMagnification(Float.NaN, Float.NaN,
+                    Float.NaN);
+        });
+        final int screenSize = mContext.getResources().getDimensionPixelSize(
+                R.dimen.magnification_max_frame_size) * 10;
+        mWindowManager.setWindowBounds(new Rect(0, 0, screenSize, screenSize));
+
+        mInstrumentation.runOnMainSync(() -> {
+            mWindowMagnificationController.onConfigurationChanged(ActivityInfo.CONFIG_SCREEN_SIZE);
+        });
+
+        final int halfScreenSize = screenSize / 2;
+        WindowManager.LayoutParams params = mWindowManager.getLayoutParamsFromAttachedView();
+        // The frame size should be the half of smaller value of window height/width unless it
+        //exceed the max frame size.
+        assertTrue(params.width < halfScreenSize);
+        assertTrue(params.height < halfScreenSize);
     }
 
     @Test
@@ -461,10 +509,7 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
     @Test
     public void moveWindowMagnificationToTheBottom_enabledWithGestureInset_overlapFlagIsTrue() {
         final Rect bounds = mWindowManager.getCurrentWindowMetrics().getBounds();
-        final WindowInsets testInsets = new WindowInsets.Builder()
-                .setInsets(systemGestures(), Insets.of(0, 0, 0, 10))
-                .build();
-        mWindowManager.setWindowInsets(testInsets);
+        setSystemGestureInsets();
         mInstrumentation.runOnMainSync(() -> {
             mWindowMagnificationController.enableWindowMagnification(Float.NaN, Float.NaN,
                     Float.NaN);
@@ -489,5 +534,12 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
 
     private boolean hasMagnificationOverlapFlag() {
         return (mSysUiState.getFlags() & SYSUI_STATE_MAGNIFICATION_OVERLAP) != 0;
+    }
+
+    private void setSystemGestureInsets() {
+        final WindowInsets testInsets = new WindowInsets.Builder()
+                .setInsets(systemGestures(), Insets.of(0, 0, 0, 10))
+                .build();
+        mWindowManager.setWindowInsets(testInsets);
     }
 }

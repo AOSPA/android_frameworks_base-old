@@ -242,11 +242,7 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
             return;
         }
         int targetAddress = targetDevice.getLogicalAddress();
-        ActiveSource active = getActiveSource();
-        if (targetDevice.getDevicePowerStatus() == HdmiControlManager.POWER_STATUS_ON
-                && active.isValid()
-                && targetAddress == active.logicalAddress) {
-            invokeCallback(callback, HdmiControlManager.RESULT_SUCCESS);
+        if (isAlreadyActiveSource(targetDevice, targetAddress, callback)) {
             return;
         }
         if (targetAddress == Constants.ADDR_INTERNAL) {
@@ -263,8 +259,8 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
             invokeCallback(callback, HdmiControlManager.RESULT_INCORRECT_MODE);
             return;
         }
-        removeAction(DeviceSelectAction.class);
-        addAndStartAction(new DeviceSelectAction(this, targetDevice, callback));
+        removeAction(DeviceSelectActionFromTv.class);
+        addAndStartAction(new DeviceSelectActionFromTv(this, targetDevice, callback));
     }
 
     @ServiceThreadOnly
@@ -572,10 +568,8 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
             }
         }
 
-        if (!mService.isPowerStandbyOrTransient()) {
-            addAndStartAction(new NewDeviceAction(this, activeSource.logicalAddress,
-                    activeSource.physicalAddress, deviceType));
-        }
+        addAndStartAction(new NewDeviceAction(this, activeSource.logicalAddress,
+                activeSource.physicalAddress, deviceType));
     }
 
     private boolean handleNewDeviceAtTheTailOfActivePath(int path) {
@@ -689,7 +683,7 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
                             mService.getHdmiCecNetwork().addCecDevice(info);
                         }
 
-                        // Since we removed all devices when it's start and
+                        // Since we removed all devices when it starts and
                         // device discovery action does not poll local devices,
                         // we should put device info of local device manually here
                         for (HdmiCecLocalDevice device : mService.getAllLocalDevices()) {
@@ -727,22 +721,13 @@ final class HdmiCecLocalDeviceTv extends HdmiCecLocalDevice {
     @ServiceThreadOnly
     void onNewAvrAdded(HdmiDeviceInfo avr) {
         assertRunOnServiceThread();
-        if (!mService.isPowerStandbyOrTransient()) {
-            addAndStartAction(new SystemAudioAutoInitiationAction(this, avr.getLogicalAddress()));
-            if (!isDirectConnectAddress(avr.getPhysicalAddress())) {
-                startArcAction(false);
-            } else if (isConnected(avr.getPortId()) && isArcFeatureEnabled(avr.getPortId())
-                    && !hasAction(SetArcTransmissionStateAction.class)) {
-                startArcAction(true);
-            }
+        addAndStartAction(new SystemAudioAutoInitiationAction(this, avr.getLogicalAddress()));
+        if (!isDirectConnectAddress(avr.getPhysicalAddress())) {
+            startArcAction(false);
+        } else if (isConnected(avr.getPortId()) && isArcFeatureEnabled(avr.getPortId())
+                && !hasAction(SetArcTransmissionStateAction.class)) {
+            startArcAction(true);
         }
-    }
-
-    // Clear all device info.
-    @ServiceThreadOnly
-    private void clearDeviceInfoList() {
-        assertRunOnServiceThread();
-        mService.getHdmiCecNetwork().clearDeviceList();
     }
 
     @ServiceThreadOnly

@@ -27,6 +27,7 @@ import android.hardware.display.VirtualDisplayConfig;
 import android.hardware.display.WifiDisplay;
 import android.hardware.display.WifiDisplayStatus;
 import android.media.projection.IMediaProjection;
+import android.view.Display.Mode;
 import android.view.DisplayInfo;
 import android.view.Surface;
 
@@ -118,6 +119,16 @@ interface IDisplayManager {
     void setBrightnessConfigurationForUser(in BrightnessConfiguration c, int userId,
             String packageName);
 
+    // Sets the global brightness configuration for a given display. Requires
+    // CONFIGURE_DISPLAY_BRIGHTNESS.
+    void setBrightnessConfigurationForDisplay(in BrightnessConfiguration c, String uniqueDisplayId,
+            int userId, String packageName);
+
+    // Gets the brightness configuration for a given display. Requires
+    // CONFIGURE_DISPLAY_BRIGHTNESS.
+    BrightnessConfiguration getBrightnessConfigurationForDisplay(String uniqueDisplayId,
+            int userId);
+
     // Gets the global brightness configuration for a given user. Requires
     // CONFIGURE_DISPLAY_BRIGHTNESS, and INTERACT_ACROSS_USER if the user is not
     // the same as the calling user.
@@ -151,6 +162,11 @@ interface IDisplayManager {
     // The wide gamut color space is returned from composition pipeline
     // based on hardware capability.
     int getPreferredWideGamutColorSpaceId();
+
+    // Sets the user preferred display mode.
+    // Requires WRITE_SECURE_SETTINGS permission.
+    void setUserPreferredDisplayMode(in Mode mode);
+    Mode getUserPreferredDisplayMode();
 
     // When enabled the app requested display resolution and refresh rate is always selected
     // in DisplayModeDirector regardless of user settings and policies for low brightness, low

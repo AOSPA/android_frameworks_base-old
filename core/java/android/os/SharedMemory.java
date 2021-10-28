@@ -18,7 +18,6 @@ package android.os;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -64,7 +63,7 @@ public final class SharedMemory implements Parcelable, Closeable {
 
         mMemoryRegistration = new MemoryRegistration(mSize);
         mCleaner = Cleaner.create(mFileDescriptor,
-                new Closer(mFileDescriptor, mMemoryRegistration));
+                new Closer(mFileDescriptor.getInt$(), mMemoryRegistration));
     }
 
     /**
@@ -95,15 +94,23 @@ public final class SharedMemory implements Parcelable, Closeable {
     }
 
     /**
-     * Creates from existing shared memory passed as {@link ParcelFileDesciptor}.
+     * Creates an instance from existing shared memory passed as {@link ParcelFileDescriptor}.
      *
-     * @param fd File descriptor of shared memory passed as {@link #ParcelFileDescriptor}.
+     * <p> The {@code fd} should be a shared memory created from
+       {@code SharedMemory or ASharedMemory}. This can be useful when shared memory is passed as
+       file descriptor through JNI or binder service implemented in cpp.
+     * <p> Note that newly created {@code SharedMemory} takes ownership of passed {@code fd} and
+     * the original {@code fd} becomes detached (Check {@link ParcelFileDescriptor#detachFd()}).
+     * If the caller wants to use the file descriptor after the call, the caller should duplicate
+     * the file descriptor (Check {@link ParcelFileDescriptor#dup()}) and pass the duped version
+     * instead.
      *
-     * @hide
+     * @param fd File descriptor of shared memory passed as {@link ParcelFileDescriptor}.
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
-    public static @NonNull SharedMemory create(@NonNull ParcelFileDescriptor fd) {
-        return new SharedMemory(fd.getFileDescriptor());
+    public static @NonNull SharedMemory fromFileDescriptor(@NonNull ParcelFileDescriptor fd) {
+        FileDescriptor f = new FileDescriptor();
+        f.setInt$(fd.detachFd());
+        return new SharedMemory(f);
     }
 
     private static final int PROT_MASK = OsConstants.PROT_READ | OsConstants.PROT_WRITE
@@ -269,6 +276,7 @@ public final class SharedMemory implements Parcelable, Closeable {
      */
     @Override
     public void close() {
+        mFileDescriptor.setInt$(-1);
         if (mCleaner != null) {
             mCleaner.clean();
             mCleaner = null;
@@ -318,10 +326,10 @@ public final class SharedMemory implements Parcelable, Closeable {
      * Cleaner that closes the FD
      */
     private static final class Closer implements Runnable {
-        private FileDescriptor mFd;
+        private int mFd;
         private MemoryRegistration mMemoryReference;
 
-        private Closer(FileDescriptor fd, MemoryRegistration memoryReference) {
+        private Closer(int fd, MemoryRegistration memoryReference) {
             mFd = fd;
             mMemoryReference = memoryReference;
         }
@@ -329,7 +337,9 @@ public final class SharedMemory implements Parcelable, Closeable {
         @Override
         public void run() {
             try {
-                Os.close(mFd);
+                FileDescriptor fd = new FileDescriptor();
+                fd.setInt$(mFd);
+                Os.close(fd);
             } catch (ErrnoException e) { /* swallow error */ }
             mMemoryReference.release();
             mMemoryReference = null;

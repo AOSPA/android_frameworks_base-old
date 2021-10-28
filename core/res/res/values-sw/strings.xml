@@ -326,6 +326,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"piga na udhibiti simu"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Vitambua shughuli za mwili"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"fikia data ya kitambuzi kuhusu alama zako muhimu"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Arifa"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"kuonyesha arifa"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Kufikia maudhui ya dirisha"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Kuchunguza maudhui ya dirisha unalotumia."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Kuwasha \'Chunguza kwa Kugusa\'"</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Inaruhusu programu kulemaza ufunguo wa vitufe na usalama mwingine ambata wa nenosiri. Kwa mfano, simu inalemaza ufunguo wa viitufe inapopokea simu inayoingia, kisha inawezesha upya ufunguo wa vitufe wakati simu inapokamilika."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"iombe kiwango cha uchangamano wa kufunga skrini"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Huruhusu programu kupata maelezo kuhusu kiwango cha uchangamano wa kufunga skrini (juu, wastani, chini au hakuna), ambacho huashiria urefu unaowezekana na aina ya kufunga skrini. Programu pia inaweza kumpendekezea mtumiaji asasishe mbinu ya kufunga skrini iwe ya kiwango fulani lakini mtumiaji anaweza kuamua kupuuza na kuendelea. Kumbuka kuwa maelezo ya kufunga skrini hayahifadhiwi kama maandishi, hivyo programu haitambui nenosiri mahususi."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"kuonyesha arifa"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Huruhusu programu kuonyesha arifa"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"tumia maunzi ya kibiolojia"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Huruhusu programu itumie maunzi ya kibiolojia katika uthibitishaji"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"dhibiti maunzi ya alama ya kidole"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Tumia alama ya kidole au mbinu yako ya kufunga skrini ili uendelee"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Hitilafu fulani imetokea. Jaribu tena."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Aikoni ya alama ya kidole"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Kufungua kwa Uso"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Hitilafu imetokea kwenye kipengele cha Kufungua kwa Uso"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Tumia uso au mbinu yako ya kufunga skrini ili uendelee"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Hitilafu fulani imetokea. Jaribu tena."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Aikoni ya uso"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"kusoma mipangilio ya usawazishaji"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Inaruhusu programu kusoma mipangilio ya upatanishi wa akaunti. Kwa mfano, huku kunaweza kuamua kama programu ya Watu imepatanishwa na akaunti."</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Unapowasha kipengele cha njia ya mkato, hatua ya kubonyeza vitufe vyote viwili vya sauti kwa sekunde tatu itafungua kipengele cha ufikivu."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Ungependa kuwasha njia ya mkato ya vipengele vya ufikivu?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Hatua ya kushikilia chini vitufe vyote viwili vya sauti kwa sekunde chache huwasha vipengele vya ufikivu. Huenda hatua hii ikabadilisha jinsi kifaa chako kinavyofanya kazi.\n\nVipengele vya sasa:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nUnaweza kubadilisha vipengele ulivyochagua katika Mipangilio &gt; Ufikivu."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Ungependa kuwasha njia ya mkato ya <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Hatua ya kushikilia chini vitufe vyote viwili vya sauti kwa sekunde chache huwasha <xliff:g id="SERVICE">%1$s</xliff:g>, kipengele cha ufikivu. Huenda hatua hii ikabadilisha jinsi kifaa chako kinavyofanya kazi.\n\nUnaweza kubadilisha njia hii ya mkato iwe kipengele kingine katika Mipangilio &gt; Ufikivu."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Washa"</string>

@@ -162,7 +162,7 @@
 
     <!-- The maximum count of notifications on Keyguard. The rest will be collapsed in an overflow
      card. -->
-    <integer name="keyguard_max_notification_count">3</integer>
+    <integer name="keyguard_max_notification_count">-1</integer>
 
     <!-- Defines the implementation of the velocity tracker to be used for the panel expansion. Can
          be 'platform' or 'noisy' (i.e. for noisy touch screens). -->
@@ -191,6 +191,15 @@
      low powered state yet. -->
     <bool name="doze_single_tap_uses_prox">true</bool>
 
+    <!-- Doze: whether the single tap sensor uses the proximity sensor in the given posture.
+        See doze_single_tap_uses_prox for usage. -->
+    <integer-array name="doze_single_tap_uses_prox_posture_mapping">
+        <item>1</item> <!-- UNKNOWN -->
+        <item>1</item> <!-- CLOSED -->
+        <item>1</item> <!-- HALF_OPENED -->
+        <item>1</item> <!-- OPENED -->
+    </integer-array>
+
     <!-- Doze: whether the long press sensor uses the proximity sensor.
      If both this parameter and doze_selectively_register_prox are true, registration for the
      sensor will be delayed when the device first enters dozing but the device has not entered its
@@ -211,8 +220,26 @@
          always-on display) -->
     <string name="doze_brightness_sensor_type" translatable="false"></string>
 
+    <!-- Name of a sensor per posture state that provides a low-power estimate of the desired
+         display brightness, suitable to listen to while the device is asleep (e.g. during
+         always-on display) -->
+    <string-array name="doze_brightness_sensor_name_posture_mapping" translatable="false">
+        <!-- UNKNOWN -->
+        <!-- CLOSED -->
+        <!-- HALF_OPENED -->
+        <!-- OPENED -->
+    </string-array>
+
     <!-- Override value to use for proximity sensor.  -->
     <string name="proximity_sensor_type" translatable="false"></string>
+
+    <!-- Sensor type per posture state to use for proximity sensor -->
+    <string-array name="proximity_sensor_posture_mapping" translatable="false">
+        <!-- UNKNOWN -->
+        <!-- CLOSED -->
+        <!-- HALF_OPENED -->
+        <!-- OPENED -->
+    </string-array>
 
     <!-- If using proximity_sensor_type, specifies a threshold value to distinguish near and
          far break points. A sensor value less than this is considered "near". -->
@@ -226,6 +253,15 @@
 
     <!-- Override value to use for proximity sensor as confirmation for proximity_sensor_type. -->
     <string name="proximity_sensor_secondary_type" translatable="false"></string>
+
+    <!-- Sensor type per posture state to use for proximity sensor as a confirmation for
+        proximity_sensor_type. -->
+    <string-array name="proximity_sensor_secondary_posture_mapping" translatable="false">
+        <!-- UNKNOWN -->
+        <!-- CLOSED -->
+        <!-- HALF_OPENED -->
+        <!-- OPENED -->
+    </string-array>
 
     <!-- If using proximity_sensor_secondary_type, specifies a threshold value to distinguish
          near and far break points. A sensor value less than this is considered "near". -->
@@ -304,11 +340,6 @@
 
     <!-- Whether to show the full screen user switcher. -->
     <bool name="config_enableFullscreenUserSwitcher">false</bool>
-
-    <!-- Whether the multi-user switch on the keyguard opens QS user panel. If false, clicking the
-         user switch on the keyguard will replace the notifications and status area with the user
-         switcher. The multi-user switch is only shown if config_keyguardUserSwitcher=false. -->
-    <bool name="config_keyguard_user_switch_opens_qs_details">false</bool>
 
     <!-- SystemUIFactory component -->
     <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIFactory</string>
@@ -707,4 +738,40 @@
 
     <!-- Flag to activate notification to contents feature -->
     <bool name="config_notificationToContents">false</bool>
+
+    <!-- Respect drawable/rounded_secondary.xml intrinsic size for multiple radius corner path
+         customization for secondary display-->
+    <bool name="config_roundedCornerMultipleRadiusSecondary">false</bool>
+
+    <!-- Whether the rounded corners are multiple radius for each display in a multi-display device.
+         {@see com.android.internal.R.array#config_displayUniqueIdArray} -->
+    <array name="config_roundedCornerMultipleRadiusArray">
+        <item>@bool/config_roundedCornerMultipleRadius</item>
+        <item>@bool/config_roundedCornerMultipleRadiusSecondary</item>
+    </array>
+
+    <!-- The rounded corner drawable for each display in a multi-display device.
+         {@see com.android.internal.R.array#config_displayUniqueIdArray} -->
+    <array name="config_roundedCornerDrawableArray">
+        <item>@drawable/rounded</item>
+        <item>@drawable/rounded_secondary</item>
+    </array>
+
+    <!-- The top rounded corner drawable for each display in a multi-display device.
+         {@see com.android.internal.R.array#config_displayUniqueIdArray} -->
+    <array name="config_roundedCornerTopDrawableArray">
+        <item>@drawable/rounded_corner_top</item>
+        <item>@drawable/rounded_corner_top_secondary</item>
+    </array>
+
+    <!-- The bottom rounded corner drawable for each display in a multi-display device.
+         {@see com.android.internal.R.array#config_displayUniqueIdArray} -->
+    <array name="config_roundedCornerBottomDrawableArray">
+        <item>@drawable/rounded_corner_bottom</item>
+        <item>@drawable/rounded_corner_bottom_secondary</item>
+    </array>
+
+    <!-- Flag to enable privacy dot views, it shall be true for normal case -->
+    <bool name="config_enablePrivacyDot">true</bool>
+
 </resources>

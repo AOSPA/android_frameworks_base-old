@@ -37,11 +37,7 @@ import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
 import android.media.AudioManager;
-import android.os.Handler;
-import android.os.IPowerManager;
-import android.os.IThermalService;
 import android.os.Looper;
-import android.os.PowerManager;
 import android.os.test.TestLooper;
 
 import androidx.test.InstrumentationRegistry;
@@ -56,6 +52,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 @SmallTest
 @RunWith(JUnit4.class)
@@ -67,18 +64,15 @@ public class HdmiCecLocalDeviceTvTest {
     private HdmiCecController mHdmiCecController;
     private HdmiCecLocalDeviceTv mHdmiCecLocalDeviceTv;
     private FakeNativeWrapper mNativeWrapper;
+    private FakePowerManagerWrapper mPowerManager;
     private Looper mMyLooper;
     private TestLooper mTestLooper = new TestLooper();
     private ArrayList<HdmiCecLocalDevice> mLocalDevices = new ArrayList<>();
     private int mTvPhysicalAddress;
     private int mTvLogicalAddress;
-    private boolean mWokenUp;
 
     @Mock
-    private IPowerManager mIPowerManagerMock;
-    @Mock
-    private IThermalService mIThermalServiceMock;
-    @Mock private AudioManager mAudioManager;
+    private AudioManager mAudioManager;
 
     @Before
     public void setUp() {
@@ -90,11 +84,6 @@ public class HdmiCecLocalDeviceTvTest {
         mHdmiControlService =
                 new HdmiControlService(InstrumentationRegistry.getTargetContext(),
                         Collections.emptyList()) {
-                    @Override
-                    void wakeUp() {
-                        mWokenUp = true;
-                    }
-
                     @Override
                     boolean isControlEnabled() {
                         return true;
@@ -113,12 +102,6 @@ public class HdmiCecLocalDeviceTvTest {
                     @Override
                     boolean isPowerStandby() {
                         return false;
-                    }
-
-                    @Override
-                    protected PowerManager getPowerManager() {
-                        return new PowerManager(context, mIPowerManagerMock,
-                                mIThermalServiceMock, new Handler(mMyLooper));
                     }
 
                     @Override
@@ -145,6 +128,8 @@ public class HdmiCecLocalDeviceTvTest {
                 new HdmiPortInfo(2, HdmiPortInfo.PORT_INPUT, 0x2000, true, false, true);
         mNativeWrapper.setPortInfo(hdmiPortInfos);
         mHdmiControlService.initService();
+        mPowerManager = new FakePowerManagerWrapper(context);
+        mHdmiControlService.setPowerManager(mPowerManager);
         mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTvPhysicalAddress = 0x0000;
         mNativeWrapper.setPhysicalAddress(mTvPhysicalAddress);
@@ -238,12 +223,12 @@ public class HdmiCecLocalDeviceTvTest {
                 HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
                 HdmiControlManager.TV_WAKE_ON_ONE_TOUCH_PLAY_ENABLED);
         mTestLooper.dispatchAll();
-        mWokenUp = false;
+        mPowerManager.setInteractive(false);
         HdmiCecMessage textViewOn = HdmiCecMessageBuilder.buildTextViewOn(ADDR_PLAYBACK_1,
                 mTvLogicalAddress);
         assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(textViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
-        assertThat(mWokenUp).isTrue();
+        assertThat(mPowerManager.isInteractive()).isTrue();
     }
 
     @Test
@@ -252,12 +237,12 @@ public class HdmiCecLocalDeviceTvTest {
                 HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
                 HdmiControlManager.TV_WAKE_ON_ONE_TOUCH_PLAY_ENABLED);
         mTestLooper.dispatchAll();
-        mWokenUp = false;
+        mPowerManager.setInteractive(false);
         HdmiCecMessage imageViewOn = new HdmiCecMessage(ADDR_PLAYBACK_1, mTvLogicalAddress,
                 Constants.MESSAGE_IMAGE_VIEW_ON, HdmiCecMessage.EMPTY_PARAM);
         assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(imageViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
-        assertThat(mWokenUp).isTrue();
+        assertThat(mPowerManager.isInteractive()).isTrue();
     }
 
     @Test
@@ -266,12 +251,12 @@ public class HdmiCecLocalDeviceTvTest {
                 HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
                 HdmiControlManager.TV_WAKE_ON_ONE_TOUCH_PLAY_DISABLED);
         mTestLooper.dispatchAll();
-        mWokenUp = false;
+        mPowerManager.setInteractive(false);
         HdmiCecMessage textViewOn = HdmiCecMessageBuilder.buildTextViewOn(ADDR_PLAYBACK_1,
                 mTvLogicalAddress);
         assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(textViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
-        assertThat(mWokenUp).isFalse();
+        assertThat(mPowerManager.isInteractive()).isFalse();
     }
 
     @Test
@@ -280,12 +265,12 @@ public class HdmiCecLocalDeviceTvTest {
                 HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
                 HdmiControlManager.TV_WAKE_ON_ONE_TOUCH_PLAY_DISABLED);
         mTestLooper.dispatchAll();
-        mWokenUp = false;
+        mPowerManager.setInteractive(false);
         HdmiCecMessage imageViewOn = new HdmiCecMessage(ADDR_PLAYBACK_1, mTvLogicalAddress,
                 Constants.MESSAGE_IMAGE_VIEW_ON, HdmiCecMessage.EMPTY_PARAM);
         assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(imageViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
-        assertThat(mWokenUp).isFalse();
+        assertThat(mPowerManager.isInteractive()).isFalse();
     }
 
     @Test
@@ -537,5 +522,32 @@ public class HdmiCecLocalDeviceTvTest {
         mTestLooper.dispatchAll();
 
         verify(mAudioManager, never()).setStreamVolume(anyInt(), anyInt(), anyInt());
+    }
+
+    /**
+     * Tests that receiving a message from a device does not prevent it from being discovered
+     * by HotplugDetectionAction.
+     */
+    @Test
+    public void hotplugDetectionAction_discoversDeviceAfterMessageReceived() {
+        // Playback 1 sends a message before ACKing a poll
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.NACK);
+        HdmiCecMessage hdmiCecMessage = HdmiCecMessageBuilder.buildActiveSource(
+                ADDR_PLAYBACK_1, ADDR_TV);
+        mNativeWrapper.onCecMessage(hdmiCecMessage);
+        mTestLooper.dispatchAll();
+
+        // Playback 1 begins ACKing polls, allowing detection by HotplugDetectionAction
+        mNativeWrapper.setPollAddressResponse(ADDR_PLAYBACK_1, SendMessageResult.SUCCESS);
+        for (int pollCount = 0; pollCount < HotplugDetectionAction.TIMEOUT_COUNT; pollCount++) {
+            mTestLooper.moveTimeForward(
+                    TimeUnit.SECONDS.toMillis(HotplugDetectionAction.POLLING_INTERVAL_MS_FOR_TV));
+            mTestLooper.dispatchAll();
+        }
+
+        // Device sends <Give Physical Address> to Playback 1 after detecting it
+        HdmiCecMessage givePhysicalAddress = HdmiCecMessageBuilder.buildGivePhysicalAddress(
+                ADDR_TV, ADDR_PLAYBACK_1);
+        assertThat(mNativeWrapper.getResultMessages()).contains(givePhysicalAddress);
     }
 }

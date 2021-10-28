@@ -467,11 +467,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
         @Override
         public int hashCode() {
-            return hashCode(authority, userId);
-        }
-
-        public static int hashCode(final String auth, final int userIdent) {
-            return ((auth != null) ? auth.hashCode() : 0) ^ userIdent;
+            return ((authority != null) ? authority.hashCode() : 0) ^ userId;
         }
     }
 
@@ -493,7 +489,7 @@ public final class ActivityThread extends ClientTransactionHandler
     // Note we never removes items from this map but that's okay because there are only so many
     // users and so many authorities.
     @GuardedBy("mGetProviderKeys")
-    final SparseArray<ProviderKey> mGetProviderKeys = new SparseArray<>();
+    final ArrayMap<ProviderKey, ProviderKey> mGetProviderKeys = new ArrayMap<>();
 
     final ArrayMap<Activity, ArrayList<OnActivityPausedListener>> mOnPauseListeners
         = new ArrayMap<Activity, ArrayList<OnActivityPausedListener>>();
@@ -531,9 +527,6 @@ public final class ActivityThread extends ClientTransactionHandler
         // A reusable token for other purposes, e.g. content capture, translation. It shouldn't be
         // used without security checks
         public IBinder shareableActivityToken;
-        // The token of the initial TaskFragment that embedded this activity. Do not rely on it
-        // after creation because the activity could be reparented.
-        @Nullable public IBinder mInitialTaskFragmentToken;
         int ident;
         @UnsupportedAppUsage
         Intent intent;
@@ -627,8 +620,7 @@ public final class ActivityThread extends ClientTransactionHandler
                 List<ReferrerIntent> pendingNewIntents, ActivityOptions activityOptions,
                 boolean isForward, ProfilerInfo profilerInfo, ClientTransactionHandler client,
                 IBinder assistToken, FixedRotationAdjustments fixedRotationAdjustments,
-                IBinder shareableActivityToken, boolean launchedFromBubble,
-                IBinder initialTaskFragmentToken) {
+                IBinder shareableActivityToken, boolean launchedFromBubble) {
             this.token = token;
             this.assistToken = assistToken;
             this.shareableActivityToken = shareableActivityToken;
@@ -650,7 +642,6 @@ public final class ActivityThread extends ClientTransactionHandler
             mActivityOptions = activityOptions;
             mPendingFixedRotationAdjustments = fixedRotationAdjustments;
             mLaunchedFromBubble = launchedFromBubble;
-            mInitialTaskFragmentToken = initialTaskFragmentToken;
             init();
         }
 
@@ -3621,6 +3612,11 @@ public final class ActivityThread extends ClientTransactionHandler
                 }
                 activity.mLaunchedFromBubble = r.mLaunchedFromBubble;
                 activity.mCalled = false;
+                // Assigning the activity to the record before calling onCreate() allows
+                // ActivityThread#getActivity() lookup for the callbacks triggered from
+                // ActivityLifecycleCallbacks#onActivityCreated() or
+                // ActivityLifecycleCallback#onActivityPostCreated().
+                r.activity = activity;
                 if (r.isPersistable()) {
                     mInstrumentation.callActivityOnCreate(activity, r.state, r.persistentState);
                 } else {
@@ -3631,7 +3627,6 @@ public final class ActivityThread extends ClientTransactionHandler
                         "Activity " + r.intent.getComponent().toShortString() +
                         " did not call through to super.onCreate()");
                 }
-                r.activity = activity;
                 mLastReportedWindowingMode.put(activity.getActivityToken(),
                         config.windowConfiguration.getWindowingMode());
             }
@@ -4579,8 +4574,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
     private void handleDumpGfxInfo(DumpComponentInfo info) {
         try {
-            nDumpGraphicsInfo(info.fd.getFileDescriptor());
-            WindowManagerGlobal.getInstance().dumpGfxInfo(info.fd.getFileDescriptor(), info.args);
+            ThreadedRenderer.handleDumpGfxInfo(info.fd.getFileDescriptor(), info.args);
         } catch (Exception e) {
             Log.w(TAG, "Caught exception from dumpGfxInfo()", e);
         } finally {
@@ -6348,7 +6342,13 @@ public final class ActivityThread extends ClientTransactionHandler
             final File cacheDir = context.getCacheDir();
             if (cacheDir != null) {
                 // Provide a usable directory for temporary files
-                System.setProperty("java.io.tmpdir", cacheDir.getAbsolutePath());
+                String tmpdir = cacheDir.getAbsolutePath();
+                System.setProperty("java.io.tmpdir", tmpdir);
+                try {
+                    android.system.Os.setenv("TMPDIR", tmpdir, true);
+                } catch (ErrnoException ex) {
+                    Log.w(TAG, "Unable to initialize $TMPDIR", ex);
+                }
             } else {
                 Log.v(TAG, "Unable to initialize \"java.io.tmpdir\" property "
                         + "due to missing cache directory");
@@ -7033,11 +7033,11 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     private ProviderKey getGetProviderKey(String auth, int userId) {
-        final int key = ProviderKey.hashCode(auth, userId);
+        final ProviderKey key = new ProviderKey(auth, userId);
         synchronized (mGetProviderKeys) {
             ProviderKey lock = mGetProviderKeys.get(key);
             if (lock == null) {
-                lock = new ProviderKey(auth, userId);
+                lock = key;
                 mGetProviderKeys.put(key, lock);
             }
             return lock;
@@ -7940,6 +7940,5 @@ public final class ActivityThread extends ClientTransactionHandler
 
     // ------------------ Regular JNI ------------------------
     private native void nPurgePendingResources();
-    private native void nDumpGraphicsInfo(FileDescriptor fd);
     private native void nInitZygoteChildHeapProfiling();
 }

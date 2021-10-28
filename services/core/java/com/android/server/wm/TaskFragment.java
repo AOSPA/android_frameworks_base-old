@@ -173,6 +173,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     boolean mTaskFragmentAppearedSent;
 
     /**
+     * The last running activity of the TaskFragment was finished due to clear task while launching
+     * an activity in the Task.
+     */
+    boolean mClearedTaskForReuse;
+
+    /**
      * When we are in the process of pausing an activity, before starting the
      * next one, this variable holds the activity that is currently being paused.
      *
@@ -221,11 +227,20 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     private IBinder mFragmentToken;
 
     /**
+     * Whether to delay the last activity of TaskFragment being immediately removed while finishing.
+     * This should only be set on a embedded TaskFragment, where the organizer can have the
+     * opportunity to perform other actions or animations.
+     */
+    private boolean mDelayLastActivityRemoval;
+
+    /**
      * The PID of the organizer that created this TaskFragment. It should be the same as the PID
      * of {@link android.window.TaskFragmentCreationParams#getOwnerToken()}.
      * {@link ActivityRecord#INVALID_PID} if this is not an organizer-created TaskFragment.
      */
     private int mTaskFragmentOrganizerPid = ActivityRecord.INVALID_PID;
+
+    final Point mLastSurfaceSize = new Point();
 
     private final Rect mTmpInsets = new Rect();
     private final Rect mTmpBounds = new Rect();
@@ -317,8 +332,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         // Reset the adjacent TaskFragment if its adjacent TaskFragment is also this TaskFragment.
         if (mAdjacentTaskFragment != null && mAdjacentTaskFragment.mAdjacentTaskFragment == this) {
             mAdjacentTaskFragment.mAdjacentTaskFragment = null;
+            mAdjacentTaskFragment.mDelayLastActivityRemoval = false;
         }
         mAdjacentTaskFragment = null;
+        mDelayLastActivityRemoval = false;
     }
 
     void setTaskFragmentOrganizer(TaskFragmentOrganizerToken organizer, int pid) {
@@ -336,7 +353,29 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return mAdjacentTaskFragment;
     }
 
-    /** @return the currently resumed activity. */
+    /** Returns the currently topmost resumed activity. */
+    @Nullable
+    ActivityRecord getTopResumedActivity() {
+        final ActivityRecord taskFragResumedActivity = getResumedActivity();
+        for (int i = getChildCount() - 1; i >= 0; --i) {
+            WindowContainer<?> child = getChildAt(i);
+            ActivityRecord topResumedActivity = null;
+            if (taskFragResumedActivity != null && child == taskFragResumedActivity) {
+                topResumedActivity = child.asActivityRecord();
+            } else if (child.asTaskFragment() != null) {
+                topResumedActivity = child.asTaskFragment().getTopResumedActivity();
+            }
+            if (topResumedActivity != null) {
+                return topResumedActivity;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the currently resumed activity in this TaskFragment's
+     * {@link #mChildren direct children}
+     */
     ActivityRecord getResumedActivity() {
         return mResumedActivity;
     }
@@ -358,6 +397,25 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     @VisibleForTesting
     void setPausingActivity(ActivityRecord pausing) {
         mPausingActivity = pausing;
+    }
+
+    /** Returns the currently topmost pausing activity. */
+    @Nullable
+    ActivityRecord getTopPausingActivity() {
+        final ActivityRecord taskFragPausingActivity = getPausingActivity();
+        for (int i = getChildCount() - 1; i >= 0; --i) {
+            WindowContainer<?> child = getChildAt(i);
+            ActivityRecord topPausingActivity = null;
+            if (taskFragPausingActivity != null && child == taskFragPausingActivity) {
+                topPausingActivity = child.asActivityRecord();
+            } else if (child.asTaskFragment() != null) {
+                topPausingActivity = child.asTaskFragment().getTopPausingActivity();
+            }
+            if (topPausingActivity != null) {
+                return topPausingActivity;
+            }
+        }
+        return null;
     }
 
     ActivityRecord getPausingActivity() {
@@ -403,12 +461,17 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return parentTaskFragment == null ? this : parentTaskFragment.getRootTaskFragment();
     }
 
+    @Nullable
+    Task getRootTask() {
+        return getRootTaskFragment().asTask();
+    }
+
     @Override
     TaskFragment asTaskFragment() {
         return this;
     }
 
-    /** Returns {@code true} if this is a container for embedded activities or tasks. */
+    @Override
     boolean isEmbedded() {
         if (mIsEmbedded) {
             return true;
@@ -419,6 +482,20 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return taskFragment != null && taskFragment.isEmbedded();
         }
         return false;
+    }
+
+    /**
+     * Returns the TaskFragment that is being organized, which could be this or the ascendant
+     * TaskFragment.
+     */
+    @Nullable
+    TaskFragment getOrganizedTaskFragment() {
+        if (mTaskFragmentOrganizer != null) {
+            return this;
+        }
+
+        TaskFragment parentTaskFragment = getParent() != null ? getParent().asTaskFragment() : null;
+        return parentTaskFragment != null ? parentTaskFragment.getOrganizedTaskFragment() : null;
     }
 
     /**
@@ -508,9 +585,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             isPausingDied = true;
         }
         if (mLastPausedActivity != null && mLastPausedActivity.app == app) {
-            if (mLastPausedActivity.isNoHistory()) {
-                mTaskSupervisor.mNoHistoryActivities.remove(mLastPausedActivity);
-            }
             mLastPausedActivity = null;
         }
         return isPausingDied;
@@ -631,7 +705,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * @param includingEmbeddedTask whether the activity in a task that being embedded from this
      *                              one should be included.
      * @see #topRunningActivity(boolean, boolean)
-     * @see ActivityRecord#okToShowLocked()
      */
     ActivityRecord getTopNonFinishingActivity(boolean includeOverlays,
             boolean includingEmbeddedTask) {
@@ -1262,6 +1335,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return getVisibility(starting) != TASK_FRAGMENT_VISIBILITY_INVISIBLE;
     }
 
+    boolean isFocusableAndVisible() {
+        return isTopActivityFocusable() && shouldBeVisible(null /* starting */);
+    }
+
     final boolean startPausing(boolean uiSleeping, ActivityRecord resuming, String reason) {
         return startPausing(mTaskSupervisor.mUserLeaving, uiSleeping, resuming, reason);
     }
@@ -1317,7 +1394,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         ProtoLog.v(WM_DEBUG_STATES, "Moving to PAUSING: %s", prev);
         mPausingActivity = prev;
         mLastPausedActivity = prev;
-        if (prev.isNoHistory() && !mTaskSupervisor.mNoHistoryActivities.contains(prev)) {
+        if (!prev.finishing && prev.isNoHistory()
+                && !mTaskSupervisor.mNoHistoryActivities.contains(prev)) {
             mTaskSupervisor.mNoHistoryActivities.add(prev);
         }
         prev.setState(PAUSING, "startPausingLocked");
@@ -1401,7 +1479,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             } else {
                 prev.schedulePauseTimeout();
                 // Unset readiness since we now need to wait until this pause is complete.
-                mAtmService.getTransitionController().setReady(this, false /* ready */);
+                mTransitionController.setReady(this, false /* ready */);
                 return true;
             }
 
@@ -1560,6 +1638,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     @Override
     void addChild(WindowContainer child, int index) {
+        mClearedTaskForReuse = false;
+
         boolean isAddingActivity = child.asActivityRecord() != null;
         final Task task = isAddingActivity ? getTask() : null;
 
@@ -1577,6 +1657,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
     }
 
+    @Override
     void onChildPositionChanged(WindowContainer child) {
         super.onChildPositionChanged(child);
 
@@ -1590,7 +1671,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     @Override
     RemoteAnimationTarget createRemoteAnimationTarget(
             RemoteAnimationController.RemoteAnimationRecord record) {
-        final ActivityRecord activity = getTopMostActivity();
+        final ActivityRecord activity = record.getMode() == RemoteAnimationTarget.MODE_OPENING
+                // There may be a trampoline activity without window on top of the existing task
+                // which is moving to front. Exclude the finishing activity so the window of next
+                // activity can be chosen to create the animation target.
+                ? getTopNonFinishingActivity()
+                : getTopMostActivity();
         return activity != null ? activity.createRemoteAnimationTarget(record) : null;
     }
 
@@ -1633,7 +1719,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
 
         final Task thisTask = asTask();
-        if (thisTask != null) {
+        // Embedded Task's configuration should go with parent TaskFragment, so we don't re-compute
+        // configuration here.
+        if (thisTask != null && !thisTask.isEmbedded()) {
             thisTask.resolveLeafTaskOnlyOverrideConfigs(newParentConfig,
                     mTmpBounds /* previousBounds */);
         }
@@ -1955,16 +2043,94 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
+        // Task will animate differently.
+        if (mTaskFragmentOrganizer != null) {
+            mTmpPrevBounds.set(getBounds());
+        }
+
         super.onConfigurationChanged(newParentConfig);
+
+        if (shouldStartChangeTransition(mTmpPrevBounds)) {
+            initializeChangeTransition(mTmpPrevBounds);
+        } else if (mTaskFragmentOrganizer != null) {
+            // Update the surface here instead of in the organizer so that we can make sure
+            // it can be synced with the surface freezer.
+            final SurfaceControl.Transaction t = getSyncTransaction();
+            updateSurfacePosition(t);
+            updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
+        }
+
         sendTaskFragmentInfoChanged();
+    }
+
+    /** Updates the surface size so that the sub windows cannot be shown out of bounds. */
+    private void updateOrganizedTaskFragmentSurfaceSize(SurfaceControl.Transaction t,
+            boolean forceUpdate) {
+        if (mTaskFragmentOrganizer == null) {
+            // We only want to update for organized TaskFragment. Task will handle itself.
+            return;
+        }
+        if (mSurfaceControl == null || mSurfaceAnimator.hasLeash() || mSurfaceFreezer.hasLeash()) {
+            return;
+        }
+
+        final Rect bounds = getBounds();
+        final int width = bounds.width();
+        final int height = bounds.height();
+        if (!forceUpdate && width == mLastSurfaceSize.x && height == mLastSurfaceSize.y) {
+            return;
+        }
+        t.setWindowCrop(mSurfaceControl, width, height);
+        mLastSurfaceSize.set(width, height);
+    }
+
+    @Override
+    public void onAnimationLeashCreated(SurfaceControl.Transaction t, SurfaceControl leash) {
+        super.onAnimationLeashCreated(t, leash);
+        // Reset surface bounds for animation. It will be taken care by the animation leash, and
+        // reset again onAnimationLeashLost.
+        if (mTaskFragmentOrganizer != null
+                && (mLastSurfaceSize.x != 0 || mLastSurfaceSize.y != 0)) {
+            t.setWindowCrop(mSurfaceControl, 0, 0);
+            mLastSurfaceSize.set(0, 0);
+        }
+    }
+
+    @Override
+    public void onAnimationLeashLost(SurfaceControl.Transaction t) {
+        super.onAnimationLeashLost(t);
+        // Update the surface bounds after animation.
+        if (mTaskFragmentOrganizer != null) {
+            updateOrganizedTaskFragmentSurfaceSize(t, true /* forceUpdate */);
+        }
+    }
+
+    /** Whether we should prepare a transition for this {@link TaskFragment} bounds change. */
+    private boolean shouldStartChangeTransition(Rect startBounds) {
+        if (mWmService.mDisableTransitionAnimation
+                || mDisplayContent == null
+                || mTaskFragmentOrganizer == null
+                || getSurfaceControl() == null
+                // The change transition will be covered by display.
+                || mDisplayContent.inTransition()
+                || !isVisible()) {
+            return false;
+        }
+
+        return !startBounds.equals(getBounds());
     }
 
     @Override
     void setSurfaceControl(SurfaceControl sc) {
         super.setSurfaceControl(sc);
-        // If the TaskFragmentOrganizer was set before we created the SurfaceControl, we need to
-        // emit the callbacks now.
-        sendTaskFragmentAppeared();
+        if (mTaskFragmentOrganizer != null) {
+            final SurfaceControl.Transaction t = getSyncTransaction();
+            updateSurfacePosition(t);
+            updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
+            // If the TaskFragmentOrganizer was set before we created the SurfaceControl, we need to
+            // emit the callbacks now.
+            sendTaskFragmentAppeared();
+        }
     }
 
     void sendTaskFragmentInfoChanged() {
@@ -1986,10 +2152,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
     }
 
-    int getTaskFragmentOrganizerPid() {
-        return mTaskFragmentOrganizerPid;
-    }
-
     /**
      * Returns a {@link TaskFragmentInfo} with information from this TaskFragment. Should not be
      * called from {@link Task}.
@@ -2007,15 +2169,22 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
         final Point positionInParent = new Point();
         getRelativePosition(positionInParent);
+        final int[] runningActivityCount = new int[1];
+        forAllActivities(a -> {
+            if (!a.finishing) {
+                runningActivityCount[0]++;
+            }
+        });
         return new TaskFragmentInfo(
                 mFragmentToken,
                 mRemoteToken.toWindowContainerToken(),
                 getConfiguration(),
                 getChildCount() == 0,
-                hasRunningActivity(this),
+                runningActivityCount[0],
                 isVisible(),
                 childActivities,
-                positionInParent);
+                positionInParent,
+                mClearedTaskForReuse);
     }
 
     @Nullable
@@ -2024,9 +2193,25 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     @Nullable
-    @VisibleForTesting
     ITaskFragmentOrganizer getTaskFragmentOrganizer() {
         return mTaskFragmentOrganizer;
+    }
+
+    @Override
+    boolean isOrganized() {
+        return mTaskFragmentOrganizer != null;
+    }
+
+    /** Whether this is an organized {@link TaskFragment} and not a {@link Task}. */
+    final boolean isOrganizedTaskFragment() {
+        return mTaskFragmentOrganizer != null;
+    }
+
+    boolean isReadyToTransit() {
+        // We don't want to start the transition if the organized TaskFragment is empty, unless
+        // it is requested to be removed.
+        return !isOrganizedTaskFragment() || getTopNonFinishingActivity() != null
+                || mIsRemovalRequested;
     }
 
     /** Clear {@link #mLastPausedActivity} for all {@link TaskFragment} children */
@@ -2082,12 +2267,23 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         });
     }
 
+    void setDelayLastActivityRemoval(boolean delay) {
+        if (!mIsEmbedded) {
+            Slog.w(TAG, "Set delaying last activity removal on a non-embedded TF.");
+        }
+        mDelayLastActivityRemoval = delay;
+    }
+
+    boolean isDelayLastActivityRemoval() {
+        return mDelayLastActivityRemoval;
+    }
+
     boolean shouldDeferRemoval() {
         if (!hasChild()) {
             return false;
         }
         return isAnimating(TRANSITION | CHILDREN, WindowState.EXIT_ANIMATING_TYPES)
-                || mAtmService.getTransitionController().inTransition(this);
+                || inTransition();
     }
 
     @Override
@@ -2110,6 +2306,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         resetAdjacentTaskFragment();
         super.removeImmediately();
         sendTaskFragmentVanished();
+    }
+
+    @Override
+    boolean canBeAnimationTarget() {
+        return true;
     }
 
     boolean dump(String prefix, FileDescriptor fd, PrintWriter pw, boolean dumpAll,

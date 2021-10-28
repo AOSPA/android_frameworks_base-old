@@ -61,7 +61,6 @@ import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN;
@@ -76,6 +75,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.DisplayAreaOrganizer.FEATURE_ROOT;
@@ -87,6 +87,7 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BOOT;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_IME;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_LAYER_MIRRORING;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
 import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
@@ -111,6 +112,7 @@ import static com.android.server.wm.DisplayContentProto.IME_POLICY;
 import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_CONTROL_TARGET;
 import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_INPUT_TARGET;
 import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_TARGET;
+import static com.android.server.wm.DisplayContentProto.INSETS_SOURCE_PROVIDERS;
 import static com.android.server.wm.DisplayContentProto.OPENING_APPS;
 import static com.android.server.wm.DisplayContentProto.RESUMED_ACTIVITY;
 import static com.android.server.wm.DisplayContentProto.ROOT_DISPLAY_AREA;
@@ -301,7 +303,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @VisibleForTesting IBinder mTokenToMirror = null;
 
     /**
-     * The surface for mirroring the contents of this hierarchy.
+     * The surface for mirroring the contents of this hierarchy, or null if layer mirroring is
+     * temporarily disabled.
      */
     private SurfaceControl mMirroredSurface = null;
 
@@ -309,6 +312,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * The last bounds of the DisplayArea to mirror.
      */
     private Rect mLastMirroredDisplayAreaBounds = null;
+
+    /**
+     * The last state of the display.
+     */
+    private int mLastDisplayState;
 
     // Contains all IME window containers. Note that the z-ordering of the IME windows will depend
     // on the IME target. We mainly have this container grouping so we can keep track of all the IME
@@ -568,6 +576,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * Specifies the count to determine whether to defer updating the IME target until ready.
      */
     private int mDeferUpdateImeTargetCount;
+    private boolean mUpdateImeRequestedWhileDeferred;
 
     private MagnificationSpec mMagnificationSpec;
 
@@ -1050,7 +1059,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         mAppTransition = new AppTransition(mWmService.mContext, mWmService, this);
         mAppTransition.registerListenerLocked(mWmService.mActivityManagerAppTransitionNotifier);
-        mAtmService.getTransitionController().registerLegacyListener(
+        mTransitionController.registerLegacyListener(
                 mWmService.mActivityManagerAppTransitionNotifier);
         mAppTransition.registerListenerLocked(mFixedRotationTransitionListener);
         mAppTransitionController = new AppTransitionController(mWmService, this);
@@ -1136,10 +1145,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (DEBUG_DISPLAY) Slog.v(TAG_WM, "Creating display=" + display);
 
         mWmService.mDisplayWindowSettings.applySettingsToDisplayLocked(this);
-
-        // Check if this DisplayContent is for a new VirtualDisplay, that should use layer mirroring
-        // to capture the contents of a DisplayArea.
-        startMirrorIfNeeded();
     }
 
     boolean isReady() {
@@ -1201,10 +1206,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     }
 
-    WindowToken removeWindowToken(IBinder binder) {
+    WindowToken removeWindowToken(IBinder binder, boolean animateExit) {
         final WindowToken token = mTokenMap.remove(binder);
         if (token != null && token.asActivityRecord() == null) {
-            token.setExiting();
+            token.setExiting(animateExit);
         }
         return token;
     }
@@ -1274,7 +1279,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         addWindowToken(token.token, token);
 
-        if (mWmService.mAccessibilityController != null) {
+        if (mWmService.mAccessibilityController.hasCallbacks()) {
             final int prevDisplayId = prevDc != null ? prevDc.getDisplayId() : INVALID_DISPLAY;
             mWmService.mAccessibilityController.onSomeWindowResizedOrMoved(prevDisplayId,
                     getDisplayId());
@@ -1282,7 +1287,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     void removeAppToken(IBinder binder) {
-        final WindowToken token = removeWindowToken(binder);
+        final WindowToken token = removeWindowToken(binder, true /* animateExit */);
         if (token == null) {
             Slog.w(TAG_WM, "removeAppToken: Attempted to remove non-existing token: " + binder);
             return;
@@ -1380,11 +1385,16 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Configuration currentDisplayConfig = getConfiguration();
         mTmpConfiguration.setTo(currentDisplayConfig);
         computeScreenConfiguration(mTmpConfiguration);
-        configChanged |= currentDisplayConfig.diff(mTmpConfiguration) != 0;
+        final int changes = currentDisplayConfig.diff(mTmpConfiguration);
+        configChanged |= changes != 0;
 
         if (configChanged) {
             mWaitingForConfig = true;
-            mWmService.startFreezingDisplay(0 /* exitAnim */, 0 /* enterAnim */, this);
+            if (mTransitionController.isShellTransitionsEnabled()) {
+                requestChangeTransitionIfNeeded(changes);
+            } else {
+                mWmService.startFreezingDisplay(0 /* exitAnim */, 0 /* enterAnim */, this);
+            }
             sendNewConfiguration();
         }
 
@@ -1500,7 +1510,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         } else if (currentConfig != null
                 // If waiting for a remote rotation, don't prematurely update configuration.
                 && !(mDisplayRotation.isWaitingForRemoteRotation()
-                        || mAtmService.getTransitionController().isCollecting(this))) {
+                        || mTransitionController.isCollecting(this))) {
             // No obvious action we need to take, but if our current state mismatches the
             // activity manager's, update it, disregarding font scale, which should remain set
             // to the value of the previous configuration.
@@ -1899,8 +1909,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     private void applyRotation(final int oldRotation, final int rotation) {
         mDisplayRotation.applyCurrentRotation(rotation);
-        final boolean shellTransitions =
-                mWmService.mAtmService.getTransitionController().getTransitionPlayer() != null;
+        final boolean shellTransitions = mTransitionController.getTransitionPlayer() != null;
         final boolean rotateSeamlessly =
                 mDisplayRotation.isRotatingSeamlessly() && !shellTransitions;
         final Transaction transaction =
@@ -2498,19 +2507,42 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         // Update mirroring surface for MediaProjection, if this DisplayContent is being used
         // for layer mirroring.
-        if (mMirroredSurface != null) {
-            // Retrieve the size of the DisplayArea to mirror, and continue with the update if the
-            // bounds have changed.
+        if (isCurrentlyMirroring() && mLastMirroredDisplayAreaBounds != null) {
+            // Mirroring has already begun, but update mirroring since the display is now on.
             final WindowContainer wc = mWmService.mWindowContextListenerController.getContainer(
                     mTokenToMirror);
-            if (wc != null && mLastMirroredDisplayAreaBounds != null) {
-                // Retrieve the size of the DisplayArea to mirror, and continue with the update
-                // if the bounds or orientation has changed.
-                final Rect displayAreaBounds = wc.getDisplayContent().getBounds();
-                int displayAreaOrientation = wc.getDisplayContent().getOrientation();
-                if (!mLastMirroredDisplayAreaBounds.equals(displayAreaBounds)
-                        || lastOrientation != displayAreaOrientation) {
-                    updateMirroredSurface(mWmService.mTransactionFactory.get(), displayAreaBounds);
+            if (wc == null) {
+                ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                        "Unable to retrieve window container to update layer mirroring for "
+                                + "display %d",
+                        mDisplayId);
+                return;
+            }
+
+            ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                    "Display %d was already layer mirroring, so apply transformations if necessary",
+                    mDisplayId);
+            // Retrieve the size of the DisplayArea to mirror, and continue with the update
+            // if the bounds or orientation has changed.
+            final Rect displayAreaBounds = wc.getDisplayContent().getBounds();
+            int displayAreaOrientation = wc.getDisplayContent().getOrientation();
+            if (!mLastMirroredDisplayAreaBounds.equals(displayAreaBounds)
+                    || lastOrientation != displayAreaOrientation) {
+                Point surfaceSize = fetchSurfaceSizeIfPresent();
+                if (surfaceSize != null) {
+                    ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                            "Going ahead with updating layer mirroring for display %d to new "
+                                    + "bounds %s and/or orientation %d.",
+                            mDisplayId, displayAreaBounds, displayAreaOrientation);
+                    updateMirroredSurface(mWmService.mTransactionFactory.get(),
+                            displayAreaBounds, surfaceSize);
+                } else {
+                    // If the surface removed, do nothing. We will handle this via onDisplayChanged
+                    // (the display will be off if the surface is removed).
+                    ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                            "Unable to update layer mirroring for display %d to new bounds %s"
+                            + " and/or orientation %d, since the surface is not available.",
+                            mDisplayId, displayAreaBounds, displayAreaOrientation);
                 }
             }
         }
@@ -3032,7 +3064,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (isAnimating(TRANSITION | PARENTS)
                 // isAnimating is a legacy transition query and will be removed, so also add a
                 // check for whether this is in a shell-transition when not using legacy.
-                || mAtmService.getTransitionController().inTransition()) {
+                || mTransitionController.inTransition()) {
             mDeferredRemoval = true;
             return;
         }
@@ -3133,6 +3165,30 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return mScreenRotationAnimation;
     }
 
+    /**
+     * Requests to start a transition for the display configuration change. The given changes must
+     * be non-zero. This method is no-op if the display has been collected.
+     */
+    void requestChangeTransitionIfNeeded(@ActivityInfo.Config int changes) {
+        final TransitionController controller = mTransitionController;
+        if (controller.isCollecting()) {
+            if (!controller.isCollecting(this)) {
+                controller.collect(this);
+            }
+            return;
+        }
+        final Transition t = controller.requestTransitionIfNeeded(TRANSIT_CHANGE, this);
+        if (t != null) {
+            t.setKnownConfigChanges(this, changes);
+        }
+    }
+
+    /** If the display is in transition, there should be a screenshot covering it. */
+    @Override
+    boolean inTransition() {
+        return mScreenRotationAnimation != null || super.inTransition();
+    }
+
     @Override
     public void dumpDebug(ProtoOutputStream proto, long fieldId,
             @WindowTraceLogLevel int logLevel) {
@@ -3153,8 +3209,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             screenRotationAnimation.dumpDebug(proto, SCREEN_ROTATION_ANIMATION);
         }
         mDisplayFrames.dumpDebug(proto, DISPLAY_FRAMES);
-        if (mAtmService.getTransitionController().isShellTransitionsEnabled()) {
-            mAtmService.getTransitionController().dumpDebugLegacy(proto, APP_TRANSITION);
+        if (mTransitionController.isShellTransitionsEnabled()) {
+            mTransitionController.dumpDebugLegacy(proto, APP_TRANSITION);
         } else {
             mAppTransition.dumpDebug(proto, APP_TRANSITION);
         }
@@ -3194,10 +3250,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (mCurrentFocus != null) {
             mCurrentFocus.dumpDebug(proto, CURRENT_FOCUS, logLevel);
         }
-        if (mInsetsStateController != null
-                && mInsetsStateController.getImeSourceProvider() != null) {
-            mInsetsStateController.getImeSourceProvider().dumpDebug(proto,
-                    IME_INSETS_SOURCE_PROVIDER, logLevel);
+        if (mInsetsStateController != null) {
+            for (@InternalInsetsType int type = 0; type < InsetsState.SIZE; type++) {
+                final InsetsSourceProvider provider = mInsetsStateController.peekSourceProvider(
+                        type);
+                if (provider != null) {
+                    provider.dumpDebug(proto, type == ITYPE_IME ? IME_INSETS_SOURCE_PROVIDER :
+                            INSETS_SOURCE_PROVIDERS, logLevel);
+                }
+            }
         }
         proto.write(IME_POLICY, getImePolicy());
         proto.end(token);
@@ -3508,7 +3569,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // focused one starts firing events.
         // TODO(b/151179149) investigate what info accessibility service needs before input can
         // dispatch focus to clients.
-        if (mWmService.mAccessibilityController != null) {
+        if (mWmService.mAccessibilityController.hasCallbacks()) {
             mWmService.mH.sendMessage(PooledLambda.obtainMessage(
                     this::updateAccessibilityOnWindowFocusChanged,
                     mWmService.mAccessibilityController));
@@ -3692,6 +3753,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final WindowState curTarget = mImeLayeringTarget;
         if (!canUpdateImeTarget()) {
             if (DEBUG_INPUT_METHOD) Slog.w(TAG_WM, "Defer updating IME target");
+            mUpdateImeRequestedWhileDeferred = true;
             return curTarget;
         }
 
@@ -3822,6 +3884,23 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     boolean forceDesktopMode() {
         return mWmService.mForceDesktopModeOnExternalDisplays && !isDefaultDisplay && !isPrivate();
+    }
+
+    /** @see WindowManagerInternal#onToggleImeRequested */
+    void onShowImeRequested() {
+        if (mImeLayeringTarget == null || mInputMethodWindow == null) {
+            return;
+        }
+        // If IME window will be shown on the rotated activity, share the transformed state to
+        // IME window so it can compute rotated frame with rotated configuration.
+        if (mImeLayeringTarget.mToken.isFixedRotationTransforming()) {
+            mInputMethodWindow.mToken.linkFixedRotationTransform(mImeLayeringTarget.mToken);
+            // Hide the window until the rotation is done to avoid intermediate artifacts if the
+            // parent surface of IME container is changed.
+            if (mFadeRotationAnimationController != null) {
+                mFadeRotationAnimationController.hideImmediately(mInputMethodWindow.mToken);
+            }
+        }
     }
 
     @VisibleForTesting
@@ -3999,6 +4078,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void updateImeInputAndControlTarget(WindowState target) {
         if (mImeInputTarget != target) {
             ProtoLog.i(WM_DEBUG_IME, "setInputMethodInputTarget %s", target);
+            if (target != null && target.mActivityRecord != null) {
+                target.mActivityRecord.mImeInsetsFrozenUntilStartInput = false;
+            }
             setImeInputTarget(target);
             updateImeControlTarget();
         }
@@ -4373,6 +4455,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     mTmpApplySurfaceChangesTransactionState.preferMinimalPostProcessing,
                     true /* inTraversal, must call performTraversalInTrans... below */);
         }
+        // If the display now has content, or no longer has content, update layer mirroring.
         updateMirroring();
 
         final boolean wallpaperVisible = mWallpaperController.isWallpaperVisible();
@@ -4925,6 +5008,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * Increment the deferral count to determine whether to update the IME target.
      */
     void deferUpdateImeTarget() {
+        if (mDeferUpdateImeTargetCount == 0) {
+            mUpdateImeRequestedWhileDeferred = false;
+        }
         mDeferUpdateImeTargetCount++;
     }
 
@@ -4938,7 +5024,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         mDeferUpdateImeTargetCount--;
-        if (mDeferUpdateImeTargetCount == 0) {
+        if (mDeferUpdateImeTargetCount == 0 && mUpdateImeRequestedWhileDeferred) {
             computeImeTarget(true /* updateImeTarget */);
         }
     }
@@ -5014,7 +5100,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
             @WindowManager.TransitionFlags int flags) {
         prepareAppTransition(transit, flags);
-        mAtmService.getTransitionController().requestTransitionIfNeeded(transit, flags,
+        mTransitionController.requestTransitionIfNeeded(transit, flags,
                 null /* trigger */, this);
     }
 
@@ -5022,12 +5108,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
             @Nullable WindowContainer trigger) {
         prepareAppTransition(transit);
-        mAtmService.getTransitionController().requestTransitionIfNeeded(transit, 0 /* flags */,
+        mTransitionController.requestTransitionIfNeeded(transit, 0 /* flags */,
                 trigger, this);
     }
 
     void executeAppTransition() {
-        mAtmService.getTransitionController().setReady(this);
+        mTransitionController.setReady(this);
         if (mAppTransition.isTransitionSet()) {
             ProtoLog.w(WM_DEBUG_APP_TRANSITIONS,
                     "Execute app transition: %s, displayId: %d Callers=%s",
@@ -5076,9 +5162,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /** Check if pending app transition is for activity / task launch. */
     boolean isNextTransitionForward() {
         // TODO(b/191375840): decouple "forwardness" from transition system.
-        if (mAtmService.getTransitionController().isShellTransitionsEnabled()) {
+        if (mTransitionController.isShellTransitionsEnabled()) {
             @WindowManager.TransitionType int type =
-                    mAtmService.getTransitionController().getCollectingTransitionType();
+                    mTransitionController.getCollectingTransitionType();
             return type == TRANSIT_OPEN || type == TRANSIT_TO_FRONT;
         }
         return mAppTransition.containsTransitRequest(TRANSIT_OPEN)
@@ -5122,7 +5208,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         if (!mLocationInParentWindow.equals(x, y)) {
             mLocationInParentWindow.set(x, y);
-            if (mWmService.mAccessibilityController != null) {
+            if (mWmService.mAccessibilityController.hasCallbacks()) {
                 mWmService.mAccessibilityController.onSomeWindowResizedOrMoved(mDisplayId);
             }
             notifyLocationInParentDisplayChanged();
@@ -5439,6 +5525,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             } else if (displayState == Display.STATE_ON) {
                 mOffTokenAcquirer.release(mDisplayId);
             }
+            ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                    "Display %d state is now (%d), so update layer mirroring?",
+                    mDisplayId, displayState);
+            if (mLastDisplayState != displayState) {
+                // If state is on due to surface being added, then start layer mirroring.
+                // If state is off due to surface being removed, then stop layer mirroring.
+                updateMirroring();
+            }
+            mLastDisplayState = displayState;
         }
         mWmService.requestTraversal();
     }
@@ -5619,6 +5714,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
             mWmService.mDisplayNotificationController.dispatchDisplayChanged(
                     this, getConfiguration());
+            if (isReady() && mTransitionController.isShellTransitionsEnabled()) {
+                requestChangeTransitionIfNeeded(changes);
+            }
         }
         return changes;
     }
@@ -5628,7 +5726,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Configuration currOverrideConfig = getRequestedOverrideConfiguration();
         final int currRotation = currOverrideConfig.windowConfiguration.getRotation();
         final int overrideRotation = overrideConfiguration.windowConfiguration.getRotation();
-        if (currRotation != ROTATION_UNDEFINED && currRotation != overrideRotation) {
+        if (currRotation != ROTATION_UNDEFINED && overrideRotation != ROTATION_UNDEFINED
+                && currRotation != overrideRotation) {
             applyRotationAndFinishFixedRotation(currRotation, overrideRotation);
         }
         mCurrentOverrideConfigurationChanges = currOverrideConfig.diff(overrideConfiguration);
@@ -5642,7 +5741,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @Override
     void onResize() {
         super.onResize();
-        if (mWmService.mAccessibilityController != null) {
+        if (mWmService.mAccessibilityController.hasCallbacks()) {
             mWmService.mAccessibilityController.onDisplaySizeChanged(this);
         }
     }
@@ -5726,6 +5825,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mRootWindowContainer.mTaskSupervisor.endDeferResume();
         }
         mRemoved = true;
+
+        if (mMirroredSurface != null) {
+            // Do not wait for the mirrored surface to be garbage collected, but clean up
+            // immediately.
+            mWmService.mTransactionFactory.get().remove(mMirroredSurface).apply();
+            mMirroredSurface = null;
+        }
 
         // Only update focus/visibility for the last one because there may be many root tasks are
         // reparented and the intermediate states are unnecessary.
@@ -5910,31 +6016,48 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * back to original MediaProjection approach.
      */
     private void startMirrorIfNeeded() {
-        // Only mirror if this display does not have its own content.
-        if (mLastHasContent) {
+        // Only mirror if this display does not have its own content, is not mirroring already,
+        // and if this display is on (it has a surface to write output to).
+        if (mLastHasContent || isCurrentlyMirroring() || mDisplay.getState() == Display.STATE_OFF) {
             return;
         }
+
         // Given the WindowToken of the DisplayArea to mirror, retrieve the associated
         // SurfaceControl.
         IBinder tokenToMirror = mWmService.mDisplayManagerInternal.getWindowTokenClientToMirror(
                 mDisplayId);
-
         if (tokenToMirror == null) {
             // This DisplayContent instance is not involved in layer mirroring. If the display
             // has been created for capturing, fall back to prior MediaProjection approach.
             return;
         }
+
         final WindowContainer wc = mWmService.mWindowContextListenerController.getContainer(
                 tokenToMirror);
         if (wc == null) {
             // Un-set the window token to mirror for this VirtualDisplay, to fall back to the
             // original MediaProjection approach.
             mWmService.mDisplayManagerInternal.setWindowTokenClientToMirror(mDisplayId, null);
+            ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                    "Unable to retrieve window container to start layer mirroring for display %d",
+                    mDisplayId);
             return;
         }
-        SurfaceControl sc = wc.getDisplayContent().getSurfaceControl();
+
+        Point surfaceSize = fetchSurfaceSizeIfPresent();
+        if (surfaceSize == null) {
+            ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                    "Unable to start layer mirroring for display %d since the surface is not "
+                            + "available.",
+                    mDisplayId);
+            return;
+        }
+        ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                "Display %d has no content and is on, so start layer mirroring for state %d",
+                mDisplayId, mDisplay.getState());
 
         // Create a mirrored hierarchy for the SurfaceControl of the DisplayArea to capture.
+        SurfaceControl sc = wc.getDisplayContent().getSurfaceControl();
         mMirroredSurface = SurfaceControl.mirrorSurface(sc);
         SurfaceControl.Transaction transaction = mWmService.mTransactionFactory.get()
                 // Set the mMirroredSurface's parent to the root SurfaceControl for this
@@ -5947,7 +6070,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 // VirtualDisplay will show up as part of the mirrored content.
                 .reparent(mWindowingLayer, null);
         // Retrieve the size of the DisplayArea to mirror.
-        updateMirroredSurface(transaction, wc.getDisplayContent().getBounds());
+        updateMirroredSurface(transaction, wc.getDisplayContent().getBounds(), surfaceSize);
         mTokenToMirror = tokenToMirror;
 
         // No need to clean up. In SurfaceFlinger, parents hold references to their children. The
@@ -5957,11 +6080,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     /**
-     * Start or stop mirroring if this DisplayContent now has content, or no longer has content.
+     * Start mirroring if this DisplayContent no longer has content. Stop mirroring if it now
+     * has content or the display is not on.
      */
     private void updateMirroring() {
-        if (mLastHasContent && mMirroredSurface != null) {
-            // Display now has content, so stop mirroring to it.
+        if (isCurrentlyMirroring() && (mLastHasContent
+                || mDisplay.getState() == Display.STATE_OFF)) {
+            ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                    "Display %d has content (%b) so disable layer mirroring", mDisplayId,
+                    mLastHasContent);
+            // If the display is not on and it is a virtual display, then it no longer has an
+            // associated surface to write output to.
+            // If the display now has content, stop mirroring to it.
             mWmService.mTransactionFactory.get()
                     // Remove the reference to mMirroredSurface, to clean up associated memory.
                     .remove(mMirroredSurface)
@@ -5972,8 +6102,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // Stop mirroring by destroying the reference to the mirrored layer.
             mMirroredSurface = null;
             // Do not un-set the token, in case content is removed and mirroring should begin again.
-        } else if (!mLastHasContent && mMirroredSurface == null) {
-            // Display no longer has content, so start mirroring to it.
+        } else {
+            // Display no longer has content, or now has a surface to write to, so try to start
+            // mirroring to it.
             startMirrorIfNeeded();
         }
     }
@@ -5982,21 +6113,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * Apply transformations to the mirrored surface to ensure the captured contents are scaled to
      * fit and centred in the output surface.
      *
-     * @param transaction            the transaction to include transformations of mMirroredSurface
-     *                               to. Transaction is not applied before returning.
-     * @param displayAreaBounds      bounds of the DisplayArea to mirror to the surface provided by
-     *                               the app.
+     * @param transaction       the transaction to include transformations of mMirroredSurface
+     *                          to. Transaction is not applied before returning.
+     * @param displayAreaBounds bounds of the DisplayArea to mirror to the surface provided by
+     *                          the app.
+     * @param surfaceSize       the default size of the surface to write the display area content to
      */
     @VisibleForTesting
     void updateMirroredSurface(SurfaceControl.Transaction transaction,
-            Rect displayAreaBounds) {
-        // Retrieve the default size of the surface the app provided to
-        // MediaProjection#createVirtualDisplay. Note the app is the consumer of the surface,
-        // since it reads out buffers from the surface, and SurfaceFlinger is the producer since
-        // it writes the mirrored layers to the buffers.
-        final Point surfaceSize = mWmService.mDisplayManagerInternal.getDisplaySurfaceDefaultSize(
-                mDisplayId);
-
+            Rect displayAreaBounds, Point surfaceSize) {
         // Calculate the scale to apply to the root mirror SurfaceControl to fit the size of the
         // output surface.
         float scaleX = surfaceSize.x / (float) displayAreaBounds.width();
@@ -6029,6 +6154,36 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 .setPosition(mMirroredSurface, shiftedX /* x */, shiftedY /* y */)
                 .apply();
         mLastMirroredDisplayAreaBounds = new Rect(displayAreaBounds);
+    }
+
+    /**
+     * Returns a non-null {@link Point} if the surface is present, or null otherwise
+     */
+    Point fetchSurfaceSizeIfPresent() {
+        // Retrieve the default size of the surface the app provided to
+        // MediaProjection#createVirtualDisplay. Note the app is the consumer of the surface,
+        // since it reads out buffers from the surface, and SurfaceFlinger is the producer since
+        // it writes the mirrored layers to the buffers.
+        Point surfaceSize = mWmService.mDisplayManagerInternal.getDisplaySurfaceDefaultSize(
+                mDisplayId);
+        if (surfaceSize == null) {
+            // Layer mirroring started with a null surface, so do not apply any transformations yet.
+            // State of virtual display will change to 'ON' when the surface is set.
+            // will get event DISPLAY_DEVICE_EVENT_CHANGED
+            ProtoLog.v(WM_DEBUG_LAYER_MIRRORING,
+                    "Provided surface for layer mirroring on display %d is not present, so do not"
+                            + " update the surface",
+                    mDisplayId);
+            return null;
+        }
+        return surfaceSize;
+    }
+
+    /**
+     * Returns {@code true} if this DisplayContent is currently layer mirroring.
+     */
+    boolean isCurrentlyMirroring() {
+        return mTokenToMirror != null && mMirroredSurface != null;
     }
 
     /** The entry for proceeding to handle {@link #mFixedRotationLaunchingApp}. */

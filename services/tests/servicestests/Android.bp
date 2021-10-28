@@ -53,6 +53,7 @@ android_test {
         "testng",
         "ub-uiautomator",
         "platformprotosnano",
+        "framework-protos",
         "hamcrest-library",
         "servicestests-utils",
         "service-appsearch",
@@ -86,7 +87,6 @@ android_test {
 
     // These are not normally accessible from apps so they must be explicitly included.
     jni_libs: [
-        "libbacktrace",
         "libbase",
         "libbinder",
         "libc++",
@@ -144,7 +144,6 @@ java_library {
         "utils/**/*.java",
         "utils/**/*.kt",
         "utils-mockito/**/*.kt",
-        ":services.core-sources-deviceconfig-interface",
     ],
     static_libs: [
         "junit",
@@ -161,7 +160,6 @@ java_library {
         "utils/**/*.java",
         "utils/**/*.kt",
         "utils-mockito/**/*.kt",
-        ":services.core-sources-deviceconfig-interface",
     ],
     static_libs: [
         "junit",

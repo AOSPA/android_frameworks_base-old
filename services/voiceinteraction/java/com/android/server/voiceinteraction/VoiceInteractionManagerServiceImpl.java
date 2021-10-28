@@ -190,7 +190,8 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
                 ServiceManager.getService(Context.WINDOW_SERVICE));
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
-        mContext.registerReceiver(mBroadcastReceiver, filter, null, handler);
+        mContext.registerReceiver(mBroadcastReceiver, filter, null, handler,
+                Context.RECEIVER_NOT_EXPORTED);
     }
 
     public boolean showSessionLocked(Bundle args, int flags,
@@ -412,6 +413,44 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
 
     public boolean supportsLocalVoiceInteraction() {
         return mInfo.getSupportsLocalInteraction();
+    }
+
+    public void startListeningVisibleActivityChangedLocked(@NonNull IBinder token) {
+        if (DEBUG) {
+            Slog.d(TAG, "startListeningVisibleActivityChangedLocked: token=" + token);
+        }
+        if (mActiveSession == null || token != mActiveSession.mToken) {
+            Slog.w(TAG, "startListeningVisibleActivityChangedLocked does not match"
+                    + " active session");
+            return;
+        }
+        mActiveSession.startListeningVisibleActivityChangedLocked();
+    }
+
+    public void stopListeningVisibleActivityChangedLocked(@NonNull IBinder token) {
+        if (DEBUG) {
+            Slog.d(TAG, "stopListeningVisibleActivityChangedLocked: token=" + token);
+        }
+        if (mActiveSession == null || token != mActiveSession.mToken) {
+            Slog.w(TAG, "stopListeningVisibleActivityChangedLocked does not match"
+                    + " active session");
+            return;
+        }
+        mActiveSession.stopListeningVisibleActivityChangedLocked();
+    }
+
+    public void notifyActivityEventChangedLocked() {
+        if (DEBUG) {
+            Slog.d(TAG, "notifyActivityEventChangedLocked");
+        }
+        if (mActiveSession == null || !mActiveSession.mShown) {
+            if (DEBUG) {
+                Slog.d(TAG, "notifyActivityEventChangedLocked not allowed on no session or"
+                        + " hidden session");
+            }
+            return;
+        }
+        mActiveSession.notifyActivityEventChangedLocked();
     }
 
     public void updateStateLocked(

@@ -306,7 +306,7 @@
     <string name="permgroupdesc_contacts" msgid="9163927941244182567">"ನಿಮ್ಮ ಸಂಪರ್ಕಗಳನ್ನು ಪ್ರವೇಶಿಸಲು"</string>
     <string name="permgrouplab_location" msgid="1858277002233964394">"ಸ್ಥಳ"</string>
     <string name="permgroupdesc_location" msgid="1995955142118450685">"ಈ ಸಾಧನದ ಸ್ಥಳವನ್ನು ಪ್ರವೇಶಿಸಿ"</string>
-    <string name="permgrouplab_calendar" msgid="6426860926123033230">"Calendar"</string>
+    <string name="permgrouplab_calendar" msgid="6426860926123033230">"ಕ್ಯಾಲೆಂಡರ್"</string>
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"ನಿಮ್ಮ ಕ್ಯಾಲೆಂಡರ್ ಪ್ರವೇಶಿಸಲು"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"SMS ಸಂದೇಶಗಳನ್ನು ಕಳುಹಿಸಲು ಮತ್ತು ನಿರ್ವಹಿಸಲು"</string>
@@ -326,6 +326,10 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"ಫೋನ್ ಕರೆ ಮಾಡಲು ಹಾಗೂ ನಿರ್ವಹಿಸಲು"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"ಬಾಡಿ ಸೆನ್ಸರ್‌"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"ನಿಮ್ಮ ಮುಖ್ಯ ಲಕ್ಷಣಗಳ ಕುರಿತು ಸೆನ್ಸಾರ್ ಡೇಟಾವನ್ನು ಪ್ರವೇಶಿಸಿ"</string>
+    <!-- no translation found for permgrouplab_notifications (5472972361980668884) -->
+    <skip />
+    <!-- no translation found for permgroupdesc_notifications (4608679556801506580) -->
+    <skip />
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"ವಿಂಡೋ ವಿಷಯವನ್ನು ಹಿಂಪಡೆಯುತ್ತದೆ"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"ನೀವು ಬಳಸುತ್ತಿರುವ ವಿಂಡೋದ ವಿಷಯ ಪರೀಕ್ಷಿಸುತ್ತದೆ."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"ಸ್ಪರ್ಶ-ಎಕ್ಸ್‌ಪ್ಲೋರ್ ಆನ್ ಮಾಡುತ್ತದೆ"</string>
@@ -549,6 +553,10 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"ಕೀಲಾಕ್ ಮತ್ತು ಯಾವುದೇ ಸಂಬಂಧಿತ ಭದ್ರತಾ ಪಾಸ್‍‍ವರ್ಡ್ ಭದ್ರತೆಯನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲು ಅಪ್ಲಿಕೇಶನ್‍‍ಗೆ ಅನುಮತಿ ನೀಡುತ್ತದೆ. ಉದಾಹರಣೆಗೆ, ಒಳಬರುವ ಕರೆಯನ್ನು ಸ್ವೀಕರಿಸುವಾಗ ಕೀಲಾಕ್ ಅನ್ನು ಫೋನ್ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸುತ್ತದೆ, ನಂತರ ಕರೆಯು ಅಂತ್ಯಗೊಂಡಾಗ ಕೀಲಾಕ್ ಅನ್ನು ಮರು ಸಕ್ರಿಯಗೊಳಿಸುತ್ತದೆ."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಸಂಕೀರ್ಣತೆಯನ್ನು ವಿನಂತಿಸಿ"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"ಆ್ಯಪ್‌ಗೆ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಸಂಕೀರ್ಣತೆ ಮಟ್ಟವನ್ನು (ಅಧಿಕ, ಮಧ್ಯಮ, ಕಡಿಮೆ ಅಥವಾ ಯಾವುದೂ ಅಲ್ಲ) ತಿಳಿದುಕೊಳ್ಳಲು ಅನುಮತಿಸುತ್ತದೆ, ಅದು ಉದ್ದದ ಸಂಭವನೀಯ ಶ್ರೇಣಿ ಮತ್ತು ಸ್ಕ್ರೀನ್ ಲಾಕ್‌ನ ವಿಧವನ್ನು ಸೂಚಿಸುತ್ತದೆ. ಬಳಕೆದಾರರು ನಿರ್ದಿಷ್ಟ ಹಂತದವರೆಗೆ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಅನ್ನು ಅಪ್‌ಡೇಟ್ ಮಾಡಬಹುದು, ಆದರೆ ಅವರು ಅದನ್ನು ನಿರ್ಲಕ್ಷಿಸಬಹುದು ಮತ್ತು ಅದರಿಂದ ಹೊರಬರಬಹುದು ಎಂಬುದನ್ನು ಸಹ ಆ್ಯಪ್ ಬಳಕೆದಾರರಿಗೆ ಸೂಚಿಸುತ್ತದೆ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಅನ್ನು ಪಠ್ಯದ ರೂಪದಲ್ಲಿ ಸಂಗ್ರಹಿಸಲಾಗಿರುವುದಿಲ್ಲ, ಇದರಿಂದಾಗಿ ಆ್ಯಪ್‌ಗೆ ಸರಿಯಾದ ಪಾಸ್‌ವರ್ಡ್ ಗೊತ್ತಿರುವುದಿಲ್ಲ ಎಂಬುದನ್ನು ಗಮನಿಸಿ."</string>
+    <!-- no translation found for permlab_postNotification (4875401198597803658) -->
+    <skip />
+    <!-- no translation found for permdesc_postNotification (5974977162462877075) -->
+    <skip />
     <string name="permlab_useBiometric" msgid="6314741124749633786">"ಬಯೋಮೆಟ್ರಿಕ್ ಹಾರ್ಡ್‌ವೇರ್‌ ಬಳಸಿ"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"ಪ್ರಮಾಣೀಕರಣಕ್ಕಾಗಿ ಬಯೋಮೆಟ್ರಿಕ್ ಹಾರ್ಡ್‌ವೇರ್ ಬಳಸಲು ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಅನುಮತಿಸುತ್ತದೆ"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"ಫಿಂಗರ್‌ಪ್ರಿಂಟ್ ಹಾರ್ಡ್‌ವೇರ್ ನಿರ್ವಹಿಸಿ"</string>
@@ -609,6 +617,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"ಮುಂದುವರಿಸಲು ಫಿಂಗರ್ ಪ್ರಿಂಟ್ ಅಥವಾ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಅನ್ನು ಬಳಸಿ"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"ಏನೋ ತಪ್ಪಾಗಿದೆ. ಪುನಃ ಪ್ರಯತ್ನಿಸಿ."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"ಫಿಂಗರ್‌ಪ್ರಿಂಟ್ ಐಕಾನ್"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"ಫೇಸ್ ಅನ್‌ಲಾಕ್"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಕುರಿತು ಸಮಸ್ಯೆ ಇದೆ"</string>
@@ -661,6 +670,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"ಮುಂದುವರಿಸಲು ನಿಮ್ಮ ಮುಖ ಅಥವಾ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಅನ್ನು ಬಳಸಿ"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"ಏನೋ ತಪ್ಪಾಗಿದೆ. ಪುನಃ ಪ್ರಯತ್ನಿಸಿ."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"ಮುಖದ ಐಕಾನ್‌"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"ಸಿಂಕ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ರೀಡ್‌ ಮಾಡು"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"ಒಂದು ಖಾತೆಯ ಸಿಂಕ್ ಸೆಟ್ಟಿಂಗ್‍‍ಗಳನ್ನು ಓದಲು ಅಪ್ಲಿಕೇಶನ್‍‍ಗೆ ಅವಕಾಶ ನೀಡುತ್ತದೆ. ಉದಾಹರಣೆಗೆ, ಖಾತೆಯೊಂದಿಗೆ ಜನರ ಅಪ್ಲಿಕೇಶನ್ ಸಿಂಕ್ ಮಾಡಲಾಗಿದೆಯೇ ಎಂಬುದನ್ನು ಇದು ನಿರ್ಧರಿಸಬಹುದು."</string>
@@ -815,7 +825,7 @@
     <string name="phoneTypeTtyTdd" msgid="532038552105328779">"TTY TDD"</string>
     <string name="phoneTypeWorkMobile" msgid="7522314392003565121">"ಕಚೇರಿ ಮೊಬೈಲ್"</string>
     <string name="phoneTypeWorkPager" msgid="3748332310638505234">"ಕಚೇರಿ ಪೇಜರ್"</string>
-    <string name="phoneTypeAssistant" msgid="757550783842231039">"Assistant"</string>
+    <string name="phoneTypeAssistant" msgid="757550783842231039">"ಅಸಿಸ್ಟೆಂಟ್"</string>
     <string name="phoneTypeMms" msgid="1799747455131365989">"MMS"</string>
     <string name="eventTypeCustom" msgid="3257367158986466481">"ಕಸ್ಟಮ್"</string>
     <string name="eventTypeBirthday" msgid="7770026752793912283">"ಜನ್ಮದಿನ"</string>
@@ -848,7 +858,7 @@
     <string name="orgTypeOther" msgid="5450675258408005553">"ಇತರೆ"</string>
     <string name="orgTypeCustom" msgid="1126322047677329218">"ಕಸ್ಟಮ್"</string>
     <string name="relationTypeCustom" msgid="282938315217441351">"ಕಸ್ಟಮ್"</string>
-    <string name="relationTypeAssistant" msgid="4057605157116589315">"Assistant"</string>
+    <string name="relationTypeAssistant" msgid="4057605157116589315">"ಅಸಿಸ್ಟೆಂಟ್"</string>
     <string name="relationTypeBrother" msgid="7141662427379247820">"ಸಹೋದರ"</string>
     <string name="relationTypeChild" msgid="9076258911292693601">"ಮಗು"</string>
     <string name="relationTypeDomesticPartner" msgid="7825306887697559238">"ಸ್ಥಳೀಯ ಪಾಲುದಾರ"</string>
@@ -1038,9 +1048,9 @@
     <string name="menu_space_shortcut_label" msgid="5949311515646872071">"space"</string>
     <string name="menu_enter_shortcut_label" msgid="6709499510082897320">"enter"</string>
     <string name="menu_delete_shortcut_label" msgid="4365787714477739080">"ಅಳಿಸಿ"</string>
-    <string name="search_go" msgid="2141477624421347086">"Search"</string>
+    <string name="search_go" msgid="2141477624421347086">"ಹುಡುಕಿ"</string>
     <string name="search_hint" msgid="455364685740251925">"ಹುಡುಕಿ…"</string>
-    <string name="searchview_description_search" msgid="1045552007537359343">"Search"</string>
+    <string name="searchview_description_search" msgid="1045552007537359343">"ಹುಡುಕಿ"</string>
     <string name="searchview_description_query" msgid="7430242366971716338">"ಪ್ರಶ್ನೆಯನ್ನು ಹುಡುಕಿ"</string>
     <string name="searchview_description_clear" msgid="1989371719192982900">"ಪ್ರಶ್ನೆಯನ್ನು ತೆರವುಗೊಳಿಸು"</string>
     <string name="searchview_description_submit" msgid="6771060386117334686">"ಪ್ರಶ್ನೆಯನ್ನು ಸಲ್ಲಿಸು"</string>
@@ -1468,7 +1478,7 @@
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"ಝೂಮ್‌ ನಿಯಂತ್ರಿಸಲು ಎರಡು ಬಾರಿ ಟ್ಯಾಪ್ ಮಾಡಿ"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"ವಿಜೆಟ್ ಸೇರಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"ಹೋಗು"</string>
-    <string name="ime_action_search" msgid="4501435960587287668">"Search"</string>
+    <string name="ime_action_search" msgid="4501435960587287668">"ಹುಡುಕಿ"</string>
     <string name="ime_action_send" msgid="8456843745664334138">"ಕಳುಹಿಸು"</string>
     <string name="ime_action_next" msgid="4169702997635728543">"ಮುಂದೆ"</string>
     <string name="ime_action_done" msgid="6299921014822891569">"ಮುಗಿದಿದೆ"</string>
@@ -1692,7 +1702,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"ಶಾರ್ಟ್‌ಕಟ್ ಆನ್ ಆಗಿರುವಾಗ, ಎರಡೂ ವಾಲ್ಯೂಮ್ ಬಟನ್‌ಗಳನ್ನು 3 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಒತ್ತಿದರೆ ಪ್ರವೇಶಿಸುವಿಕೆ ವೈಶಿಷ್ಟ್ಯವೊಂದು ಪ್ರಾರಂಭವಾಗುತ್ತದೆ."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"ಪ್ರವೇಶಿಸುವಿಕೆ ವೈಶಿಷ್ಟ್ಯಗಳಿಗಾಗಿ ಶಾರ್ಟ್‌ಕಟ್ ಆನ್ ಮಾಡಬೇಕೇ?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"ಎರಡೂ ವಾಲ್ಯೂಮ್ ಕೀಗಳನ್ನು ಕೆಲವು ಸೆಕೆಂಡುಗಳ ಕಾಲ ಹಿಡಿದಿಟ್ಟುಕೊಳ್ಳುವುದರಿಂದ ಪ್ರವೇಶಿಸುವಿಕೆ ವೈಶಿಷ್ಟ್ಯಗಳು ಆನ್ ಆಗುತ್ತವೆ. ಇದು ನಿಮ್ಮ ಸಾಧನವು ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಎಂಬುದನ್ನು ಬದಲಾಯಿಸಬಹುದು.\n\n ಪ್ರಸ್ತುತ ವೈಶಿಷ್ಟ್ಯಗಳು:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nಸೆಟ್ಟಿಂಗ್‌ಗಳು ಮತ್ತು ಆ್ಯಕ್ಸೆಸಿಬಿಲಿಟಿಯಲ್ಲಿ ಆಯ್ದ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ನೀವು ಬದಲಾಯಿಸಬಹುದು."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"ಶಾರ್ಟ್‌ಕಟ್ <xliff:g id="SERVICE">%1$s</xliff:g>ಆನ್‌ ಮಾಡಬೇಕೇ?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"ಎರಡೂ ವಾಲ್ಯೂಮ್ ಕೀಗಳನ್ನು ಕೆಲವು ಸೆಕೆಂಡುಗಳ ಕಾಲ ಹಿಡಿದಿಟ್ಟುಕೊಳ್ಳುವುದರಿಂದ ಪ್ರವೇಶಿಸುವಿಕೆ ವೈಶಿಷ್ಟ್ಯವಾದ <xliff:g id="SERVICE">%1$s</xliff:g> ಆನ್ ಆಗುತ್ತದೆ. ಇದು ನಿಮ್ಮ ಸಾಧನವು ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಎಂಬುದನ್ನು ಬದಲಾಯಿಸಬಹುದು.\n\nನೀವು ಈ ಶಾರ್ಟ್‌ಕಟ್ ಅನ್ನು ಸೆಟ್ಟಿಂಗ್‌ಗಳು ಮತ್ತು ಅಕ್ಸೆಸಿಬಿಲಿಟಿಯಲ್ಲಿನ ಮತ್ತೊಂದು ವೈಶಿಷ್ಟ್ಯಕ್ಕೆ ಬದಲಾಯಿಸಬಹುದು."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"ಆನ್ ಮಾಡಿ"</string>
@@ -1973,7 +1983,7 @@
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"ಸೂಚಿತ ಭಾಷೆ"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"ಎಲ್ಲಾ ಭಾಷೆಗಳು"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"ಎಲ್ಲಾ ಪ್ರದೇಶಗಳು"</string>
-    <string name="locale_search_menu" msgid="6258090710176422934">"Search"</string>
+    <string name="locale_search_menu" msgid="6258090710176422934">"ಹುಡುಕಿ"</string>
     <string name="app_suspended_title" msgid="888873445010322650">"ಅಪ್ಲಿಕೇಶನ್ ಲಭ್ಯವಿಲ್ಲ"</string>
     <string name="app_suspended_default_message" msgid="6451215678552004172">"<xliff:g id="APP_NAME_0">%1$s</xliff:g> ಅಪ್ಲಿಕೇಶನ್‌ ಸದ್ಯಕ್ಕೆ ಲಭ್ಯವಿಲ್ಲ. ಇದನ್ನು <xliff:g id="APP_NAME_1">%2$s</xliff:g> ನಲ್ಲಿ ನಿರ್ವಹಿಸಲಾಗುತ್ತಿದೆ."</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ"</string>

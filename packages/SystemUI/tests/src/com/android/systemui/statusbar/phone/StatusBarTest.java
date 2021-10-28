@@ -77,12 +77,15 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.InitController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.animation.ActivityLaunchAnimator;
+import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.demomode.DemoModeController;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
@@ -105,10 +108,11 @@ import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
+import com.android.systemui.statusbar.OperatorNameViewController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
-import com.android.systemui.statusbar.SuperStatusBarViewFactory;
+import com.android.systemui.statusbar.connectivity.NetworkController;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -134,16 +138,18 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.ExtensionController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
-import com.android.systemui.unfold.UnfoldLightRevealOverlayAnimation;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.unfold.UnfoldLightRevealOverlayAnimation;
+import com.android.systemui.unfold.UnfoldTransitionWallpaperController;
+import com.android.systemui.unfold.config.UnfoldTransitionConfig;
+import com.android.systemui.util.WallpaperController;
 import com.android.systemui.util.concurrency.FakeExecutor;
+import com.android.systemui.util.concurrency.MessageRouterImpl;
 import com.android.systemui.util.time.FakeSystemClock;
 import com.android.systemui.volume.VolumeComponent;
 import com.android.systemui.wmshell.BubblesManager;
-import com.android.unfold.config.UnfoldTransitionConfig;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.startingsurface.StartingSurface;
@@ -157,8 +163,6 @@ import org.mockito.MockitoAnnotations;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.util.Optional;
-
-import javax.inject.Provider;
 
 import dagger.Lazy;
 
@@ -205,6 +209,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private NotificationShadeWindowView mNotificationShadeWindowView;
     @Mock private BroadcastDispatcher mBroadcastDispatcher;
     @Mock private AssistManager mAssistManager;
+    @Mock private NotificationEntryManager mNotificationEntryManager;
     @Mock private NotificationGutsManager mNotificationGutsManager;
     @Mock private NotificationMediaManager mNotificationMediaManager;
     @Mock private NavigationBarController mNavigationBarController;
@@ -226,17 +231,18 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private NotificationShadeWindowViewController mNotificationShadeWindowViewController;
     @Mock private DozeParameters mDozeParameters;
     @Mock private Lazy<LockscreenWallpaper> mLockscreenWallpaperLazy;
+    @Mock private LockscreenGestureLogger mLockscreenGestureLogger;
     @Mock private LockscreenWallpaper mLockscreenWallpaper;
     @Mock private DozeServiceHost mDozeServiceHost;
     @Mock private ViewMediatorCallback mKeyguardVieMediatorCallback;
     @Mock private VolumeComponent mVolumeComponent;
     @Mock private CommandQueue mCommandQueue;
-    @Mock private Provider<StatusBarComponent.Builder> mStatusBarComponentBuilderProvider;
-    @Mock private StatusBarComponent.Builder mStatusBarComponentBuilder;
+    @Mock private CollapsedStatusBarFragmentLogger mCollapsedStatusBarFragmentLogger;
+    @Mock private StatusBarComponent.Factory mStatusBarComponentFactory;
     @Mock private StatusBarComponent mStatusBarComponent;
     @Mock private PluginManager mPluginManager;
     @Mock private LegacySplitScreen mLegacySplitScreen;
-    @Mock private SuperStatusBarViewFactory mSuperStatusBarViewFactory;
+    @Mock private StatusBarWindowView mStatusBarWindowView;
     @Mock private LightsOutNotifController mLightsOutNotifController;
     @Mock private ViewMediatorCallback mViewMediatorCallback;
     @Mock private StatusBarTouchableRegionManager mStatusBarTouchableRegionManager;
@@ -253,6 +259,9 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private BrightnessSlider.Factory mBrightnessSliderFactory;
     @Mock private UnfoldTransitionConfig mUnfoldTransitionConfig;
     @Mock private Lazy<UnfoldLightRevealOverlayAnimation> mUnfoldLightRevealOverlayAnimationLazy;
+    @Mock private Lazy<StatusBarMoveFromCenterAnimationController> mMoveFromCenterAnimationLazy;
+    @Mock private Lazy<UnfoldTransitionWallpaperController> mUnfoldWallpaperController;
+    @Mock private WallpaperController mWallpaperController;
     @Mock private OngoingCallController mOngoingCallController;
     @Mock private SystemStatusAnimationScheduler mAnimationScheduler;
     @Mock private StatusBarLocationPublisher mLocationPublisher;
@@ -265,8 +274,14 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
     @Mock private TunerService mTunerService;
     @Mock private StartingSurface mStartingSurface;
+    @Mock private OperatorNameViewController mOperatorNameViewController;
+    @Mock private OperatorNameViewController.Factory mOperatorNameViewControllerFactory;
+    @Mock private ActivityLaunchAnimator mActivityLaunchAnimator;
+    @Mock private DialogLaunchAnimator mDialogLaunchAnimator;
     private ShadeController mShadeController;
-    private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
+    private final FakeSystemClock mFakeSystemClock = new FakeSystemClock();
+    private FakeExecutor mMainExecutor = new FakeExecutor(mFakeSystemClock);
+    private FakeExecutor mUiBgExecutor = new FakeExecutor(mFakeSystemClock);
     private InitController mInitController = new InitController();
 
     @Before
@@ -322,7 +337,7 @@ public class StatusBarTest extends SysuiTestCase {
         }).when(mStatusBarKeyguardViewManager).addAfterKeyguardGoneRunnable(any());
 
         WakefulnessLifecycle wakefulnessLifecycle =
-                new WakefulnessLifecycle(mContext, mIWallpaperManager);
+                new WakefulnessLifecycle(mContext, mIWallpaperManager, mock(DumpManager.class));
         wakefulnessLifecycle.dispatchStartedWakingUp(PowerManager.WAKE_REASON_UNKNOWN);
         wakefulnessLifecycle.dispatchFinishedWakingUp();
 
@@ -333,8 +348,7 @@ public class StatusBarTest extends SysuiTestCase {
         when(mLockscreenWallpaperLazy.get()).thenReturn(mLockscreenWallpaper);
         when(mBiometricUnlockControllerLazy.get()).thenReturn(mBiometricUnlockController);
 
-        when(mStatusBarComponentBuilderProvider.get()).thenReturn(mStatusBarComponentBuilder);
-        when(mStatusBarComponentBuilder.build()).thenReturn(mStatusBarComponent);
+        when(mStatusBarComponentFactory.create()).thenReturn(mStatusBarComponent);
         when(mStatusBarComponent.getNotificationShadeWindowViewController()).thenReturn(
                 mNotificationShadeWindowViewController);
 
@@ -342,6 +356,9 @@ public class StatusBarTest extends SysuiTestCase {
                 mStatusBarStateController, mNotificationShadeWindowController,
                 mStatusBarKeyguardViewManager, mContext.getSystemService(WindowManager.class),
                 () -> Optional.of(mStatusBar), () -> mAssistManager, Optional.of(mBubbles));
+
+        when(mOperatorNameViewControllerFactory.create(any()))
+                .thenReturn(mOperatorNameViewController);
 
         mStatusBar = new StatusBar(
                 mContext,
@@ -359,6 +376,7 @@ public class StatusBarTest extends SysuiTestCase {
                 new FalsingManagerFake(),
                 new FalsingCollectorFake(),
                 mBroadcastDispatcher,
+                mNotificationEntryManager,
                 mNotificationGutsManager,
                 notificationLogger,
                 mNotificationInterruptStateProvider,
@@ -374,7 +392,7 @@ public class StatusBarTest extends SysuiTestCase {
                 mNetworkController,
                 mBatteryController,
                 mColorExtractor,
-                new ScreenLifecycle(),
+                new ScreenLifecycle(mock(DumpManager.class)),
                 wakefulnessLifecycle,
                 mStatusBarStateController,
                 Optional.of(mBubblesManager),
@@ -388,19 +406,21 @@ public class StatusBarTest extends SysuiTestCase {
                 mDozeParameters,
                 mScrimController,
                 mLockscreenWallpaperLazy,
+                mLockscreenGestureLogger,
                 mBiometricUnlockControllerLazy,
                 mDozeServiceHost,
                 mPowerManager, mScreenPinningRequest,
                 mDozeScrimController,
                 mVolumeComponent,
                 mCommandQueue,
-                mStatusBarComponentBuilderProvider,
+                mCollapsedStatusBarFragmentLogger,
+                mStatusBarComponentFactory,
                 mPluginManager,
                 Optional.of(mLegacySplitScreen),
                 mLightsOutNotifController,
                 mStatusBarNotificationActivityStarterBuilder,
                 mShadeController,
-                mSuperStatusBarViewFactory,
+                mStatusBarWindowView,
                 mStatusBarKeyguardViewManager,
                 mViewMediatorCallback,
                 mInitController,
@@ -409,6 +429,7 @@ public class StatusBarTest extends SysuiTestCase {
                 mKeyguardDismissUtil,
                 mExtensionController,
                 mUserInfoControllerImpl,
+                mOperatorNameViewControllerFactory,
                 mPhoneStatusBarPolicy,
                 mKeyguardIndicationController,
                 mDemoModeController,
@@ -418,6 +439,9 @@ public class StatusBarTest extends SysuiTestCase {
                 mBrightnessSliderFactory,
                 mUnfoldTransitionConfig,
                 mUnfoldLightRevealOverlayAnimationLazy,
+                mUnfoldWallpaperController,
+                mMoveFromCenterAnimationLazy,
+                mWallpaperController,
                 mOngoingCallController,
                 mAnimationScheduler,
                 mLocationPublisher,
@@ -425,10 +449,16 @@ public class StatusBarTest extends SysuiTestCase {
                 mLockscreenTransitionController,
                 mFeatureFlags,
                 mKeyguardUnlockAnimationController,
+                new Handler(TestableLooper.get(this).getLooper()),
+                mMainExecutor,
+                new MessageRouterImpl(mMainExecutor),
                 mWallpaperManager,
                 mUnlockedScreenOffAnimationController,
                 Optional.of(mStartingSurface),
-                mTunerService);
+                mTunerService,
+                mock(DumpManager.class),
+                mActivityLaunchAnimator,
+                mDialogLaunchAnimator);
         when(mKeyguardViewMediator.registerStatusBar(any(StatusBar.class), any(ViewGroup.class),
                 any(NotificationPanelViewController.class), any(BiometricUnlockController.class),
                 any(ViewGroup.class), any(KeyguardBypassController.class)))
@@ -691,7 +721,7 @@ public class StatusBarTest extends SysuiTestCase {
         } catch (RemoteException e) {
             fail();
         }
-        TestableLooper.get(this).processAllMessages();
+        mMainExecutor.runAllReady();
     }
 
     @Test
@@ -710,7 +740,7 @@ public class StatusBarTest extends SysuiTestCase {
         } catch (RemoteException e) {
             fail();
         }
-        TestableLooper.get(this).processAllMessages();
+        mMainExecutor.runAllReady();
     }
 
     @Test
@@ -728,7 +758,7 @@ public class StatusBarTest extends SysuiTestCase {
         } catch (RemoteException e) {
             fail();
         }
-        TestableLooper.get(this).processAllMessages();
+        mMainExecutor.runAllReady();
     }
 
     @Test
@@ -740,15 +770,6 @@ public class StatusBarTest extends SysuiTestCase {
     public void testDumpBarTransitions_DoesNotCrash() {
         StatusBar.dumpBarTransitions(
                 new PrintWriter(new ByteArrayOutputStream()), "var", /* transitions= */ null);
-    }
-
-    @Test
-    @RunWithLooper(setAsMainLooper = true)
-    public void testUpdateKeyguardState_DoesNotCrash() {
-        mStatusBar.setBarStateForTest(StatusBarState.KEYGUARD);
-        when(mLockscreenUserManager.getCurrentProfiles()).thenReturn(
-                new SparseArray<>());
-        mStatusBar.onStateChanged(StatusBarState.SHADE);
     }
 
     @Test
@@ -764,6 +785,58 @@ public class StatusBarTest extends SysuiTestCase {
                 .thenReturn(BiometricUnlockController.MODE_WAKE_AND_UNLOCK);
         mStatusBar.updateScrimController();
         verify(mScrimController).transitionTo(eq(ScrimState.UNLOCKED), any());
+    }
+
+    @Test
+    public void testTransitionLaunch_goesToUnlocked() {
+        mStatusBar.setBarStateForTest(StatusBarState.KEYGUARD);
+        mStatusBar.showKeyguardImpl();
+
+        // Starting a pulse should change the scrim controller to the pulsing state
+        when(mNotificationPanelViewController.isLaunchTransitionRunning()).thenReturn(true);
+        when(mNotificationPanelViewController.isLaunchingAffordanceWithPreview()).thenReturn(true);
+        mStatusBar.updateScrimController();
+        verify(mScrimController).transitionTo(eq(ScrimState.UNLOCKED), any());
+    }
+
+    @Test
+    public void testSetExpansionAffectsAlpha_onlyWhenHidingKeyguard() {
+        mStatusBar.updateScrimController();
+        verify(mScrimController).setExpansionAffectsAlpha(eq(true));
+
+        clearInvocations(mScrimController);
+        when(mBiometricUnlockController.isBiometricUnlock()).thenReturn(true);
+        mStatusBar.updateScrimController();
+        verify(mScrimController).setExpansionAffectsAlpha(eq(true));
+
+        clearInvocations(mScrimController);
+        when(mKeyguardStateController.isShowing()).thenReturn(true);
+        mStatusBar.updateScrimController();
+        verify(mScrimController).setExpansionAffectsAlpha(eq(false));
+
+        clearInvocations(mScrimController);
+        reset(mKeyguardStateController);
+        when(mKeyguardStateController.isKeyguardFadingAway()).thenReturn(true);
+        mStatusBar.updateScrimController();
+        verify(mScrimController).setExpansionAffectsAlpha(eq(false));
+
+        clearInvocations(mScrimController);
+        reset(mKeyguardStateController);
+        when(mKeyguardStateController.isKeyguardGoingAway()).thenReturn(true);
+        mStatusBar.updateScrimController();
+        verify(mScrimController).setExpansionAffectsAlpha(eq(false));
+    }
+
+    @Test
+    public void testTransitionLaunch_noPreview_doesntGoUnlocked() {
+        mStatusBar.setBarStateForTest(StatusBarState.KEYGUARD);
+        mStatusBar.showKeyguardImpl();
+
+        // Starting a pulse should change the scrim controller to the pulsing state
+        when(mNotificationPanelViewController.isLaunchTransitionRunning()).thenReturn(true);
+        when(mNotificationPanelViewController.isLaunchingAffordanceWithPreview()).thenReturn(false);
+        mStatusBar.updateScrimController();
+        verify(mScrimController).transitionTo(eq(ScrimState.KEYGUARD));
     }
 
     @Test

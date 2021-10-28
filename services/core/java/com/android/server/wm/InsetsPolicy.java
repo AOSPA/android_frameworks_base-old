@@ -43,11 +43,14 @@ import android.view.InsetsSource;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
 import android.view.InsetsState.InternalInsetsType;
+import android.view.InternalInsetsAnimationController;
 import android.view.SurfaceControl;
 import android.view.SyncRtSurfaceTransactionApplier;
+import android.view.WindowInsets.Type;
 import android.view.WindowInsetsAnimation;
 import android.view.WindowInsetsAnimation.Bounds;
 import android.view.WindowInsetsAnimationControlListener;
+import android.view.WindowInsetsAnimationController;
 import android.view.WindowManager;
 
 import com.android.internal.R;
@@ -218,7 +221,7 @@ class InsetsPolicy {
     InsetsState getInsetsForWindow(WindowState target) {
         final InsetsState originalState = mStateController.getInsetsForWindow(target);
         final InsetsState state = adjustVisibilityForTransientTypes(originalState);
-        return target.mIsImWindow ? adjustVisibilityForIme(state, state == originalState) : state;
+        return adjustVisibilityForIme(target, state, state == originalState);
     }
 
     /**
@@ -248,16 +251,37 @@ class InsetsPolicy {
         return state;
     }
 
-    // Navigation bar insets is always visible to IME.
-    private static InsetsState adjustVisibilityForIme(InsetsState originalState,
+    private InsetsState adjustVisibilityForIme(WindowState w, InsetsState originalState,
             boolean copyState) {
-        final InsetsSource originalNavSource = originalState.peekSource(ITYPE_NAVIGATION_BAR);
-        if (originalNavSource != null && !originalNavSource.isVisible()) {
-            final InsetsState state = copyState ? new InsetsState(originalState) : originalState;
-            final InsetsSource navSource = new InsetsSource(originalNavSource);
-            navSource.setVisible(true);
-            state.addSource(navSource);
-            return state;
+        if (w.mIsImWindow) {
+            // Navigation bar insets is always visible to IME.
+            final InsetsSource originalNavSource = originalState.peekSource(ITYPE_NAVIGATION_BAR);
+            if (originalNavSource != null && !originalNavSource.isVisible()) {
+                final InsetsState state = copyState ? new InsetsState(originalState)
+                        : originalState;
+                final InsetsSource navSource = new InsetsSource(originalNavSource);
+                navSource.setVisible(true);
+                state.addSource(navSource);
+                return state;
+            }
+        } else if (w.mActivityRecord != null && w.mActivityRecord.mImeInsetsFrozenUntilStartInput) {
+            // During switching tasks with gestural navigation, if the IME is attached to
+            // one app window on that time, even the next app window is behind the IME window,
+            // conceptually the window should not receive the IME insets if the next window is
+            // not eligible IME requester and ready to show IME on top of it.
+            final boolean shouldImeAttachedToApp = mDisplayContent.shouldImeAttachedToApp();
+            final InsetsSource originalImeSource = originalState.peekSource(ITYPE_IME);
+
+            if (shouldImeAttachedToApp && originalImeSource != null) {
+                final boolean imeVisibility =
+                        w.mActivityRecord.mLastImeShown || w.getRequestedVisibility(ITYPE_IME);
+                final InsetsState state = copyState ? new InsetsState(originalState)
+                        : originalState;
+                final InsetsSource imeSource = new InsetsSource(originalImeSource);
+                imeSource.setVisible(imeVisibility);
+                state.addSource(imeSource);
+                return state;
+            }
         }
         return originalState;
     }
@@ -313,7 +337,7 @@ class InsetsPolicy {
 
     private @Nullable InsetsControlTarget getStatusControlTarget(@Nullable WindowState focusedWin,
             boolean fake) {
-        if (mShowingTransientTypes.indexOf(ITYPE_STATUS_BAR) != -1 && !fake) {
+        if (!fake && isShowingTransientTypes(Type.statusBars())) {
             return mDummyControlTarget;
         }
         final WindowState notificationShade = mPolicy.getNotificationShade();
@@ -363,7 +387,7 @@ class InsetsPolicy {
             // Force showing navigation bar while IME is visible.
             return null;
         }
-        if (mShowingTransientTypes.indexOf(ITYPE_NAVIGATION_BAR) != -1 && !fake) {
+        if (!fake && isShowingTransientTypes(Type.navigationBars())) {
             return mDummyControlTarget;
         }
         if (focusedWin == mPolicy.getNotificationShade()) {
@@ -387,6 +411,16 @@ class InsetsPolicy {
             return mDummyControlTarget;
         }
         return focusedWin;
+    }
+
+    private boolean isShowingTransientTypes(@Type.InsetsType int types) {
+        final IntArray showingTransientTypes = mShowingTransientTypes;
+        for (int i = showingTransientTypes.size() - 1; i >= 0; i--) {
+            if ((InsetsState.toPublicType(showingTransientTypes.get(i)) & types) != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -563,8 +597,8 @@ class InsetsPolicy {
             }
 
             @Override
-            public void startAnimation(InsetsAnimationControlImpl controller,
-                    WindowInsetsAnimationControlListener listener, int types,
+            public <T extends InsetsAnimationControlRunner & InternalInsetsAnimationController>
+            void startAnimation(T runner, WindowInsetsAnimationControlListener listener, int types,
                     WindowInsetsAnimation animation,
                     Bounds bounds) {
             }

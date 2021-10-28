@@ -22,7 +22,7 @@ import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 
-import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_IME;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_INSETS;
 import static com.android.server.wm.InsetsSourceProviderProto.CAPTURED_LEASH;
 import static com.android.server.wm.InsetsSourceProviderProto.CLIENT_VISIBLE;
 import static com.android.server.wm.InsetsSourceProviderProto.CONTROL;
@@ -163,8 +163,10 @@ class InsetsSourceProvider {
             // animate-out as new one animates-in.
             mWin.cancelAnimation();
             mWin.mProvidedInsetsSources.remove(mSource.getType());
+            mSeamlessRotating = false;
         }
-        ProtoLog.d(WM_DEBUG_IME, "InsetsSource setWin %s", win);
+        ProtoLog.d(WM_DEBUG_WINDOW_INSETS, "InsetsSource setWin %s for type %s", win,
+                InsetsState.typeToString(mSource.getType()));
         mWin = win;
         mFrameProvider = frameProvider;
         mImeFrameProvider = imeFrameProvider;
@@ -266,7 +268,7 @@ class InsetsSourceProvider {
                         && mWin.okToDisplay()) {
                     mWin.applyWithNextDraw(mSetLeashPositionConsumer);
                 } else {
-                    mSetLeashPositionConsumer.accept(mWin.getPendingTransaction());
+                    mSetLeashPositionConsumer.accept(mWin.getSyncTransaction());
                 }
             }
             if (mServerVisible && !mLastSourceFrame.equals(mSource.getFrame())) {
@@ -330,7 +332,7 @@ class InsetsSourceProvider {
         if (getSource().getType() == ITYPE_IME) {
             setClientVisible(target.getRequestedVisibility(mSource.getType()));
         }
-        final Transaction t = mDisplayContent.getPendingTransaction();
+        final Transaction t = mDisplayContent.getSyncTransaction();
         mWin.startAnimation(t, mAdapter, !mClientVisible /* hidden */,
                 ANIMATION_TYPE_INSETS_CONTROL);
 
@@ -343,7 +345,7 @@ class InsetsSourceProvider {
         updateVisibility();
         mControl = new InsetsSourceControl(mSource.getType(), leash, surfacePosition,
                 mSource.calculateInsets(mWin.getBounds(), true /* ignoreVisibility */));
-        ProtoLog.d(WM_DEBUG_IME,
+        ProtoLog.d(WM_DEBUG_WINDOW_INSETS,
                 "InsetsSource Control %s for target %s", mControl, mControlTarget);
     }
 
@@ -392,8 +394,9 @@ class InsetsSourceProvider {
 
     protected void updateVisibility() {
         mSource.setVisible(mServerVisible && (isMirroredSource() || mClientVisible));
-        ProtoLog.d(WM_DEBUG_IME,
-                "InsetsSource updateVisibility serverVisible: %s clientVisible: %s",
+        ProtoLog.d(WM_DEBUG_WINDOW_INSETS,
+                "InsetsSource updateVisibility for %s, serverVisible: %s clientVisible: %s",
+                InsetsState.typeToString(mSource.getType()),
                 mServerVisible, mClientVisible);
     }
 
@@ -539,7 +542,7 @@ class InsetsSourceProvider {
                 t.setAlpha(animationLeash, 1 /* alpha */);
                 t.hide(animationLeash);
             }
-            ProtoLog.i(WM_DEBUG_IME,
+            ProtoLog.i(WM_DEBUG_WINDOW_INSETS,
                     "ControlAdapter startAnimation mSource: %s controlTarget: %s", mSource,
                     mControlTarget);
 
@@ -555,7 +558,7 @@ class InsetsSourceProvider {
                 mControlTarget = null;
                 mAdapter = null;
                 setClientVisible(InsetsState.getDefaultVisibility(mSource.getType()));
-                ProtoLog.i(WM_DEBUG_IME,
+                ProtoLog.i(WM_DEBUG_WINDOW_INSETS,
                         "ControlAdapter onAnimationCancelled mSource: %s mControlTarget: %s",
                         mSource, mControlTarget);
             }

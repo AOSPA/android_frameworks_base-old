@@ -34,6 +34,7 @@ import android.util.TimeUtils;
 import com.android.internal.annotations.CompositeRWLock;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.am.PlatformCompatCache.CachedCompatChangeId;
 
 import java.io.PrintWriter;
 
@@ -359,6 +360,20 @@ final class ProcessStateRecord {
     private int mCacheOomRankerUseCount;
 
     /**
+     * Process memory usage (RSS).
+     *
+     * Periodically populated by {@code CacheOomRanker}, stored in this object to cache the values.
+     */
+    @GuardedBy("mService")
+    private long mCacheOomRankerRss;
+
+    /**
+     * The last time, in milliseconds since boot, since {@link #mCacheOomRankerRss} was updated.
+     */
+    @GuardedBy("mService")
+    private long mCacheOomRankerRssTimeMs;
+
+    /**
      * Whether or not this process is reachable from given process.
      */
     @GuardedBy("mService")
@@ -373,6 +388,34 @@ final class ProcessStateRecord {
     @GuardedBy("mService")
     @ElapsedRealtimeLong
     private long mLastInvisibleTime;
+
+    /**
+     * Whether or not this process could be killed when it's in background restricted mode
+     * and cached &amp; idle state.
+     */
+    @GuardedBy("mService")
+    private boolean mNoKillOnBgRestrictedAndIdle;
+
+    /**
+     * Last set value of {@link #mCached}.
+     */
+    @GuardedBy("mService")
+    private boolean mSetCached;
+
+    /**
+     * Last set value of {@link #mNoKillOnBgRestrictedAndIdle}.
+     */
+    @GuardedBy("mService")
+    private boolean mSetNoKillOnBgRestrictedAndIdle;
+
+    /**
+     * The last time when the {@link #mNoKillOnBgRestrictedAndIdle} is false and the
+     * {@link #mCached} is true, and either the former state is flipping from true to false
+     * when latter state is true, or the latter state is flipping from false to true when the
+     * former state is false.
+     */
+    @GuardedBy("mService")
+    private @ElapsedRealtimeLong long mLastCanKillOnBgRestrictedAndIdleTime;
 
     // Below are the cached task info for OomAdjuster only
     private static final int VALUE_INVALID = -1;
@@ -393,6 +436,16 @@ final class ProcessStateRecord {
     private int mCachedHasRecentTasks = VALUE_INVALID;
     @GuardedBy("mService")
     private int mCachedIsReceivingBroadcast = VALUE_INVALID;
+
+    /**
+     * Cache the return value of PlatformCompat.isChangeEnabled().
+     */
+    @GuardedBy("mService")
+    private int[] mCachedCompatChanges = new int[] {
+        VALUE_INVALID, // CACHED_COMPAT_CHANGE_PROCESS_CAPABILITY
+        VALUE_INVALID, // CACHED_COMPAT_CHANGE_CAMERA_MICROPHONE_CAPABILITY
+        VALUE_INVALID, // CACHED_COMPAT_CHANGE_USE_SHORT_FGS_USAGE_INTERACTION_TIME
+    };
 
     @GuardedBy("mService")
     private int mCachedAdj = ProcessList.INVALID_ADJ;
@@ -583,6 +636,10 @@ final class ProcessStateRecord {
 
     @GuardedBy({"mService", "mProcLock"})
     void setSetProcState(int setProcState) {
+        if (ActivityManager.isProcStateCached(mSetProcState)
+                && !ActivityManager.isProcStateCached(setProcState)) {
+            mCacheOomRankerUseCount++;
+        }
         mSetProcState = setProcState;
     }
 
@@ -846,12 +903,7 @@ final class ProcessStateRecord {
 
     @GuardedBy("mService")
     void setCached(boolean cached) {
-        if (mCached != cached) {
-            mCached = cached;
-            if (cached) {
-                ++mCacheOomRankerUseCount;
-            }
-        }
+        mCached = cached;
     }
 
     @GuardedBy("mService")
@@ -1026,6 +1078,16 @@ final class ProcessStateRecord {
     }
 
     @GuardedBy("mService")
+    boolean getCachedCompatChange(@CachedCompatChangeId int cachedCompatChangeId) {
+        if (mCachedCompatChanges[cachedCompatChangeId] == VALUE_INVALID) {
+            mCachedCompatChanges[cachedCompatChangeId] = mService.mOomAdjuster
+                    .isChangeEnabled(cachedCompatChangeId, mApp.info, false /* default */)
+                    ? VALUE_TRUE : VALUE_FALSE;
+        }
+        return mCachedCompatChanges[cachedCompatChangeId] == VALUE_TRUE;
+    }
+
+    @GuardedBy("mService")
     void computeOomAdjFromActivitiesIfNecessary(OomAdjuster.ComputeOomAdjWindowCallback callback,
             int adj, boolean foregroundActivities, boolean hasVisibleActivities, int procState,
             int schedGroup, int appUid, int logUid, int processCurTop) {
@@ -1105,6 +1167,9 @@ final class ProcessStateRecord {
         mCurSchedGroup = mSetSchedGroup = ProcessList.SCHED_GROUP_BACKGROUND;
         mCurProcState = mCurRawProcState = mSetProcState = mAllowStartFgsState =
                 PROCESS_STATE_NONEXISTENT;
+        for (int i = 0; i < mCachedCompatChanges.length; i++) {
+            mCachedCompatChanges[i] = VALUE_INVALID;
+        }
     }
 
     @GuardedBy("mService")
@@ -1172,6 +1237,62 @@ final class ProcessStateRecord {
     @ElapsedRealtimeLong
     long getLastInvisibleTime() {
         return mLastInvisibleTime;
+    }
+
+    @GuardedBy("mService")
+    void setNoKillOnBgRestrictedAndIdle(boolean shouldNotKill) {
+        mNoKillOnBgRestrictedAndIdle = shouldNotKill;
+    }
+
+    @GuardedBy("mService")
+    boolean shouldNotKillOnBgRestrictedAndIdle() {
+        return mNoKillOnBgRestrictedAndIdle;
+    }
+
+    @GuardedBy("mService")
+    void setSetCached(boolean cached) {
+        mSetCached = cached;
+    }
+
+    @GuardedBy("mService")
+    boolean isSetCached() {
+        return mSetCached;
+    }
+
+    @GuardedBy("mService")
+    void setSetNoKillOnBgRestrictedAndIdle(boolean shouldNotKill) {
+        mSetNoKillOnBgRestrictedAndIdle = shouldNotKill;
+    }
+
+    @GuardedBy("mService")
+    boolean isSetNoKillOnBgRestrictedAndIdle() {
+        return mSetNoKillOnBgRestrictedAndIdle;
+    }
+
+    @GuardedBy("mService")
+    void setLastCanKillOnBgRestrictedAndIdleTime(@ElapsedRealtimeLong long now) {
+        mLastCanKillOnBgRestrictedAndIdleTime = now;
+    }
+
+    @ElapsedRealtimeLong
+    @GuardedBy("mService")
+    long getLastCanKillOnBgRestrictedAndIdleTime() {
+        return mLastCanKillOnBgRestrictedAndIdleTime;
+    }
+
+    public void setCacheOomRankerRss(long rss, long rssTimeMs) {
+        mCacheOomRankerRss = rss;
+        mCacheOomRankerRssTimeMs = rssTimeMs;
+    }
+
+    @GuardedBy("mService")
+    public long getCacheOomRankerRss() {
+        return mCacheOomRankerRss;
+    }
+
+    @GuardedBy("mService")
+    public long getCacheOomRankerRssTimeMs() {
+        return mCacheOomRankerRssTimeMs;
     }
 
     @GuardedBy({"mService", "mProcLock"})

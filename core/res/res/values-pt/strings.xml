@@ -326,6 +326,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"faça e gerencie chamadas telefônicas"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Sensores corporais"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"acesse dados do sensor sobre seus sinais vitais"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Notificações"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"mostrar notificações"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Acessar conteúdo de uma janela"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Inspeciona o conteúdo de uma janela com a qual você está interagindo."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Ativar Explorar por toque"</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Permite que o app desative o bloqueio de teclas e qualquer segurança por senha associada. Por exemplo, o telefone desativa o bloqueio de telas ao receber uma chamada e o reativa quando a chamada é finalizada."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"Solicitar complexidade do bloqueio de tela"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Permite que o app saiba o nível de complexidade do bloqueio de tela (alto, médio, baixo ou nenhum), que indica o intervalo possível de comprimento e o tipo de bloqueio de tela. O app também pode sugerir a atualização do bloqueio de tela até um certo nível, mas os usuários podem ignorar a sugestão. O bloqueio de tela não é armazenado em texto simples, então o app não tem acesso à senha exata."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"mostrar notificações"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Permite que o app mostre notificações"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"Usar hardware de biometria"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Permite que o app use hardware de biometria para autenticação"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"gerenciar hardware de impressão digital"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Use sua impressão digital ou o bloqueio de tela para continuar"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Algo deu errado. Tente de novo."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Ícone de impressão digital"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Desbloqueio facial"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Problema com o Desbloqueio facial"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Use seu rosto ou o bloqueio de tela para continuar"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Algo deu errado. Tente de novo."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Ícone facial"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"ler as configurações de sincronização"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Permite que o app leia as configurações de sincronização de uma conta. Por exemplo, pode determinar se o app People está sincronizado com uma conta."</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Quando o atalho estiver ativado, pressione os dois botões de volume por três segundos para iniciar um recurso de acessibilidade."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Ativar atalho para recursos de acessibilidade?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Manter as duas teclas de volume pressionadas por alguns segundos ativa os recursos de acessibilidade. Isso pode mudar a forma como seu dispositivo funciona.\n\nRecursos atuais:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nÉ possível mudar os recursos selecionados em \"Config. &gt; Acessibilidade\"."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Ativar atalho para <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Manter as duas teclas de volume pressionadas por alguns segundos ativa o serviço <xliff:g id="SERVICE">%1$s</xliff:g>, um recurso de acessibilidade. Isso pode mudar a forma como seu dispositivo funciona.\n\nÉ possível trocar o uso desse atalho para outro recurso em \"Config. &gt; Acessibilidade\"."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Ativar"</string>
@@ -1939,7 +1945,7 @@
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"Perfil de trabalho"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"Alertado"</string>
     <string name="notification_verified_content_description" msgid="6401483602782359391">"Verificada"</string>
-    <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"Expandir"</string>
+    <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"Abrir"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"Recolher"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"alternar expansão"</string>
     <string name="usb_midi_peripheral_name" msgid="490523464968655741">"Porta USB periférica Android"</string>
@@ -2038,7 +2044,7 @@
     <string name="autofill_update_title_with_2types" msgid="1797514386321086273">"Atualizar <xliff:g id="TYPE_0">%1$s</xliff:g> e <xliff:g id="TYPE_1">%2$s</xliff:g> em "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
     <string name="autofill_update_title_with_3types" msgid="1312232153076212291">"Atualizar estes itens em "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>": <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> e <xliff:g id="TYPE_2">%3$s</xliff:g>?"</string>
     <string name="autofill_save_yes" msgid="8035743017382012850">"Salvar"</string>
-    <string name="autofill_save_no" msgid="9212826374207023544">"Não, obrigado"</string>
+    <string name="autofill_save_no" msgid="9212826374207023544">"Agora não"</string>
     <string name="autofill_save_notnow" msgid="2853932672029024195">"Agora não"</string>
     <string name="autofill_save_never" msgid="6821841919831402526">"Nunca"</string>
     <string name="autofill_update_yes" msgid="4608662968996874445">"Atualizar"</string>

@@ -26,6 +26,7 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.helpers.FIND_TIMEOUT
 import com.android.server.wm.flicker.helpers.SYSTEMUI_PACKAGE
+import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import com.android.wm.shell.flicker.pip.tv.closeTvPipWindow
 import com.android.wm.shell.flicker.pip.tv.isFocusedOrHasFocusedChild
@@ -34,7 +35,7 @@ import com.android.wm.shell.flicker.testapp.Components
 class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
     instrumentation,
     Components.PipActivity.LABEL,
-    Components.PipActivity.COMPONENT
+    Components.PipActivity.COMPONENT.toFlickerComponent()
 ) {
     private val mediaSessionManager: MediaSessionManager
         get() = context.getSystemService(MediaSessionManager::class.java)
@@ -88,6 +89,10 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
 
         // Wait on WMHelper or simply wait for 3 seconds
         wmHelper?.waitFor("hasPipWindow") { it.wmState.hasPipWindow() } ?: SystemClock.sleep(3_000)
+        // when entering pip, the dismiss button is visible at the start. to ensure the pip
+        // animation is complete, wait until the pip dismiss button is no longer visible. 
+        // b/176822698: dismiss-only state will be removed in the future
+        uiDevice.wait(Until.gone(By.res(SYSTEMUI_PACKAGE, "dismiss")), FIND_TIMEOUT)
     }
 
     fun clickStartMediaSessionButton() {
@@ -125,7 +130,7 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
     }
 
     /**
-     * Expands the pip window and dismisses it by clicking on the X button.
+     * Taps the pip window and dismisses it by clicking on the X button.
      */
     fun closePipWindow(wmHelper: WindowManagerStateHelper) {
         if (isTelevision) {
@@ -133,9 +138,12 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         } else {
             val windowRect = getWindowRect(wmHelper)
             uiDevice.click(windowRect.centerX(), windowRect.centerY())
-            val exitPipObject = uiDevice.findObject(By.res(SYSTEMUI_PACKAGE, "dismiss"))
+            // search and interact with the dismiss button
+            val dismissSelector = By.res(SYSTEMUI_PACKAGE, "dismiss")
+            uiDevice.wait(Until.hasObject(dismissSelector), FIND_TIMEOUT)
+            val dismissPipObject = uiDevice.findObject(dismissSelector)
                     ?: error("PIP window dismiss button not found")
-            val dismissButtonBounds = exitPipObject.visibleBounds
+            val dismissButtonBounds = dismissPipObject.visibleBounds
             uiDevice.click(dismissButtonBounds.centerX(), dismissButtonBounds.centerY())
         }
 
@@ -158,6 +166,7 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         val expandButtonBounds = expandPipObject.visibleBounds
         uiDevice.click(expandButtonBounds.centerX(), expandButtonBounds.centerY())
         wmHelper.waitFor("!hasPipWindow") { !it.wmState.hasPipWindow() }
+        wmHelper.waitForAppTransitionIdle()
     }
 
     /**

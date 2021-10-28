@@ -817,7 +817,7 @@ public class AudioManager {
     }
 
     @UnsupportedAppUsage
-    private static IAudioService getService()
+    static IAudioService getService()
     {
         if (sService != null) {
             return sService;
@@ -2454,6 +2454,19 @@ public class AudioManager {
             throw new NullPointerException("Illegal null AudioAttributes");
         }
         return AudioSystem.getOffloadSupport(format, attributes);
+    }
+
+    //====================================================================
+    // Immersive audio
+
+    /**
+     * Return a handle to the optional platform's {@link Spatializer}
+     * @return the {@code Spatializer} instance.
+     * @see Spatializer#getImmersiveAudioLevel() to check for the level of support of the effect
+     *   on the platform
+     */
+    public @NonNull Spatializer getSpatializer() {
+        return new Spatializer(this);
     }
 
     //====================================================================
@@ -5827,6 +5840,40 @@ public class AudioManager {
         try {
             service.setBluetoothHearingAidDeviceConnectionState(device,
                 state, suppressNoisyIntent, musicDevice);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+    * Indicate Le Audio output device connection state change and eventually suppress
+    * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+    * @param device Bluetooth device connected/disconnected
+    * @param state new connection state (BluetoothProfile.STATE_xxx)
+    * @param suppressNoisyIntent if true the
+    * {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent will not be sent.
+    * {@hide}
+    */
+    public void setBluetoothLeAudioOutDeviceConnectionState(BluetoothDevice device, int state,
+            boolean suppressNoisyIntent) {
+        final IAudioService service = getService();
+        try {
+            service.setBluetoothLeAudioOutDeviceConnectionState(device, state, suppressNoisyIntent);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+    * Indicate Le Audio input connection state change.
+    * @param device Bluetooth device connected/disconnected
+    * @param state new connection state (BluetoothProfile.STATE_xxx)
+    * {@hide}
+    */
+    public void setBluetoothLeAudioInDeviceConnectionState(BluetoothDevice device, int state) {
+        final IAudioService service = getService();
+        try {
+            service.setBluetoothLeAudioInDeviceConnectionState(device, state);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

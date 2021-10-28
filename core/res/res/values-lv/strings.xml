@@ -321,7 +321,7 @@
     <string name="permgroupdesc_activityRecognition" msgid="4725624819457670704">"piekļūt jūsu fiziskajām aktivitātēm"</string>
     <string name="permgrouplab_camera" msgid="9090413408963547706">"Kamera"</string>
     <string name="permgroupdesc_camera" msgid="7585150538459320326">"uzņemt attēlus un ierakstīt videoklipus"</string>
-    <string name="permgrouplab_nearby_devices" msgid="5529147543651181991">"Tuvējās ierīces"</string>
+    <string name="permgrouplab_nearby_devices" msgid="5529147543651181991">"Tuvumā esošas ierīces"</string>
     <string name="permgroupdesc_nearby_devices" msgid="3213561597116913508">"tuvumā esošu ierīču meklēšana un savienojuma izveide ar tām"</string>
     <string name="permgrouplab_calllog" msgid="7926834372073550288">"Zvanu žurnāli"</string>
     <string name="permgroupdesc_calllog" msgid="2026996642917801803">"lasīt un rakstīt tālruņa zvanu žurnālu"</string>
@@ -329,6 +329,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"veikt un pārvaldīt tālruņa zvanus"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Ķermeņa sensori"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"piekļūt sensoru datiem par jūsu veselības rādījumiem"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Paziņojumi"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"rādīt paziņojumus"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Izgūt loga saturu."</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Skatīt tā loga saturu, ar kuru mijiedarbojaties."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Aktivizēt funkciju “Pārlūkot pieskaroties”."</string>
@@ -542,7 +544,7 @@
     <string name="permdesc_bluetooth_connect" product="default" msgid="4546016548795544617">"Ļauj lietotnei piekļūt pārī savienotām Bluetooth ierīcēm."</string>
     <string name="permlab_bluetooth_advertise" msgid="2781147747928853177">"reklamēšana tuvumā esošās Bluetooth ierīcēs"</string>
     <string name="permdesc_bluetooth_advertise" product="default" msgid="6085174451034210183">"Atļauj lietotnei veikt reklamēšanu tuvumā esošās Bluetooth ierīcēs"</string>
-    <string name="permlab_uwb_ranging" msgid="8141915781475770665">"novietojuma noteikšana starp tuvu esošām ultraplatjoslas ierīcēm"</string>
+    <string name="permlab_uwb_ranging" msgid="8141915781475770665">"novietojums starp tuvējām ultraplatjoslas ierīcēm"</string>
     <string name="permdesc_uwb_ranging" msgid="2519723069604307055">"Atļaut lietotnei noteikt relatīvo atrašanās vietu starp tuvumā esošām ultraplatjoslas ierīcēm"</string>
     <string name="permlab_preferredPaymentInfo" msgid="5274423844767445054">"Informācija par vēlamo NFC maksājumu pakalpojumu"</string>
     <string name="permdesc_preferredPaymentInfo" msgid="8583552469807294967">"Ļauj lietotnei iegūt informāciju par vēlamo NFC maksājumu pakalpojumu, piemēram, par reģistrētajiem lietojumprogrammu ID un maršruta galamērķi."</string>
@@ -552,6 +554,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Ļauj lietotnei atspējot taustiņslēgu un visu saistīto paroļu drošību. Piemēram, tālrunis atspējo taustiņslēgu, saņemot ienākošu zvanu, un pēc zvana pabeigšanas atkārtoti iespējo taustiņslēgu."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"ekrāna bloķēšanas sarežģītības pakāpes informācijas pieprasījums"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Atļauj lietotnei saglabāt informāciju par ekrāna bloķēšanas sarežģītības pakāpi (augsta, vidēja, zema, nav), kas apzīmē iespējamo garumu un ekrāna bloķēšanas veidus. Lietotnē lietotājiem var tikt rādīts arī ieteikums ekrāna bloķēšanai iestatīt citu līmeni, taču šo ieteikumu var ignorēt un aizvērt. Ņemiet vērā, ka ekrāna bloķēšanas parole netiek glabāta vienkārša teksta formātā, tāpēc lietotnei nav piekļuves precīzai parolei."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"Paziņojumu rādīšana"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Ļauj lietotnei rādīt paziņojumus."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"izmantot biometrisko datu aparatūru"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Atļauj lietotnei izmantot biometrisko datu aparatūru autentificēšanai"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"pārvaldīt pirkstu nospiedumu aparatūru"</string>
@@ -612,6 +616,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Izmantojiet pirksta nospiedumu vai ekrāna bloķēšanas opciju, lai turpinātu"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Radās kļūda. Mēģiniet vēlreiz."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Pirksta nospieduma ikona"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Autorizācija pēc sejas"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Problēma ar autorizāciju pēc sejas"</string>
@@ -664,6 +669,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Izmantojiet autorizāciju pēc sejas vai ekrāna bloķēšanas opciju, lai turpinātu"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Radās kļūda. Mēģiniet vēlreiz."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Sejas ikona"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"lasīt sinhronizācijas iestatījumus"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Ļauj lietotnei lasīt konta sinhronizācijas iestatījumus. Piemēram, šādi var noteikt, vai lietotne Personas ir sinhronizēta ar kontu."</string>
@@ -1714,7 +1720,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Kad īsinājumtaustiņš ir ieslēgts, nospiežot abas skaļuma pogas un 3 sekundes turot tās, tiks aktivizēta pieejamības funkcija."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Vai ieslēgt pieejamības funkciju saīsni?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Turot nospiestus abus skaļuma taustiņus dažas sekundes, tiek ieslēgtas pieejamības funkcijas. Tas var mainīt ierīces darbību.\n\nPašreizējās funkcijas:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nAtlasītās funkcijas varat mainīt šeit: Iestatījumi &gt; Pieejamība."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Vai ieslēgt <xliff:g id="SERVICE">%1$s</xliff:g> saīsni?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Turot nospiestus abus skaļuma taustiņus dažas sekundes, tiek ieslēgta pieejamības funkcija <xliff:g id="SERVICE">%1$s</xliff:g>. Tas var mainīt ierīces darbību.\n\nŠo saīsni uz citu funkciju varat mainīt šeit: Iestatījumi &gt; Pieejamība."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Ieslēgt"</string>

@@ -80,6 +80,7 @@ import android.os.UserManager;
 import android.os.UserManager.EnforcingUser;
 import android.os.UserManager.QuietModeFlag;
 import android.os.storage.StorageManager;
+import android.os.storage.StorageManagerInternal;
 import android.provider.Settings;
 import android.security.GateKeeper;
 import android.service.gatekeeper.IGateKeeperService;
@@ -858,11 +859,12 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public List<UserInfo> getProfiles(@UserIdInt int userId, boolean enabledOnly) {
-        boolean returnFullInfo = true;
+        boolean returnFullInfo;
         if (userId != UserHandle.getCallingUserId()) {
             checkManageOrCreateUsersPermission("getting profiles related to user " + userId);
+            returnFullInfo = true;
         } else {
-            returnFullInfo = hasManageUsersPermission();
+            returnFullInfo = hasManageOrCreateUsersPermission();
         }
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -1659,9 +1661,13 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public boolean isRestricted() {
+    public boolean isRestricted(@UserIdInt int userId) {
+        if (userId != UserHandle.getCallingUserId()) {
+            checkManageOrCreateUsersPermission("query isRestricted for user " + userId);
+        }
         synchronized (mUsersLock) {
-            return getUserInfoLU(UserHandle.getCallingUserId()).isRestricted();
+            final UserInfo userInfo = getUserInfoLU(userId);
+            return userInfo == null ? false : userInfo.isRestricted();
         }
     }
 
@@ -1682,15 +1688,14 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public boolean hasRestrictedProfiles() {
+    public boolean hasRestrictedProfiles(@UserIdInt int userId) {
         checkManageUsersPermission("hasRestrictedProfiles");
-        final int callingUserId = UserHandle.getCallingUserId();
         synchronized (mUsersLock) {
             final int userSize = mUsers.size();
             for (int i = 0; i < userSize; i++) {
                 UserInfo profile = mUsers.valueAt(i).info;
-                if (callingUserId != profile.id
-                        && profile.restrictedProfileParentId == callingUserId) {
+                if (userId != profile.id
+                        && profile.restrictedProfileParentId == userId) {
                     return true;
                 }
             }
@@ -2541,6 +2546,14 @@ public class UserManagerService extends IUserManager.Stub {
      */
     private static final boolean hasManageUsersPermission() {
         final int callingUid = Binder.getCallingUid();
+        return hasManageUsersPermission(callingUid);
+    }
+
+    /**
+     * @return whether the given UID is system UID or root's UID or the has the permission
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS}.
+     */
+    private static boolean hasManageUsersPermission(int callingUid) {
         return UserHandle.isSameApp(callingUid, Process.SYSTEM_UID)
                 || callingUid == Process.ROOT_UID
                 || hasPermissionGranted(android.Manifest.permission.MANAGE_USERS, callingUid);
@@ -2552,9 +2565,7 @@ public class UserManagerService extends IUserManager.Stub {
      */
     private static final boolean hasManageUsersOrPermission(String alternativePermission) {
         final int callingUid = Binder.getCallingUid();
-        return UserHandle.isSameApp(callingUid, Process.SYSTEM_UID)
-                || callingUid == Process.ROOT_UID
-                || hasPermissionGranted(android.Manifest.permission.MANAGE_USERS, callingUid)
+        return hasManageUsersPermission(callingUid)
                 || hasPermissionGranted(alternativePermission, callingUid);
     }
 
@@ -4836,6 +4847,9 @@ public class UserManagerService extends IUserManager.Stub {
         mUserDataPreparer.prepareUserData(userId, userSerial, StorageManager.FLAG_STORAGE_CE);
         t.traceEnd();
 
+        StorageManagerInternal smInternal = LocalServices.getService(StorageManagerInternal.class);
+        smInternal.markCeStoragePrepared(userId);
+
         t.traceBegin("reconcileAppsData-" + userId);
         mPm.reconcileAppsData(userId, StorageManager.FLAG_STORAGE_CE, migrateAppsData);
         t.traceEnd();
@@ -4939,39 +4953,39 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public String getSeedAccountName() throws RemoteException {
+    public String getSeedAccountName(@UserIdInt int userId) throws RemoteException {
         checkManageUsersPermission("Cannot get seed account information");
         synchronized (mUsersLock) {
-            UserData userData = getUserDataLU(UserHandle.getCallingUserId());
-            return userData.seedAccountName;
+            final UserData userData = getUserDataLU(userId);
+            return userData == null ? null : userData.seedAccountName;
         }
     }
 
     @Override
-    public String getSeedAccountType() throws RemoteException {
+    public String getSeedAccountType(@UserIdInt int userId) throws RemoteException {
         checkManageUsersPermission("Cannot get seed account information");
         synchronized (mUsersLock) {
-            UserData userData = getUserDataLU(UserHandle.getCallingUserId());
-            return userData.seedAccountType;
+            final UserData userData = getUserDataLU(userId);
+            return userData == null ? null : userData.seedAccountType;
         }
     }
 
     @Override
-    public PersistableBundle getSeedAccountOptions() throws RemoteException {
+    public PersistableBundle getSeedAccountOptions(@UserIdInt int userId) throws RemoteException {
         checkManageUsersPermission("Cannot get seed account information");
         synchronized (mUsersLock) {
-            UserData userData = getUserDataLU(UserHandle.getCallingUserId());
-            return userData.seedAccountOptions;
+            final UserData userData = getUserDataLU(userId);
+            return userData == null ? null : userData.seedAccountOptions;
         }
     }
 
     @Override
-    public void clearSeedAccountData() throws RemoteException {
+    public void clearSeedAccountData(@UserIdInt int userId) throws RemoteException {
         checkManageUsersPermission("Cannot clear seed account information");
         synchronized (mPackagesLock) {
             UserData userData;
             synchronized (mUsersLock) {
-                userData = getUserDataLU(UserHandle.getCallingUserId());
+                userData = getUserDataLU(userId);
                 if (userData == null) return;
                 userData.clearSeedAccountData();
             }
@@ -5148,8 +5162,14 @@ public class UserManagerService extends IUserManager.Stub {
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
 
-        long now = System.currentTimeMillis();
+        final long now = System.currentTimeMillis();
         final long nowRealtime = SystemClock.elapsedRealtime();
+        final StringBuilder sb = new StringBuilder();
+
+        if (args != null && args.length > 0 && args[0].equals("--user")) {
+            dumpUser(pw, UserHandle.parseUserArg(args[1]), sb, now, nowRealtime);
+            return;
+        }
 
         final ActivityManagerInternal amInternal = LocalServices
                 .getService(ActivityManagerInternal.class);
@@ -5161,7 +5181,6 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         pw.println();
-        StringBuilder sb = new StringBuilder();
         synchronized (mPackagesLock) {
             synchronized (mUsersLock) {
                 pw.println("Users:");
@@ -5170,89 +5189,7 @@ public class UserManagerService extends IUserManager.Stub {
                     if (userData == null) {
                         continue;
                     }
-                    UserInfo userInfo = userData.info;
-                    final int userId = userInfo.id;
-                    pw.print("  "); pw.print(userInfo);
-                    pw.print(" serialNo="); pw.print(userInfo.serialNumber);
-                    pw.print(" isPrimary="); pw.print(userInfo.isPrimary());
-                    if (userInfo.profileGroupId != userInfo.id
-                            &&  userInfo.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID) {
-                        pw.print(" parentId="); pw.print(userInfo.profileGroupId);
-                    }
-
-                    if (mRemovingUserIds.get(userId)) {
-                        pw.print(" <removing> ");
-                    }
-                    if (userInfo.partial) {
-                        pw.print(" <partial>");
-                    }
-                    if (userInfo.preCreated) {
-                        pw.print(" <pre-created>");
-                    }
-                    if (userInfo.convertedFromPreCreated) {
-                        pw.print(" <converted>");
-                    }
-                    pw.println();
-                    pw.print("    Type: "); pw.println(userInfo.userType);
-                    pw.print("    Flags: "); pw.print(userInfo.flags); pw.print(" (");
-                    pw.print(UserInfo.flagsToString(userInfo.flags)); pw.println(")");
-                    pw.print("    State: ");
-                    final int state;
-                    synchronized (mUserStates) {
-                        state = mUserStates.get(userId, -1);
-                    }
-                    pw.println(UserState.stateToString(state));
-                    pw.print("    Created: ");
-                    dumpTimeAgo(pw, sb, now, userInfo.creationTime);
-
-                    pw.print("    Last logged in: ");
-                    dumpTimeAgo(pw, sb, now, userInfo.lastLoggedInTime);
-
-                    pw.print("    Last logged in fingerprint: ");
-                    pw.println(userInfo.lastLoggedInFingerprint);
-
-                    pw.print("    Start time: ");
-                    dumpTimeAgo(pw, sb, nowRealtime, userData.startRealtime);
-
-                    pw.print("    Unlock time: ");
-                    dumpTimeAgo(pw, sb, nowRealtime, userData.unlockRealtime);
-
-                    pw.print("    Has profile owner: ");
-                    pw.println(mIsUserManaged.get(userId));
-                    pw.println("    Restrictions:");
-                    synchronized (mRestrictionsLock) {
-                        UserRestrictionsUtils.dumpRestrictions(
-                                pw, "      ", mBaseUserRestrictions.getRestrictions(userInfo.id));
-                        pw.println("    Device policy global restrictions:");
-                        UserRestrictionsUtils.dumpRestrictions(
-                                pw, "      ",
-                                mDevicePolicyGlobalUserRestrictions.getRestrictions(userInfo.id));
-                        pw.println("    Device policy local restrictions:");
-                        getDevicePolicyLocalRestrictionsForTargetUserLR(
-                                userInfo.id).dumpRestrictions(pw, "      ");
-                        pw.println("    Effective restrictions:");
-                        UserRestrictionsUtils.dumpRestrictions(
-                                pw, "      ",
-                                mCachedEffectiveUserRestrictions.getRestrictions(userInfo.id));
-                    }
-
-                    if (userData.account != null) {
-                        pw.print("    Account name: " + userData.account);
-                        pw.println();
-                    }
-
-                    if (userData.seedAccountName != null) {
-                        pw.print("    Seed account name: " + userData.seedAccountName);
-                        pw.println();
-                        if (userData.seedAccountType != null) {
-                            pw.print("         account type: " + userData.seedAccountType);
-                            pw.println();
-                        }
-                        if (userData.seedAccountOptions != null) {
-                            pw.print("         account options exist");
-                            pw.println();
-                        }
-                    }
+                    dumpUserLocked(pw, userData, sb, now, nowRealtime);
                 }
             }
 
@@ -5338,6 +5275,116 @@ public class UserManagerService extends IUserManager.Stub {
 
             // NOTE: pw's not available after this point as it's auto-closed by ipw, so new dump
             // statements should use ipw below
+        }
+    }
+
+    private void dumpUser(PrintWriter pw, @UserIdInt int userId, StringBuilder sb, long now,
+            long nowRealtime) {
+        if (userId == UserHandle.USER_CURRENT) {
+            final ActivityManagerInternal amInternal = LocalServices
+                    .getService(ActivityManagerInternal.class);
+            if (amInternal == null) {
+                pw.println("Cannot determine current user");
+                return;
+            }
+            userId = amInternal.getCurrentUserId();
+        }
+
+        synchronized (mUsersLock) {
+            final UserData userData = mUsers.get(userId);
+            if (userData == null) {
+                pw.println("User " + userId + " not found");
+                return;
+            }
+            dumpUserLocked(pw, userData, sb, now, nowRealtime);
+        }
+    }
+
+    @GuardedBy("mUsersLock")
+    private void dumpUserLocked(PrintWriter pw, UserData userData, StringBuilder tempStringBuilder,
+            long now, long nowRealtime) {
+        final UserInfo userInfo = userData.info;
+        final int userId = userInfo.id;
+        pw.print("  "); pw.print(userInfo);
+        pw.print(" serialNo="); pw.print(userInfo.serialNumber);
+        pw.print(" isPrimary="); pw.print(userInfo.isPrimary());
+        if (userInfo.profileGroupId != userInfo.id
+                &&  userInfo.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID) {
+            pw.print(" parentId="); pw.print(userInfo.profileGroupId);
+        }
+
+        if (mRemovingUserIds.get(userId)) {
+            pw.print(" <removing> ");
+        }
+        if (userInfo.partial) {
+            pw.print(" <partial>");
+        }
+        if (userInfo.preCreated) {
+            pw.print(" <pre-created>");
+        }
+        if (userInfo.convertedFromPreCreated) {
+            pw.print(" <converted>");
+        }
+        pw.println();
+        pw.print("    Type: "); pw.println(userInfo.userType);
+        pw.print("    Flags: "); pw.print(userInfo.flags); pw.print(" (");
+        pw.print(UserInfo.flagsToString(userInfo.flags)); pw.println(")");
+        pw.print("    State: ");
+        final int state;
+        synchronized (mUserStates) {
+            state = mUserStates.get(userId, -1);
+        }
+        pw.println(UserState.stateToString(state));
+        pw.print("    Created: ");
+        dumpTimeAgo(pw, tempStringBuilder, now, userInfo.creationTime);
+
+        pw.print("    Last logged in: ");
+        dumpTimeAgo(pw, tempStringBuilder, now, userInfo.lastLoggedInTime);
+
+        pw.print("    Last logged in fingerprint: ");
+        pw.println(userInfo.lastLoggedInFingerprint);
+
+        pw.print("    Start time: ");
+        dumpTimeAgo(pw, tempStringBuilder, nowRealtime, userData.startRealtime);
+
+        pw.print("    Unlock time: ");
+        dumpTimeAgo(pw, tempStringBuilder, nowRealtime, userData.unlockRealtime);
+
+        pw.print("    Has profile owner: ");
+        pw.println(mIsUserManaged.get(userId));
+        pw.println("    Restrictions:");
+        synchronized (mRestrictionsLock) {
+            UserRestrictionsUtils.dumpRestrictions(
+                    pw, "      ", mBaseUserRestrictions.getRestrictions(userInfo.id));
+            pw.println("    Device policy global restrictions:");
+            UserRestrictionsUtils.dumpRestrictions(
+                    pw, "      ",
+                    mDevicePolicyGlobalUserRestrictions.getRestrictions(userInfo.id));
+            pw.println("    Device policy local restrictions:");
+            getDevicePolicyLocalRestrictionsForTargetUserLR(
+                    userInfo.id).dumpRestrictions(pw, "      ");
+            pw.println("    Effective restrictions:");
+            UserRestrictionsUtils.dumpRestrictions(
+                    pw, "      ",
+                    mCachedEffectiveUserRestrictions.getRestrictions(userInfo.id));
+        }
+
+        if (userData.account != null) {
+            pw.print("    Account name: " + userData.account);
+            pw.println();
+        }
+
+        if (userData.seedAccountName != null) {
+            pw.print("    Seed account name: " + userData.seedAccountName);
+            pw.println();
+            if (userData.seedAccountType != null) {
+                pw.print("         account type: " + userData.seedAccountType);
+                pw.println();
+            }
+            if (userData.seedAccountOptions != null) {
+                pw.print("         account options exist");
+                pw.println();
+            }
         }
     }
 

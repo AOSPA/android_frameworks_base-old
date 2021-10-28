@@ -28,6 +28,7 @@ import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
+import android.app.Activity;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.Application;
@@ -1918,7 +1919,6 @@ public final class Settings {
     /**
      * Activity Action: Show app listing settings, filtered by those that send notifications.
      *
-     * @hide
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_ALL_APPS_NOTIFICATION_SETTINGS =
@@ -2240,6 +2240,21 @@ public final class Settings {
     @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_TETHER_SETTINGS = "android.settings.TETHER_SETTINGS";
+
+    /**
+     * Activity Action: Show screen that lets user configure wifi tethering.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
+     * <p>
+     * Input: Nothing
+     * <p>
+     * Output: Nothing
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_WIFI_TETHER_SETTING =
+            "com.android.settings.WIFI_TETHER_SETTINGS";
 
     /**
      * Broadcast to trigger notification of asking user to enable MMS.
@@ -9021,6 +9036,15 @@ public final class Settings {
         public static final String UNSAFE_VOLUME_MUSIC_ACTIVE_MS = "unsafe_volume_music_active_ms";
 
         /**
+         * Indicates whether the spatial audio feature was enabled for this user.
+         *
+         * Type : int (0 disabled, 1 enabled)
+         *
+         * @hide
+         */
+        public static final String SPATIAL_AUDIO_ENABLED = "spatial_audio_enabled";
+
+        /**
          * Indicates whether notification display on the lock screen is enabled.
          * <p>
          * Type: int (0 for false, 1 for true)
@@ -10232,6 +10256,20 @@ public final class Settings {
                 "device_state_rotation_lock";
 
         /**
+         * Control whether communal mode is allowed on this device.
+         *
+         * @hide
+         */
+        public static final String COMMUNAL_MODE_ENABLED = "communal_mode_enabled";
+
+        /**
+         * An array of all the packages which have been enabled for hub mode by the user.
+         *
+         * @hide
+         */
+        public static final String COMMUNAL_MODE_PACKAGES = "communal_mode_packages";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
@@ -10376,6 +10414,14 @@ public final class Settings {
         @Readable
         public static final String ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED =
                 "enable_accessibility_global_gesture_enabled";
+
+        /**
+         * Whether select sound track with audio description by default.
+         * @hide
+         */
+        @Readable
+        public static final String ENABLE_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT =
+                "enable_accessibility_audio_description_by_default";
 
         /**
          * Whether Airplane Mode is on.
@@ -11981,6 +12027,12 @@ public final class Settings {
          */
         @Readable
         public static final String WIFI_MIGRATION_COMPLETED = "wifi_migration_completed";
+
+        /**
+         * Whether UWB should be enabled.
+         * @hide
+         */
+        public static final String UWB_ENABLED = "uwb_enabled";
 
         /**
          * Value to specify whether network quality scores and badging should be shown in the UI.
@@ -14604,6 +14656,38 @@ public final class Settings {
         public static final int HEADS_UP_ON = 1;
 
         /**
+         * The refresh rate chosen by the user.
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String USER_PREFERRED_REFRESH_RATE = "user_preferred_refresh_rate";
+
+        /**
+         * The resolution height chosen by the user.
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String USER_PREFERRED_RESOLUTION_HEIGHT =
+                "user_preferred_resolution_height";
+
+        /**
+         * The resolution width chosen by the user.
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String USER_PREFERRED_RESOLUTION_WIDTH =
+                "user_preferred_resolution_width";
+
+        /**
          * The name of the device
          */
         @Readable
@@ -15139,6 +15223,16 @@ public final class Settings {
                 "power_button_long_press";
 
         /**
+         * Override internal R.integer.config_longPressOnPowerDurationMs. It determines the length
+         * of power button press to be considered a long press in milliseconds.
+         * Used by PhoneWindowManager.
+         * @hide
+         */
+        @Readable
+        public static final String POWER_BUTTON_LONG_PRESS_DURATION_MS =
+                "power_button_long_press_duration_ms";
+
+        /**
          * Overrides internal R.integer.config_veryLongPressOnPowerBehavior.
          * Allowable values detailed in frameworks/base/core/res/res/values/config.xml.
          * Used by PhoneWindowManager.
@@ -15461,9 +15555,27 @@ public final class Settings {
          */
         public static int getInt(ContentResolver cr, String name, int def) {
             String v = getString(cr, name);
+            final boolean isQueryForDeviceProvision = name.equals(DEVICE_PROVISIONED);
             try {
-                return v != null ? Integer.parseInt(v) : def;
+                // TODO(b/197879371): remove the extra logging after bug is fixed
+                final int result;
+                if (v != null) {
+                    result = Integer.parseInt(v);
+                    if (isQueryForDeviceProvision) {
+                        Log.w(TAG, "Found settings value for provision. Returning " + result);
+                    }
+                } else {
+                    result = def;
+                    if (isQueryForDeviceProvision) {
+                        Log.w(TAG, "Missing settings value for provision. Returning " + result);
+                    }
+                }
+                return result;
             } catch (NumberFormatException e) {
+                if (isQueryForDeviceProvision) {
+                    Log.w(TAG, "Wrong settings value for provision. Found: " + v
+                            + ". Returning " + v);
+                }
                 return def;
             }
         }
@@ -16926,6 +17038,29 @@ public final class Settings {
              * @hide
              */
             public static final String COMBINED_LOCATION_ENABLED = "combined_location_enable";
+
+            /**
+             * The wrist orientation mode of the device
+             * Valid values - LEFT_WRIST_ROTATION_0 = "0" (default), LEFT_WRIST_ROTATION_180 = "1",
+             *          RIGHT_WRIST_ROTATION_0 = "2", RIGHT_WRIST_ROTATION_180 = "3"
+             * @hide
+             */
+            public static final String WRIST_ORIENTATION_MODE = "wear_wrist_orientation_mode";
+
+            /**
+             * Setting indicating the name of the Wear OS app package containing the device's sysui.
+             *
+             * @hide
+             */
+            public static final String CLOCKWORK_SYSUI_PACKAGE = "clockwork_sysui_package";
+
+            /**
+             * Setting indicating the name of the main activity of the Wear OS sysui.
+             *
+             * @hide
+             */
+            public static final String CLOCKWORK_SYSUI_MAIN_ACTIVITY =
+                    "clockwork_sysui_main_activity";
         }
     }
 
@@ -17654,6 +17789,42 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION =
             "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION";
+
+    /**
+     * Activity Action: For system or preinstalled apps to show their {@link Activity} in 2-pane
+     * mode in Settings app on large screen devices.
+     * <p>
+     *     Input: {@link #EXTRA_SETTINGS_LARGE_SCREEN_DEEP_LINK_INTENT_URI} must be included to
+     * specify the intent for the activity which will be displayed in 2-pane mode in Settings app.
+     * It's an intent URI string from {@code intent.toUri(Intent.URI_INTENT_SCHEME)}.
+     *
+     *     Input: {@link #EXTRA_SETTINGS_LARGE_SCREEN_HIGHLIGHT_MENU_KEY} must be included to
+     * specify a key that indicates the menu item which will be highlighted on settings home menu.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_SETTINGS_LARGE_SCREEN_DEEP_LINK =
+            "android.settings.SETTINGS_LARGE_SCREEN_DEEP_LINK";
+
+    /**
+     * Activity Extra: Specify the intent for the {@link Activity} which will be displayed in 2-pane
+     * mode in Settings app. It's an intent URI string from
+     * {@code intent.toUri(Intent.URI_INTENT_SCHEME)}.
+     * <p>
+     * This must be passed as an extra field to {@link #ACTION_SETTINGS_LARGE_SCREEN_DEEP_LINK}.
+     */
+    public static final String EXTRA_SETTINGS_LARGE_SCREEN_DEEP_LINK_INTENT_URI =
+            "android.provider.extra.SETTINGS_LARGE_SCREEN_DEEP_LINK_INTENT_URI";
+
+    /**
+     * Activity Extra: Specify a key that indicates the menu item which should be highlighted on
+     * settings home menu.
+     * <p>
+     * This must be passed as an extra field to {@link #ACTION_SETTINGS_LARGE_SCREEN_DEEP_LINK}.
+     */
+    public static final String EXTRA_SETTINGS_LARGE_SCREEN_HIGHLIGHT_MENU_KEY =
+            "android.provider.extra.SETTINGS_LARGE_SCREEN_HIGHLIGHT_MENU_KEY";
 
     /**
      * Performs a strict and comprehensive check of whether a calling package is allowed to

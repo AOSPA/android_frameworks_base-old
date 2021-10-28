@@ -103,7 +103,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     val dataAppDirectory: File =
             File(Files.createTempDirectory("data").toFile(), "app")
     val frameworkSignature: SigningDetails = SigningDetails(arrayOf(generateSpySignature()), 3)
-    val systemPartitions: List<PackageManagerService.ScanPartition> =
+    val systemPartitions: List<ScanPartition> =
             redirectScanPartitions(PackageManagerService.SYSTEM_PARTITIONS)
     val session: StaticMockitoSession
 
@@ -168,8 +168,8 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     class Mocks {
         val lock = PackageManagerTracedLock()
         val installLock = Any()
-        val injector: PackageManagerService.Injector = mock()
-        val systemWrapper: PackageManagerService.SystemWrapper = mock()
+        val injector: PackageManagerServiceInjector = mock()
+        val systemWrapper: PackageManagerServiceInjector.SystemWrapper = mock()
         val context: Context = mock()
         val userManagerService: UserManagerService = mock()
         val componentResolver: ComponentResolver = mock()
@@ -476,7 +476,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     }
 
     /** Finds the appropriate partition, if available, based on a scan flag unique to it.  */
-    fun getPartitionFromFlag(scanFlagMask: Int): PackageManagerService.ScanPartition =
+    fun getPartitionFromFlag(scanFlagMask: Int): ScanPartition =
             systemPartitions.first { (it.scanFlag and scanFlagMask) != 0 }
 
     @Throws(Exception::class)
@@ -630,11 +630,11 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     /** Override get*Folder methods to point to temporary local directories  */
 
     @Throws(IOException::class)
-    private fun redirectScanPartitions(partitions: List<PackageManagerService.ScanPartition>):
-            List<PackageManagerService.ScanPartition> {
-        val spiedPartitions: MutableList<PackageManagerService.ScanPartition> =
+    private fun redirectScanPartitions(partitions: List<ScanPartition>):
+            List<ScanPartition> {
+        val spiedPartitions: MutableList<ScanPartition> =
                 ArrayList(partitions.size)
-        for (partition: PackageManagerService.ScanPartition in partitions) {
+        for (partition: ScanPartition in partitions) {
             val spy = spy(partition)
             val newRoot = Files.createTempDirectory(partition.folder.name).toFile()
             whenever(spy.overlayFolder).thenReturn(File(newRoot, "overlay"))

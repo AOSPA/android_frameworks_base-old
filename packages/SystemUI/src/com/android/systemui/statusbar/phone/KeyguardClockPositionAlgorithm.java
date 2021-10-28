@@ -32,6 +32,7 @@ import com.android.systemui.statusbar.policy.KeyguardUserSwitcherListView;
  * Utility class to calculate the clock position and top padding of notifications on Keyguard.
  */
 public class KeyguardClockPositionAlgorithm {
+
     /**
      * Margin between the bottom of the status view and the notification shade.
      */
@@ -56,6 +57,21 @@ public class KeyguardClockPositionAlgorithm {
     private int mUserSwitchPreferredY;
 
     /**
+     * Whether or not there is a custom clock face on keyguard.
+     */
+    private boolean mHasCustomClock;
+
+    /**
+     * Whether or not the NSSL contains any visible notifications.
+     */
+    private boolean mHasVisibleNotifs;
+
+    /**
+     * Height of notification stack: Sum of height of each notification.
+     */
+    private int mNotificationStackHeight;
+
+    /**
      * Minimum top margin to avoid overlap with status bar, lock icon, or multi-user switcher
      * avatar.
      */
@@ -65,12 +81,6 @@ public class KeyguardClockPositionAlgorithm {
      * Minimum top inset (in pixels) to avoid overlap with any display cutouts.
      */
     private int mCutoutTopInset = 0;
-
-    /**
-     * Maximum bottom padding to avoid overlap with {@link KeyguardBottomAreaView} or
-     * the ambient indication.
-     */
-    private int mMaxShadeBottom;
 
     /**
      * Recommended distance from the status bar.
@@ -88,14 +98,9 @@ public class KeyguardClockPositionAlgorithm {
     private int mBurnInPreventionOffsetX;
 
     /**
-     * Burn-in prevention y translation.
+     * Burn-in prevention y translation for clock layouts.
      */
-    private int mBurnInPreventionOffsetY;
-
-    /**
-     * Burn-in prevention y translation for large clock layouts.
-     */
-    private int mBurnInPreventionOffsetYLargeClock;
+    private int mBurnInPreventionOffsetYClock;
 
     /**
      * Doze/AOD transition amount.
@@ -121,7 +126,25 @@ public class KeyguardClockPositionAlgorithm {
     private int mUnlockedStackScrollerPadding;
 
     private boolean mIsSplitShade;
-    private int mSplitShadeSmartspaceHeight;
+
+    /**
+     * Top location of the udfps icon. This includes the worst case (highest) burn-in
+     * offset that would make the top physically highest on the screen.
+     *
+     * Set to -1 if udfps is not enrolled on the device.
+     */
+    private float mUdfpsTop;
+
+    /**
+     * Bottom y-position of the currently visible clock
+     */
+    private float mClockBottom;
+
+    /**
+     * If true, try to keep clock aligned to the top of the display. Else, assume the clock
+     * is center aligned.
+     */
+    private boolean mIsClockTopAligned;
 
     /**
      * Refreshes the dimension values.
@@ -131,39 +154,37 @@ public class KeyguardClockPositionAlgorithm {
                 R.dimen.keyguard_status_view_bottom_margin);
 
         mContainerTopPadding =
-                res.getDimensionPixelSize(R.dimen.keyguard_clock_top_margin) / 2;
+                res.getDimensionPixelSize(R.dimen.keyguard_clock_top_margin);
         mBurnInPreventionOffsetX = res.getDimensionPixelSize(
                 R.dimen.burn_in_prevention_offset_x);
-        mBurnInPreventionOffsetY = res.getDimensionPixelSize(
-                R.dimen.burn_in_prevention_offset_y);
-        mBurnInPreventionOffsetYLargeClock = res.getDimensionPixelSize(
-                R.dimen.burn_in_prevention_offset_y_large_clock);
+        mBurnInPreventionOffsetYClock = res.getDimensionPixelSize(
+                R.dimen.burn_in_prevention_offset_y_clock);
     }
 
     /**
      * Sets up algorithm values.
      */
-    public void setup(int keyguardStatusBarHeaderHeight, int maxShadeBottom,
-            float panelExpansion,
-            int keyguardStatusHeight, int userSwitchHeight, int userSwitchPreferredY, float dark,
-            float overStrechAmount, boolean bypassEnabled, int unlockedStackScrollerPadding,
-            float qsExpansion, int cutoutTopInset, int splitShadeSmartspaceHeight,
-            boolean isSplitShade) {
+    public void setup(int keyguardStatusBarHeaderHeight, float panelExpansion,
+            int keyguardStatusHeight, int userSwitchHeight, int userSwitchPreferredY,
+            float dark, float overStretchAmount, boolean bypassEnabled,
+            int unlockedStackScrollerPadding, float qsExpansion, int cutoutTopInset,
+            boolean isSplitShade, float udfpsTop, float clockBottom, boolean isClockTopAligned) {
         mMinTopMargin = keyguardStatusBarHeaderHeight + Math.max(mContainerTopPadding,
                 userSwitchHeight);
-        mMaxShadeBottom = maxShadeBottom;
         mPanelExpansion = panelExpansion;
         mKeyguardStatusHeight = keyguardStatusHeight + mStatusViewBottomMargin;
         mUserSwitchHeight = userSwitchHeight;
         mUserSwitchPreferredY = userSwitchPreferredY;
         mDarkAmount = dark;
-        mOverStretchAmount = overStrechAmount;
+        mOverStretchAmount = overStretchAmount;
         mBypassEnabled = bypassEnabled;
         mUnlockedStackScrollerPadding = unlockedStackScrollerPadding;
         mQsExpansion = qsExpansion;
         mCutoutTopInset = cutoutTopInset;
-        mSplitShadeSmartspaceHeight = splitShadeSmartspaceHeight;
         mIsSplitShade = isSplitShade;
+        mUdfpsTop = udfpsTop;
+        mClockBottom = clockBottom;
+        mIsClockTopAligned = isClockTopAligned;
     }
 
     public void run(Result result) {
@@ -184,7 +205,7 @@ public class KeyguardClockPositionAlgorithm {
         if (mBypassEnabled) {
             return (int) (mUnlockedStackScrollerPadding + mOverStretchAmount);
         } else if (mIsSplitShade) {
-            return clockYPosition + mSplitShadeSmartspaceHeight;
+            return clockYPosition;
         } else {
             return clockYPosition + mKeyguardStatusHeight;
         }
@@ -215,11 +236,37 @@ public class KeyguardClockPositionAlgorithm {
 
         // This will keep the clock at the top but out of the cutout area
         float shift = 0;
-        if (clockY - mBurnInPreventionOffsetYLargeClock < mCutoutTopInset) {
-            shift = mCutoutTopInset - (clockY - mBurnInPreventionOffsetYLargeClock);
+        if (clockY - mBurnInPreventionOffsetYClock < mCutoutTopInset) {
+            shift = mCutoutTopInset - (clockY - mBurnInPreventionOffsetYClock);
         }
-        float clockYDark = clockY + burnInPreventionOffsetY() + shift;
 
+        int burnInPreventionOffsetY = mBurnInPreventionOffsetYClock; // requested offset
+        final boolean hasUdfps = mUdfpsTop > -1;
+        if (hasUdfps && !mIsClockTopAligned) {
+            // ensure clock doesn't overlap with the udfps icon
+            if (mUdfpsTop < mClockBottom) {
+                // sometimes the clock textView extends beyond udfps, so let's just use the
+                // space above the KeyguardStatusView/clock as our burn-in offset
+                burnInPreventionOffsetY = (int) (clockY - mCutoutTopInset) / 2;
+                if (mBurnInPreventionOffsetYClock < burnInPreventionOffsetY) {
+                    burnInPreventionOffsetY = mBurnInPreventionOffsetYClock;
+                }
+                shift = -burnInPreventionOffsetY;
+            } else {
+                float upperSpace = clockY - mCutoutTopInset;
+                float lowerSpace = mUdfpsTop - mClockBottom;
+                // center the burn-in offset within the upper + lower space
+                burnInPreventionOffsetY = (int) (lowerSpace + upperSpace) / 2;
+                if (mBurnInPreventionOffsetYClock < burnInPreventionOffsetY) {
+                    burnInPreventionOffsetY = mBurnInPreventionOffsetYClock;
+                }
+                shift = (lowerSpace - upperSpace) / 2;
+            }
+        }
+
+        float clockYDark = clockY
+                + burnInPreventionOffsetY(burnInPreventionOffsetY)
+                + shift;
         return (int) (MathUtils.lerp(clockY, clockYDark, darkAmount) + mOverStretchAmount);
     }
 
@@ -251,9 +298,7 @@ public class KeyguardClockPositionAlgorithm {
         return MathUtils.lerp(alphaKeyguard, 1f, mDarkAmount);
     }
 
-    private float burnInPreventionOffsetY() {
-        int offset = mBurnInPreventionOffsetYLargeClock;
-
+    private float burnInPreventionOffsetY(int offset) {
         return getBurnInOffset(offset * 2, false /* xAxis */) - offset;
     }
 

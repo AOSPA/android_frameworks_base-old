@@ -90,6 +90,7 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.Observer;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.WirelessUtils;
 import com.android.settingslib.fuelgauge.BatteryStatus;
@@ -319,6 +320,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mIsDreaming;
     private final DevicePolicyManager mDevicePolicyManager;
     private final BroadcastDispatcher mBroadcastDispatcher;
+    private final InteractionJankMonitor mInteractionJankMonitor;
     private boolean mLogoutEnabled;
     // cached value to avoid IPCs
     private boolean mIsUdfpsEnrolled;
@@ -1749,6 +1751,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             AuthController authController,
             TelephonyListenerManager telephonyListenerManager,
             FeatureFlags featureFlags,
+            InteractionJankMonitor interactionJankMonitor,
             @Nullable Vibrator vibrator) {
         mContext = context;
         mSubscriptionManager = SubscriptionManager.from(context);
@@ -1757,6 +1760,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mStrongAuthTracker = new StrongAuthTracker(context, this::notifyStrongAuthStateChanged);
         mBackgroundExecutor = backgroundExecutor;
         mBroadcastDispatcher = broadcastDispatcher;
+        mInteractionJankMonitor = interactionJankMonitor;
         mRingerModeTracker = ringerModeTracker;
         mStatusBarStateController = statusBarStateController;
         mStatusBarStateController.addCallback(mStatusBarStateControllerListener);
@@ -2616,7 +2620,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     /**
      * Handle {@link #MSG_USER_SWITCH_COMPLETE}
      */
-    private void handleUserSwitchComplete(int userId) {
+    @VisibleForTesting
+    void handleUserSwitchComplete(int userId) {
         Assert.isMainThread();
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
@@ -2624,6 +2629,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 cb.onUserSwitchComplete(userId);
             }
         }
+        mInteractionJankMonitor.end(InteractionJankMonitor.CUJ_USER_SWITCH);
     }
 
     /**

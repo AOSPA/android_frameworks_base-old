@@ -476,9 +476,10 @@ public final class Permission {
             r.append("DUP:");
             r.append(permissionInfo.name);
         }
-        if (permission.isRuntime() && (ownerChanged || wasNonRuntime)) {
-            // If this is a runtime permission and the owner has changed, or this wasn't a runtime
-            // permission, then permission state should be cleaned up
+        if ((permission.isInternal() && ownerChanged)
+                || (permission.isRuntime() && (ownerChanged || wasNonRuntime))) {
+            // If this is an internal/runtime permission and the owner has changed, or this wasn't a
+            // runtime permission, then permission state should be cleaned up.
             permission.mDefinitionChanged = true;
         }
         if (PackageManagerService.DEBUG_PACKAGE_SCANNING && r != null) {
@@ -497,13 +498,10 @@ public final class Permission {
                 if (permissionTree.getUid() == UserHandle.getAppId(callingUid)) {
                     return permissionTree;
                 }
-                throw new SecurityException("Calling uid " + callingUid
-                        + " is not allowed to add to permission tree "
-                        + permissionTree.getName() + " owned by uid "
-                        + permissionTree.getUid());
             }
         }
-        throw new SecurityException("No permission tree found for " + permissionName);
+        throw new SecurityException("Calling uid " + callingUid
+            + " is not allowed to add to or remove from the permission tree");
     }
 
     @Nullable

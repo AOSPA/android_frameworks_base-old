@@ -21,7 +21,34 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="wifi_fail_to_scan" msgid="2333336097603822490">"Der kan ikke søges efter netværk"</string>
+    <string name="wifi_security_short_wep" msgid="7939809393561636237">"WEP"</string>
+    <string name="wifi_security_short_wpa" msgid="6998160832497442533">"WPA"</string>
+    <string name="wifi_security_short_wpa2" msgid="7697856994856831026">"WPA2"</string>
+    <string name="wifi_security_short_wpa_wpa2" msgid="2399839645955520093">"WPA/WPA2"</string>
+    <string name="wifi_security_short_eap" msgid="5029688687205212985">"802.1x"</string>
+    <string name="wifi_security_short_eap_wpa" msgid="8510772177310043426">"WPA-EAP"</string>
+    <string name="wifi_security_short_eap_wpa2_wpa3" msgid="6455656470422244501">"RSN-EAP"</string>
+    <string name="wifi_security_short_sae" msgid="78353562671556266">"WPA3"</string>
+    <string name="wifi_security_short_psk_sae" msgid="4965830739185952958">"WPA2/WPA3"</string>
+    <string name="wifi_security_short_none_owe" msgid="8827409046261759703">"Ingen/OWE"</string>
+    <string name="wifi_security_short_owe" msgid="5073524307942025369">"OWE"</string>
+    <string name="wifi_security_short_eap_suiteb" msgid="4174071135081556115">"Suite-B-192"</string>
     <string name="wifi_security_none" msgid="7392696451280611452">"Ingen"</string>
+    <string name="wifi_security_wep" msgid="1413627788581122366">"WEP"</string>
+    <string name="wifi_security_wpa" msgid="1072450904799930636">"WPA-Personal"</string>
+    <string name="wifi_security_wpa2" msgid="4038267581230425543">"WPA2-Personal"</string>
+    <string name="wifi_security_wpa_wpa2" msgid="946853615482465986">"WPA/WPA2-Personal"</string>
+    <string name="wifi_security_eap" msgid="6179633834446852269">"WPA/WPA2/WPA3-Enterprise"</string>
+    <string name="wifi_security_eap_wpa" msgid="6189023812330549957">"WPA-Enterprise"</string>
+    <string name="wifi_security_eap_wpa_wpa2" msgid="1089879674896108216">"WPA/WPA2-Enterprise"</string>
+    <string name="wifi_security_eap_wpa2_wpa3" msgid="2952912020876252266">"WPA2/WPA3-Enterprise"</string>
+    <string name="wifi_security_eap_wpa3" msgid="7961135182909018796">"WPA3-Enterprise"</string>
+    <string name="wifi_security_passpoint" msgid="2209078477216565387">"Passpoint"</string>
+    <string name="wifi_security_sae" msgid="3644520541721422843">"WPA3-Personal"</string>
+    <string name="wifi_security_psk_sae" msgid="8135104122179904684">"WPA2/WPA3-Personal"</string>
+    <string name="wifi_security_none_owe" msgid="5241745828327404101">"Ingen/Enhanced Open"</string>
+    <string name="wifi_security_owe" msgid="3343421403561657809">"Enhanced Open"</string>
+    <string name="wifi_security_eap_suiteb" msgid="415842785991698142">"WPA3-Enterprise 192-bit"</string>
     <string name="wifi_remembered" msgid="3266709779723179188">"Gemt"</string>
     <string name="wifi_disconnected" msgid="7054450256284661757">"Afbrudt"</string>
     <string name="wifi_disabled_generic" msgid="2651916945380294607">"Deaktiveret"</string>
@@ -245,9 +272,9 @@
     <string name="oem_unlock_enable_summary" msgid="5857388174390953829">"Tillad, at startindlæseren låses op"</string>
     <string name="confirm_enable_oem_unlock_title" msgid="8249318129774367535">"Vil du tillade OEM-oplåsning?"</string>
     <string name="confirm_enable_oem_unlock_text" msgid="854131050791011970">"ADVARSEL! Funktioner, der beskytter enheden, fungerer ikke på denne enhed, når denne indstilling er aktiveret."</string>
-    <string name="mock_location_app" msgid="6269380172542248304">"Vælg app til falsk placering"</string>
-    <string name="mock_location_app_not_set" msgid="6972032787262831155">"Der er ikke angivet nogen app til falsk placering"</string>
-    <string name="mock_location_app_set" msgid="4706722469342913843">"App til falsk placering: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
+    <string name="mock_location_app" msgid="6269380172542248304">"Vælg app til falsk lokation"</string>
+    <string name="mock_location_app_not_set" msgid="6972032787262831155">"Der er ikke angivet nogen app til falsk lokation"</string>
+    <string name="mock_location_app_set" msgid="4706722469342913843">"App til falsk lokation: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="debug_networking_category" msgid="6829757985772659599">"Netværk"</string>
     <string name="wifi_display_certification" msgid="1805579519992520381">"Certificering af trådløs skærm"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Aktivér detaljeret Wi-Fi-logføring"</string>
@@ -295,8 +322,8 @@
     <string name="select_logpersist_dialog_title" msgid="7745193591195485594">"Vælg logbuffere, der skal gemmes permanent på enheden"</string>
     <string name="select_usb_configuration_title" msgid="6339801314922294586">"Vælg USB-konfiguration"</string>
     <string name="select_usb_configuration_dialog_title" msgid="3579567144722589237">"Vælg USB-konfiguration"</string>
-    <string name="allow_mock_location" msgid="2102650981552527884">"Imiterede placeringer"</string>
-    <string name="allow_mock_location_summary" msgid="179780881081354579">"Tillad imiterede placeringer"</string>
+    <string name="allow_mock_location" msgid="2102650981552527884">"Imiterede lokationer"</string>
+    <string name="allow_mock_location_summary" msgid="179780881081354579">"Tillad imiterede lokationer"</string>
     <string name="debug_view_attributes" msgid="3539609843984208216">"Aktivér visning af attributinspektion"</string>
     <string name="mobile_data_always_on_summary" msgid="1112156365594371019">"Hold altid mobildata aktiveret, selv når Wi-Fi er aktiveret (for at skifte hurtigt mellem netværk)."</string>
     <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Brug hardwareacceleration ved netdeling, hvis det er muligt"</string>
@@ -332,7 +359,7 @@
     <string name="debug_monitoring_category" msgid="1597387133765424994">"Overvågning"</string>
     <string name="strict_mode" msgid="889864762140862437">"Striks tilstand aktiveret"</string>
     <string name="strict_mode_summary" msgid="1838248687233554654">"Blink med skærmen, når apps foretager handlinger på hovedtråd"</string>
-    <string name="pointer_location" msgid="7516929526199520173">"Markørens placering"</string>
+    <string name="pointer_location" msgid="7516929526199520173">"Markørens lokation"</string>
     <string name="pointer_location_summary" msgid="957120116989798464">"Skærmoverlejringen viser de aktuelle berøringsdata"</string>
     <string name="show_touches" msgid="8437666942161289025">"Vis tryk"</string>
     <string name="show_touches_summary" msgid="3692861665994502193">"Vis visuel feedback ved tryk"</string>

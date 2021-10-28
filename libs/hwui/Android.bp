@@ -272,7 +272,6 @@ cc_defaults {
                 "apex/android_bitmap.cpp",
                 "apex/android_canvas.cpp",
                 "apex/jni_runtime.cpp",
-                "apex/renderthread.cpp",
             ],
         },
         host: {
@@ -587,6 +586,7 @@ cc_defaults {
                 "HardwareBitmapUploader.cpp",
                 "HWUIProperties.sysprop",
                 "JankTracker.cpp",
+                "FrameMetricsReporter.cpp",
                 "Layer.cpp",
                 "LayerUpdateQueue.cpp",
                 "ProfileData.cpp",
@@ -691,6 +691,7 @@ cc_test {
         "tests/unit/FatVectorTests.cpp",
         "tests/unit/GraphicsStatsServiceTests.cpp",
         "tests/unit/JankTrackerTests.cpp",
+        "tests/unit/FrameMetricsReporterTests.cpp",
         "tests/unit/LayerUpdateQueueTests.cpp",
         "tests/unit/LinearAllocatorTests.cpp",
         "tests/unit/MatrixTests.cpp",

@@ -29,116 +29,119 @@
 
 package com.android.systemui.statusbar.policy;
 
-import android.os.RemoteException;
-import android.util.Log;
-import android.test.suitebuilder.annotation.SmallTest;
-import android.testing.AndroidTestingRunner;
-import android.testing.TestableLooper.RunWithLooper;
+// TODO(b/203889167)
 
-import com.qti.extphone.IExtPhoneCallback;
-import com.qti.extphone.NrIconType;
-import com.qti.extphone.Status;
-import com.qti.extphone.Token;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+// import android.os.RemoteException;
+// import android.util.Log;
+// import android.test.suitebuilder.annotation.SmallTest;
+// import android.testing.AndroidTestingRunner;
+// import android.testing.TestableLooper.RunWithLooper;
 
-import static junit.framework.Assert.assertEquals;
+// import com.qti.extphone.IExtPhoneCallback;
+// import com.qti.extphone.NrIconType;
+// import com.qti.extphone.Status;
+// import com.qti.extphone.Token;
+// import org.junit.Before;
+// import org.junit.Test;
+// import org.junit.runner.RunWith;
 
-import com.android.settingslib.mobile.TelephonyIcons;
-import com.android.systemui.statusbar.policy.FiveGServiceClient;
-import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
+// import static junit.framework.Assert.assertEquals;
 
-@SmallTest
-@RunWith(AndroidTestingRunner.class)
-@RunWithLooper
-public class FiveGServiceClientTest extends NetworkControllerBaseTest {
-    private final static String TAG = "FiveGServiceClientTest";
-    private FiveGServiceClient mFiveGServiceClient;
-    protected IExtPhoneCallback mCallback;
+// import com.android.settingslib.mobile.TelephonyIcons;
+// import com.android.systemui.statusbar.connectivity.NetworkControllerBaseTest;
+// import com.android.systemui.statusbar.policy.FiveGServiceClient;
+// import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 
-    Token mToken;
-    Status mSuccessStatus;
-    Status mFailStatus;
-    private int mPhoneId;
+// @SmallTest
+// @RunWith(AndroidTestingRunner.class)
+// @RunWithLooper
+// public class FiveGServiceClientTest extends NetworkControllerBaseTest {
+//     private final static String TAG = "FiveGServiceClientTest";
+//     private FiveGServiceClient mFiveGServiceClient;
+//     protected IExtPhoneCallback mCallback;
 
-    @Before
-    public void setupCallback() {
-        mPhoneId = 0;
-        mToken = new Token(0);
-        mSuccessStatus = new Status(Status.SUCCESS);
-        mFailStatus = new Status(Status.FAILURE);
-        mFiveGServiceClient = mNetworkController.mFiveGServiceClient;
-        mCallback = mFiveGServiceClient.mCallback;
+//     Token mToken;
+//     Status mSuccessStatus;
+//     Status mFailStatus;
+//     private int mPhoneId;
 
-    }
+//     @Before
+//     public void setupCallback() {
+//         mPhoneId = 0;
+//         mToken = new Token(0);
+//         mSuccessStatus = new Status(Status.SUCCESS);
+//         mFailStatus = new Status(Status.FAILURE);
+//         mFiveGServiceClient = mNetworkController.mFiveGServiceClient;
+//         mCallback = mFiveGServiceClient.mCallback;
 
-    @Test
-    public void testNrIconType() {
-        //Success status case
-        NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
-        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
-        FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        assertEquals(fiveGState.getNrIconType(), NrIconType.TYPE_5G_BASIC);
+//     }
 
-        //Failure status case
-        nrIconType = new NrIconType(NrIconType.TYPE_NONE);
-        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
-        fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        assertEquals(fiveGState.getNrIconType(), NrIconType.TYPE_5G_BASIC);
-    }
+//     @Test
+//     public void testNrIconType() {
+//         //Success status case
+//         NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
+//         updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+//         FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
+//         assertEquals(fiveGState.getNrIconType(), NrIconType.TYPE_5G_BASIC);
 
-    @Test
-    public void test5GBasicIcon() {
-        /**
-         * Verify that 5G Basic icon is shown when
-         * NrIconType is TYPE_5G_BASIC
-         */
-        NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
-        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
-        verifyIcon(TelephonyIcons.ICON_5G_BASIC);
+//         //Failure status case
+//         nrIconType = new NrIconType(NrIconType.TYPE_NONE);
+//         updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+//         fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
+//         assertEquals(fiveGState.getNrIconType(), NrIconType.TYPE_5G_BASIC);
+//     }
 
-        /**
-         * Verify that 5G Basic icon is not shown when
-         * NrIconType is TYPE_NONE
-         */
-        nrIconType = new NrIconType(NrIconType.TYPE_NONE);
-        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
-        verifyIcon(0);
-    }
+//     @Test
+//     public void test5GBasicIcon() {
+//         /**
+//          * Verify that 5G Basic icon is shown when
+//          * NrIconType is TYPE_5G_BASIC
+//          */
+//         NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
+//         updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+//         verifyIcon(TelephonyIcons.ICON_5G_BASIC);
 
-    @Test
-    public void test5GUWBIcon() {
-        /**
-         * Verify that 5G UWB icon is shown when
-         * NrIconType is TYPE_5G_UWB
-         */
-        NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_UWB);
-        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
-        verifyIcon(TelephonyIcons.ICON_5G_UWB);
+//         /**
+//          * Verify that 5G Basic icon is not shown when
+//          * NrIconType is TYPE_NONE
+//          */
+//         nrIconType = new NrIconType(NrIconType.TYPE_NONE);
+//         updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+//         verifyIcon(0);
+//     }
 
-        /**
-         * Verify that 5G UWB icon is not shown when
-         * NrIconType is TYPE_NONE
-         */
-        nrIconType = new NrIconType(NrIconType.TYPE_NONE);
-        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
-        verifyIcon(0);
-    }
+//     @Test
+//     public void test5GUWBIcon() {
+//         /**
+//          * Verify that 5G UWB icon is shown when
+//          * NrIconType is TYPE_5G_UWB
+//          */
+//         NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_UWB);
+//         updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+//         verifyIcon(TelephonyIcons.ICON_5G_UWB);
 
-    public void updateNrIconType(int phoneId, Token token, Status status, NrIconType nrIconType) {
-        Log.d(TAG, "Sending NrIconType");
-        try {
-            mCallback.onNrIconType(phoneId, token, status, nrIconType);
-        } catch ( RemoteException e) {
-            e.printStackTrace();
-        }
-    }
+//         /**
+//          * Verify that 5G UWB icon is not shown when
+//          * NrIconType is TYPE_NONE
+//          */
+//         nrIconType = new NrIconType(NrIconType.TYPE_NONE);
+//         updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+//         verifyIcon(0);
+//     }
 
-    private void verifyIcon(int resIcon) {
-        FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        int dataType = fiveGState.getIconGroup().dataType;
-        assertEquals(dataType, resIcon);
-    }
+//     public void updateNrIconType(int phoneId, Token token, Status status, NrIconType nrIconType) {
+//         Log.d(TAG, "Sending NrIconType");
+//         try {
+//             mCallback.onNrIconType(phoneId, token, status, nrIconType);
+//         } catch ( RemoteException e) {
+//             e.printStackTrace();
+//         }
+//     }
 
-}
+//     private void verifyIcon(int resIcon) {
+//         FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
+//         int dataType = fiveGState.getIconGroup().dataType;
+//         assertEquals(dataType, resIcon);
+//     }
+
+// }

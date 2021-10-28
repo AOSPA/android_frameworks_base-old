@@ -23,8 +23,10 @@ import static android.graphics.Matrix.MSKEW_Y;
 import static android.graphics.Matrix.MTRANS_X;
 import static android.graphics.Matrix.MTRANS_Y;
 import static android.view.SurfaceControlProto.HASH_CODE;
+import static android.view.SurfaceControlProto.LAYER_ID;
 import static android.view.SurfaceControlProto.NAME;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.FloatRange;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
@@ -41,6 +43,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.gui.DropInputMode;
 import android.hardware.HardwareBuffer;
 import android.hardware.display.DeviceProductInfo;
 import android.hardware.display.DisplayedContentSample;
@@ -72,6 +75,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -150,13 +154,15 @@ public final class SurfaceControl implements Parcelable {
             float childRelativeTop, float childRelativeRight, float childRelativeBottom);
     private static native void nativeSetTrustedOverlay(long transactionObj, long nativeObject,
             boolean isTrustedOverlay);
-
+    private static native void nativeSetDropInputMode(
+            long transactionObj, long nativeObject, int flags);
     private static native boolean nativeClearContentFrameStats(long nativeObject);
     private static native boolean nativeGetContentFrameStats(long nativeObject, WindowContentFrameStats outStats);
     private static native boolean nativeClearAnimationFrameStats();
     private static native boolean nativeGetAnimationFrameStats(WindowAnimationFrameStats outStats);
 
     private static native long[] nativeGetPhysicalDisplayIds();
+    private static native long nativeGetPrimaryPhysicalDisplayId();
     private static native IBinder nativeGetPhysicalDisplayToken(long physicalDisplayId);
     private static native IBinder nativeCreateDisplay(String name, boolean secure);
     private static native void nativeDestroyDisplay(IBinder displayToken);
@@ -239,6 +245,9 @@ public final class SurfaceControl implements Parcelable {
     private static native int nativeGetGPUContextPriority();
     private static native void nativeSetTransformHint(long nativeObject, int transformHint);
     private static native int nativeGetTransformHint(long nativeObject);
+    private static native int nativeGetLayerId(long nativeObject);
+    private static native void nativeAddTransactionCommittedListener(long nativeObject,
+            TransactionCommittedListener listener);
 
     @Nullable
     @GuardedBy("mLock")
@@ -353,8 +362,6 @@ public final class SurfaceControl implements Parcelable {
     private int mWidth;
     @GuardedBy("mLock")
     private int mHeight;
-
-    private int mTransformHint;
 
     private WeakReference<View> mLocalOwnerView;
 
@@ -1541,6 +1548,7 @@ public final class SurfaceControl implements Parcelable {
         final long token = proto.start(fieldId);
         proto.write(HASH_CODE, System.identityHashCode(this));
         proto.write(NAME, mName);
+        proto.write(LAYER_ID, getLayerId());
         proto.end(token);
     }
 
@@ -1822,11 +1830,6 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static final class DisplayMode {
-        /**
-         * Invalid display config id.
-         */
-        public static final int INVALID_DISPLAY_MODE_ID = -1;
-
         public int id;
         public int width;
         public int height;
@@ -2277,6 +2280,15 @@ public final class SurfaceControl implements Parcelable {
      */
     public static long[] getPhysicalDisplayIds() {
         return nativeGetPhysicalDisplayIds();
+    }
+
+    /**
+     * Exposed to identify the correct display to apply the primary display orientation. Avoid using
+     * for any other purpose.
+     * @hide
+     */
+    public static long getPrimaryPhysicalDisplayId() {
+        return nativeGetPrimaryPhysicalDisplayId();
     }
 
     /**
@@ -3451,7 +3463,18 @@ public final class SurfaceControl implements Parcelable {
             return this;
         }
 
-         /**
+        /**
+         * Sets the input event drop mode on this SurfaceControl and its children. The caller must
+         * hold the ACCESS_SURFACE_FLINGER permission. See {@code InputEventDropMode}.
+         * @hide
+         */
+        public Transaction setDropInputMode(SurfaceControl sc, @DropInputMode int mode) {
+            checkPreconditions(sc);
+            nativeSetDropInputMode(mNativeObject, sc.mNativeObject, mode);
+            return this;
+        }
+
+        /**
          * Merge the other transaction into this transaction, clearing the
          * other transaction as if it had been applied.
          *
@@ -3499,6 +3522,31 @@ public final class SurfaceControl implements Parcelable {
         @NonNull
         public Transaction setFrameTimelineVsync(long frameTimelineVsyncId) {
             nativeSetFrameTimelineVsync(mNativeObject, frameTimelineVsyncId);
+            return this;
+        }
+
+        /**
+         * Request to add a {@link TransactionCommittedListener}.
+         *
+         * The callback is invoked when transaction is applied and the updates are ready to be
+         * presented. This callback does not mean buffers have been released! It simply means that
+         * any new transactions applied will not overwrite the transaction for which we are
+         * receiving a callback and instead will be included in the next frame. If you are trying
+         * to avoid dropping frames (overwriting transactions), and unable to use timestamps (Which
+         * provide a more efficient solution), then this method provides a method to pace your
+         * transaction application.
+         *
+         * @param executor The executor that the callback should be invoked on.
+         * @param listener The callback that will be invoked when the transaction has been
+         *                 committed.
+         */
+        @NonNull
+        public Transaction addTransactionCommittedListener(
+                @NonNull @CallbackExecutor Executor executor,
+                @NonNull TransactionCommittedListener listener) {
+            TransactionCommittedListener listenerInner =
+                    () -> executor.execute(listener::onTransactionCommitted);
+            nativeAddTransactionCommittedListener(mNativeObject, listenerInner);
             return this;
         }
 
@@ -3654,5 +3702,16 @@ public final class SurfaceControl implements Parcelable {
      */
     public void setTransformHint(@Surface.Rotation int transformHint) {
         nativeSetTransformHint(mNativeObject, transformHint);
+    }
+
+    /**
+     * @hide
+     */
+    public int getLayerId() {
+        if (mNativeObject != 0) {
+            return nativeGetLayerId(mNativeObject);
+        }
+
+        return -1;
     }
 }

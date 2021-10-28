@@ -326,6 +326,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"упатува и управува со телефонски повици"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Телесни сензори"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"пристапува до податоците од сензорите за виталните знаци"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Известувања"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"да прикажува известувања"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Преземе содржина на прозорец"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Ја следи содржината на прозорецот со кој се комуницира."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Вклучи „Истражувај со допир“"</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Овозможува апликацијата да го оневозможи заклучувањето и каква било безбедност поврзана со лозинка. На пример, телефонот го оневозможува заклучувањето при прием на телефонски повик, а потоа повторно го овозможува заклучувањето кога повикот ќе заврши."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"побарува сложеност за заклучувањето на екранот"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Дозволува апликацијата да го научи нивото на сложеност за заклучувањето на екранот (високо, средно, ниско или нема), коешто ги означува можниот опсег на должината и типот на заклучувањето на екранот. Апликацијата може да им дава предлози на корисниците да го ажурираат заклучувањето на екранот на одредено ниво, но корисниците можат да го игнорираат и да продолжат понатаму. Имајте предвид дека заклучувањето на екранот не се складира како обичен текст, па апликацијата не ја знае точната лозинка."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"да прикажува известувања"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Ѝ дозволува на апликацијата да прикажува известувања"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"користи биометриски хардвер"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Дозволува апликацијата да користи биометриски хардвер за проверка"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"управувај хардвер за отпечатоци"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Користете го вашиот отпечаток или заклучување екран за да продолжите"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Нешто не е во ред. Обидете се повторно."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Икона за отпечатоци"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Отклучување со лик"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Проблем со „Отклучување со лик“"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Користете отклучување со лик или заклучување екран за да продолжите"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Нешто не е во ред. Обидете се повторно."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Икона"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"чита поставки за синхронизација"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Овозможува апликацијата да ги чита поставките за синхронизирање на сметка. На пример, така може да се утврди дали апликацијата „Луѓе“ е синхронизирана со сметка."</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Кога е вклучена кратенката, ако ги притиснете двете копчиња за јачина на звук во времетраење од 3 секунди, ќе се стартува функција за пристапност."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Да се вклучи кратенка за функциите за пристапност?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Ако ги задржите притиснати двете копчиња за јачина на звук неколку секунди, ќе се вклучат функциите за пристапност. Ова може да го промени начинот на функционирање на уредот.\n\nТековни функции:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nМоже да ги промените избраните функции во „Поставки &gt; Пристапност“."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Да се вклучи кратенка за <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Ако ги задржите притиснати двете копчиња за јачина на звук неколку секунди, ќе се вклучи функцијата за пристапност <xliff:g id="SERVICE">%1$s</xliff:g>. Ова може да го промени начинот на функционирање на уредот.\n\nМоже да ја измените кратенкава да биде за друга функција во „Поставки &gt; Пристапност“."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Вклучи"</string>

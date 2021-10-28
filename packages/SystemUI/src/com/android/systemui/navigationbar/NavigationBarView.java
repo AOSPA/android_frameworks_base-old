@@ -19,9 +19,7 @@ package com.android.systemui.navigationbar;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL;
 
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_HOME_DISABLED;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_OVERVIEW_DISABLED;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_SCREEN_PINNING;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_SEARCH_DISABLED;
 import static com.android.systemui.shared.system.QuickStepContract.isGesturalMode;
@@ -79,9 +77,9 @@ import com.android.systemui.navigationbar.buttons.NearestTouchFrame;
 import com.android.systemui.navigationbar.buttons.RotationContextButton;
 import com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler;
 import com.android.systemui.navigationbar.gestural.FloatingRotationButton;
-import com.android.systemui.navigationbar.gestural.RegionSamplingHelper;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
+import com.android.systemui.shared.navigationbar.RegionSamplingHelper;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.SysUiStatsLog;
@@ -104,10 +102,7 @@ import java.util.function.Consumer;
 public class NavigationBarView extends FrameLayout implements
         NavigationModeController.ModeChangedListener {
     final static boolean DEBUG = false;
-    final static String TAG = "StatusBar/NavBarView";
-
-    // slippery nav bar when everything is disabled, e.g. during setup
-    final static boolean SLIPPERY_WHEN_DISABLED = true;
+    final static String TAG = "NavBarView";
 
     final static boolean ALTERNATE_CAR_MODE_UI = false;
     private final RegionSamplingHelper mRegionSamplingHelper;
@@ -281,7 +276,7 @@ public class NavigationBarView extends FrameLayout implements
             new RotationButtonUpdatesCallback() {
                 @Override
                 public void onVisibilityChanged(boolean visible) {
-                    if (visible) {
+                    if (visible && mAutoHideController != null) {
                         // If the button will actually become visible and the navbar is about
                         // to hide, tell the statusbar to keep it around for longer
                         mAutoHideController.touchAutoHide();
@@ -385,6 +380,12 @@ public class NavigationBarView extends FrameLayout implements
             mNavBarOverlayController.init(mNavbarOverlayVisibilityChangeCallback,
                     mEdgeBackGestureHandler::updateNavigationBarOverlayExcludeRegion);
         }
+    }
+
+    @Override
+    protected boolean onSetAlpha(int alpha) {
+        Log.e(TAG, "onSetAlpha", new Throwable());
+        return super.onSetAlpha(alpha);
     }
 
     public void setAutoHideController(AutoHideController autoHideController) {
@@ -841,7 +842,6 @@ public class NavigationBarView extends FrameLayout implements
 
     public void onStatusBarPanelStateChanged() {
         updateSlippery();
-        updatePanelSystemUiStateFlags();
     }
 
     public void updateDisabledSystemUiStateFlags() {
@@ -858,21 +858,12 @@ public class NavigationBarView extends FrameLayout implements
                 .commitUpdate(displayId);
     }
 
-    public void updatePanelSystemUiStateFlags() {
-        int displayId = mContext.getDisplayId();
+    private void updatePanelSystemUiStateFlags() {
         if (SysUiState.DEBUG) {
             Log.d(TAG, "Updating panel sysui state flags: panelView=" + mPanelView);
         }
         if (mPanelView != null) {
-            if (SysUiState.DEBUG) {
-                Log.d(TAG, "Updating panel sysui state flags: fullyExpanded="
-                        + mPanelView.isFullyExpanded() + " inQs=" + mPanelView.isInSettings());
-            }
-            mSysUiFlagContainer.setFlag(SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED,
-                    mPanelView.isFullyExpanded() && !mPanelView.isInSettings())
-                    .setFlag(SYSUI_STATE_QUICK_SETTINGS_EXPANDED,
-                            mPanelView.isInSettings())
-                    .commitUpdate(displayId);
+            mPanelView.updateSystemUiStateFlags();
         }
     }
 
@@ -1331,6 +1322,7 @@ public class NavigationBarView extends FrameLayout implements
 
         dumpButton(pw, "back", getBackButton());
         dumpButton(pw, "home", getHomeButton());
+        dumpButton(pw, "handle", getHomeHandle());
         dumpButton(pw, "rcnt", getRecentsButton());
         dumpButton(pw, "rota", getRotateSuggestionButton());
         dumpButton(pw, "a11y", getAccessibilityButton());

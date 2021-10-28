@@ -125,7 +125,7 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
         final List<PackageSetting> important;
         final List<PackageSetting> others;
         Predicate<PackageSetting> isPlatformPackage = pkgSetting ->
-                PLATFORM_PACKAGE_NAME.equals(pkgSetting.pkg.getPackageName());
+                PLATFORM_PACKAGE_NAME.equals(pkgSetting.getPkg().getPackageName());
         synchronized (mPackageManagerService.mLock) {
             // Important: the packages we need to run with ab-ota compiler-reason.
             important = PackageManagerServiceUtils.getPackagesForDexopt(
@@ -144,15 +144,15 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
         }
 
         for (PackageSetting pkgSetting : important) {
-            mDexoptCommands.addAll(generatePackageDexopts(pkgSetting.pkg, pkgSetting,
+            mDexoptCommands.addAll(generatePackageDexopts(pkgSetting.getPkg(), pkgSetting,
                     PackageManagerService.REASON_AB_OTA));
         }
         for (PackageSetting pkgSetting : others) {
             // We assume here that there are no core apps left.
-            if (pkgSetting.pkg.isCoreApp()) {
+            if (pkgSetting.getPkg().isCoreApp()) {
                 throw new IllegalStateException("Found a core app that's not important");
             }
-            mDexoptCommands.addAll(generatePackageDexopts(pkgSetting.pkg, pkgSetting,
+            mDexoptCommands.addAll(generatePackageDexopts(pkgSetting.getPkg(), pkgSetting,
                     PackageManagerService.REASON_FIRST_BOOT));
         }
         completeSize = mDexoptCommands.size();
@@ -162,7 +162,7 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
             Log.i(TAG, "Low on space, deleting oat files in an attempt to free up space: "
                     + PackageManagerServiceUtils.packagesToString(others));
             for (PackageSetting pkg : others) {
-                mPackageManagerService.deleteOatArtifactsOfPackage(pkg.name);
+                mPackageManagerService.deleteOatArtifactsOfPackage(pkg.getPackageName());
             }
         }
         long spaceAvailableNow = getAvailableSpace();
@@ -182,7 +182,7 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
                         + lastUsed.getPkgState().getLatestForegroundPackageUseTimeInMills());
                 Log.d(TAG, "A/B OTA: deprioritized packages:");
                 for (PackageSetting pkgSetting : others) {
-                    Log.d(TAG, "  " + pkgSetting.name + " - "
+                    Log.d(TAG, "  " + pkgSetting.getPackageName() + " - "
                             + pkgSetting.getPkgState().getLatestForegroundPackageUseTimeInMills());
                 }
             } catch (Exception ignored) {
@@ -288,7 +288,7 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
              *       frameworks/native/cmds/installd/otapreopt.cpp.
              */
             @Override
-            public void dexopt(String apkPath, int uid, @Nullable String pkgName,
+            public boolean dexopt(String apkPath, int uid, @Nullable String pkgName,
                     String instructionSet, int dexoptNeeded, @Nullable String outputPath,
                     int dexFlags, String compilerFilter, @Nullable String volumeUuid,
                     @Nullable String sharedLibraries, @Nullable String seInfo, boolean downgrade,
@@ -320,6 +320,9 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
                 encodeParameter(builder, dexoptCompilationReason);
 
                 commands.add(builder.toString());
+
+                // Cancellation cannot happen for OtaDexOpt. Returns true always.
+                return true;
             }
 
             /**

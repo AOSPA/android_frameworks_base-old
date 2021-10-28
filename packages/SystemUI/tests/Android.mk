@@ -41,11 +41,7 @@ LOCAL_JNI_SHARED_LIBRARIES := \
 LOCAL_JAVA_LIBRARIES := \
     android.test.runner \
     telephony-common \
-    android.test.base \
-    android.car \
-    android.car.userlib \
-    telephony-ext \
-    ims-common
+    android.test.base
 
 LOCAL_AAPT_FLAGS := --extra-packages com.android.systemui
 

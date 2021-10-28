@@ -395,6 +395,12 @@
          this attribute unnecessary. -->
     <attr name="sharedUserLabel" format="reference" />
 
+    <!-- The maximum device SDK version for which the application will remain in the user ID
+         defined in sharedUserId. Used when the application wants to migrate out of using shared
+         user ID, but has to maintain backwards compatibility with the API level specified
+         and before. -->
+    <attr name="sharedUserMaxSdkVersion" format="integer" />
+
     <!-- Internal version code.  This is the number used to determine whether
          one version is more recent than another: it has no other meaning than
          that higher numbers are more recent.  You could use this number to
@@ -1215,8 +1221,25 @@
     <attr name="isFeatureSplit" format="boolean" />
 
     <!-- Flag to specify if this APK requires at least one split [either feature or
-         resource] to be present in order to function. Default value is false. -->
+         resource] to be present in order to function. Default value is false.
+         @deprecated Use {@link android.R.attr#requiredSplitTypes} instead. -->
     <attr name="isSplitRequired" format="boolean" />
+
+    <!-- List of split types required by this APK to be present in order to function properly,
+         separated by commas. The platform will reject installation of an app that is missing
+         any required split types. Each split type is a string, and is only used for matching
+         <code>requiredSplitTypes</code> and <code>splitTypes</code>. As an example, if this
+         APK requires localized string resources, screen density resources, and native code
+         this value could be "language,density,abi". Default value is null to indicate no split
+         types are required. -->
+    <attr name="requiredSplitTypes" format="string" />
+
+    <!-- List of split types offered by this APK, separated by commas. Each split type is a
+         string, and is only used for matching <code>requiredSplitTypes</code> and
+         <code>splitTypes</code>. As an example, if this split offers localized string resources,
+         and screen density resources the value could be "language,density". Default value is
+         null to indicate no split types are offered. -->
+    <attr name="splitTypes" format="string" />
 
     <!-- Flag to specify if this app wants to run the dex within its APK but not extracted or
          locally compiled variants. This keeps the dex code protected by the APK signature. Such
@@ -1650,6 +1673,7 @@
         <attr name="revisionCode" />
         <attr name="sharedUserId" />
         <attr name="sharedUserLabel" />
+        <attr name="sharedUserMaxSdkVersion" />
         <attr name="installLocation" />
         <attr name="isolatedSplits" />
         <attr name="isFeatureSplit" />
@@ -1657,6 +1681,8 @@
         <attr name="compileSdkVersion" />
         <attr name="compileSdkVersionCodename" />
         <attr name="isSplitRequired" />
+        <attr name="requiredSplitTypes" />
+        <attr name="splitTypes" />
     </declare-styleable>
 
     <!-- The <code>application</code> tag describes application-level components

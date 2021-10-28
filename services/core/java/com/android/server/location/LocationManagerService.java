@@ -1397,7 +1397,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
 
                 ipw.println("Event Log:");
                 ipw.increaseIndent();
-                EVENT_LOG.iterate(manager.getName(), ipw::println);
+                EVENT_LOG.iterate(ipw::println, manager.getName());
                 ipw.decreaseIndent();
                 return;
             }

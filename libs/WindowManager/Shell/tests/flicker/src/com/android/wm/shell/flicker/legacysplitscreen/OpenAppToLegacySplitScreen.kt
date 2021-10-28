@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.legacysplitscreen
 
-import android.content.ComponentName
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
@@ -28,9 +27,8 @@ import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.launchSplitScreen
-import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerIsVisible
-import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
+import com.android.server.wm.traces.common.FlickerComponentName
 import com.android.wm.shell.flicker.appPairsDividerBecomesVisible
 import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import org.junit.FixMethodOrder
@@ -60,10 +58,10 @@ class OpenAppToLegacySplitScreen(
             }
         }
 
-    override val ignoredWindows: List<ComponentName>
+    override val ignoredWindows: List<FlickerComponentName>
         get() = listOf(LAUNCHER_COMPONENT, splitScreenApp.component,
-            WindowManagerStateHelper.SPLASH_SCREEN_COMPONENT,
-            WindowManagerStateHelper.SNAPSHOT_COMPONENT)
+            FlickerComponentName.SPLASH_SCREEN,
+            FlickerComponentName.SNAPSHOT)
 
     @FlakyTest
     @Test
@@ -77,7 +75,7 @@ class OpenAppToLegacySplitScreen(
 
     @Presubmit
     @Test
-    fun entireScreenCovered() = testSpec.entireScreenCovered(testSpec.config.startRotation)
+    fun entireScreenCovered() = testSpec.entireScreenCovered()
 
     @Presubmit
     @Test

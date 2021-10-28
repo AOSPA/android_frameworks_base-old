@@ -45,6 +45,7 @@ import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.ActivityManagerService;
+import com.android.server.am.CriticalEventLog;
 import com.android.server.am.TraceErrorLogger;
 import com.android.server.am.trace.SmartTraceUtils;
 import com.android.server.wm.SurfaceAnimationThread;
@@ -148,6 +149,8 @@ public class Watchdog {
     );
 
     public static final String[] AIDL_INTERFACE_PREFIXES_OF_INTEREST = new String[] {
+            "android.hardware.biometrics.face.IFace/",
+            "android.hardware.biometrics.fingerprint.IFingerprint/",
             "android.hardware.light.ILights/",
             "android.hardware.power.stats.IPowerStats/",
     };
@@ -670,10 +673,15 @@ public class Watchdog {
 
             if (doWaitedHalfDump) {
                 ArrayList<Integer> nativePids = getInterestingNativePids();
+                // Get critical event log before logging the half watchdog so that it doesn't
+                // occur in the log.
+                String criticalEvents = CriticalEventLog.getInstance().logLinesForAnrFile();
+                CriticalEventLog.getInstance().logHalfWatchdog(subject);
+
                 // We've waited half the deadlock-detection interval.  Pull a stack
                 // trace and wait another half.
                 initialStack = ActivityManagerService.dumpStackTraces(pids, null, null,
-                        nativePids, null, subject);
+                        nativePids, null, subject, criticalEvents);
                 if (initialStack != null){
                     SmartTraceUtils.dumpStackTraces(Process.myPid(), pids,
                         nativePids, initialStack);
@@ -686,12 +694,9 @@ public class Watchdog {
             // Then kill this process so that the system will restart.
             EventLog.writeEvent(EventLogTags.WATCHDOG, subject);
 
-            final UUID errorId;
+            final UUID errorId = mTraceErrorLogger.generateErrorId();
             if (mTraceErrorLogger.isAddErrorIdEnabled()) {
-                errorId = mTraceErrorLogger.generateErrorId();
                 mTraceErrorLogger.addErrorIdToTrace("system_server", errorId);
-            } else {
-                errorId = null;
             }
 
             // Log the atom as early as possible since it is used as a mechanism to trigger
@@ -700,6 +705,11 @@ public class Watchdog {
             FrameworkStatsLog.write(FrameworkStatsLog.SYSTEM_SERVER_WATCHDOG_OCCURRED, subject);
             ArrayList<Integer> nativePids = getInterestingNativePids();
 
+            // Get critical event log before logging the watchdog so that it doesn't occur in the
+            // log.
+            String criticalEvents = CriticalEventLog.getInstance().logLinesForAnrFile();
+            CriticalEventLog.getInstance().logWatchdog(subject, errorId);
+
             long anrTime = SystemClock.uptimeMillis();
             StringBuilder report = new StringBuilder();
             report.append(MemoryPressureUtil.currentPsiState());
@@ -707,7 +717,7 @@ public class Watchdog {
             StringWriter tracesFileException = new StringWriter();
             final File finalStack = ActivityManagerService.dumpStackTraces(
                     pids, processCpuTracker, new SparseArray<>(), nativePids,
-                    tracesFileException, subject);
+                    tracesFileException, subject, criticalEvents);
             if (finalStack != null){
                 SmartTraceUtils.dumpStackTraces(Process.myPid(), pids, nativePids, finalStack);
             }

@@ -64,7 +64,10 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     // Fade out faster than fade in to finish before QQS hides.
     private static final long QQS_FADE_OUT_DURATION = 50L;
 
-
+    /**
+     * List of all views that will be reset when clearing animation state
+     * see {@link #clearAnimationState()} }
+     */
     private final ArrayList<View> mAllViews = new ArrayList<>();
     /**
      * List of {@link View}s representing Quick Settings that are being animated from the quick QS
@@ -397,6 +400,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                     tileView.setClipChildren(true);
                     tileView.setClipToPadding(true);
                     firstPageBuilder.addFloat(tileView.getSecondaryLabel(), "alpha", 0, 1);
+                    mAllViews.add(tileView.getSecondaryLabel());
                 }
 
                 mAllViews.add(tileView);
@@ -405,21 +409,8 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         }
 
         if (mAllowFancy) {
-            // Make brightness appear static position and alpha in through second half.
-            View brightness = mQsPanelController.getBrightnessView();
-            if (brightness != null) {
-                firstPageBuilder.addFloat(brightness, "translationY",
-                        brightness.getMeasuredHeight() * 0.5f, 0);
-                mBrightnessAnimator = new TouchAnimator.Builder()
-                        .addFloat(brightness, "alpha", 0, 1)
-                        .addFloat(brightness, "sliderScaleY", 0.3f, 1)
-                        .setInterpolator(Interpolators.ALPHA_IN)
-                        .setStartDelay(0.3f)
-                        .build();
-                mAllViews.add(brightness);
-            } else {
-                mBrightnessAnimator = null;
-            }
+            animateBrightnessSlider(firstPageBuilder);
+
             mFirstPageAnimator = firstPageBuilder
                     .setListener(this)
                     .build();
@@ -470,18 +461,51 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 .addFloat(tileLayout, "alpha", 0, 1).build();
     }
 
+    private void animateBrightnessSlider(Builder firstPageBuilder) {
+        View qsBrightness = mQsPanelController.getBrightnessView();
+        View qqsBrightness = mQuickQSPanelController.getBrightnessView();
+        if (qqsBrightness != null && qqsBrightness.getVisibility() == View.VISIBLE) {
+            // animating in split shade mode
+            mAnimatedQsViews.add(qsBrightness);
+            mAllViews.add(qqsBrightness);
+            int translationY = getRelativeTranslationY(qsBrightness, qqsBrightness);
+            mBrightnessAnimator = new Builder()
+                    // we need to animate qs brightness even if animation will not be visible,
+                    // as we might start from sliderScaleY set to 0.3 if device was in collapsed QS
+                    // portrait orientation before
+                    .addFloat(qsBrightness, "sliderScaleY", 0.3f, 1)
+                    .addFloat(qqsBrightness, "translationY", 0, translationY)
+                    .build();
+        } else if (qsBrightness != null) {
+            firstPageBuilder.addFloat(qsBrightness, "translationY",
+                    qsBrightness.getMeasuredHeight() * 0.5f, 0);
+            mBrightnessAnimator = new Builder()
+                    .addFloat(qsBrightness, "alpha", 0, 1)
+                    .addFloat(qsBrightness, "sliderScaleY", 0.3f, 1)
+                    .setInterpolator(Interpolators.ALPHA_IN)
+                    .setStartDelay(0.3f)
+                    .build();
+            mAllViews.add(qsBrightness);
+        } else {
+            mBrightnessAnimator = null;
+        }
+    }
+
     private void updateQQSFooterAnimation() {
-        int[] qsPosition = new int[2];
-        int[] qqsPosition = new int[2];
-        View commonView = mQs.getView();
-        getRelativePositionInt(qsPosition, mQSFooterActions, commonView);
-        getRelativePositionInt(qqsPosition, mQQSFooterActions, commonView);
-        int translationY = (qsPosition[1] - qqsPosition[1])
-                - mQuickStatusBarHeader.getOffsetTranslation();
+        int translationY = getRelativeTranslationY(mQSFooterActions, mQQSFooterActions);
         mQQSFooterActionsAnimator = new TouchAnimator.Builder()
                 .addFloat(mQQSFooterActions, "translationY", 0, translationY)
                 .build();
         mAnimatedQsViews.add(mQSFooterActions);
+    }
+
+    private int getRelativeTranslationY(View view1, View view2) {
+        int[] qsPosition = new int[2];
+        int[] qqsPosition = new int[2];
+        View commonView = mQs.getView();
+        getRelativePositionInt(qsPosition, view1, commonView);
+        getRelativePositionInt(qqsPosition, view2, commonView);
+        return (qsPosition[1] - qqsPosition[1]) - mQuickStatusBarHeader.getOffsetTranslation();
     }
 
     private boolean isIconInAnimatedRow(int count) {

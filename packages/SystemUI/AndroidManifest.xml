@@ -447,6 +447,26 @@
         </activity>
 
         <!-- started from UsbDeviceSettingsManager -->
+        <activity android:name=".usb.tv.TvUsbConfirmActivity"
+                  android:exported="true"
+                  android:launchMode="singleTop"
+                  android:permission="android.permission.MANAGE_USB"
+                  android:theme="@style/BottomSheet"
+                  android:finishOnCloseSystemDialogs="true"
+                  android:excludeFromRecents="true">
+        </activity>
+
+        <!-- started from UsbDeviceSettingsManager -->
+        <activity android:name=".usb.tv.TvUsbPermissionActivity"
+                  android:exported="true"
+                  android:launchMode="singleTop"
+                  android:permission="android.permission.MANAGE_USB"
+                  android:theme="@style/BottomSheet"
+                  android:finishOnCloseSystemDialogs="true"
+                  android:excludeFromRecents="true">
+        </activity>
+
+        <!-- started from UsbDeviceSettingsManager -->
         <activity android:name=".usb.UsbResolverActivity"
             android:exported="true"
             android:permission="android.permission.MANAGE_USB"
@@ -467,6 +487,7 @@
         <!-- started from SensoryPrivacyService -->
         <activity android:name=".sensorprivacy.television.TvUnblockSensorActivity"
                   android:exported="true"
+                  android:launchMode="singleTop"
                   android:permission="android.permission.MANAGE_SENSOR_PRIVACY"
                   android:theme="@style/BottomSheet"
                   android:finishOnCloseSystemDialogs="true">
@@ -658,10 +679,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </service>
-
-        <service
-            android:name=".communal.service.CommunalService"
-            android:exported="@bool/config_communalServiceEnabled"/>
 
         <service
             android:name=".keyguard.KeyguardService"

@@ -21,6 +21,10 @@ import android.annotation.Nullable;
 import android.hardware.audio.common.V2_0.Uuid;
 import android.hardware.soundtrigger.V2_1.ISoundTriggerHwCallback;
 import android.hardware.soundtrigger.V2_3.ISoundTriggerHw;
+import android.media.audio.common.AidlConversion;
+import android.media.audio.common.AudioConfig;
+import android.media.audio.common.AudioConfigBase;
+import android.media.audio.common.AudioOffloadInfo;
 import android.media.soundtrigger.AudioCapabilities;
 import android.media.soundtrigger.ConfidenceLevel;
 import android.media.soundtrigger.ModelParameter;
@@ -36,8 +40,6 @@ import android.media.soundtrigger.RecognitionMode;
 import android.media.soundtrigger.RecognitionStatus;
 import android.media.soundtrigger.SoundModel;
 import android.media.soundtrigger.SoundModelType;
-import android.media.audio.common.AudioConfig;
-import android.media.audio.common.AudioOffloadInfo;
 import android.os.HidlMemory;
 import android.os.HidlMemoryUtil;
 import android.os.ParcelFileDescriptor;
@@ -303,7 +305,7 @@ class ConversionUtil {
         aidlEvent.captureDelayMs = hidlEvent.captureDelayMs;
         aidlEvent.capturePreambleMs = hidlEvent.capturePreambleMs;
         aidlEvent.triggerInData = hidlEvent.triggerInData;
-        aidlEvent.audioConfig = hidl2aidlAudioConfig(hidlEvent.audioConfig);
+        aidlEvent.audioConfig = hidl2aidlAudioConfig(hidlEvent.audioConfig, true /*isInput*/);
         aidlEvent.data = new byte[hidlEvent.data.size()];
         for (int i = 0; i < aidlEvent.data.length; ++i) {
             aidlEvent.data[i] = hidlEvent.data.get(i);
@@ -348,13 +350,10 @@ class ConversionUtil {
 
     static @NonNull
     AudioConfig hidl2aidlAudioConfig(
-            @NonNull android.hardware.audio.common.V2_0.AudioConfig hidlConfig) {
+            @NonNull android.hardware.audio.common.V2_0.AudioConfig hidlConfig, boolean isInput) {
         AudioConfig aidlConfig = new AudioConfig();
-        // TODO(ytai): channelMask and format might need a more careful conversion to make sure the
-        //  constants match.
-        aidlConfig.sampleRateHz = hidlConfig.sampleRateHz;
-        aidlConfig.channelMask = hidlConfig.channelMask;
-        aidlConfig.format = hidlConfig.format;
+        aidlConfig.base = hidl2aidlAudioConfigBase(hidlConfig.sampleRateHz, hidlConfig.channelMask,
+                hidlConfig.format, isInput);
         aidlConfig.offloadInfo = hidl2aidlOffloadInfo(hidlConfig.offloadInfo);
         aidlConfig.frameCount = hidlConfig.frameCount;
         return aidlConfig;
@@ -364,20 +363,34 @@ class ConversionUtil {
     AudioOffloadInfo hidl2aidlOffloadInfo(
             @NonNull android.hardware.audio.common.V2_0.AudioOffloadInfo hidlInfo) {
         AudioOffloadInfo aidlInfo = new AudioOffloadInfo();
-        // TODO(ytai): channelMask, format, streamType and usage might need a more careful
-        //  conversion to make sure the constants match.
-        aidlInfo.sampleRateHz = hidlInfo.sampleRateHz;
-        aidlInfo.channelMask = hidlInfo.channelMask;
-        aidlInfo.format = hidlInfo.format;
-        aidlInfo.streamType = hidlInfo.streamType;
+        aidlInfo.base = hidl2aidlAudioConfigBase(hidlInfo.sampleRateHz, hidlInfo.channelMask,
+                hidlInfo.format, false /*isInput*/);
+        aidlInfo.streamType = AidlConversion.legacy2aidl_audio_stream_type_t_AudioStreamType(
+                hidlInfo.streamType);
         aidlInfo.bitRatePerSecond = hidlInfo.bitRatePerSecond;
-        aidlInfo.durationMicroseconds = hidlInfo.durationMicroseconds;
+        aidlInfo.durationUs = hidlInfo.durationMicroseconds;
         aidlInfo.hasVideo = hidlInfo.hasVideo;
         aidlInfo.isStreaming = hidlInfo.isStreaming;
         aidlInfo.bitWidth = hidlInfo.bitWidth;
-        aidlInfo.bufferSize = hidlInfo.bufferSize;
-        aidlInfo.usage = hidlInfo.usage;
+        aidlInfo.offloadBufferSize = hidlInfo.bufferSize;
+        aidlInfo.usage = AidlConversion.legacy2aidl_audio_usage_t_AudioUsage(hidlInfo.usage);
         return aidlInfo;
+    }
+
+    // Ideally we would want to convert AudioConfigBase as a unit, however
+    // HIDL V2 lacks this type, so convert by field instead.
+    static @NonNull
+    AudioConfigBase hidl2aidlAudioConfigBase(int sampleRateHz, int channelMask, int format,
+            boolean isInput) {
+        AudioConfigBase aidlBase = new AudioConfigBase();
+        aidlBase.sampleRate = sampleRateHz;
+        // Relies on the fact that HIDL AudioChannelMask uses the same constant values as
+        // system/audio.h.
+        aidlBase.channelMask = AidlConversion.legacy2aidl_audio_channel_mask_t_AudioChannelLayout(
+                channelMask, isInput);
+        // Relies on the fact that HIDL AudioFormat uses the same constant values as system/audio.h.
+        aidlBase.format = AidlConversion.legacy2aidl_audio_format_t_AudioFormatDescription(format);
+        return aidlBase;
     }
 
     @Nullable

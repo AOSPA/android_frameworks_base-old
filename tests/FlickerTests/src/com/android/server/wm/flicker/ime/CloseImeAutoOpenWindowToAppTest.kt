@@ -37,7 +37,7 @@ import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerIsVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsVisible
-import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
+import com.android.server.wm.traces.common.FlickerComponentName
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -119,13 +119,13 @@ class CloseImeAutoOpenWindowToAppTest(private val testSpec: FlickerTestParameter
 
     @Presubmit
     @Test
-    fun entireScreenCovered() = testSpec.entireScreenCovered(testSpec.config.startRotation)
+    fun entireScreenCovered() = testSpec.entireScreenCovered()
 
     @Presubmit
     @Test
     fun imeLayerVisibleStart() {
         testSpec.assertLayersStart {
-            this.isVisible(WindowManagerStateHelper.IME_COMPONENT)
+            this.isVisible(FlickerComponentName.IME)
         }
     }
 
@@ -133,7 +133,7 @@ class CloseImeAutoOpenWindowToAppTest(private val testSpec: FlickerTestParameter
     @Test
     fun imeLayerInvisibleEnd() {
         testSpec.assertLayersEnd {
-            this.isInvisible(WindowManagerStateHelper.IME_COMPONENT)
+            this.isInvisible(FlickerComponentName.IME)
         }
     }
 
@@ -151,15 +151,11 @@ class CloseImeAutoOpenWindowToAppTest(private val testSpec: FlickerTestParameter
 
     @Presubmit
     @Test
-    fun navBarLayerRotatesAndScales() {
-        testSpec.navBarLayerRotatesAndScales(testSpec.config.startRotation)
-    }
+    fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
     @Presubmit
     @Test
-    fun statusBarLayerRotatesScales() {
-        testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation)
-    }
+    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
     @Presubmit
     @Test

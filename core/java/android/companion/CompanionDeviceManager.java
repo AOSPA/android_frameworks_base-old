@@ -24,6 +24,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.app.Activity;
 import android.app.Application;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothDevice;
 import android.content.ComponentName;
@@ -259,7 +260,11 @@ public final class CompanionDeviceManager {
      *
      * @param component the name of the component
      * @return whether the given component has the notification listener permission
+     *
+     * @deprecated Use
+     * {@link NotificationManager#isNotificationListenerAccessGranted(ComponentName)} instead.
      */
+    @Deprecated
     public boolean hasNotificationAccess(ComponentName component) {
         if (!checkFeaturePresent()) {
             return false;
@@ -436,6 +441,32 @@ public final class CompanionDeviceManager {
                     mContext.getPackageName(), deviceAddress);
         } catch (RemoteException e) {
             ExceptionUtils.propagateIfInstanceOf(e.getCause(), DeviceNotAssociatedException.class);
+        }
+    }
+
+    /**
+     * Dispatch a message to system for processing.
+     *
+     * <p>Calling app must declare uses-permission
+     * {@link android.Manifest.permission#DELIVER_COMPANION_MESSAGES}</p>
+     *
+     * @param messageId id of the message
+     * @param associationId association id of the associated device where data is coming from
+     * @param message message received from the associated device
+     *
+     * @throws DeviceNotAssociatedException if the given device was not previously associated with
+     * this app
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
+    public void dispatchMessage(int messageId, int associationId, @NonNull byte[] message)
+            throws DeviceNotAssociatedException {
+        try {
+            mService.dispatchMessage(messageId, associationId, message);
+        } catch (RemoteException e) {
+            ExceptionUtils.propagateIfInstanceOf(e.getCause(), DeviceNotAssociatedException.class);
+            throw e.rethrowFromSystemServer();
         }
     }
 

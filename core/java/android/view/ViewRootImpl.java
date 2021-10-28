@@ -313,6 +313,9 @@ public final class ViewRootImpl implements ViewParent,
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList<>();
     static boolean sFirstDrawComplete = false;
 
+    private ArrayList<OnSurfaceTransformHintChangedListener> mTransformHintListeners =
+            new ArrayList<>();
+    private @Surface.Rotation int mPreviousTransformHint = Surface.ROTATION_0;
     /**
      * Callback for notifying about global configuration changes.
      */
@@ -486,9 +489,6 @@ public final class ViewRootImpl implements ViewParent,
     protected final ViewFrameInfo mViewFrameInfo = new ViewFrameInfo();
     private final InputEventAssigner mInputEventAssigner = new InputEventAssigner();
 
-    // Set to true if mSurfaceControl is used for Webview Overlay
-    private boolean mIsForWebviewOverlay;
-
     /**
      * Update the Choreographer's FrameInfo object with the timing information for the current
      * ViewRootImpl instance. Erase the data in the current ViewFrameInfo to prepare for the next
@@ -651,6 +651,7 @@ public final class ViewRootImpl implements ViewParent,
     /* Drag/drop */
     ClipDescription mDragDescription;
     View mCurrentDragView;
+    View mStartedDragViewForA11y;
     volatile Object mLocalDragState;
     final PointF mDragPoint = new PointF();
     final PointF mLastTouchPoint = new PointF();
@@ -761,6 +762,12 @@ public final class ViewRootImpl implements ViewParent,
      * synchronize with the client.
      */
     private boolean mWaitForBlastSyncComplete = false;
+
+    /**
+     * Keeps track of the last frame number that was attempted to draw. Should only be accessed on
+     * the RenderThread.
+     */
+    private long mRtLastAttemptedDrawFrameNum = 0;
 
     /**
      * Keeps track of whether a traverse was triggered while the UI thread was paused. This can
@@ -1388,42 +1395,6 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    /**
-     * Register a callback to be executed when Webview overlay needs to merge a transaction.
-     * This callback will be executed on RenderThread worker thread, and released inside native code
-     * when CanvasContext is destroyed.
-     */
-    private void addASurfaceTransactionCallback() {
-        HardwareRenderer.ASurfaceTransactionCallback callback = (nativeTransactionObj,
-                                                                 nativeSurfaceControlObj,
-                                                                 frameNr) -> {
-            if (mBlastBufferQueue == null) {
-                return false;
-            } else {
-                mBlastBufferQueue.mergeWithNextTransaction(nativeTransactionObj, frameNr);
-                return true;
-            }
-        };
-        mAttachInfo.mThreadedRenderer.setASurfaceTransactionCallback(callback);
-    }
-
-    /**
-     * Register a callback to be executed when Webview overlay needs a surface control.
-     * This callback will be executed on RenderThread worker thread, and released inside native code
-     * when CanvasContext is destroyed.
-     */
-    private void addPrepareSurfaceControlForWebviewCallback() {
-        HardwareRenderer.PrepareSurfaceControlForWebviewCallback callback = () -> {
-            // make mSurfaceControl transparent, so child surface controls are visible
-            if (mIsForWebviewOverlay) return;
-            synchronized (ViewRootImpl.this) {
-                mIsForWebviewOverlay = true;
-            }
-            mTransaction.setOpaque(mSurfaceControl, false).apply();
-        };
-        mAttachInfo.mThreadedRenderer.setPrepareSurfaceControlForWebviewCallback(callback);
-    }
-
     @UnsupportedAppUsage
     private void enableHardwareAcceleration(WindowManager.LayoutParams attrs) {
         mAttachInfo.mHardwareAccelerated = false;
@@ -1468,11 +1439,8 @@ public final class ViewRootImpl implements ViewParent,
                     if (mHardwareRendererObserver != null) {
                         mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
                     }
-                    if (HardwareRenderer.isWebViewOverlaysEnabled()) {
-                        addPrepareSurfaceControlForWebviewCallback();
-                        addASurfaceTransactionCallback();
-                    }
                     mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
+                    mAttachInfo.mThreadedRenderer.setBlastBufferQueue(mBlastBufferQueue);
                 }
             }
         }
@@ -2044,6 +2012,7 @@ public final class ViewRootImpl implements ViewParent,
 
         if (mAttachInfo.mThreadedRenderer != null) {
             mAttachInfo.mThreadedRenderer.setSurfaceControl(null);
+            mAttachInfo.mThreadedRenderer.setBlastBufferQueue(null);
         }
     }
 
@@ -2472,7 +2441,7 @@ public final class ViewRootImpl implements ViewParent,
             mAttachInfo.mContentInsets.set(mLastWindowInsets.getSystemWindowInsets().toRect());
             mAttachInfo.mStableInsets.set(mLastWindowInsets.getStableInsets().toRect());
             mAttachInfo.mVisibleInsets.set(mInsetsController.calculateVisibleInsets(
-                    mWindowAttributes.softInputMode));
+                    mWindowAttributes.softInputMode).toRect());
         }
         return mLastWindowInsets;
     }
@@ -2865,8 +2834,13 @@ public final class ViewRootImpl implements ViewParent,
                     }
                 }
 
+                final boolean surfaceControlChanged =
+                        (relayoutResult & RELAYOUT_RES_SURFACE_CHANGED)
+                                == RELAYOUT_RES_SURFACE_CHANGED;
+
                 if (mSurfaceControl.isValid()) {
-                    updateOpacity(mWindowAttributes, dragResizing);
+                    updateOpacity(mWindowAttributes, dragResizing,
+                            surfaceControlChanged /*forceUpdate */);
                 }
 
                 if (DEBUG_LAYOUT) Log.v(mTag, "relayout: frame=" + frame.toShortString()
@@ -2901,9 +2875,7 @@ public final class ViewRootImpl implements ViewParent,
                 // RELAYOUT_RES_SURFACE_CHANGED since it should indicate that WMS created a new
                 // SurfaceControl.
                 surfaceReplaced = (surfaceGenerationId != mSurface.getGenerationId()
-                        || (relayoutResult & RELAYOUT_RES_SURFACE_CHANGED)
-                        == RELAYOUT_RES_SURFACE_CHANGED)
-                        && mSurface.isValid();
+                        || surfaceControlChanged) && mSurface.isValid();
                 if (surfaceReplaced) {
                     mSurfaceSequenceId++;
                 }
@@ -4018,35 +3990,19 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
-     * The callback will run on the render thread.
+     * Only call this on the UI Thread.
      */
-    private HardwareRenderer.FrameCompleteCallback createFrameCompleteCallback(Handler handler,
-            boolean reportNextDraw, ArrayList<Runnable> commitCallbacks) {
-        return frameNr -> {
-            if (DEBUG_BLAST) {
-                Log.d(mTag, "Received frameCompleteCallback frameNum=" + frameNr);
-            }
-
-            handler.postAtFrontOfQueue(() -> {
-                if (mNextDrawUseBlastSync) {
-                    // We don't need to synchronize mRtBLASTSyncTransaction here since we're
-                    // guaranteed that this is called after onFrameDraw and mNextDrawUseBlastSync
-                    // is only true when the UI thread is paused. Therefore, no one should be
-                    // modifying this object until the next vsync.
-                    mSurfaceChangedTransaction.merge(mRtBLASTSyncTransaction);
-                }
-
-                if (reportNextDraw) {
-                    // TODO: Use the frame number
-                    pendingDrawFinished();
-                }
-                if (commitCallbacks != null) {
-                    for (int i = 0; i < commitCallbacks.size(); i++) {
-                        commitCallbacks.get(i).run();
-                    }
-                }
-            });
-        };
+    void clearBlastSync() {
+        mNextDrawUseBlastSync = false;
+        mWaitForBlastSyncComplete = false;
+        if (DEBUG_BLAST) {
+            Log.d(mTag, "Scheduling a traversal=" + mRequestedTraverseWhilePaused
+                    + " due to a previous skipped traversal.");
+        }
+        if (mRequestedTraverseWhilePaused) {
+            mRequestedTraverseWhilePaused = false;
+            scheduleTraversals();
+        }
     }
 
     /**
@@ -4056,46 +4012,104 @@ public final class ViewRootImpl implements ViewParent,
         return mAttachInfo.mThreadedRenderer != null && mAttachInfo.mThreadedRenderer.isEnabled();
     }
 
-    private boolean addFrameCompleteCallbackIfNeeded() {
+    private boolean addFrameCompleteCallbackIfNeeded(boolean reportNextDraw) {
         if (!isHardwareEnabled()) {
             return false;
         }
 
+        if (!mNextDrawUseBlastSync && !reportNextDraw) {
+            return false;
+        }
+
+        if (DEBUG_BLAST) {
+            Log.d(mTag, "Creating frameCompleteCallback");
+        }
+
+        mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(() -> {
+            long frameNr = mBlastBufferQueue.getLastAcquiredFrameNum();
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Received frameCompleteCallback "
+                        + " lastAcquiredFrameNum=" + frameNr
+                        + " lastAttemptedDrawFrameNum=" + mRtLastAttemptedDrawFrameNum);
+            }
+
+            boolean frameWasNotDrawn = frameNr != mRtLastAttemptedDrawFrameNum;
+            // If frame wasn't drawn, clear out the next transaction so it doesn't affect the next
+            // draw attempt. The next transaction and transaction complete callback were only set
+            // for the current draw attempt.
+            if (frameWasNotDrawn) {
+                mBlastBufferQueue.setNextTransaction(null);
+                mBlastBufferQueue.setTransactionCompleteCallback(mRtLastAttemptedDrawFrameNum,
+                        null);
+                // Apply the transactions that were sent to mergeWithNextTransaction since the
+                // frame didn't draw on this vsync. It's possible the frame will draw later, but
+                // it's better to not be sync than to block on a frame that may never come.
+                mBlastBufferQueue.applyPendingTransactions(mRtLastAttemptedDrawFrameNum);
+            }
+
+            mHandler.postAtFrontOfQueue(() -> {
+                if (mNextDrawUseBlastSync) {
+                    // We don't need to synchronize mRtBLASTSyncTransaction here since we're
+                    // guaranteed that this is called after onFrameDraw and mNextDrawUseBlastSync
+                    // is only true when the UI thread is paused. Therefore, no one should be
+                    // modifying this object until the next vsync.
+                    mSurfaceChangedTransaction.merge(mRtBLASTSyncTransaction);
+                }
+
+                if (reportNextDraw) {
+                    pendingDrawFinished();
+                }
+
+                if (frameWasNotDrawn) {
+                    clearBlastSync();
+                }
+            });
+        });
+        return true;
+    }
+
+    private void addFrameCommitCallbackIfNeeded() {
+        if (!isHardwareEnabled()) {
+            return;
+        }
+
         ArrayList<Runnable> commitCallbacks = mAttachInfo.mTreeObserver
                 .captureFrameCommitCallbacks();
-        final boolean needFrameCompleteCallback =
-                mNextDrawUseBlastSync || mReportNextDraw
-                        || (commitCallbacks != null && commitCallbacks.size() > 0);
-        if (needFrameCompleteCallback) {
-            if (DEBUG_BLAST) {
-                Log.d(mTag, "Creating frameCompleteCallback"
-                        + " mNextDrawUseBlastSync=" + mNextDrawUseBlastSync
-                        + " mReportNextDraw=" + mReportNextDraw
-                        + " commitCallbacks size="
-                        + (commitCallbacks == null ? 0 : commitCallbacks.size()));
-            }
-            mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(
-                    createFrameCompleteCallback(mAttachInfo.mHandler, mReportNextDraw,
-                            commitCallbacks));
-            return true;
+        final boolean needFrameCommitCallback =
+                (commitCallbacks != null && commitCallbacks.size() > 0);
+        if (!needFrameCommitCallback) {
+            return;
         }
-        return false;
+
+        if (DEBUG_DRAW) {
+            Log.d(mTag, "Creating frameCommitCallback"
+                    + " commitCallbacks size=" + commitCallbacks.size());
+        }
+        mAttachInfo.mThreadedRenderer.setFrameCommitCallback(didProduceBuffer -> {
+            if (DEBUG_DRAW) {
+                Log.d(mTag, "Received frameCommitCallback didProduceBuffer=" + didProduceBuffer);
+            }
+
+            mHandler.postAtFrontOfQueue(() -> {
+                for (int i = 0; i < commitCallbacks.size(); i++) {
+                    commitCallbacks.get(i).run();
+                }
+            });
+        });
     }
 
     private void addFrameCallbackIfNeeded() {
         final boolean nextDrawUseBlastSync = mNextDrawUseBlastSync;
-        final boolean reportNextDraw = mReportNextDraw;
         final boolean hasBlurUpdates = mBlurRegionAggregator.hasUpdates();
         final boolean needsCallbackForBlur = hasBlurUpdates || mBlurRegionAggregator.hasRegions();
 
-        if (!nextDrawUseBlastSync && !reportNextDraw && !needsCallbackForBlur) {
+        if (!nextDrawUseBlastSync && !needsCallbackForBlur) {
             return;
         }
 
         if (DEBUG_BLAST) {
             Log.d(mTag, "Creating frameDrawingCallback"
                     + " nextDrawUseBlastSync=" + nextDrawUseBlastSync
-                    + " reportNextDraw=" + reportNextDraw
                     + " hasBlurUpdates=" + hasBlurUpdates);
         }
         mWaitForBlastSyncComplete = nextDrawUseBlastSync;
@@ -4108,6 +4122,8 @@ public final class ViewRootImpl implements ViewParent,
                 Log.d(mTag, "Received frameDrawingCallback frameNum=" + frame + "."
                         + " Creating transactionCompleteCallback=" + nextDrawUseBlastSync);
             }
+
+            mRtLastAttemptedDrawFrameNum = frame;
 
             if (needsCallbackForBlur) {
                 mBlurRegionAggregator
@@ -4131,24 +4147,8 @@ public final class ViewRootImpl implements ViewParent,
                     if (DEBUG_BLAST) {
                         Log.d(mTag, "Received transactionCompleteCallback frameNum=" + frame);
                     }
-                    mHandler.postAtFrontOfQueue(() -> {
-                        mNextDrawUseBlastSync = false;
-                        mWaitForBlastSyncComplete = false;
-                        if (DEBUG_BLAST) {
-                            Log.d(mTag, "Scheduling a traversal=" + mRequestedTraverseWhilePaused
-                                    + " due to a previous skipped traversal.");
-                        }
-                        if (mRequestedTraverseWhilePaused) {
-                            mRequestedTraverseWhilePaused = false;
-                            scheduleTraversals();
-                        }
-                    });
+                    mHandler.postAtFrontOfQueue(this::clearBlastSync);
                 });
-            } else if (reportNextDraw) {
-                // If we need to report next draw, wait for adapter to flush its shadow queue
-                // by processing previously queued buffers so that we can submit the
-                // transaction a timely manner.
-                mBlastBufferQueue.flushShadowQueue();
             }
         };
         registerRtFrameCallback(frameDrawingCallback);
@@ -4168,8 +4168,9 @@ public final class ViewRootImpl implements ViewParent,
         mIsDrawing = true;
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "draw");
 
-        boolean usingAsyncReport = addFrameCompleteCallbackIfNeeded();
         addFrameCallbackIfNeeded();
+        addFrameCommitCallbackIfNeeded();
+        boolean usingAsyncReport = addFrameCompleteCallbackIfNeeded(mReportNextDraw);
 
         try {
             boolean canUseAsync = draw(fullRedrawNeeded);
@@ -4277,6 +4278,14 @@ public final class ViewRootImpl implements ViewParent,
         }
         try {
             if (!isContentCaptureEnabled()) return;
+
+            // Initial dispatch of window bounds to content capture
+            if (mAttachInfo.mContentCaptureManager != null) {
+                MainContentCaptureSession session =
+                        mAttachInfo.mContentCaptureManager.getMainContentCaptureSession();
+                session.notifyWindowBoundsChanged(session.getId(),
+                        getConfiguration().windowConfiguration.getBounds());
+            }
 
             // Content capture is a go!
             rootView.dispatchInitialProvideContentCaptureStructure();
@@ -7587,6 +7596,11 @@ public final class ViewRootImpl implements ViewParent,
             if (what == DragEvent.ACTION_DRAG_STARTED) {
                 mCurrentDragView = null;    // Start the current-recipient tracking
                 mDragDescription = event.mClipDescription;
+                if (mStartedDragViewForA11y != null) {
+                    // Send a drag started a11y event
+                    mStartedDragViewForA11y.sendWindowContentChangedAccessibilityEvent(
+                            AccessibilityEvent.CONTENT_CHANGE_TYPE_DRAG_STARTED);
+                }
             } else {
                 if (what == DragEvent.ACTION_DRAG_ENDED) {
                     mDragDescription = null;
@@ -7661,6 +7675,16 @@ public final class ViewRootImpl implements ViewParent,
 
                 // When the drag operation ends, reset drag-related state
                 if (what == DragEvent.ACTION_DRAG_ENDED) {
+                    if (mStartedDragViewForA11y != null) {
+                        // If the drag failed, send a cancelled event from the source. Otherwise,
+                        // the View that accepted the drop sends CONTENT_CHANGE_TYPE_DRAG_DROPPED
+                        if (!event.getResult()) {
+                            mStartedDragViewForA11y.sendWindowContentChangedAccessibilityEvent(
+                                    AccessibilityEvent.CONTENT_CHANGE_TYPE_DRAG_CANCELLED);
+                        }
+                        mStartedDragViewForA11y.setAccessibilityDragStarted(false);
+                    }
+                    mStartedDragViewForA11y = null;
                     mCurrentDragView = null;
                     setLocalDragState(null);
                     mAttachInfo.mDragToken = null;
@@ -7738,6 +7762,13 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         mCurrentDragView = newDragTarget;
+    }
+
+    /** Sets the view that started drag and drop for the purpose of sending AccessibilityEvents */
+    void setDragStartedViewForAccessibility(View view) {
+        if (mStartedDragViewForA11y == null) {
+            mStartedDragViewForA11y = view;
+        }
     }
 
     private AudioManager getAudioManager() {
@@ -7818,6 +7849,14 @@ public final class ViewRootImpl implements ViewParent,
                 insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0, frameNumber,
                 mTmpFrames, mPendingMergedConfiguration, mSurfaceControl, mTempInsets,
                 mTempControls, mSurfaceSize);
+
+        if (mAttachInfo.mContentCaptureManager != null) {
+            MainContentCaptureSession mainSession = mAttachInfo.mContentCaptureManager
+                    .getMainContentCaptureSession();
+            mainSession.notifyWindowBoundsChanged(mainSession.getId(),
+                    getConfiguration().windowConfiguration.getBounds());
+        }
+
         mPendingBackDropFrame.set(mTmpFrames.backdropFrame);
         if (mSurfaceControl.isValid()) {
             if (!useBLAST()) {
@@ -7832,11 +7871,13 @@ public final class ViewRootImpl implements ViewParent,
                 }
             }
             if (mAttachInfo.mThreadedRenderer != null) {
-                if (HardwareRenderer.isWebViewOverlaysEnabled()) {
-                    addPrepareSurfaceControlForWebviewCallback();
-                    addASurfaceTransactionCallback();
-                }
                 mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
+                mAttachInfo.mThreadedRenderer.setBlastBufferQueue(mBlastBufferQueue);
+            }
+            int transformHint = mSurfaceControl.getTransformHint();
+            if (mPreviousTransformHint != transformHint) {
+                mPreviousTransformHint = transformHint;
+                dispatchTransformHintChanged(transformHint);
             }
         } else {
             destroySurface();
@@ -7862,7 +7903,8 @@ public final class ViewRootImpl implements ViewParent,
         return relayoutResult;
     }
 
-    private void updateOpacity(WindowManager.LayoutParams params, boolean dragResizing) {
+    private void updateOpacity(WindowManager.LayoutParams params, boolean dragResizing,
+            boolean forceUpdate) {
         boolean opaque = false;
 
         if (!PixelFormat.formatHasAlpha(params.format)
@@ -7878,15 +7920,14 @@ public final class ViewRootImpl implements ViewParent,
             opaque = true;
         }
 
-        if (mIsSurfaceOpaque == opaque) {
+        if (!forceUpdate && mIsSurfaceOpaque == opaque) {
             return;
         }
 
-        synchronized (this) {
-            if (mIsForWebviewOverlay) {
-                mIsSurfaceOpaque = false;
-                return;
-            }
+        final ThreadedRenderer renderer = mAttachInfo.mThreadedRenderer;
+        if (renderer != null && renderer.rendererOwnsSurfaceControlOpacity()) {
+            opaque = renderer.setSurfaceControlOpaque(opaque);
+        } else {
             mTransaction.setOpaque(mSurfaceControl, opaque).apply();
         }
 
@@ -9532,6 +9573,7 @@ public final class ViewRootImpl implements ViewParent,
 
         ScrollCaptureResponse.Builder response = new ScrollCaptureResponse.Builder();
         response.setWindowTitle(getTitle().toString());
+        response.setPackageName(mContext.getPackageName());
 
         StringWriter writer =  new StringWriter();
         IndentingPrintWriter pw = new IndentingPrintWriter(writer);
@@ -10461,7 +10503,39 @@ public final class ViewRootImpl implements ViewParent,
         return true;
     }
 
-    int getSurfaceTransformHint() {
+    @Override
+    public @Surface.Rotation int getSurfaceTransformHint() {
         return mSurfaceControl.getTransformHint();
+    }
+
+    @Override
+    public void addOnSurfaceTransformHintChangedListener(
+            OnSurfaceTransformHintChangedListener listener) {
+        Objects.requireNonNull(listener);
+        if (mTransformHintListeners.contains(listener)) {
+            throw new IllegalArgumentException(
+                    "attempt to call addOnSurfaceTransformHintChangedListener() "
+                            + "with a previously registered listener");
+        }
+        mTransformHintListeners.add(listener);
+    }
+
+    @Override
+    public void removeOnSurfaceTransformHintChangedListener(
+            OnSurfaceTransformHintChangedListener listener) {
+        Objects.requireNonNull(listener);
+        mTransformHintListeners.remove(listener);
+    }
+
+    private void dispatchTransformHintChanged(@Surface.Rotation int hint) {
+        if (mTransformHintListeners.isEmpty()) {
+            return;
+        }
+        ArrayList<OnSurfaceTransformHintChangedListener> listeners =
+                (ArrayList<OnSurfaceTransformHintChangedListener>) mTransformHintListeners.clone();
+        for (int i = 0; i < listeners.size(); i++) {
+            OnSurfaceTransformHintChangedListener listener = listeners.get(i);
+            listener.onSurfaceTransformHintChanged(hint);
+        }
     }
 }

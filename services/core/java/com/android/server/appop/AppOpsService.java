@@ -4562,8 +4562,10 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
         if (pkgUid != Process.INVALID_UID) {
             if (pkgUid != UserHandle.getAppId(uid)) {
+                Slog.e(TAG, "Bad call made by uid " + callingUid + ". "
+                        + "Package \"" + packageName + "\" does not belong to uid " + uid + ".");
                 String otherUidMessage = DEBUG ? " but it is really " + pkgUid : " but it is not";
-                throw new SecurityException("Specified package " + packageName + " under uid "
+                throw new SecurityException("Specified package \"" + packageName + "\" under uid "
                         +  UserHandle.getAppId(uid) + otherUidMessage);
             }
             return new PackageVerificationResult(RestrictionBypass.UNRESTRICTED,
@@ -4618,8 +4620,10 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
 
         if (pkgUid != uid) {
+            Slog.e(TAG, "Bad call made by uid " + callingUid + ". "
+                    + "Package \"" + packageName + "\" does not belong to uid " + uid + ".");
             String otherUidMessage = DEBUG ? " but it is really " + pkgUid : " but it is not";
-            throw new SecurityException("Specified package " + packageName + " under uid " + uid
+            throw new SecurityException("Specified package \"" + packageName + "\" under uid " + uid
                     + otherUidMessage);
         }
 

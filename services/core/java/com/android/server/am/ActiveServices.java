@@ -343,16 +343,25 @@ public final class ActiveServices {
     };
 
     /**
-     * Watch for apps being put into forced app standby, so we can step their fg
+     * Reference to the AppStateTracker service. No lock is needed as we'll assign with the same
+     * instance to it always.
+     */
+    AppStateTracker mAppStateTracker;
+
+    /**
+     * Watch for apps being put into background restricted, so we can step their fg
      * services down.
      */
-    class ForcedStandbyListener implements AppStateTracker.ServiceStateListener {
+    class BackgroundRestrictedListener implements AppStateTracker.BackgroundRestrictedAppListener {
         @Override
-        public void stopForegroundServicesForUidPackage(final int uid, final String packageName) {
+        public void updateBackgroundRestrictedForUidPackage(int uid, String packageName,
+                boolean restricted) {
             synchronized (mAm) {
                 if (!isForegroundServiceAllowedInBackgroundRestricted(uid, packageName)) {
                     stopAllForegroundServicesLocked(uid, packageName);
                 }
+                mAm.mProcessList.updateBackgroundRestrictedForUidPackageLocked(
+                        uid, packageName, restricted);
             }
         }
     }
@@ -540,10 +549,16 @@ public final class ActiveServices {
     }
 
     void systemServicesReady() {
-        AppStateTracker ast = LocalServices.getService(AppStateTracker.class);
-        ast.addServiceStateListener(new ForcedStandbyListener());
+        getAppStateTracker().addBackgroundRestrictedAppListener(new BackgroundRestrictedListener());
         mAppWidgetManagerInternal = LocalServices.getService(AppWidgetManagerInternal.class);
         setAllowListWhileInUsePermissionInFgs();
+    }
+
+    private AppStateTracker getAppStateTracker() {
+        if (mAppStateTracker == null) {
+            mAppStateTracker = LocalServices.getService(AppStateTracker.class);
+        }
+        return mAppStateTracker;
     }
 
     private void setAllowListWhileInUsePermissionInFgs() {
@@ -642,9 +657,11 @@ public final class ActiveServices {
     }
 
     private boolean appRestrictedAnyInBackground(final int uid, final String packageName) {
-        final int mode = mAm.getAppOpsManager().checkOpNoThrow(
-                AppOpsManager.OP_RUN_ANY_IN_BACKGROUND, uid, packageName);
-        return (mode != AppOpsManager.MODE_ALLOWED);
+        final AppStateTracker appStateTracker = getAppStateTracker();
+        if (appStateTracker != null) {
+            return appStateTracker.isAppBackgroundRestricted(uid, packageName);
+        }
+        return false;
     }
 
     void updateAppRestrictedAnyInBackgroundLocked(final int uid, final String packageName) {
@@ -834,8 +851,19 @@ public final class ActiveServices {
             return null;
         }
 
-        return startServiceInnerLocked(r, service, callingUid, callingPid, fgRequired, callerFg,
+        // If what the client try to start/connect was an alias, then we need to return the
+        // alias component name to the client, not the "target" component name, which is
+        // what realResult contains.
+        final ComponentName realResult =
+                startServiceInnerLocked(r, service, callingUid, callingPid, fgRequired, callerFg,
                 allowBackgroundActivityStarts, backgroundActivityStartsToken);
+        if (res.aliasComponent != null
+                && !realResult.getPackageName().startsWith("!")
+                && !realResult.getPackageName().startsWith("?")) {
+            return res.aliasComponent;
+        } else {
+            return realResult;
+        }
     }
 
     private ComponentName startServiceInnerLocked(ServiceRecord r, Intent service,
@@ -2856,7 +2884,7 @@ public final class ActiveServices {
             AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);
             ConnectionRecord c = new ConnectionRecord(b, activity,
                     connection, flags, clientLabel, clientIntent,
-                    callerApp.uid, callerApp.processName, callingPackage);
+                    callerApp.uid, callerApp.processName, callingPackage, res.aliasComponent);
 
             IBinder binder = connection.asBinder();
             s.addConnection(binder, c);
@@ -2957,8 +2985,13 @@ public final class ActiveServices {
             if (s.app != null && b.intent.received) {
                 // Service is already running, so we can immediately
                 // publish the connection.
+
+                // If what the client try to start/connect was an alias, then we need to
+                // pass the alias component name instead to the client.
+                final ComponentName clientSideComponentName =
+                        res.aliasComponent != null ? res.aliasComponent : s.name;
                 try {
-                    c.conn.connected(s.name, b.intent.binder, false);
+                    c.conn.connected(clientSideComponentName, b.intent.binder, false);
                 } catch (Exception e) {
                     Slog.w(TAG, "Failure sending service " + s.shortInstanceName
                             + " to connection " + c.conn.asBinder()
@@ -3029,8 +3062,12 @@ public final class ActiveServices {
                                 continue;
                             }
                             if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Publishing to: " + c);
+                            // If what the client try to start/connect was an alias, then we need to
+                            // pass the alias component name instead to the client.
+                            final ComponentName clientSideComponentName =
+                                    c.aliasComponent != null ? c.aliasComponent : r.name;
                             try {
-                                c.conn.connected(r.name, service, false);
+                                c.conn.connected(clientSideComponentName, service, false);
                             } catch (Exception e) {
                                 Slog.w(TAG, "Failure sending service " + r.shortInstanceName
                                       + " to connection " + c.conn.asBinder()
@@ -3205,9 +3242,22 @@ public final class ActiveServices {
         final ServiceRecord record;
         final String permission;
 
-        ServiceLookupResult(ServiceRecord _record, String _permission) {
+        /**
+         * Set only when we looked up to this service via an alias. Otherwise, it's null.
+         */
+        @Nullable
+        final ComponentName aliasComponent;
+
+        ServiceLookupResult(ServiceRecord _record, ComponentName _aliasComponent) {
             record = _record;
+            permission = null;
+            aliasComponent = _aliasComponent;
+        }
+
+        ServiceLookupResult(String _permission) {
+            record = null;
             permission = _permission;
+            aliasComponent = null;
         }
     }
 
@@ -3239,10 +3289,19 @@ public final class ActiveServices {
                 /* name= */ "service", callingPackage);
 
         ServiceMap smap = getServiceMapLocked(userId);
+
+        // See if the intent refers to an alias. If so, update the intent with the target component
+        // name. `resolution` will contain the alias component name, which we need to return
+        // to the client.
+        final ComponentAliasResolver.Resolution<ComponentName> resolution =
+                mAm.mComponentAliasResolver.resolveService(service, resolvedType,
+                        /* match flags */ 0, userId, callingUid);
+
         final ComponentName comp;
         if (instanceName == null) {
             comp = service.getComponent();
         } else {
+            // This is for isolated services
             final ComponentName realComp = service.getComponent();
             if (realComp == null) {
                 throw new IllegalArgumentException("Can't use custom instance name '" + instanceName
@@ -3251,6 +3310,7 @@ public final class ActiveServices {
             comp = new ComponentName(realComp.getPackageName(),
                     realComp.getClassName() + ":" + instanceName);
         }
+
         if (comp != null) {
             r = smap.mServicesByInstanceName.get(comp);
             if (DEBUG_SERVICE && r != null) Slog.v(TAG_SERVICE, "Retrieved by component: " + r);
@@ -3308,7 +3368,7 @@ public final class ActiveServices {
                     String msg = "association not allowed between packages "
                             + callingPackage + " and " + name.getPackageName();
                     Slog.w(TAG, "Service lookup failed: " + msg);
-                    return new ServiceLookupResult(null, msg);
+                    return new ServiceLookupResult(msg);
                 }
 
                 // Store the defining packageName and uid, as they might be changed in
@@ -3426,11 +3486,11 @@ public final class ActiveServices {
                 String msg = "association not allowed between packages "
                         + callingPackage + " and " + r.packageName;
                 Slog.w(TAG, "Service lookup failed: " + msg);
-                return new ServiceLookupResult(null, msg);
+                return new ServiceLookupResult(msg);
             }
             if (!mAm.mIntentFirewall.checkService(r.name, service, callingUid, callingPid,
                     resolvedType, r.appInfo)) {
-                return new ServiceLookupResult(null, "blocked by firewall");
+                return new ServiceLookupResult("blocked by firewall");
             }
             if (mAm.checkComponentPermission(r.permission,
                     callingPid, callingUid, r.appInfo.uid, r.exported) != PERMISSION_GRANTED) {
@@ -3439,14 +3499,14 @@ public final class ActiveServices {
                             + " from pid=" + callingPid
                             + ", uid=" + callingUid
                             + " that is not exported from uid " + r.appInfo.uid);
-                    return new ServiceLookupResult(null, "not exported from uid "
+                    return new ServiceLookupResult("not exported from uid "
                             + r.appInfo.uid);
                 }
                 Slog.w(TAG, "Permission Denial: Accessing service " + r.shortInstanceName
                         + " from pid=" + callingPid
                         + ", uid=" + callingUid
                         + " requires " + r.permission);
-                return new ServiceLookupResult(null, r.permission);
+                return new ServiceLookupResult(r.permission);
             } else if (Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE.equals(r.permission)
                     && callingUid != Process.SYSTEM_UID) {
                 // Hotword detection must run in its own sandbox, and we don't even trust
@@ -3457,7 +3517,7 @@ public final class ActiveServices {
                         + ", uid=" + callingUid
                         + " requiring permission " + r.permission
                         + " can only be bound to from the system.");
-                return new ServiceLookupResult(null, "can only be bound to "
+                return new ServiceLookupResult("can only be bound to "
                         + "by the system.");
             } else if (r.permission != null && callingPackage != null) {
                 final int opCode = AppOpsManager.permissionToOpCode(r.permission);
@@ -3470,7 +3530,7 @@ public final class ActiveServices {
                     return null;
                 }
             }
-            return new ServiceLookupResult(r, null);
+            return new ServiceLookupResult(r, resolution.getAlias());
         }
         return null;
     }
@@ -4564,6 +4624,8 @@ public final class ActiveServices {
                 // being brought down.  Mark it as dead.
                 cr.serviceDead = true;
                 cr.stopAssociation();
+                final ComponentName clientSideComponentName =
+                        cr.aliasComponent != null ? cr.aliasComponent : r.name;
                 try {
                     cr.conn.connected(r.name, null, true);
                 } catch (Exception e) {
@@ -5344,7 +5406,9 @@ public final class ActiveServices {
             sr.setProcess(null, null, 0, null);
             sr.isolatedProc = null;
             sr.executeNesting = 0;
-            sr.forceClearTracker();
+            synchronized (mAm.mProcessStats.mLock) {
+                sr.forceClearTracker();
+            }
             if (mDestroyingServices.remove(sr)) {
                 if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "killServices remove destroying " + sr);
             }
@@ -5409,7 +5473,7 @@ public final class ActiveServices {
                 psr.updateBoundClientUids();
             }
 
-            // Sanity check: if the service listed for the app is not one
+            // Check: if the service listed for the app is not one
             // we actually are maintaining, just let it drop.
             final ServiceRecord curRec = smap.mServicesByInstanceName.get(sr.instanceName);
             if (curRec != sr) {
@@ -5494,7 +5558,9 @@ public final class ActiveServices {
             i--;
             ServiceRecord sr = mDestroyingServices.get(i);
             if (sr.app == app) {
-                sr.forceClearTracker();
+                synchronized (mAm.mProcessStats.mLock) {
+                    sr.forceClearTracker();
+                }
                 mDestroyingServices.remove(i);
                 if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "killServices remove destroying " + sr);
             }

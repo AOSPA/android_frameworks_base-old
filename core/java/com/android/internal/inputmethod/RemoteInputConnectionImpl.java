@@ -16,12 +16,18 @@
 
 package com.android.internal.inputmethod;
 
+import static com.android.internal.inputmethod.InputConnectionProtoDumper.buildGetCursorCapsModeProto;
+import static com.android.internal.inputmethod.InputConnectionProtoDumper.buildGetExtractedTextProto;
+import static com.android.internal.inputmethod.InputConnectionProtoDumper.buildGetSelectedTextProto;
+import static com.android.internal.inputmethod.InputConnectionProtoDumper.buildGetSurroundingTextProto;
+import static com.android.internal.inputmethod.InputConnectionProtoDumper.buildGetTextAfterCursorProto;
+import static com.android.internal.inputmethod.InputConnectionProtoDumper.buildGetTextBeforeCursorProto;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.RemoteException;
 import android.os.Trace;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
@@ -30,19 +36,18 @@ import android.view.View;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.DumpableInputConnection;
-import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputConnectionInspector;
-import android.view.inputmethod.InputConnectionInspector.MissingMethodFlags;
 import android.view.inputmethod.InputContentInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.view.inputmethod.SurroundingText;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.infra.AndroidFuture;
 import com.android.internal.view.IInputContext;
 
 import java.lang.ref.WeakReference;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Takes care of remote method invocations of {@link InputConnection} in the IME client side.
@@ -138,10 +143,10 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
                 if (ic == null) {
                     return;
                 }
-                @MissingMethodFlags
-                final int missingMethods = InputConnectionInspector.getMissingMethodFlags(ic);
-                if ((missingMethods & MissingMethodFlags.CLOSE_CONNECTION) == 0) {
+                try {
                     ic.closeConnection();
+                } catch (AbstractMethodError ignored) {
+                    // TODO(b/199934664): See if we can remove this by providing a default impl.
                 }
             } finally {
                 synchronized (mLock) {
@@ -220,566 +225,388 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
     }
 
     @Override
-    public void getTextAfterCursor(int length, int flags, ICharSequenceResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#getTextAfterCursor");
-            try {
-                final InputConnection ic = getInputConnection();
-                final CharSequence result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "getTextAfterCursor on inactive InputConnection");
-                    result = null;
-                } else {
-                    result = ic.getTextAfterCursor(length, flags);
-                }
-                if (ImeTracing.getInstance().isEnabled()) {
-                    final byte[] icProto = InputConnectionProtoDumper.buildGetTextAfterCursorProto(
-                            length, flags, result);
-                    ImeTracing.getInstance().triggerClientDump(
-                            TAG + "#getTextAfterCursor", mParentInputMethodManager, icProto);
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to getTextAfterCursor()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+    public void getTextAfterCursor(int length, int flags,
+            AndroidFuture future /* T=CharSequence */) {
+        dispatchWithTracing("getTextAfterCursor", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "getTextAfterCursor on inactive InputConnection");
+                return null;
             }
-        });
+            if (length < 0) {
+                Log.i(TAG, "Returning null to getTextAfterCursor due to an invalid length="
+                        + length);
+                return null;
+            }
+            return ic.getTextAfterCursor(length, flags);
+        }, useImeTracing() ? result -> buildGetTextAfterCursorProto(length, flags, result) : null);
     }
 
     @Override
-    public void getTextBeforeCursor(int length, int flags, ICharSequenceResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#getTextBeforeCursor");
-            try {
-                final InputConnection ic = getInputConnection();
-                final CharSequence result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "getTextBeforeCursor on inactive InputConnection");
-                    result = null;
-                } else {
-                    result = ic.getTextBeforeCursor(length, flags);
-                }
-                if (ImeTracing.getInstance().isEnabled()) {
-                    final byte[] icProto = InputConnectionProtoDumper.buildGetTextBeforeCursorProto(
-                            length, flags, result);
-                    ImeTracing.getInstance().triggerClientDump(
-                            TAG + "#getTextBeforeCursor", mParentInputMethodManager, icProto);
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to getTextBeforeCursor()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+    public void getTextBeforeCursor(int length, int flags,
+            AndroidFuture future /* T=CharSequence */) {
+        dispatchWithTracing("getTextBeforeCursor", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "getTextBeforeCursor on inactive InputConnection");
+                return null;
             }
-        });
+            if (length < 0) {
+                Log.i(TAG, "Returning null to getTextBeforeCursor due to an invalid length="
+                        + length);
+                return null;
+            }
+            return ic.getTextBeforeCursor(length, flags);
+        }, useImeTracing() ? result -> buildGetTextBeforeCursorProto(length, flags, result) : null);
     }
 
     @Override
-    public void getSelectedText(int flags, ICharSequenceResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#getSelectedText");
-            try {
-                final InputConnection ic = getInputConnection();
-                final CharSequence result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "getSelectedText on inactive InputConnection");
-                    result = null;
-                } else {
-                    result = ic.getSelectedText(flags);
-                }
-                if (ImeTracing.getInstance().isEnabled()) {
-                    final byte[] icProto = InputConnectionProtoDumper.buildGetSelectedTextProto(
-                            flags, result);
-                    ImeTracing.getInstance().triggerClientDump(
-                            TAG + "#getSelectedText", mParentInputMethodManager, icProto);
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to getSelectedText()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+    public void getSelectedText(int flags, AndroidFuture future /* T=CharSequence */) {
+        dispatchWithTracing("getSelectedText", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "getSelectedText on inactive InputConnection");
+                return null;
             }
-        });
+            try {
+                return ic.getSelectedText(flags);
+            } catch (AbstractMethodError ignored) {
+                // TODO(b/199934664): See if we can remove this by providing a default impl.
+                return null;
+            }
+        }, useImeTracing() ? result -> buildGetSelectedTextProto(flags, result) : null);
     }
 
     @Override
     public void getSurroundingText(int beforeLength, int afterLength, int flags,
-            ISurroundingTextResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#getSurroundingText");
-            try {
-                final InputConnection ic = getInputConnection();
-                final SurroundingText result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "getSurroundingText on inactive InputConnection");
-                    result = null;
-                } else {
-                    result = ic.getSurroundingText(beforeLength, afterLength, flags);
-                }
-                if (ImeTracing.getInstance().isEnabled()) {
-                    final byte[] icProto = InputConnectionProtoDumper.buildGetSurroundingTextProto(
-                            beforeLength, afterLength, flags, result);
-                    ImeTracing.getInstance().triggerClientDump(
-                            TAG + "#getSurroundingText", mParentInputMethodManager, icProto);
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to getSurroundingText()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+            AndroidFuture future /* T=SurroundingText */) {
+        dispatchWithTracing("getSurroundingText", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "getSurroundingText on inactive InputConnection");
+                return null;
             }
-        });
+            if (beforeLength < 0) {
+                Log.i(TAG, "Returning null to getSurroundingText due to an invalid"
+                        + " beforeLength=" + beforeLength);
+                return null;
+            }
+            if (afterLength < 0) {
+                Log.i(TAG, "Returning null to getSurroundingText due to an invalid"
+                        + " afterLength=" + afterLength);
+                return null;
+            }
+            return ic.getSurroundingText(beforeLength, afterLength, flags);
+        }, useImeTracing() ? result -> buildGetSurroundingTextProto(
+                beforeLength, afterLength, flags, result) : null);
     }
 
     @Override
-    public void getCursorCapsMode(int reqModes, IIntResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#getCursorCapsMode");
-            try {
-                final InputConnection ic = getInputConnection();
-                final int result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "getCursorCapsMode on inactive InputConnection");
-                    result = 0;
-                } else {
-                    result = ic.getCursorCapsMode(reqModes);
-                }
-                if (ImeTracing.getInstance().isEnabled()) {
-                    final byte[] icProto = InputConnectionProtoDumper.buildGetCursorCapsModeProto(
-                            reqModes, result);
-                    ImeTracing.getInstance().triggerClientDump(
-                            TAG + "#getCursorCapsMode", mParentInputMethodManager, icProto);
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to getCursorCapsMode()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+    public void getCursorCapsMode(int reqModes, AndroidFuture future /* T=Integer */) {
+        dispatchWithTracing("getCursorCapsMode", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "getCursorCapsMode on inactive InputConnection");
+                return 0;
             }
-        });
+            return ic.getCursorCapsMode(reqModes);
+        }, useImeTracing() ? result -> buildGetCursorCapsModeProto(reqModes, result) : null);
     }
 
     @Override
     public void getExtractedText(ExtractedTextRequest request, int flags,
-            IExtractedTextResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#getExtractedText");
-            try {
-                final InputConnection ic = getInputConnection();
-                final ExtractedText result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "getExtractedText on inactive InputConnection");
-                    result = null;
-                } else {
-                    result = ic.getExtractedText(request, flags);
-                }
-                if (ImeTracing.getInstance().isEnabled()) {
-                    final byte[] icProto = InputConnectionProtoDumper.buildGetExtractedTextProto(
-                            request, flags, result);
-                    ImeTracing.getInstance().triggerClientDump(
-                            TAG + "#getExtractedText", mParentInputMethodManager, icProto);
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to getExtractedText()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+            AndroidFuture future /* T=ExtractedText */) {
+        dispatchWithTracing("getExtractedText", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "getExtractedText on inactive InputConnection");
+                return null;
             }
-        });
+            return ic.getExtractedText(request, flags);
+        }, useImeTracing() ? result -> buildGetExtractedTextProto(request, flags, result) : null);
     }
 
     @Override
     public void commitText(CharSequence text, int newCursorPosition) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#commitText");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "commitText on inactive InputConnection");
-                    return;
-                }
-                ic.commitText(text, newCursorPosition);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("commitText", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "commitText on inactive InputConnection");
+                return;
             }
+            ic.commitText(text, newCursorPosition);
         });
     }
 
     @Override
     public void commitCompletion(CompletionInfo text) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#commitCompletion");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "commitCompletion on inactive InputConnection");
-                    return;
-                }
-                ic.commitCompletion(text);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("commitCompletion", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "commitCompletion on inactive InputConnection");
+                return;
             }
+            ic.commitCompletion(text);
         });
     }
 
     @Override
     public void commitCorrection(CorrectionInfo info) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#commitCorrection");
+        dispatchWithTracing("commitCorrection", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "commitCorrection on inactive InputConnection");
+                return;
+            }
             try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "commitCorrection on inactive InputConnection");
-                    return;
-                }
                 ic.commitCorrection(info);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+            } catch (AbstractMethodError ignored) {
+                // TODO(b/199934664): See if we can remove this by providing a default impl.
             }
         });
     }
 
     @Override
     public void setSelection(int start, int end) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#setSelection");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "setSelection on inactive InputConnection");
-                    return;
-                }
-                ic.setSelection(start, end);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("setSelection", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "setSelection on inactive InputConnection");
+                return;
             }
+            ic.setSelection(start, end);
         });
     }
 
     @Override
     public void performEditorAction(int id) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#performEditorAction");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "performEditorAction on inactive InputConnection");
-                    return;
-                }
-                ic.performEditorAction(id);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("performEditorAction", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "performEditorAction on inactive InputConnection");
+                return;
             }
+            ic.performEditorAction(id);
         });
     }
 
     @Override
     public void performContextMenuAction(int id) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#performContextMenuAction");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "performContextMenuAction on inactive InputConnection");
-                    return;
-                }
-                ic.performContextMenuAction(id);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("performContextMenuAction", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "performContextMenuAction on inactive InputConnection");
+                return;
             }
+            ic.performContextMenuAction(id);
         });
     }
 
     @Override
     public void setComposingRegion(int start, int end) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#setComposingRegion");
+        dispatchWithTracing("setComposingRegion", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "setComposingRegion on inactive InputConnection");
+                return;
+            }
             try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "setComposingRegion on inactive InputConnection");
-                    return;
-                }
                 ic.setComposingRegion(start, end);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+            } catch (AbstractMethodError ignored) {
+                // TODO(b/199934664): See if we can remove this by providing a default impl.
             }
         });
     }
 
     @Override
     public void setComposingText(CharSequence text, int newCursorPosition) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#setComposingText");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "setComposingText on inactive InputConnection");
-                    return;
-                }
-                ic.setComposingText(text, newCursorPosition);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("setComposingText", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "setComposingText on inactive InputConnection");
+                return;
             }
+            ic.setComposingText(text, newCursorPosition);
         });
     }
 
     @Override
     public void finishComposingText() {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#finishComposingText");
-            try {
-                if (isFinished()) {
-                    // In this case, #finishComposingText() is guaranteed to be called already.
-                    // There should be no negative impact if we ignore this call silently.
-                    if (DEBUG) {
-                        Log.w(TAG, "Bug 35301295: Redundant finishComposingText.");
-                    }
-                    return;
+        dispatchWithTracing("finishComposingText", () -> {
+            if (isFinished()) {
+                // In this case, #finishComposingText() is guaranteed to be called already.
+                // There should be no negative impact if we ignore this call silently.
+                if (DEBUG) {
+                    Log.w(TAG, "Bug 35301295: Redundant finishComposingText.");
                 }
-                InputConnection ic = getInputConnection();
-                // Note we do NOT check isActive() here, because this is safe
-                // for an IME to call at any time, and we need to allow it
-                // through to clean up our state after the IME has switched to
-                // another client.
-                if (ic == null) {
-                    Log.w(TAG, "finishComposingText on inactive InputConnection");
-                    return;
-                }
-                ic.finishComposingText();
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+                return;
             }
+            InputConnection ic = getInputConnection();
+            // Note we do NOT check isActive() here, because this is safe
+            // for an IME to call at any time, and we need to allow it
+            // through to clean up our state after the IME has switched to
+            // another client.
+            if (ic == null) {
+                Log.w(TAG, "finishComposingText on inactive InputConnection");
+                return;
+            }
+            ic.finishComposingText();
         });
     }
 
     @Override
     public void sendKeyEvent(KeyEvent event) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#sendKeyEvent");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "sendKeyEvent on inactive InputConnection");
-                    return;
-                }
-                ic.sendKeyEvent(event);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("sendKeyEvent", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "sendKeyEvent on inactive InputConnection");
+                return;
             }
+            ic.sendKeyEvent(event);
         });
     }
 
     @Override
     public void clearMetaKeyStates(int states) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#clearMetaKeyStates");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "clearMetaKeyStates on inactive InputConnection");
-                    return;
-                }
-                ic.clearMetaKeyStates(states);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("clearMetaKeyStates", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "clearMetaKeyStates on inactive InputConnection");
+                return;
             }
+            ic.clearMetaKeyStates(states);
         });
     }
 
     @Override
     public void deleteSurroundingText(int beforeLength, int afterLength) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#deleteSurroundingText");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "deleteSurroundingText on inactive InputConnection");
-                    return;
-                }
-                ic.deleteSurroundingText(beforeLength, afterLength);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("deleteSurroundingText", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "deleteSurroundingText on inactive InputConnection");
+                return;
             }
+            ic.deleteSurroundingText(beforeLength, afterLength);
         });
     }
 
     @Override
     public void deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT,
-                    "InputConnection#deleteSurroundingTextInCodePoints");
+        dispatchWithTracing("deleteSurroundingTextInCodePoints", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "deleteSurroundingTextInCodePoints on inactive InputConnection");
+                return;
+            }
             try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "deleteSurroundingTextInCodePoints on inactive InputConnection");
-                    return;
-                }
                 ic.deleteSurroundingTextInCodePoints(beforeLength, afterLength);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+            } catch (AbstractMethodError ignored) {
+                // TODO(b/199934664): See if we can remove this by providing a default impl.
             }
         });
     }
 
     @Override
     public void beginBatchEdit() {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#beginBatchEdit");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "beginBatchEdit on inactive InputConnection");
-                    return;
-                }
-                ic.beginBatchEdit();
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("beginBatchEdit", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "beginBatchEdit on inactive InputConnection");
+                return;
             }
+            ic.beginBatchEdit();
         });
     }
 
     @Override
     public void endBatchEdit() {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#endBatchEdit");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "endBatchEdit on inactive InputConnection");
-                    return;
-                }
-                ic.endBatchEdit();
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("endBatchEdit", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "endBatchEdit on inactive InputConnection");
+                return;
             }
+            ic.endBatchEdit();
         });
     }
 
     @Override
     public void performSpellCheck() {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#performSpellCheck");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "performSpellCheck on inactive InputConnection");
-                    return;
-                }
-                ic.performSpellCheck();
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("performSpellCheck", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "performSpellCheck on inactive InputConnection");
+                return;
             }
+            ic.performSpellCheck();
         });
     }
 
     @Override
     public void performPrivateCommand(String action, Bundle data) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#performPrivateCommand");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "performPrivateCommand on inactive InputConnection");
-                    return;
-                }
-                ic.performPrivateCommand(action, data);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("performPrivateCommand", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "performPrivateCommand on inactive InputConnection");
+                return;
             }
+            ic.performPrivateCommand(action, data);
         });
     }
 
     @Override
-    public void requestCursorUpdates(int cursorUpdateMode, IBooleanResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#requestCursorUpdates");
+    public void requestCursorUpdates(int cursorUpdateMode, int imeDisplayId,
+            AndroidFuture future /* T=Boolean */) {
+        dispatchWithTracing("requestCursorUpdates", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "requestCursorAnchorInfo on inactive InputConnection");
+                return false;
+            }
+            if (mParentInputMethodManager.getDisplayId() != imeDisplayId) {
+                // requestCursorUpdates() is not currently supported across displays.
+                return false;
+            }
             try {
-                final InputConnection ic = getInputConnection();
-                final boolean result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "requestCursorAnchorInfo on inactive InputConnection");
-                    result = false;
-                } else {
-                    result = ic.requestCursorUpdates(cursorUpdateMode);
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to requestCursorUpdates()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+                return ic.requestCursorUpdates(cursorUpdateMode);
+            } catch (AbstractMethodError ignored) {
+                // TODO(b/199934664): See if we can remove this by providing a default impl.
+                return false;
             }
         });
     }
 
     @Override
     public void commitContent(InputContentInfo inputContentInfo, int flags, Bundle opts,
-            IBooleanResultCallback callback) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#commitContent");
+            AndroidFuture future /* T=Boolean */) {
+        dispatchWithTracing("commitContent", future, () -> {
+            final InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "commitContent on inactive InputConnection");
+                return false;
+            }
+            if (inputContentInfo == null || !inputContentInfo.validate()) {
+                Log.w(TAG, "commitContent with invalid inputContentInfo=" + inputContentInfo);
+                return false;
+            }
             try {
-                final InputConnection ic = getInputConnection();
-                final boolean result;
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "commitContent on inactive InputConnection");
-                    result = false;
-                } else {
-                    if (inputContentInfo == null || !inputContentInfo.validate()) {
-                        Log.w(TAG, "commitContent with invalid inputContentInfo="
-                                + inputContentInfo);
-                        result = false;
-                    } else {
-                        result = ic.commitContent(inputContentInfo, flags, opts);
-                    }
-                }
-                try {
-                    callback.onResult(result);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to return the result to commitContent()."
-                            + " result=" + result, e);
-                }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+                return ic.commitContent(inputContentInfo, flags, opts);
+            } catch (AbstractMethodError ignored) {
+                // TODO(b/199934664): See if we can remove this by providing a default impl.
+                return false;
             }
         });
     }
 
     @Override
     public void setImeConsumesInput(boolean imeConsumesInput) {
-        dispatch(() -> {
-            Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#setImeConsumesInput");
-            try {
-                InputConnection ic = getInputConnection();
-                if (ic == null || !isActive()) {
-                    Log.w(TAG, "setImeConsumesInput on inactive InputConnection");
-                    return;
-                }
-                ic.setImeConsumesInput(imeConsumesInput);
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+        dispatchWithTracing("setImeConsumesInput", () -> {
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "setImeConsumesInput on inactive InputConnection");
+                return;
             }
+            ic.setImeConsumesInput(imeConsumesInput);
         });
     }
 
@@ -792,5 +619,54 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
         }
 
         mH.post(runnable);
+    }
+
+    private void dispatchWithTracing(@NonNull String methodName, @NonNull Runnable runnable) {
+        final Runnable actualRunnable;
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_INPUT)) {
+            actualRunnable = () -> {
+                Trace.traceBegin(Trace.TRACE_TAG_INPUT, "InputConnection#" + methodName);
+                try {
+                    runnable.run();
+                } finally {
+                    Trace.traceEnd(Trace.TRACE_TAG_INPUT);
+                }
+            };
+        } else {
+            actualRunnable = runnable;
+        }
+
+        dispatch(actualRunnable);
+    }
+
+    private <T> void dispatchWithTracing(@NonNull String methodName,
+            @NonNull AndroidFuture untypedFuture, @NonNull Supplier<T> supplier) {
+        dispatchWithTracing(methodName, untypedFuture, supplier, null /* dumpProtoProvider */);
+    }
+
+    private <T> void dispatchWithTracing(@NonNull String methodName,
+            @NonNull AndroidFuture untypedFuture, @NonNull Supplier<T> supplier,
+            @Nullable Function<T, byte[]> dumpProtoProvider) {
+        @SuppressWarnings("unchecked")
+        final AndroidFuture<T> future = untypedFuture;
+        dispatchWithTracing(methodName, () -> {
+            final T result;
+            try {
+                result = supplier.get();
+            } catch (Throwable throwable) {
+                future.completeExceptionally(throwable);
+                throw throwable;
+            }
+            future.complete(result);
+            if (dumpProtoProvider != null) {
+                final byte[] icProto = dumpProtoProvider.apply(result);
+                ImeTracing.getInstance().triggerClientDump(
+                        TAG + "#" + methodName, mParentInputMethodManager, icProto);
+            }
+        });
+    }
+
+    private static boolean useImeTracing() {
+        return ImeTracing.getInstance().isEnabled();
     }
 }

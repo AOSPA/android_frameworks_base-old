@@ -62,7 +62,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageUserState;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
@@ -80,6 +79,7 @@ import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.parsing.result.ParseInput;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
+import android.content.pm.pkg.PackageUserState;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
@@ -2130,7 +2130,7 @@ public class ApplicationPackageManager extends PackageManager {
             return null;
         }
         return PackageInfoWithoutStateUtils.generate(result.getResult(), null, flags, 0, 0, null,
-                new PackageUserState(), UserHandle.getCallingUserId());
+                PackageUserState.DEFAULT, UserHandle.getCallingUserId());
     }
 
     @Override
@@ -2801,6 +2801,15 @@ public class ApplicationPackageManager extends PackageManager {
                                            int newState, int flags) {
         try {
             mPM.setComponentEnabledSetting(componentName, newState, flags, getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public void setComponentEnabledSettings(List<ComponentEnabledSetting> settings) {
+        try {
+            mPM.setComponentEnabledSettings(settings, getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3564,6 +3573,21 @@ public class ApplicationPackageManager extends PackageManager {
             return parceledList.getList();
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public boolean canPackageQuery(@NonNull String sourcePackageName,
+            @NonNull String targetPackageName) throws NameNotFoundException {
+        Objects.requireNonNull(sourcePackageName);
+        Objects.requireNonNull(targetPackageName);
+        try {
+            return mPM.canPackageQuery(sourcePackageName, targetPackageName, getUserId());
+        } catch (ParcelableException e) {
+            e.maybeRethrow(PackageManager.NameNotFoundException.class);
+            throw new RuntimeException(e);
+        } catch (RemoteException re) {
+            throw re.rethrowAsRuntimeException();
         }
     }
 }

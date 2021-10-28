@@ -77,6 +77,7 @@
     <string name="compat_mode_on" msgid="4963711187149440884">"Zoom for å fylle skjermen"</string>
     <string name="compat_mode_off" msgid="7682459748279487945">"Strekk for å fylle skjerm"</string>
     <string name="global_action_screenshot" msgid="2760267567509131654">"Skjermdump"</string>
+    <string name="global_action_smart_lock_disabled" msgid="9097102067802412936">"Smart Lock er slått av"</string>
     <string name="remote_input_image_insertion_text" msgid="4850791636452521123">"har sendt et bilde"</string>
     <string name="screenshot_saving_ticker" msgid="6519186952674544916">"Lagrer skjermdumpen …"</string>
     <string name="screenshot_saving_title" msgid="2298349784913287333">"Lagrer skjermdumpen …"</string>
@@ -434,7 +435,7 @@
     <string name="sensor_privacy_start_use_mic_dialog_content" msgid="1624701280680913717">"Dette opphever blokkeringen av tilgang for alle apper og tjenester som har tillatelse til å bruke mikrofonen."</string>
     <string name="sensor_privacy_start_use_camera_dialog_content" msgid="4704948062372435963">"Dette opphever blokkeringen av tilgang for alle apper og tjenester som har tillatelse til å bruke kameraet."</string>
     <string name="sensor_privacy_start_use_mic_camera_dialog_content" msgid="3577642558418404919">"Dette opphever blokkeringen av tilgang for alle apper og tjenester som har tillatelse til å bruke kameraet eller mikrofonen."</string>
-    <string name="media_seamless_remote_device" msgid="177033467332920464">"Enhet"</string>
+    <string name="media_seamless_other_device" msgid="4654849800789196737">"Annen enhet"</string>
     <string name="quick_step_accessibility_toggle_overview" msgid="7908949976727578403">"Slå oversikten av eller på"</string>
     <string name="expanded_header_battery_charged" msgid="5307907517976548448">"Oppladet"</string>
     <string name="expanded_header_battery_charging" msgid="1717522253171025549">"Lader"</string>
@@ -1161,11 +1162,10 @@
     <string name="keyguard_try_fingerprint" msgid="2825130772993061165">"Bruk fingeravtrykk for å åpne"</string>
     <string name="accessibility_fingerprint_bouncer" msgid="7189102492498735519">"Autentisering kreves. Trykk på fingeravtrykkssensoren for å autentisere."</string>
     <string name="ongoing_phone_call_content_description" msgid="5332334388483099947">"Pågående telefonsamtale"</string>
-    <string name="airplane_mode" msgid="2536350001462130668">"Flymodus"</string>
     <string name="mobile_data_settings_title" msgid="3955246641380064901">"Mobildata"</string>
     <string name="preference_summary_default_combination" msgid="8453246369903749670">"<xliff:g id="STATE">%1$s</xliff:g>/<xliff:g id="NETWORKMODE">%2$s</xliff:g>"</string>
     <string name="mobile_data_connection_active" msgid="944490013299018227">"Tilkoblet"</string>
-    <string name="mobile_data_off_summary" msgid="5621158216585822679">"Internett kobles ikke til automatisk"</string>
+    <string name="mobile_data_off_summary" msgid="3663995422004150567">"Mobildata kobler ikke til automatisk"</string>
     <string name="mobile_data_no_connection" msgid="1713872434869947377">"Ingen tilkobling"</string>
     <string name="non_carrier_network_unavailable" msgid="770049357024492372">"Ingen andre nettverk er tilgjengelige"</string>
     <string name="all_network_unavailable" msgid="4112774339909373349">"Ingen nettverk er tilgjengelige"</string>
@@ -1175,5 +1175,11 @@
     <string name="unlock_to_view_networks" msgid="5072880496312015676">"Lås opp for å se nettverk"</string>
     <string name="wifi_empty_list_wifi_on" msgid="3864376632067585377">"Søker etter nettverk …"</string>
     <string name="wifi_failed_connect_message" msgid="4161863112079000071">"Kunne ikke koble til nettverket"</string>
+    <string name="wifi_wont_autoconnect_for_now" msgid="5782282612749867762">"Wi-Fi kobles ikke til automatisk inntil videre"</string>
     <string name="see_all_networks" msgid="3773666844913168122">"Se alle"</string>
+    <string name="to_switch_networks_disconnect_ethernet" msgid="6698111101156951955">"For å bytte nettverk, koble fra Ethernet"</string>
+    <string name="qs_tile_request_dialog_text" msgid="3501359944139877694">"<xliff:g id="APPNAME">%1$s</xliff:g> vil legge til denne brikken i Hurtiginnstillinger"</string>
+    <string name="qs_tile_request_dialog_add" msgid="4888460910694986304">"Legg til brikke"</string>
+    <string name="qs_tile_request_dialog_not_add" msgid="4168716573114067296">"Ikke legg til brikke"</string>
+    <string name="qs_user_switch_dialog_title" msgid="3045189293587781366">"Velg bruker"</string>
 </resources>

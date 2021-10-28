@@ -56,11 +56,11 @@ import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.SignalTileView;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
+import com.android.systemui.statusbar.connectivity.NetworkController;
+import com.android.systemui.statusbar.connectivity.NetworkController.IconState;
+import com.android.systemui.statusbar.connectivity.NetworkController.MobileDataIndicators;
+import com.android.systemui.statusbar.connectivity.NetworkController.SignalCallback;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
-import com.android.systemui.statusbar.policy.NetworkController;
-import com.android.systemui.statusbar.policy.NetworkController.IconState;
-import com.android.systemui.statusbar.policy.NetworkController.MobileDataIndicators;
-import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 
 import javax.inject.Inject;
 
@@ -275,7 +275,7 @@ public class CellularTile extends QSTileImpl<SignalState> {
                 return;
             }
             mInfo.dataSubscriptionName = mController.getMobileDataNetworkName();
-            mInfo.dataContentDescription = indicators.description != null
+            mInfo.dataContentDescription = indicators.qsDescription != null
                     ? indicators.typeContentDescriptionHtml : null;
             mInfo.activityIn = indicators.activityIn;
             mInfo.activityOut = indicators.activityOut;

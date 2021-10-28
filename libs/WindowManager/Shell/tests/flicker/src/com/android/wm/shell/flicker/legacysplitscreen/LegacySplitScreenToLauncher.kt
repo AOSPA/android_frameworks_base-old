@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.legacysplitscreen
 
-import android.content.ComponentName
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
@@ -39,7 +38,7 @@ import com.android.server.wm.flicker.navBarWindowIsVisible
 import com.android.server.wm.flicker.statusBarLayerIsVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsVisible
-import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
+import com.android.server.wm.traces.common.FlickerComponentName
 import com.android.wm.shell.flicker.dockedStackDividerBecomesInvisible
 import com.android.wm.shell.flicker.helpers.SimpleAppHelper
 import org.junit.FixMethodOrder
@@ -86,9 +85,9 @@ class LegacySplitScreenToLauncher(
             }
         }
 
-    override val ignoredWindows: List<ComponentName>
-        get() = listOf(LAUNCHER_COMPONENT, WindowManagerStateHelper.SPLASH_SCREEN_COMPONENT,
-            WindowManagerStateHelper.SNAPSHOT_COMPONENT)
+    override val ignoredWindows: List<FlickerComponentName>
+        get() = listOf(LAUNCHER_COMPONENT, FlickerComponentName.SPLASH_SCREEN,
+            FlickerComponentName.SNAPSHOT)
 
     @Presubmit
     @Test
@@ -104,17 +103,15 @@ class LegacySplitScreenToLauncher(
 
     @Presubmit
     @Test
-    fun entireScreenCovered() = testSpec.entireScreenCovered(testSpec.config.endRotation)
+    fun entireScreenCovered() = testSpec.entireScreenCovered()
 
     @Presubmit
     @Test
-    fun navBarLayerRotatesAndScales() =
-        testSpec.navBarLayerRotatesAndScales(testSpec.config.endRotation)
+    fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
     @Presubmit
     @Test
-    fun statusBarLayerRotatesScales() =
-        testSpec.statusBarLayerRotatesScales(testSpec.config.endRotation)
+    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
     @Presubmit
     @Test

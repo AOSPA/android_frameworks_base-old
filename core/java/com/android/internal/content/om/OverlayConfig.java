@@ -23,6 +23,7 @@ import android.content.pm.parsing.ParsingPackageRead;
 import android.os.Build;
 import android.os.Trace;
 import android.util.ArrayMap;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -32,9 +33,12 @@ import com.android.internal.content.om.OverlayScanner.ParsedOverlayInfo;
 import com.android.internal.util.Preconditions;
 
 import java.io.File;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
@@ -116,14 +120,16 @@ public class OverlayConfig {
         }
 
         boolean foundConfigFile = false;
-        ArrayList<ParsedOverlayInfo> packageManagerOverlayInfos = null;
+        final Map<String, ParsedOverlayInfo> packageManagerOverlayInfos =
+                packageProvider == null ? null : getOverlayPackageInfos(packageProvider);
 
         final ArrayList<ParsedConfiguration> overlays = new ArrayList<>();
         for (int i = 0, n = partitions.size(); i < n; i++) {
             final OverlayPartition partition = partitions.get(i);
             final OverlayScanner scanner = (scannerFactory == null) ? null : scannerFactory.get();
             final ArrayList<ParsedConfiguration> partitionOverlays =
-                    OverlayConfigParser.getConfigurations(partition, scanner);
+                    OverlayConfigParser.getConfigurations(partition, scanner,
+                            packageManagerOverlayInfos);
             if (partitionOverlays != null) {
                 foundConfigFile = true;
                 overlays.addAll(partitionOverlays);
@@ -138,12 +144,8 @@ public class OverlayConfig {
             if (scannerFactory != null) {
                 partitionOverlayInfos = new ArrayList<>(scanner.getAllParsedInfos());
             } else {
-                if (packageManagerOverlayInfos == null) {
-                    packageManagerOverlayInfos = getOverlayPackageInfos(packageProvider);
-                }
-
                 // Filter out overlays not present in the partition.
-                partitionOverlayInfos = new ArrayList<>(packageManagerOverlayInfos);
+                partitionOverlayInfos = new ArrayList<>(packageManagerOverlayInfos.values());
                 for (int j = partitionOverlayInfos.size() - 1; j >= 0; j--) {
                     if (!partition.containsFile(partitionOverlayInfos.get(j).path)) {
                         partitionOverlayInfos.remove(j);
@@ -289,14 +291,14 @@ public class OverlayConfig {
     }
 
     @NonNull
-    private static ArrayList<ParsedOverlayInfo> getOverlayPackageInfos(
+    private static Map<String, ParsedOverlayInfo> getOverlayPackageInfos(
             @NonNull PackageProvider packageManager) {
-        final ArrayList<ParsedOverlayInfo> overlays = new ArrayList<>();
+        final HashMap<String, ParsedOverlayInfo> overlays = new HashMap<>();
         packageManager.forEachPackage((ParsingPackageRead p, Boolean isSystem) -> {
             if (p.getOverlayTarget() != null && isSystem) {
-                overlays.add(new ParsedOverlayInfo(p.getPackageName(), p.getOverlayTarget(),
-                        p.getTargetSdkVersion(), p.isOverlayIsStatic(), p.getOverlayPriority(),
-                        new File(p.getBaseApkPath())));
+                overlays.put(p.getPackageName(), new ParsedOverlayInfo(p.getPackageName(),
+                        p.getOverlayTarget(), p.getTargetSdkVersion(), p.isOverlayIsStatic(),
+                        p.getOverlayPriority(), new File(p.getBaseApkPath())));
             }
         });
         return overlays;
@@ -395,6 +397,25 @@ public class OverlayConfig {
         }
 
         return idmapPaths.toArray(new String[0]);
+    }
+
+    /** Dump all overlay configurations to the Printer. */
+    public void dump(@NonNull PrintWriter writer) {
+        final IndentingPrintWriter ipw = new IndentingPrintWriter(writer);
+        ipw.println("Overlay configurations:");
+        ipw.increaseIndent();
+
+        final ArrayList<Configuration> configurations = new ArrayList<>(mConfigurations.values());
+        configurations.sort(Comparator.comparingInt(o -> o.configIndex));
+        for (int i = 0; i < configurations.size(); i++) {
+            final Configuration configuration = configurations.get(i);
+            ipw.print(configuration.configIndex);
+            ipw.print(", ");
+            ipw.print(configuration.parsedConfig);
+            ipw.println();
+        }
+        ipw.decreaseIndent();
+        ipw.println();
     }
 
     /**

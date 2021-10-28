@@ -331,9 +331,6 @@
     <style name="Animation.ShutdownUi" parent="@android:style/Animation.Toast">
     </style>
 
-    <style name="Animation.MediaOutputDialog" parent="@android:style/Animation.InputMethod">
-    </style>
-
     <!-- Standard animations for hiding and showing the status bar. -->
     <style name="Animation.StatusBar">
     </style>
@@ -416,7 +413,9 @@
     </style>
 
     <!-- Overridden by values-television/styles.xml with tv-specific settings -->
-    <style name="volume_dialog_theme" parent="Theme.SystemUI"/>
+    <style name="volume_dialog_theme" parent="Theme.SystemUI">
+        <item name="android:windowIsFloating">true</item>
+    </style>
 
     <style name="Theme.SystemUI.Dialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog" />
 
@@ -432,10 +431,6 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
-    </style>
-
-    <style name="Theme.SystemUI.Dialog.MediaOutput">
-        <item name="android:windowBackground">@drawable/media_output_dialog_background</item>
     </style>
 
     <style name="QSBorderlessButton">
@@ -727,6 +722,16 @@
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>
 
+    <!-- TileService request dialog -->
+    <style name="TileRequestDialog" parent="Theme.SystemUI.QuickSettings.Dialog">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@drawable/qs_dialog_bg</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+
     <!-- USB Contaminant dialog -->
     <style name ="USBContaminant" />
 
@@ -934,6 +939,39 @@
         <item name="actionDividerHeight">32dp</item>
     </style>
 
+    <style name="Theme.SystemUI.Dialog.QSDialog">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+        <item name="android:dialogCornerRadius">28dp</item>
+        <item name="android:buttonCornerRadius">28dp</item>
+        <item name="android:colorBackground">@color/prv_color_surface</item>
+    </style>
+
+    <style name="TextAppearance.QSDialog.Title" parent="Theme.SystemUI.Dialog.QSDialog">
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:lineHeight">32sp</item>
+    </style>
+
+    <style name="Widget.QSDialog.Button" parent = "Theme.SystemUI.Dialog.QSDialog">
+        <item name="android:background">@drawable/qs_dialog_btn_filled</item>
+        <item name="android:textColor">@color/prv_text_color_on_accent</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineHeight">20sp</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="Widget.QSDialog.Button.BorderButton">
+        <item name="android:background">@drawable/qs_dialog_btn_outline</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+    </style>
+
     <style name="Theme.SystemUI.Dialog.Internet">
         <item name="android:windowBackground">@drawable/internet_dialog_background</item>
     </style>
@@ -950,5 +988,61 @@
         <item name="android:minHeight">4dp</item>
         <item name="android:maxHeight">4dp</item>
     </style>
+
+    <!-- Internet Dialog -->
+    <style name="InternetDialog">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">center_vertical|start</item>
+        <item name="android:layout_marginStart">@dimen/internet_dialog_network_layout_margin</item>
+    </style>
+
+    <style name="InternetDialog.Network">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">88dp</item>
+        <item name="android:layout_marginEnd">@dimen/internet_dialog_network_layout_margin</item>
+        <item name="android:paddingStart">22dp</item>
+        <item name="android:paddingEnd">22dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+    </style>
+
+    <style name="InternetDialog.NetworkTitle">
+        <item name="android:layout_marginEnd">7dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textAppearance">@style/TextAppearance.InternetDialog</item>
+    </style>
+
+    <style name="InternetDialog.NetworkTitle.Active">
+        <item name="android:textAppearance">@style/TextAppearance.InternetDialog.Active</item>
+    </style>
+
+    <style name="InternetDialog.NetworkSummary">
+        <item name="android:layout_marginEnd">34dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textAppearance">@style/TextAppearance.InternetDialog.Secondary</item>
+    </style>
+
+    <style name="InternetDialog.NetworkSummary.Active">
+        <item name="android:textAppearance">@style/TextAppearance.InternetDialog.Secondary.Active
+        </item>
+    </style>
+
+    <style name="TextAppearance.InternetDialog">
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textDirection">locale</item>
+    </style>
+
+    <style name="TextAppearance.InternetDialog.Secondary">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
+    </style>
+
+    <style name="TextAppearance.InternetDialog.Active"/>
+
+    <style name="TextAppearance.InternetDialog.Secondary.Active"/>
 
 </resources>

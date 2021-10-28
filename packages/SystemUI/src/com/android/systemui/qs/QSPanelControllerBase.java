@@ -24,7 +24,9 @@ import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.res.Configuration;
 import android.metrics.LogMaker;
+import android.view.View;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.Dumpable;
@@ -78,21 +80,22 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
 
     private final QSHost.Callback mQSHostCallback = this::setTiles;
 
-    private final QSPanel.OnConfigurationChangedListener mOnConfigurationChangedListener =
+    @VisibleForTesting
+    protected final QSPanel.OnConfigurationChangedListener mOnConfigurationChangedListener =
             new QSPanel.OnConfigurationChangedListener() {
                 @Override
                 public void onConfigurationChange(Configuration newConfig) {
                     mShouldUseSplitNotificationShade =
                             Utils.shouldUseSplitNotificationShade(getResources());
+                    onConfigurationChanged();
                     if (newConfig.orientation != mLastOrientation) {
                         mLastOrientation = newConfig.orientation;
-                        onScreenRotated();
                         switchTileLayout(false);
                     }
                 }
             };
 
-    protected void onScreenRotated() { }
+    protected void onConfigurationChanged() { }
 
     private final Function1<Boolean, Unit> mMediaHostVisibilityListener = (visible) -> {
         if (mMediaVisibilityChangedListener != null) {
@@ -155,6 +158,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         mView.addOnConfigurationChangedListener(mOnConfigurationChangedListener);
         mHost.addCallback(mQSHostCallback);
         setTiles();
+        mLastOrientation = getResources().getConfiguration().orientation;
         switchTileLayout(true);
 
         mDumpManager.registerDumpable(mView.getDumpableTag(), this);
@@ -355,8 +359,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
             return false;
         }
         return mUsingMediaPlayer && mMediaHost.getVisible()
-                    && getResources().getConfiguration().orientation
-                    == Configuration.ORIENTATION_LANDSCAPE;
+                && mLastOrientation == Configuration.ORIENTATION_LANDSCAPE;
     }
 
     private void logTiles() {
@@ -403,6 +406,10 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
      */
     public void setUsingHorizontalLayoutChangeListener(Runnable listener) {
         mUsingHorizontalLayoutChangedListener = listener;
+    }
+
+    public View getBrightnessView() {
+        return mView.getBrightnessView();
     }
 
     /** */

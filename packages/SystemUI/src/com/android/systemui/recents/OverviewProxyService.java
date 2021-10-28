@@ -78,6 +78,7 @@ import com.android.internal.util.ScreenshotHelper;
 import com.android.systemui.Dumpable;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationBar;
@@ -94,6 +95,7 @@ import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.smartspace.SmartspaceTransitionController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
+import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarWindowCallback;
 import com.android.systemui.statusbar.policy.CallbackController;
@@ -428,19 +430,6 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
     };
 
-    private final BroadcastReceiver mDebugAnyPackageChangedReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            final String[] stringArrayExtra = intent.getStringArrayExtra(
-                    Intent.EXTRA_CHANGED_COMPONENT_NAME_LIST);
-            Log.e("b/188806432", intent.toString()
-                    + (stringArrayExtra != null
-                            ? ", EXTRA_CHANGED_COMPONENT_NAME_LIST: " + String.join(", ",
-                            stringArrayExtra)
-                            : ""));
-        }
-    };
-
     private final ServiceConnection mOverviewServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -546,7 +535,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
             ShellTransitions shellTransitions,
             ScreenLifecycle screenLifecycle,
             Optional<StartingSurface> startingSurface,
-            SmartspaceTransitionController smartspaceTransitionController) {
+            SmartspaceTransitionController smartspaceTransitionController,
+            DumpManager dumpManager) {
         super(broadcastDispatcher);
         mContext = context;
         mPipOptional = pipOptional;
@@ -559,7 +549,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
                 com.android.internal.R.string.config_recentsComponentName));
         mQuickStepIntent = new Intent(ACTION_QUICKSTEP)
                 .setPackage(mRecentsComponentName.getPackageName());
-        mWindowCornerRadius = ScreenDecorationsUtils.getWindowCornerRadius(mContext.getResources());
+        mWindowCornerRadius = ScreenDecorationsUtils.getWindowCornerRadius(mContext);
         mSupportsRoundedCornersOnWindows = ScreenDecorationsUtils
                 .supportsRoundedCornersOnWindows(mContext.getResources());
         mSysUiState = sysUiState;
@@ -569,6 +559,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
         // Assumes device always starts with back button until launcher tells it that it does not
         mNavBarButtonAlpha = 1.0f;
+
+        dumpManager.registerDumpable(getClass().getSimpleName(), this);
 
         // Listen for nav bar mode changes
         mNavBarMode = navModeController.addListener(this);
@@ -580,13 +572,6 @@ public class OverviewProxyService extends CurrentUserTracker implements
                 PatternMatcher.PATTERN_LITERAL);
         filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
         mContext.registerReceiver(mLauncherStateChangedReceiver, filter);
-
-        // b/188806432
-        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
-        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
-        filter.addDataScheme("package");
-        filter.addDataSchemeSpecificPart("", PatternMatcher.PATTERN_PREFIX);
-        mContext.registerReceiver(mDebugAnyPackageChangedReceiver, filter);
 
         // Listen for status bar state changes
         statusBarWinController.registerCallback(mStatusBarWindowCallback);
@@ -646,17 +631,21 @@ public class OverviewProxyService extends CurrentUserTracker implements
                 mNavBarControllerLazy.get().getDefaultNavigationBar();
         final NavigationBarView navBarView =
                 mNavBarControllerLazy.get().getNavigationBarView(mContext.getDisplayId());
+        final NotificationPanelViewController panelController =
+                mStatusBarOptionalLazy.get().get().getPanelController();
         if (SysUiState.DEBUG) {
             Log.d(TAG_OPS, "Updating sysui state flags: navBarFragment=" + navBarFragment
-                    + " navBarView=" + navBarView);
+                    + " navBarView=" + navBarView + " panelController=" + panelController);
         }
 
         if (navBarFragment != null) {
             navBarFragment.updateSystemUiStateFlags(-1);
         }
         if (navBarView != null) {
-            navBarView.updatePanelSystemUiStateFlags();
             navBarView.updateDisabledSystemUiStateFlags();
+        }
+        if (panelController != null) {
+            panelController.updateSystemUiStateFlags();
         }
         if (mStatusBarWinController != null) {
             mStatusBarWinController.notifyStateChangedCallbacks();

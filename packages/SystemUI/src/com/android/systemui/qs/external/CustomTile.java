@@ -63,6 +63,7 @@ import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.inject.Inject;
 
@@ -98,6 +99,8 @@ public class CustomTile extends QSTileImpl<State> implements TileChangeListener 
 
     private final TileServiceKey mKey;
 
+    private final AtomicBoolean mInitialDefaultIconFetched = new AtomicBoolean(false);
+
     private CustomTile(
             QSHost host,
             Looper backgroundLooper,
@@ -128,6 +131,12 @@ public class CustomTile extends QSTileImpl<State> implements TileChangeListener 
     @Override
     protected void handleInitialize() {
         updateDefaultTileAndIcon();
+        if (mInitialDefaultIconFetched.compareAndSet(false, true)) {
+            if (mDefaultIcon == null) {
+                Log.w(TAG, "No default icon for " + getTileSpec() + ", destroying tile");
+                mHost.removeTile(getTileSpec());
+            }
+        }
         if (mServiceManager.isToggleableTile()) {
             // Replace states with BooleanState
             resetStates();
@@ -213,9 +222,18 @@ public class CustomTile extends QSTileImpl<State> implements TileChangeListener 
         mHandler.post(this::updateDefaultTileAndIcon);
     }
 
+    /**
+     * Custom tile is considered available if there is a default icon (obtained from PM).
+     *
+     * It will return {@code true} before initialization, so tiles are not destroyed prematurely.
+     */
     @Override
     public boolean isAvailable() {
-        return mDefaultIcon != null;
+        if (mInitialDefaultIconFetched.get()) {
+            return mDefaultIcon != null;
+        } else {
+            return true;
+        }
     }
 
     public int getUser() {
@@ -394,7 +412,7 @@ public class CustomTile extends QSTileImpl<State> implements TileChangeListener 
             tileState = Tile.STATE_UNAVAILABLE;
         }
         state.state = tileState;
-        Drawable drawable;
+        Drawable drawable = null;
         try {
             drawable = mTile.getIcon().loadDrawable(mUserContext);
         } catch (Exception e) {

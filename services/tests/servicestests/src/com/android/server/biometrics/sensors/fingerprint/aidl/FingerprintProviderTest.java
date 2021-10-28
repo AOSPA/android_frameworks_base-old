@@ -19,10 +19,13 @@ package com.android.server.biometrics.sensors.fingerprint.aidl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
+import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.hardware.biometrics.common.CommonProps;
 import android.hardware.biometrics.fingerprint.IFingerprint;
 import android.hardware.biometrics.fingerprint.SensorLocation;
@@ -37,6 +40,7 @@ import androidx.test.filters.SmallTest;
 import com.android.server.biometrics.sensors.BiometricScheduler;
 import com.android.server.biometrics.sensors.HalClientMonitor;
 import com.android.server.biometrics.sensors.LockoutResetDispatcher;
+import com.android.server.biometrics.sensors.fingerprint.FingerprintStateCallback;
 import com.android.server.biometrics.sensors.fingerprint.GestureAvailabilityDispatcher;
 
 import org.junit.Before;
@@ -55,9 +59,13 @@ public class FingerprintProviderTest {
     @Mock
     private Context mContext;
     @Mock
+    private Resources mResources;
+    @Mock
     private UserManager mUserManager;
     @Mock
     private GestureAvailabilityDispatcher mGestureAvailabilityDispatcher;
+    @Mock
+    private FingerprintStateCallback mFingerprintStateCallback;
 
     private SensorProps[] mSensorProps;
     private LockoutResetDispatcher mLockoutResetDispatcher;
@@ -71,24 +79,26 @@ public class FingerprintProviderTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
+        when(mContext.getResources()).thenReturn(mResources);
+        when(mResources.obtainTypedArray(anyInt())).thenReturn(mock(TypedArray.class));
         when(mContext.getSystemService(Context.USER_SERVICE)).thenReturn(mUserManager);
         when(mUserManager.getAliveUsers()).thenReturn(new ArrayList<>());
 
         final SensorProps sensor1 = new SensorProps();
         sensor1.commonProps = new CommonProps();
         sensor1.commonProps.sensorId = 0;
-        sensor1.sensorLocations = new SensorLocation[] {new SensorLocation()};
+        sensor1.sensorLocations = new SensorLocation[]{new SensorLocation()};
         final SensorProps sensor2 = new SensorProps();
         sensor2.commonProps = new CommonProps();
         sensor2.commonProps.sensorId = 1;
-        sensor2.sensorLocations = new SensorLocation[] {new SensorLocation()};
+        sensor2.sensorLocations = new SensorLocation[]{new SensorLocation()};
 
-        mSensorProps = new SensorProps[] {sensor1, sensor2};
+        mSensorProps = new SensorProps[]{sensor1, sensor2};
 
         mLockoutResetDispatcher = new LockoutResetDispatcher(mContext);
 
-        mFingerprintProvider = new TestableFingerprintProvider(mContext, mSensorProps, TAG,
-                mLockoutResetDispatcher, mGestureAvailabilityDispatcher);
+        mFingerprintProvider = new TestableFingerprintProvider(mContext, mFingerprintStateCallback,
+                mSensorProps, TAG, mLockoutResetDispatcher, mGestureAvailabilityDispatcher);
     }
 
     @SuppressWarnings("rawtypes")
@@ -133,11 +143,12 @@ public class FingerprintProviderTest {
 
     private static class TestableFingerprintProvider extends FingerprintProvider {
         public TestableFingerprintProvider(@NonNull Context context,
+                @NonNull FingerprintStateCallback fingerprintStateCallback,
                 @NonNull SensorProps[] props,
                 @NonNull String halInstanceName,
                 @NonNull LockoutResetDispatcher lockoutResetDispatcher,
                 @NonNull GestureAvailabilityDispatcher gestureAvailabilityDispatcher) {
-            super(context, props, halInstanceName, lockoutResetDispatcher,
+            super(context, fingerprintStateCallback, props, halInstanceName, lockoutResetDispatcher,
                     gestureAvailabilityDispatcher);
         }
 

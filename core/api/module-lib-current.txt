@@ -15,6 +15,10 @@ package android.app {
     method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public boolean updateMccMncConfiguration(@NonNull String, @NonNull String);
   }
 
+  public class ActivityOptions {
+    method @NonNull public static android.app.ActivityOptions fromBundle(@NonNull android.os.Bundle);
+  }
+
   public class AppOpsManager {
     field public static final String OPSTR_NO_ISOLATED_STORAGE = "android:no_isolated_storage";
   }
@@ -35,8 +39,14 @@ package android.app {
   }
 
   public final class PendingIntent implements android.os.Parcelable {
+    method public boolean addCancelListener(@NonNull java.util.concurrent.Executor, @NonNull android.app.PendingIntent.CancelListener);
     method @RequiresPermission(android.Manifest.permission.GET_INTENT_SENDER_INTENT) public boolean intentFilterEquals(@Nullable android.app.PendingIntent);
     method @NonNull @RequiresPermission(android.Manifest.permission.GET_INTENT_SENDER_INTENT) public java.util.List<android.content.pm.ResolveInfo> queryIntentComponents(int);
+    method public void removeCancelListener(@NonNull android.app.PendingIntent.CancelListener);
+  }
+
+  public static interface PendingIntent.CancelListener {
+    method public void onCanceled(@NonNull android.app.PendingIntent);
   }
 
   public class StatusBarManager {
@@ -274,8 +284,9 @@ package android.os {
     field public static final int VPN_UID = 1016; // 0x3f8
   }
 
-  public final class SharedMemory implements java.io.Closeable android.os.Parcelable {
-    method @NonNull public static android.os.SharedMemory create(@NonNull android.os.ParcelFileDescriptor);
+  public final class ServiceManager {
+    method public static boolean isDeclared(@NonNull String);
+    method @Nullable public static android.os.IBinder waitForDeclaredService(@NonNull String);
   }
 
   public class StatsServiceManager {
@@ -324,6 +335,11 @@ package android.telephony {
 
   public abstract class CellSignalStrength {
     method public static int getNumSignalStrengthLevels();
+  }
+
+  public class SubscriptionManager {
+    method public void addSubscriptionInfoRecord(@NonNull String, @Nullable String, int, int);
+    method public void removeSubscriptionInfoRecord(@NonNull String, int);
   }
 
   public class TelephonyManager {

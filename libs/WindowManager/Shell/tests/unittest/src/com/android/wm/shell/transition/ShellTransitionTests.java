@@ -27,6 +27,7 @@ import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_UNSPECI
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FIRST_CUSTOM;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
@@ -62,6 +63,7 @@ import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.window.IRemoteTransition;
 import android.window.IRemoteTransitionFinishedCallback;
+import android.window.RemoteTransition;
 import android.window.TransitionFilter;
 import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
@@ -89,6 +91,9 @@ import java.util.ArrayList;
 
 /**
  * Tests for the shell transitions.
+ *
+ * Build/Install/Run:
+ *  atest WMShellUnitTests:ShellTransitionTests
  */
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -234,7 +239,8 @@ public class ShellTransitionTests {
         };
         IBinder transitToken = new Binder();
         transitions.requestStartTransition(transitToken,
-                new TransitionRequestInfo(TRANSIT_OPEN, null /* trigger */, testRemote));
+                new TransitionRequestInfo(TRANSIT_OPEN, null /* trigger */,
+                        new RemoteTransition(testRemote)));
         verify(mOrganizer, times(1)).startTransition(eq(TRANSIT_OPEN), eq(transitToken), any());
         TransitionInfo info = new TransitionInfoBuilder(TRANSIT_OPEN)
                 .addChange(TRANSIT_OPEN).addChange(TRANSIT_CLOSE).build();
@@ -305,6 +311,54 @@ public class ShellTransitionTests {
     }
 
     @Test
+    public void testTransitionFilterChecksTypeSet() {
+        TransitionFilter filter = new TransitionFilter();
+        filter.mTypeSet = new int[]{TRANSIT_OPEN, TRANSIT_TO_FRONT};
+
+        final TransitionInfo openOnly = new TransitionInfoBuilder(TRANSIT_OPEN)
+                .addChange(TRANSIT_OPEN).build();
+        assertTrue(filter.matches(openOnly));
+
+        final TransitionInfo toFrontOnly = new TransitionInfoBuilder(TRANSIT_TO_FRONT)
+                .addChange(TRANSIT_TO_FRONT).build();
+        assertTrue(filter.matches(toFrontOnly));
+
+        final TransitionInfo closeOnly = new TransitionInfoBuilder(TRANSIT_CLOSE)
+                .addChange(TRANSIT_CLOSE).build();
+        assertFalse(filter.matches(closeOnly));
+    }
+
+    @Test
+    public void testTransitionFilterChecksFlags() {
+        TransitionFilter filter = new TransitionFilter();
+        filter.mFlags = TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
+
+        final TransitionInfo withFlag = new TransitionInfoBuilder(TRANSIT_TO_BACK,
+                TRANSIT_FLAG_KEYGUARD_GOING_AWAY)
+                .addChange(TRANSIT_TO_BACK).build();
+        assertTrue(filter.matches(withFlag));
+
+        final TransitionInfo withoutFlag = new TransitionInfoBuilder(TRANSIT_OPEN)
+                .addChange(TRANSIT_OPEN).build();
+        assertFalse(filter.matches(withoutFlag));
+    }
+
+    @Test
+    public void testTransitionFilterChecksNotFlags() {
+        TransitionFilter filter = new TransitionFilter();
+        filter.mNotFlags = TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
+
+        final TransitionInfo withFlag = new TransitionInfoBuilder(TRANSIT_TO_BACK,
+                TRANSIT_FLAG_KEYGUARD_GOING_AWAY)
+                .addChange(TRANSIT_TO_BACK).build();
+        assertFalse(filter.matches(withFlag));
+
+        final TransitionInfo withoutFlag = new TransitionInfoBuilder(TRANSIT_OPEN)
+                .addChange(TRANSIT_OPEN).build();
+        assertTrue(filter.matches(withoutFlag));
+    }
+
+    @Test
     public void testRegisteredRemoteTransition() {
         Transitions transitions = createTestTransitions();
         transitions.replaceDefaultHandlerForTest(mDefaultHandler);
@@ -331,7 +385,7 @@ public class ShellTransitionTests {
                 new TransitionFilter.Requirement[]{new TransitionFilter.Requirement()};
         filter.mRequirements[0].mModes = new int[]{TRANSIT_OPEN, TRANSIT_TO_FRONT};
 
-        transitions.registerRemote(filter, testRemote);
+        transitions.registerRemote(filter, new RemoteTransition(testRemote));
         mMainExecutor.flushAll();
 
         IBinder transitToken = new Binder();
@@ -374,11 +428,12 @@ public class ShellTransitionTests {
 
         final int transitType = TRANSIT_FIRST_CUSTOM + 1;
 
-        OneShotRemoteHandler oneShot = new OneShotRemoteHandler(mMainExecutor, testRemote);
+        OneShotRemoteHandler oneShot = new OneShotRemoteHandler(mMainExecutor,
+                new RemoteTransition(testRemote));
         // Verify that it responds to the remote but not other things.
         IBinder transitToken = new Binder();
         assertNotNull(oneShot.handleRequest(transitToken,
-                new TransitionRequestInfo(transitType, null, testRemote)));
+                new TransitionRequestInfo(transitType, null, new RemoteTransition(testRemote))));
         assertNull(oneShot.handleRequest(transitToken,
                 new TransitionRequestInfo(transitType, null, null)));
 
@@ -528,13 +583,25 @@ public class ShellTransitionTests {
                         .setRotate(ROTATION_ANIMATION_SEAMLESS).build())
                 .build();
         assertFalse(DefaultTransitionHandler.isRotationSeamless(seamlessButAlert, displays));
+
+        // Not seamless if there is no changed task.
+        final TransitionInfo noTask = new TransitionInfoBuilder(TRANSIT_CHANGE)
+                .addChange(new ChangeBuilder(TRANSIT_CHANGE).setFlags(FLAG_IS_DISPLAY)
+                        .setRotate().build())
+                .build();
+        assertFalse(DefaultTransitionHandler.isRotationSeamless(noTask, displays));
     }
 
     class TransitionInfoBuilder {
         final TransitionInfo mInfo;
 
         TransitionInfoBuilder(@WindowManager.TransitionType int type) {
-            mInfo = new TransitionInfo(type, 0 /* flags */);
+            this(type, 0 /* flags */);
+        }
+
+        TransitionInfoBuilder(@WindowManager.TransitionType int type,
+                @WindowManager.TransitionFlags int flags) {
+            mInfo = new TransitionInfo(type, flags);
             mInfo.setRootLeash(createMockSurface(true /* valid */), 0, 0);
         }
 
@@ -674,24 +741,12 @@ public class ShellTransitionTests {
         IWindowManager mockWM = mock(IWindowManager.class);
         final IDisplayWindowListener[] displayListener = new IDisplayWindowListener[1];
         try {
-            doAnswer(new Answer() {
-                @Override
-                public Object answer(InvocationOnMock invocation) {
-                    displayListener[0] = invocation.getArgument(0);
-                    return null;
-                }
-            }).when(mockWM).registerDisplayWindowListener(any());
+            doReturn(new int[] {DEFAULT_DISPLAY}).when(mockWM).registerDisplayWindowListener(any());
         } catch (RemoteException e) {
             // No remote stuff happening, so this can't be hit
         }
         DisplayController out = new DisplayController(mContext, mockWM, mMainExecutor);
         out.initialize();
-        try {
-            displayListener[0].onDisplayAdded(DEFAULT_DISPLAY);
-            mMainExecutor.flushAll();
-        } catch (RemoteException e) {
-            // Again, no remote stuff
-        }
         return out;
     }
 

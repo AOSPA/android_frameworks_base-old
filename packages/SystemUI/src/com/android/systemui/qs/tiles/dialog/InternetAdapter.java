@@ -16,16 +16,11 @@
 
 package com.android.systemui.qs.tiles.dialog;
 
-import static com.android.wifitrackerlib.WifiEntry.SECURITY_NONE;
-import static com.android.wifitrackerlib.WifiEntry.SECURITY_OWE;
-
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.text.Html;
 import android.text.TextUtils;
-import android.util.Log;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,8 +29,10 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.Utils;
 import com.android.settingslib.wifi.WifiUtils;
 import com.android.systemui.R;
@@ -43,7 +40,6 @@ import com.android.wifitrackerlib.WifiEntry;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 /**
  * Adapter for showing Wi-Fi networks.
@@ -54,9 +50,10 @@ public class InternetAdapter extends RecyclerView.Adapter<InternetAdapter.Intern
     private static final String ACTION_WIFI_DIALOG = "com.android.settings.WIFI_DIALOG";
     private static final String EXTRA_CHOSEN_WIFI_ENTRY_KEY = "key_chosen_wifientry_key";
     private static final String EXTRA_CONNECT_FOR_CALLER = "connect_for_caller";
-    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private final InternetDialogController mInternetDialogController;
+    private List<WifiEntry> mWifiEntries;
+    private int mWifiEntriesCount;
 
     protected View mHolderView;
     protected Context mContext;
@@ -76,54 +73,31 @@ public class InternetAdapter extends RecyclerView.Adapter<InternetAdapter.Intern
 
     @Override
     public void onBindViewHolder(@NonNull InternetViewHolder viewHolder, int position) {
-        List<WifiEntry> wifiList = getWifiEntryList();
-        if (wifiList != null && wifiList.size() != 0) {
-            int count = getItemCount();
-            if (wifiList.size() > count) {
-                wifiList = getWifiEntryList().subList(0, count - 1);
-            }
-
-            if (position < wifiList.size()) {
-                viewHolder.onBind(wifiList.get(position));
-            }
-        } else if (DEBUG) {
-            Log.d(TAG, "onBindViewHolder, Wi-Fi entry list = null");
+        if (mWifiEntries == null || position >= mWifiEntriesCount) {
+            return;
         }
-    }
-
-    private List<WifiEntry> getWifiEntryList() {
-        if (mInternetDialogController.getWifiEntryList() == null) {
-            return null;
-        }
-
-        return mInternetDialogController.getWifiEntryList().stream()
-                .filter(wifiEntry -> (!wifiEntry.isDefaultNetwork()
-                        || !wifiEntry.hasInternetAccess()))
-                .limit(getItemCount())
-                .collect(Collectors.toList());
+        viewHolder.onBind(mWifiEntries.get(position));
     }
 
     /**
-     * The total number of networks (mobile network and entries of Wi-Fi) should be four in
-     * {@link InternetDialog}.
+     * Updates the Wi-Fi networks.
      *
-     * Airplane mode is ON (mobile network is gone):
-     *   Return four Wi-Fi's entries if no internet Wi-Fi.
-     *   Return three Wi-Fi's entries if one internet Wi-Fi.
-     * Airplane mode is OFF (mobile network is visible):
-     *   Return three Wi-Fi's entries if no internet Wi-Fi.
-     *   Return two Wi-Fi's entries if one internet Wi-Fi.
+     * @param wifiEntries the updated Wi-Fi entries.
+     * @param wifiEntriesCount the total number of Wi-Fi entries.
+     */
+    public void setWifiEntries(@Nullable List<WifiEntry> wifiEntries, int wifiEntriesCount) {
+        mWifiEntries = wifiEntries;
+        mWifiEntriesCount = wifiEntriesCount;
+    }
+
+    /**
+     * Gets the total number of Wi-Fi networks.
      *
-     * @return The total number of networks.
+     * @return The total number of Wi-Fi entries.
      */
     @Override
     public int getItemCount() {
-        final boolean hasInternetWifi = mInternetDialogController.getInternetWifiEntry() != null;
-        if (mInternetDialogController.isAirplaneModeEnabled()) {
-            return hasInternetWifi ? 3 : 4;
-        } else {
-            return hasInternetWifi ? 2 : 3;
-        }
+        return mWifiEntriesCount;
     }
 
     /**
@@ -137,10 +111,11 @@ public class InternetAdapter extends RecyclerView.Adapter<InternetAdapter.Intern
         final ImageView mWifiIcon;
         final TextView mWifiTitleText;
         final TextView mWifiSummaryText;
-        final ImageView mWifiLockedIcon;
+        final ImageView mWifiEndIcon;
         final Context mContext;
         final InternetDialogController mInternetDialogController;
 
+        @VisibleForTesting
         protected WifiUtils.InternetIconInjector mWifiIconInjector;
 
         InternetViewHolder(View view, InternetDialogController internetDialogController) {
@@ -153,28 +128,25 @@ public class InternetAdapter extends RecyclerView.Adapter<InternetAdapter.Intern
             mWifiIcon = view.requireViewById(R.id.wifi_icon);
             mWifiTitleText = view.requireViewById(R.id.wifi_title);
             mWifiSummaryText = view.requireViewById(R.id.wifi_summary);
-            mWifiLockedIcon = view.requireViewById(R.id.wifi_locked_icon);
+            mWifiEndIcon = view.requireViewById(R.id.wifi_end_icon);
             mWifiIconInjector = mInternetDialogController.getWifiIconInjector();
         }
 
-        void onBind(WifiEntry wifiEntry) {
-            int security = wifiEntry.getSecurity();
-            try {
-                mWifiIcon.setImageDrawable(getWifiDrawable(wifiEntry));
-                if (isOpenNetwork(security)) {
-                    mWifiLockedIcon.setVisibility(View.GONE);
-                } else {
-                    mWifiLockedIcon.setVisibility(View.VISIBLE);
-                    mWifiLockedIcon.setImageDrawable(
-                            mContext.getDrawable(R.drawable.ic_friction_lock_closed));
-                }
-            } catch (Throwable throwable) {
-                throwable.printStackTrace();
-            }
-
+        void onBind(@NonNull WifiEntry wifiEntry) {
+            mWifiIcon.setImageDrawable(getWifiDrawable(wifiEntry));
             setWifiNetworkLayout(wifiEntry.getTitle(),
                     Html.fromHtml(wifiEntry.getSummary(false), Html.FROM_HTML_MODE_LEGACY));
 
+            final int connectedState = wifiEntry.getConnectedState();
+            final int security = wifiEntry.getSecurity();
+            updateEndIcon(connectedState, security);
+
+            if (connectedState != WifiEntry.CONNECTED_STATE_DISCONNECTED) {
+                mWifiListLayout.setOnClickListener(
+                        v -> mInternetDialogController.launchWifiNetworkDetailsSetting(
+                                wifiEntry.getKey()));
+                return;
+            }
             mWifiListLayout.setOnClickListener(v -> {
                 if (wifiEntry.shouldEditBeforeConnect()) {
                     final Intent intent = new Intent(ACTION_WIFI_DIALOG);
@@ -188,28 +160,20 @@ public class InternetAdapter extends RecyclerView.Adapter<InternetAdapter.Intern
             });
         }
 
-        /** Return true if this is an open network AccessPoint. */
-        boolean isOpenNetwork(int security) {
-            return security == SECURITY_NONE
-                    || security == SECURITY_OWE;
-        }
-
         void setWifiNetworkLayout(CharSequence title, CharSequence summary) {
-            mWifiNetworkLayout.setVisibility(View.VISIBLE);
             mWifiTitleText.setText(title);
             if (TextUtils.isEmpty(summary)) {
-                mWifiTitleText.setGravity(Gravity.CENTER);
                 mWifiSummaryText.setVisibility(View.GONE);
                 return;
-            } else {
-                mWifiTitleText.setGravity(Gravity.BOTTOM);
-                mWifiSummaryText.setGravity(Gravity.TOP);
-                mWifiSummaryText.setVisibility(View.VISIBLE);
             }
+            mWifiSummaryText.setVisibility(View.VISIBLE);
             mWifiSummaryText.setText(summary);
         }
 
-        Drawable getWifiDrawable(@NonNull WifiEntry wifiEntry) throws Throwable {
+        Drawable getWifiDrawable(@NonNull WifiEntry wifiEntry) {
+            if (wifiEntry.getLevel() == WifiEntry.WIFI_LEVEL_UNREACHABLE) {
+                return null;
+            }
             final Drawable drawable = mWifiIconInjector.getIcon(wifiEntry.shouldShowXLevelIcon(),
                     wifiEntry.getLevel());
             if (drawable == null) {
@@ -220,6 +184,21 @@ public class InternetAdapter extends RecyclerView.Adapter<InternetAdapter.Intern
             final AtomicReference<Drawable> shared = new AtomicReference<>();
             shared.set(drawable);
             return shared.get();
+        }
+
+        void updateEndIcon(int connectedState, int security) {
+            Drawable drawable = null;
+            if (connectedState != WifiEntry.CONNECTED_STATE_DISCONNECTED) {
+                drawable = mContext.getDrawable(R.drawable.ic_settings_24dp);
+            } else if (security != WifiEntry.SECURITY_NONE && security != WifiEntry.SECURITY_OWE) {
+                drawable = mContext.getDrawable(R.drawable.ic_friction_lock_closed);
+            }
+            if (drawable == null) {
+                mWifiEndIcon.setVisibility(View.GONE);
+                return;
+            }
+            mWifiEndIcon.setVisibility(View.VISIBLE);
+            mWifiEndIcon.setImageDrawable(drawable);
         }
     }
 }
