@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e467ad88_eb782775",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2021-11-02T22:07:54Z",
+      "side": 1,
+      "message": "Adapted for A12 and its new logic in VolumeDialogImpl, but somehow the button is still clickable.",
+      "revId": "6cadda525402b514f4c36d705ac8facf88995dbd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
