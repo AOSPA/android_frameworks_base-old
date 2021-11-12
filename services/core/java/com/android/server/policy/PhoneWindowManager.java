@@ -291,6 +291,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final int MULTI_PRESS_POWER_NOTHING = 0;
     static final int MULTI_PRESS_POWER_THEATER_MODE = 1;
     static final int MULTI_PRESS_POWER_BRIGHTNESS_BOOST = 2;
+    static final int MULTI_PRESS_POWER_GLOBAL_ACTIONS = 3;
 
     // must match: config_longPressOnBackBehavior in config.xml
     static final int LONG_PRESS_BACK_NOTHING = 0;
@@ -1100,6 +1101,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     wakeUpFromPowerKey(eventTime);
                 }
                 mPowerManager.boostScreenBrightness(eventTime);
+                break;
+            case MULTI_PRESS_POWER_GLOBAL_ACTIONS:
+                mPowerKeyHandled = true;
+                showGlobalActions();
                 break;
         }
     }
@@ -5637,6 +5642,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return "MULTI_PRESS_POWER_THEATER_MODE";
             case MULTI_PRESS_POWER_BRIGHTNESS_BOOST:
                 return "MULTI_PRESS_POWER_BRIGHTNESS_BOOST";
+            case MULTI_PRESS_POWER_GLOBAL_ACTIONS:
+                return "MULTI_PRESS_POWER_GLOBAL_ACTIONS";
             default:
                 return Integer.toString(behavior);
         }
