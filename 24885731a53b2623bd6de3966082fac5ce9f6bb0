@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6d72ca52_95b5f67a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2021-11-15T15:55:58Z",
+      "side": 1,
+      "message": "Volume panel is now in the center of the screen, not on the left.",
+      "revId": "24885731a53b2623bd6de3966082fac5ce9f6bb0",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
