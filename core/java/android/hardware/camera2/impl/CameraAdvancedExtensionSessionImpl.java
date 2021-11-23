@@ -872,70 +872,60 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
 
         @Override
         public boolean submitBurst(List<Request> requests, IRequestCallback callback) {
-            synchronized (mInterfaceLock) {
-                try {
-                    CaptureCallbackHandler captureCallback = new CaptureCallbackHandler(callback);
-                    ArrayList<CaptureRequest> captureRequests = new ArrayList<>();
-                    for (Request request : requests) {
-                        captureRequests.add(initializeCaptureRequest(mCameraDevice, request,
-                                mCameraConfigMap));
-                    }
-                    mCaptureSession.captureBurstRequests(captureRequests,
-                            new CameraExtensionUtils.HandlerExecutor(mHandler), captureCallback);
-                } catch (CameraAccessException e) {
-                    Log.e(TAG, "Failed to submit capture requests!");
-                    return false;
-                } catch (IllegalStateException e) {
-                    Log.e(TAG, "Capture session closed!");
+            try {
+                CaptureCallbackHandler captureCallback = new CaptureCallbackHandler(callback);
+                ArrayList<CaptureRequest> captureRequests = new ArrayList<>();
+                for (Request request : requests) {
+                    captureRequests.add(initializeCaptureRequest(mCameraDevice, request,
+                            mCameraConfigMap));
                 }
+                mCaptureSession.captureBurstRequests(captureRequests,
+                        new CameraExtensionUtils.HandlerExecutor(mHandler), captureCallback);
+            } catch (CameraAccessException e) {
+                Log.e(TAG, "Failed to submit capture requests!");
+                return false;
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Capture session closed!");
             }
-
             return true;
         }
 
         @Override
         public boolean setRepeating(Request request, IRequestCallback callback) {
-            synchronized (mInterfaceLock) {
-                try {
-                    CaptureRequest repeatingRequest = initializeCaptureRequest(mCameraDevice,
-                                request, mCameraConfigMap);
-                    CaptureCallbackHandler captureCallback = new CaptureCallbackHandler(callback);
-                    mCaptureSession.setSingleRepeatingRequest(repeatingRequest,
-                            new CameraExtensionUtils.HandlerExecutor(mHandler), captureCallback);
-                } catch (CameraAccessException e) {
-                    Log.e(TAG, "Failed to enable repeating request!");
-                    return false;
-                } catch (IllegalStateException e) {
-                    Log.e(TAG, "Capture session closed!");
-                }
+            try {
+                CaptureRequest repeatingRequest = initializeCaptureRequest(mCameraDevice,
+                            request, mCameraConfigMap);
+                CaptureCallbackHandler captureCallback = new CaptureCallbackHandler(callback);
+                mCaptureSession.setSingleRepeatingRequest(repeatingRequest,
+                        new CameraExtensionUtils.HandlerExecutor(mHandler), captureCallback);
+            } catch (CameraAccessException e) {
+                Log.e(TAG, "Failed to enable repeating request!");
+                return false;
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Capture session closed!");
             }
-
             return true;
         }
 
         @Override
         public void abortCaptures() {
-            synchronized (mInterfaceLock) {
-                try {
-                    mCaptureSession.abortCaptures();
-                } catch (CameraAccessException e) {
-                    Log.e(TAG, "Failed during capture abort!");
-                } catch (IllegalStateException e) {
-                    Log.e(TAG, "Capture session closed!");
-                }
+            try {
+                mCaptureSession.abortCaptures();
+            } catch (CameraAccessException e) {
+                Log.e(TAG, "Failed during capture abort!");
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Capture session closed!");
             }
         }
 
         @Override
         public void stopRepeating() {
-            synchronized (mInterfaceLock) {
-                try {
-                    mCaptureSession.stopRepeating();
-                } catch (CameraAccessException e) {
-                    Log.e(TAG, "Failed during repeating capture stop!");
-                } catch (IllegalStateException e) {
-                    Log.e(TAG, "Capture session closed!");
-                }
+            try {
+                mCaptureSession.stopRepeating();
+            } catch (CameraAccessException e) {
+                Log.e(TAG, "Failed during repeating capture stop!");
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Capture session closed!");
             }
         }
     }

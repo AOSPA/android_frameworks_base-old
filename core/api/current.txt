@@ -1303,7 +1303,7 @@ package android {
     field public static final int shortcutLongLabel = 16844074; // 0x101052a
     field public static final int shortcutShortLabel = 16844073; // 0x1010529
     field public static final int shouldDisableView = 16843246; // 0x10101ee
-    field public static final int shouldUseDefaultDisplayStateChangeTransition;
+    field public static final int shouldUseDefaultUnfoldTransition;
     field public static final int showAsAction = 16843481; // 0x10102d9
     field public static final int showDefault = 16843258; // 0x10101fa
     field public static final int showDividers = 16843561; // 0x1010329
@@ -6257,6 +6257,7 @@ package android.app {
     method public android.app.NotificationManager.Policy getNotificationPolicy();
     method public boolean isNotificationListenerAccessGranted(android.content.ComponentName);
     method public boolean isNotificationPolicyAccessGranted();
+    method @WorkerThread public boolean matchesCallFilter(@NonNull android.net.Uri);
     method public void notify(int, android.app.Notification);
     method public void notify(String, int, android.app.Notification);
     method public void notifyAsPackage(@NonNull String, @Nullable String, int, @NonNull android.app.Notification);
@@ -6698,13 +6699,13 @@ package android.app {
   }
 
   public class StatusBarManager {
-    method public int requestAddTileService(@NonNull android.content.ComponentName, @NonNull CharSequence, @NonNull android.graphics.drawable.Icon, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Integer>);
-    field public static final int TILE_ADD_REQUEST_ANSWER_FAILED_BAD_COMPONENT = 3; // 0x3
-    field public static final int TILE_ADD_REQUEST_ANSWER_FAILED_MISMATCHED_PACKAGE = 1; // 0x1
-    field public static final int TILE_ADD_REQUEST_ANSWER_FAILED_NOT_CURRENT_USER = 4; // 0x4
-    field public static final int TILE_ADD_REQUEST_ANSWER_FAILED_REQUEST_IN_PROGRESS = 2; // 0x2
-    field public static final int TILE_ADD_REQUEST_ANSWER_FAILED_UNKNOWN_REASON = 5; // 0x5
-    field public static final int TILE_ADD_REQUEST_ANSWER_SUCCESS = 0; // 0x0
+    method public void requestAddTileService(@NonNull android.content.ComponentName, @NonNull CharSequence, @NonNull android.graphics.drawable.Icon, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Integer>);
+    field public static final int TILE_ADD_REQUEST_ERROR_APP_NOT_IN_FOREGROUND = 1004; // 0x3ec
+    field public static final int TILE_ADD_REQUEST_ERROR_BAD_COMPONENT = 1002; // 0x3ea
+    field public static final int TILE_ADD_REQUEST_ERROR_MISMATCHED_PACKAGE = 1000; // 0x3e8
+    field public static final int TILE_ADD_REQUEST_ERROR_NOT_CURRENT_USER = 1003; // 0x3eb
+    field public static final int TILE_ADD_REQUEST_ERROR_NO_STATUS_BAR_SERVICE = 1005; // 0x3ed
+    field public static final int TILE_ADD_REQUEST_ERROR_REQUEST_IN_PROGRESS = 1001; // 0x3e9
     field public static final int TILE_ADD_REQUEST_RESULT_TILE_ADDED = 2; // 0x2
     field public static final int TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED = 1; // 0x1
     field public static final int TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED = 0; // 0x0
@@ -6943,7 +6944,7 @@ package android.app {
     method public android.graphics.drawable.Drawable loadIcon(android.content.pm.PackageManager);
     method public CharSequence loadLabel(android.content.pm.PackageManager);
     method public android.graphics.drawable.Drawable loadThumbnail(android.content.pm.PackageManager);
-    method public boolean shouldUseDefaultDisplayStateChangeTransition();
+    method public boolean shouldUseDefaultUnfoldTransition();
     method public boolean supportsMultipleDisplays();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.app.WallpaperInfo> CREATOR;
@@ -13300,6 +13301,7 @@ package android.content.res {
     method public int describeContents();
     method public int diff(android.content.res.Configuration);
     method public boolean equals(android.content.res.Configuration);
+    method @NonNull public static android.content.res.Configuration generateDelta(@NonNull android.content.res.Configuration, @NonNull android.content.res.Configuration);
     method public int getLayoutDirection();
     method @NonNull public android.os.LocaleList getLocales();
     method public boolean isLayoutSizeAtLeast(int);
@@ -18011,6 +18013,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> EDGE_AVAILABLE_EDGE_MODES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Boolean> FLASH_INFO_AVAILABLE;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> HOT_PIXEL_AVAILABLE_HOT_PIXEL_MODES;
+    field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.hardware.camera2.params.DeviceStateOrientationMap> INFO_DEVICE_STATE_ORIENTATION_MAP;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Integer> INFO_SUPPORTED_HARDWARE_LEVEL;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.String> INFO_VERSION;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.util.Size[]> JPEG_AVAILABLE_THUMBNAIL_SIZES;
@@ -18703,6 +18706,12 @@ package android.hardware.camera2.params {
     method public void copyElements(android.util.Rational[], int);
     method public void copyElements(int[], int);
     method public android.util.Rational getElement(int, int);
+  }
+
+  public final class DeviceStateOrientationMap {
+    method public int getSensorOrientation(long);
+    field public static final long FOLDED = 4L; // 0x4L
+    field public static final long NORMAL = 0L; // 0x0L
   }
 
   public final class ExtensionSessionConfiguration {
@@ -32157,6 +32166,7 @@ package android.os {
     field public static final String DISALLOW_BLUETOOTH = "no_bluetooth";
     field public static final String DISALLOW_BLUETOOTH_SHARING = "no_bluetooth_sharing";
     field public static final String DISALLOW_CAMERA_TOGGLE = "disallow_camera_toggle";
+    field public static final String DISALLOW_CHANGE_WIFI_STATE = "no_change_wifi_state";
     field public static final String DISALLOW_CONFIG_BLUETOOTH = "no_config_bluetooth";
     field public static final String DISALLOW_CONFIG_BRIGHTNESS = "no_config_brightness";
     field public static final String DISALLOW_CONFIG_CELL_BROADCASTS = "no_config_cell_broadcasts";
@@ -39765,6 +39775,7 @@ package android.telecom {
     field public static final int CAPABILITY_MANAGE_CONFERENCE = 128; // 0x80
     field public static final int CAPABILITY_MERGE_CONFERENCE = 4; // 0x4
     field public static final int CAPABILITY_MUTE = 64; // 0x40
+    field public static final int CAPABILITY_REMOTE_PARTY_SUPPORTS_RTT = 268435456; // 0x10000000
     field public static final int CAPABILITY_RESPOND_VIA_TEXT = 32; // 0x20
     field public static final int CAPABILITY_SEPARATE_FROM_CONFERENCE = 4096; // 0x1000
     field public static final int CAPABILITY_SUPPORTS_VT_LOCAL_BIDIRECTIONAL = 768; // 0x300
@@ -40051,6 +40062,7 @@ package android.telecom {
     field public static final int CAPABILITY_MANAGE_CONFERENCE = 128; // 0x80
     field public static final int CAPABILITY_MERGE_CONFERENCE = 4; // 0x4
     field public static final int CAPABILITY_MUTE = 64; // 0x40
+    field public static final int CAPABILITY_REMOTE_PARTY_SUPPORTS_RTT = 536870912; // 0x20000000
     field public static final int CAPABILITY_RESPOND_VIA_TEXT = 32; // 0x20
     field public static final int CAPABILITY_SEPARATE_FROM_CONFERENCE = 4096; // 0x1000
     field public static final int CAPABILITY_SUPPORTS_VT_LOCAL_BIDIRECTIONAL = 768; // 0x300
@@ -47023,15 +47035,15 @@ package android.view {
   }
 
   @UiThread public interface AttachedSurfaceControl {
-    method public default void addOnSurfaceTransformHintChangedListener(@NonNull android.view.AttachedSurfaceControl.OnSurfaceTransformHintChangedListener);
+    method public default void addOnBufferTransformHintChangedListener(@NonNull android.view.AttachedSurfaceControl.OnBufferTransformHintChangedListener);
     method public boolean applyTransactionOnDraw(@NonNull android.view.SurfaceControl.Transaction);
     method @Nullable public android.view.SurfaceControl.Transaction buildReparentTransaction(@NonNull android.view.SurfaceControl);
-    method public default int getSurfaceTransformHint();
-    method public default void removeOnSurfaceTransformHintChangedListener(@NonNull android.view.AttachedSurfaceControl.OnSurfaceTransformHintChangedListener);
+    method public default int getBufferTransformHint();
+    method public default void removeOnBufferTransformHintChangedListener(@NonNull android.view.AttachedSurfaceControl.OnBufferTransformHintChangedListener);
   }
 
-  @UiThread public static interface AttachedSurfaceControl.OnSurfaceTransformHintChangedListener {
-    method public void onSurfaceTransformHintChanged(int);
+  @UiThread public static interface AttachedSurfaceControl.OnBufferTransformHintChangedListener {
+    method public void onBufferTransformHintChanged(int);
   }
 
   public final class Choreographer {
@@ -48521,6 +48533,12 @@ package android.view {
     method public void readFromParcel(android.os.Parcel);
     method public void release();
     method public void writeToParcel(android.os.Parcel, int);
+    field public static final int BUFFER_TRANSFORM_IDENTITY = 0; // 0x0
+    field public static final int BUFFER_TRANSFORM_MIRROR_HORIZONTAL = 1; // 0x1
+    field public static final int BUFFER_TRANSFORM_MIRROR_VERTICAL = 2; // 0x2
+    field public static final int BUFFER_TRANSFORM_ROTATE_180 = 3; // 0x3
+    field public static final int BUFFER_TRANSFORM_ROTATE_270 = 7; // 0x7
+    field public static final int BUFFER_TRANSFORM_ROTATE_90 = 4; // 0x4
     field @NonNull public static final android.os.Parcelable.Creator<android.view.SurfaceControl> CREATOR;
   }
 
