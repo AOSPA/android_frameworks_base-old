@@ -313,7 +313,7 @@ public final class ViewRootImpl implements ViewParent,
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList<>();
     static boolean sFirstDrawComplete = false;
 
-    private ArrayList<OnSurfaceTransformHintChangedListener> mTransformHintListeners =
+    private ArrayList<OnBufferTransformHintChangedListener> mTransformHintListeners =
             new ArrayList<>();
     private @Surface.Rotation int mPreviousTransformHint = Surface.ROTATION_0;
     /**
@@ -4688,13 +4688,6 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    void updateLocationInParentDisplay(int x, int y) {
-        if (mAttachInfo != null
-                && !mAttachInfo.mLocationInParentDisplay.equals(x, y)) {
-            mAttachInfo.mLocationInParentDisplay.set(x, y);
-        }
-    }
-
     /**
      * Set the root-level system gesture exclusion rects. These are added to those provided by
      * the root's view hierarchy.
@@ -5206,7 +5199,6 @@ public final class ViewRootImpl implements ViewParent,
     private static final int MSG_INSETS_CHANGED = 30;
     private static final int MSG_INSETS_CONTROL_CHANGED = 31;
     private static final int MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED = 32;
-    private static final int MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED = 33;
     private static final int MSG_SHOW_INSETS = 34;
     private static final int MSG_HIDE_INSETS = 35;
     private static final int MSG_REQUEST_SCROLL_CAPTURE = 36;
@@ -5272,8 +5264,6 @@ public final class ViewRootImpl implements ViewParent,
                     return "MSG_INSETS_CONTROL_CHANGED";
                 case MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED:
                     return "MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED";
-                case MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED:
-                    return "MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED";
                 case MSG_SHOW_INSETS:
                     return "MSG_SHOW_INSETS";
                 case MSG_HIDE_INSETS:
@@ -5498,9 +5488,6 @@ public final class ViewRootImpl implements ViewParent,
                 } break;
                 case MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED: {
                     systemGestureExclusionChanged();
-                } break;
-                case MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED: {
-                    updateLocationInParentDisplay(msg.arg1, msg.arg2);
                 } break;
                 case MSG_REQUEST_SCROLL_CAPTURE:
                     handleScrollCaptureRequest((IScrollCaptureResponseListener) msg.obj);
@@ -7877,7 +7864,8 @@ public final class ViewRootImpl implements ViewParent,
             int transformHint = mSurfaceControl.getTransformHint();
             if (mPreviousTransformHint != transformHint) {
                 mPreviousTransformHint = transformHint;
-                dispatchTransformHintChanged(transformHint);
+                dispatchTransformHintChanged(
+                        SurfaceControl.rotationToBufferTransform(transformHint));
             }
         } else {
             destroySurface();
@@ -9040,17 +9028,6 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.sendMessage(msg);
     }
 
-    /**
-     * Dispatch the offset changed.
-     *
-     * @param offset the offset of this view in the parent window.
-     */
-    public void dispatchLocationInParentDisplayChanged(Point offset) {
-        Message msg =
-                mHandler.obtainMessage(MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED, offset.x, offset.y);
-        mHandler.sendMessage(msg);
-    }
-
     public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {
         synchronized (this) {
             mWindowFocusChanged = true;
@@ -9722,14 +9699,6 @@ public final class ViewRootImpl implements ViewParent,
             if (viewAncestor != null) {
                 viewAncestor.dispatchResized(frames, reportDraw, mergedConfiguration, forceLayout,
                         alwaysConsumeSystemBars, displayId);
-            }
-        }
-
-        @Override
-        public void locationInParentDisplayChanged(Point offset) {
-            final ViewRootImpl viewAncestor = mViewAncestor.get();
-            if (viewAncestor != null) {
-                viewAncestor.dispatchLocationInParentDisplayChanged(offset);
             }
         }
 
@@ -10504,38 +10473,38 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     @Override
-    public @Surface.Rotation int getSurfaceTransformHint() {
-        return mSurfaceControl.getTransformHint();
+    public @SurfaceControl.BufferTransform int getBufferTransformHint() {
+        return SurfaceControl.rotationToBufferTransform(mSurfaceControl.getTransformHint());
     }
 
     @Override
-    public void addOnSurfaceTransformHintChangedListener(
-            OnSurfaceTransformHintChangedListener listener) {
+    public void addOnBufferTransformHintChangedListener(
+            OnBufferTransformHintChangedListener listener) {
         Objects.requireNonNull(listener);
         if (mTransformHintListeners.contains(listener)) {
             throw new IllegalArgumentException(
-                    "attempt to call addOnSurfaceTransformHintChangedListener() "
+                    "attempt to call addOnBufferTransformHintChangedListener() "
                             + "with a previously registered listener");
         }
         mTransformHintListeners.add(listener);
     }
 
     @Override
-    public void removeOnSurfaceTransformHintChangedListener(
-            OnSurfaceTransformHintChangedListener listener) {
+    public void removeOnBufferTransformHintChangedListener(
+            OnBufferTransformHintChangedListener listener) {
         Objects.requireNonNull(listener);
         mTransformHintListeners.remove(listener);
     }
 
-    private void dispatchTransformHintChanged(@Surface.Rotation int hint) {
+    private void dispatchTransformHintChanged(@SurfaceControl.BufferTransform int hint) {
         if (mTransformHintListeners.isEmpty()) {
             return;
         }
-        ArrayList<OnSurfaceTransformHintChangedListener> listeners =
-                (ArrayList<OnSurfaceTransformHintChangedListener>) mTransformHintListeners.clone();
+        ArrayList<OnBufferTransformHintChangedListener> listeners =
+                (ArrayList<OnBufferTransformHintChangedListener>) mTransformHintListeners.clone();
         for (int i = 0; i < listeners.size(); i++) {
-            OnSurfaceTransformHintChangedListener listener = listeners.get(i);
-            listener.onSurfaceTransformHintChanged(hint);
+            OnBufferTransformHintChangedListener listener = listeners.get(i);
+            listener.onBufferTransformHintChanged(hint);
         }
     }
 }

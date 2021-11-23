@@ -26,6 +26,7 @@ package android {
     field public static final String MANAGE_ROLLBACKS = "android.permission.MANAGE_ROLLBACKS";
     field public static final String MANAGE_TOAST_RATE_LIMITING = "android.permission.MANAGE_TOAST_RATE_LIMITING";
     field public static final String MODIFY_REFRESH_RATE_SWITCHING_TYPE = "android.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE";
+    field public static final String MODIFY_USER_PREFERRED_DISPLAY_MODE = "android.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE";
     field public static final String NETWORK_SETTINGS = "android.permission.NETWORK_SETTINGS";
     field public static final String NETWORK_STACK = "android.permission.NETWORK_STACK";
     field public static final String OVERRIDE_DISPLAY_MODE_REQUESTS = "android.permission.OVERRIDE_DISPLAY_MODE_REQUESTS";
@@ -304,10 +305,10 @@ package android.app {
 
   public class NotificationManager {
     method public void allowAssistantAdjustment(String);
+    method public void cleanUpCallersAfter(long);
     method public void disallowAssistantAdjustment(String);
     method public android.content.ComponentName getEffectsSuppressor();
     method public boolean isNotificationPolicyAccessGrantedForPackage(@NonNull String);
-    method public boolean matchesCallFilter(android.os.Bundle);
     method @RequiresPermission(android.Manifest.permission.MANAGE_NOTIFICATION_LISTENERS) public void setNotificationListenerAccessGranted(@NonNull android.content.ComponentName, boolean, boolean);
     method @RequiresPermission(android.Manifest.permission.MANAGE_TOAST_RATE_LIMITING) public void setToastRateLimitingEnabled(boolean);
     method public void updateNotificationChannel(@NonNull String, int, @NonNull android.app.NotificationChannel);
@@ -3220,13 +3221,6 @@ package android.window {
     method @Nullable public android.view.View getBrandingView();
   }
 
-  public final class StartingWindowInfo implements android.os.Parcelable {
-    ctor public StartingWindowInfo();
-    method public int describeContents();
-    method public void writeToParcel(@NonNull android.os.Parcel, int);
-    field @NonNull public static final android.os.Parcelable.Creator<android.window.StartingWindowInfo> CREATOR;
-  }
-
   public final class TaskAppearedInfo implements android.os.Parcelable {
     ctor public TaskAppearedInfo(@NonNull android.app.ActivityManager.RunningTaskInfo, @NonNull android.view.SurfaceControl);
     method public int describeContents();
@@ -3293,7 +3287,6 @@ package android.window {
 
   public class TaskOrganizer extends android.window.WindowOrganizer {
     ctor public TaskOrganizer();
-    method @BinderThread public void addStartingWindow(@NonNull android.window.StartingWindowInfo, @NonNull android.os.IBinder);
     method @BinderThread public void copySplashScreenView(int);
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void createRootTask(int, int, @Nullable android.os.IBinder);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public boolean deleteRootTask(@NonNull android.window.WindowContainerToken);
@@ -3306,7 +3299,6 @@ package android.window {
     method @BinderThread public void onTaskInfoChanged(@NonNull android.app.ActivityManager.RunningTaskInfo);
     method @BinderThread public void onTaskVanished(@NonNull android.app.ActivityManager.RunningTaskInfo);
     method @CallSuper @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public java.util.List<android.window.TaskAppearedInfo> registerOrganizer();
-    method @BinderThread public void removeStartingWindow(int, @Nullable android.view.SurfaceControl, @Nullable android.graphics.Rect, boolean);
     method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void setInterceptBackPressedOnTaskRoot(@NonNull android.window.WindowContainerToken, boolean);
     method @CallSuper @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void unregisterOrganizer();
   }

@@ -351,13 +351,6 @@ public abstract class PanelViewController {
     protected abstract float getOpeningHeight();
 
     /**
-     * Minimum fraction from where expansion should start. This is set when pulling down on a
-     * heads-up notification.
-     * @param minFraction Fraction from 0 to 1.
-     */
-    public abstract void setMinFraction(float minFraction);
-
-    /**
      * @return whether the swiping direction is upwards and above a 45 degree angle compared to the
      * horizontal direction
      */
@@ -400,11 +393,16 @@ public abstract class PanelViewController {
 
             final boolean expand;
             if (event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel) {
-                // If we get a cancel, put the shade back to the state it was in when the gesture
-                // started
-                if (onKeyguard) {
+                // If the keyguard is fading away, don't expand it again. This can happen if you're
+                // swiping to unlock, the app below the keyguard is in landscape, and the screen
+                // rotates while your finger is still down after the swipe to unlock.
+                if (mKeyguardStateController.isKeyguardFadingAway()) {
+                    expand = false;
+                } else if (onKeyguard) {
                     expand = true;
                 } else {
+                    // If we get a cancel, put the shade back to the state it was in when the
+                    // gesture started
                     expand = !mPanelClosedOnDown;
                 }
             } else {
@@ -1188,11 +1186,6 @@ public abstract class PanelViewController {
     protected OnConfigurationChangedListener createOnConfigurationChangedListener() {
         return new OnConfigurationChangedListener();
     }
-
-    /**
-     * Set that the panel is currently opening and not fully opened or closed.
-     */
-    public abstract void setIsShadeOpening(boolean opening);
 
     public class TouchHandler implements View.OnTouchListener {
         public boolean onInterceptTouchEvent(MotionEvent event) {

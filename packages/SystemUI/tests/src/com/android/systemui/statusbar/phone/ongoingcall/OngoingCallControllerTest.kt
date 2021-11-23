@@ -40,6 +40,7 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntry
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder
 import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener
+import com.android.systemui.statusbar.phone.StatusBarWindowController
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.time.FakeSystemClock
@@ -49,8 +50,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
-import org.mockito.ArgumentMatchers.anyBoolean
-import org.mockito.ArgumentMatchers.nullable
+import org.mockito.ArgumentMatchers.*
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.eq
@@ -60,6 +60,7 @@ import org.mockito.Mockito.reset
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
+import java.util.Optional
 
 private const val CALL_UID = 900
 
@@ -81,9 +82,11 @@ class OngoingCallControllerTest : SysuiTestCase() {
     private lateinit var controller: OngoingCallController
     private lateinit var notifCollectionListener: NotifCollectionListener
 
+    @Mock private lateinit var mockSwipeStatusBarAwayGestureHandler: SwipeStatusBarAwayGestureHandler
     @Mock private lateinit var mockOngoingCallListener: OngoingCallListener
     @Mock private lateinit var mockActivityStarter: ActivityStarter
     @Mock private lateinit var mockIActivityManager: IActivityManager
+    @Mock private lateinit var mockStatusBarWindowController: StatusBarWindowController
 
     private lateinit var chipView: View
 
@@ -108,6 +111,8 @@ class OngoingCallControllerTest : SysuiTestCase() {
                 mockIActivityManager,
                 OngoingCallLogger(uiEventLoggerFake),
                 DumpManager(),
+                Optional.of(mockStatusBarWindowController),
+                Optional.of(mockSwipeStatusBarAwayGestureHandler),
         )
         controller.init()
         controller.addCallback(mockOngoingCallListener)
@@ -131,6 +136,21 @@ class OngoingCallControllerTest : SysuiTestCase() {
         notifCollectionListener.onEntryUpdated(createOngoingCallNotifEntry())
 
         verify(mockOngoingCallListener).onOngoingCallStateChanged(anyBoolean())
+    }
+
+    @Test
+    fun onEntryUpdated_isOngoingCallNotif_windowControllerUpdated() {
+        notifCollectionListener.onEntryUpdated(createOngoingCallNotifEntry())
+
+        verify(mockStatusBarWindowController).setOngoingProcessRequiresStatusBarVisible(true)
+    }
+
+    @Test
+    fun onEntryUpdated_isOngoingCallNotif_swipeGestureCallbackAdded() {
+        notifCollectionListener.onEntryUpdated(createOngoingCallNotifEntry())
+
+        verify(mockSwipeStatusBarAwayGestureHandler)
+            .addOnGestureDetectedCallback(anyString(), any())
     }
 
     @Test
@@ -222,6 +242,27 @@ class OngoingCallControllerTest : SysuiTestCase() {
         notifCollectionListener.onEntryRemoved(ongoingCallNotifEntry, REASON_USER_STOPPED)
 
         verify(mockOngoingCallListener).onOngoingCallStateChanged(anyBoolean())
+    }
+
+    @Test
+    fun onEntryUpdated_callNotifAddedThenRemoved_windowControllerUpdated() {
+        val ongoingCallNotifEntry = createOngoingCallNotifEntry()
+        notifCollectionListener.onEntryAdded(ongoingCallNotifEntry)
+
+        notifCollectionListener.onEntryRemoved(ongoingCallNotifEntry, REASON_USER_STOPPED)
+
+        verify(mockStatusBarWindowController).setOngoingProcessRequiresStatusBarVisible(false)
+    }
+
+    @Test
+    fun onEntryUpdated_callNotifAddedThenRemoved_swipeGestureCallbackRemoved() {
+        val ongoingCallNotifEntry = createOngoingCallNotifEntry()
+        notifCollectionListener.onEntryAdded(ongoingCallNotifEntry)
+
+        notifCollectionListener.onEntryRemoved(ongoingCallNotifEntry, REASON_USER_STOPPED)
+
+        verify(mockSwipeStatusBarAwayGestureHandler)
+            .removeOnGestureDetectedCallback(anyString())
     }
 
     /** Regression test for b/188491504. */

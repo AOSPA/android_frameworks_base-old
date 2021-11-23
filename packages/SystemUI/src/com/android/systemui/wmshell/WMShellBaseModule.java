@@ -26,6 +26,7 @@ import android.view.WindowManager;
 
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.launcher3.icons.IconProvider;
 import com.android.systemui.dagger.WMComponent;
 import com.android.systemui.dagger.WMSingleton;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
@@ -73,6 +74,7 @@ import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.splitscreen.SplitScreenController;
+import com.android.wm.shell.splitscreen.StageTaskUnfoldController;
 import com.android.wm.shell.startingsurface.StartingSurface;
 import com.android.wm.shell.startingsurface.StartingWindowController;
 import com.android.wm.shell.startingsurface.StartingWindowTypeAlgorithm;
@@ -81,10 +83,14 @@ import com.android.wm.shell.tasksurfacehelper.TaskSurfaceHelperController;
 import com.android.wm.shell.transition.ShellTransitions;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
+import com.android.wm.shell.unfold.UnfoldBackgroundController;
 
 import java.util.Optional;
 
+import javax.inject.Provider;
+
 import dagger.BindsOptionalOf;
+import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
@@ -161,6 +167,12 @@ public abstract class WMShellBaseModule {
         return new SystemWindows(displayController, wmService);
     }
 
+    @WMSingleton
+    @Provides
+    static IconProvider provideIconProvider(Context context) {
+        return new IconProvider(context);
+    }
+
     // We currently dedupe multiple messages, so we use the shell main handler directly
     @WMSingleton
     @Provides
@@ -234,14 +246,46 @@ public abstract class WMShellBaseModule {
     static Optional<FullscreenUnfoldController> provideFullscreenUnfoldController(
             Context context,
             Optional<ShellUnfoldProgressProvider> progressProvider,
-            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
+            Lazy<UnfoldBackgroundController> unfoldBackgroundController,
             DisplayInsetsController displayInsetsController,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
         return progressProvider.map(shellUnfoldTransitionProgressProvider ->
                 new FullscreenUnfoldController(context, mainExecutor,
-                        shellUnfoldTransitionProgressProvider, rootTaskDisplayAreaOrganizer,
+                        unfoldBackgroundController.get(), shellUnfoldTransitionProgressProvider,
                         displayInsetsController));
+    }
+
+    @Provides
+    static Optional<StageTaskUnfoldController> provideStageTaskUnfoldController(
+            Optional<ShellUnfoldProgressProvider> progressProvider,
+            Context context,
+            TransactionPool transactionPool,
+            Lazy<UnfoldBackgroundController> unfoldBackgroundController,
+            DisplayInsetsController displayInsetsController,
+            @ShellMainThread ShellExecutor mainExecutor
+    ) {
+        return progressProvider.map(shellUnfoldTransitionProgressProvider ->
+                new StageTaskUnfoldController(
+                        context,
+                        transactionPool,
+                        shellUnfoldTransitionProgressProvider,
+                        displayInsetsController,
+                        unfoldBackgroundController.get(),
+                        mainExecutor
+                ));
+    }
+
+    @WMSingleton
+    @Provides
+    static UnfoldBackgroundController provideUnfoldBackgroundController(
+            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
+            Context context
+    ) {
+        return new UnfoldBackgroundController(
+                context,
+                rootTaskDisplayAreaOrganizer
+        );
     }
 
     //
@@ -401,12 +445,13 @@ public abstract class WMShellBaseModule {
             @ShellMainThread ShellExecutor mainExecutor,
             DisplayImeController displayImeController,
             DisplayInsetsController displayInsetsController, Transitions transitions,
-            TransactionPool transactionPool) {
+            TransactionPool transactionPool,
+            Provider<Optional<StageTaskUnfoldController>> stageTaskUnfoldControllerProvider) {
         if (ActivityTaskManager.supportsSplitScreenMultiWindow(context)) {
             return Optional.of(new SplitScreenController(shellTaskOrganizer, syncQueue, context,
                     rootTaskDisplayAreaOrganizer, mainExecutor, displayImeController,
                     displayInsetsController, transitions,
-                    transactionPool));
+                    transactionPool, stageTaskUnfoldControllerProvider));
         } else {
             return Optional.empty();
         }
@@ -448,9 +493,10 @@ public abstract class WMShellBaseModule {
     @Provides
     static StartingWindowController provideStartingWindowController(Context context,
             @ShellSplashscreenThread ShellExecutor splashScreenExecutor,
-            StartingWindowTypeAlgorithm startingWindowTypeAlgorithm, TransactionPool pool) {
+            StartingWindowTypeAlgorithm startingWindowTypeAlgorithm, IconProvider iconProvider,
+            TransactionPool pool) {
         return new StartingWindowController(context, splashScreenExecutor,
-                startingWindowTypeAlgorithm, pool);
+                startingWindowTypeAlgorithm, iconProvider, pool);
     }
 
     //

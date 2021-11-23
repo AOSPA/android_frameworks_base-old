@@ -467,12 +467,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @VisibleForTesting
     boolean isDefaultDisplay;
 
-    /**
-     * Flag indicating whether WindowManager should override info for this display in
-     * DisplayManager.
-     */
-    boolean mShouldOverrideDisplayConfiguration = true;
-
     /** Window tokens that are in the process of exiting, but still on screen for animations. */
     final ArrayList<WindowToken> mExitingTokens = new ArrayList<>();
 
@@ -654,11 +648,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     private final InsetsStateController mInsetsStateController;
     private final InsetsPolicy mInsetsPolicy;
-
-    /** @see #getParentWindow() */
-    private WindowState mParentWindow;
-
-    private Point mLocationInParentWindow = new Point();
 
     /** Corner radius that windows should have in order to match the display. */
     private final float mWindowCornerRadius;
@@ -860,7 +849,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     w.updateLastFrames();
                 }
                 w.onResizeHandled();
-                w.updateLocationInParentDisplayIfNeeded();
             }
 
             if (w.mActivityRecord != null) {
@@ -1067,7 +1055,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         final InputChannel inputChannel = mWmService.mInputManager.monitorInput(
                 "PointerEventDispatcher" + mDisplayId, mDisplayId);
-        mPointerEventDispatcher = new PointerEventDispatcher(inputChannel, this);
+        mPointerEventDispatcher = new PointerEventDispatcher(inputChannel);
 
         // Tap Listeners are supported for:
         // 1. All physical displays (multi-display).
@@ -1661,7 +1649,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     /** Returns {@code true} if the IME is possible to show on the launching activity. */
-    private boolean mayImeShowOnLaunchingActivity(@NonNull ActivityRecord r) {
+    boolean mayImeShowOnLaunchingActivity(@NonNull ActivityRecord r) {
         final WindowState win = r.findMainWindow();
         if (win == null) {
             return false;
@@ -2023,14 +2011,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         computeSizeRangesAndScreenLayout(mDisplayInfo, rotated, uiMode, dw, dh,
                 mDisplayMetrics.density, outConfig);
 
-        // We usually set the override info in DisplayManager so that we get consistent display
-        // metrics values when displays are changing and don't send out new values until WM is aware
-        // of them. However, we don't do this for displays that serve as containers for ActivityView
-        // because we don't want letter-/pillar-boxing during resize.
-        final DisplayInfo overrideDisplayInfo = mShouldOverrideDisplayConfiguration
-                ? mDisplayInfo : null;
         mWmService.mDisplayManagerInternal.setDisplayInfoOverrideFromWindowManager(mDisplayId,
-                overrideDisplayInfo);
+                mDisplayInfo);
 
         mBaseDisplayRect.set(0, 0, dw, dh);
 
@@ -3075,9 +3057,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void removeImmediately() {
         mDeferredRemoval = false;
         try {
-            if (mParentWindow != null) {
-                mParentWindow.removeEmbeddedDisplayContent(this);
-            }
             // Clear all transitions & screen frozen states when removing display.
             mOpeningApps.clear();
             mClosingApps.clear();
@@ -3094,6 +3073,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mOverlayLayer.release();
             mInputMonitor.onDisplayRemoved();
             mWmService.mDisplayNotificationController.dispatchDisplayRemoved(this);
+            mWmService.mAccessibilityController.onDisplayRemoved(mDisplayId);
         } finally {
             mDisplayReady = false;
         }
@@ -3804,7 +3784,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     boolean shouldImeAttachedToApp() {
-        return isImeControlledByApp()
+        // Force attaching IME to the display when magnifying, or it would be magnified with
+        // target app together.
+        final boolean allowAttachToApp = (mMagnificationSpec == null);
+
+        return allowAttachToApp && isImeControlledByApp()
                 && mImeLayeringTarget != null
                 && mImeLayeringTarget.mActivityRecord != null
                 && mImeLayeringTarget.getWindowingMode() == WINDOWING_MODE_FULLSCREEN
@@ -3829,8 +3813,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /**
      * Finds the window which can host IME if IME target cannot host it.
-     * e.g. IME target cannot host IME when it's display has a parent display OR when display
-     * doesn't support IME/system decorations.
+     * e.g. IME target cannot host IME  when display doesn't support IME/system decorations.
      *
      * @param target current IME target.
      * @return {@link InsetsControlTarget} that can host IME.
@@ -4143,14 +4126,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     @VisibleForTesting
     SurfaceControl computeImeParent() {
-        // Force attaching IME to the display when magnifying, or it would be magnified with
-        // target app together.
-        final boolean allowAttachToApp = (mMagnificationSpec == null);
-
         // Attach it to app if the target is part of an app and such app is covering the entire
         // screen. If it's not covering the entire screen the IME might extend beyond the apps
         // bounds.
-        if (allowAttachToApp && shouldImeAttachedToApp()) {
+        if (shouldImeAttachedToApp()) {
             if (mImeLayeringTarget.mActivityRecord != mImeInputTarget.mActivityRecord) {
                 // Do not change parent if the window hasn't requested IME.
                 return null;
@@ -5182,65 +5161,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 && mDisplayId != mWmService.mVr2dDisplayId
                 // Do not show system decorations on untrusted virtual display.
                 && isTrusted();
-    }
-
-    /**
-     * Get the window which owns the surface that this DisplayContent is re-parented to.
-     *
-     * @return the parent window.
-     */
-    WindowState getParentWindow() {
-        return mParentWindow;
-    }
-
-    /**
-     * Update the location of this display in the parent window. This enables windows in this
-     * display to compute the global transformation matrix.
-     *
-     * @param win The parent window of this display.
-     * @param x The x coordinate in the parent window.
-     * @param y The y coordinate in the parent window.
-     */
-    void updateLocation(WindowState win, int x, int y) {
-        if (mParentWindow != win) {
-            throw new IllegalArgumentException(
-                    "The given window is not the parent window of this display.");
-        }
-        if (!mLocationInParentWindow.equals(x, y)) {
-            mLocationInParentWindow.set(x, y);
-            if (mWmService.mAccessibilityController.hasCallbacks()) {
-                mWmService.mAccessibilityController.onSomeWindowResizedOrMoved(mDisplayId);
-            }
-            notifyLocationInParentDisplayChanged();
-        }
-    }
-
-    Point getLocationInParentWindow() {
-        return mLocationInParentWindow;
-    }
-
-    Point getLocationInParentDisplay() {
-        final Point location = new Point();
-        if (mParentWindow != null) {
-            // LocationInParentWindow indicates the offset to (0,0) of window, but what we need is
-            // the offset to (0,0) of display.
-            DisplayContent dc = this;
-            do {
-                final WindowState displayParent = dc.getParentWindow();
-                location.x += displayParent.getFrame().left
-                        + (dc.getLocationInParentWindow().x * displayParent.mGlobalScale + 0.5f);
-                location.y += displayParent.getFrame().top
-                        + (dc.getLocationInParentWindow().y * displayParent.mGlobalScale + 0.5f);
-                dc = displayParent.getDisplayContent();
-            } while (dc != null && dc.getParentWindow() != null);
-        }
-        return location;
-    }
-
-    void notifyLocationInParentDisplayChanged() {
-        forAllWindows(w -> {
-            w.updateLocationInParentDisplayIfNeeded();
-        }, false /* traverseTopToBottom */);
     }
 
     SurfaceControl getWindowingLayer() {

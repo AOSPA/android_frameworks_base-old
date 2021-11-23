@@ -71,7 +71,6 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityThread;
-import android.app.WindowConfiguration;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -112,6 +111,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -127,26 +127,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         implements Comparable<WindowContainer>, Animatable, SurfaceFreezer.Freezable {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "WindowContainer" : TAG_WM;
-
-    /** Animation layer that happens above all animating {@link Task}s. */
-    static final int ANIMATION_LAYER_STANDARD = 0;
-
-    /** Animation layer that happens above all {@link Task}s. */
-    static final int ANIMATION_LAYER_BOOSTED = 1;
-
-    /**
-     * Animation layer that is reserved for {@link WindowConfiguration#ACTIVITY_TYPE_HOME}
-     * activities and all activities that are being controlled by the recents animation. This
-     * layer is generally below all {@link Task}s.
-     */
-    static final int ANIMATION_LAYER_HOME = 2;
-
-    @IntDef(prefix = { "ANIMATION_LAYER_" }, value = {
-            ANIMATION_LAYER_STANDARD,
-            ANIMATION_LAYER_BOOSTED,
-            ANIMATION_LAYER_HOME,
-    })
-    @interface AnimationLayer {}
 
     static final int POSITION_TOP = Integer.MAX_VALUE;
     static final int POSITION_BOTTOM = Integer.MIN_VALUE;
@@ -198,6 +178,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * Applied as part of the animation pass in "prepareSurfaces".
      */
     protected final SurfaceAnimator mSurfaceAnimator;
+
+    /** The parent leash added for animation. */
+    @Nullable
+    private SurfaceControl mAnimationLeash;
 
     final SurfaceFreezer mSurfaceFreezer;
     protected final WindowManagerService mWmService;
@@ -953,21 +937,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     final boolean isAnimating(int flags, int typesToCheck) {
         return getAnimatingContainer(flags, typesToCheck) != null;
-    }
-
-    /**
-     * Similar to {@link #isAnimating(int, int)} except provide a bitmask of
-     * {@link AnimationType} to exclude, rather than include
-     * @param flags The combination of bitmask flags to specify targets and condition for
-     *              checking animating status.
-     * @param typesToExclude The combination of bitmask {@link AnimationType} to exclude when
-     *                     checking if animating.
-     *
-     * @deprecated Use {@link #isAnimating(int, int)}
-     */
-    @Deprecated
-    final boolean isAnimatingExcluding(int flags, int typesToExclude) {
-        return isAnimating(flags, ANIMATION_TYPE_ALL & ~typesToExclude);
     }
 
     /**
@@ -2582,11 +2551,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param animationFinishedCallback The callback being triggered when the animation finishes.
      * @param animationCancelledCallback The callback is triggered after the SurfaceAnimator sends a
      *                                   cancel call to the underlying AnimationAdapter.
+     * @param snapshotAnim  The animation to run for the snapshot. {@code null} if there is no
+     *                      snapshot.
      */
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
             @AnimationType int type,
             @Nullable OnAnimationFinishedCallback animationFinishedCallback,
-            @Nullable Runnable animationCancelledCallback) {
+            @Nullable Runnable animationCancelledCallback,
+            @Nullable AnimationAdapter snapshotAnim) {
         if (DEBUG_ANIM) {
             Slog.v(TAG, "Starting animation on " + this + ": type=" + type + ", anim=" + anim);
         }
@@ -2594,14 +2566,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // TODO: This should use isVisible() but because isVisible has a really weird meaning at
         // the moment this doesn't work for all animatable window containers.
         mSurfaceAnimator.startAnimation(t, anim, hidden, type, animationFinishedCallback,
-                animationCancelledCallback, mSurfaceFreezer);
+                animationCancelledCallback, snapshotAnim, mSurfaceFreezer);
     }
 
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
             @AnimationType int type,
             @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
         startAnimation(t, anim, hidden, type, animationFinishedCallback,
-                null /* adapterAnimationCancelledCallback */);
+                null /* adapterAnimationCancelledCallback */, null /* snapshotAnim */);
     }
 
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
@@ -2670,17 +2642,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public SurfaceControl getAnimationLeashParent() {
         return getParentSurfaceControl();
-    }
-
-    /**
-     * @return The layer on which all app animations are happening.
-     */
-    SurfaceControl getAppAnimationLayer(@AnimationLayer int animationLayer) {
-        final WindowContainer parent = getParent();
-        if (parent != null) {
-            return parent.getAppAnimationLayer(animationLayer);
-        }
-        return null;
     }
 
     // TODO: Remove this and use #getBounds() instead once we set an app transition animation
@@ -2860,20 +2821,25 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 taskDisplayArea.setBackgroundColor(backgroundColor);
             }
 
+            // Atomic counter to make sure the clearColor callback is only called one.
+            // It will be called twice in the case we cancel the animation without restart
+            // (in that case it will run as the cancel and finished callbacks).
+            final AtomicInteger callbackCounter = new AtomicInteger(0);
+            final Runnable clearBackgroundColorHandler = () -> {
+                if (callbackCounter.getAndIncrement() == 0) {
+                    taskDisplayArea.clearBackgroundColor();
+                }
+            };
+
             final Runnable cleanUpCallback = isSettingBackgroundColor
-                    ? taskDisplayArea::clearBackgroundColor : () -> {};
+                    ? clearBackgroundColorHandler : () -> {};
 
             startAnimation(getPendingTransaction(), adapter, !isVisible(),
-                    ANIMATION_TYPE_APP_TRANSITION,
-                    (type, anim) -> cleanUpCallback.run(),
-                    cleanUpCallback);
+                    ANIMATION_TYPE_APP_TRANSITION, (type, anim) -> cleanUpCallback.run(),
+                    cleanUpCallback, thumbnailAdapter);
 
             if (adapter.getShowWallpaper()) {
                 getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
-            }
-            if (thumbnailAdapter != null) {
-                mSurfaceFreezer.mSnapshot.startAnimation(getPendingTransaction(),
-                        thumbnailAdapter, ANIMATION_TYPE_APP_TRANSITION, (type, anim) -> { });
             }
         }
     }
@@ -3004,6 +2970,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
         mLastLayer = -1;
+        mAnimationLeash = leash;
         reassignLayer(t);
 
         // Leash is now responsible for position, so set our position to 0.
@@ -3013,9 +2980,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public void onAnimationLeashLost(Transaction t) {
         mLastLayer = -1;
-        mSurfaceFreezer.unfreeze(t);
+        mAnimationLeash = null;
         reassignLayer(t);
         updateSurfacePosition(t);
+    }
+
+    @Override
+    public SurfaceControl getAnimationLeash() {
+        return mAnimationLeash;
     }
 
     private void doAnimationFinished(@AnimationType int type, AnimationAdapter anim) {
