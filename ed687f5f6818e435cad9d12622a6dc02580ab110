@@ -16,6 +16,23 @@
       "message": "cherry-picked from https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/16328 as I found disabling cleaner than removing. Checked works.",
       "revId": "ed687f5f6818e435cad9d12622a6dc02580ab110",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ba2f74cb_51253756",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-11-23T03:31:01Z",
+      "side": 1,
+      "message": "I guess the only thing that would be less of a delta is if (false)",
+      "revId": "ed687f5f6818e435cad9d12622a6dc02580ab110",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
