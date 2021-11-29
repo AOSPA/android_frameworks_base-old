@@ -96,6 +96,7 @@ import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.StatusBarLocationPublisher;
 import com.android.systemui.statusbar.phone.StatusBarMoveFromCenterAnimationController;
 import com.android.systemui.statusbar.phone.StatusBarNotificationActivityStarter;
+import com.android.systemui.statusbar.phone.StatusBarSignalPolicy;
 import com.android.systemui.statusbar.phone.StatusBarTouchableRegionManager;
 import com.android.systemui.statusbar.phone.StatusBarWindowView;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
@@ -145,6 +146,7 @@ public interface StatusBarPhoneModule {
             LightBarController lightBarController,
             AutoHideController autoHideController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
+            StatusBarSignalPolicy statusBarSignalPolicy,
             PulseExpansionHandler pulseExpansionHandler,
             NotificationWakeUpCoordinator notificationWakeUpCoordinator,
             KeyguardBypassController keyguardBypassController,
@@ -246,6 +248,7 @@ public interface StatusBarPhoneModule {
                 lightBarController,
                 autoHideController,
                 keyguardUpdateMonitor,
+                statusBarSignalPolicy,
                 pulseExpansionHandler,
                 notificationWakeUpCoordinator,
                 keyguardBypassController,

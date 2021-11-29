@@ -2985,11 +2985,6 @@ class Task extends TaskFragment {
         return super.makeAnimationLeash().setMetadata(METADATA_TASK_ID, mTaskId);
     }
 
-    @Override
-    void resetSurfacePositionForAnimationLeash(SurfaceControl.Transaction t) {
-        super.resetSurfacePositionForAnimationLeash(t);
-    }
-
     boolean shouldAnimate() {
         /**
          * Animations are handled by the TaskOrganizer implementation.
@@ -4283,7 +4278,7 @@ class Task extends TaskFragment {
     /**
      * @return true if the task is currently focused.
      */
-    boolean isFocused() {
+    private boolean isFocused() {
         if (mDisplayContent == null || mDisplayContent.mFocusedApp == null) {
             return false;
         }
@@ -4341,14 +4336,10 @@ class Task extends TaskFragment {
     }
 
     /**
-     * Called on the task of a window which gained or lost focus.
+     * Called on the task when it gained or lost focus.
      * @param hasFocus
      */
     void onAppFocusChanged(boolean hasFocus) {
-        final ActivityRecord topAct = getTopVisibleActivity();
-        if (topAct != null && (topAct.mStartingData instanceof SnapshotStartingData)) {
-            topAct.removeStartingWindowIfNeeded();
-        }
         updateShadowsRadius(hasFocus, getSyncTransaction());
         dispatchTaskInfoChangedIfNeeded(false /* force */);
     }

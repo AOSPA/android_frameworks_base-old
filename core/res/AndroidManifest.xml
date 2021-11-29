@@ -743,7 +743,7 @@
     <protected-broadcast android:name="android.scheduling.action.REBOOT_READY" />
     <protected-broadcast android:name="android.app.action.DEVICE_POLICY_CONSTANTS_CHANGED" />
     <protected-broadcast android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
-    <protected-broadcast android:name="android.app.action.ACTION_SHOW_NEW_USER_DISCLAIMER" />
+    <protected-broadcast android:name="android.app.action.SHOW_NEW_USER_DISCLAIMER" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -4531,6 +4531,12 @@
          @hide
          @TestApi -->
     <permission android:name="android.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE"
+                android:protectionLevel="signature" />
+
+    <!-- Allows an application to modify the user preferred display mode.
+         @hide
+         @TestApi -->
+    <permission android:name="android.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE"
                 android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows an application to control VPN.

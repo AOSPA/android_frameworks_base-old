@@ -199,11 +199,8 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
      *
      * <p>
      * <ul>
-     * <li> {@link #GROUP_STATUS_IDLE} </li>
-     * <li> {@link #GROUP_STATUS_STREAMING} </li>
-     * <li> {@link #GROUP_STATUS_SUSPENDED} </li>
-     * <li> {@link #GROUP_STATUS_RECONFIGURED} </li>
-     * <li> {@link #GROUP_STATUS_DESTROYED} </li>
+     * <li> {@link #GROUP_STATUS_ACTIVE} </li>
+     * <li> {@link #GROUP_STATUS_INACTIVE} </li>
      * </ul>
      * <p>
      * @hide
@@ -241,6 +238,19 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
+    /**
+     * Indicating that group is Active ( Audio device is available )
+     * @hide
+     */
+    public static final int GROUP_STATUS_ACTIVE = IBluetoothLeAudio.GROUP_STATUS_ACTIVE;
+
+    /**
+     * Indicating that group is Inactive ( Audio device is not available )
+     * @hide
+     */
+    public static final int GROUP_STATUS_INACTIVE = IBluetoothLeAudio.GROUP_STATUS_INACTIVE;
+
+
     private final BluetoothProfileConnector<IBluetoothLeAudio> mProfileConnector =
             new BluetoothProfileConnector(this, BluetoothProfile.LE_AUDIO, "BluetoothLeAudio",
                     IBluetoothLeAudio.class.getName()) {
@@ -433,7 +443,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
      * <p> This API returns false in scenarios like the profile on the
      * device is not connected or Bluetooth is not turned on.
      * When this API returns true, it is guaranteed that the
-     * {@link #ACTION_LEAUDIO_ACTIVE_DEVICE_CHANGED} intent will be broadcasted
+     * {@link #ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED} intent will be broadcasted
      * with the active device.
      *
      *
@@ -508,6 +518,30 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
         } catch (RemoteException e) {
             Log.e(TAG, "Stack:" + Log.getStackTraceString(new Throwable()));
             return GROUP_ID_INVALID;
+        }
+    }
+
+    /**
+     * Set volume for the streaming devices
+     *
+     * @param volume volume to set
+     * @hide
+     */
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_PRIVILEGED})
+    public void setVolume(int volume) {
+        if (VDBG) log("setVolume(vol: " + volume + " )");
+        try {
+            final IBluetoothLeAudio service = getService();
+            if (service != null && mAdapter.isEnabled()) {
+                service.setVolume(volume, mAttributionSource);
+                return;
+            }
+            if (service == null) Log.w(TAG, "Proxy not attached to service");
+            return;
+        } catch (RemoteException e) {
+            Log.e(TAG, "Stack:" + Log.getStackTraceString(new Throwable()));
+            return;
         }
     }
 

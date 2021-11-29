@@ -92,6 +92,8 @@ import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.Scr
 import static com.android.server.am.ActivityManagerServiceDumpProcessesProto.ScreenCompatPackage.PACKAGE;
 import static com.android.server.am.EventLogTags.writeBootProgressEnableScreen;
 import static com.android.server.am.EventLogTags.writeConfigurationChanged;
+import static com.android.server.wm.ActivityInterceptorCallback.FIRST_ORDERED_ID;
+import static com.android.server.wm.ActivityInterceptorCallback.LAST_ORDERED_ID;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_ROOT_TASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_SWITCH;
@@ -457,6 +459,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /** The controller for all operations related to locktask. */
     private LockTaskController mLockTaskController;
     private ActivityStartController mActivityStartController;
+    private SparseArray<ActivityInterceptorCallback> mActivityInterceptorCallbacks =
+            new SparseArray<>();
     PackageConfigPersister mPackageConfigPersister;
 
     boolean mSuppressResizeConfigChanges;
@@ -986,6 +990,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         synchronized (mGlobalLock) {
             mWindowManager = wm;
             mRootWindowContainer = wm.mRoot;
+            mWindowOrganizerController.setWindowManager(wm);
             mTempConfig.setToDefaults();
             mTempConfig.setLocales(LocaleList.getDefault());
             mConfigurationSeq = mTempConfig.seq = 1;
@@ -1112,6 +1117,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Nullable
     public BackgroundActivityStartCallback getBackgroundActivityStartCallback() {
         return mBackgroundActivityStartCallback;
+    }
+
+    SparseArray<ActivityInterceptorCallback> getActivityInterceptorCallbacks() {
+        return mActivityInterceptorCallbacks;
     }
 
     private void start() {
@@ -3414,9 +3423,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 final List<RemoteAction> actions = r.pictureInPictureArgs.getActions();
                 mRootWindowContainer.moveActivityToPinnedRootTask(
                         r, "enterPictureInPictureMode");
-                final Task rootTask = r.getRootTask();
-                rootTask.setPictureInPictureAspectRatio(aspectRatio);
-                rootTask.setPictureInPictureActions(actions);
+                final Task task = r.getTask();
+                task.setPictureInPictureAspectRatio(aspectRatio);
+                task.setPictureInPictureActions(actions);
+
+                // Continue the pausing process after entering pip.
+                if (task.getPausingActivity() == r) {
+                    task.schedulePauseActivity(r, false /* userLeaving */,
+                            false /* pauseImmediately */, "auto-pip");
+                }
             }
         };
 
@@ -4737,7 +4752,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                                     mContext.getText(R.string.heavy_weight_notification_detail))
                             .setContentIntent(PendingIntent.getActivityAsUser(mContext, 0,
                                     intent, PendingIntent.FLAG_CANCEL_CURRENT
-                                    | PendingIntent.FLAG_IMMUTABLE, null,
+                                            | PendingIntent.FLAG_IMMUTABLE, null,
                                     new UserHandle(userId)))
                             .build();
             try {
@@ -6576,6 +6591,23 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             // Start a transition for waking. This is needed for showWhenLocked activities.
             getTransitionController().requestTransitionIfNeeded(TRANSIT_WAKE, 0 /* flags */,
                     null /* trigger */, mRootWindowContainer.getDefaultDisplay());
+        }
+
+        @Override
+        public void registerActivityStartInterceptor(
+                @ActivityInterceptorCallback.OrderedId int id,
+                ActivityInterceptorCallback callback) {
+            synchronized (mGlobalLock) {
+                if (mActivityInterceptorCallbacks.contains(id)) {
+                    throw new IllegalArgumentException("Duplicate id provided: " + id);
+                }
+                if (id > LAST_ORDERED_ID || id < FIRST_ORDERED_ID) {
+                    throw new IllegalArgumentException(
+                            "Provided id " + id + " is not in range of valid ids ["
+                                    + FIRST_ORDERED_ID + "," + LAST_ORDERED_ID + "]");
+                }
+                mActivityInterceptorCallbacks.put(id, callback);
+            }
         }
     }
 }

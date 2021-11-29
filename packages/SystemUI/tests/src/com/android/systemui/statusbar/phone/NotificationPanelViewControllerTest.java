@@ -348,6 +348,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private LockscreenGestureLogger mLockscreenGestureLogger;
     @Mock
     private DumpManager mDumpManager;
+    @Mock
+    private NotificationsQSContainerController mNotificationsQSContainerController;
 
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
@@ -482,6 +484,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 () -> flingAnimationUtilsBuilder, mStatusBarTouchableRegionManager,
                 mConversationNotificationManager, mMediaHiearchyManager,
                 mStatusBarKeyguardViewManager,
+                mNotificationsQSContainerController,
                 mNotificationStackScrollLayoutController,
                 mKeyguardStatusViewComponentFactory,
                 mKeyguardQsUserSwitchComponentFactory,
@@ -540,8 +543,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetMinFraction() {
-        mNotificationPanelViewController.setMinFraction(0.5f);
+    public void testSetPanelScrimMinFraction() {
+        mNotificationPanelViewController.setPanelScrimMinFraction(0.5f);
         verify(mNotificationShadeDepthController).setPanelPullDownMinFraction(eq(0.5f));
     }
 

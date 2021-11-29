@@ -336,6 +336,7 @@ public class StatusBar extends SystemUI implements
     }
 
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
+    private boolean mCallingFadingAwayAfterReveal;
     private StatusBarCommandQueueCallbacks mCommandQueueCallbacks;
 
     void setWindowState(int state) {
@@ -513,6 +514,7 @@ public class StatusBar extends SystemUI implements
     private final NotificationsController mNotificationsController;
     private final OngoingCallController mOngoingCallController;
     private final SystemStatusAnimationScheduler mAnimationScheduler;
+    private final StatusBarSignalPolicy mStatusBarSignalPolicy;
     private final StatusBarLocationPublisher mStatusBarLocationPublisher;
     private final StatusBarIconController mStatusBarIconController;
 
@@ -628,6 +630,7 @@ public class StatusBar extends SystemUI implements
     private final Executor mUiBgExecutor;
 
     protected boolean mDozing;
+    private boolean mIsFullscreen;
 
     private final NotificationMediaManager mMediaManager;
     private final NotificationLockscreenUserManager mLockscreenUserManager;
@@ -704,6 +707,7 @@ public class StatusBar extends SystemUI implements
             LightBarController lightBarController,
             AutoHideController autoHideController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
+            StatusBarSignalPolicy statusBarSignalPolicy,
             PulseExpansionHandler pulseExpansionHandler,
             NotificationWakeUpCoordinator notificationWakeUpCoordinator,
             KeyguardBypassController keyguardBypassController,
@@ -882,6 +886,7 @@ public class StatusBar extends SystemUI implements
         mMoveFromCenterAnimation = statusBarUnfoldAnimationController;
         mOngoingCallController = ongoingCallController;
         mAnimationScheduler = animationScheduler;
+        mStatusBarSignalPolicy = statusBarSignalPolicy;
         mStatusBarLocationPublisher = locationPublisher;
         mStatusBarIconController = statusBarIconController;
         mFeatureFlags = featureFlags;
@@ -898,6 +903,8 @@ public class StatusBar extends SystemUI implements
         lockscreenShadeTransitionController.setStatusbar(this);
 
         mExpansionChangedListeners = new ArrayList<>();
+        addExpansionChangedListener(
+                (expansion, expanded) -> mScrimController.setRawPanelExpansionFraction(expansion));
 
         mBubbleExpandListener =
                 (isExpanding, key) -> mContext.getMainExecutor().execute(() -> {
@@ -908,6 +915,9 @@ public class StatusBar extends SystemUI implements
         mActivityIntentHelper = new ActivityIntentHelper(mContext);
         mActivityLaunchAnimator = activityLaunchAnimator;
         mDialogLaunchAnimator = dialogLaunchAnimator;
+
+        // The status bar background may need updating when the ongoing call status changes.
+        mOngoingCallController.addCallback((animate) -> maybeUpdateBarMode());
 
         // TODO(b/190746471): Find a better home for this.
         DateTimeView.setReceiverHandler(timeTickHandler);
@@ -936,6 +946,7 @@ public class StatusBar extends SystemUI implements
             mBroadcastDispatcher.registerReceiver(mTaskbarChangeReceiver, filter);
         }
 
+        mStatusBarSignalPolicy.init();
         mKeyguardIndicationController.init();
 
         mColorExtractor.addOnColorsChangedListener(mOnColorsChangedListener);
@@ -1161,6 +1172,8 @@ public class StatusBar extends SystemUI implements
                     mStatusBarView = (PhoneStatusBarView) statusBarFragment.getView();
                     mStatusBarView.setBar(this);
                     mStatusBarView.setPanel(mNotificationPanelViewController);
+                    mStatusBarView.setPanelStateChangeListener(
+                            mNotificationPanelViewController.getPanelStateChangeListener());
                     mStatusBarView.setScrimController(mScrimController);
                     mStatusBarView.setExpansionChangedListeners(mExpansionChangedListeners);
                     for (ExpansionChangedListener listener : mExpansionChangedListeners) {
@@ -1398,6 +1411,12 @@ public class StatusBar extends SystemUI implements
         mDeviceProvisionedController.addCallback(mUserSetupObserver);
         mUserSetupObserver.onUserSetupChanged();
 
+        for (ExpansionChangedListener listener : mExpansionChangedListeners) {
+            // The initial expansion amount comes from mNotificationPanelViewController, so we
+            // should send the amount once we've fully set up that controller.
+            sendInitialExpansionAmount(listener);
+        }
+
         // disable profiling bars, since they overlap and clutter the output on app windows
         ThreadedRenderer.overrideProperty("disableProfileBars", "true");
 
@@ -1550,6 +1569,9 @@ public class StatusBar extends SystemUI implements
                     time, PowerManager.WAKE_REASON_GESTURE, "com.android.systemui:" + why);
             mWakeUpComingFromTouch = true;
             where.getLocationInWindow(mTmpInt2);
+
+            // NOTE, the incoming view can sometimes be the entire container... unsure if
+            // this location is valuable enough
             mWakeUpTouchLocation = new PointF(mTmpInt2[0] + where.getWidth() / 2,
                     mTmpInt2[1] + where.getHeight() / 2);
             mFalsingCollector.onScreenOnFromTouch();
@@ -1643,7 +1665,7 @@ public class StatusBar extends SystemUI implements
                     }
                 });
         mStatusBarKeyguardViewManager.registerStatusBar(
-                /* statusBar= */ this, getBouncerContainer(),
+                /* statusBar= */ this,
                 mNotificationPanelViewController, mBiometricUnlockController,
                 mStackScroller, mKeyguardBypassController);
         mKeyguardIndicationController
@@ -1678,8 +1700,8 @@ public class StatusBar extends SystemUI implements
         return mNotificationPanelViewController;
     }
 
-    protected ViewGroup getBouncerContainer() {
-        return mNotificationShadeWindowView.findViewById(R.id.keyboard_bouncer_container);
+    public ViewGroup getBouncerContainer() {
+        return mNotificationShadeWindowViewController.getBouncerContainer();
     }
 
     public int getStatusBarHeight() {
@@ -2237,7 +2259,7 @@ public class StatusBar extends SystemUI implements
         if (!mTransientShown) {
             mTransientShown = true;
             mNoAnimationOnNextBarModeChange = true;
-            handleTransientChanged();
+            maybeUpdateBarMode();
         }
     }
 
@@ -2245,11 +2267,11 @@ public class StatusBar extends SystemUI implements
     void clearTransient() {
         if (mTransientShown) {
             mTransientShown = false;
-            handleTransientChanged();
+            maybeUpdateBarMode();
         }
     }
 
-    private void handleTransientChanged() {
+    private void maybeUpdateBarMode() {
         final int barMode = barMode(mTransientShown, mAppearance);
         if (updateBarMode(barMode)) {
             mLightBarController.onStatusBarModeChanged(barMode);
@@ -2267,9 +2289,11 @@ public class StatusBar extends SystemUI implements
         return false;
     }
 
-    private static @TransitionMode int barMode(boolean isTransient, int appearance) {
+    private @TransitionMode int barMode(boolean isTransient, int appearance) {
         final int lightsOutOpaque = APPEARANCE_LOW_PROFILE_BARS | APPEARANCE_OPAQUE_STATUS_BARS;
-        if (isTransient) {
+        if (mOngoingCallController.hasOngoingCall() && mIsFullscreen) {
+            return MODE_SEMI_TRANSPARENT;
+        } else if (isTransient) {
             return MODE_SEMI_TRANSPARENT;
         } else if ((appearance & lightsOutOpaque) == lightsOutOpaque) {
             return MODE_LIGHTS_OUT;
@@ -3120,8 +3144,20 @@ public class StatusBar extends SystemUI implements
     public void fadeKeyguardWhilePulsing() {
         mNotificationPanelViewController.fadeOut(0, FADE_KEYGUARD_DURATION_PULSING,
                 ()-> {
-                hideKeyguard();
-                mStatusBarKeyguardViewManager.onKeyguardFadedAway();
+                Runnable finishFading = () -> {
+                    mCallingFadingAwayAfterReveal = false;
+                    hideKeyguard();
+                    mStatusBarKeyguardViewManager.onKeyguardFadedAway();
+                };
+                if (mLightRevealScrim.getRevealAmount() != 1.0f) {
+                    mCallingFadingAwayAfterReveal = true;
+                    // We're still revealing the Light reveal, let's only go to keyguard once
+                    // that has finished and nothing moves anymore.
+                    // Going there introduces lots of jank
+                    mLightRevealScrim.setFullyRevealedRunnable(finishFading);
+                } else {
+                    finishFading.run();
+                }
             }).start();
     }
 
@@ -4223,9 +4259,11 @@ public class StatusBar extends SystemUI implements
     }
 
     private void sendInitialExpansionAmount(ExpansionChangedListener expansionChangedListener) {
-        expansionChangedListener.onExpansionChanged(
-                mNotificationPanelViewController.getExpandedFraction(),
-                mNotificationPanelViewController.isExpanded());
+        if (mNotificationPanelViewController != null) {
+            expansionChangedListener.onExpansionChanged(
+                    mNotificationPanelViewController.getExpandedFraction(),
+                    mNotificationPanelViewController.isExpanded());
+        }
     }
 
     public void removeExpansionChangedListener(@NonNull ExpansionChangedListener listener) {
@@ -4281,7 +4319,7 @@ public class StatusBar extends SystemUI implements
                         + "mStatusBarKeyguardViewManager was null");
                 return;
             }
-            if (mKeyguardStateController.isKeyguardFadingAway()) {
+            if (mKeyguardStateController.isKeyguardFadingAway() && !mCallingFadingAwayAfterReveal) {
                 mStatusBarKeyguardViewManager.onKeyguardFadedAway();
             }
         }
@@ -4471,6 +4509,12 @@ public class StatusBar extends SystemUI implements
                     updateScrimController();
                     updateReportRejectedTouchVisibility();
                     Trace.endSection();
+                }
+
+                @Override
+                public void onFullscreenStateChanged(boolean isFullscreen) {
+                    mIsFullscreen = isFullscreen;
+                    maybeUpdateBarMode();
                 }
             };
 

@@ -57,18 +57,19 @@ import android.view.Display;
 import android.view.IWindowSession;
 import android.view.InsetsState;
 import android.view.Surface;
-import android.view.SurfaceControl;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.WindowMetrics;
 import android.window.StartingWindowInfo;
+import android.window.StartingWindowRemovalInfo;
 import android.window.TaskSnapshot;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.common.HandlerExecutor;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.TransactionPool;
@@ -93,6 +94,8 @@ public class StartingSurfaceDrawerTests {
     @Mock
     private WindowManager mMockWindowManager;
     @Mock
+    private IconProvider mIconProvider;
+    @Mock
     private TransactionPool mTransactionPool;
 
     private final Handler mTestHandler = new Handler(Looper.getMainLooper());
@@ -105,8 +108,8 @@ public class StartingSurfaceDrawerTests {
         int mAddWindowForTask = 0;
 
         TestStartingSurfaceDrawer(Context context, ShellExecutor splashScreenExecutor,
-                TransactionPool pool) {
-            super(context, splashScreenExecutor, pool);
+                IconProvider iconProvider, TransactionPool pool) {
+            super(context, splashScreenExecutor, iconProvider, pool);
         }
 
         @Override
@@ -119,10 +122,9 @@ public class StartingSurfaceDrawerTests {
         }
 
         @Override
-        protected void removeWindowSynced(int taskId, SurfaceControl leash, Rect frame,
-                boolean playRevealAnimation) {
+        protected void removeWindowSynced(StartingWindowRemovalInfo removalInfo) {
             // listen for removeView
-            if (mAddWindowForTask == taskId) {
+            if (mAddWindowForTask == removalInfo.taskId) {
                 mAddWindowForTask = 0;
             }
         }
@@ -157,7 +159,8 @@ public class StartingSurfaceDrawerTests {
         doNothing().when(mMockWindowManager).addView(any(), any());
         mTestExecutor = new HandlerExecutor(mTestHandler);
         mStartingSurfaceDrawer = spy(
-                new TestStartingSurfaceDrawer(mTestContext, mTestExecutor, mTransactionPool));
+                new TestStartingSurfaceDrawer(mTestContext, mTestExecutor, mIconProvider,
+                        mTransactionPool));
     }
 
     @Test
@@ -172,9 +175,11 @@ public class StartingSurfaceDrawerTests {
                 eq(STARTING_WINDOW_TYPE_SPLASH_SCREEN));
         assertEquals(mStartingSurfaceDrawer.mAddWindowForTask, taskId);
 
-        mStartingSurfaceDrawer.removeStartingWindow(windowInfo.taskInfo.taskId, null, null, false);
+        StartingWindowRemovalInfo removalInfo = new StartingWindowRemovalInfo();
+        removalInfo.taskId = windowInfo.taskInfo.taskId;
+        mStartingSurfaceDrawer.removeStartingWindow(removalInfo);
         waitHandlerIdle(mTestHandler);
-        verify(mStartingSurfaceDrawer).removeWindowSynced(eq(taskId), any(), any(), eq(false));
+        verify(mStartingSurfaceDrawer).removeWindowSynced(any());
         assertEquals(mStartingSurfaceDrawer.mAddWindowForTask, 0);
     }
 
