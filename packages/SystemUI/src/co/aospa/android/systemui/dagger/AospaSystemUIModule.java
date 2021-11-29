@@ -24,6 +24,7 @@ import androidx.annotation.Nullable;
 
 import co.aospa.android.systemui.AospaServices;
 import co.aospa.android.systemui.assist.AssistManagerGoogle;
+import co.aospa.android.systemui.biometrics.AospaUdfpsHbmProvider;
 import co.aospa.android.systemui.smartspace.KeyguardSmartspaceController;
 
 import com.android.internal.logging.UiEventLogger;
@@ -34,6 +35,7 @@ import com.android.systemui.assist.AssistLogger;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.assist.PhoneStateMonitor;
 import com.android.systemui.assist.ui.DefaultUiController;
+import com.android.systemui.biometrics.UdfpsHbmProvider;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -628,4 +630,8 @@ public abstract class AospaSystemUIModule {
     static ViewGroup provideParentViewGroup(OverlayUiHost overlayUiHost) {
         return overlayUiHost.getParent();
     }
+
+    @SysUISingleton
+    @Binds
+    abstract UdfpsHbmProvider bindUdfpsHbmProvider(AospaUdfpsHbmProvider provider);
 }
