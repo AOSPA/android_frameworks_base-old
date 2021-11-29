@@ -114,6 +114,7 @@ package android {
     field public static final String MODIFY_PHONE_STATE = "android.permission.MODIFY_PHONE_STATE";
     field public static final String MOUNT_FORMAT_FILESYSTEMS = "android.permission.MOUNT_FORMAT_FILESYSTEMS";
     field public static final String MOUNT_UNMOUNT_FILESYSTEMS = "android.permission.MOUNT_UNMOUNT_FILESYSTEMS";
+    field public static final String NEARBY_WIFI_DEVICES = "android.permission.NEARBY_WIFI_DEVICES";
     field public static final String NFC = "android.permission.NFC";
     field public static final String NFC_PREFERRED_PAYMENT_INFO = "android.permission.NFC_PREFERRED_PAYMENT_INFO";
     field public static final String NFC_TRANSACTION_EVENT = "android.permission.NFC_TRANSACTION_EVENT";
@@ -6729,6 +6730,7 @@ package android.app {
   }
 
   public class TaskInfo {
+    method public boolean isVisible();
     field @Nullable public android.content.ComponentName baseActivity;
     field @NonNull public android.content.Intent baseIntent;
     field public boolean isRunning;
@@ -18013,7 +18015,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> EDGE_AVAILABLE_EDGE_MODES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Boolean> FLASH_INFO_AVAILABLE;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> HOT_PIXEL_AVAILABLE_HOT_PIXEL_MODES;
-    field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.hardware.camera2.params.DeviceStateOrientationMap> INFO_DEVICE_STATE_ORIENTATION_MAP;
+    field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.hardware.camera2.params.DeviceStateSensorOrientationMap> INFO_DEVICE_STATE_SENSOR_ORIENTATION_MAP;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Integer> INFO_SUPPORTED_HARDWARE_LEVEL;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.String> INFO_VERSION;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.util.Size[]> JPEG_AVAILABLE_THUMBNAIL_SIZES;
@@ -18708,7 +18710,7 @@ package android.hardware.camera2.params {
     method public android.util.Rational getElement(int, int);
   }
 
-  public final class DeviceStateOrientationMap {
+  public final class DeviceStateSensorOrientationMap {
     method public int getSensorOrientation(long);
     field public static final long FOLDED = 4L; // 0x4L
     field public static final long NORMAL = 0L; // 0x0L
@@ -22661,6 +22663,7 @@ package android.media {
     field public static final String KEY_MAX_FPS_TO_ENCODER = "max-fps-to-encoder";
     field public static final String KEY_MAX_HEIGHT = "max-height";
     field public static final String KEY_MAX_INPUT_SIZE = "max-input-size";
+    field public static final String KEY_MAX_OUTPUT_CHANNEL_COUNT = "max-output-channel_count";
     field public static final String KEY_MAX_PTS_GAP_TO_ENCODER = "max-pts-gap-to-encoder";
     field public static final String KEY_MAX_WIDTH = "max-width";
     field public static final String KEY_MIME = "mime";
@@ -25661,6 +25664,7 @@ package android.media.tv {
     field public static final String COLUMN_CONTENT_ID = "content_id";
     field public static final String COLUMN_CONTENT_RATING = "content_rating";
     field public static final String COLUMN_DURATION_MILLIS = "duration_millis";
+    field public static final String COLUMN_END_TIME_UTC_MILLIS = "end_time_utc_millis";
     field public static final String COLUMN_EPISODE_DISPLAY_NUMBER = "episode_display_number";
     field public static final String COLUMN_EPISODE_TITLE = "episode_title";
     field public static final String COLUMN_INTENT_URI = "intent_uri";
@@ -25691,6 +25695,7 @@ package android.media.tv {
     field public static final String COLUMN_SHORT_DESCRIPTION = "short_description";
     field public static final String COLUMN_SPLIT_ID = "split_id";
     field public static final String COLUMN_STARTING_PRICE = "starting_price";
+    field public static final String COLUMN_START_TIME_UTC_MILLIS = "start_time_utc_millis";
     field public static final String COLUMN_THUMBNAIL_ASPECT_RATIO = "poster_thumbnail_aspect_ratio";
     field public static final String COLUMN_THUMBNAIL_URI = "thumbnail_uri";
     field public static final String COLUMN_TITLE = "title";
@@ -25853,6 +25858,7 @@ package android.media.tv {
     field public static final String COLUMN_CONTENT_ID = "content_id";
     field public static final String COLUMN_CONTENT_RATING = "content_rating";
     field public static final String COLUMN_DURATION_MILLIS = "duration_millis";
+    field public static final String COLUMN_END_TIME_UTC_MILLIS = "end_time_utc_millis";
     field public static final String COLUMN_EPISODE_DISPLAY_NUMBER = "episode_display_number";
     field public static final String COLUMN_EPISODE_TITLE = "episode_title";
     field public static final String COLUMN_INTENT_URI = "intent_uri";
@@ -25884,6 +25890,7 @@ package android.media.tv {
     field public static final String COLUMN_SHORT_DESCRIPTION = "short_description";
     field public static final String COLUMN_SPLIT_ID = "split_id";
     field public static final String COLUMN_STARTING_PRICE = "starting_price";
+    field public static final String COLUMN_START_TIME_UTC_MILLIS = "start_time_utc_millis";
     field public static final String COLUMN_THUMBNAIL_ASPECT_RATIO = "poster_thumbnail_aspect_ratio";
     field public static final String COLUMN_THUMBNAIL_URI = "thumbnail_uri";
     field public static final String COLUMN_TITLE = "title";
@@ -31568,6 +31575,7 @@ package android.os {
     method public int dataSize();
     method public void enforceInterface(@NonNull String);
     method public boolean hasFileDescriptors();
+    method public boolean hasFileDescriptors(int, int);
     method public byte[] marshall();
     method @NonNull public static android.os.Parcel obtain();
     method @NonNull public static android.os.Parcel obtain(@NonNull android.os.IBinder);
@@ -45769,7 +45777,7 @@ package android.text.util {
     method public static final boolean addLinks(@NonNull android.text.Spannable, @NonNull java.util.regex.Pattern, @Nullable String, @Nullable android.text.util.Linkify.MatchFilter, @Nullable android.text.util.Linkify.TransformFilter);
     method public static final boolean addLinks(@NonNull android.text.Spannable, @NonNull java.util.regex.Pattern, @Nullable String, @Nullable String[], @Nullable android.text.util.Linkify.MatchFilter, @Nullable android.text.util.Linkify.TransformFilter);
     method public static final boolean addLinks(@NonNull android.text.Spannable, @NonNull java.util.regex.Pattern, @Nullable String, @Nullable String[], @Nullable android.text.util.Linkify.MatchFilter, @Nullable android.text.util.Linkify.TransformFilter, @Nullable java.util.function.Function<java.lang.String,android.text.style.URLSpan>);
-    field public static final int ALL = 15; // 0xf
+    field @Deprecated public static final int ALL = 15; // 0xf
     field public static final int EMAIL_ADDRESSES = 2; // 0x2
     field @Deprecated public static final int MAP_ADDRESSES = 8; // 0x8
     field public static final int PHONE_NUMBERS = 4; // 0x4

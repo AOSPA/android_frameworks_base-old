@@ -32,6 +32,7 @@ import static java.util.Arrays.asList;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.platform.test.annotations.Presubmit;
+import android.service.timezone.TimeZoneProviderEvent;
 import android.service.timezone.TimeZoneProviderSuggestion;
 import android.util.IndentingPrintWriter;
 
@@ -91,10 +92,12 @@ public class LocationTimeZoneProviderTest {
         ConfigurationInternal config = USER1_CONFIG_GEO_DETECTION_ENABLED;
         Duration arbitraryInitializationTimeout = Duration.ofMinutes(5);
         Duration arbitraryInitializationTimeoutFuzz = Duration.ofMinutes(2);
+        Duration arbitraryEventFilteringAgeThreshold = Duration.ofMinutes(3);
         provider.startUpdates(config, arbitraryInitializationTimeout,
-                arbitraryInitializationTimeoutFuzz);
+                arbitraryInitializationTimeoutFuzz, arbitraryEventFilteringAgeThreshold);
 
-        provider.assertOnStartCalled(arbitraryInitializationTimeout);
+        provider.assertOnStartCalled(
+                arbitraryInitializationTimeout, arbitraryEventFilteringAgeThreshold);
 
         currentState = assertAndReturnProviderState(
                 provider, providerMetricsLogger, PROVIDER_STATE_STARTED_INITIALIZING);
@@ -117,7 +120,8 @@ public class LocationTimeZoneProviderTest {
                 .setElapsedRealtimeMillis(ARBITRARY_ELAPSED_REALTIME_MILLIS)
                 .setTimeZoneIds(Arrays.asList("Europe/London"))
                 .build();
-        TimeZoneProviderEvent event = TimeZoneProviderEvent.createSuggestionEvent(suggestion);
+        TimeZoneProviderEvent event = TimeZoneProviderEvent.createSuggestionEvent(
+                ARBITRARY_ELAPSED_REALTIME_MILLIS, suggestion);
         provider.simulateProviderEventReceived(event);
 
         currentState = assertAndReturnProviderState(
@@ -129,7 +133,7 @@ public class LocationTimeZoneProviderTest {
         mProviderListener.assertProviderChangeReported(PROVIDER_STATE_STARTED_CERTAIN);
 
         // Simulate an uncertain event being received.
-        event = TimeZoneProviderEvent.createUncertainEvent();
+        event = TimeZoneProviderEvent.createUncertainEvent(ARBITRARY_ELAPSED_REALTIME_MILLIS);
         provider.simulateProviderEventReceived(event);
 
         currentState = assertAndReturnProviderState(
@@ -178,8 +182,9 @@ public class LocationTimeZoneProviderTest {
         ConfigurationInternal config = USER1_CONFIG_GEO_DETECTION_ENABLED;
         Duration arbitraryInitializationTimeout = Duration.ofMinutes(5);
         Duration arbitraryInitializationTimeoutFuzz = Duration.ofMinutes(2);
+        Duration eventFilteringAgeThreshold = Duration.ofMinutes(3);
         provider.startUpdates(config, arbitraryInitializationTimeout,
-                arbitraryInitializationTimeoutFuzz);
+                arbitraryInitializationTimeoutFuzz, eventFilteringAgeThreshold);
         provider.assertLatestRecordedState(PROVIDER_STATE_STARTED_INITIALIZING);
 
         // Simulate a suggestion event being received.
@@ -187,12 +192,13 @@ public class LocationTimeZoneProviderTest {
                 .setElapsedRealtimeMillis(ARBITRARY_ELAPSED_REALTIME_MILLIS)
                 .setTimeZoneIds(Arrays.asList("Europe/London"))
                 .build();
-        TimeZoneProviderEvent event = TimeZoneProviderEvent.createSuggestionEvent(suggestion);
+        TimeZoneProviderEvent event = TimeZoneProviderEvent.createSuggestionEvent(
+                ARBITRARY_ELAPSED_REALTIME_MILLIS, suggestion);
         provider.simulateProviderEventReceived(event);
         provider.assertLatestRecordedState(PROVIDER_STATE_STARTED_CERTAIN);
 
         // Simulate an uncertain event being received.
-        event = TimeZoneProviderEvent.createUncertainEvent();
+        event = TimeZoneProviderEvent.createUncertainEvent(ARBITRARY_ELAPSED_REALTIME_MILLIS);
         provider.simulateProviderEventReceived(event);
         provider.assertLatestRecordedState(PROVIDER_STATE_STARTED_UNCERTAIN);
 
@@ -220,16 +226,17 @@ public class LocationTimeZoneProviderTest {
         ConfigurationInternal config = USER1_CONFIG_GEO_DETECTION_ENABLED;
         Duration arbitraryInitializationTimeout = Duration.ofMinutes(5);
         Duration arbitraryInitializationTimeoutFuzz = Duration.ofMinutes(2);
+        Duration eventFilteringAgeThreshold = Duration.ofMinutes(3);
         provider.startUpdates(config, arbitraryInitializationTimeout,
-                arbitraryInitializationTimeoutFuzz);
+                arbitraryInitializationTimeoutFuzz, eventFilteringAgeThreshold);
 
         List<String> invalidTimeZoneIds = asList("Atlantic/Atlantis");
         TimeZoneProviderSuggestion invalidIdSuggestion = new TimeZoneProviderSuggestion.Builder()
                 .setElapsedRealtimeMillis(ARBITRARY_ELAPSED_REALTIME_MILLIS)
                 .setTimeZoneIds(invalidTimeZoneIds)
                 .build();
-        TimeZoneProviderEvent event =
-                TimeZoneProviderEvent.createSuggestionEvent(invalidIdSuggestion);
+        TimeZoneProviderEvent event = TimeZoneProviderEvent.createSuggestionEvent(
+                ARBITRARY_ELAPSED_REALTIME_MILLIS, invalidIdSuggestion);
         provider.simulateProviderEventReceived(event);
         provider.assertLatestRecordedState(PROVIDER_STATE_STARTED_UNCERTAIN);
     }
@@ -277,6 +284,7 @@ public class LocationTimeZoneProviderTest {
         private boolean mOnDestroyCalled;
         private boolean mOnStartUpdatesCalled;
         private Duration mInitializationTimeout;
+        private Duration mEventFilteringAgeThreshold;
         private boolean mOnStopUpdatesCalled;
 
         /** Creates the instance. */
@@ -300,9 +308,11 @@ public class LocationTimeZoneProviderTest {
         }
 
         @Override
-        void onStartUpdates(@NonNull Duration initializationTimeout) {
+        void onStartUpdates(@NonNull Duration initializationTimeout,
+                @NonNull Duration eventFilteringAgeThreshold) {
             mOnStartUpdatesCalled = true;
             mInitializationTimeout = initializationTimeout;
+            mEventFilteringAgeThreshold = eventFilteringAgeThreshold;
         }
 
         @Override
@@ -319,9 +329,11 @@ public class LocationTimeZoneProviderTest {
             assertTrue(mOnInitializeCalled);
         }
 
-        void assertOnStartCalled(Duration expectedInitializationTimeout) {
+        void assertOnStartCalled(Duration expectedInitializationTimeout,
+                Duration eventFilteringAgeThreshold) {
             assertTrue(mOnStartUpdatesCalled);
             assertEquals(expectedInitializationTimeout, mInitializationTimeout);
+            assertEquals(eventFilteringAgeThreshold, mEventFilteringAgeThreshold);
         }
 
         void simulateProviderEventReceived(TimeZoneProviderEvent event) {
