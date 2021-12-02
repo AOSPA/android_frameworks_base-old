@@ -300,6 +300,11 @@ public class KeyguardUpdateMonitorCallback {
     public void onStrongAuthStateChanged(int userId) { }
 
     /**
+     * Called when the state whether we have a lockscreen wallpaper has changed.
+     */
+    public void onHasLockscreenWallpaperChanged(boolean hasLockscreenWallpaper) { }
+
+    /**
      * Called when the dream's window state is changed.
      * @param dreaming true if the dream's window has been created and is visible
      */
@@ -331,11 +336,6 @@ public class KeyguardUpdateMonitorCallback {
      * Called when the secondary lock screen requirement changes.
      */
     public void onSecondaryLockscreenRequirementChanged(int userId) { }
-
-    /**
-     * Called to switch lock screen layout/clock layouts
-     */
-    public void onLockScreenModeChanged(int mode) { }
 
     /**
      * Called when notifying user to unlock in order to use NFC.

@@ -21,6 +21,7 @@ import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHearingAid;
+import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.content.Context;
@@ -115,11 +116,14 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private boolean mIsActiveDeviceA2dp = false;
     private boolean mIsActiveDeviceHeadset = false;
     private boolean mIsActiveDeviceHearingAid = false;
+    private boolean mIsActiveDeviceLeAudio = false;
     // Media profile connect state
     private boolean mIsA2dpProfileConnectedFail = false;
     private boolean mIsHeadsetProfileConnectedFail = false;
     private boolean mIsHearingAidProfileConnectedFail = false;
+    private boolean mIsLeAudioProfileConnectedFail = false;
     private boolean mUnpairing;
+
     // Group second device for Hearing Aid
     private CachedBluetoothDevice mSubDevice;
     // Group member devices for the coordinated set
@@ -150,6 +154,9 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                     break;
                 case BluetoothProfile.HEARING_AID:
                     mIsHearingAidProfileConnectedFail = true;
+                    break;
+                case BluetoothProfile.LE_AUDIO:
+                    mIsLeAudioProfileConnectedFail = true;
                     break;
                 default:
                     Log.w(TAG, "handleMessage(): unknown message : " + msg.what);
@@ -319,6 +326,9 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 break;
             case BluetoothProfile.HEARING_AID:
                 mIsHearingAidProfileConnectedFail = isFailed;
+                break;
+            case BluetoothProfile.LE_AUDIO:
+                mIsLeAudioProfileConnectedFail = isFailed;
                 break;
             default:
                 Log.w(TAG, "setProfileConnectedStatus(): unknown profile id : " + profileId);
@@ -615,6 +625,13 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 result = true;
             }
         }
+        LeAudioProfile leAudioProfile = mProfileManager.getLeAudioProfile();
+        if ((leAudioProfile != null) && isConnectedProfile(leAudioProfile)) {
+            if (leAudioProfile.setActiveDevice(getDevice())) {
+                Log.i(TAG, "OnPreferenceClickListener: LeAudio active device=" + this);
+                result = true;
+            }
+        }
         return result;
     }
 
@@ -693,6 +710,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             changed = (mIsActiveDeviceHearingAid != isActive);
             mIsActiveDeviceHearingAid = isActive;
             break;
+        case BluetoothProfile.LE_AUDIO:
+            changed = (mIsActiveDeviceLeAudio != isActive);
+            mIsActiveDeviceLeAudio = isActive;
+            break;
         default:
             Log.w(TAG, "onActiveDeviceChanged: unknown profile " + bluetoothProfile +
                     " isActive " + isActive);
@@ -724,6 +745,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 return mIsActiveDeviceHeadset;
             case BluetoothProfile.HEARING_AID:
                 return mIsActiveDeviceHearingAid;
+            case BluetoothProfile.LE_AUDIO:
+                return mIsActiveDeviceLeAudio;
             default:
                 Log.w(TAG, "getActiveDevice: unknown profile " + bluetoothProfile);
                 break;
@@ -817,6 +840,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         HearingAidProfile hearingAidProfile = mProfileManager.getHearingAidProfile();
         if (hearingAidProfile != null) {
             mIsActiveDeviceHearingAid = hearingAidProfile.getActiveDevices().contains(mDevice);
+        }
+        LeAudioProfile leAudio = mProfileManager.getLeAudioProfile();
+        if (leAudio != null) {
+            mIsActiveDeviceLeAudio = leAudio.getActiveDevices().contains(mDevice);
         }
     }
 
@@ -1103,6 +1130,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         boolean a2dpConnected = true;        // A2DP is connected
         boolean hfpConnected = true;         // HFP is connected
         boolean hearingAidConnected = true;  // Hearing Aid is connected
+        boolean leAudioConnected = true;        // LeAudio is connected
         int leftBattery = -1;
         int rightBattery = -1;
 
@@ -1134,6 +1162,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                                 hfpConnected = false;
                             } else if (profile instanceof HearingAidProfile) {
                                 hearingAidConnected = false;
+                            } else if (profile instanceof LeAudioProfile) {
+                                leAudioConnected = false;
                             }
                         }
                         break;
@@ -1193,7 +1223,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             //    1. Hearing Aid device active.
             //    2. Headset device active with in-calling state.
             //    3. A2DP device active without in-calling state.
-            if (a2dpConnected || hfpConnected || hearingAidConnected) {
+            //    4. Le Audio device active
+            if (a2dpConnected || hfpConnected || hearingAidConnected || leAudioConnected) {
                 final boolean isOnCall = Utils.isAudioModeOngoingCall(mContext);
                 if ((mIsActiveDeviceHearingAid)
                         || (mIsActiveDeviceHeadset && isOnCall)
@@ -1228,7 +1259,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     private boolean isProfileConnectedFail() {
         return mIsA2dpProfileConnectedFail || mIsHearingAidProfileConnectedFail
-                || (!isConnectedSapDevice() && mIsHeadsetProfileConnectedFail);
+                || (!isConnectedSapDevice() && mIsHeadsetProfileConnectedFail)
+                || mIsLeAudioProfileConnectedFail;
     }
 
     /**
@@ -1239,6 +1271,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         boolean a2dpNotConnected = false;       // A2DP is preferred but not connected
         boolean hfpNotConnected = false;        // HFP is preferred but not connected
         boolean hearingAidNotConnected = false; // Hearing Aid is preferred but not connected
+        boolean leAudioNotConnected = false;       // LeAudio is preferred but not connected
 
         synchronized (mProfileLock) {
             for (LocalBluetoothProfile profile : getProfiles()) {
@@ -1264,6 +1297,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                                 hfpNotConnected = true;
                             } else if (profile instanceof HearingAidProfile) {
                                 hearingAidNotConnected = true;
+                            } else if (profile instanceof  LeAudioProfile) {
+                                leAudioNotConnected = true;
                             }
                         }
                         break;
@@ -1298,6 +1333,11 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             }
         }
         if (!hearingAidNotConnected && mIsActiveDeviceHearingAid) {
+            activeDeviceString = activeDeviceStringsArray[1];
+            return mContext.getString(R.string.bluetooth_connected, activeDeviceString);
+        }
+
+        if (!leAudioNotConnected && mIsActiveDeviceLeAudio) {
             activeDeviceString = activeDeviceStringsArray[1];
             return mContext.getString(R.string.bluetooth_connected, activeDeviceString);
         }
@@ -1376,6 +1416,15 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     public boolean isConnectedHearingAidDevice() {
         HearingAidProfile hearingAidProfile = mProfileManager.getHearingAidProfile();
         return hearingAidProfile != null && hearingAidProfile.getConnectionStatus(mDevice) ==
+                BluetoothProfile.STATE_CONNECTED;
+    }
+
+    /**
+     * @return {@code true} if {@code cachedBluetoothDevice} is LeAudio device
+     */
+    public boolean isConnectedLeAudioDevice() {
+        LeAudioProfile leAudio = mProfileManager.getLeAudioProfile();
+        return leAudio != null && leAudio.getConnectionStatus(mDevice) ==
                 BluetoothProfile.STATE_CONNECTED;
     }
 

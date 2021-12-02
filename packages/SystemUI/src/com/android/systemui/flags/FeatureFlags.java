@@ -94,10 +94,6 @@ public class FeatureFlags {
         return mFlagReader.isEnabled(R.bool.flag_notification_pipeline2_rendering);
     }
 
-    public boolean isKeyguardLayoutEnabled() {
-        return mFlagReader.isEnabled(R.bool.flag_keyguard_layout);
-    }
-
     /** */
     public boolean useNewLockscreenAnimations() {
         return mFlagReader.isEnabled(R.bool.flag_lockscreen_animations);
@@ -126,6 +122,11 @@ public class FeatureFlags {
     public boolean isOngoingCallInImmersiveEnabled() {
         return isOngoingCallStatusBarChipEnabled()
                 && mFlagReader.isEnabled(R.bool.flag_ongoing_call_in_immersive);
+    }
+
+    public boolean isOngoingCallInImmersiveChipTapEnabled() {
+        return isOngoingCallInImmersiveEnabled()
+                && mFlagReader.isEnabled(R.bool.flag_ongoing_call_in_immersive_chip_tap);
     }
 
     public boolean isSmartspaceEnabled() {

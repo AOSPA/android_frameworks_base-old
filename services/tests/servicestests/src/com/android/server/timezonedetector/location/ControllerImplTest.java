@@ -36,6 +36,7 @@ import static java.util.Arrays.asList;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.platform.test.annotations.Presubmit;
+import android.service.timezone.TimeZoneProviderEvent;
 import android.service.timezone.TimeZoneProviderSuggestion;
 import android.util.IndentingPrintWriter;
 
@@ -65,9 +66,9 @@ public class ControllerImplTest {
     private static final TimeZoneProviderEvent USER1_SUCCESS_LOCATION_TIME_ZONE_EVENT2 =
             createSuggestionEvent(asList("Europe/Paris"));
     private static final TimeZoneProviderEvent USER1_UNCERTAIN_LOCATION_TIME_ZONE_EVENT =
-            TimeZoneProviderEvent.createUncertainEvent();
+            TimeZoneProviderEvent.createUncertainEvent(ARBITRARY_TIME_MILLIS);
     private static final TimeZoneProviderEvent USER1_PERM_FAILURE_LOCATION_TIME_ZONE_EVENT =
-            TimeZoneProviderEvent.createPermanentFailureEvent("Test");
+            TimeZoneProviderEvent.createPermanentFailureEvent(ARBITRARY_TIME_MILLIS, "Test");
 
     private TestThreadingDomain mTestThreadingDomain;
     private TestCallback mTestCallback;
@@ -1124,6 +1125,7 @@ public class ControllerImplTest {
 
     private static TimeZoneProviderEvent createSuggestionEvent(@NonNull List<String> timeZoneIds) {
         return TimeZoneProviderEvent.createSuggestionEvent(
+                ARBITRARY_TIME_MILLIS,
                 new TimeZoneProviderSuggestion.Builder()
                         .setElapsedRealtimeMillis(ARBITRARY_TIME_MILLIS)
                         .setTimeZoneIds(timeZoneIds)
@@ -1136,9 +1138,12 @@ public class ControllerImplTest {
         // (initialization timeout * 2) < uncertainty delay
         //
         // That makes the order of initialization timeout Vs uncertainty delay deterministic.
-        static final Duration PROVIDER_INITIALIZATION_TIMEOUT = Duration.ofMinutes(5);
-        static final Duration PROVIDER_INITIALIZATION_TIMEOUT_FUZZ = Duration.ofMinutes(1);
+        private static final Duration PROVIDER_INITIALIZATION_TIMEOUT = Duration.ofMinutes(5);
+        private static final Duration PROVIDER_INITIALIZATION_TIMEOUT_FUZZ = Duration.ofMinutes(1);
         private static final Duration UNCERTAINTY_DELAY = Duration.ofMinutes(15);
+
+        private static final Duration PROVIDER_EVENT_FILTERING_AGE_THRESHOLD =
+                Duration.ofMinutes(3);
 
         private final LocationTimeZoneProviderController mController;
         private ConfigurationInternal mConfigurationInternal;
@@ -1169,6 +1174,11 @@ public class ControllerImplTest {
         @Override
         Duration getProviderInitializationTimeoutFuzz() {
             return PROVIDER_INITIALIZATION_TIMEOUT_FUZZ;
+        }
+
+        @Override
+        Duration getProviderEventFilteringAgeThreshold() {
+            return PROVIDER_EVENT_FILTERING_AGE_THRESHOLD;
         }
 
         @Override
@@ -1254,7 +1264,7 @@ public class ControllerImplTest {
         }
 
         @Override
-        void onStartUpdates(Duration initializationTimeout) {
+        void onStartUpdates(Duration initializationTimeout, Duration eventFilteringAgeThreshold) {
             // Nothing needed for tests.
         }
 

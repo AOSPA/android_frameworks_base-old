@@ -81,6 +81,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -92,8 +93,8 @@ import android.window.TaskFragmentInfo;
 import android.window.TaskFragmentOrganizerToken;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.ActivityTrigger;
 import com.android.internal.protolog.common.ProtoLog;
-import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 
@@ -102,7 +103,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A basic container that can be used to contain activities or other {@link TaskFragment}, which
@@ -147,6 +148,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     final ActivityTaskSupervisor mTaskSupervisor;
     final RootWindowContainer mRootWindowContainer;
     private final TaskFragmentOrganizerController mTaskFragmentOrganizerController;
+
+    public BoostFramework mPerf = null;
+    //ActivityTrigger
+    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
     /**
      * Minimal width of this task fragment when it's resizeable. {@link #INVALID_MIN_SIZE} means it
@@ -252,7 +257,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             new EnsureActivitiesVisibleHelper(this);
     private final EnsureVisibleActivitiesConfigHelper mEnsureVisibleActivitiesConfigHelper =
             new EnsureVisibleActivitiesConfigHelper();
-    private class EnsureVisibleActivitiesConfigHelper {
+    private class EnsureVisibleActivitiesConfigHelper implements Predicate<ActivityRecord> {
         private boolean mUpdateConfig;
         private boolean mPreserveWindow;
         private boolean mBehindFullscreen;
@@ -268,12 +273,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 return;
             }
             reset(preserveWindow);
-
-            final PooledFunction f = PooledLambda.obtainFunction(
-                    EnsureVisibleActivitiesConfigHelper::processActivity, this,
-                    PooledLambda.__(ActivityRecord.class));
-            forAllActivities(f, start, true /*includeBoundary*/, true /*traverseTopToBottom*/);
-            f.recycle();
+            forAllActivities(this, start, true /* includeBoundary */,
+                    true /* traverseTopToBottom */);
 
             if (mUpdateConfig) {
                 // Ensure the resumed state of the focus activity if we updated the configuration of
@@ -282,7 +283,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             }
         }
 
-        boolean processActivity(ActivityRecord r) {
+        @Override
+        public boolean test(ActivityRecord r) {
             mUpdateConfig |= r.ensureActivityConfiguration(0 /*globalChanges*/, mPreserveWindow);
             mBehindFullscreen |= r.occludesParent();
             return mBehindFullscreen;
@@ -1019,6 +1021,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
+        //Trigger Activity Resume
+        if (mActivityTrigger != null) {
+            mActivityTrigger.activityResumeTrigger(next.intent, next.info,
+                                                   next.info.applicationInfo,
+                                                   next.occludesParent());
+        }
+
         mTaskSupervisor.setLaunchSource(next.info.applicationInfo.uid);
 
         ActivityRecord lastResumed = null;
@@ -1120,6 +1129,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         // to ignore it when computing the desired screen orientation.
         boolean anim = true;
         final DisplayContent dc = taskDisplayArea.mDisplayContent;
+
+        if (mPerf == null) {
+            mPerf = new BoostFramework();
+        }
+
         if (prev != null) {
             if (prev.finishing) {
                 if (DEBUG_TRANSITION) {
@@ -1129,6 +1143,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     anim = false;
                     dc.prepareAppTransition(TRANSIT_NONE);
                 } else {
+                    if(prev.getTask() != next.getTask() && mPerf != null) {
+                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST,
+                           next.packageName);
+                    }
                     dc.prepareAppTransition(TRANSIT_CLOSE);
                 }
                 prev.setVisibility(false);
@@ -1140,6 +1158,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     anim = false;
                     dc.prepareAppTransition(TRANSIT_NONE);
                 } else {
+                    if(prev.getTask() != next.getTask() && mPerf != null) {
+                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST,
+                           next.packageName);
+                    }
                     dc.prepareAppTransition(TRANSIT_OPEN,
                             next.mLaunchTaskBehind ? TRANSIT_FLAG_OPEN_BEHIND : 0);
                 }
@@ -1619,7 +1641,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     @Override
-    boolean forAllLeafTaskFragments(Function<TaskFragment, Boolean> callback) {
+    boolean forAllLeafTaskFragments(Predicate<TaskFragment> callback) {
         boolean isLeafTaskFrag = true;
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final TaskFragment child = mChildren.get(i).asTaskFragment();
@@ -1631,7 +1653,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             }
         }
         if (isLeafTaskFrag) {
-            return callback.apply(this);
+            return callback.test(this);
         }
         return false;
     }
