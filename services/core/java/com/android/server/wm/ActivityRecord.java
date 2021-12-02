@@ -361,7 +361,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 import vendor.qti.hardware.servicetracker.V1_2.IServicetracker;
@@ -2058,7 +2057,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     boolean addStartingWindow(String pkg, int resolvedTheme, CompatibilityInfo compatInfo,
             CharSequence nonLocalizedLabel, int labelRes, int icon, int logo, int windowFlags,
             ActivityRecord from, boolean newTask, boolean taskSwitch, boolean processRunning,
-            boolean allowTaskSnapshot, boolean activityCreated, boolean useEmpty) {
+            boolean allowTaskSnapshot, boolean activityCreated, boolean useEmpty,
+            boolean activityAllDrawn) {
         // If the display is frozen, we won't do anything until the actual window is
         // displayed so there is no reason to put in the starting window.
         if (!okToDisplay()) {
@@ -2079,7 +2079,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mWmService.mTaskSnapshotController.getSnapshot(task.mTaskId, task.mUserId,
                         false /* restoreFromDisk */, false /* isLowResolution */);
         final int type = getStartingWindowType(newTask, taskSwitch, processRunning,
-                allowTaskSnapshot, activityCreated, snapshot);
+                allowTaskSnapshot, activityCreated, activityAllDrawn, snapshot);
 
         //TODO(191787740) Remove for T
         final boolean useLegacy = type == STARTING_WINDOW_TYPE_SPLASH_SCREEN
@@ -2093,7 +2093,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         final int typeParameter = mWmService.mStartingSurfaceController
                 .makeStartingWindowTypeParameter(newTask, taskSwitch, processRunning,
-                        allowTaskSnapshot, activityCreated, useEmpty, useLegacy);
+                        allowTaskSnapshot, activityCreated, useEmpty, useLegacy, activityAllDrawn);
 
         if (type == STARTING_WINDOW_TYPE_SNAPSHOT) {
             if (isActivityTypeHome()) {
@@ -2228,10 +2228,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private final AddStartingWindow mAddStartingWindow = new AddStartingWindow();
 
     private int getStartingWindowType(boolean newTask, boolean taskSwitch, boolean processRunning,
-            boolean allowTaskSnapshot, boolean activityCreated,
+            boolean allowTaskSnapshot, boolean activityCreated, boolean activityAllDrawn,
             TaskSnapshot snapshot) {
-        if ((newTask || !processRunning || (taskSwitch && !activityCreated))
-                && !isActivityTypeHome()) {
+        if ((newTask || !processRunning || (taskSwitch && !activityCreated)
+                || (taskSwitch && !activityAllDrawn)) && !isActivityTypeHome()) {
             return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
         } else if (taskSwitch && allowTaskSnapshot) {
             if (isSnapshotCompatible(snapshot)) {
@@ -4250,9 +4250,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     @Override
-    boolean forAllActivities(
-            Function<ActivityRecord, Boolean> callback, boolean traverseTopToBottom) {
-        return callback.apply(this);
+    boolean forAllActivities(Predicate<ActivityRecord> callback, boolean traverseTopToBottom) {
+        return callback.test(this);
     }
 
     @Override
@@ -6744,7 +6743,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final boolean scheduled = addStartingWindow(packageName, resolvedTheme,
                 compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
                 prev, newTask || newSingleActivity, taskSwitch, isProcessRunning(),
-                allowTaskSnapshot(), activityCreated, mSplashScreenStyleEmpty);
+                allowTaskSnapshot(), activityCreated, mSplashScreenStyleEmpty, allDrawn);
         if (DEBUG_STARTING_WINDOW_VERBOSE && scheduled) {
             Slog.d(TAG, "Scheduled starting window for " + this);
         }

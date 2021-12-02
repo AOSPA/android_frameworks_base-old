@@ -16,6 +16,10 @@
 
 package com.android.server.timezonedetector.location;
 
+import static android.service.timezone.TimeZoneProviderEvent.EVENT_TYPE_PERMANENT_FAILURE;
+import static android.service.timezone.TimeZoneProviderEvent.EVENT_TYPE_SUGGESTION;
+import static android.service.timezone.TimeZoneProviderEvent.EVENT_TYPE_UNCERTAIN;
+
 import static com.android.server.timezonedetector.location.LocationTimeZoneManagerService.debugLog;
 import static com.android.server.timezonedetector.location.LocationTimeZoneManagerService.warnLog;
 import static com.android.server.timezonedetector.location.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_DESTROYED;
@@ -24,9 +28,6 @@ import static com.android.server.timezonedetector.location.LocationTimeZoneProvi
 import static com.android.server.timezonedetector.location.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_STARTED_INITIALIZING;
 import static com.android.server.timezonedetector.location.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_STARTED_UNCERTAIN;
 import static com.android.server.timezonedetector.location.LocationTimeZoneProvider.ProviderState.PROVIDER_STATE_STOPPED;
-import static com.android.server.timezonedetector.location.TimeZoneProviderEvent.EVENT_TYPE_PERMANENT_FAILURE;
-import static com.android.server.timezonedetector.location.TimeZoneProviderEvent.EVENT_TYPE_SUGGESTION;
-import static com.android.server.timezonedetector.location.TimeZoneProviderEvent.EVENT_TYPE_UNCERTAIN;
 
 import android.annotation.ElapsedRealtimeLong;
 import android.annotation.IntDef;
@@ -34,6 +35,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.service.timezone.TimeZoneProviderEvent;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -527,7 +529,8 @@ abstract class LocationTimeZoneProvider implements Dumpable {
      * called using the handler thread from the {@link ThreadingDomain}.
      */
     final void startUpdates(@NonNull ConfigurationInternal currentUserConfiguration,
-            @NonNull Duration initializationTimeout, @NonNull Duration initializationTimeoutFuzz) {
+            @NonNull Duration initializationTimeout, @NonNull Duration initializationTimeoutFuzz,
+            @NonNull Duration eventFilteringAgeThreshold) {
         mThreadingDomain.assertCurrentThread();
 
         synchronized (mSharedLock) {
@@ -542,7 +545,7 @@ abstract class LocationTimeZoneProvider implements Dumpable {
             mInitializationTimeoutQueue.runDelayed(
                     this::handleInitializationTimeout, delay.toMillis());
 
-            onStartUpdates(initializationTimeout);
+            onStartUpdates(initializationTimeout, eventFilteringAgeThreshold);
         }
     }
 
@@ -568,9 +571,11 @@ abstract class LocationTimeZoneProvider implements Dumpable {
      * Implemented by subclasses to do work during {@link #startUpdates}. This is where the logic
      * to start the real provider should be implemented.
      *
-     * @param initializationTimeout the initialization timeout to pass to the real provider
+     * @param initializationTimeout the initialization timeout to pass to the provider
+     * @param eventFilteringAgeThreshold the event filtering age threshold to pass to the provider
      */
-    abstract void onStartUpdates(@NonNull Duration initializationTimeout);
+    abstract void onStartUpdates(@NonNull Duration initializationTimeout,
+            @NonNull Duration eventFilteringAgeThreshold);
 
     /**
      * Stops the provider. It is an error to call this method except when the {@link

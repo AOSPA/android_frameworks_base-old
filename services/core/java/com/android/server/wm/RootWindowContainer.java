@@ -48,6 +48,7 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_O
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WALLPAPER;
 import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_SURFACE_ALLOC;
 import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.server.policy.PhoneWindowManager.SYSTEM_DIALOG_REASON_ASSIST;
@@ -73,6 +74,7 @@ import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityTaskSupervisor.dumpHistoryList;
 import static com.android.server.wm.ActivityTaskSupervisor.printThisActivity;
 import static com.android.server.wm.KeyguardController.KEYGUARD_SLEEP_TOKEN_TAG;
+import static com.android.server.wm.RootWindowContainerProto.DEFAULT_MIN_SIZE_RESIZABLE_TASK;
 import static com.android.server.wm.RootWindowContainerProto.IS_HOME_RECENTS_COMPONENT;
 import static com.android.server.wm.RootWindowContainerProto.KEYGUARD_CONTROLLER;
 import static com.android.server.wm.RootWindowContainerProto.WINDOW_CONTAINER;
@@ -80,7 +82,6 @@ import static com.android.server.wm.Task.REPARENT_LEAVE_ROOT_TASK_IN_PLACE;
 import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
 import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_INVISIBLE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_TRACE;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -153,7 +154,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.ResolverActivity;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledConsumer;
-import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.LocalServices;
@@ -171,7 +171,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 /** Root {@link WindowContainer} for the device. */
 public class RootWindowContainer extends WindowContainer<DisplayContent>
@@ -286,8 +286,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     private int mTmpTaskLayerRank;
     private final RankTaskLayersRunnable mRankTaskLayersRunnable = new RankTaskLayersRunnable();
 
-    private boolean mTmpBoolean;
-    private RemoteException mTmpRemoteException;
+    private final AttachApplicationHelper mAttachApplicationHelper = new AttachApplicationHelper();
 
     private String mDestroyAllActivitiesReason;
     private final Runnable mDestroyAllActivitiesRunnable = new Runnable() {
@@ -313,7 +312,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     private final FindTaskResult mTmpFindTaskResult = new FindTaskResult();
 
-    static class FindTaskResult implements Function<Task, Boolean> {
+    static class FindTaskResult implements Predicate<Task> {
         ActivityRecord mIdealRecord;
         ActivityRecord mCandidateRecord;
 
@@ -355,7 +354,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         @Override
-        public Boolean apply(Task task) {
+        public boolean test(Task task) {
             if (!ConfigurationContainer.isCompatibleActivityType(mActivityType,
                     task.getActivityType())) {
                 ProtoLog.d(WM_DEBUG_TASKS, "Skipping task: (mismatch activity/task) %s", task);
@@ -902,7 +901,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         for (int displayNdx = 0; displayNdx < mChildren.size(); ++displayNdx) {
             final DisplayContent displayContent = mChildren.get(displayNdx);
             if (displayContent.mWallpaperMayChange) {
-                if (DEBUG_WALLPAPER_LIGHT) Slog.v(TAG, "Wallpaper may change!  Adjusting");
+                ProtoLog.v(WM_DEBUG_WALLPAPER, "Wallpaper may change!  Adjusting");
                 displayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
                 if (DEBUG_LAYOUT_REPEATS) {
                     surfacePlacer.debugLayoutRepeats("WallpaperMayChange",
@@ -1262,6 +1261,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         pw.println(mTopFocusedDisplayId);
     }
 
+    void dumpDefaultMinSizeOfResizableTask(PrintWriter pw) {
+        pw.print("  mDefaultMinSizeOfResizeableTaskDp=");
+        pw.println(mDefaultMinSizeOfResizeableTaskDp);
+    }
+
     void dumpLayoutNeededDisplayIds(PrintWriter pw) {
         if (!isLayoutNeeded()) {
             return;
@@ -1308,7 +1312,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mTaskSupervisor.getKeyguardController().dumpDebug(proto, KEYGUARD_CONTROLLER);
         proto.write(IS_HOME_RECENTS_COMPONENT,
                 mTaskSupervisor.mRecentTasks.isRecentsComponentHomeActivity(mCurrentUser));
-
+        proto.write(DEFAULT_MIN_SIZE_RESIZABLE_TASK, mDefaultMinSizeOfResizeableTaskDp);
         proto.end(token);
     }
 
@@ -1939,58 +1943,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     boolean attachApplication(WindowProcessController app) throws RemoteException {
-        boolean didSomething = false;
-        for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
-            mTmpRemoteException = null;
-            mTmpBoolean = false; // Set to true if an activity was started.
-            final DisplayContent display = getChildAt(displayNdx);
-            display.forAllRootTasks(rootTask -> {
-                if (mTmpRemoteException != null) {
-                    return;
-                }
-
-                if (rootTask.getVisibility(null /* starting */)
-                        == TASK_FRAGMENT_VISIBILITY_INVISIBLE) {
-                    return;
-                }
-
-                final PooledFunction c = PooledLambda.obtainFunction(
-                        RootWindowContainer::startActivityForAttachedApplicationIfNeeded, this,
-                        PooledLambda.__(ActivityRecord.class), app,
-                        rootTask.topRunningActivity());
-                rootTask.forAllActivities(c);
-                c.recycle();
-            });
-            if (mTmpRemoteException != null) {
-                throw mTmpRemoteException;
-            }
-            didSomething |= mTmpBoolean;
-        }
-        if (!didSomething) {
-            ensureActivitiesVisible(null, 0, false /* preserve_windows */);
-        }
-        return didSomething;
-    }
-
-    private boolean startActivityForAttachedApplicationIfNeeded(ActivityRecord r,
-            WindowProcessController app, ActivityRecord top) {
-        if (r.finishing || !r.showToCurrentUser() || !r.visibleIgnoringKeyguard || r.app != null
-                || app.mUid != r.info.applicationInfo.uid || !app.mName.equals(r.processName)) {
-            return false;
-        }
-
         try {
-            if (mTaskSupervisor.realStartActivityLocked(r, app,
-                    top == r && r.isFocusable() /*andResume*/, true /*checkConfig*/)) {
-                mTmpBoolean = true;
-            }
-        } catch (RemoteException e) {
-            Slog.w(TAG, "Exception in new application when starting activity "
-                    + top.intent.getComponent().flattenToShortString(), e);
-            mTmpRemoteException = e;
-            return true;
+            return mAttachApplicationHelper.process(app);
+        } finally {
+            mAttachApplicationHelper.reset();
         }
-        return false;
     }
 
     /**
@@ -3323,7 +3280,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     FinishDisabledPackageActivitiesHelper mFinishDisabledPackageActivitiesHelper =
             new FinishDisabledPackageActivitiesHelper();
 
-    class FinishDisabledPackageActivitiesHelper {
+    class FinishDisabledPackageActivitiesHelper implements Predicate<ActivityRecord> {
         private String mPackageName;
         private Set<String> mFilterByClasses;
         private boolean mDoit;
@@ -3347,12 +3304,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         boolean process(String packageName, Set<String> filterByClasses,
                 boolean doit, boolean evenPersistent, int userId, boolean onlyRemoveNoProcess) {
             reset(packageName, filterByClasses, doit, evenPersistent, userId, onlyRemoveNoProcess);
-
-            final PooledFunction f = PooledLambda.obtainFunction(
-                    FinishDisabledPackageActivitiesHelper::collectActivity, this,
-                    PooledLambda.__(ActivityRecord.class));
-            forAllActivities(f);
-            f.recycle();
+            forAllActivities(this);
 
             boolean didSomething = false;
             final int size = mCollectedActivities.size();
@@ -3377,7 +3329,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return didSomething;
         }
 
-        private boolean collectActivity(ActivityRecord r) {
+        @Override
+        public boolean test(ActivityRecord r) {
             final boolean sameComponent =
                     (r.packageName.equals(mPackageName) && (mFilterByClasses == null
                             || mFilterByClasses.contains(r.mActivityComponent.getClassName())))
@@ -3815,6 +3768,69 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     rankTaskLayers();
                 }
             }
+        }
+    }
+
+    private class AttachApplicationHelper implements Consumer<Task>, Predicate<ActivityRecord> {
+        private boolean mHasActivityStarted;
+        private RemoteException mRemoteException;
+        private WindowProcessController mApp;
+        private ActivityRecord mTop;
+
+        void reset() {
+            mHasActivityStarted = false;
+            mRemoteException = null;
+            mApp = null;
+            mTop = null;
+        }
+
+        boolean process(WindowProcessController app) throws RemoteException {
+            mApp = app;
+            for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
+                getChildAt(displayNdx).forAllRootTasks(this);
+                if (mRemoteException != null) {
+                    throw mRemoteException;
+                }
+            }
+            if (!mHasActivityStarted) {
+                ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                        false /* preserveWindows */);
+            }
+            return mHasActivityStarted;
+        }
+
+        @Override
+        public void accept(Task rootTask) {
+            if (mRemoteException != null) {
+                return;
+            }
+            if (rootTask.getVisibility(null /* starting */)
+                    == TASK_FRAGMENT_VISIBILITY_INVISIBLE) {
+                return;
+            }
+            mTop = rootTask.topRunningActivity();
+            rootTask.forAllActivities(this);
+        }
+
+        @Override
+        public boolean test(ActivityRecord r) {
+            if (r.finishing || !r.showToCurrentUser() || !r.visibleIgnoringKeyguard
+                    || r.app != null || mApp.mUid != r.info.applicationInfo.uid
+                    || !mApp.mName.equals(r.processName)) {
+                return false;
+            }
+
+            try {
+                if (mTaskSupervisor.realStartActivityLocked(r, mApp,
+                        mTop == r && r.isFocusable() /* andResume */, true /* checkConfig */)) {
+                    mHasActivityStarted = true;
+                }
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Exception in new application when starting activity " + mTop, e);
+                mRemoteException = e;
+                return true;
+            }
+            return false;
         }
     }
 }

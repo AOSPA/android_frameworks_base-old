@@ -478,7 +478,6 @@ public class NotificationPanelViewController extends PanelViewController {
     private ArrayList<Consumer<ExpandableNotificationRow>>
             mTrackingHeadsUpListeners =
             new ArrayList<>();
-    private Runnable mVerticalTranslationListener;
     private HeadsUpAppearanceController mHeadsUpAppearanceController;
 
     private int mPanelAlpha;
@@ -3403,7 +3402,6 @@ public class NotificationPanelViewController extends PanelViewController {
     @Override
     protected void onClosingFinished() {
         super.onClosingFinished();
-        resetHorizontalPanelPosition();
         setClosingWithAlphaFadeout(false);
         mMediaHierarchyManager.closeGuts();
     }
@@ -3411,47 +3409,6 @@ public class NotificationPanelViewController extends PanelViewController {
     private void setClosingWithAlphaFadeout(boolean closing) {
         mClosingWithAlphaFadeOut = closing;
         mNotificationStackScrollLayoutController.forceNoOverlappingRendering(closing);
-    }
-
-    /**
-     * Updates the horizontal position of the panel so it is positioned closer to the touch
-     * responsible for opening the panel.
-     *
-     * @param x the x-coordinate the touch event
-     */
-    protected void updateHorizontalPanelPosition(float x) {
-        if (mNotificationStackScrollLayoutController.getWidth() * 1.75f > mView.getWidth()
-                || mShouldUseSplitNotificationShade) {
-            resetHorizontalPanelPosition();
-            return;
-        }
-        float leftMost = mPositionMinSideMargin
-                + mNotificationStackScrollLayoutController.getWidth() / 2;
-        float
-                rightMost =
-                mView.getWidth() - mPositionMinSideMargin
-                        - mNotificationStackScrollLayoutController.getWidth() / 2;
-        if (Math.abs(x - mView.getWidth() / 2)
-                < mNotificationStackScrollLayoutController.getWidth() / 4) {
-            x = mView.getWidth() / 2;
-        }
-        x = Math.min(rightMost, Math.max(leftMost, x));
-        float
-                center = mNotificationStackScrollLayoutController.getLeft()
-                + mNotificationStackScrollLayoutController.getWidth() / 2;
-        setHorizontalPanelTranslation(x - center);
-    }
-
-    private void resetHorizontalPanelPosition() {
-        setHorizontalPanelTranslation(0f);
-    }
-
-    protected void setHorizontalPanelTranslation(float translation) {
-        mNotificationStackScrollLayoutController.setTranslationX(translation);
-        mQsFrame.setTranslationX(translation);
-        if (mVerticalTranslationListener != null) {
-            mVerticalTranslationListener.run();
-        }
     }
 
     protected void updateExpandedHeight(float expandedHeight) {
@@ -3766,10 +3723,6 @@ public class NotificationPanelViewController extends PanelViewController {
         mTrackingHeadsUpListeners.remove(listener);
     }
 
-    public void setVerticalTranslationListener(Runnable verticalTranslationListener) {
-        mVerticalTranslationListener = verticalTranslationListener;
-    }
-
     public void setHeadsUpAppearanceController(
             HeadsUpAppearanceController headsUpAppearanceController) {
         mHeadsUpAppearanceController = headsUpAppearanceController;
@@ -4038,7 +3991,6 @@ public class NotificationPanelViewController extends PanelViewController {
                 }
                 if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isFullyCollapsed()) {
                     mMetricsLogger.count(COUNTER_PANEL_OPEN, 1);
-                    updateHorizontalPanelPosition(event.getX());
                     handled = true;
                 }
 
@@ -4422,12 +4374,7 @@ public class NotificationPanelViewController extends PanelViewController {
         @Override
         public void onThemeChanged() {
             if (DEBUG) Log.d(TAG, "onThemeChanged");
-            final int themeResId = mView.getContext().getThemeResId();
-            if (mThemeResId == themeResId) {
-                return;
-            }
-            mThemeResId = themeResId;
-
+            mThemeResId = mView.getContext().getThemeResId();
             reInflateViews();
         }
 
@@ -4437,12 +4384,6 @@ public class NotificationPanelViewController extends PanelViewController {
 
             // Can affect multi-user switcher visibility as it depends on screen size by default:
             // it is enabled only for devices with large screens (see config_keyguardUserSwitcher)
-            reInflateViews();
-        }
-
-        @Override
-        public void onOverlayChanged() {
-            if (DEBUG) Log.d(TAG, "onOverlayChanged");
             reInflateViews();
         }
 
@@ -4554,7 +4495,6 @@ public class NotificationPanelViewController extends PanelViewController {
             // The update needs to happen after the headerSlide in above, otherwise the translation
             // would reset
             maybeAnimateBottomAreaAlpha();
-            resetHorizontalPanelPosition();
             updateQsState();
             mSplitShadeHeaderController.setShadeExpanded(
                     mBarState == SHADE || mBarState == SHADE_LOCKED);
@@ -4805,9 +4745,6 @@ public class NotificationPanelViewController extends PanelViewController {
         public void onConfigurationChanged(Configuration newConfig) {
             super.onConfigurationChanged(newConfig);
             mAffordanceHelper.onConfigurationChanged();
-            if (newConfig.orientation != mLastOrientation) {
-                resetHorizontalPanelPosition();
-            }
             mLastOrientation = newConfig.orientation;
         }
     }

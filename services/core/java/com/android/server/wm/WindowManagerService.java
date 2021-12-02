@@ -2478,7 +2478,8 @@ public class WindowManagerService extends IWindowManager.Stub
             if (isPrimaryDisplay) {
                 transformHint = (transformHint + mPrimaryDisplayOrientation) % 4;
             }
-            outSurfaceControl.setTransformHint(transformHint);
+            outSurfaceControl.setTransformHint(
+                    SurfaceControl.rotationToBufferTransform(transformHint));
             ProtoLog.v(WM_DEBUG_ORIENTATION,
                     "Passing transform hint %d for window %s%s",
                     transformHint, win,
@@ -2588,17 +2589,13 @@ public class WindowManagerService extends IWindowManager.Stub
             // an exit.
             win.mAnimatingExit = true;
         } else if (win.mDisplayContent.okToAnimate()
-                && win.mDisplayContent.mWallpaperController.isWallpaperTarget(win)
-                && win.mAttrs.type == TYPE_NOTIFICATION_SHADE) {
-            // If the wallpaper is currently behind this app window, we need to change both of them
-            // inside of a transaction to avoid artifacts.
-            // For NotificationShade, sysui is in charge of running window animation and it updates
-            // the client view visibility only after both NotificationShade and the wallpaper are
-            // hidden. So we don't need to care about exit animation, but can destroy its surface
-            // immediately.
+                && win.mDisplayContent.mWallpaperController.isWallpaperTarget(win)) {
+            // If the wallpaper is currently behind this
+            // window, we need to change both of them inside
+            // of a transaction to avoid artifacts.
             win.mAnimatingExit = true;
         } else {
-            boolean stopped = win.mActivityRecord == null || win.mActivityRecord.mAppStopped;
+            boolean stopped = win.mActivityRecord != null ? win.mActivityRecord.mAppStopped : true;
             // We set mDestroying=true so ActivityRecord#notifyAppStopped in-to destroy surfaces
             // will later actually destroy the surface if we do not do so here. Normally we leave
             // this to the exit animation.
@@ -6452,6 +6449,7 @@ public class WindowManagerService extends IWindowManager.Stub
         pw.print("  mGlobalConfiguration="); pw.println(mRoot.getConfiguration());
         pw.print("  mHasPermanentDpad="); pw.println(mHasPermanentDpad);
         mRoot.dumpTopFocusedDisplayId(pw);
+        mRoot.dumpDefaultMinSizeOfResizableTask(pw);
         mRoot.forAllDisplays(dc -> {
             final int displayId = dc.getDisplayId();
             final InsetsControlTarget imeLayeringTarget = dc.getImeTarget(IME_TARGET_LAYERING);

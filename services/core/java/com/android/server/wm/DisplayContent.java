@@ -90,6 +90,7 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_IME;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_LAYER_MIRRORING;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WALLPAPER;
 import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_CONFIG;
@@ -127,7 +128,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT_METHOD;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREENSHOT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_STACK_CRAWLS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -223,7 +223,6 @@ import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.TriConsumer;
 import com.android.internal.util.function.pooled.PooledConsumer;
-import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.inputmethod.InputMethodManagerInternal;
@@ -579,7 +578,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /** Caches the value whether told display manager that we have content. */
     private boolean mLastHasContent;
 
-    private DisplayRotationUtil mRotationUtil = new DisplayRotationUtil();
+    private static DisplayRotationUtil sRotationUtil = new DisplayRotationUtil();
 
     /**
      * The input method window for this display.
@@ -986,8 +985,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             final boolean committed = winAnimator.commitFinishDrawingLocked();
             if (isDefaultDisplay && committed) {
                 if (w.hasWallpaper()) {
-                    if (DEBUG_WALLPAPER_LIGHT) Slog.v(TAG,
-                            "First draw done in potential wallpaper target " + w);
+                    ProtoLog.v(WM_DEBUG_WALLPAPER,
+                            "First draw done in potential wallpaper target %s", w);
                     mWallpaperMayChange = true;
                     pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
                     if (DEBUG_LAYOUT_REPEATS) {
@@ -2030,29 +2029,35 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return mDisplayCutoutCache.getOrCompute(mInitialDisplayCutout, rotation);
     }
 
-    private WmDisplayCutout calculateDisplayCutoutForRotationUncached(
-            DisplayCutout cutout, int rotation) {
+    static WmDisplayCutout calculateDisplayCutoutForRotationAndDisplaySizeUncached(
+            DisplayCutout cutout, int rotation, int displayWidth, int displayHeight) {
         if (cutout == null || cutout == DisplayCutout.NO_CUTOUT) {
             return WmDisplayCutout.NO_CUTOUT;
         }
         if (rotation == ROTATION_0) {
             return WmDisplayCutout.computeSafeInsets(
-                    cutout, mInitialDisplayWidth, mInitialDisplayHeight);
+                    cutout, displayWidth, displayHeight);
         }
         final Insets waterfallInsets =
                 RotationUtils.rotateInsets(cutout.getWaterfallInsets(), rotation);
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
-        final Rect[] newBounds = mRotationUtil.getRotatedBounds(
+        final Rect[] newBounds = sRotationUtil.getRotatedBounds(
                 cutout.getBoundingRectsAll(),
-                rotation, mInitialDisplayWidth, mInitialDisplayHeight);
+                rotation, displayWidth, displayHeight);
         final CutoutPathParserInfo info = cutout.getCutoutPathParserInfo();
         final CutoutPathParserInfo newInfo = new CutoutPathParserInfo(
                 info.getDisplayWidth(), info.getDisplayHeight(), info.getDensity(),
                 info.getCutoutSpec(), rotation, info.getScale());
         return WmDisplayCutout.computeSafeInsets(
                 DisplayCutout.constructDisplayCutout(newBounds, waterfallInsets, newInfo),
-                rotated ? mInitialDisplayHeight : mInitialDisplayWidth,
-                rotated ? mInitialDisplayWidth : mInitialDisplayHeight);
+                rotated ? displayHeight : displayWidth,
+                rotated ? displayWidth : displayHeight);
+    }
+
+    private WmDisplayCutout calculateDisplayCutoutForRotationUncached(
+            DisplayCutout cutout, int rotation) {
+        return calculateDisplayCutoutForRotationAndDisplaySizeUncached(cutout, rotation,
+                mInitialDisplayWidth, mInitialDisplayHeight);
     }
 
     RoundedCorners calculateRoundedCornersForRotation(int rotation) {
@@ -4659,7 +4664,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 || mWmService.mPolicy.okToAnimate(ignoreScreenOn));
     }
 
-    static final class TaskForResizePointSearchResult {
+    static final class TaskForResizePointSearchResult implements Predicate<Task> {
         private Task taskForResize;
         private int x;
         private int y;
@@ -4672,16 +4677,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             this.y = y;
             this.delta = delta;
             mTmpRect.setEmpty();
-
-            final PooledFunction f = PooledLambda.obtainFunction(
-                    TaskForResizePointSearchResult::processTask, this, PooledLambda.__(Task.class));
-            root.forAllTasks(f);
-            f.recycle();
+            root.forAllTasks(this);
 
             return taskForResize;
         }
 
-        private boolean processTask(Task task) {
+        @Override
+        public boolean test(Task task) {
             if (!task.getRootTask().getWindowConfiguration().canResizeTask()) {
                 return true;
             }
@@ -5126,9 +5128,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         onAppTransitionDone();
 
         changes |= FINISH_LAYOUT_REDO_LAYOUT;
-        if (DEBUG_WALLPAPER_LIGHT) {
-            Slog.v(TAG_WM, "Wallpaper layer changed: assigning layers + relayout");
-        }
+        ProtoLog.v(WM_DEBUG_WALLPAPER, "Wallpaper layer changed: assigning layers + relayout");
         computeImeTarget(true /* updateImeTarget */);
         mWallpaperMayChange = true;
         // Since the window list has been rebuilt, focus might have to be recomputed since the
