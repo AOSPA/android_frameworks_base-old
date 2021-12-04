@@ -16,6 +16,24 @@
       "message": "We need change this code?",
       "revId": "890fca24b43e87cb830b14f6e85aed1ee7cad453",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ed856af9_8c1a0904",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/UdfpsController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 312,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2021-12-04T08:02:41Z",
+      "side": 1,
+      "message": "That value if only for XiaoMi devices.",
+      "parentUuid": "61206c53_bc75813e",
+      "revId": "890fca24b43e87cb830b14f6e85aed1ee7cad453",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
