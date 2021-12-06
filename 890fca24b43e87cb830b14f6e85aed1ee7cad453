@@ -34,6 +34,42 @@
       "parentUuid": "61206c53_bc75813e",
       "revId": "890fca24b43e87cb830b14f6e85aed1ee7cad453",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2ebe4f75_0d85aa41",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/UdfpsController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 312,
+      "author": {
+        "id": 1000687
+      },
+      "writtenOn": "2021-12-06T01:43:52Z",
+      "side": 1,
+      "message": "This is an example of using overlay to configure vendor code.\nhttps://github.com/PixelExperience/frameworks_base/commit/e6f94820282c5d1abc5c47ded12aa6d120ec6bd5",
+      "parentUuid": "ed856af9_8c1a0904",
+      "revId": "890fca24b43e87cb830b14f6e85aed1ee7cad453",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "f67d81a1_8afd0d2b",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/UdfpsController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 312,
+      "author": {
+        "id": 1000687
+      },
+      "writtenOn": "2021-12-06T01:43:52Z",
+      "side": 1,
+      "message": "This is an example of using overlay to configure vendor code.\nhttps://github.com/PixelExperience/frameworks_base/commit/e6f94820282c5d1abc5c47ded12aa6d120ec6bd5",
+      "parentUuid": "ed856af9_8c1a0904",
+      "revId": "890fca24b43e87cb830b14f6e85aed1ee7cad453",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
