@@ -37,6 +37,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ApplicationPackageManager;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageDeleteObserver2;
 import android.content.pm.PackageChangeEvent;
 import android.content.pm.PackageInstaller;
@@ -50,6 +51,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.text.TextUtils;
 import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.Log;
@@ -74,6 +76,7 @@ import java.util.List;
  * Relies on RemovePackageHelper to clear internal data structures.
  */
 final class DeletePackageHelper {
+    private static final boolean DEBUG_CLEAN_APKS = false;
     // ------- apps on sdcard specific code -------
     private static final boolean DEBUG_SD_INSTALL = false;
 
@@ -81,6 +84,7 @@ final class DeletePackageHelper {
     private final UserManagerInternal mUserManagerInternal;
     private final PermissionManagerServiceInternal mPermissionManager;
     private final RemovePackageHelper mRemovePackageHelper;
+    // TODO(b/201815903): remove dependency to InitAndSystemPackageHelper
     private final InitAndSystemPackageHelper mInitAndSystemPackageHelper;
     private final AppDataHelper mAppDataHelper;
 
@@ -102,8 +106,7 @@ final class DeletePackageHelper {
         mUserManagerInternal = mPm.mInjector.getUserManagerInternal();
         mPermissionManager = mPm.mInjector.getPermissionManagerServiceInternal();
         mRemovePackageHelper = new RemovePackageHelper(mPm, mAppDataHelper);
-        mInitAndSystemPackageHelper = new InitAndSystemPackageHelper(mPm, mRemovePackageHelper,
-                mAppDataHelper);
+        mInitAndSystemPackageHelper = mPm.getInitAndSystemPackageHelper();
     }
 
     /**
@@ -280,8 +283,7 @@ final class DeletePackageHelper {
                             Slog.i(TAG, "Enabling system stub after removal; pkg: "
                                     + stubPkg.getPackageName());
                         }
-                        mInitAndSystemPackageHelper.enableCompressedPackage(stubPkg, stubPs,
-                                mPm.mDefParseFlags, mPm.getDirsToScanAsSystem());
+                        mInitAndSystemPackageHelper.enableCompressedPackage(stubPkg, stubPs);
                     } else if (DEBUG_COMPRESSION) {
                         Slog.i(TAG, "System stub disabled for all users, leaving uncompressed "
                                 + "after removal; pkg: " + stubPkg.getPackageName());
@@ -432,8 +434,7 @@ final class DeletePackageHelper {
             PackageSetting disabledPs = deleteInstalledSystemPackage(action, ps, allUserHandles,
                     flags, outInfo, writeSettings);
             mInitAndSystemPackageHelper.restoreDisabledSystemPackageLIF(
-                    action, ps, allUserHandles, outInfo, writeSettings, mPm.mDefParseFlags,
-                    mPm.getDirsToScanAsSystem(), disabledPs);
+                    action, ps, allUserHandles, outInfo, writeSettings, disabledPs);
         } else {
             if (DEBUG_REMOVE) Slog.d(TAG, "Removing non-system package: " + ps.getPackageName());
             deleteInstalledPackageLIF(ps, deleteCodeAndResources, flags, allUserHandles,
@@ -471,6 +472,7 @@ final class DeletePackageHelper {
         final SharedUserSetting sus = ps.getSharedUser();
         final List<AndroidPackage> sharedUserPkgs =
                 sus != null ? sus.getPackages() : Collections.emptyList();
+        final PreferredActivityHelper preferredActivityHelper = new PreferredActivityHelper(mPm);
         final int[] userIds = (userId == UserHandle.USER_ALL) ? mUserManagerInternal.getUserIds()
                 : new int[] {userId};
         for (int nextUserId : userIds) {
@@ -484,7 +486,8 @@ final class DeletePackageHelper {
             }
             PackageManagerService.removeKeystoreDataIfNeeded(mUserManagerInternal, nextUserId,
                     ps.getAppId());
-            mPm.clearPackagePreferredActivities(ps.getPackageName(), nextUserId);
+            preferredActivityHelper.clearPackagePreferredActivities(ps.getPackageName(),
+                    nextUserId);
             mPm.mDomainVerificationManager.clearPackageForUser(ps.getPackageName(), nextUserId);
         }
         mPermissionManager.onPackageUninstalled(ps.getPackageName(), ps.getAppId(), pkg,
@@ -520,9 +523,9 @@ final class DeletePackageHelper {
 
         // Delete application code and resources only for parent packages
         if (deleteCodeAndResources && (outInfo != null)) {
-            outInfo.mArgs = mPm.createInstallArgsForExisting(
+            outInfo.mArgs = new FileInstallArgs(
                     ps.getPathString(), getAppDexInstructionSets(
-                            ps.getPrimaryCpuAbi(), ps.getSecondaryCpuAbi()));
+                            ps.getPrimaryCpuAbi(), ps.getSecondaryCpuAbi()), mPm);
             if (DEBUG_SD_INSTALL) Slog.i(TAG, "args=" + outInfo.mArgs);
         }
     }
@@ -820,6 +823,91 @@ final class DeletePackageHelper {
             this.enabledState = enabledState;
             this.lastDisableAppCaller = lastDisableAppCaller;
             this.installed = installed;
+        }
+    }
+
+    /**
+     * We're removing userId and would like to remove any downloaded packages
+     * that are no longer in use by any other user.
+     * @param userId the user being removed
+     */
+    @GuardedBy("mPm.mLock")
+    public void removeUnusedPackagesLPw(UserManagerService userManager, final int userId) {
+        int [] users = userManager.getUserIds();
+        final int numPackages = mPm.mSettings.getPackagesLocked().size();
+        for (int index = 0; index < numPackages; index++) {
+            final PackageSetting ps = mPm.mSettings.getPackagesLocked().valueAt(index);
+            if (ps.getPkg() == null) {
+                continue;
+            }
+            final String packageName = ps.getPkg().getPackageName();
+            // Skip over if system app or static shared library
+            if ((ps.pkgFlags & ApplicationInfo.FLAG_SYSTEM) != 0
+                    || !TextUtils.isEmpty(ps.getPkg().getStaticSharedLibName())) {
+                continue;
+            }
+            if (DEBUG_CLEAN_APKS) {
+                Slog.i(TAG, "Checking package " + packageName);
+            }
+            boolean keep = mPm.shouldKeepUninstalledPackageLPr(packageName);
+            if (keep) {
+                if (DEBUG_CLEAN_APKS) {
+                    Slog.i(TAG, "  Keeping package " + packageName + " - requested by DO");
+                }
+            } else {
+                for (int i = 0; i < users.length; i++) {
+                    if (users[i] != userId && ps.getInstalled(users[i])) {
+                        keep = true;
+                        if (DEBUG_CLEAN_APKS) {
+                            Slog.i(TAG, "  Keeping package " + packageName + " for user "
+                                    + users[i]);
+                        }
+                        break;
+                    }
+                }
+            }
+            if (!keep) {
+                if (DEBUG_CLEAN_APKS) {
+                    Slog.i(TAG, "  Removing package " + packageName);
+                }
+                //end run
+                mPm.mHandler.post(() -> deletePackageX(
+                        packageName, PackageManager.VERSION_CODE_HIGHEST,
+                        userId, 0, true /*removedBySystem*/));
+            }
+        }
+    }
+
+    public void deleteExistingPackageAsUser(VersionedPackage versionedPackage,
+            final IPackageDeleteObserver2 observer, final int userId) {
+        mPm.mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.DELETE_PACKAGES, null);
+        Preconditions.checkNotNull(versionedPackage);
+        Preconditions.checkNotNull(observer);
+        final String packageName = versionedPackage.getPackageName();
+        final long versionCode = versionedPackage.getLongVersionCode();
+
+        int installedForUsersCount = 0;
+        synchronized (mPm.mLock) {
+            // Normalize package name to handle renamed packages and static libs
+            final String internalPkgName = mPm.resolveInternalPackageNameLPr(packageName,
+                    versionCode);
+            final PackageSetting ps = mPm.mSettings.getPackageLPr(internalPkgName);
+            if (ps != null) {
+                int[] installedUsers = ps.queryInstalledUsers(mUserManagerInternal.getUserIds(),
+                        true);
+                installedForUsersCount = installedUsers.length;
+            }
+        }
+
+        if (installedForUsersCount > 1) {
+            deletePackageVersionedInternal(versionedPackage, observer, userId, 0, true);
+        } else {
+            try {
+                observer.onPackageDeleted(packageName, PackageManager.DELETE_FAILED_INTERNAL_ERROR,
+                        null);
+            } catch (RemoteException re) {
+            }
         }
     }
 }

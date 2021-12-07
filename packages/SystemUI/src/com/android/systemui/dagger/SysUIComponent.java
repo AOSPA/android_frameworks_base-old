@@ -25,11 +25,11 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardSliceProvider;
 import com.android.systemui.people.PeopleProvider;
 import com.android.systemui.statusbar.policy.ConfigurationController;
-import com.android.systemui.util.InjectionInflationController;
 import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.bubbles.Bubbles;
+import com.android.wm.shell.displayareahelper.DisplayAreaHelper;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
@@ -96,6 +96,9 @@ public interface SysUIComponent {
         Builder setStartingSurface(Optional<StartingSurface> s);
 
         @BindsInstance
+        Builder setDisplayAreaHelper(Optional<DisplayAreaHelper> h);
+
+        @BindsInstance
         Builder setTaskSurfaceHelper(Optional<TaskSurfaceHelper> t);
 
         SysUIComponent build();
@@ -141,11 +144,6 @@ public interface SysUIComponent {
      */
     @SysUISingleton
     InitController getInitController();
-
-    /**
-     * ViewInstanceCreator generates all Views that need injection.
-     */
-    InjectionInflationController.ViewInstanceCreator.Factory createViewInstanceCreatorFactory();
 
     /**
      * Member injection into the supplied argument.

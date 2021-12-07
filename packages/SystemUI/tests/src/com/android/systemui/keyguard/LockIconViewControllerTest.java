@@ -16,6 +16,9 @@
 
 package com.android.systemui.keyguard;
 
+import static com.android.keyguard.LockIconView.ICON_LOCK;
+import static com.android.keyguard.LockIconView.ICON_UNLOCK;
+
 import static junit.framework.Assert.assertEquals;
 
 import static org.mockito.Mockito.any;
@@ -29,7 +32,7 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.PointF;
-import android.graphics.drawable.AnimatedVectorDrawable;
+import android.graphics.drawable.AnimatedStateListDrawable;
 import android.hardware.biometrics.BiometricSourceType;
 import android.hardware.biometrics.SensorLocationInternal;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
@@ -59,7 +62,8 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-import com.android.systemui.util.concurrency.DelayableExecutor;
+import com.android.systemui.util.concurrency.FakeExecutor;
+import com.android.systemui.util.time.FakeSystemClock;
 
 import com.airbnb.lottie.LottieAnimationView;
 
@@ -81,7 +85,7 @@ public class LockIconViewControllerTest extends SysuiTestCase {
     private static final String UNLOCKED_LABEL = "unlocked";
 
     private @Mock LockIconView mLockIconView;
-    private @Mock AnimatedVectorDrawable mIconDrawable;
+    private @Mock AnimatedStateListDrawable mIconDrawable;
     private @Mock Context mContext;
     private @Mock Resources mResources;
     private @Mock DisplayMetrics mDisplayMetrics;
@@ -94,11 +98,11 @@ public class LockIconViewControllerTest extends SysuiTestCase {
     private @Mock DumpManager mDumpManager;
     private @Mock AccessibilityManager mAccessibilityManager;
     private @Mock ConfigurationController mConfigurationController;
-    private @Mock DelayableExecutor mDelayableExecutor;
     private @Mock Vibrator mVibrator;
     private @Mock AuthRippleController mAuthRippleController;
     private @Mock LottieAnimationView mAodFp;
     private @Mock LayoutInflater mLayoutInflater;
+    private FakeExecutor mDelayableExecutor = new FakeExecutor(new FakeSystemClock());
 
     private LockIconViewController mLockIconViewController;
 
@@ -106,6 +110,14 @@ public class LockIconViewControllerTest extends SysuiTestCase {
     @Captor private ArgumentCaptor<View.OnAttachStateChangeListener> mAttachCaptor =
             ArgumentCaptor.forClass(View.OnAttachStateChangeListener.class);
     private View.OnAttachStateChangeListener mAttachListener;
+
+    @Captor private ArgumentCaptor<KeyguardStateController.Callback> mKeyguardStateCaptor =
+            ArgumentCaptor.forClass(KeyguardStateController.Callback.class);
+    private KeyguardStateController.Callback mKeyguardStateCallback;
+
+    @Captor private ArgumentCaptor<StatusBarStateController.StateListener> mStatusBarStateCaptor =
+            ArgumentCaptor.forClass(StatusBarStateController.StateListener.class);
+    private StatusBarStateController.StateListener mStatusBarStateListener;
 
     @Captor private ArgumentCaptor<AuthController.Callback> mAuthControllerCallbackCaptor;
     private AuthController.Callback mAuthControllerCallback;
@@ -212,6 +224,7 @@ public class LockIconViewControllerTest extends SysuiTestCase {
 
         // WHEN all authenticators are registered
         mAuthControllerCallback.onAllAuthenticatorsRegistered();
+        mDelayableExecutor.runAllReady();
 
         // THEN lock icon view location is updated with the same coordinates as fpProps
         verify(mLockIconView).setCenterLocation(mPointCaptor.capture(), eq(udfps.first));
@@ -271,6 +284,86 @@ public class LockIconViewControllerTest extends SysuiTestCase {
         verify(mLockIconView).setContentDescription(UNLOCKED_LABEL);
     }
 
+    @Test
+    public void testLockIconStartState() {
+        // GIVEN lock icon state
+        setupShowLockIcon();
+
+        // WHEN lock icon controller is initialized
+        mLockIconViewController.init();
+        captureAttachListener();
+        mAttachListener.onViewAttachedToWindow(mLockIconView);
+
+        // THEN the lock icon should show
+        verify(mLockIconView).updateIcon(ICON_LOCK, false);
+    }
+
+    @Test
+    public void testLockIcon_updateToUnlock() {
+        // GIVEN starting state for the lock icon
+        setupShowLockIcon();
+
+        // GIVEN lock icon controller is initialized and view is attached
+        mLockIconViewController.init();
+        captureAttachListener();
+        mAttachListener.onViewAttachedToWindow(mLockIconView);
+        captureKeyguardStateCallback();
+        reset(mLockIconView);
+
+        // WHEN the unlocked state changes to canDismissLockScreen=true
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(true);
+        mKeyguardStateCallback.onUnlockedChanged();
+
+        // THEN the unlock should show
+        verify(mLockIconView).updateIcon(ICON_UNLOCK, false);
+    }
+
+    @Test
+    public void testLockIcon_clearsIconOnAod_whenUdfpsNotEnrolled() {
+        // GIVEN udfps not enrolled
+        setupUdfps();
+        when(mKeyguardUpdateMonitor.isUdfpsEnrolled()).thenReturn(false);
+
+        // GIVEN starting state for the lock icon
+        setupShowLockIcon();
+
+        // GIVEN lock icon controller is initialized and view is attached
+        mLockIconViewController.init();
+        captureAttachListener();
+        mAttachListener.onViewAttachedToWindow(mLockIconView);
+        captureStatusBarStateListener();
+        reset(mLockIconView);
+
+        // WHEN the dozing state changes
+        mStatusBarStateListener.onDozingChanged(true /* isDozing */);
+
+        // THEN the icon is cleared
+        verify(mLockIconView).clearIcon();
+    }
+
+    @Test
+    public void testLockIcon_updateToAodLock_whenUdfpsEnrolled() {
+        // GIVEN udfps enrolled
+        setupUdfps();
+        when(mKeyguardUpdateMonitor.isUdfpsEnrolled()).thenReturn(true);
+
+        // GIVEN starting state for the lock icon
+        setupShowLockIcon();
+
+        // GIVEN lock icon controller is initialized and view is attached
+        mLockIconViewController.init();
+        captureAttachListener();
+        mAttachListener.onViewAttachedToWindow(mLockIconView);
+        captureStatusBarStateListener();
+        reset(mLockIconView);
+
+        // WHEN the dozing state changes
+        mStatusBarStateListener.onDozingChanged(true /* isDozing */);
+
+        // THEN the AOD lock icon should show
+        verify(mLockIconView).updateIcon(ICON_LOCK, true);
+    }
+
     private Pair<Integer, PointF> setupUdfps() {
         final PointF udfpsLocation = new PointF(50, 75);
         final int radius = 33;
@@ -290,6 +383,15 @@ public class LockIconViewControllerTest extends SysuiTestCase {
         return new Pair(radius, udfpsLocation);
     }
 
+    private void setupShowLockIcon() {
+        when(mKeyguardStateController.isShowing()).thenReturn(true);
+        when(mKeyguardStateController.isKeyguardGoingAway()).thenReturn(false);
+        when(mStatusBarStateController.isDozing()).thenReturn(false);
+        when(mStatusBarStateController.getDozeAmount()).thenReturn(0f);
+        when(mStatusBarStateController.getState()).thenReturn(StatusBarState.KEYGUARD);
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(false);
+    }
+
     private void captureAuthControllerCallback() {
         verify(mAuthController).addCallback(mAuthControllerCallbackCaptor.capture());
         mAuthControllerCallback = mAuthControllerCallbackCaptor.getValue();
@@ -298,6 +400,16 @@ public class LockIconViewControllerTest extends SysuiTestCase {
     private void captureAttachListener() {
         verify(mLockIconView).addOnAttachStateChangeListener(mAttachCaptor.capture());
         mAttachListener = mAttachCaptor.getValue();
+    }
+
+    private void captureKeyguardStateCallback() {
+        verify(mKeyguardStateController).addCallback(mKeyguardStateCaptor.capture());
+        mKeyguardStateCallback = mKeyguardStateCaptor.getValue();
+    }
+
+    private void captureStatusBarStateListener() {
+        verify(mStatusBarStateController).addCallback(mStatusBarStateCaptor.capture());
+        mStatusBarStateListener = mStatusBarStateCaptor.getValue();
     }
 
     private void captureKeyguardUpdateMonitorCallback() {

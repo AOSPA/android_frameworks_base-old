@@ -1350,7 +1350,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     .setCaller(r.app.getThread())
                     .setResolvedType(r.resolvedType)
                     .setActivityInfo(aInfo)
-                    .setResultTo(resultTo != null ? resultTo.appToken : null)
+                    .setResultTo(resultTo != null ? resultTo.token : null)
                     .setResultWho(resultWho)
                     .setRequestCode(requestCode)
                     .setCallingPid(-1)
@@ -3194,7 +3194,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mViSessionId++;
             }
             try {
-                activity.app.getThread().requestAssistContextExtras(activity.appToken, pae,
+                activity.app.getThread().requestAssistContextExtras(activity.token, pae,
                         requestType, mViSessionId, flags);
                 mPendingAssistExtras.add(pae);
                 mUiHandler.postDelayed(pae, timeout);
@@ -3439,7 +3439,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             // If the keyguard is showing or occluded, then try and dismiss it before
             // entering picture-in-picture (this will prompt the user to authenticate if the
             // device is currently locked).
-            mActivityClientController.dismissKeyguard(r.appToken, new KeyguardDismissCallback() {
+            mActivityClientController.dismissKeyguard(r.token, new KeyguardDismissCallback() {
                 @Override
                 public void onDismissSucceeded() {
                     mH.post(enterPipRunnable);
@@ -4010,7 +4010,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             // to write to the file descriptor directly
             pw.flush();
             try (TransferPipe tp = new TransferPipe()) {
-                appThread.dumpActivity(tp.getWriteFd(), r.appToken, innerPrefix, args);
+                appThread.dumpActivity(tp.getWriteFd(), r.token, innerPrefix, args);
                 tp.go(fd);
             } catch (IOException e) {
                 pw.println(innerPrefix + "Failure while dumping the activity: " + e);
@@ -4639,7 +4639,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         final Message m = PooledLambda.obtainMessage(
                 ActivityManagerInternal::updateActivityUsageStats, mAmInternal,
-                activity.mActivityComponent, activity.mUserId, event, activity.appToken, taskRoot);
+                activity.mActivityComponent, activity.mUserId, event, activity.token, taskRoot);
         mH.sendMessage(m);
     }
 
@@ -5747,7 +5747,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                             + activity);
                     return null;
                 }
-                return new ActivityTokens(activity.appToken, activity.assistToken,
+                return new ActivityTokens(activity.token, activity.assistToken,
                         activity.app.getThread(), activity.shareableActivityToken);
             }
         }
@@ -6608,6 +6608,34 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
                 mActivityInterceptorCallbacks.put(id, callback);
             }
+        }
+
+        @Override
+        public ActivityManager.RecentTaskInfo getMostRecentTaskFromBackground() {
+            List<ActivityManager.RunningTaskInfo> runningTaskInfoList = getTasks(1);
+            ActivityManager.RunningTaskInfo runningTaskInfo;
+            if (runningTaskInfoList.size() > 0) {
+                runningTaskInfo = runningTaskInfoList.get(0);
+            } else {
+                Slog.i(TAG, "No running task found!");
+                return null;
+            }
+            // Get 2 most recent tasks.
+            List<ActivityManager.RecentTaskInfo> recentTaskInfoList =
+                    getRecentTasks(
+                                    2,
+                                    ActivityManager.RECENT_IGNORE_UNAVAILABLE,
+                                    mContext.getUserId())
+                            .getList();
+            ActivityManager.RecentTaskInfo targetTask = null;
+            for (ActivityManager.RecentTaskInfo info : recentTaskInfoList) {
+                // Find a recent task that is not the current running task on screen.
+                if (info.id != runningTaskInfo.id) {
+                    targetTask = info;
+                    break;
+                }
+            }
+            return targetTask;
         }
     }
 }

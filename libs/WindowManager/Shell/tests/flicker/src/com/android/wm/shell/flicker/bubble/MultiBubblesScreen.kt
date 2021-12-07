@@ -17,6 +17,7 @@
 package com.android.wm.shell.flicker.bubble
 
 import android.os.SystemClock
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
@@ -25,6 +26,7 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.junit.runners.Parameterized
 
 /**
@@ -42,10 +44,11 @@ import org.junit.runners.Parameterized
 class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
     override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
-        get() = buildTransition() {
+        get() = buildTransition {
             setup {
                 test {
                     for (i in 1..3) {
+                        val addBubbleBtn = waitAndGetAddBubbleBtn()
                         addBubbleBtn?.run { addBubbleBtn.click() } ?: error("Add Bubble not found")
                     }
                     val showBubble = device.wait(Until.findObject(
@@ -63,4 +66,12 @@ class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(test
                 }
             }
         }
+
+    @FlakyTest
+    @Test
+    fun testAppIsAlwaysVisible() {
+        testSpec.assertLayers {
+            this.isVisible(testApp.component)
+        }
+    }
 }

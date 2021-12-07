@@ -20,6 +20,7 @@ import android.content.Context
 import android.graphics.Point
 import android.util.DisplayMetrics
 import android.view.WindowManager
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
@@ -28,6 +29,7 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.junit.runners.Parameterized
 
 /**
@@ -44,22 +46,31 @@ import org.junit.runners.Parameterized
 @Group4
 class DismissBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
-    val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    val displaySize = DisplayMetrics()
+    private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val displaySize = DisplayMetrics()
 
     override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
-        get() = buildTransition() {
+        get() = buildTransition {
             setup {
                 eachRun {
-                    addBubbleBtn?.run { addBubbleBtn.click() } ?: error("Add Bubble not found")
+                    val addBubbleBtn = waitAndGetAddBubbleBtn()
+                    addBubbleBtn?.click() ?: error("Add Bubble not found")
                 }
             }
             transitions {
-                wm?.run { wm.getDefaultDisplay().getMetrics(displaySize) } ?: error("WM not found")
+                wm.run { wm.getDefaultDisplay().getMetrics(displaySize) }
                 val dist = Point((displaySize.widthPixels / 2), displaySize.heightPixels)
                 val showBubble = device.wait(Until.findObject(
                         By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)), FIND_OBJECT_TIMEOUT)
                 showBubble?.run { drag(dist, 1000) } ?: error("Show bubble not found")
             }
         }
+
+    @FlakyTest
+    @Test
+    fun testAppIsAlwaysVisible() {
+        testSpec.assertLayers {
+            this.isVisible(testApp.component)
+        }
+    }
 }

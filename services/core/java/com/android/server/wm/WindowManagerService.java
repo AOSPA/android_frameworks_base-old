@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
 import static android.Manifest.permission.INPUT_CONSUMER;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
+import static android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
 import static android.Manifest.permission.MANAGE_APP_TOKENS;
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
@@ -269,6 +270,7 @@ import android.view.ScrollCaptureResponse;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
+import android.view.TaskTransitionSpec;
 import android.view.View;
 import android.view.WindowContentFrameStats;
 import android.view.WindowInsets;
@@ -437,7 +439,7 @@ public class WindowManagerService extends IWindowManager.Stub
             "persist.wm.enable_remote_keyguard_animation";
 
     private static final int sEnableRemoteKeyguardAnimation =
-            SystemProperties.getInt(ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY, 0);
+            SystemProperties.getInt(ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY, 1);
 
     /**
      * @see #ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY
@@ -760,6 +762,11 @@ public class WindowManagerService extends IWindowManager.Stub
      * not as critical.
      */
     final Handler mAnimationHandler = new Handler(AnimationThread.getHandler().getLooper());
+
+    /**
+     * Used during task transitions to allow SysUI and launcher to customize task transitions.
+     */
+    TaskTransitionSpec mTaskTransitionSpec;
 
     boolean mHardKeyboardAvailable;
     WindowManagerInternal.OnHardKeyboardStatusChangeListener mHardKeyboardStatusChangeListener;
@@ -1139,7 +1146,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     atoken.mEnteringAnimation = false;
                     if (atoken.attachedToProcess()) {
                         try {
-                            atoken.app.getThread().scheduleEnterAnimationComplete(atoken.appToken);
+                            atoken.app.getThread().scheduleEnterAnimationComplete(atoken.token);
                         } catch (RemoteException e) {
                         }
                     }
@@ -2074,26 +2081,14 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         final WindowToken token = win.mToken;
-        final ActivityRecord activity = win.mActivityRecord;
         ProtoLog.v(WM_DEBUG_ADD_REMOVE, "Removing %s from %s", win, token);
         // Window will already be removed from token before this post clean-up method is called.
-        if (token.isEmpty()) {
-            if (!token.mPersistOnEmpty) {
-                token.removeImmediately();
-            } else if (activity != null) {
-                // TODO: Should this be moved into ActivityRecord.removeWindow? Might go away after
-                // re-factor.
-                activity.firstWindowDrawn = false;
-                activity.clearAllDrawn();
-                final Task rootTask = activity.getRootTask();
-                if (rootTask != null) {
-                    rootTask.mExitingActivities.remove(activity);
-                }
-            }
+        if (token.isEmpty() && !token.mPersistOnEmpty) {
+            token.removeImmediately();
         }
 
-        if (activity != null) {
-            activity.postWindowRemoveStartingWindowCleanup(win);
+        if (win.mActivityRecord != null) {
+            win.mActivityRecord.postWindowRemoveStartingWindowCleanup(win);
         }
 
         if (win.mAttrs.type == TYPE_WALLPAPER) {
@@ -2589,13 +2584,17 @@ public class WindowManagerService extends IWindowManager.Stub
             // an exit.
             win.mAnimatingExit = true;
         } else if (win.mDisplayContent.okToAnimate()
-                && win.mDisplayContent.mWallpaperController.isWallpaperTarget(win)) {
-            // If the wallpaper is currently behind this
-            // window, we need to change both of them inside
-            // of a transaction to avoid artifacts.
+                && win.mDisplayContent.mWallpaperController.isWallpaperTarget(win)
+                && win.mAttrs.type != TYPE_NOTIFICATION_SHADE) {
+            // If the wallpaper is currently behind this app window, we need to change both of them
+            // inside of a transaction to avoid artifacts.
+            // For NotificationShade, sysui is in charge of running window animation and it updates
+            // the client view visibility only after both NotificationShade and the wallpaper are
+            // hidden. So we don't need to care about exit animation, but can destroy its surface
+            // immediately.
             win.mAnimatingExit = true;
         } else {
-            boolean stopped = win.mActivityRecord != null ? win.mActivityRecord.mAppStopped : true;
+            boolean stopped = win.mActivityRecord == null || win.mActivityRecord.mAppStopped;
             // We set mDestroying=true so ActivityRecord#notifyAppStopped in-to destroy surfaces
             // will later actually destroy the surface if we do not do so here. Normally we leave
             // this to the exit animation.
@@ -3490,8 +3489,6 @@ public class WindowManagerService extends IWindowManager.Stub
             // Notify whether the root docked task exists for the current user
             final DisplayContent displayContent = getDefaultDisplayContentLocked();
 
-            mRoot.forAllDisplays(dc -> dc.mAppTransition.setCurrentUser(newUserId));
-
             // If the display is already prepared, update the density.
             // Otherwise, we'll update it when it's prepared.
             if (mDisplayReady) {
@@ -3807,6 +3804,14 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+        }
+    }
+
+    @Override
+    public SurfaceControl mirrorWallpaperSurface(int displayId) {
+        synchronized (mGlobalLock) {
+            final DisplayContent dc = mRoot.getDisplayContent(displayId);
+            return dc.mWallpaperController.mirrorWallpaperSurface();
         }
     }
 
@@ -5846,7 +5851,9 @@ public class WindowManagerService extends IWindowManager.Stub
             return;
         }
 
-        if (!displayContent.isReady() || !mPolicy.isScreenOn() || !displayContent.okToAnimate()) {
+        if (!displayContent.isReady() || !displayContent.getDisplayPolicy().isScreenOnFully()
+                || displayContent.getDisplayInfo().state == Display.STATE_OFF
+                || !displayContent.okToAnimate()) {
             // No need to freeze the screen before the display is ready,  if the screen is off,
             // or we can't currently animate.
             return;
@@ -8741,5 +8748,23 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void setTaskSnapshotEnabled(boolean enabled) {
         mTaskSnapshotController.setTaskSnapshotEnabled(enabled);
+    }
+
+    @Override
+    public void setTaskTransitionSpec(TaskTransitionSpec spec) {
+        if (!checkCallingPermission(MANAGE_ACTIVITY_TASKS, "setTaskTransitionSpec()")) {
+            throw new SecurityException("Requires MANAGE_ACTIVITY_TASKS permission");
+        }
+
+        mTaskTransitionSpec = spec;
+    }
+
+    @Override
+    public void clearTaskTransitionSpec() {
+        if (!checkCallingPermission(MANAGE_ACTIVITY_TASKS, "clearTaskTransitionSpec()")) {
+            throw new SecurityException("Requires MANAGE_ACTIVITY_TASKS permission");
+        }
+
+        mTaskTransitionSpec = null;
     }
 }

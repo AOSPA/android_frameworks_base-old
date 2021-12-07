@@ -469,6 +469,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (mState != STATE_COLLECTING) {
             throw new IllegalStateException("Too late to abort.");
         }
+        ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Aborting Transition: %d", mSyncId);
         mController.dispatchLegacyAppTransitionCancelled();
         mState = STATE_ABORT;
         // Syncengine abort will call through to onTransactionReady()
@@ -789,7 +790,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             }
         }
         if ((flags & TRANSIT_FLAG_KEYGUARD_LOCKED) != 0) {
-            mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange();
+            mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange(
+                    true /* keyguardOccludingStarted */);
         }
     }
 

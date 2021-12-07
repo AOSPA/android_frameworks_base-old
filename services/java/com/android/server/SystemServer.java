@@ -115,6 +115,7 @@ import com.android.server.biometrics.sensors.iris.IrisService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
+import com.android.server.communal.CommunalManagerService;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.compat.PlatformCompatNative;
 import com.android.server.connectivity.PacProxyService;
@@ -150,7 +151,6 @@ import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.NativeTombstoneManagerService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.people.PeopleService;
-import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.CrossProfileAppsService;
 import com.android.server.pm.DataLoaderManagerService;
 import com.android.server.pm.DynamicCodeLoggingService;
@@ -2445,15 +2445,6 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(AuthService.class);
             t.traceEnd();
 
-
-            t.traceBegin("StartBackgroundDexOptService");
-            try {
-                BackgroundDexOptService.schedule(context);
-            } catch (Throwable e) {
-                reportWtf("starting StartBackgroundDexOptService", e);
-            }
-            t.traceEnd();
-
             if (!isWatch) {
                 // We don't run this on watches as there are no plans to use the data logged
                 // on watch devices.
@@ -2752,6 +2743,12 @@ public final class SystemServer implements Dumpable {
         t.traceBegin("AppCompatOverridesService");
         mSystemServiceManager.startService(APP_COMPAT_OVERRIDES_SERVICE_CLASS);
         t.traceEnd();
+
+        if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_COMMUNAL_MODE)) {
+            t.traceBegin("CommunalManagerService");
+            mSystemServiceManager.startService(CommunalManagerService.class);
+            t.traceEnd();
+        }
 
         // These are needed to propagate to the runnable below.
         final NetworkManagementService networkManagementF = networkManagement;

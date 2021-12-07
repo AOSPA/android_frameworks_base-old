@@ -104,12 +104,12 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
         assertTrue("Activity must be finished", mAtm.mActivityClientController.finishActivity(
-                activity.appToken, 0 /* resultCode */, null /* resultData */,
+                activity.token, 0 /* resultCode */, null /* resultData */,
                 Activity.DONT_FINISH_TASK_WITH_ACTIVITY));
         assertTrue(activity.finishing);
 
         assertTrue("Duplicate activity finish request must also return 'true'",
-                mAtm.mActivityClientController.finishActivity(activity.appToken, 0 /* resultCode */,
+                mAtm.mActivityClientController.finishActivity(activity.token, 0 /* resultCode */,
                         null /* resultData */, Activity.DONT_FINISH_TASK_WITH_ACTIVITY));
     }
 
@@ -837,6 +837,30 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         // application while it is currently running.
         assertEquals(LocaleList.forLanguageTags("en-XA,ar-XB,en-XC"),
                 wpc.getConfiguration().getLocales());
+    }
+
+    @Test
+    public void testPackageConfigUpdate_commitConfig_configSuccessfullyApplied() {
+        Configuration config = mAtm.getGlobalConfiguration();
+        config.setLocales(LocaleList.forLanguageTags("en-XC"));
+        mAtm.updateGlobalConfigurationLocked(config, true, true,
+                DEFAULT_USER_ID);
+        WindowProcessController wpc = createWindowProcessController(
+                DEFAULT_PACKAGE_NAME, DEFAULT_USER_ID);
+        mAtm.mProcessMap.put(Binder.getCallingPid(), wpc);
+        mAtm.mInternal.onProcessAdded(wpc);
+
+        ActivityTaskManagerInternal.PackageConfigurationUpdater packageConfigUpdater =
+                mAtm.mInternal.createPackageConfigurationUpdater(DEFAULT_PACKAGE_NAME,
+                        DEFAULT_USER_ID);
+        // committing new configuration returns true;
+        assertTrue(packageConfigUpdater.setLocales(LocaleList.forLanguageTags("en-XA,ar-XB"))
+                .commit());
+        // applying the same configuration returns false.
+        assertFalse(packageConfigUpdater.setLocales(LocaleList.forLanguageTags("en-XA,ar-XB"))
+                .commit());
+        assertTrue(packageConfigUpdater.setLocales(LocaleList.getEmptyLocaleList())
+                .setNightMode(Configuration.UI_MODE_NIGHT_UNDEFINED).commit());
     }
 
     private WindowProcessController createWindowProcessController(String packageName,

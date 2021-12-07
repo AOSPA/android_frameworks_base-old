@@ -387,8 +387,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         when(mView.findViewById(R.id.notification_stack_scroller))
                 .thenReturn(mNotificationStackScrollLayout);
         when(mView.findViewById(R.id.communal_host)).thenReturn(mCommunalHostView);
-        when(mNotificationStackScrollLayout.getController())
-                .thenReturn(mNotificationStackScrollLayoutController);
         when(mNotificationStackScrollLayoutController.getHeight()).thenReturn(1000);
         when(mNotificationStackScrollLayoutController.getHeadsUpCallback())
                 .thenReturn(mHeadsUpCallback);
@@ -521,6 +519,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
                 mStatusBar,
+                () -> {},
                 mNotificationShelfController);
         mNotificationPanelViewController.setHeadsUpManager(mHeadsUpManager);
         mNotificationPanelViewController.setBar(mPanelBar);
@@ -586,6 +585,51 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 0L /* eventTime */, MotionEvent.ACTION_UP, 0f /* x */, 300f /* y */,
                 0 /* metaState */));
         assertThat(mNotificationPanelViewController.isTrackingBlocked()).isFalse();
+    }
+
+    @Test
+    public void onTouchForwardedFromStatusBar_panelsNotEnabled_returnsFalseAndNoViewEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(false);
+
+        boolean returnVal = mTouchHandler.onTouchForwardedFromStatusBar(
+                MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0));
+
+        assertThat(returnVal).isFalse();
+        verify(mView, never()).dispatchTouchEvent(any());
+    }
+
+    @Test
+    public void onTouchForwardedFromStatusBar_viewNotEnabled_returnsTrueAndNoViewEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(true);
+        when(mView.isEnabled()).thenReturn(false);
+
+        boolean returnVal = mTouchHandler.onTouchForwardedFromStatusBar(
+                MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0));
+
+        assertThat(returnVal).isTrue();
+        verify(mView, never()).dispatchTouchEvent(any());
+    }
+
+    @Test
+    public void onTouchForwardedFromStatusBar_viewNotEnabledButIsMoveEvent_viewReceivesEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(true);
+        when(mView.isEnabled()).thenReturn(false);
+        MotionEvent event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_MOVE, 0f, 0f, 0);
+
+        mTouchHandler.onTouchForwardedFromStatusBar(event);
+
+        verify(mView).dispatchTouchEvent(event);
+    }
+
+    @Test
+    public void onTouchForwardedFromStatusBar_panelAndViewEnabled_viewReceivesEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(true);
+        when(mView.isEnabled()).thenReturn(true);
+        MotionEvent event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0);
+
+        mTouchHandler.onTouchForwardedFromStatusBar(event);
+
+        verify(mView).dispatchTouchEvent(event);
     }
 
     @Test
