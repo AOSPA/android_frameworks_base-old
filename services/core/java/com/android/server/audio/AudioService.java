@@ -351,6 +351,10 @@ public class AudioService extends IAudioService.Stub
         return mStreamStates[stream].getIndex(device);
     }
 
+    /*package*/ int getMaxVssVolumeForStream(int stream) {
+        return mStreamStates[stream].getMaxIndex();
+    }
+
     private SettingsObserver mSettingsObserver;
 
     private AtomicInteger mMode = new AtomicInteger(AudioSystem.MODE_NORMAL);
@@ -3031,6 +3035,16 @@ public class AudioService extends IAudioService.Stub
                 mDeviceBroker.postSetAvrcpAbsoluteVolumeIndex(newIndex / 10);
             }
 
+            if (device == AudioSystem.DEVICE_OUT_BLE_HEADSET
+                    && streamType == getBluetoothContextualVolumeStream()) {
+                if (DEBUG_VOL) {
+                    Log.d(TAG, "adjustSreamVolume postSetLeAudioVolumeIndex index="
+                            + newIndex + " stream=" + streamType);
+                }
+                mDeviceBroker.postSetLeAudioVolumeIndex(newIndex,
+                    mStreamStates[streamType].getMaxIndex(), streamType);
+            }
+
             // Check if volume update should be send to Hearing Aid
             if (device == AudioSystem.DEVICE_OUT_HEARING_AID) {
                 // only modify the hearing aid attenuation when the stream to modify matches
@@ -3648,6 +3662,16 @@ public class AudioService extends IAudioService.Stub
                             + "stream=" + streamType);
                 }
                 mDeviceBroker.postSetAvrcpAbsoluteVolumeIndex(index / 10);
+            }
+
+            if (device == AudioSystem.DEVICE_OUT_BLE_HEADSET
+                    && streamType == getBluetoothContextualVolumeStream()) {
+                if (DEBUG_VOL) {
+                    Log.d(TAG, "adjustSreamVolume postSetLeAudioVolumeIndex index="
+                            + index + " stream=" + streamType);
+                }
+                mDeviceBroker.postSetLeAudioVolumeIndex(index,
+                    mStreamStates[streamType].getMaxIndex(), streamType);
             }
 
             if (device == AudioSystem.DEVICE_OUT_HEARING_AID
@@ -6197,6 +6221,11 @@ public class AudioService extends IAudioService.Stub
         if (pkgName == null) {
             pkgName = "";
         }
+        if (device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) {
+            avrcpSupportsAbsoluteVolume(device.getAddress(),
+                    deviceVolumeBehavior == AudioManager.DEVICE_VOLUME_BEHAVIOR_ABSOLUTE);
+            return;
+        }
 
         int audioSystemDeviceOut = AudioDeviceInfo.convertDeviceTypeToInternalDevice(
                 device.getType());
@@ -7896,7 +7925,7 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
-    public void avrcpSupportsAbsoluteVolume(String address, boolean support) {
+    private void avrcpSupportsAbsoluteVolume(String address, boolean support) {
         // address is not used for now, but may be used when multiple a2dp devices are supported
         sVolumeLogger.log(new AudioEventLogger.StringEvent("avrcpSupportsAbsoluteVolume addr="
                 + address + " support=" + support));

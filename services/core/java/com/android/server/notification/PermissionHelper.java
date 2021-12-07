@@ -21,6 +21,7 @@ import static android.content.pm.PackageManager.GET_PERMISSIONS;
 import static android.permission.PermissionManager.PERMISSION_GRANTED;
 
 import android.Manifest;
+import android.annotation.UserIdInt;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.ParceledListSlice;
@@ -55,6 +56,10 @@ public final class PermissionHelper {
         mPackageManager = packageManager;
         mPermManager = permManager;
         mMigrationEnabled = migrationEnabled;
+    }
+
+    public boolean isMigrationEnabled() {
+        return mMigrationEnabled;
     }
 
     /**
@@ -133,7 +138,7 @@ public final class PermissionHelper {
      * can prevent the user from seeing the in app permission dialog. Must not be called
      * with a lock held.
      */
-    public void setNotificationPermission(String packageName, int userId, boolean grant,
+    public void setNotificationPermission(String packageName, @UserIdInt int userId, boolean grant,
             boolean userSet) {
         assertFlag();
         try {

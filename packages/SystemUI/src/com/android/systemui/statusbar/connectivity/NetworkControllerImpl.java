@@ -333,8 +333,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         deviceProvisionedController.addCallback(new DeviceProvisionedListener() {
             @Override
             public void onUserSetupChanged() {
-                setUserSetupComplete(deviceProvisionedController.isUserSetup(
-                        deviceProvisionedController.getCurrentUser()));
+                setUserSetupComplete(deviceProvisionedController.isCurrentUserSetup());
             }
         });
 

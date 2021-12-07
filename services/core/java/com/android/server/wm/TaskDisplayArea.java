@@ -62,7 +62,6 @@ import android.window.WindowContainerTransaction;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.wm.LaunchParamsController.LaunchParams;
@@ -70,7 +69,6 @@ import com.android.server.wm.LaunchParamsController.LaunchParams;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -689,71 +687,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     }
 
     @Override
-    boolean forAllWindows(ToBooleanFunction<WindowState> callback,
-            boolean traverseTopToBottom) {
-        if (traverseTopToBottom) {
-            if (super.forAllWindows(callback, traverseTopToBottom)) {
-                return true;
-            }
-            if (forAllExitingAppTokenWindows(callback, traverseTopToBottom)) {
-                return true;
-            }
-        } else {
-            if (forAllExitingAppTokenWindows(callback, traverseTopToBottom)) {
-                return true;
-            }
-            if (super.forAllWindows(callback, traverseTopToBottom)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean forAllExitingAppTokenWindows(ToBooleanFunction<WindowState> callback,
-            boolean traverseTopToBottom) {
-        // For legacy reasons we process the RootTask.mExitingActivities first here before the
-        // app tokens.
-        // TODO: Investigate if we need to continue to do this or if we can just process them
-        // in-order.
-        if (traverseTopToBottom) {
-            for (int i = mChildren.size() - 1; i >= 0; --i) {
-                // Only run on those of direct Task child, because child TaskDisplayArea has run on
-                // its child in #forAllWindows()
-                if (mChildren.get(i).asTask() == null) {
-                    continue;
-                }
-                final List<ActivityRecord> activities =
-                        mChildren.get(i).asTask().mExitingActivities;
-                for (int j = activities.size() - 1; j >= 0; --j) {
-                    if (activities.get(j).forAllWindowsUnchecked(callback,
-                            traverseTopToBottom)) {
-                        return true;
-                    }
-                }
-            }
-        } else {
-            final int count = mChildren.size();
-            for (int i = 0; i < count; ++i) {
-                // Only run on those of direct Task child, because child TaskDisplayArea has run on
-                // its child in #forAllWindows()
-                if (mChildren.get(i).asTask() == null) {
-                    continue;
-                }
-                final List<ActivityRecord> activities =
-                        mChildren.get(i).asTask().mExitingActivities;
-                final int appTokensCount = activities.size();
-                for (int j = 0; j < appTokensCount; j++) {
-                    if (activities.get(j).forAllWindowsUnchecked(callback,
-                            traverseTopToBottom)) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    @Override
     int getOrientation(int candidate) {
         mLastOrientationSource = null;
         if (mIgnoreOrientationRequest) {
@@ -1277,6 +1210,11 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                     return launchRootTask;
                 }
             }
+        }
+        // For better split UX, If task launch by the source task which root task is created by
+        // organizer, it should also launch in that root too.
+        if (sourceTask != null && sourceTask.getRootTask().mCreatedByOrganizer) {
+            return sourceTask.getRootTask();
         }
         return null;
     }

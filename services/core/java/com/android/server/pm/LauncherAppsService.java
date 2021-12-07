@@ -746,11 +746,15 @@ public class LauncherAppsService extends SystemService {
         @Override
         public Bundle getSuspendedPackageLauncherExtras(String packageName,
                 UserHandle user) {
-            if (!canAccessProfile(user.getIdentifier(), "Cannot get launcher extras")) {
+            final int callingUid = injectBinderCallingUid();
+            final int userId = user.getIdentifier();
+            if (!canAccessProfile(userId, "Cannot get launcher extras")) {
                 return null;
             }
-            return mPackageManagerInternal.getSuspendedPackageLauncherExtras(packageName,
-                    user.getIdentifier());
+            if (mPackageManagerInternal.filterAppAccess(packageName, callingUid, userId)) {
+                return null;
+            }
+            return mPackageManagerInternal.getSuspendedPackageLauncherExtras(packageName, userId);
         }
 
         @Override
@@ -1259,7 +1263,7 @@ public class LauncherAppsService extends SystemService {
 
         /** Returns whether or not the given appId is in allow list */
         private static boolean isCallingAppIdAllowed(int[] appIdAllowList, @AppIdInt int appId) {
-            if (appIdAllowList == null) {
+            if (appIdAllowList == null || appId < Process.FIRST_APPLICATION_UID) {
                 return true;
             }
             return Arrays.binarySearch(appIdAllowList, appId) > -1;

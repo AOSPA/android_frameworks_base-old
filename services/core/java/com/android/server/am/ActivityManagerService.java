@@ -385,6 +385,7 @@ import com.android.server.am.LowMemDetector.MemFactor;
 import com.android.server.appop.AppOpsService;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
+import com.android.server.criticalevents.CriticalEventLog;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.graphics.fonts.FontManagerInternal;
 import com.android.server.job.JobSchedulerInternal;
@@ -2417,7 +2418,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     private void start() {
         removeAllProcessGroups();
 
-        CriticalEventLog.init();
         mBatteryStatsService.publish();
         mAppOpsService.publish();
         Slog.d("AppOps", "AppOpsService published");
@@ -2427,6 +2427,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mActivityTaskManager.onActivityManagerInternalAdded();
         mPendingIntentController.onActivityManagerInternalAdded();
         mAppProfiler.onActivityManagerInternalAdded();
+        CriticalEventLog.init();
     }
 
     public void initPowerManagement() {

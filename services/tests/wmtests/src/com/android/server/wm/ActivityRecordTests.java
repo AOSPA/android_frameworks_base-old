@@ -77,6 +77,7 @@ import static com.android.server.wm.ActivityRecord.State.RESUMED;
 import static com.android.server.wm.ActivityRecord.State.STARTED;
 import static com.android.server.wm.ActivityRecord.State.STOPPED;
 import static com.android.server.wm.ActivityRecord.State.STOPPING;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_INVISIBLE;
 import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE;
 import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
@@ -508,7 +509,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityConfigurationChangeItem expected =
                 ActivityConfigurationChangeItem.obtain(newConfig);
         verify(mAtm.getLifecycleManager()).scheduleTransaction(eq(activity.app.getThread()),
-                eq(activity.appToken), eq(expected));
+                eq(activity.token), eq(expected));
     }
 
     @Test
@@ -723,7 +724,7 @@ public class ActivityRecordTests extends WindowTestsBase {
             final ActivityConfigurationChangeItem expected =
                     ActivityConfigurationChangeItem.obtain(newConfig);
             verify(mAtm.getLifecycleManager()).scheduleTransaction(
-                    eq(activity.app.getThread()), eq(activity.appToken), eq(expected));
+                    eq(activity.app.getThread()), eq(activity.token), eq(expected));
         } finally {
             stack.getDisplayArea().removeChild(stack);
         }
@@ -787,7 +788,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = createActivityWithTask();
         assertTrue(activity.hasSavedState());
 
-        ActivityRecord.activityResumedLocked(activity.appToken, false /* handleSplashScreenExit */);
+        ActivityRecord.activityResumedLocked(activity.token, false /* handleSplashScreenExit */);
         assertFalse(activity.hasSavedState());
         assertNull(activity.getSavedState());
     }
@@ -1610,7 +1611,7 @@ public class ActivityRecordTests extends WindowTestsBase {
             setup.accept(activity);
             activity.getTask().removeImmediately("test");
             try {
-                verify(mAtm.getLifecycleManager()).scheduleTransaction(any(), eq(activity.appToken),
+                verify(mAtm.getLifecycleManager()).scheduleTransaction(any(), eq(activity.token),
                         isA(DestroyActivityItem.class));
             } catch (RemoteException ignored) {
             }
@@ -1751,6 +1752,11 @@ public class ActivityRecordTests extends WindowTestsBase {
                 anyInt() /* orientation */, anyInt() /* lastRotation */);
         // Set to visible so the activity can freeze the screen.
         activity.setVisibility(true);
+        // Update the display policy to make the screen fully turned on so the freeze is allowed
+        display.getDisplayPolicy().screenTurnedOn(null);
+        display.getDisplayPolicy().finishKeyguardDrawn();
+        display.getDisplayPolicy().finishWindowsDrawn();
+        display.getDisplayPolicy().finishScreenTurningOn();
 
         display.rotateInDifferentOrientationIfNeeded(activity);
         display.setFixedRotationLaunchingAppUnchecked(activity);
@@ -2999,7 +3005,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
 
         // Expect IME insets frozen state will reset when the activity has no IME focusable window.
-        app.mActivityRecord.forAllWindowsUnchecked(w -> {
+        app.mActivityRecord.forAllWindows(w -> {
             w.mAttrs.flags |= FLAG_ALT_FOCUSABLE_IM;
             return true;
         }, true);
@@ -3026,6 +3032,10 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Because the app is waiting for transition, it should not hide the surface.
         assertTrue(app.mActivityRecord.isSurfaceShowing());
+
+        // Ensure onAnimationFinished will callback when the closing animation is finished.
+        verify(app.mActivityRecord).onAnimationFinished(eq(ANIMATION_TYPE_APP_TRANSITION),
+                eq(null));
     }
 
     private void assertHasStartingWindow(ActivityRecord atoken) {

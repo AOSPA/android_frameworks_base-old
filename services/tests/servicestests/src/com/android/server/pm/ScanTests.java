@@ -43,7 +43,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.parsing.ParsingPackage;
-import android.content.pm.parsing.component.ParsedUsesPermission;
+import android.content.pm.parsing.component.ParsedUsesPermissionImpl;
 import android.content.res.TypedArray;
 import android.os.Environment;
 import android.os.UserHandle;
@@ -89,6 +89,8 @@ public class ScanTests {
     PackageManagerServiceInjector mMockInjector;
     @Mock
     PackageManagerService mMockPackageManager;
+    @Mock
+    Installer mMockInstaller;
 
     @Before
     public void setupInjector() {
@@ -103,6 +105,7 @@ public class ScanTests {
 
         when(mMockInjector.getDomainVerificationManagerInternal())
                 .thenReturn(domainVerificationManager);
+        when(mMockInjector.getInstaller()).thenReturn(mMockInstaller);
     }
 
     @Before
@@ -432,9 +435,11 @@ public class ScanTests {
     @Test
     public void factoryTestFlagSet() throws Exception {
         final ParsingPackage basicPackage = createBasicPackage(DUMMY_PACKAGE_NAME)
-                .addUsesPermission(new ParsedUsesPermission(Manifest.permission.FACTORY_TEST, 0));
+                .addUsesPermission(
+                        new ParsedUsesPermissionImpl(Manifest.permission.FACTORY_TEST, 0));
 
-        final ScanPackageHelper scanPackageHelper = new ScanPackageHelper(mMockPackageManager);
+        final ScanPackageHelper scanPackageHelper = new ScanPackageHelper(
+                mMockPackageManager, mMockInjector);
         final ScanResult scanResult = scanPackageHelper.scanPackageOnlyLI(
                 createBasicScanRequestBuilder(basicPackage).build(),
                 mMockInjector,
@@ -483,7 +488,8 @@ public class ScanTests {
 
     private ScanResult executeScan(
             ScanRequest scanRequest) throws PackageManagerException {
-        final ScanPackageHelper scanPackageHelper = new ScanPackageHelper(mMockPackageManager);
+        final ScanPackageHelper scanPackageHelper = new ScanPackageHelper(
+                mMockPackageManager, mMockInjector);
         ScanResult result = scanPackageHelper.scanPackageOnlyLI(
                 scanRequest,
                 mMockInjector,

@@ -843,6 +843,11 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub implements Rollba
         final String packageName = newPackage.getPackageName();
         final int rollbackDataPolicy = computeRollbackDataPolicy(
                 session.rollbackDataPolicy, newPackage.getRollbackDataPolicy());
+        if (!session.isStaged() && (installFlags & PackageManager.INSTALL_APEX) != 0
+                && rollbackDataPolicy != PackageManager.ROLLBACK_DATA_POLICY_RETAIN) {
+            Slog.e(TAG, "Only RETAIN is supported for rebootless APEX: " + packageName);
+            return false;
+        }
         Slog.i(TAG, "Enabling rollback for install of " + packageName
                 + ", session:" + session.sessionId
                 + ", rollbackDataPolicy=" + rollbackDataPolicy);
@@ -1157,6 +1162,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub implements Rollba
         assertInWorkerThread();
         Slog.i(TAG, "makeRollbackAvailable id=" + rollback.info.getRollbackId());
         rollback.makeAvailable();
+        mPackageHealthObserver.notifyRollbackAvailable(rollback.info);
 
         // TODO(zezeozue): Provide API to explicitly start observing instead
         // of doing this for all rollbacks. If we do this for all rollbacks,

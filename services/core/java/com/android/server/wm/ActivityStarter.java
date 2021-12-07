@@ -1603,7 +1603,7 @@ class ActivityStarter {
         // transition based on a sub-action.
         // Only do the create here (and defer requestStart) since startActivityInner might abort.
         final TransitionController transitionController = r.mTransitionController;
-        final Transition newTransition = (!transitionController.isCollecting()
+        Transition newTransition = (!transitionController.isCollecting()
                 && transitionController.getTransitionPlayer() != null)
                 ? transitionController.createTransition(TRANSIT_OPEN) : null;
         RemoteTransition remoteTransition = r.takeRemoteTransition();
@@ -1658,6 +1658,10 @@ class ActivityStarter {
                     // The activity is started new rather than just brought forward, so record
                     // it as an existence change.
                     transitionController.collectExistenceChange(r);
+                } else if (result == START_DELIVERED_TO_TOP && newTransition != null) {
+                    // We just delivered to top, so there isn't an actual transition here
+                    newTransition.abort();
+                    newTransition = null;
                 }
                 if (isTransient) {
                     // `r` isn't guaranteed to be the actual relevant activity, so we must wait
@@ -2781,9 +2785,11 @@ class ActivityStarter {
         // If it exist, we need to reparent target root task from TDA to launch root task.
         final TaskDisplayArea tda = mTargetRootTask.getDisplayArea();
         final Task launchRootTask = tda.getLaunchRootTask(mTargetRootTask.getWindowingMode(),
-                mTargetRootTask.getActivityType(), null /** options */, null /** sourceTask */,
-                0 /** launchFlags */);
-        if (launchRootTask != null && launchRootTask != mTargetRootTask) {
+                mTargetRootTask.getActivityType(), null /** options */,
+                mSourceRootTask, 0 /** launchFlags */);
+        // If target root task is created by organizer, let organizer handle reparent itself.
+        if (!mTargetRootTask.mCreatedByOrganizer && launchRootTask != null
+                && launchRootTask != mTargetRootTask) {
             mTargetRootTask.reparent(launchRootTask, POSITION_TOP);
             mTargetRootTask = launchRootTask;
         }

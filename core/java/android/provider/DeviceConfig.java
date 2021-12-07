@@ -189,6 +189,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_CAPTIVEPORTALLOGIN = "captive_portal_login";
 
     /**
+     * Namespace for Tethering module.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_TETHERING = "tethering";
+
+    /**
      * Namespace for content capture feature used by on-device machine intelligence
      * to provide suggestions in a privacy-safe manner.
      *
@@ -304,6 +312,14 @@ public final class DeviceConfig {
      */
     @SystemApi
     public static final String NAMESPACE_NETD_NATIVE = "netd_native";
+
+    /**
+     * Namespace for all Android NNAPI related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_NNAPI_NATIVE = "nnapi_native";
 
     /**
      * Namespace for features related to the Package Manager Service.

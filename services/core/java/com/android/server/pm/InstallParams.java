@@ -87,6 +87,7 @@ import android.content.pm.SigningDetails;
 import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.parsing.PackageLite;
 import android.content.pm.parsing.ParsingPackageUtils;
+import android.content.pm.parsing.component.ComponentMutateUtils;
 import android.content.pm.parsing.component.ParsedPermission;
 import android.content.pm.parsing.component.ParsedPermissionGroup;
 import android.content.pm.parsing.result.ParseResult;
@@ -163,6 +164,7 @@ final class InstallParams extends HandlerParams {
     final int mDataLoaderType;
     final long mRequiredInstalledVersionCode;
     final PackageLite mPackageLite;
+    final InstallPackageHelper mInstallPackageHelper;
 
     InstallParams(OriginInfo originInfo, MoveInfo moveInfo, IPackageInstallObserver2 observer,
             int installFlags, InstallSource installSource, String volumeUuid,
@@ -187,6 +189,7 @@ final class InstallParams extends HandlerParams {
         mDataLoaderType = DataLoaderType.NONE;
         mRequiredInstalledVersionCode = PackageManager.VERSION_CODE_HIGHEST;
         mPackageLite = packageLite;
+        mInstallPackageHelper = new InstallPackageHelper(mPm);
     }
 
     InstallParams(File stagedDir, IPackageInstallObserver2 observer,
@@ -213,6 +216,7 @@ final class InstallParams extends HandlerParams {
                 ? sessionParams.dataLoaderParams.getType() : DataLoaderType.NONE;
         mRequiredInstalledVersionCode = sessionParams.requiredInstalledVersionCode;
         mPackageLite = packageLite;
+        mInstallPackageHelper = new InstallPackageHelper(mPm);
     }
 
     @Override
@@ -463,7 +467,7 @@ final class InstallParams extends HandlerParams {
                 }
             }
             for (InstallRequest request : apkInstallRequests) {
-                mPm.restoreAndPostInstall(request.mArgs.mUser.getIdentifier(),
+                mInstallPackageHelper.restoreAndPostInstall(request.mArgs.mUser.getIdentifier(),
                         request.mInstallResult,
                         new PostInstallData(request.mArgs,
                                 request.mInstallResult, null));
@@ -624,7 +628,7 @@ final class InstallParams extends HandlerParams {
                 Map<String, ReconciledPackage> reconciledPackages;
                 try {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "reconcilePackages");
-                    reconciledPackages = mPm.reconcilePackagesLocked(
+                    reconciledPackages = mInstallPackageHelper.reconcilePackagesLocked(
                             reconcileRequest, mPm.mSettings.getKeySetManagerService(),
                             mPm.mInjector);
                 } catch (ReconcileFailure e) {
@@ -730,7 +734,7 @@ final class InstallParams extends HandlerParams {
 
         // Retrieve PackageSettings and parse package
         @ParsingPackageUtils.ParseFlags final int parseFlags =
-                mPm.mDefParseFlags | ParsingPackageUtils.PARSE_CHATTY
+                mPm.getDefParseFlags() | ParsingPackageUtils.PARSE_CHATTY
                 | ParsingPackageUtils.PARSE_ENFORCE_CODE
                 | (onExternal ? ParsingPackageUtils.PARSE_EXTERNAL_STORAGE : 0);
 
@@ -882,10 +886,10 @@ final class InstallParams extends HandlerParams {
                     }
                 } else {
                     try {
-                        final boolean compareCompat = mPm.isCompatSignatureUpdateNeeded(
-                                parsedPackage);
-                        final boolean compareRecover = mPm.isRecoverSignatureUpdateNeeded(
-                                parsedPackage);
+                        final boolean compareCompat =
+                                mInstallPackageHelper.isCompatSignatureUpdateNeeded(parsedPackage);
+                        final boolean compareRecover =
+                                mInstallPackageHelper.isRecoverSignatureUpdateNeeded(parsedPackage);
                         // We don't care about disabledPkgSetting on install for now.
                         final boolean compatMatch = verifySignatures(signatureCheckPs, null,
                                 parsedPackage.getSigningDetails(), compareCompat, compareRecover,
@@ -945,7 +949,7 @@ final class InstallParams extends HandlerParams {
                     Slog.w(TAG, "Non-System package " + parsedPackage.getPackageName()
                             + " attempting to delcare ephemeral permission "
                             + perm.getName() + "; Removing ephemeral.");
-                    perm.setProtectionLevel(
+                    ComponentMutateUtils.setProtectionLevel(perm,
                             perm.getProtectionLevel() & ~PermissionInfo.PROTECTION_FLAG_INSTANT);
                 }
 
@@ -985,7 +989,8 @@ final class InstallParams extends HandlerParams {
                                         + " trying to change a non-runtime permission "
                                         + perm.getName()
                                         + " to runtime; keeping old protection level");
-                                perm.setProtectionLevel(bp.getProtectionLevel());
+                                ComponentMutateUtils.setProtectionLevel(perm,
+                                        bp.getProtectionLevel());
                             }
                         }
                     }
@@ -1561,13 +1566,13 @@ final class InstallParams extends HandlerParams {
                         // We didn't need to disable the .apk as a current system package,
                         // which means we are replacing another update that is already
                         // installed.  We need to make sure to delete the older one's .apk.
-                        res.mRemovedInfo.mArgs = mPm.createInstallArgsForExisting(
+                        res.mRemovedInfo.mArgs = new FileInstallArgs(
                                 oldPackage.getPath(),
                                 getAppDexInstructionSets(
                                         AndroidPackageUtils.getPrimaryCpuAbi(oldPackage,
                                                 deletedPkgSetting),
                                         AndroidPackageUtils.getSecondaryCpuAbi(oldPackage,
-                                                deletedPkgSetting)));
+                                                deletedPkgSetting)), mPm);
                     } else {
                         res.mRemovedInfo.mArgs = null;
                     }
@@ -1627,8 +1632,8 @@ final class InstallParams extends HandlerParams {
                 }
             }
 
-            AndroidPackage pkg = mPm.commitReconciledScanResultLocked(reconciledPkg,
-                    request.mAllUsers);
+            AndroidPackage pkg = mInstallPackageHelper.commitReconciledScanResultLocked(
+                    reconciledPkg, request.mAllUsers);
             updateSettingsLI(pkg, reconciledPkg, request.mAllUsers, res);
 
             final PackageSetting ps = mPm.mSettings.getPackageLPr(packageName);
@@ -1973,7 +1978,7 @@ final class InstallParams extends HandlerParams {
             // If this is an update of a package which used to fail to compile,
             // BackgroundDexOptService will remove it from its denylist.
             // TODO: Layering violation
-            BackgroundDexOptService.notifyPackageChanged(packageName);
+            BackgroundDexOptService.getService().notifyPackageChanged(packageName);
 
             notifyPackageChangeObserversOnUpdate(reconciledPkg);
         }
