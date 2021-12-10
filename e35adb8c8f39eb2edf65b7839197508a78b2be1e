@@ -16,6 +16,29 @@
       "message": "works on op8 now",
       "revId": "e35adb8c8f39eb2edf65b7839197508a78b2be1e",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "55a22ac8_4d4aabd4",
+        "filename": "packages/SystemUI/res/values/aospa_config.xml",
+        "patchSetId": 6
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1000361
+      },
+      "writtenOn": "2021-12-10T09:39:58Z",
+      "side": 1,
+      "message": "-1, 0 is valid code and might trigger by mistake",
+      "range": {
+        "startLine": 25,
+        "startChar": 45,
+        "endLine": 25,
+        "endChar": 46
+      },
+      "revId": "e35adb8c8f39eb2edf65b7839197508a78b2be1e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
