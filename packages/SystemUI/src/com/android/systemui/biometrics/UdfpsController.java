@@ -47,6 +47,7 @@ import android.os.RemoteException;
 import android.os.Trace;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.BoostFramework;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -168,6 +169,11 @@ public class UdfpsController implements DozeReceiver, UdfpsHbmProvider {
     private boolean mAttemptedToDismissKeyguard;
     private Set<Callback> mCallbacks = new HashSet<>();
     private final int mUdfpsVendorCode;
+
+    // Boostframework for UDFPS
+    private BoostFramework mPerf = null;
+    private boolean mIsPerfLockAcquired = false;
+    private static final int BOOST_DURATION_TIMEOUT = 2000;
 
     @VisibleForTesting
     public static final AudioAttributes VIBRATION_SONIFICATION_ATTRIBUTES =
@@ -642,6 +648,8 @@ public class UdfpsController implements DozeReceiver, UdfpsHbmProvider {
 
         mUdfpsVendorCode = mContext.getResources().getInteger(R.integer.config_udfps_vendor_code);
 
+        mPerf = new BoostFramework();
+
     }
 
     /**
@@ -829,6 +837,13 @@ public class UdfpsController implements DozeReceiver, UdfpsHbmProvider {
             }
         } else {
             Log.v(TAG, "showUdfpsOverlay | the overlay is already showing");
+        }
+
+        if (mPerf != null && !mIsPerfLockAcquired) {
+            mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                    null,
+                    BOOST_DURATION_TIMEOUT);
+            mIsPerfLockAcquired = true;
         }
     }
 
@@ -1047,6 +1062,10 @@ public class UdfpsController implements DozeReceiver, UdfpsHbmProvider {
         mOnFingerDown = false;
         if (mView.isIlluminationRequested()) {
             mView.stopIllumination();
+        }
+        if (mPerf != null && mIsPerfLockAcquired) {
+            mPerf.perfLockRelease();
+            mIsPerfLockAcquired = false;
         }
     }
 
