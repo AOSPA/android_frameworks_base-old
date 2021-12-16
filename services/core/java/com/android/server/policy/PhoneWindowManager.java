@@ -1373,7 +1373,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         try {
             ActivityManager.getService().startActivityFromRecents(targetTask.persistentId, null);
-        } catch (RemoteException e) {
+        } catch (RemoteException | IllegalArgumentException e) {
             Slog.e(TAG, "Failed to start task " + targetTask.persistentId + " from recents", e);
         }
     }
@@ -2953,6 +2953,24 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Slog.wtf(TAG, "KEYCODE_VOICE_ASSIST should be handled in"
                         + " interceptKeyBeforeQueueing");
                 return key_consumed;
+            case KeyEvent.KEYCODE_VIDEO_APP_1:
+            case KeyEvent.KEYCODE_VIDEO_APP_2:
+            case KeyEvent.KEYCODE_VIDEO_APP_3:
+            case KeyEvent.KEYCODE_VIDEO_APP_4:
+            case KeyEvent.KEYCODE_VIDEO_APP_5:
+            case KeyEvent.KEYCODE_VIDEO_APP_6:
+            case KeyEvent.KEYCODE_VIDEO_APP_7:
+            case KeyEvent.KEYCODE_VIDEO_APP_8:
+            case KeyEvent.KEYCODE_FEATURED_APP_1:
+            case KeyEvent.KEYCODE_FEATURED_APP_2:
+            case KeyEvent.KEYCODE_FEATURED_APP_3:
+            case KeyEvent.KEYCODE_FEATURED_APP_4:
+            case KeyEvent.KEYCODE_DEMO_APP_1:
+            case KeyEvent.KEYCODE_DEMO_APP_2:
+            case KeyEvent.KEYCODE_DEMO_APP_3:
+            case KeyEvent.KEYCODE_DEMO_APP_4:
+                Slog.wtf(TAG, "KEYCODE_APP_X should be handled in interceptKeyBeforeQueueing");
+                return key_consumed;
             case KeyEvent.KEYCODE_SYSRQ:
                 if (down && repeatCount == 0) {
                     mScreenshotRunnable.setScreenshotType(TAKE_SCREENSHOT_FULLSCREEN);
@@ -4058,6 +4076,26 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 break;
             }
+            case KeyEvent.KEYCODE_VIDEO_APP_1:
+            case KeyEvent.KEYCODE_VIDEO_APP_2:
+            case KeyEvent.KEYCODE_VIDEO_APP_3:
+            case KeyEvent.KEYCODE_VIDEO_APP_4:
+            case KeyEvent.KEYCODE_VIDEO_APP_5:
+            case KeyEvent.KEYCODE_VIDEO_APP_6:
+            case KeyEvent.KEYCODE_VIDEO_APP_7:
+            case KeyEvent.KEYCODE_VIDEO_APP_8:
+            case KeyEvent.KEYCODE_FEATURED_APP_1:
+            case KeyEvent.KEYCODE_FEATURED_APP_2:
+            case KeyEvent.KEYCODE_FEATURED_APP_3:
+            case KeyEvent.KEYCODE_FEATURED_APP_4:
+            case KeyEvent.KEYCODE_DEMO_APP_1:
+            case KeyEvent.KEYCODE_DEMO_APP_2:
+            case KeyEvent.KEYCODE_DEMO_APP_3:
+            case KeyEvent.KEYCODE_DEMO_APP_4: {
+                // Just drop if keys are not intercepted for direct key.
+                result &= ~ACTION_PASS_TO_USER;
+                break;
+            }
         }
 
         // Intercept the Accessibility keychord (CTRL + ALT + Z) for keyboard users.
@@ -4894,6 +4932,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     public boolean inKeyguardRestrictedKeyInputMode() {
         if (mKeyguardDelegate == null) return false;
         return mKeyguardDelegate.isInputRestricted();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isKeyguardUnoccluding() {
+        return keyguardOn() && !mWindowManagerFuncs.isAppTransitionStateIdle();
     }
 
     @Override

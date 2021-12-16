@@ -1561,6 +1561,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayRotation.java"
     },
+    "-436553282": {
+      "message": "Remove sleep token: tag=%s, displayId=%d",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/RootWindowContainer.java"
+    },
     "-417514857": {
       "message": "Key dispatch not paused for screen off",
       "level": "VERBOSE",
@@ -1674,6 +1680,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/WindowState.java"
+    },
+    "-317761482": {
+      "message": "Create sleep token: tag=%s, displayId=%d",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/RootWindowContainer.java"
     },
     "-317194205": {
       "message": "clearLockedTasks: %s",
@@ -1974,12 +1986,6 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "44438983": {
-      "message": "performLayout: Activity exiting now removed %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ADD_REMOVE",
-      "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
     "45285419": {
       "message": "startingWindow was set but startingSurface==null, couldn't remove",

@@ -207,6 +207,7 @@ import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationLaunchAnimatorControllerProvider;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.render.NotifShadeEventSource;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
 import com.android.systemui.statusbar.notification.interruption.BypassHeadsUpNotifier;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
@@ -536,6 +537,7 @@ public class StatusBar extends SystemUI implements
 
     private final int[] mAbsPos = new int[2];
 
+    private final NotifShadeEventSource mNotifShadeEventSource;
     protected final NotificationEntryManager mEntryManager;
     private final NotificationGutsManager mGutsManager;
     private final NotificationLogger mNotificationLogger;
@@ -720,6 +722,7 @@ public class StatusBar extends SystemUI implements
             FalsingManager falsingManager,
             FalsingCollector falsingCollector,
             BroadcastDispatcher broadcastDispatcher,
+            NotifShadeEventSource notifShadeEventSource,
             NotificationEntryManager notificationEntryManager,
             NotificationGutsManager notificationGutsManager,
             NotificationLogger notificationLogger,
@@ -825,6 +828,7 @@ public class StatusBar extends SystemUI implements
         mFalsingCollector = falsingCollector;
         mFalsingManager = falsingManager;
         mBroadcastDispatcher = broadcastDispatcher;
+        mNotifShadeEventSource = notifShadeEventSource;
         mEntryManager = notificationEntryManager;
         mGutsManager = notificationGutsManager;
         mNotificationLogger = notificationLogger;
@@ -1510,6 +1514,7 @@ public class StatusBar extends SystemUI implements
                 mDynamicPrivacyController,
                 mKeyguardStateController,
                 mKeyguardIndicationController,
+                mFeatureFlags,
                 this /* statusBar */,
                 mShadeController,
                 mLockscreenShadeTransitionController,
@@ -1517,6 +1522,7 @@ public class StatusBar extends SystemUI implements
                 mViewHierarchyManager,
                 mLockscreenUserManager,
                 mStatusBarStateController,
+                mNotifShadeEventSource,
                 mEntryManager,
                 mMediaManager,
                 mGutsManager,

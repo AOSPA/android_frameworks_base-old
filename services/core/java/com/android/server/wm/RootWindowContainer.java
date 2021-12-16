@@ -847,12 +847,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     UPDATE_FOCUS_WILL_PLACE_SURFACES, false /*updateInputWindows*/);
         }
 
-        // Initialize state of exiting tokens.
-        for (int displayNdx = 0; displayNdx < mChildren.size(); ++displayNdx) {
-            final DisplayContent displayContent = mChildren.get(displayNdx);
-            displayContent.setExitingTokensHasVisible(false);
-        }
-
         mHoldScreen = null;
         mScreenBrightnessOverride = PowerManager.BRIGHTNESS_INVALID_FLOAT;
         mUserActivityTimeout = -1;
@@ -957,12 +951,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 win.destroySurfaceUnchecked();
             } while (i > 0);
             mWmService.mDestroySurface.clear();
-        }
-
-        // Time to remove any exiting tokens?
-        for (int displayNdx = mChildren.size() - 1; displayNdx >= 0; --displayNdx) {
-            final DisplayContent displayContent = mChildren.get(displayNdx);
-            displayContent.removeExistingTokensIfPossible();
         }
 
         for (int displayNdx = 0; displayNdx < mChildren.size(); ++displayNdx) {
@@ -2732,6 +2720,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             token = new SleepToken(tag, displayId);
             mSleepTokens.put(tokenKey, token);
             display.mAllSleepTokens.add(token);
+            ProtoLog.d(WM_DEBUG_STATES, "Create sleep token: tag=%s, displayId=%d", tag, displayId);
         } else {
             throw new RuntimeException("Create the same sleep token twice: " + token);
         }
@@ -2750,6 +2739,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return;
         }
 
+        ProtoLog.d(WM_DEBUG_STATES, "Remove sleep token: tag=%s, displayId=%d", token.mTag,
+                token.mDisplayId);
         display.mAllSleepTokens.remove(token);
         if (display.mAllSleepTokens.isEmpty()) {
             mService.updateSleepIfNeededLocked();
@@ -3756,6 +3747,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         public String toString() {
             return "{\"" + mTag + "\", display " + mDisplayId
                     + ", acquire at " + TimeUtils.formatUptime(mAcquireTime) + "}";
+        }
+
+        void writeTagToProto(ProtoOutputStream proto, long fieldId) {
+            proto.write(fieldId, mTag);
         }
     }
 

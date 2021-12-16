@@ -86,8 +86,6 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SIZE_CHANGES_SUPPORTED_METADATA;
 import static android.content.pm.ActivityInfo.SIZE_CHANGES_SUPPORTED_OVERRIDE;
 import static android.content.pm.ActivityInfo.SIZE_CHANGES_UNSUPPORTED_OVERRIDE;
-import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
-import static android.content.pm.ActivityInfo.isFixedOrientationPortrait;
 import static android.content.res.Configuration.ASSETS_SEQ_UNDEFINED;
 import static android.content.res.Configuration.EMPTY;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
@@ -1153,10 +1151,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (info.getMaxAspectRatio() != 0) {
                 pw.println(prefix + "maxAspectRatio=" + info.getMaxAspectRatio());
             }
-            if (info.getMinAspectRatio() != 0) {
-                pw.println(prefix + "minAspectRatio=" + info.getMinAspectRatio());
+            final float minAspectRatio = getMinAspectRatio();
+            if (minAspectRatio != 0) {
+                pw.println(prefix + "minAspectRatio=" + minAspectRatio);
             }
-            if (info.getMinAspectRatio() != info.getManifestMinAspectRatio()) {
+            if (minAspectRatio != info.getManifestMinAspectRatio()) {
                 // Log the fact that we've overridden the min aspect ratio from the manifest
                 pw.println(prefix + "manifestMinAspectRatio="
                         + info.getManifestMinAspectRatio());
@@ -1455,13 +1454,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         final Task rootTask = getRootTask();
 
-        // If we reparent, make sure to remove ourselves from the old animation registry.
-        if (mAnimatingActivityRegistry != null) {
-            mAnimatingActivityRegistry.notifyFinished(this);
-        }
-        mAnimatingActivityRegistry = rootTask != null
-                ? rootTask.getAnimatingActivityRegistry()
-                : null;
+        updateAnimatingActivityRegistry();
 
         if (task == mLastParentBeforePip) {
             // Activity's reparented back from pip, clear the links once established
@@ -1492,6 +1485,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 rootTask.setHasBeenVisible(true);
             }
         }
+    }
+
+    void updateAnimatingActivityRegistry() {
+        final Task rootTask = getRootTask();
+        final AnimatingActivityRegistry registry = rootTask != null
+                ? rootTask.getAnimatingActivityRegistry()
+                : null;
+
+        // If we reparent, make sure to remove ourselves from the old animation registry.
+        if (mAnimatingActivityRegistry != null && mAnimatingActivityRegistry != registry) {
+            mAnimatingActivityRegistry.notifyFinished(this);
+        }
+
+        mAnimatingActivityRegistry = registry;
     }
 
     /**
@@ -3630,6 +3637,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         if (mPendingRelaunchCount > 0) {
             mPendingRelaunchCount--;
+            if (mPendingRelaunchCount == 0 && !isClientVisible()) {
+                // Don't count if the client won't report drawn.
+                mRelaunchStartTime = 0;
+            }
         } else {
             // Update keyguard flags upon finishing relaunch.
             checkKeyguardFlagsChanged();
@@ -4132,15 +4143,36 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      *         conditions a) above.
      *         Multi-windowing mode will be exited if {@code true} is returned.
      */
-    boolean canShowWhenLocked() {
-        if (!inPinnedWindowingMode() && (mShowWhenLocked || containsShowWhenLockedWindow())) {
+    private static boolean canShowWhenLocked(ActivityRecord r) {
+        if (r == null || r.getTaskFragment() == null) {
+            return false;
+        }
+        if (!r.inPinnedWindowingMode() && (r.mShowWhenLocked || r.containsShowWhenLockedWindow())) {
             return true;
-        } else if (mInheritShownWhenLocked) {
-            final ActivityRecord r = task.getActivityBelow(this);
-            return r != null && !r.inPinnedWindowingMode() && (r.mShowWhenLocked
-                    || r.containsShowWhenLockedWindow());
+        } else if (r.mInheritShownWhenLocked) {
+            final ActivityRecord activity = r.getTaskFragment().getActivityBelow(r);
+            return activity != null && !activity.inPinnedWindowingMode()
+                    && (activity.mShowWhenLocked || activity.containsShowWhenLockedWindow());
         } else {
             return false;
+        }
+    }
+
+    /**
+     *  Determines if the activity can show while lock-screen is displayed. System displays
+     *  activities while lock-screen is displayed only if all activities
+     *  {@link #canShowWhenLocked(ActivityRecord)}.
+     *  @see #canShowWhenLocked(ActivityRecord)
+     */
+    boolean canShowWhenLocked() {
+        final TaskFragment taskFragment = getTaskFragment();
+        if (taskFragment != null && taskFragment.getAdjacentTaskFragment() != null
+                && taskFragment.isEmbedded()) {
+            final TaskFragment adjacentTaskFragment = taskFragment.getAdjacentTaskFragment();
+            final ActivityRecord r = adjacentTaskFragment.getTopNonFinishingActivity();
+            return canShowWhenLocked(this) && canShowWhenLocked(r);
+        } else {
+            return canShowWhenLocked(this);
         }
     }
 
@@ -4160,29 +4192,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private boolean hasNonDefaultColorWindow() {
         return forAllWindows(ws -> ws.mAttrs.getColorMode() != COLOR_MODE_DEFAULT,
                 true /* topToBottom */);
-    }
-
-    WindowState getImeTargetBelowWindow(WindowState w) {
-        final int index = mChildren.indexOf(w);
-        if (index > 0) {
-            return mChildren.get(index - 1)
-                    .getWindow(WindowState::canBeImeTarget);
-        }
-        return null;
-    }
-
-    WindowState getHighestAnimLayerWindow(WindowState currentTarget) {
-        WindowState candidate = null;
-        for (int i = mChildren.indexOf(currentTarget); i >= 0; i--) {
-            final WindowState w = mChildren.get(i);
-            if (w.mRemoved) {
-                continue;
-            }
-            if (candidate == null) {
-                candidate = w;
-            }
-        }
-        return candidate;
     }
 
     @Override
@@ -7115,11 +7124,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         clearThumbnail();
     }
 
-    @VisibleForTesting
-    WindowContainerThumbnail getThumbnail() {
-        return mThumbnail;
-    }
-
     private void clearThumbnail() {
         if (mThumbnail == null) {
             return;
@@ -7132,9 +7136,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return mTransit;
     }
 
-    int getTransitFlags() {
-        return mTransitFlags;
-    }
 
     void registerRemoteAnimations(RemoteAnimationDefinition definition) {
         mRemoteAnimationDefinition = definition;
@@ -7329,7 +7330,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return false;
             }
         }
-        return !isResizeable() && (info.isFixedOrientation() || info.hasFixedAspectRatio())
+        return !isResizeable() && (info.isFixedOrientation() || hasFixedAspectRatio())
                 // The configuration of non-standard type should be enforced by system.
                 // {@link WindowConfiguration#ACTIVITY_TYPE_STANDARD} is set when this activity is
                 // added to a task, but this function is called when resolving the launch params, at
@@ -8000,13 +8001,14 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return false;
             }
         }
-        if (info.getMinAspectRatio() > 0) {
+        final float minAspectRatio = getMinAspectRatio();
+        if (minAspectRatio > 0) {
             // The activity should have at least the min aspect ratio, so this checks if the
             // container still has available space to provide larger aspect ratio.
             final float containerAspectRatio =
                     (0.5f + Math.max(containerAppWidth, containerAppHeight))
                             / Math.min(containerAppWidth, containerAppHeight);
-            if (containerAspectRatio <= info.getMinAspectRatio()) {
+            if (containerAspectRatio <= minAspectRatio) {
                 // The long side has reached the parent.
                 return false;
             }
@@ -8186,20 +8188,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         super.onResize();
     }
 
-    /** Returns true if the configuration is compatible with this activity. */
-    boolean isConfigurationCompatible(Configuration config) {
-        final int orientation = getRequestedOrientation();
-        if (isFixedOrientationPortrait(orientation)
-                && config.orientation != ORIENTATION_PORTRAIT) {
-            return false;
-        }
-        if (isFixedOrientationLandscape(orientation)
-                && config.orientation != ORIENTATION_LANDSCAPE) {
-            return false;
-        }
-        return true;
-    }
-
     private boolean applyAspectRatio(Rect outBounds, Rect containingAppBounds,
             Rect containingBounds) {
         return applyAspectRatio(outBounds, containingAppBounds, containingBounds,
@@ -8217,8 +8205,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             Rect containingBounds, float desiredAspectRatio, boolean fixedOrientationLetterboxed) {
         final float maxAspectRatio = info.getMaxAspectRatio();
         final Task rootTask = getRootTask();
-        final float minAspectRatio = info.getMinAspectRatio();
-
+        final float minAspectRatio = getMinAspectRatio();
         if (task == null || rootTask == null
                 || (inMultiWindowMode() && !shouldCreateCompatDisplayInsets()
                 && !fixedOrientationLetterboxed)
@@ -8319,6 +8306,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         return true;
+    }
+
+    /**
+     * Returns the min aspect ratio of this activity.
+     */
+    private float getMinAspectRatio() {
+        return info.getMinAspectRatio(getRequestedOrientation());
+    }
+
+    /**
+     * Returns true if the activity has maximum or minimum aspect ratio.
+     */
+    private boolean hasFixedAspectRatio() {
+        return info.hasFixedAspectRatio(getRequestedOrientation());
     }
 
     /**
@@ -9052,7 +9053,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         proto.write(PIP_AUTO_ENTER_ENABLED, pictureInPictureArgs.isAutoEnterEnabled());
         proto.write(IN_SIZE_COMPAT_MODE, inSizeCompatMode());
-        proto.write(MIN_ASPECT_RATIO, info.getMinAspectRatio());
+        proto.write(MIN_ASPECT_RATIO, getMinAspectRatio());
     }
 
     @Override

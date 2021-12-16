@@ -2420,6 +2420,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         mBatteryStatsService.publish();
         mAppOpsService.publish();
+        mProcessStats.publish();
         Slog.d("AppOps", "AppOpsService published");
         LocalServices.addService(ActivityManagerInternal.class, mInternal);
         LocalManagerRegistry.addManager(ActivityManagerLocal.class,
@@ -3820,6 +3821,29 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
+    public void makeServicesNonForeground(final String packageName, int userId) {
+        if (checkCallingPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
+                != PackageManager.PERMISSION_GRANTED) {
+            String msg = "Permission Denial: makeServicesNonForeground() from pid="
+                    + Binder.getCallingPid()
+                    + ", uid=" + Binder.getCallingUid()
+                    + " requires " + android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
+            Slog.w(TAG, msg);
+            throw new SecurityException(msg);
+        }
+
+        final int callingPid = Binder.getCallingPid();
+        userId = mUserController.handleIncomingUser(callingPid, Binder.getCallingUid(),
+                userId, true, ALLOW_FULL_ONLY, "makeServicesNonForeground", null);
+        final long callingId = Binder.clearCallingIdentity();
+        try {
+            makeServicesNonForegroundUnchecked(packageName, userId);
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
+    }
+
+    @Override
     public void forceStopPackage(final String packageName, int userId) {
         if (checkCallingPermission(android.Manifest.permission.FORCE_STOP_PACKAGES)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -4124,6 +4148,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         } else {
             throw new SecurityException(callerUid + " cannot kill app process: " +
                     processName);
+        }
+    }
+
+    private void makeServicesNonForegroundUnchecked(final String packageName,
+            final @UserIdInt int userId) {
+        synchronized (this) {
+            mServices.makeServicesNonForegroundLocked(packageName, userId);
         }
     }
 
@@ -16498,6 +16529,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mServices.onForegroundServiceNotificationUpdateLocked(shown,
                         notification, id, pkg, userId);
             }
+        }
+
+        @Override
+        public void makeServicesNonForeground(String pkg, int userId) {
+            ActivityManagerService.this.makeServicesNonForegroundUnchecked(pkg, userId);
         }
 
         @Override

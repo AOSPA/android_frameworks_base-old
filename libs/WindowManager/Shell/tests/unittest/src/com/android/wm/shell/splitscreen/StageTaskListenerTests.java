@@ -21,6 +21,8 @@ import static android.view.Display.DEFAULT_DISPLAY;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeFalse;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
@@ -31,11 +33,15 @@ import android.app.ActivityManager;
 import android.os.SystemProperties;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
+import android.window.WindowContainerTransaction;
 
+import androidx.test.annotation.UiThreadTest;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
+import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.ShellTestCase;
 import com.android.wm.shell.TestRunningTaskInfoBuilder;
 import com.android.wm.shell.common.SyncTransactionQueue;
 
@@ -50,33 +56,43 @@ import org.mockito.MockitoAnnotations;
 /**
  * Tests for {@link StageTaskListener}
  * Build/Install/Run:
- *  atest WMShellUnitTests:StageTaskListenerTests
+ * atest WMShellUnitTests:StageTaskListenerTests
  */
 @SmallTest
 @RunWith(AndroidJUnit4.class)
-public final class StageTaskListenerTests {
+public final class StageTaskListenerTests extends ShellTestCase {
     private static final boolean ENABLE_SHELL_TRANSITIONS =
             SystemProperties.getBoolean("persist.debug.shell_transit", false);
 
-    @Mock private ShellTaskOrganizer mTaskOrganizer;
-    @Mock private StageTaskListener.StageListenerCallbacks mCallbacks;
-    @Mock private SyncTransactionQueue mSyncQueue;
-    @Mock private StageTaskUnfoldController mStageTaskUnfoldController;
-    @Captor private ArgumentCaptor<SyncTransactionQueue.TransactionRunnable> mRunnableCaptor;
+    @Mock
+    private ShellTaskOrganizer mTaskOrganizer;
+    @Mock
+    private StageTaskListener.StageListenerCallbacks mCallbacks;
+    @Mock
+    private SyncTransactionQueue mSyncQueue;
+    @Mock
+    private IconProvider mIconProvider;
+    @Mock
+    private StageTaskUnfoldController mStageTaskUnfoldController;
+    @Captor
+    private ArgumentCaptor<SyncTransactionQueue.TransactionRunnable> mRunnableCaptor;
     private SurfaceSession mSurfaceSession = new SurfaceSession();
     private SurfaceControl mSurfaceControl;
     private ActivityManager.RunningTaskInfo mRootTask;
     private StageTaskListener mStageTaskListener;
 
     @Before
+    @UiThreadTest
     public void setup() {
         MockitoAnnotations.initMocks(this);
         mStageTaskListener = new StageTaskListener(
+                mContext,
                 mTaskOrganizer,
                 DEFAULT_DISPLAY,
                 mCallbacks,
                 mSyncQueue,
                 mSurfaceSession,
+                mIconProvider,
                 mStageTaskUnfoldController);
         mRootTask = new TestRunningTaskInfoBuilder().build();
         mRootTask.parentTaskId = INVALID_TASK_ID;
@@ -166,5 +182,19 @@ public final class StageTaskListenerTests {
 
         mStageTaskListener.onTaskInfoChanged(childTask);
         verify(mCallbacks).onNoLongerSupportMultiWindow();
+    }
+
+    @Test
+    public void testEvictAllChildren() {
+        final WindowContainerTransaction wct = new WindowContainerTransaction();
+        mStageTaskListener.evictAllChildren(wct);
+        assertTrue(wct.isEmpty());
+
+        final ActivityManager.RunningTaskInfo childTask =
+                new TestRunningTaskInfoBuilder().setParentTaskId(mRootTask.taskId).build();
+        mStageTaskListener.onTaskAppeared(childTask, mSurfaceControl);
+
+        mStageTaskListener.evictAllChildren(wct);
+        assertFalse(wct.isEmpty());
     }
 }

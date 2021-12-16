@@ -1335,6 +1335,11 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         mAttributionSource = attributionSource;
     }
 
+    /** {@hide} */
+    public void prepareToEnterProcess(@NonNull AttributionSource attributionSource) {
+        setAttributionSource(attributionSource);
+    }
+
     @Override
     public boolean equals(@Nullable Object o) {
         if (o instanceof BluetoothDevice) {
