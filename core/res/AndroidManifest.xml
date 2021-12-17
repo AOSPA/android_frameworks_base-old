@@ -261,6 +261,9 @@
         android:name="android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.action.LE_AUDIO_CONNECTION_STATE_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.action.LE_AUDIO_ACTIVE_DEVICE_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.LE_AUDIO_CONF_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.LE_AUDIO_GROUP_NODE_STATUS_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.LE_AUDIO_GROUP_STATUS_CHANGED" />
     <protected-broadcast
         android:name="android.bluetooth.action.TETHERING_STATE_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.pbap.profile.action.CONNECTION_STATE_CHANGED" />
@@ -5945,6 +5948,11 @@
       <!-- @SystemApi Allows an application to query over global data in AppSearch.
            @hide -->
     <permission android:name="android.permission.READ_GLOBAL_APP_SEARCH_DATA"
+                android:protectionLevel="internal|role" />
+
+    <!-- @SystemApi Allows an application to create virtual devices in VirtualDeviceManager.
+         @hide -->
+    <permission android:name="android.permission.CREATE_VIRTUAL_DEVICE"
                 android:protectionLevel="internal|role" />
 
     <!-- Attribution for Geofencing service. -->

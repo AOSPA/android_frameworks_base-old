@@ -142,7 +142,6 @@ import android.content.pm.dex.IArtManager;
 import android.content.pm.overlay.OverlayPaths;
 import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.parsing.component.ParsedActivity;
-import android.content.pm.parsing.component.ParsedActivityImpl;
 import android.content.pm.parsing.component.ParsedInstrumentation;
 import android.content.pm.parsing.component.ParsedIntentInfo;
 import android.content.pm.parsing.component.ParsedMainComponent;
@@ -4907,7 +4906,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     return;
                 }
             } else {
-                if (isInstantApp(packageName, callingUserId)) {
+                if (isInstantAppInternal(packageName, callingUserId, Process.SYSTEM_UID)) {
                     return;
                 }
             }
@@ -5014,7 +5013,8 @@ public class PackageManagerService extends IPackageManager.Stub
     public void reconcileSecondaryDexFiles(String packageName) {
         if (getInstantAppPackageName(Binder.getCallingUid()) != null) {
             return;
-        } else if (isInstantApp(packageName, UserHandle.getCallingUserId())) {
+        } else if (isInstantAppInternal(
+                packageName, UserHandle.getCallingUserId(), Process.SYSTEM_UID)) {
             return;
         }
         mDexManager.reconcileSecondaryDexFiles(packageName);
@@ -6629,7 +6629,8 @@ public class PackageManagerService extends IPackageManager.Stub
             if (DEBUG_BACKUP) {
                 Slog.i(TAG, "Package " + packageName + " sending normal FIRST_LAUNCH");
             }
-            final boolean isInstantApp = isInstantApp(packageName, userId);
+            final boolean isInstantApp = isInstantAppInternal(
+                    packageName, userId, Process.SYSTEM_UID);
             final int[] userIds = isInstantApp ? EMPTY_INT_ARRAY : new int[] { userId };
             final int[] instantUserIds = isInstantApp ? new int[] { userId } : EMPTY_INT_ARRAY;
             mBroadcastHelper.sendFirstLaunchBroadcast(
@@ -8024,7 +8025,7 @@ public class PackageManagerService extends IPackageManager.Stub
     void sendPackageChangedBroadcast(String packageName,
             boolean dontKillApp, ArrayList<String> componentNames, int packageUid, String reason) {
         final int userId = UserHandle.getUserId(packageUid);
-        final boolean isInstantApp = isInstantApp(packageName, userId);
+        final boolean isInstantApp = isInstantAppInternal(packageName, userId, Process.SYSTEM_UID);
         final int[] userIds = isInstantApp ? EMPTY_INT_ARRAY : new int[] { userId };
         final int[] instantUserIds = isInstantApp ? new int[] { userId } : EMPTY_INT_ARRAY;
         final SparseArray<int[]> broadcastAllowList = getBroadcastAllowList(
@@ -8947,7 +8948,8 @@ public class PackageManagerService extends IPackageManager.Stub
      * return {@code true} if any one application belongs to the shared user ID meets the criteria.
      */
     boolean canQueryPackage(int callingUid, @Nullable String targetPackageName) {
-        if (targetPackageName == null) {
+        // Since getSettingLPr returns null for ROOT_UID, add an extra check for it here.
+        if (callingUid == Process.ROOT_UID || targetPackageName == null) {
             return true;
         }
         synchronized (mLock) {
@@ -10039,7 +10041,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (ps == null) {
                 return null;
             }
-            return ps.getIncrementalStatesInfo();
+            return new IncrementalStatesInfo(ps.isPackageLoading(), ps.getLoadingProgress());
         }
 
         @Override
@@ -10373,7 +10375,7 @@ public class PackageManagerService extends IPackageManager.Stub
             throw new SecurityException(
                     "Caller uid " + callingUid + " does not own package " + packageName);
         }
-        if (isInstantAppInternal(packageName, userId, callingUid)) {
+        if (isInstantAppInternal(packageName, userId, Process.SYSTEM_UID)) {
             return false;
         }
         final AndroidPackage pkg;

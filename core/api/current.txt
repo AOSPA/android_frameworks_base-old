@@ -8684,12 +8684,14 @@ package android.bluetooth {
     method public android.bluetooth.BluetoothDevice getRemoteDevice(byte[]);
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN) public int getScanMode();
     method public int getState();
+    method public int isCisCentralSupported();
     method @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN) public boolean isDiscovering();
     method public boolean isEnabled();
     method public boolean isLe2MPhySupported();
     method public boolean isLeCodedPhySupported();
     method public boolean isLeExtendedAdvertisingSupported();
     method public boolean isLePeriodicAdvertisingSupported();
+    method public int isLePeriodicAdvertisingSyncTransferSenderSupported();
     method public boolean isMultipleAdvertisementSupported();
     method public boolean isOffloadedFilteringSupported();
     method public boolean isOffloadedScanBatchingSupported();
@@ -9542,6 +9544,7 @@ package android.bluetooth {
     field public static final int ERROR_BLUETOOTH_NOT_ALLOWED = 2; // 0x2
     field public static final int ERROR_BLUETOOTH_NOT_ENABLED = 1; // 0x1
     field public static final int ERROR_DEVICE_NOT_BONDED = 3; // 0x3
+    field public static final int ERROR_FEATURE_NOT_SUPPORTED = 8; // 0x8
     field public static final int ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION = 6; // 0x6
     field public static final int ERROR_UNKNOWN = 2147483647; // 0x7fffffff
     field public static final int SUCCESS = 0; // 0x0
@@ -22672,7 +22675,7 @@ package android.media {
     field public static final String KEY_MAX_FPS_TO_ENCODER = "max-fps-to-encoder";
     field public static final String KEY_MAX_HEIGHT = "max-height";
     field public static final String KEY_MAX_INPUT_SIZE = "max-input-size";
-    field public static final String KEY_MAX_OUTPUT_CHANNEL_COUNT = "max-output-channel_count";
+    field public static final String KEY_MAX_OUTPUT_CHANNEL_COUNT = "max-output-channel-count";
     field public static final String KEY_MAX_PTS_GAP_TO_ENCODER = "max-pts-gap-to-encoder";
     field public static final String KEY_MAX_WIDTH = "max-width";
     field public static final String KEY_MIME = "mime";
@@ -30975,6 +30978,7 @@ package android.os {
     field public static final int Q = 29; // 0x1d
     field public static final int R = 30; // 0x1e
     field public static final int S = 31; // 0x1f
+    field public static final int S_V2 = 32; // 0x20
     field public static final int TIRAMISU = 10000; // 0x2710
   }
 
@@ -31589,7 +31593,9 @@ package android.os {
     method @NonNull public static android.os.Parcel obtain();
     method @NonNull public static android.os.Parcel obtain(@NonNull android.os.IBinder);
     method @Nullable public Object[] readArray(@Nullable ClassLoader);
+    method @Nullable public <T> T[] readArray(@Nullable ClassLoader, @NonNull Class<T>);
     method @Nullable public java.util.ArrayList readArrayList(@Nullable ClassLoader);
+    method @Nullable public <T> java.util.ArrayList<T> readArrayList(@Nullable ClassLoader, @NonNull Class<? extends T>);
     method public void readBinderArray(@NonNull android.os.IBinder[]);
     method public void readBinderList(@NonNull java.util.List<android.os.IBinder>);
     method public boolean readBoolean();
@@ -31617,6 +31623,7 @@ package android.os {
     method @Nullable public <T extends android.os.Parcelable> T readParcelable(@Nullable ClassLoader);
     method @Nullable public <T extends android.os.Parcelable> T readParcelable(@Nullable ClassLoader, @NonNull Class<T>);
     method @Nullable public android.os.Parcelable[] readParcelableArray(@Nullable ClassLoader);
+    method @Nullable public <T> T[] readParcelableArray(@Nullable ClassLoader, @NonNull Class<T>);
     method @Nullable public android.os.Parcelable.Creator<?> readParcelableCreator(@Nullable ClassLoader);
     method @Nullable public <T> android.os.Parcelable.Creator<T> readParcelableCreator(@Nullable ClassLoader, @NonNull Class<T>);
     method @NonNull public <T extends android.os.Parcelable> java.util.List<T> readParcelableList(@NonNull java.util.List<T>, @Nullable ClassLoader);
@@ -31626,6 +31633,7 @@ package android.os {
     method @NonNull public android.util.Size readSize();
     method @NonNull public android.util.SizeF readSizeF();
     method @Nullable public <T> android.util.SparseArray<T> readSparseArray(@Nullable ClassLoader);
+    method @Nullable public <T> android.util.SparseArray<T> readSparseArray(@Nullable ClassLoader, @NonNull Class<? extends T>);
     method @Nullable public android.util.SparseBooleanArray readSparseBooleanArray();
     method @Nullable public String readString();
     method public void readStringArray(@NonNull String[]);
@@ -47696,6 +47704,10 @@ package android.view {
     field public static final int KEYCODE_CUT = 277; // 0x115
     field public static final int KEYCODE_D = 32; // 0x20
     field public static final int KEYCODE_DEL = 67; // 0x43
+    field public static final int KEYCODE_DEMO_APP_1 = 301; // 0x12d
+    field public static final int KEYCODE_DEMO_APP_2 = 302; // 0x12e
+    field public static final int KEYCODE_DEMO_APP_3 = 303; // 0x12f
+    field public static final int KEYCODE_DEMO_APP_4 = 304; // 0x130
     field public static final int KEYCODE_DPAD_CENTER = 23; // 0x17
     field public static final int KEYCODE_DPAD_DOWN = 20; // 0x14
     field public static final int KEYCODE_DPAD_DOWN_LEFT = 269; // 0x10d
@@ -47727,6 +47739,10 @@ package android.view {
     field public static final int KEYCODE_F7 = 137; // 0x89
     field public static final int KEYCODE_F8 = 138; // 0x8a
     field public static final int KEYCODE_F9 = 139; // 0x8b
+    field public static final int KEYCODE_FEATURED_APP_1 = 297; // 0x129
+    field public static final int KEYCODE_FEATURED_APP_2 = 298; // 0x12a
+    field public static final int KEYCODE_FEATURED_APP_3 = 299; // 0x12b
+    field public static final int KEYCODE_FEATURED_APP_4 = 300; // 0x12c
     field public static final int KEYCODE_FOCUS = 80; // 0x50
     field public static final int KEYCODE_FORWARD = 125; // 0x7d
     field public static final int KEYCODE_FORWARD_DEL = 112; // 0x70
@@ -47892,6 +47908,14 @@ package android.view {
     field public static final int KEYCODE_U = 49; // 0x31
     field public static final int KEYCODE_UNKNOWN = 0; // 0x0
     field public static final int KEYCODE_V = 50; // 0x32
+    field public static final int KEYCODE_VIDEO_APP_1 = 289; // 0x121
+    field public static final int KEYCODE_VIDEO_APP_2 = 290; // 0x122
+    field public static final int KEYCODE_VIDEO_APP_3 = 291; // 0x123
+    field public static final int KEYCODE_VIDEO_APP_4 = 292; // 0x124
+    field public static final int KEYCODE_VIDEO_APP_5 = 293; // 0x125
+    field public static final int KEYCODE_VIDEO_APP_6 = 294; // 0x126
+    field public static final int KEYCODE_VIDEO_APP_7 = 295; // 0x127
+    field public static final int KEYCODE_VIDEO_APP_8 = 296; // 0x128
     field public static final int KEYCODE_VOICE_ASSIST = 231; // 0xe7
     field public static final int KEYCODE_VOLUME_DOWN = 25; // 0x19
     field public static final int KEYCODE_VOLUME_MUTE = 164; // 0xa4

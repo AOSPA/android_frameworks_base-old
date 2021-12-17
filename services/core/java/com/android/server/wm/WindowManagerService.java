@@ -169,10 +169,8 @@ import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.graphics.Insets;
-import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.graphics.RectF;
 import android.graphics.Region;
 import android.hardware.configstore.V1_0.OptionalBool;
 import android.hardware.configstore.V1_1.DisplayOrientation;
@@ -343,8 +341,6 @@ import java.util.function.Supplier;
 public class WindowManagerService extends IWindowManager.Stub
         implements Watchdog.Monitor, WindowManagerPolicy.WindowManagerFuncs {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "WindowManagerService" : TAG_WM;
-
-    private static final String WM_USE_BLAST_ADAPTER_FLAG = "wm_use_blast_adapter";
 
     static final int LAYOUT_REPEAT_THRESHOLD = 4;
 
@@ -651,13 +647,7 @@ public class WindowManagerService extends IWindowManager.Stub
     StrictModeFlash mStrictModeFlash;
     EmulatorDisplayOverlay mEmulatorDisplayOverlay;
 
-    final float[] mTmpFloats = new float[9];
     final Rect mTmpRect = new Rect();
-    final Rect mTmpRect2 = new Rect();
-    final Rect mTmpRect3 = new Rect();
-    final RectF mTmpRectF = new RectF();
-
-    final Matrix mTmpTransform = new Matrix();
 
     boolean mDisplayReady;
     boolean mSafeMode;
@@ -1064,8 +1054,6 @@ public class WindowManagerService extends IWindowManager.Stub
         public void focusChanged();
     }
 
-    final Configuration mTempConfiguration = new Configuration();
-
     final HighRefreshRateDenylist mHighRefreshRateDenylist;
 
     // Maintainer of a collection of all possible DisplayInfo for all configurations of the
@@ -1161,11 +1149,6 @@ public class WindowManagerService extends IWindowManager.Stub
         void onAppFreezeTimeout();
     }
 
-    private static WindowManagerService sInstance;
-    static WindowManagerService getInstance() {
-        return sInstance;
-    }
-
     public static WindowManagerService main(final Context context, final InputManagerService im,
             final boolean showBootMsgs, final boolean onlyCore, WindowManagerPolicy policy,
             ActivityTaskManagerService atm) {
@@ -1185,11 +1168,12 @@ public class WindowManagerService extends IWindowManager.Stub
             displayWindowSettingsProvider, Supplier<SurfaceControl.Transaction> transactionFactory,
             Supplier<Surface> surfaceFactory,
             Function<SurfaceSession, SurfaceControl.Builder> surfaceControlFactory) {
+        final WindowManagerService[] wms = new WindowManagerService[1];
         DisplayThread.getHandler().runWithScissors(() ->
-                sInstance = new WindowManagerService(context, im, showBootMsgs, onlyCore, policy,
+                wms[0] = new WindowManagerService(context, im, showBootMsgs, onlyCore, policy,
                         atm, displayWindowSettingsProvider, transactionFactory, surfaceFactory,
                         surfaceControlFactory), 0);
-        return sInstance;
+        return wms[0];
     }
 
     private void initPolicy() {
@@ -1788,6 +1772,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
             win.mToken.addWindow(win);
             displayPolicy.addWindowLw(win, attrs);
+            displayPolicy.setDropInputModePolicy(win, win.mAttrs);
             if (type == TYPE_APPLICATION_STARTING && activity != null) {
                 activity.attachStartingWindow(win);
                 ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "addWindow: %s startingWindow=%s",
@@ -2520,9 +2505,11 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             win.mInRelayout = false;
 
-            if (mUseBLASTSync && win.useBLASTSync() && viewVisibility != View.GONE) {
+            if (mUseBLASTSync && win.useBLASTSync() && viewVisibility != View.GONE
+                    && win.mNextRelayoutUseSync) {
                 win.prepareDrawHandlers();
                 win.markRedrawForSyncReported();
+                win.mNextRelayoutUseSync = false;
                 result |= RELAYOUT_RES_BLAST_SYNC;
             }
 
@@ -3019,15 +3006,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 aspectRatio);
     }
 
-    void getRootTaskBounds(int windowingMode, int activityType, Rect bounds) {
-        final Task rootTask = mRoot.getRootTask(windowingMode, activityType);
-        if (rootTask != null) {
-            rootTask.getBounds(bounds);
-            return;
-        }
-        bounds.setEmpty();
-    }
-
     /**
      * Notifies window manager that {@link DisplayPolicy#isShowingDreamLw} has changed.
      */
@@ -3083,6 +3061,11 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         }
         syncInputTransactions(true /* waitForAnimations */);
+    }
+
+    @Override
+    public boolean isAppTransitionStateIdle() {
+        return getDefaultDisplayContentLocked().mAppTransition.isIdle();
     }
 
     /**
@@ -5411,6 +5394,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 case WINDOW_STATE_BLAST_SYNC_TIMEOUT: {
                     synchronized (mGlobalLock) {
                         final WindowState ws = (WindowState) msg.obj;
+                        Slog.i(TAG, "Blast sync timeout: " + ws);
                         ws.immediatelyNotifyBlastSync();
                     }
                     break;
@@ -7016,12 +7000,6 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             dc.setForwardedInsets(insets);
         }
-    }
-
-    void intersectDisplayInsetBounds(Rect display, Rect insets, Rect inOutBounds) {
-        mTmpRect3.set(display);
-        mTmpRect3.inset(insets);
-        inOutBounds.intersect(mTmpRect3);
     }
 
     MousePositionTracker mMousePositionTracker = new MousePositionTracker();
