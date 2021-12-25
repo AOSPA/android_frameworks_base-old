@@ -59,6 +59,7 @@ android_library {
     ],
     resource_dirs: [
         "res-product",
+        "res-gamedashboard",
         "res-keyguard",
         "res-smartspace",
         "res",
@@ -99,6 +100,7 @@ android_library {
         "colorkt",
         "themelib",
         "backgesture-google",
+        "gamedashboard-sysui-google",
         "smartspace-google",
         "tensorflowlite_java",
     ],
