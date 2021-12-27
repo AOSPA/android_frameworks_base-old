@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2a6ad214_b8dfd849",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2021-12-27T19:17:10Z",
+      "side": 1,
+      "message": "not sure if you guys are still formatting commits from non-upstream branches with [android12-gsi] or not.  if not, it looks good.",
+      "revId": "bbaa3d11e7327f0b97de28d098512e2a5a973110",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
