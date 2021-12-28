@@ -61,3 +61,7 @@
 
 # Custom rules
 -keep class co.aospa.** { *; }
+
+# Google rules
+-keep class com.google.** { *; }
+-keep class vendor.** { *; }
