@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "bd94a692_6b381c25",
+        "filename": "packages/SystemUI/res/values/pa_colors.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-12-29T15:20:08Z",
+      "side": 1,
+      "message": "aospa_colors*",
+      "revId": "0bc96a946e898b614c04311a9e03eb0894f1793d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b6393967_38ceea04",
+        "filename": "packages/SystemUI/res/values/pa_strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-12-29T15:20:08Z",
+      "side": 1,
+      "message": "we have aospa_strings",
+      "revId": "0bc96a946e898b614c04311a9e03eb0894f1793d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c14ec858_ac7b1b4c",
+        "filename": "proto/src/metrics_constants/metrics_constants.proto",
+        "patchSetId": 1
+      },
+      "lineNbr": 7439,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-12-29T15:20:08Z",
+      "side": 1,
+      "message": "aospa*",
+      "revId": "0bc96a946e898b614c04311a9e03eb0894f1793d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
