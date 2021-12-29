@@ -1,0 +1,188 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "55473729_e06868b7",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 9494,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "Large indent",
+      "range": {
+        "startLine": 9494,
+        "startChar": 0,
+        "endLine": 9494,
+        "endChar": 1
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "f27c4185_1e103bec",
+        "filename": "packages/SystemUI/res/values/pa_strings.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 14,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "whitespace",
+      "range": {
+        "startLine": 14,
+        "startChar": 75,
+        "endLine": 14,
+        "endChar": 76
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8de8f6f4_5fc122d2",
+        "filename": "packages/SystemUI/res/values/pa_strings.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 15,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "whitespace",
+      "range": {
+        "startLine": 15,
+        "startChar": 70,
+        "endLine": 15,
+        "endChar": 71
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "195b7bad_f6b8b3bc",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 36,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "Conflicts not resolved",
+      "range": {
+        "startLine": 25,
+        "startChar": 0,
+        "endLine": 36,
+        "endChar": 7
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8e77d14e_56149700",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 108,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "same",
+      "range": {
+        "startLine": 105,
+        "startChar": 0,
+        "endLine": 108,
+        "endChar": 7
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2ee690a3_17fb7798",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 744,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "same",
+      "range": {
+        "startLine": 723,
+        "startChar": 0,
+        "endLine": 744,
+        "endChar": 7
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "e68f632d_ffd76d4a",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 911,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "+",
+      "range": {
+        "startLine": 861,
+        "startChar": 0,
+        "endLine": 911,
+        "endChar": 7
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ef33a42c_f3a2000e",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 2813,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2021-12-29T04:16:50Z",
+      "side": 1,
+      "message": "-",
+      "range": {
+        "startLine": 2813,
+        "startChar": 0,
+        "endLine": 2813,
+        "endChar": 77
+      },
+      "revId": "4322c93a92ae5731122b17c0190c3d51283f31e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
