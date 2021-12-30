@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fd2d310a_a5740445",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-12-30T07:28:15Z",
+      "side": 1,
+      "message": "can be merged? if yes remove the android12-gsi tag from commit message\n",
+      "revId": "a5bbce3321c3615108c2203f41b97cf2c72221e8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
