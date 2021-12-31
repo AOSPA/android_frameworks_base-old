@@ -33,6 +33,7 @@ public class PixelPropsUtils {
     private static final Map<String, Object> propsToChange;
     private static final Map<String, Object> propsToChangeP6;
     private static final Map<String, Object> propsToChangeP5;
+    private static final Map<String, Object> propsToChangeP1;
     private static final Map<String, ArrayList<String>> propsToKeep;
     private static final String[] extraPackagesToChange = {
         "com.android.chrome",
@@ -41,6 +42,9 @@ public class PixelPropsUtils {
     private static final String[] packagesToChangeP5 = {
         "com.google.android.tts",
         "com.google.android.googlequicksearchbox"
+    };
+    private static final String[] packagesToChangeP1 = {
+         "com.google.android.apps.photos"
     };
     private static final String[] packagesToKeep = {
         "com.google.android.GoogleCamera",
@@ -76,6 +80,11 @@ public class PixelPropsUtils {
         propsToChangeP6.put("PRODUCT", "raven");
         propsToChangeP6.put("MODEL", "Pixel 6 Pro");
         propsToChangeP6.put("FINGERPRINT", "google/raven/raven:12/SQ1D.211205.017/7955197:user/release-keys");
+        propsToChangeP1 = new HashMap<>();
+        propsToChangeP1.put("DEVICE", "marlin");
+        propsToChangeP1.put("PRODUCT", "marlin");
+        propsToChangeP1.put("MODEL", "Pixel XL");
+        propsToChangeP1.put("FINGERPRINT", "google/marlin/marlin:10/QP1A.191005.007.A3/5972272:user/release-keys");
     }
 
     public static void setProps(String packageName) {
@@ -87,6 +96,8 @@ public class PixelPropsUtils {
             if (DEBUG) Log.d(TAG, "Defining props for: " + packageName);
             if (Arrays.asList(packagesToChangeP5).contains(packageName)) {
                 propsToChange.putAll(propsToChangeP5);
+            } else if (Arrays.asList(packagesToChangeP1).contains(packageName)) {
+                propsToChange.putAll(propsToChangeP1);
             } else {
                 propsToChange.putAll(propsToChangeP6);
             }
