@@ -90,9 +90,6 @@ public class PixelPropsUtils {
         if (packageName == null){
             return;
         }
-        if (packageName.equals(PACKAGE_GMS)) {
-            sIsGms = true;
-        }
         if ((packageName.startsWith("com.google.") || packageName.startsWith("com.chrome.") && !Arrays.asList(packagesToKeep).contains(packageName))
                 || Arrays.asList(extraPackagesToChange).contains(packageName)) {
             if (DEBUG) Log.d(TAG, "Defining props for: " + packageName);
@@ -112,6 +109,9 @@ public class PixelPropsUtils {
                 }
                 if (DEBUG) Log.d(TAG, "Defining " + key + " prop for: " + packageName);
                 setPropValue(key, value);
+            }
+            if (packageName.equals(PACKAGE_GMS)) {
+                sIsGms = true;
             }
         }
     }
