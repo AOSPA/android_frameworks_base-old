@@ -42,6 +42,7 @@ import androidx.annotation.VisibleForTesting
 import com.android.settingslib.Utils
 import com.android.systemui.FontSizeUtils
 import com.android.systemui.R
+import com.android.systemui.animation.LaunchableView
 import com.android.systemui.plugins.qs.QSIconView
 import com.android.systemui.plugins.qs.QSTile
 import com.android.systemui.plugins.qs.QSTile.BooleanState
@@ -54,7 +55,7 @@ open class QSTileViewImpl @JvmOverloads constructor(
     context: Context,
     private val _icon: QSIconView,
     private val collapsed: Boolean = false
-) : QSTileView(context), HeightOverrideable {
+) : QSTileView(context), HeightOverrideable, LaunchableView {
 
     companion object {
         private const val INVALID = -1
@@ -130,6 +131,8 @@ open class QSTileViewImpl @JvmOverloads constructor(
     private var lastStateDescription: CharSequence? = null
     private var tileState = false
     private var lastState = INVALID
+    private var blockVisibilityChanges = false
+    private var lastVisibility = View.VISIBLE
 
     private val locInScreen = IntArray(2)
 
@@ -239,12 +242,12 @@ open class QSTileViewImpl @JvmOverloads constructor(
     }
 
     private fun updateHeight() {
-        val actualHeight = (if (heightOverride != HeightOverrideable.NO_OVERRIDE) {
+        val actualHeight = if (heightOverride != HeightOverrideable.NO_OVERRIDE) {
             heightOverride
         } else {
             measuredHeight
-        } * squishinessFraction).toInt()
-        bottom = top + actualHeight
+        }
+        bottom = top + (actualHeight * squishinessFraction).toInt()
         scrollY = (actualHeight - height) / 2
     }
 
@@ -321,6 +324,36 @@ open class QSTileViewImpl @JvmOverloads constructor(
 
     override fun getSecondaryIcon(): View {
         return sideView
+    }
+
+    override fun setShouldBlockVisibilityChanges(block: Boolean) {
+        blockVisibilityChanges = block
+
+        if (block) {
+            lastVisibility = visibility
+        } else {
+            visibility = lastVisibility
+        }
+    }
+
+    override fun setVisibility(visibility: Int) {
+        if (blockVisibilityChanges) {
+            lastVisibility = visibility
+            return
+        }
+
+        super.setVisibility(visibility)
+    }
+
+    override fun setTransitionVisibility(visibility: Int) {
+        if (blockVisibilityChanges) {
+            // View.setTransitionVisibility just sets the visibility flag, so we don't have to save
+            // the transition visibility separately from the normal visibility.
+            lastVisibility = visibility
+            return
+        }
+
+        super.setTransitionVisibility(visibility)
     }
 
     // Accessibility
@@ -488,7 +521,7 @@ open class QSTileViewImpl @JvmOverloads constructor(
     }
 
     private fun setColor(color: Int) {
-        colorBackgroundDrawable.setTint(color)
+        colorBackgroundDrawable.mutate().setTint(color)
         paintColor = color
     }
 
@@ -614,6 +647,7 @@ internal object SubtitleArrayMapping {
         "mictoggle" to R.array.tile_states_mictoggle,
         "controls" to R.array.tile_states_controls,
         "wallet" to R.array.tile_states_wallet,
+        "qr_code_scanner" to R.array.tile_states_qr_code_scanner,
         "alarm" to R.array.tile_states_alarm
     )
 

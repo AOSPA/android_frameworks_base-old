@@ -39,8 +39,8 @@ import com.android.systemui.statusbar.gesture.SwipeStatusBarAwayGestureHandler
 import com.android.systemui.statusbar.notification.collection.NotificationEntry
 import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener
-import com.android.systemui.statusbar.phone.StatusBarWindowController
 import com.android.systemui.statusbar.policy.CallbackController
+import com.android.systemui.statusbar.window.StatusBarWindowController
 import com.android.systemui.util.time.SystemClock
 import java.io.FileDescriptor
 import java.io.PrintWriter
@@ -86,7 +86,7 @@ class OngoingCallController @Inject constructor(
         //
         // TODO(b/183229367): Remove this function override when b/178406514 is fixed.
         override fun onEntryAdded(entry: NotificationEntry) {
-            onEntryUpdated(entry)
+            onEntryUpdated(entry, true)
         }
 
         override fun onEntryUpdated(entry: NotificationEntry) {

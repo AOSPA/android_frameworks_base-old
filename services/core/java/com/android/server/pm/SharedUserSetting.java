@@ -94,6 +94,7 @@ public final class SharedUserSetting extends SettingBase {
     private SharedUserSetting(SharedUserSetting orig) {
         super(orig);
         name = orig.name;
+        userId = orig.userId;
         uidFlags = orig.uidFlags;
         uidPrivateFlags = orig.uidPrivateFlags;
         packages = new ArraySet<>(orig.packages);
@@ -147,17 +148,17 @@ public final class SharedUserSetting extends SettingBase {
             return false;
         }
         // recalculate the pkgFlags for this shared user if needed
-        if ((this.pkgFlags & packageSetting.pkgFlags) != 0) {
+        if ((this.getFlags() & packageSetting.getFlags()) != 0) {
             int aggregatedFlags = uidFlags;
             for (PackageSetting ps : packages) {
-                aggregatedFlags |= ps.pkgFlags;
+                aggregatedFlags |= ps.getFlags();
             }
             setFlags(aggregatedFlags);
         }
-        if ((this.pkgPrivateFlags & packageSetting.pkgPrivateFlags) != 0) {
+        if ((this.getPrivateFlags() & packageSetting.getPrivateFlags()) != 0) {
             int aggregatedPrivateFlags = uidPrivateFlags;
             for (PackageSetting ps : packages) {
-                aggregatedPrivateFlags |= ps.pkgPrivateFlags;
+                aggregatedPrivateFlags |= ps.getPrivateFlags();
             }
             setPrivateFlags(aggregatedPrivateFlags);
         }
@@ -174,8 +175,8 @@ public final class SharedUserSetting extends SettingBase {
             seInfoTargetSdkVersion = packageSetting.getPkg().getTargetSdkVersion();
         }
         if (packages.add(packageSetting)) {
-            setFlags(this.pkgFlags | packageSetting.pkgFlags);
-            setPrivateFlags(this.pkgPrivateFlags | packageSetting.pkgPrivateFlags);
+            setFlags(this.getFlags() | packageSetting.getFlags());
+            setPrivateFlags(this.getPrivateFlags() | packageSetting.getPrivateFlags());
             onChanged();
         }
         if (packageSetting.getPkg() != null) {
@@ -201,7 +202,7 @@ public final class SharedUserSetting extends SettingBase {
     }
 
     public boolean isPrivileged() {
-        return (this.pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0;
+        return (this.getPrivateFlags() & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0;
     }
 
     /**

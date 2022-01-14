@@ -27,6 +27,7 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_OPEN;
 import static com.android.server.wm.DisplayRotationProto.FIXED_TO_USER_ROTATION_MODE;
 import static com.android.server.wm.DisplayRotationProto.FROZEN_TO_USER_ROTATION;
+import static com.android.server.wm.DisplayRotationProto.IS_FIXED_TO_USER_ROTATION;
 import static com.android.server.wm.DisplayRotationProto.LAST_ORIENTATION;
 import static com.android.server.wm.DisplayRotationProto.ROTATION;
 import static com.android.server.wm.DisplayRotationProto.USER_ROTATION;
@@ -1394,7 +1395,7 @@ public class DisplayRotation {
             case ActivityInfo.SCREEN_ORIENTATION_USER:
             case ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED:
                 // Works with any rotation except upside down.
-                return (preferredRotation >= 0) && (preferredRotation != mUpsideDownRotation);
+                return (preferredRotation >= 0) && (preferredRotation != Surface.ROTATION_180);
         }
 
         return false;
@@ -1591,6 +1592,7 @@ public class DisplayRotation {
         proto.write(USER_ROTATION, getUserRotation());
         proto.write(FIXED_TO_USER_ROTATION_MODE, mFixedToUserRotation);
         proto.write(LAST_ORIENTATION, mLastOrientation);
+        proto.write(IS_FIXED_TO_USER_ROTATION, isFixedToUserRotation());
         proto.end(token);
     }
 

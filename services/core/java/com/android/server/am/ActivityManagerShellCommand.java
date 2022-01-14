@@ -29,6 +29,8 @@ import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_CRI
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_LOW;
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_MODERATE;
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
+import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.LowMemDetector.ADJ_MEM_FACTOR_NOTHING;
 
 import android.app.ActivityManager;
@@ -85,6 +87,7 @@ import android.os.ShellCommand;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.text.TextUtils;
@@ -100,6 +103,7 @@ import com.android.internal.util.HexDump;
 import com.android.internal.util.MemInfoReader;
 import com.android.server.am.LowMemDetector.MemFactor;
 import com.android.server.compat.PlatformCompat;
+import com.android.server.utils.Slogf;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -128,6 +132,10 @@ import javax.microedition.khronos.egl.EGLDisplay;
 import javax.microedition.khronos.egl.EGLSurface;
 
 final class ActivityManagerShellCommand extends ShellCommand {
+
+    static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityManagerShellCommand" : TAG_AM;
+
+
     public static final String NO_CLASS_ERROR_CODE = "Error type 3";
 
     private static final String SHELL_PACKAGE_NAME = "com.android.shell";
@@ -325,6 +333,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runServiceRestartBackoff(pw);
                 case "get-isolated-pids":
                     return runGetIsolatedProcesses(pw);
+                case "set-stop-user-on-switch":
+                    return runSetStopUserOnSwitch(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -1880,16 +1890,21 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         int userId = Integer.parseInt(getNextArgRequired());
         boolean switched;
-        if (wait) {
-            switched = switchUserAndWaitForComplete(userId);
-        } else {
-            switched = mInterface.switchUser(userId);
-        }
-        if (switched) {
-            return 0;
-        } else {
-            pw.printf("Error: Failed to switch to user %d\n", userId);
-            return 1;
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "shell_runSwitchUser");
+        try {
+            if (wait) {
+                switched = switchUserAndWaitForComplete(userId);
+            } else {
+                switched = mInterface.switchUser(userId);
+            }
+            if (switched) {
+                return 0;
+            } else {
+                pw.printf("Error: Failed to switch to user %d\n", userId);
+                return 1;
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
@@ -3175,6 +3190,29 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runSetStopUserOnSwitch(PrintWriter pw) throws RemoteException {
+        mInternal.enforceCallingPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
+                "setStopUserOnSwitch()");
+        String arg = getNextArg();
+        if (arg == null) {
+            Slogf.i(TAG, "setStopUserOnSwitch(): resetting to default value");
+            mInternal.setStopUserOnSwitch(ActivityManager.STOP_USER_ON_SWITCH_DEFAULT);
+            pw.println("Reset to default value");
+            return 0;
+        }
+
+        boolean stop = Boolean.parseBoolean(arg);
+        int value = stop
+                ? ActivityManager.STOP_USER_ON_SWITCH_TRUE
+                : ActivityManager.STOP_USER_ON_SWITCH_FALSE;
+
+        Slogf.i(TAG, "runSetStopUserOnSwitch(): setting to %d (%b)", value, stop);
+        mInternal.setStopUserOnSwitch(value);
+        pw.println("Set to " + stop);
+
+        return 0;
+    }
+
     private Resources getResources(PrintWriter pw) throws RemoteException {
         // system resources does not contain all the device configuration, construct it manually.
         Configuration config = mInterface.getConfiguration();
@@ -3507,6 +3545,10 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("            Shows the restart backoff policy state for <PACKAGE_NAME>.");
             pw.println("  get-isolated-pids <UID>");
             pw.println("         Get the PIDs of isolated processes with packages in this <UID>");
+            pw.println("  set-stop-user-on-switch [true|false]");
+            pw.println("         Sets whether the current user (and its profiles) should be stopped"
+                    + " when switching to a different user.");
+            pw.println("         Without arguments, it resets to the value defined by platform.");
             pw.println();
             Intent.printIntentArgsHelp(pw, "");
         }

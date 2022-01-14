@@ -25,6 +25,8 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardSliceProvider;
 import com.android.systemui.people.PeopleProvider;
 import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.unfold.SysUIUnfoldComponent;
+import com.android.systemui.unfold.util.NaturalRotationUnfoldProgressProvider;
 import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.apppairs.AppPairs;
@@ -34,6 +36,7 @@ import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
+import com.android.wm.shell.recents.RecentTasks;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.startingsurface.StartingSurface;
 import com.android.wm.shell.tasksurfacehelper.TaskSurfaceHelper;
@@ -101,6 +104,9 @@ public interface SysUIComponent {
         @BindsInstance
         Builder setTaskSurfaceHelper(Optional<TaskSurfaceHelper> t);
 
+        @BindsInstance
+        Builder setRecentTasks(Optional<RecentTasks> r);
+
         SysUIComponent build();
     }
 
@@ -108,7 +114,14 @@ public interface SysUIComponent {
      * Initializes all the SysUI components.
      */
     default void init() {
-        // Do nothing
+        // Initialize components that have no direct tie to the dagger dependency graph,
+        // but are critical to this component's operation
+        // TODO(b/205034537): I think this is a good idea?
+        getSysUIUnfoldComponent().ifPresent(c -> {
+            c.getUnfoldLightRevealOverlayAnimation().init();
+            c.getUnfoldTransitionWallpaperController().init();
+        });
+        getNaturalRotationUnfoldProgressProvider().ifPresent(o -> o.init());
     }
 
     /**
@@ -144,6 +157,16 @@ public interface SysUIComponent {
      */
     @SysUISingleton
     InitController getInitController();
+
+    /**
+     * For devices with a hinge: access objects within this component
+     */
+    Optional<SysUIUnfoldComponent> getSysUIUnfoldComponent();
+
+    /**
+     * For devices with a hinge: the rotation animation
+     */
+    Optional<NaturalRotationUnfoldProgressProvider> getNaturalRotationUnfoldProgressProvider();
 
     /**
      * Member injection into the supplied argument.

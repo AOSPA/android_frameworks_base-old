@@ -18,12 +18,14 @@ package com.android.systemui;
 
 import android.app.ActivityThread;
 import android.app.Application;
+import android.app.Notification;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
+import android.os.Bundle;
 import android.os.Process;
 import android.os.SystemProperties;
 import android.os.Trace;
@@ -60,7 +62,7 @@ public class SystemUIApplication extends Application implements
     /**
      * Hold a reference on the stuff we start.
      */
-    private SystemUI[] mServices;
+    private CoreStartable[] mServices;
     private boolean mServicesStarted;
     private SystemUIAppComponentFactory.ContextAvailableCallback mContextAvailableCallback;
     private GlobalRootComponent mRootComponent;
@@ -190,7 +192,7 @@ public class SystemUIApplication extends Application implements
         if (mServicesStarted) {
             return;
         }
-        mServices = new SystemUI[services.length];
+        mServices = new CoreStartable[services.length];
 
         if (!mBootCompleteCache.isBootComplete()) {
             // check to see if maybe it was already completed long before we began
@@ -217,10 +219,10 @@ public class SystemUIApplication extends Application implements
             log.traceBegin(metricsPrefix + clsName);
             long ti = System.currentTimeMillis();
             try {
-                SystemUI obj = mComponentHelper.resolveSystemUI(clsName);
+                CoreStartable obj = mComponentHelper.resolveCoreStartable(clsName);
                 if (obj == null) {
                     Constructor constructor = Class.forName(clsName).getConstructor(Context.class);
-                    obj = (SystemUI) constructor.newInstance(this);
+                    obj = (CoreStartable) constructor.newInstance(this);
                 }
                 mServices[i] = obj;
             } catch (ClassNotFoundException
@@ -265,7 +267,7 @@ public class SystemUIApplication extends Application implements
         }
     }
 
-    public SystemUI[] getServices() {
+    public CoreStartable[] getServices() {
         return mServices;
     }
 
@@ -275,4 +277,15 @@ public class SystemUIApplication extends Application implements
         mContextAvailableCallback = callback;
     }
 
+    /** Update a notifications application name. */
+    public static void overrideNotificationAppName(Context context, Notification.Builder n,
+            boolean system) {
+        final Bundle extras = new Bundle();
+        String appName = system
+                ? context.getString(com.android.internal.R.string.notification_app_name_system)
+                : context.getString(com.android.internal.R.string.notification_app_name_settings);
+        extras.putString(Notification.EXTRA_SUBSTITUTE_APP_NAME, appName);
+
+        n.addExtras(extras);
+    }
 }

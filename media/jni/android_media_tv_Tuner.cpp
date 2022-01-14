@@ -123,9 +123,12 @@
 #include <aidl/android/hardware/tv/tuner/FrontendIsdbtBandwidth.h>
 #include <aidl/android/hardware/tv/tuner/FrontendIsdbtCoderate.h>
 #include <aidl/android/hardware/tv/tuner/FrontendIsdbtGuardInterval.h>
+#include <aidl/android/hardware/tv/tuner/FrontendIsdbtLayerSettings.h>
 #include <aidl/android/hardware/tv/tuner/FrontendIsdbtMode.h>
 #include <aidl/android/hardware/tv/tuner/FrontendIsdbtModulation.h>
+#include <aidl/android/hardware/tv/tuner/FrontendIsdbtPartialReceptionFlag.h>
 #include <aidl/android/hardware/tv/tuner/FrontendIsdbtSettings.h>
+#include <aidl/android/hardware/tv/tuner/FrontendIsdbtTimeInterleaveMode.h>
 #include <aidl/android/hardware/tv/tuner/FrontendModulation.h>
 #include <aidl/android/hardware/tv/tuner/FrontendModulationStatus.h>
 #include <aidl/android/hardware/tv/tuner/FrontendRollOff.h>
@@ -268,9 +271,12 @@ using ::aidl::android::hardware::tv::tuner::FrontendIsdbsStreamIdType;
 using ::aidl::android::hardware::tv::tuner::FrontendIsdbtBandwidth;
 using ::aidl::android::hardware::tv::tuner::FrontendIsdbtCoderate;
 using ::aidl::android::hardware::tv::tuner::FrontendIsdbtGuardInterval;
+using ::aidl::android::hardware::tv::tuner::FrontendIsdbtLayerSettings;
 using ::aidl::android::hardware::tv::tuner::FrontendIsdbtMode;
 using ::aidl::android::hardware::tv::tuner::FrontendIsdbtModulation;
+using ::aidl::android::hardware::tv::tuner::FrontendIsdbtPartialReceptionFlag;
 using ::aidl::android::hardware::tv::tuner::FrontendIsdbtSettings;
+using ::aidl::android::hardware::tv::tuner::FrontendIsdbtTimeInterleaveMode;
 using ::aidl::android::hardware::tv::tuner::FrontendModulation;
 using ::aidl::android::hardware::tv::tuner::FrontendModulationStatus;
 using ::aidl::android::hardware::tv::tuner::FrontendRollOff;
@@ -298,6 +304,7 @@ struct fields_t {
     jfieldID dvrRecorderContext;
     jfieldID dvrPlaybackContext;
     jfieldID mediaEventContext;
+    jfieldID sharedFilterContext;
     jmethodID frontendInitID;
     jmethodID filterInitID;
     jmethodID timeFilterInitID;
@@ -314,6 +321,9 @@ struct fields_t {
     jmethodID descramblerInitID;
     jmethodID linearBlockInitID;
     jmethodID linearBlockSetInternalStateID;
+    jmethodID sharedFilterInitID;
+    jmethodID onSharedFilterStatusID;
+    jmethodID onSharedFilterEventID;
 };
 
 static fields_t gFields;
@@ -884,10 +894,11 @@ void FilterClientCallbackImpl::onFilterEvent(const vector<DemuxFilterEvent> &eve
     }
     jobject filter(env->NewLocalRef(mFilterObj));
     if (!env->IsSameObject(filter, nullptr)) {
-        env->CallVoidMethod(
-                filter,
-                gFields.onFilterEventID,
-                array);
+        jmethodID methodID = gFields.onFilterEventID;
+        if (mSharedFilter) {
+            methodID = gFields.onSharedFilterEventID;
+        }
+        env->CallVoidMethod(filter, methodID, array);
     } else {
         ALOGE("FilterClientCallbackImpl::onFilterEvent:"
               "Filter object has been freed. Ignoring callback.");
@@ -899,13 +910,14 @@ void FilterClientCallbackImpl::onFilterStatus(const DemuxFilterStatus status) {
     JNIEnv *env = AndroidRuntime::getJNIEnv();
     jobject filter(env->NewLocalRef(mFilterObj));
     if (!env->IsSameObject(filter, nullptr)) {
-        env->CallVoidMethod(
-                filter,
-                gFields.onFilterStatusID,
-                (jint)status);
+        jmethodID methodID = gFields.onFilterStatusID;
+        if (mSharedFilter) {
+            methodID = gFields.onSharedFilterStatusID;
+        }
+        env->CallVoidMethod(filter, methodID, (jint)static_cast<uint8_t>(status));
     } else {
         ALOGE("FilterClientCallbackImpl::onFilterStatus:"
-                "Filter object has been freed. Ignoring callback.");
+              "Filter object has been freed. Ignoring callback.");
     }
 }
 
@@ -914,6 +926,15 @@ void FilterClientCallbackImpl::setFilter(jweak filterObj, sp<FilterClient> filte
     // Java Object
     mFilterObj = filterObj;
     mFilterClient = filterClient;
+    mSharedFilter = false;
+}
+
+void FilterClientCallbackImpl::setSharedFilter(jweak filterObj, sp<FilterClient> filterClient) {
+    ALOGV("FilterClientCallbackImpl::setFilter");
+    // Java Object
+    mFilterObj = filterObj;
+    mFilterClient = filterClient;
+    mSharedFilter = true;
 }
 
 FilterClientCallbackImpl::~FilterClientCallbackImpl() {
@@ -1340,16 +1361,19 @@ jobject JTuner::getIsdbsFrontendCaps(JNIEnv *env, FrontendCapabilities &caps) {
 
 jobject JTuner::getIsdbtFrontendCaps(JNIEnv *env, FrontendCapabilities &caps) {
     jclass clazz = env->FindClass("android/media/tv/tuner/frontend/IsdbtFrontendCapabilities");
-    jmethodID capsInit = env->GetMethodID(clazz, "<init>", "(IIIII)V");
+    jmethodID capsInit = env->GetMethodID(clazz, "<init>", "(IIIIIIZZ)V");
 
     jint modeCap = caps.get<FrontendCapabilities::Tag::isdbtCaps>().modeCap;
     jint bandwidthCap = caps.get<FrontendCapabilities::Tag::isdbtCaps>().bandwidthCap;
     jint modulationCap = caps.get<FrontendCapabilities::Tag::isdbtCaps>().modulationCap;
     jint coderateCap = caps.get<FrontendCapabilities::Tag::isdbtCaps>().coderateCap;
     jint guardIntervalCap = caps.get<FrontendCapabilities::Tag::isdbtCaps>().guardIntervalCap;
+    jint timeInterleaveCap = caps.get<FrontendCapabilities::Tag::isdbtCaps>().timeInterleaveCap;
+    jboolean isSegmentAuto = caps.get<FrontendCapabilities::Tag::isdbtCaps>().isSegmentAuto;
+    jboolean isFullSegment = caps.get<FrontendCapabilities::Tag::isdbtCaps>().isFullSegment;
 
     return env->NewObject(clazz, capsInit, modeCap, bandwidthCap, modulationCap, coderateCap,
-            guardIntervalCap);
+                          guardIntervalCap, timeInterleaveCap, isSegmentAuto, isFullSegment);
 }
 
 jobject JTuner::getDtmbFrontendCaps(JNIEnv *env, FrontendCapabilities &caps) {
@@ -2321,6 +2345,13 @@ jobject JTuner::getFrontendStatus(jintArray types) {
                             valid = true;
                            break;
                         }
+                        case FrontendInterleaveMode::Tag::isdbt: {
+                            in[0] = static_cast<jint>(
+                                    interleaving.get<FrontendInterleaveMode::Tag::isdbt>());
+                            env->SetIntArrayRegion(valObj, i, 1, in);
+                            valid = true;
+                            break;
+                        }
                         default:
                             break;
                     }
@@ -2397,6 +2428,22 @@ jobject JTuner::getFrontendStatus(jintArray types) {
                 jobject newBooleanObj = env->NewObject(booleanClazz, initBoolean,
                                                        s.get<FrontendStatus::Tag::isShortFrames>());
                 env->SetObjectField(statusObj, field, newBooleanObj);
+                break;
+            }
+            case FrontendStatus::Tag::isdbtMode: {
+                jfieldID field = env->GetFieldID(clazz, "mIsdbtMode", "Ljava/lang/Integer;");
+                jobject newIntegerObj =
+                        env->NewObject(intClazz, initInt, s.get<FrontendStatus::Tag::isdbtMode>());
+                env->SetObjectField(statusObj, field, newIntegerObj);
+                break;
+            }
+            case FrontendStatus::Tag::partialReceptionFlag: {
+                jfieldID field =
+                        env->GetFieldID(clazz, "mIsdbtPartialReceptionFlag", "Ljava/lang/Integer;");
+                jobject newIntegerObj =
+                        env->NewObject(intClazz, initInt,
+                                       s.get<FrontendStatus::Tag::partialReceptionFlag>());
+                env->SetObjectField(statusObj, field, newIntegerObj);
                 break;
             }
             default: {
@@ -2864,35 +2911,55 @@ static FrontendSettings getIsdbtFrontendSettings(JNIEnv *env, const jobject& set
     int64_t endFreq = getFrontendSettingsEndFreq(env, settings);
     FrontendSpectralInversion inversion = getFrontendSettingsSpectralInversion(env, settings);
     jclass clazz = env->FindClass("android/media/tv/tuner/frontend/IsdbtFrontendSettings");
-    FrontendIsdbtModulation modulation =
-            static_cast<FrontendIsdbtModulation>(
-                    env->GetIntField(settings, env->GetFieldID(clazz, "mModulation", "I")));
     FrontendIsdbtBandwidth bandwidth =
             static_cast<FrontendIsdbtBandwidth>(
                     env->GetIntField(settings, env->GetFieldID(clazz, "mBandwidth", "I")));
-    FrontendIsdbtMode mode =
-            static_cast<FrontendIsdbtMode>(
-                    env->GetIntField(settings, env->GetFieldID(clazz, "mMode", "I")));
-    FrontendIsdbtCoderate coderate =
-            static_cast<FrontendIsdbtCoderate>(
-                    env->GetIntField(settings, env->GetFieldID(clazz, "mCodeRate", "I")));
+    FrontendIsdbtMode mode = static_cast<FrontendIsdbtMode>(
+            env->GetIntField(settings, env->GetFieldID(clazz, "mMode", "I")));
     FrontendIsdbtGuardInterval guardInterval =
             static_cast<FrontendIsdbtGuardInterval>(
                     env->GetIntField(settings, env->GetFieldID(clazz, "mGuardInterval", "I")));
     int32_t serviceAreaId =
             env->GetIntField(settings, env->GetFieldID(clazz, "mServiceAreaId", "I"));
+    FrontendIsdbtPartialReceptionFlag partialReceptionFlag =
+            static_cast<FrontendIsdbtPartialReceptionFlag>(
+                    env->GetIntField(settings,
+                                     env->GetFieldID(clazz, "mPartialReceptionFlag", "I")));
 
     FrontendIsdbtSettings frontendIsdbtSettings{
             .frequency = freq,
             .endFrequency = endFreq,
-            .modulation = modulation,
             .bandwidth = bandwidth,
             .mode = mode,
-            .coderate = coderate,
             .guardInterval = guardInterval,
             .serviceAreaId = serviceAreaId,
             .inversion = inversion,
+            .partialReceptionFlag = partialReceptionFlag,
     };
+
+    jobjectArray layerSettings = reinterpret_cast<jobjectArray>(
+            env->GetObjectField(settings,
+                                env->GetFieldID(clazz, "mLayerSettings",
+                                                "[Landroid/media/tv/tuner/frontend/"
+                                                "IsdbtFrontendSettings$IsdbtLayerSettings;")));
+    int len = env->GetArrayLength(layerSettings);
+    jclass layerClazz = env->FindClass(
+            "android/media/tv/tuner/frontend/IsdbtFrontendSettings$IsdbtLayerSettings");
+    frontendIsdbtSettings.layerSettings.resize(len);
+    for (int i = 0; i < len; i++) {
+        jobject layer = env->GetObjectArrayElement(layerSettings, i);
+        frontendIsdbtSettings.layerSettings[i].modulation = static_cast<FrontendIsdbtModulation>(
+                env->GetIntField(layer, env->GetFieldID(layerClazz, "mModulation", "I")));
+        frontendIsdbtSettings.layerSettings[i].timeInterleave =
+                static_cast<FrontendIsdbtTimeInterleaveMode>(
+                        env->GetIntField(layer,
+                                         env->GetFieldID(layerClazz, "mTimeInterleaveMode", "I")));
+        frontendIsdbtSettings.layerSettings[i].coderate = static_cast<FrontendIsdbtCoderate>(
+                env->GetIntField(layer, env->GetFieldID(layerClazz, "mCodeRate", "I")));
+        frontendIsdbtSettings.layerSettings[i].numOfSegment =
+                env->GetIntField(layer, env->GetFieldID(layerClazz, "mNumOfSegment", "I"));
+    }
+
     frontendSettings.set<FrontendSettings::Tag::isdbt>(frontendIsdbtSettings);
     return frontendSettings;
 }
@@ -2974,6 +3041,10 @@ static sp<FilterClient> getFilterClient(JNIEnv *env, jobject filter) {
     return (FilterClient *)env->GetLongField(filter, gFields.filterContext);
 }
 
+static sp<FilterClient> getSharedFilterClient(JNIEnv *env, jobject filter) {
+    return (FilterClient *)env->GetLongField(filter, gFields.sharedFilterContext);
+}
+
 static sp<LnbClient> getLnbClient(JNIEnv *env, jobject lnb) {
     return (LnbClient *)env->GetLongField(lnb, gFields.lnbContext);
 }
@@ -3048,6 +3119,14 @@ static void android_media_tv_Tuner_native_init(JNIEnv *env) {
     gFields.onFilterEventID =
             env->GetMethodID(filterClazz, "onFilterEvent",
                     "([Landroid/media/tv/tuner/filter/FilterEvent;)V");
+
+    jclass sharedFilterClazz = env->FindClass("android/media/tv/tuner/filter/SharedFilter");
+    gFields.sharedFilterContext = env->GetFieldID(filterClazz, "mNativeContext", "J");
+    gFields.sharedFilterInitID = env->GetMethodID(sharedFilterClazz, "<init>", "()V");
+    gFields.onSharedFilterStatusID = env->GetMethodID(sharedFilterClazz, "onFilterStatus", "(I)V");
+    gFields.onSharedFilterEventID =
+            env->GetMethodID(sharedFilterClazz, "onFilterEvent",
+                             "([Landroid/media/tv/tuner/filter/FilterEvent;)V");
 
     jclass timeFilterClazz = env->FindClass("android/media/tv/tuner/filter/TimeFilter");
     gFields.timeFilterContext = env->GetFieldID(timeFilterClazz, "mNativeContext", "J");
@@ -3718,7 +3797,12 @@ static jint android_media_tv_Tuner_set_filter_data_source(
 }
 
 static jint android_media_tv_Tuner_start_filter(JNIEnv *env, jobject filter) {
-    sp<FilterClient> filterClient = getFilterClient(env, filter);
+    sp<FilterClient> filterClient = nullptr;
+    if (env->IsInstanceOf(filter, env->FindClass("android/media/tv/tuner/filter/SharedFilter"))) {
+        filterClient = getSharedFilterClient(env, filter);
+    } else {
+        filterClient = getFilterClient(env, filter);
+    }
     if (filterClient == nullptr) {
         ALOGD("Failed to start filter: filter client not found");
         return (int)Result::NOT_INITIALIZED;
@@ -3727,7 +3811,12 @@ static jint android_media_tv_Tuner_start_filter(JNIEnv *env, jobject filter) {
 }
 
 static jint android_media_tv_Tuner_stop_filter(JNIEnv *env, jobject filter) {
-    sp<FilterClient> filterClient = getFilterClient(env, filter);
+    sp<FilterClient> filterClient = nullptr;
+    if (env->IsInstanceOf(filter, env->FindClass("android/media/tv/tuner/filter/SharedFilter"))) {
+        filterClient = getSharedFilterClient(env, filter);
+    } else {
+        filterClient = getFilterClient(env, filter);
+    }
     if (filterClient == nullptr) {
         ALOGD("Failed to stop filter: filter client not found");
         return (int)Result::NOT_INITIALIZED;
@@ -3736,17 +3825,27 @@ static jint android_media_tv_Tuner_stop_filter(JNIEnv *env, jobject filter) {
 }
 
 static jint android_media_tv_Tuner_flush_filter(JNIEnv *env, jobject filter) {
-    sp<FilterClient> filterClient = getFilterClient(env, filter);
+    sp<FilterClient> filterClient = nullptr;
+    if (env->IsInstanceOf(filter, env->FindClass("android/media/tv/tuner/filter/SharedFilter"))) {
+        filterClient = getSharedFilterClient(env, filter);
+    } else {
+        filterClient = getFilterClient(env, filter);
+    }
     if (filterClient == nullptr) {
         ALOGD("Failed to flush filter: filter client not found");
-        return (int)Result::NOT_INITIALIZED;
+        return (jint)Result::NOT_INITIALIZED;
     }
     return (jint)filterClient->flush();
 }
 
 static jint android_media_tv_Tuner_read_filter_fmq(
         JNIEnv *env, jobject filter, jbyteArray buffer, jlong offset, jlong size) {
-    sp<FilterClient> filterClient = getFilterClient(env, filter);
+    sp<FilterClient> filterClient = nullptr;
+    if (env->IsInstanceOf(filter, env->FindClass("android/media/tv/tuner/filter/SharedFilter"))) {
+        filterClient = getSharedFilterClient(env, filter);
+    } else {
+        filterClient = getFilterClient(env, filter);
+    }
     if (filterClient == nullptr) {
         jniThrowException(env, "java/lang/IllegalStateException",
                 "Failed to read filter FMQ: filter client not found");
@@ -3766,14 +3865,57 @@ static jint android_media_tv_Tuner_read_filter_fmq(
 }
 
 static jint android_media_tv_Tuner_close_filter(JNIEnv *env, jobject filter) {
-    sp<FilterClient> filterClient = getFilterClient(env, filter);
+    sp<FilterClient> filterClient = nullptr;
+    bool shared = env->IsInstanceOf(
+        filter, env->FindClass("android/media/tv/tuner/filter/SharedFilter"));
+    if (shared) {
+        filterClient = getSharedFilterClient(env, filter);
+    } else {
+        filterClient = getFilterClient(env, filter);
+    }
     if (filterClient == nullptr) {
         jniThrowException(env, "java/lang/IllegalStateException",
                 "Failed to close filter: filter client not found");
         return 0;
     }
 
-    return (jint)filterClient->close();
+    Result r = filterClient->close();
+    filterClient->decStrong(filter);
+       env->SetLongField(filter, gFields.sharedFilterContext, 0);
+    if (shared) {
+    } else {
+        env->SetLongField(filter, gFields.filterContext, 0);
+    }
+
+    return (jint)r;
+}
+
+static jstring android_media_tv_Tuner_create_shared_filter(JNIEnv *env, jobject filter) {
+    sp<FilterClient> filterClient = getFilterClient(env, filter);
+    if (filterClient == nullptr) {
+        jniThrowException(env, "java/lang/IllegalStateException",
+                          "Failed to create shared filter: filter client not found");
+        return nullptr;
+    }
+
+    string token = filterClient->createSharedFilter();
+    if (token.empty()) {
+        return nullptr;
+    }
+    return env->NewStringUTF(token.data());
+}
+
+static void android_media_tv_Tuner_release_shared_filter(
+        JNIEnv *env, jobject filter, jstring token) {
+    sp<FilterClient> filterClient = getFilterClient(env, filter);
+    if (filterClient == nullptr) {
+        jniThrowException(env, "java/lang/IllegalStateException",
+                          "Failed to release shared filter: filter client not found");
+        return;
+    }
+
+    std::string filterToken(env->GetStringUTFChars(token, nullptr));
+    filterClient->releaseSharedFilter(filterToken);
 }
 
 static sp<TimeFilterClient> getTimeFilterClient(JNIEnv *env, jobject filter) {
@@ -3843,10 +3985,8 @@ static int android_media_tv_Tuner_time_filter_close(JNIEnv *env, jobject filter)
     }
 
     Result r = timeFilterClient->close();
-    if (r == Result::SUCCESS) {
-        timeFilterClient->decStrong(filter);
-        env->SetLongField(filter, gFields.timeFilterContext, 0);
-    }
+    timeFilterClient->decStrong(filter);
+    env->SetLongField(filter, gFields.timeFilterContext, 0);
     return (int)r;
 }
 
@@ -3896,9 +4036,8 @@ static jint android_media_tv_Tuner_close_descrambler(JNIEnv* env, jobject descra
         return (jint)Result::NOT_INITIALIZED;
     }
     Result r = descramblerClient->close();
-    if (r == Result::SUCCESS) {
-        descramblerClient->decStrong(descrambler);
-    }
+    descramblerClient->decStrong(descrambler);
+    env->SetLongField(descrambler, gFields.descramblerContext, 0);
     return (jint)r;
 }
 
@@ -3933,6 +4072,29 @@ static jint android_media_tv_Tuner_close_tuner(JNIEnv* env, jobject thiz) {
 static jint android_media_tv_Tuner_close_demux(JNIEnv* env, jobject thiz, jint /* handle */) {
     sp<JTuner> tuner = getTuner(env, thiz);
     return tuner->closeDemux();
+}
+
+static jobject android_media_tv_Tuner_open_shared_filter(
+        JNIEnv* env, jobject /* thiz */, jstring token) {
+
+    sp<TunerClient> tunerClient = new TunerClient();
+    std::string filterToken(env->GetStringUTFChars(token, nullptr));
+    sp<FilterClient> filterClient;
+    sp<FilterClientCallbackImpl> callback = new FilterClientCallbackImpl();
+    filterClient = tunerClient->openSharedFilter(filterToken, callback);
+    if (filterClient == nullptr) {
+        ALOGD("Failed to open shared filter %s", filterToken.c_str());
+        return nullptr;
+    }
+
+    jobject filterObj = env->NewObject(env->FindClass("android/media/tv/tuner/filter/SharedFilter"),
+                                       gFields.sharedFilterInitID);
+
+    filterClient->incStrong(filterObj);
+    env->SetLongField(filterObj, gFields.sharedFilterContext, (jlong)filterClient.get());
+    callback->setSharedFilter(env->NewWeakGlobalRef(filterObj), filterClient);
+
+    return filterObj;
 }
 
 static jint android_media_tv_Tuner_close_frontend(JNIEnv* env, jobject thiz, jint /* handle */) {
@@ -4014,7 +4176,14 @@ static jint android_media_tv_Tuner_close_dvr(JNIEnv* env, jobject dvr) {
         ALOGD("Failed to close dvr: dvr client not found");
         return (jint)Result::NOT_INITIALIZED;
     }
-    return (jint)dvrClient->close();
+    Result r = dvrClient->close();
+    bool isRecorder =
+            env->IsInstanceOf(dvr, env->FindClass("android/media/tv/tuner/dvr/DvrRecorder"));
+    jfieldID fieldId =
+            isRecorder ? gFields.dvrRecorderContext : gFields.dvrPlaybackContext;
+    dvrClient->decStrong(dvr);
+    env->SetLongField(dvr, fieldId, 0);
+    return (jint)r;
 }
 
 static jint android_media_tv_Tuner_lnb_set_voltage(JNIEnv* env, jobject lnb, jint voltage) {
@@ -4043,10 +4212,8 @@ static int android_media_tv_Tuner_lnb_send_diseqc_msg(JNIEnv* env, jobject lnb, 
 static int android_media_tv_Tuner_close_lnb(JNIEnv* env, jobject lnb) {
     sp<LnbClient> lnbClient = getLnbClient(env, lnb);
     Result r = lnbClient->close();
-    if (r == Result::SUCCESS) {
-        lnbClient->decStrong(lnb);
-        env->SetLongField(lnb, gFields.lnbContext, 0);
-    }
+    lnbClient->decStrong(lnb);
+    env->SetLongField(lnb, gFields.lnbContext, 0);
     return (jint)r;
 }
 
@@ -4221,6 +4388,9 @@ static const JNINativeMethod gTunerMethods[] = {
     { "nativeClose", "()I", (void *)android_media_tv_Tuner_close_tuner },
     { "nativeCloseFrontend", "(I)I", (void *)android_media_tv_Tuner_close_frontend },
     { "nativeCloseDemux", "(I)I", (void *)android_media_tv_Tuner_close_demux },
+    {"nativeOpenSharedFilter",
+            "(Ljava/lang/String;)Landroid/media/tv/tuner/filter/SharedFilter;",
+            (void *)android_media_tv_Tuner_open_shared_filter},
 };
 
 static const JNINativeMethod gFilterMethods[] = {
@@ -4238,6 +4408,18 @@ static const JNINativeMethod gFilterMethods[] = {
     { "nativeFlushFilter", "()I", (void *)android_media_tv_Tuner_flush_filter },
     { "nativeRead", "([BJJ)I", (void *)android_media_tv_Tuner_read_filter_fmq },
     { "nativeClose", "()I", (void *)android_media_tv_Tuner_close_filter },
+    {"nativeCreateSharedFilter", "()Ljava/lang/String;",
+            (void *)android_media_tv_Tuner_create_shared_filter},
+    {"nativeReleaseSharedFilter", "(Ljava/lang/String;)V",
+            (void *)android_media_tv_Tuner_release_shared_filter},
+};
+
+static const JNINativeMethod gSharedFilterMethods[] = {
+    {"nativeStartSharedFilter", "()I", (void *)android_media_tv_Tuner_start_filter},
+    {"nativeStopSharedFilter", "()I", (void *)android_media_tv_Tuner_stop_filter},
+    {"nativeFlushSharedFilter", "()I", (void *)android_media_tv_Tuner_flush_filter},
+    {"nativeSharedRead", "([BJJ)I", (void *)android_media_tv_Tuner_read_filter_fmq},
+    {"nativeSharedClose", "()I", (void *)android_media_tv_Tuner_close_filter},
 };
 
 static const JNINativeMethod gTimeFilterMethods[] = {
@@ -4319,6 +4501,13 @@ static bool register_android_media_tv_Tuner(JNIEnv *env) {
             gFilterMethods,
             NELEM(gFilterMethods)) != JNI_OK) {
         ALOGE("Failed to register filter native methods");
+        return false;
+    }
+    if (AndroidRuntime::registerNativeMethods(
+            env, "android/media/tv/tuner/filter/SharedFilter",
+            gSharedFilterMethods,
+            NELEM(gSharedFilterMethods)) != JNI_OK) {
+        ALOGE("Failed to register shared filter native methods");
         return false;
     }
     if (AndroidRuntime::registerNativeMethods(

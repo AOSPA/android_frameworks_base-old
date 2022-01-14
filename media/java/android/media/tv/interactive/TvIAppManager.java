@@ -19,21 +19,23 @@ package android.media.tv.interactive;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemService;
+import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.SparseArray;
+import android.view.Surface;
 
 import com.android.internal.util.Preconditions;
 
 /**
  * Central system API to the overall TV interactive application framework (TIAF) architecture, which
  * arbitrates interaction between applications and interactive apps.
- * @hide
  */
-@SystemService("tv_interactive_app")
+@SystemService(Context.TV_IAPP_SERVICE)
 public final class TvIAppManager {
+    // TODO: cleanup and unhide public APIs
     private static final String TAG = "TvIAppManager";
 
     private final ITvIAppManager mService;
@@ -49,6 +51,7 @@ public final class TvIAppManager {
 
     private final ITvIAppClient mClient;
 
+    /** @hide */
     public TvIAppManager(ITvIAppManager service, int userId) {
         mService = service;
         mUserId = userId;
@@ -84,6 +87,18 @@ public final class TvIAppManager {
                     }
                     record.mSession.releaseInternal();
                     record.postSessionReleased();
+                }
+            }
+
+            @Override
+            public void onLayoutSurface(int left, int top, int right, int bottom, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postLayoutSurface(left, top, right, bottom);
                 }
             }
         };
@@ -125,6 +140,7 @@ public final class TvIAppManager {
 
     /**
      * The Session provides the per-session functionality of interactive app.
+     * @hide
      */
     public static final class Session {
         private final ITvIAppManager mService;
@@ -150,6 +166,44 @@ public final class TvIAppManager {
             }
             try {
                 mService.startIApp(mToken, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
+         * Sets the {@link android.view.Surface} for this session.
+         *
+         * @param surface A {@link android.view.Surface} used to render video.
+         */
+        public void setSurface(Surface surface) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            // surface can be null.
+            try {
+                mService.setSurface(mToken, surface, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
+         * Notifies of any structural changes (format or size) of the surface passed in
+         * {@link #setSurface}.
+         *
+         * @param format The new PixelFormat of the surface.
+         * @param width The new width of the surface.
+         * @param height The new height of the surface.
+         */
+        public void dispatchSurfaceChanged(int format, int width, int height) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.dispatchSurfaceChanged(mToken, format, width, height, mUserId);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -208,6 +262,16 @@ public final class TvIAppManager {
                 }
             });
         }
+
+        void postLayoutSurface(final int left, final int top, final int right,
+                final int bottom) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onLayoutSurface(mSession, left, top, right, bottom);
+                }
+            });
+        }
     }
 
     /**
@@ -231,6 +295,19 @@ public final class TvIAppManager {
          * @param session the {@link TvIAppManager.Session} instance released.
          */
         public void onSessionReleased(@NonNull Session session) {
+        }
+
+        /**
+         * This is called when {@link TvIAppService.Session#layoutSurface} is called to change the
+         * layout of surface.
+         *
+         * @param session A {@link TvIAppManager.Session} associated with this callback.
+         * @param left Left position.
+         * @param top Top position.
+         * @param right Right position.
+         * @param bottom Bottom position.
+         */
+        public void onLayoutSurface(Session session, int left, int top, int right, int bottom) {
         }
     }
 }

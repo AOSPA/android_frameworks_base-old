@@ -34,10 +34,6 @@ class PhoneStatusBarViewTest : SysuiTestCase() {
     private lateinit var panelViewController: PanelViewController
     @Mock
     private lateinit var panelView: ViewGroup
-    @Mock
-    private lateinit var scrimController: ScrimController
-    @Mock
-    private lateinit var statusBar: StatusBar
 
     private lateinit var view: PhoneStatusBarView
 
@@ -49,61 +45,6 @@ class PhoneStatusBarViewTest : SysuiTestCase() {
         `when`(panelViewController.view).thenReturn(panelView)
 
         view = PhoneStatusBarView(mContext, null)
-        view.setScrimController(scrimController)
-        view.setBar(statusBar)
-    }
-
-    @Test
-    fun panelExpansionChanged_expansionChangeListenerNotified() {
-        val listener = TestExpansionChangedListener()
-        view.setExpansionChangedListeners(listOf(listener))
-        val fraction = 0.4f
-        val isExpanded = true
-
-        view.panelExpansionChanged(fraction, isExpanded)
-
-        assertThat(listener.fraction).isEqualTo(fraction)
-        assertThat(listener.isExpanded).isEqualTo(isExpanded)
-    }
-
-    @Test
-    fun panelExpansionChanged_noListeners_noCrash() {
-        view.panelExpansionChanged(1f, false)
-        // No assert needed, just testing no crash
-    }
-
-    @Test
-    fun panelStateChanged_toStateOpening_listenerNotified() {
-        val listener = TestStateChangedListener()
-        view.setPanelStateChangeListener(listener)
-
-        view.panelExpansionChanged(0.5f, true)
-
-        assertThat(listener.state).isEqualTo(PanelBar.STATE_OPENING)
-    }
-
-    @Test
-    fun panelStateChanged_toStateOpen_listenerNotified() {
-        val listener = TestStateChangedListener()
-        view.setPanelStateChangeListener(listener)
-
-        view.panelExpansionChanged(1f, true)
-
-        assertThat(listener.state).isEqualTo(PanelBar.STATE_OPEN)
-    }
-
-    @Test
-    fun panelStateChanged_toStateClosed_listenerNotified() {
-        val listener = TestStateChangedListener()
-        view.setPanelStateChangeListener(listener)
-
-        // First, open the panel
-        view.panelExpansionChanged(1f, true)
-
-        // Then, close it again
-        view.panelExpansionChanged(0f, false)
-
-        assertThat(listener.state).isEqualTo(PanelBar.STATE_CLOSED)
     }
 
     @Test
@@ -118,12 +59,23 @@ class PhoneStatusBarViewTest : SysuiTestCase() {
     }
 
     @Test
+    fun onInterceptTouchEvent_listenerNotified() {
+        val handler = TestTouchEventHandler()
+        view.setTouchEventHandler(handler)
+
+        val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
+        view.onInterceptTouchEvent(event)
+
+        assertThat(handler.lastInterceptEvent).isEqualTo(event)
+    }
+
+    @Test
     fun onTouchEvent_listenerReturnsTrue_viewReturnsTrue() {
         val handler = TestTouchEventHandler()
         view.setTouchEventHandler(handler)
         val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
 
-        handler.returnValue = true
+        handler.handleTouchReturnValue = true
 
         assertThat(view.onTouchEvent(event)).isTrue()
     }
@@ -134,7 +86,7 @@ class PhoneStatusBarViewTest : SysuiTestCase() {
         view.setTouchEventHandler(handler)
         val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
 
-        handler.returnValue = false
+        handler.handleTouchReturnValue = false
 
         assertThat(view.onTouchEvent(event)).isFalse()
     }
@@ -145,30 +97,18 @@ class PhoneStatusBarViewTest : SysuiTestCase() {
         // No assert needed, just testing no crash
     }
 
-    private class TestExpansionChangedListener
-        : StatusBar.ExpansionChangedListener {
-        var fraction: Float = 0f
-        var isExpanded: Boolean = false
-
-        override fun onExpansionChanged(expansion: Float, expanded: Boolean) {
-            this.fraction = expansion
-            this.isExpanded = expanded
-        }
-    }
-
-    private class TestStateChangedListener : PanelBar.PanelStateChangeListener {
-        var state: Int = 0
-        override fun onStateChanged(state: Int) {
-            this.state = state
-        }
-    }
-
     private class TestTouchEventHandler : PhoneStatusBarView.TouchEventHandler {
+        var lastInterceptEvent: MotionEvent? = null
         var lastEvent: MotionEvent? = null
-        var returnValue: Boolean = false
+        var handleTouchReturnValue: Boolean = false
+
+        override fun onInterceptTouchEvent(event: MotionEvent?) {
+            lastInterceptEvent = event
+        }
+
         override fun handleTouchEvent(event: MotionEvent?): Boolean {
             lastEvent = event
-            return returnValue
+            return handleTouchReturnValue
         }
     }
 }

@@ -16,6 +16,8 @@
 
 package android.app;
 
+import static android.app.ActivityManager.StopUserOnSwitch;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -687,6 +689,12 @@ public abstract class ActivityManagerInternal {
      */
     public abstract void setVoiceInteractionManagerProvider(
             @Nullable VoiceInteractionManagerProvider provider);
+
+    /**
+     * Sets whether the current foreground user (and its profiles) should be stopped after switched
+     * out.
+     */
+    public abstract void setStopUserOnSwitch(@StopUserOnSwitch int value);
 
     /**
      * Provides the interface to communicate between voice interaction manager service and

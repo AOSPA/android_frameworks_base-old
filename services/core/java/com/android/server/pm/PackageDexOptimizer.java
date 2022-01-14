@@ -46,6 +46,7 @@ import static dalvik.system.DexFile.isProfileGuidedCompilerFilter;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.SharedLibraryInfo;
@@ -64,7 +65,11 @@ import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.content.F2fsUtils;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.server.LocalServices;
+import com.android.server.apphibernation.AppHibernationManagerInternal;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.dex.ArtManagerService;
 import com.android.server.pm.dex.ArtStatsLogUtils;
@@ -75,6 +80,7 @@ import com.android.server.pm.dex.DexoptUtils;
 import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
+import com.android.server.pm.pkg.PackageStateInternal;
 
 import dalvik.system.DexFile;
 
@@ -134,30 +140,64 @@ public class PackageDexOptimizer {
     private volatile boolean mSystemReady;
 
     private final ArtStatsLogger mArtStatsLogger = new ArtStatsLogger();
+    private final Injector mInjector;
 
+
+    private final Context mContext;
     private static final Random sRandom = new Random();
 
     PackageDexOptimizer(Installer installer, Object installLock, Context context,
             String wakeLockTag) {
-        this.mInstaller = installer;
-        this.mInstallLock = installLock;
+        this(new Injector() {
+            @Override
+            public AppHibernationManagerInternal getAppHibernationManagerInternal() {
+                return LocalServices.getService(AppHibernationManagerInternal.class);
+            }
 
-        PowerManager powerManager = (PowerManager)context.getSystemService(Context.POWER_SERVICE);
-        mDexoptWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, wakeLockTag);
+            @Override
+            public PowerManager getPowerManager(Context context) {
+                return context.getSystemService(PowerManager.class);
+            }
+        }, installer, installLock, context, wakeLockTag);
     }
 
     protected PackageDexOptimizer(PackageDexOptimizer from) {
+        this.mContext = from.mContext;
         this.mInstaller = from.mInstaller;
         this.mInstallLock = from.mInstallLock;
         this.mDexoptWakeLock = from.mDexoptWakeLock;
         this.mSystemReady = from.mSystemReady;
+        this.mInjector = from.mInjector;
     }
 
-    static boolean canOptimizePackage(AndroidPackage pkg) {
+    @VisibleForTesting
+    PackageDexOptimizer(@NonNull Injector injector, Installer installer, Object installLock,
+            Context context, String wakeLockTag) {
+        this.mContext = context;
+        this.mInstaller = installer;
+        this.mInstallLock = installLock;
+
+        PowerManager powerManager = injector.getPowerManager(context);
+        mDexoptWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, wakeLockTag);
+        mInjector = injector;
+    }
+
+    boolean canOptimizePackage(AndroidPackage pkg) {
         // We do not dexopt a package with no code.
         // Note that the system package is marked as having no code, however we can
         // still optimize it via dexoptSystemServerPath.
         if (!PLATFORM_PACKAGE_NAME.equals(pkg.getPackageName()) && !pkg.isHasCode()) {
+            return false;
+        }
+
+        // We do not dexopt unused packages.
+        // It's possible for this to be called before app hibernation service is ready due to
+        // an OTA dexopt. In this case, we ignore the hibernation check here. This is fine since
+        // a hibernating app should have no artifacts to copy in the first place.
+        AppHibernationManagerInternal ahm = mInjector.getAppHibernationManagerInternal();
+        if (ahm != null
+                && ahm.isHibernatingGlobally(pkg.getPackageName())
+                && ahm.isOatArtifactDeletionEnabled()) {
             return false;
         }
 
@@ -172,7 +212,7 @@ public class PackageDexOptimizer {
      * synchronized on {@link #mInstallLock}.
      */
     @DexOptResult
-    int performDexOpt(AndroidPackage pkg, @NonNull PackageSetting pkgSetting,
+    int performDexOpt(AndroidPackage pkg, @NonNull PackageStateInternal pkgSetting,
             String[] instructionSets, CompilerStats.PackageStats packageStats,
             PackageDexUsage.PackageUseInfo packageUseInfo, DexoptOptions options) {
         if (PLATFORM_PACKAGE_NAME.equals(pkg.getPackageName())) {
@@ -212,12 +252,12 @@ public class PackageDexOptimizer {
      */
     @GuardedBy("mInstallLock")
     @DexOptResult
-    private int performDexOptLI(AndroidPackage pkg, @NonNull PackageSetting pkgSetting,
+    private int performDexOptLI(AndroidPackage pkg, @NonNull PackageStateInternal pkgSetting,
             String[] targetInstructionSets, CompilerStats.PackageStats packageStats,
             PackageDexUsage.PackageUseInfo packageUseInfo, DexoptOptions options) {
         // ClassLoader only refers non-native (jar) shared libraries and must ignore
         // native (so) shared libraries. See also LoadedApk#createSharedLibraryLoader().
-        final List<SharedLibraryInfo> sharedLibraries = pkgSetting.getPkgState()
+        final List<SharedLibraryInfo> sharedLibraries = pkgSetting.getTransientState()
                 .getNonNativeUsesLibraryInfos();
         final String[] instructionSets = targetInstructionSets != null ?
                 targetInstructionSets : getAppDexInstructionSets(
@@ -360,10 +400,11 @@ public class PackageDexOptimizer {
      */
     @GuardedBy("mInstallLock")
     @DexOptResult
-    private int dexOptPath(AndroidPackage pkg, @NonNull PackageSetting pkgSetting, String path,
-            String isa, String compilerFilter, int profileAnalysisResult, String classLoaderContext,
-            int dexoptFlags, int uid, CompilerStats.PackageStats packageStats, boolean downgrade,
-            String profileName, String dexMetadataPath, int compilationReason) {
+    private int dexOptPath(AndroidPackage pkg, @NonNull PackageStateInternal pkgSetting,
+            String path, String isa, String compilerFilter, int profileAnalysisResult,
+            String classLoaderContext, int dexoptFlags, int uid,
+            CompilerStats.PackageStats packageStats, boolean downgrade, String profileName,
+            String dexMetadataPath, int compilationReason) {
         int dexoptNeeded = getDexoptNeeded(path, isa, compilerFilter, classLoaderContext,
                 profileAnalysisResult, downgrade);
         if (Math.abs(dexoptNeeded) == DexFile.NO_DEXOPT_NEEDED) {
@@ -371,7 +412,7 @@ public class PackageDexOptimizer {
         }
 
         String oatDir = getPackageOatDirIfSupported(pkg,
-                pkgSetting.getPkgState().isUpdatedSystemApp());
+                pkgSetting.getTransientState().isUpdatedSystemApp());
 
         Log.i(TAG, "Running dexopt (dexoptNeeded=" + dexoptNeeded + ") on: " + path
                 + " pkg=" + pkg.getPackageName() + " isa=" + isa
@@ -397,6 +438,13 @@ public class PackageDexOptimizer {
             if (packageStats != null) {
                 long endTime = System.currentTimeMillis();
                 packageStats.setCompileTime(path, (int)(endTime - startTime));
+            }
+            if (oatDir != null) {
+                // Release odex/vdex compressed blocks to save user space.
+                // Compression support will be checked in F2fsUtils.
+                // The system app may be dexed, oatDir may be null, skip this situation.
+                final ContentResolver resolver = mContext.getContentResolver();
+                F2fsUtils.releaseCompressedBlocks(resolver, new File(oatDir));
             }
             return DEX_OPT_PERFORMED;
         } catch (InstallerException e) {
@@ -615,8 +663,8 @@ public class PackageDexOptimizer {
     /**
      * Dumps the dexopt state of the given package {@code pkg} to the given {@code PrintWriter}.
      */
-    void dumpDexoptState(IndentingPrintWriter pw, AndroidPackage pkg, PackageSetting pkgSetting,
-            PackageDexUsage.PackageUseInfo useInfo) {
+    void dumpDexoptState(IndentingPrintWriter pw, AndroidPackage pkg,
+            PackageStateInternal pkgSetting, PackageDexUsage.PackageUseInfo useInfo) {
         final String[] instructionSets = getAppDexInstructionSets(
                 AndroidPackageUtils.getPrimaryCpuAbi(pkg, pkgSetting),
                 AndroidPackageUtils.getSecondaryCpuAbi(pkg, pkgSetting));
@@ -753,7 +801,7 @@ public class PackageDexOptimizer {
                 info.getHiddenApiEnforcementPolicy(), info.splitDependencies,
                 info.requestsIsolatedSplitLoading(), compilerFilter, options);
     }
-    private int getDexFlags(AndroidPackage pkg, @NonNull PackageSetting pkgSetting,
+    private int getDexFlags(AndroidPackage pkg, @NonNull PackageStateInternal pkgSetting,
             String compilerFilter, DexoptOptions options) {
         return getDexFlags(pkg.isDebuggable(),
                 AndroidPackageUtils.getHiddenApiEnforcementPolicy(pkg, pkgSetting),
@@ -999,5 +1047,14 @@ public class PackageDexOptimizer {
      */
     private Installer getInstallerWithoutLock() {
         return mInstaller;
+    }
+
+    /**
+     * Injector for {@link PackageDexOptimizer} dependencies
+     */
+    interface Injector {
+        AppHibernationManagerInternal getAppHibernationManagerInternal();
+
+        PowerManager getPowerManager(Context context);
     }
 }

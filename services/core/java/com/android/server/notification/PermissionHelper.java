@@ -21,20 +21,27 @@ import static android.content.pm.PackageManager.GET_PERMISSIONS;
 import static android.permission.PermissionManager.PERMISSION_GRANTED;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.os.RemoteException;
 import android.permission.IPermissionManager;
+import android.util.ArrayMap;
+import android.util.Pair;
 import android.util.Slog;
 
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * NotificationManagerService helper for querying/setting the app-level notification permission
@@ -42,7 +49,7 @@ import java.util.Map;
 public final class PermissionHelper {
     private static final String TAG = "PermissionHelper";
 
-    private static String NOTIFICATION_PERMISSION = Manifest.permission.POST_NOTIFICATIONS;
+    private static final String NOTIFICATION_PERMISSION = Manifest.permission.POST_NOTIFICATIONS;
 
     private final PermissionManagerServiceInternal mPmi;
     private final IPackageManager mPackageManager;
@@ -75,9 +82,9 @@ public final class PermissionHelper {
      * Returns all of the apps that have requested the notification permission in a given user.
      * Must not be called with a lock held. Format: uid, packageName
      */
-    public Map<Integer, String> getAppsRequestingPermission(int userId) {
+    Set<Pair<Integer, String>> getAppsRequestingPermission(int userId) {
         assertFlag();
-        Map<Integer, String> requested = new HashMap<>();
+        Set<Pair<Integer, String>> requested = new HashSet<>();
         List<PackageInfo> pkgs = getInstalledPackages(userId);
         for (PackageInfo pi : pkgs) {
             // when data was stored in PreferencesHelper, we only had data for apps that
@@ -88,7 +95,7 @@ public final class PermissionHelper {
             }
             for (String perm : pi.requestedPermissions) {
                 if (NOTIFICATION_PERMISSION.equals(perm)) {
-                    requested.put(pi.applicationInfo.uid, pi.packageName);
+                    requested.add(new Pair<>(pi.applicationInfo.uid, pi.packageName));
                     break;
                 }
             }
@@ -113,9 +120,9 @@ public final class PermissionHelper {
      * Returns a list of apps that hold the notification permission. Must not be called
      * with a lock held. Format: uid, packageName.
      */
-    public Map<Integer, String> getAppsGrantedPermission(int userId) {
+    Set<Pair<Integer, String>> getAppsGrantedPermission(int userId) {
         assertFlag();
-        Map<Integer, String> granted = new HashMap<>();
+        Set<Pair<Integer, String>> granted = new HashSet<>();
         ParceledListSlice<PackageInfo> parceledList = null;
         try {
             parceledList = mPackageManager.getPackagesHoldingPermissions(
@@ -127,9 +134,22 @@ public final class PermissionHelper {
             return granted;
         }
         for (PackageInfo pi : parceledList.getList()) {
-            granted.put(pi.applicationInfo.uid, pi.packageName);
+            granted.add(new Pair<>(pi.applicationInfo.uid, pi.packageName));
         }
         return granted;
+    }
+
+    public @NonNull
+    ArrayMap<Pair<Integer, String>, Boolean> getNotificationPermissionValues(
+            int userId) {
+        assertFlag();
+        ArrayMap<Pair<Integer, String>, Boolean> notifPermissions = new ArrayMap<>();
+        Set<Pair<Integer, String>> allRequestingUids = getAppsRequestingPermission(userId);
+        Set<Pair<Integer, String>> allApprovedUids = getAppsGrantedPermission(userId);
+        for (Pair<Integer, String> pair : allRequestingUids) {
+            notifPermissions.put(pair, allApprovedUids.contains(pair));
+        }
+        return notifPermissions;
     }
 
     /**
@@ -157,9 +177,66 @@ public final class PermissionHelper {
         }
     }
 
+    public void setNotificationPermission(PackagePermission pkgPerm) {
+        assertFlag();
+        setNotificationPermission(
+                pkgPerm.packageName, pkgPerm.userId, pkgPerm.granted, pkgPerm.userSet);
+    }
+
+    public boolean isPermissionFixed(String packageName, @UserIdInt int userId) {
+        assertFlag();
+        try {
+            int flags = mPermManager.getPermissionFlags(packageName, NOTIFICATION_PERMISSION,
+                    userId);
+            return (flags & PackageManager.FLAG_PERMISSION_SYSTEM_FIXED) != 0
+                    || (flags & PackageManager.FLAG_PERMISSION_POLICY_FIXED) != 0;
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Could not reach system server", e);
+        }
+        return false;
+    }
+
     private void assertFlag() {
         if (!mMigrationEnabled) {
             throw new IllegalStateException("Method called without checking flag value");
+        }
+    }
+
+    public static class PackagePermission {
+        public final String packageName;
+        public final @UserIdInt int userId;
+        public final boolean granted;
+        public final boolean userSet;
+
+        public PackagePermission(String pkg, int userId, boolean granted, boolean userSet) {
+            this.packageName = pkg;
+            this.userId = userId;
+            this.granted = granted;
+            this.userSet = userSet;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            PackagePermission that = (PackagePermission) o;
+            return userId == that.userId && granted == that.granted && userSet == that.userSet
+                    && Objects.equals(packageName, that.packageName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(packageName, userId, granted, userSet);
+        }
+
+        @Override
+        public String toString() {
+            return "PackagePermission{" +
+                    "packageName='" + packageName + '\'' +
+                    ", userId=" + userId +
+                    ", granted=" + granted +
+                    ", userSet=" + userSet +
+                    '}';
         }
     }
 }

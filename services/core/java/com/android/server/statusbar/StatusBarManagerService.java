@@ -1066,8 +1066,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
 
     @Override
     public void setImeWindowStatus(int displayId, final IBinder token, final int vis,
-            final int backDisposition, final boolean showImeSwitcher,
-            boolean isMultiClientImeEnabled) {
+            final int backDisposition, final boolean showImeSwitcher) {
         enforceStatusBar();
 
         if (SPEW) {
@@ -1084,8 +1083,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 if (mBar == null) return;
                 try {
                     mBar.setImeWindowStatus(
-                            displayId, token, vis, backDisposition, showImeSwitcher,
-                            isMultiClientImeEnabled);
+                            displayId, token, vis, backDisposition, showImeSwitcher);
                 } catch (RemoteException ex) { }
             });
         }

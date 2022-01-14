@@ -44,12 +44,16 @@ import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.BatteryManagerInternal;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.Handler;
+import android.os.IDeviceIdleController;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PowerManager;
+import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
@@ -59,16 +63,19 @@ import android.util.SparseArrayMap;
 import android.util.SparseSetArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.pm.UserManagerInternal;
+import com.android.server.tare.EconomyManagerInternal.TareStateChangeListener;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * Responsible for handling app's ARC count based on events, ensuring ARCs are credited when
@@ -104,6 +111,8 @@ public class InternalResourceService extends SystemService {
     private final BatteryManagerInternal mBatteryManagerInternal;
     private final PackageManager mPackageManager;
     private final PackageManagerInternal mPackageManagerInternal;
+
+    private IDeviceIdleController mDeviceIdleController;
 
     private final Agent mAgent;
     private final ConfigObserver mConfigObserver;
@@ -163,8 +172,17 @@ public class InternalResourceService extends SystemService {
     @GuardedBy("mPackageToUidCache")
     private final SparseArrayMap<String, Integer> mPackageToUidCache = new SparseArrayMap<>();
 
+    private final CopyOnWriteArraySet<TareStateChangeListener> mStateChangeListeners =
+            new CopyOnWriteArraySet<>();
+
+    /** List of packages that are "exempted" from battery restrictions. */
+    // TODO(144864180): include userID
+    @GuardedBy("mLock")
+    private ArraySet<String> mExemptedApps = new ArraySet<>();
+
     private volatile boolean mIsEnabled;
     private volatile int mBootPhase;
+    private volatile boolean mExemptListLoaded;
     // In the range [0,100] to represent 0% to 100% battery.
     @GuardedBy("mLock")
     private int mCurrentBatteryLevel;
@@ -213,6 +231,9 @@ public class InternalResourceService extends SystemService {
                     onUserRemoved(userId);
                 }
                 break;
+                case PowerManager.ACTION_POWER_SAVE_WHITELIST_CHANGED:
+                    onExemptionListChanged();
+                    break;
             }
         }
     };
@@ -245,9 +266,9 @@ public class InternalResourceService extends SystemService {
     private static final int MSG_NOTIFY_AFFORDABILITY_CHANGE_LISTENER = 0;
     private static final int MSG_SCHEDULE_UNUSED_WEALTH_RECLAMATION_EVENT = 1;
     private static final int MSG_PROCESS_USAGE_EVENT = 2;
-    private static final int MSG_MAYBE_FOCE_RECLAIM = 3;
+    private static final int MSG_MAYBE_FORCE_RECLAIM = 3;
+    private static final int MSG_NOTIFY_STATE_CHANGE_LISTENERS = 4;
     private static final String ALARM_TAG_WEALTH_RECLAMATION = "*tare.reclamation*";
-    private static final String KEY_PKG = "pkg";
 
     /**
      * Initializes the system service.
@@ -286,7 +307,22 @@ public class InternalResourceService extends SystemService {
 
         if (PHASE_SYSTEM_SERVICES_READY == phase) {
             mConfigObserver.start();
+            mDeviceIdleController = IDeviceIdleController.Stub.asInterface(
+                    ServiceManager.getService(Context.DEVICE_IDLE_CONTROLLER));
             setupEverything();
+        } else if (PHASE_BOOT_COMPLETED == phase) {
+            if (!mExemptListLoaded) {
+                synchronized (mLock) {
+                    try {
+                        mExemptedApps =
+                                new ArraySet<>(mDeviceIdleController.getFullPowerWhitelist());
+                    } catch (RemoteException e) {
+                        // Shouldn't happen.
+                        Slog.wtf(TAG, e);
+                    }
+                    mExemptListLoaded = true;
+                }
+            }
         }
     }
 
@@ -351,6 +387,12 @@ public class InternalResourceService extends SystemService {
         return mIsEnabled;
     }
 
+    boolean isPackageExempted(final int userId, @NonNull String pkgName) {
+        synchronized (mLock) {
+            return mExemptedApps.contains(pkgName);
+        }
+    }
+
     boolean isSystem(final int userId, @NonNull String pkgName) {
         if ("android".equals(pkgName)) {
             return true;
@@ -364,7 +406,7 @@ public class InternalResourceService extends SystemService {
             if (newBatteryLevel > mCurrentBatteryLevel) {
                 mAgent.distributeBasicIncomeLocked(newBatteryLevel);
             } else if (newBatteryLevel < mCurrentBatteryLevel) {
-                mHandler.obtainMessage(MSG_MAYBE_FOCE_RECLAIM).sendToTarget();
+                mHandler.obtainMessage(MSG_MAYBE_FORCE_RECLAIM).sendToTarget();
             }
             mCurrentBatteryLevel = newBatteryLevel;
         }
@@ -373,6 +415,53 @@ public class InternalResourceService extends SystemService {
     void onDeviceStateChanged() {
         synchronized (mLock) {
             mAgent.onDeviceStateChangedLocked();
+        }
+    }
+
+    void onExemptionListChanged() {
+        final int[] userIds = LocalServices.getService(UserManagerInternal.class).getUserIds();
+        synchronized (mLock) {
+            final ArraySet<String> removed = mExemptedApps;
+            final ArraySet<String> added = new ArraySet<>();
+            try {
+                mExemptedApps = new ArraySet<>(mDeviceIdleController.getFullPowerWhitelist());
+            } catch (RemoteException e) {
+                // Shouldn't happen.
+                Slog.wtf(TAG, e);
+                return;
+            }
+
+            for (int i = mExemptedApps.size() - 1; i >= 0; --i) {
+                final String pkg = mExemptedApps.valueAt(i);
+                if (!removed.contains(pkg)) {
+                    added.add(pkg);
+                }
+                removed.remove(pkg);
+            }
+            for (int a = added.size() - 1; a >= 0; --a) {
+                final String pkgName = added.valueAt(a);
+                for (int userId : userIds) {
+                    // Since the exemption list doesn't specify user ID and we track by user ID,
+                    // we need to see if the app exists on the user before talking to the agent.
+                    // Otherwise, we may end up with invalid ledgers.
+                    final boolean appExists = getUid(userId, pkgName) >= 0;
+                    if (appExists) {
+                        mAgent.onAppExemptedLocked(userId, pkgName);
+                    }
+                }
+            }
+            for (int r = removed.size() - 1; r >= 0; --r) {
+                final String pkgName = removed.valueAt(r);
+                for (int userId : userIds) {
+                    // Since the exemption list doesn't specify user ID and we track by user ID,
+                    // we need to see if the app exists on the user before talking to the agent.
+                    // Otherwise, we may end up with invalid ledgers.
+                    final boolean appExists = getUid(userId, pkgName) >= 0;
+                    if (appExists) {
+                        mAgent.onAppUnexemptedLocked(userId, pkgName);
+                    }
+                }
+            }
         }
     }
 
@@ -463,12 +552,11 @@ public class InternalResourceService extends SystemService {
             Slog.d(TAG, userId + ":" + pkgName + " affordability changed to "
                     + affordabilityNote.isCurrentlyAffordable());
         }
-        Message msg = mHandler.obtainMessage(
-                MSG_NOTIFY_AFFORDABILITY_CHANGE_LISTENER, userId, 0, affordabilityNote);
-        Bundle data = new Bundle();
-        data.putString(KEY_PKG, pkgName);
-        msg.setData(data);
-        msg.sendToTarget();
+        final SomeArgs args = SomeArgs.obtain();
+        args.argi1 = userId;
+        args.arg1 = pkgName;
+        args.arg2 = affordabilityNote;
+        mHandler.obtainMessage(MSG_NOTIFY_AFFORDABILITY_CHANGE_LISTENER, args).sendToTarget();
     }
 
     @GuardedBy("mLock")
@@ -604,6 +692,7 @@ public class InternalResourceService extends SystemService {
     private void registerListeners() {
         final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_BATTERY_LEVEL_CHANGED);
+        filter.addAction(PowerManager.ACTION_POWER_SAVE_WHITELIST_CHANGED);
         getContext().registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
 
         final IntentFilter pkgFilter = new IntentFilter();
@@ -627,6 +716,15 @@ public class InternalResourceService extends SystemService {
     private void setupHeavyWork() {
         synchronized (mLock) {
             loadInstalledPackageListLocked();
+            if (mBootPhase >= PHASE_BOOT_COMPLETED && !mExemptListLoaded) {
+                try {
+                    mExemptedApps = new ArraySet<>(mDeviceIdleController.getFullPowerWhitelist());
+                } catch (RemoteException e) {
+                    // Shouldn't happen.
+                    Slog.wtf(TAG, e);
+                }
+                mExemptListLoaded = true;
+            }
             final boolean isFirstSetup = !mScribe.recordExists();
             if (isFirstSetup) {
                 mAgent.grantBirthrightsLocked();
@@ -656,6 +754,8 @@ public class InternalResourceService extends SystemService {
         synchronized (mLock) {
             mAgent.tearDownLocked();
             mCompleteEconomicPolicy.tearDown();
+            mExemptedApps.clear();
+            mExemptListLoaded = false;
             mHandler.post(() -> {
                 // Never call out to AlarmManager with the lock held. This sits below AM.
                 AlarmManager alarmManager = getContext().getSystemService(AlarmManager.class);
@@ -684,8 +784,8 @@ public class InternalResourceService extends SystemService {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-                case MSG_MAYBE_FOCE_RECLAIM: {
-                    removeMessages(MSG_MAYBE_FOCE_RECLAIM);
+                case MSG_MAYBE_FORCE_RECLAIM: {
+                    removeMessages(MSG_MAYBE_FORCE_RECLAIM);
                     synchronized (mLock) {
                         maybeForceReclaimLocked();
                     }
@@ -693,16 +793,26 @@ public class InternalResourceService extends SystemService {
                 break;
 
                 case MSG_NOTIFY_AFFORDABILITY_CHANGE_LISTENER: {
-                    Bundle data = msg.getData();
-                    final int userId = msg.arg1;
-                    final String pkgName = data.getString(KEY_PKG);
+                    final SomeArgs args = (SomeArgs) msg.obj;
+                    final int userId = args.argi1;
+                    final String pkgName = (String) args.arg1;
                     final Agent.ActionAffordabilityNote affordabilityNote =
-                            (Agent.ActionAffordabilityNote) msg.obj;
+                            (Agent.ActionAffordabilityNote) args.arg2;
+
                     final EconomyManagerInternal.AffordabilityChangeListener listener =
                             affordabilityNote.getListener();
                     listener.onAffordabilityChanged(userId, pkgName,
                             affordabilityNote.getActionBill(),
                             affordabilityNote.isCurrentlyAffordable());
+
+                    args.recycle();
+                }
+                break;
+
+                case MSG_NOTIFY_STATE_CHANGE_LISTENERS: {
+                    for (TareStateChangeListener listener : mStateChangeListeners) {
+                        listener.onTareEnabledStateChanged(mIsEnabled);
+                    }
                 }
                 break;
 
@@ -796,6 +906,16 @@ public class InternalResourceService extends SystemService {
         }
 
         @Override
+        public void registerTareStateChangeListener(@NonNull TareStateChangeListener listener) {
+            mStateChangeListeners.add(listener);
+        }
+
+        @Override
+        public void unregisterTareStateChangeListener(@NonNull TareStateChangeListener listener) {
+            mStateChangeListeners.remove(listener);
+        }
+
+        @Override
         public boolean canPayFor(int userId, @NonNull String pkgName, @NonNull ActionBill bill) {
             if (!mIsEnabled) {
                 return true;
@@ -848,6 +968,11 @@ public class InternalResourceService extends SystemService {
         }
 
         @Override
+        public boolean isEnabled() {
+            return mIsEnabled;
+        }
+
+        @Override
         public void noteInstantaneousEvent(int userId, @NonNull String pkgName, int eventId,
                 @Nullable String tag) {
             if (!mIsEnabled) {
@@ -884,7 +1009,10 @@ public class InternalResourceService extends SystemService {
         }
     }
 
-    private class ConfigObserver extends ContentObserver {
+    private class ConfigObserver extends ContentObserver
+            implements DeviceConfig.OnPropertiesChangedListener {
+        private static final String KEY_DC_ENABLE_TARE = "enable_tare";
+
         private final ContentResolver mContentResolver;
 
         ConfigObserver(Handler handler, Context context) {
@@ -893,12 +1021,15 @@ public class InternalResourceService extends SystemService {
         }
 
         public void start() {
+            DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_TARE,
+                    TareHandlerThread.getExecutor(), this);
             mContentResolver.registerContentObserver(
                     Settings.Global.getUriFor(Settings.Global.ENABLE_TARE), false, this);
             mContentResolver.registerContentObserver(
                     Settings.Global.getUriFor(TARE_ALARM_MANAGER_CONSTANTS), false, this);
             mContentResolver.registerContentObserver(
                     Settings.Global.getUriFor(TARE_JOB_SCHEDULER_CONSTANTS), false, this);
+            onPropertiesChanged(DeviceConfig.getProperties(DeviceConfig.NAMESPACE_TARE));
             updateEnabledStatus();
         }
 
@@ -912,9 +1043,31 @@ public class InternalResourceService extends SystemService {
             }
         }
 
+        @Override
+        public void onPropertiesChanged(DeviceConfig.Properties properties) {
+            synchronized (mLock) {
+                for (String name : properties.getKeyset()) {
+                    if (name == null) {
+                        continue;
+                    }
+                    switch (name) {
+                        case KEY_DC_ENABLE_TARE:
+                            updateEnabledStatus();
+                            break;
+                    }
+                }
+            }
+        }
+
         private void updateEnabledStatus() {
+            // User setting should override DeviceConfig setting.
+            // NOTE: There's currently no way for a user to reset the value (via UI), so if a user
+            // manually toggles TARE via UI, we'll always defer to the user's current setting
+            // TODO: add a "reset" value if the user toggle is an issue
+            final boolean isTareEnabledDC = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_TARE,
+                    KEY_DC_ENABLE_TARE, Settings.Global.DEFAULT_ENABLE_TARE == 1);
             final boolean isTareEnabled = Settings.Global.getInt(mContentResolver,
-                    Settings.Global.ENABLE_TARE, Settings.Global.DEFAULT_ENABLE_TARE) == 1;
+                    Settings.Global.ENABLE_TARE, isTareEnabledDC ? 1 : 0) == 1;
             if (mIsEnabled != isTareEnabled) {
                 mIsEnabled = isTareEnabled;
                 if (mIsEnabled) {
@@ -922,6 +1075,7 @@ public class InternalResourceService extends SystemService {
                 } else {
                     tearDownEverything();
                 }
+                mHandler.sendEmptyMessage(MSG_NOTIFY_STATE_CHANGE_LISTENERS);
             }
         }
 
@@ -952,9 +1106,9 @@ public class InternalResourceService extends SystemService {
             pw.print("Current battery level: ");
             pw.println(mCurrentBatteryLevel);
 
-            final long maxCircluation = getMaxCirculationLocked();
+            final long maxCirculation = getMaxCirculationLocked();
             pw.print("Max circulation (current/satiated): ");
-            pw.print(narcToString(maxCircluation));
+            pw.print(narcToString(maxCirculation));
             pw.print("/");
             pw.println(narcToString(mCompleteEconomicPolicy.getMaxSatiatedCirculation()));
 
@@ -962,8 +1116,12 @@ public class InternalResourceService extends SystemService {
             pw.print("Current GDP: ");
             pw.print(narcToString(currentCirculation));
             pw.print(" (");
-            pw.print(String.format("%.2f", 100f * currentCirculation / maxCircluation));
+            pw.print(String.format("%.2f", 100f * currentCirculation / maxCirculation));
             pw.println("% of current max)");
+
+            pw.println();
+            pw.print("Exempted apps", mExemptedApps);
+            pw.println();
 
             pw.println();
             mCompleteEconomicPolicy.dump(pw);

@@ -12,7 +12,6 @@ import static android.app.WaitResult.LAUNCH_STATE_WARM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
-import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -196,7 +195,7 @@ class ActivityMetricsLogger {
 
         @VisibleForTesting
         boolean allDrawn() {
-            return mAssociatedTransitionInfo != null && mAssociatedTransitionInfo.allDrawn();
+            return mAssociatedTransitionInfo != null && mAssociatedTransitionInfo.mIsDrawn;
         }
 
         boolean hasActiveTransitionInfo() {
@@ -230,8 +229,8 @@ class ActivityMetricsLogger {
         final boolean mProcessRunning;
         /** whether the process of the launching activity didn't have any active activity. */
         final boolean mProcessSwitch;
-        /** The activities that should be drawn. */
-        final ArrayList<ActivityRecord> mPendingDrawActivities = new ArrayList<>(2);
+        /** Whether the last launched activity has reported drawn. */
+        boolean mIsDrawn;
         /** The latest activity to have been launched. */
         @NonNull ActivityRecord mLastLaunchedActivity;
 
@@ -324,10 +323,7 @@ class ActivityMetricsLogger {
                 mLastLaunchedActivity.mLaunchRootTask = null;
             }
             mLastLaunchedActivity = r;
-            if (!r.noDisplay && !r.isReportedDrawn()) {
-                if (DEBUG_METRICS) Slog.i(TAG, "Add pending draw " + r);
-                mPendingDrawActivities.add(r);
-            }
+            mIsDrawn = r.isReportedDrawn();
         }
 
         /** Returns {@code true} if the incoming activity can belong to this transition. */
@@ -338,29 +334,7 @@ class ActivityMetricsLogger {
 
         /** @return {@code true} if the activity matches a launched activity in this transition. */
         boolean contains(ActivityRecord r) {
-            return r != null && (r == mLastLaunchedActivity || mPendingDrawActivities.contains(r));
-        }
-
-        /** Called when the activity is drawn or won't be drawn. */
-        void removePendingDrawActivity(ActivityRecord r) {
-            if (DEBUG_METRICS) Slog.i(TAG, "Remove pending draw " + r);
-            mPendingDrawActivities.remove(r);
-        }
-
-        boolean allDrawn() {
-            return mPendingDrawActivities.isEmpty();
-        }
-
-        /** Only keep the records which can be drawn. */
-        void updatePendingDraw(boolean keepInitializing) {
-            for (int i = mPendingDrawActivities.size() - 1; i >= 0; i--) {
-                final ActivityRecord r = mPendingDrawActivities.get(i);
-                if (!r.mVisibleRequested
-                        && !(keepInitializing && r.isState(ActivityRecord.State.INITIALIZING))) {
-                    if (DEBUG_METRICS) Slog.i(TAG, "Discard pending draw " + r);
-                    mPendingDrawActivities.remove(i);
-                }
-            }
+            return r == mLastLaunchedActivity;
         }
 
         /**
@@ -383,7 +357,7 @@ class ActivityMetricsLogger {
         @Override
         public String toString() {
             return "TransitionInfo{" + Integer.toHexString(System.identityHashCode(this))
-                    + " a=" + mLastLaunchedActivity + " ua=" + mPendingDrawActivities + "}";
+                    + " a=" + mLastLaunchedActivity + " d=" + mIsDrawn + "}";
         }
     }
 
@@ -479,33 +453,31 @@ class ActivityMetricsLogger {
         mLaunchObserver = new LaunchObserverRegistryImpl(looper);
     }
 
+    private void logWindowState(String state, int durationSecs) {
+        mMetricsLogger.count(state, durationSecs);
+    }
+
     void logWindowState() {
         final long now = SystemClock.elapsedRealtime() / 1000;
         if (mWindowState != WINDOW_STATE_INVALID) {
             // We log even if the window state hasn't changed, because the user might remain in
             // home/fullscreen move forever and we would like to track this kind of behavior
             // too.
-            mMetricsLogger.count(TRON_WINDOW_STATE_VARZ_STRINGS[mWindowState],
-                    (int) (now - mLastLogTimeSecs));
+            mLoggerHandler.sendMessage(PooledLambda.obtainMessage(
+                    ActivityMetricsLogger::logWindowState, this,
+                    TRON_WINDOW_STATE_VARZ_STRINGS[mWindowState], (int) (now - mLastLogTimeSecs)));
         }
         mLastLogTimeSecs = now;
 
         mWindowState = WINDOW_STATE_INVALID;
-        Task rootTask = mSupervisor.mRootWindowContainer.getTopDisplayFocusedRootTask();
-        if (rootTask == null) {
-            return;
-        }
-
-        if (rootTask.isActivityTypeAssistant()) {
+        final Task focusedTask = mSupervisor.mRootWindowContainer.getTopDisplayFocusedRootTask();
+        if (focusedTask == null)  return;
+        if (focusedTask.isActivityTypeAssistant()) {
             mWindowState = WINDOW_STATE_ASSISTANT;
             return;
         }
 
-        @WindowingMode int windowingMode = rootTask.getWindowingMode();
-        if (windowingMode == WINDOWING_MODE_PINNED) {
-            rootTask = mSupervisor.mRootWindowContainer.findRootTaskBehind(rootTask);
-            windowingMode = rootTask.getWindowingMode();
-        }
+        @WindowingMode final int windowingMode = focusedTask.getWindowingMode();
         switch (windowingMode) {
             case WINDOWING_MODE_FULLSCREEN:
                 mWindowState = WINDOW_STATE_STANDARD;
@@ -522,7 +494,7 @@ class ActivityMetricsLogger {
                 break;
             default:
                 if (windowingMode != WINDOWING_MODE_UNDEFINED) {
-                    throw new IllegalStateException("Unknown windowing mode for task=" + rootTask
+                    Slog.wtf(TAG, "Unknown windowing mode for task=" + focusedTask
                             + " windowingMode=" + windowingMode);
                 }
         }
@@ -689,8 +661,7 @@ class ActivityMetricsLogger {
         // visible such as after the top task is finished.
         for (int i = mTransitionInfoList.size() - 2; i >= 0; i--) {
             final TransitionInfo prevInfo = mTransitionInfoList.get(i);
-            prevInfo.updatePendingDraw(false /* keepInitializing */);
-            if (prevInfo.allDrawn()) {
+            if (prevInfo.mIsDrawn || !prevInfo.mLastLaunchedActivity.mVisibleRequested) {
                 abort(prevInfo, "nothing will be drawn");
             }
         }
@@ -717,17 +688,16 @@ class ActivityMetricsLogger {
         if (DEBUG_METRICS) Slog.i(TAG, "notifyWindowsDrawn " + r);
 
         final TransitionInfo info = getActiveTransitionInfo(r);
-        if (info == null || info.allDrawn()) {
-            if (DEBUG_METRICS) Slog.i(TAG, "notifyWindowsDrawn no activity to be drawn");
+        if (info == null || info.mIsDrawn) {
+            if (DEBUG_METRICS) Slog.i(TAG, "notifyWindowsDrawn not pending drawn " + info);
             return null;
         }
         // Always calculate the delay because the caller may need to know the individual drawn time.
         info.mWindowsDrawnDelayMs = info.calculateDelay(timestampNs);
-        info.removePendingDrawActivity(r);
-        info.updatePendingDraw(false /* keepInitializing */);
+        info.mIsDrawn = true;
         final TransitionInfoSnapshot infoSnapshot = new TransitionInfoSnapshot(info);
-        if (info.mLoggedTransitionStarting && info.allDrawn()) {
-            done(false /* abort */, info, "notifyWindowsDrawn - all windows drawn", timestampNs);
+        if (info.mLoggedTransitionStarting) {
+            done(false /* abort */, info, "notifyWindowsDrawn", timestampNs);
         }
         if (r.mWmService.isRecentsAnimationTarget(r)) {
             r.mWmService.getRecentsAnimationController().logRecentsAnimationStartTime(
@@ -776,12 +746,8 @@ class ActivityMetricsLogger {
             info.mCurrentTransitionDelayMs = info.calculateDelay(timestampNs);
             info.mReason = activityToReason.valueAt(index);
             info.mLoggedTransitionStarting = true;
-            // Do not remove activity in initializing state because the transition may be started
-            // by starting window. The initializing activity may be requested to visible soon.
-            info.updatePendingDraw(true /* keepInitializing */);
-            if (info.allDrawn()) {
-                done(false /* abort */, info, "notifyTransitionStarting - all windows drawn",
-                        timestampNs);
+            if (info.mIsDrawn) {
+                done(false /* abort */, info, "notifyTransitionStarting drawn", timestampNs);
             }
         }
     }
@@ -807,10 +773,6 @@ class ActivityMetricsLogger {
         if (compatStateInfo.mLastLoggedActivity == r) {
             compatStateInfo.mLastLoggedActivity = null;
         }
-        if (compatStateInfo.mVisibleActivities.isEmpty()) {
-            // No need to keep the entry if there are no visible activities.
-            mPackageUidToCompatStateInfo.remove(packageUid);
-        }
     }
 
     /**
@@ -834,12 +796,9 @@ class ActivityMetricsLogger {
             return;
         }
         if (!r.mVisibleRequested || r.finishing) {
-            info.removePendingDrawActivity(r);
-            if (info.mLastLaunchedActivity == r) {
-                // Check if the tracker can be cancelled because the last launched activity may be
-                // no longer visible.
-                scheduleCheckActivityToBeDrawn(r, 0 /* delay */);
-            }
+            // Check if the tracker can be cancelled because the last launched activity may be
+            // no longer visible.
+            scheduleCheckActivityToBeDrawn(r, 0 /* delay */);
         }
     }
 
@@ -858,14 +817,9 @@ class ActivityMetricsLogger {
             // If we have an active transition that's waiting on a certain activity that will be
             // invisible now, we'll never get onWindowsDrawn, so abort the transition if necessary.
 
-            // We have no active transitions.
+            // We have no active transitions. Or the notified activity whose visibility changed is
+            // no longer the launched activity, then we can still wait to get onWindowsDrawn.
             if (info == null) {
-                return;
-            }
-
-            // The notified activity whose visibility changed is no longer the launched activity.
-            // We can still wait to get onWindowsDrawn.
-            if (info.mLastLaunchedActivity != r) {
                 return;
             }
 
@@ -951,7 +905,6 @@ class ActivityMetricsLogger {
             }
             logAppTransitionFinished(info, isHibernating != null ? isHibernating : false);
         }
-        info.mPendingDrawActivities.clear();
         mTransitionInfoList.remove(info);
     }
 
@@ -1164,7 +1117,7 @@ class ActivityMetricsLogger {
         if (info == null) {
             return null;
         }
-        if (!info.allDrawn() && info.mPendingFullyDrawn == null) {
+        if (!info.mIsDrawn && info.mPendingFullyDrawn == null) {
             // There are still undrawn activities, postpone reporting fully drawn until all of its
             // windows are drawn. So that is closer to an usable state.
             info.mPendingFullyDrawn = () -> {
@@ -1351,13 +1304,14 @@ class ActivityMetricsLogger {
      *   activity.
      *   <li>If the current state is NOT_VISIBLE, there is a previously logged state for the
      *   package UID and there are no other visible activities with the same package UID.
-     *   <li>The last logged activity with the same package UID is either {@code activity} or the
-     *   last logged state is NOT_VISIBLE or NOT_LETTERBOXED.
+     *   <li>The last logged activity with the same package UID is either {@code activity} (or an
+     *   activity that has been removed) or the last logged state is NOT_VISIBLE or NOT_LETTERBOXED.
      * </ul>
      *
      * <p>If the current state is NOT_VISIBLE and the previous state which was logged by {@code
-     * activity} wasn't, looks for the first visible activity with the same package UID that has
-     * a letterboxed state, or a non-letterboxed state if there isn't one, and logs that state.
+     * activity} (or an activity that has been removed) wasn't, looks for the first visible activity
+     * with the same package UID that has a letterboxed state, or a non-letterboxed state if
+     * there isn't one, and logs that state.
      *
      * <p>This method assumes that the caller is wrapping the call with a synchronized block so
      * that there won't be a race condition between two activities with the same package.
@@ -1393,14 +1347,14 @@ class ActivityMetricsLogger {
 
         if (!isVisible && !visibleActivities.isEmpty()) {
             // There is another visible activity for this package UID.
-            if (activity == lastLoggedActivity) {
+            if (lastLoggedActivity == null || activity == lastLoggedActivity) {
                 // Make sure a new visible state is logged if needed.
                 findAppCompatStateToLog(compatStateInfo, packageUid);
             }
             return;
         }
 
-        if (activity != lastLoggedActivity
+        if (lastLoggedActivity != null && activity != lastLoggedActivity
                 && lastLoggedState != APP_COMPAT_STATE_CHANGED__STATE__NOT_VISIBLE
                 && lastLoggedState != APP_COMPAT_STATE_CHANGED__STATE__NOT_LETTERBOXED) {
             // Another visible activity for this package UID has logged a letterboxed state.
@@ -1414,15 +1368,25 @@ class ActivityMetricsLogger {
      * Looks for the first visible activity in {@code compatStateInfo} that has a letterboxed
      * state, or a non-letterboxed state if there isn't one, and logs that state for the given
      * {@code packageUid}.
+     *
+     * <p>If there is a visible activity in {@code compatStateInfo} with the same state as the
+     * last logged state for the given {@code packageUid}, changes the last logged activity to
+     * reference the first such activity without actually logging the same state twice.
      */
     private void findAppCompatStateToLog(PackageCompatStateInfo compatStateInfo, int packageUid) {
         final ArrayList<ActivityRecord> visibleActivities = compatStateInfo.mVisibleActivities;
+        final int lastLoggedState = compatStateInfo.mLastLoggedState;
 
         ActivityRecord activityToLog = null;
         int stateToLog = APP_COMPAT_STATE_CHANGED__STATE__NOT_VISIBLE;
         for (int i = 0; i < visibleActivities.size(); i++) {
             ActivityRecord activity = visibleActivities.get(i);
             int state = activity.getAppCompatState();
+            if (state == lastLoggedState) {
+                // Change last logged activity without logging the same state twice.
+                compatStateInfo.mLastLoggedActivity = activity;
+                return;
+            }
             if (state == APP_COMPAT_STATE_CHANGED__STATE__NOT_VISIBLE) {
                 // This shouldn't happen.
                 Slog.w(TAG, "Visible activity with NOT_VISIBLE App Compat state for package UID: "

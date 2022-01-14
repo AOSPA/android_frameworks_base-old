@@ -84,6 +84,7 @@ import com.android.server.IntentResolver;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 
 import dalvik.system.VMRuntime;
@@ -122,7 +123,7 @@ import java.util.zip.GZIPInputStream;
 public class PackageManagerServiceUtils {
     private static final long MAX_CRITICAL_INFO_DUMP_SIZE = 3 * 1000 * 1000; // 3MB
 
-    public final static Predicate<PackageSetting> REMOVE_IF_NULL_PKG =
+    public final static Predicate<PackageStateInternal> REMOVE_IF_NULL_PKG =
             pkgSetting -> pkgSetting.getPkg() == null;
 
     /**
@@ -643,6 +644,35 @@ public class PackageManagerServiceUtils {
         return compatMatch;
     }
 
+    /**
+     * Decompress files stored in codePath to dstCodePath for a certain package.
+     */
+    public static int decompressFiles(String codePath, File dstCodePath, String packageName) {
+        final File[] compressedFiles = getCompressedFiles(codePath);
+        int ret = PackageManager.INSTALL_SUCCEEDED;
+        try {
+            makeDirRecursive(dstCodePath, 0755);
+            for (File srcFile : compressedFiles) {
+                final String srcFileName = srcFile.getName();
+                final String dstFileName = srcFileName.substring(
+                        0, srcFileName.length() - COMPRESSED_EXTENSION.length());
+                final File dstFile = new File(dstCodePath, dstFileName);
+                ret = decompressFile(srcFile, dstFile);
+                if (ret != PackageManager.INSTALL_SUCCEEDED) {
+                    logCriticalInfo(Log.ERROR, "Failed to decompress"
+                            + "; pkg: " + packageName
+                            + ", file: " + dstFileName);
+                    break;
+                }
+            }
+        } catch (ErrnoException e) {
+            logCriticalInfo(Log.ERROR, "Failed to decompress"
+                    + "; pkg: " + packageName
+                    + ", err: " + e.errno);
+        }
+        return ret;
+    }
+
     public static int decompressFile(File srcFile, File dstFile) throws ErrnoException {
         if (DEBUG_COMPRESSION) {
             Slog.i(TAG, "Decompress file"
@@ -959,11 +989,11 @@ public class PackageManagerServiceUtils {
     }
 
     public static boolean isSystemApp(PackageSetting ps) {
-        return (ps.pkgFlags & ApplicationInfo.FLAG_SYSTEM) != 0;
+        return (ps.getFlags() & ApplicationInfo.FLAG_SYSTEM) != 0;
     }
 
     public static boolean isUpdatedSystemApp(PackageSetting ps) {
-        return (ps.pkgFlags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+        return (ps.getFlags() & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
     }
 
     // Static to give access to ComputeEngine
@@ -1037,9 +1067,9 @@ public class PackageManagerServiceUtils {
      * @return if the package is approved at any non-zero level for the domain in the intent
      */
     public static boolean hasAnyDomainApproval(
-            @NonNull DomainVerificationManagerInternal manager, @NonNull PackageSetting pkgSetting,
-            @NonNull Intent intent, @PackageManager.ResolveInfoFlags int resolveInfoFlags,
-            @UserIdInt int userId) {
+            @NonNull DomainVerificationManagerInternal manager,
+            @NonNull PackageStateInternal pkgSetting, @NonNull Intent intent,
+            @PackageManager.ResolveInfoFlags int resolveInfoFlags, @UserIdInt int userId) {
         return manager.approvalLevelForDomain(pkgSetting, intent, resolveInfoFlags, userId)
                 > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE;
     }
