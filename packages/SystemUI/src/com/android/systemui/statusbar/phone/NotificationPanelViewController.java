@@ -34,9 +34,9 @@ import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
 import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
-import static com.android.systemui.statusbar.phone.PanelBar.STATE_CLOSED;
-import static com.android.systemui.statusbar.phone.PanelBar.STATE_OPEN;
-import static com.android.systemui.statusbar.phone.PanelBar.STATE_OPENING;
+import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_CLOSED;
+import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_OPEN;
+import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_OPENING;
 
 import static java.lang.Float.isNaN;
 
@@ -101,6 +101,7 @@ import com.android.keyguard.EmergencyButton;
 import com.android.keyguard.EmergencyButtonController;
 import com.android.keyguard.KeyguardStatusView;
 import com.android.keyguard.KeyguardStatusViewController;
+import com.android.keyguard.KeyguardUnfoldTransition;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.LockIconViewController;
 import com.android.keyguard.dagger.KeyguardQsUserSwitchComponent;
@@ -143,6 +144,7 @@ import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
+import com.android.systemui.qrcodescanner.controller.QRCodeScannerController;
 import com.android.systemui.qs.QSDetailDisplayer;
 import com.android.systemui.screenrecord.RecordingController;
 import com.android.systemui.shared.system.QuickStepContract;
@@ -183,12 +185,15 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger.LockscreenUiEvent;
 import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
+import com.android.systemui.statusbar.phone.panelstate.PanelState;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardQsUserSwitchController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcherController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcherView;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
+import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.util.Utils;
 import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.wallet.controller.QuickAccessWalletController;
@@ -200,6 +205,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -307,6 +313,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private final ScrimController mScrimController;
     private final PrivacyDotViewController mPrivacyDotViewController;
     private final QuickAccessWalletController mQuickAccessWalletController;
+    private final QRCodeScannerController mQRCodeScannerController;
     private final ControlsComponent mControlsComponent;
     private final NotificationRemoteInputManager mRemoteInputManager;
 
@@ -350,6 +357,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private VelocityTracker mQsVelocityTracker;
     private boolean mQsTracking;
 
+    private IdleHostView mIdleHostView;
     private CommunalHostView mCommunalView;
 
     /**
@@ -652,6 +660,8 @@ public class NotificationPanelViewController extends PanelViewController {
 
     private boolean mStatusViewCentered = true;
 
+    private Optional<KeyguardUnfoldTransition> mKeyguardUnfoldTransition;
+
     private View.AccessibilityDelegate mAccessibilityDelegate = new View.AccessibilityDelegate() {
         @Override
         public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
@@ -764,13 +774,16 @@ public class NotificationPanelViewController extends PanelViewController {
             FragmentService fragmentService,
             ContentResolver contentResolver,
             QuickAccessWalletController quickAccessWalletController,
+            QRCodeScannerController qrCodeScannerController,
             RecordingController recordingController,
             @Main Executor uiExecutor,
             SecureSettings secureSettings,
             SplitShadeHeaderController splitShadeHeaderController,
             UnlockedScreenOffAnimationController unlockedScreenOffAnimationController,
             LockscreenGestureLogger lockscreenGestureLogger,
+            PanelExpansionStateManager panelExpansionStateManager,
             NotificationRemoteInputManager remoteInputManager,
+            Optional<SysUIUnfoldComponent> unfoldComponent,
             ControlsComponent controlsComponent,
             EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         super(view,
@@ -784,12 +797,14 @@ public class NotificationPanelViewController extends PanelViewController {
                 flingAnimationUtilsBuilder.get(),
                 statusBarTouchableRegionManager,
                 lockscreenGestureLogger,
+                panelExpansionStateManager,
                 ambientState);
         mView = view;
         mVibratorHelper = vibratorHelper;
         mKeyguardMediaController = keyguardMediaController;
         mPrivacyDotViewController = privacyDotViewController;
         mQuickAccessWalletController = quickAccessWalletController;
+        mQRCodeScannerController = qrCodeScannerController;
         mControlsComponent = controlsComponent;
         mMetricsLogger = metricsLogger;
         mActivityManager = activityManager;
@@ -858,6 +873,8 @@ public class NotificationPanelViewController extends PanelViewController {
                 new DynamicPrivacyControlListener();
         dynamicPrivacyController.addListener(dynamicPrivacyControlListener);
 
+        panelExpansionStateManager.addStateListener(this::onPanelStateChanged);
+
         mBottomAreaShadeAlphaAnimator = ValueAnimator.ofFloat(1f, 0);
         mBottomAreaShadeAlphaAnimator.addUpdateListener(animation -> {
             mBottomAreaShadeAlpha = (float) animation.getAnimatedValue();
@@ -891,6 +908,7 @@ public class NotificationPanelViewController extends PanelViewController {
         }
 
         mMaxKeyguardNotifications = resources.getInteger(R.integer.keyguard_max_notification_count);
+        mKeyguardUnfoldTransition = unfoldComponent.map(c -> c.getKeyguardUnfoldTransition());
         updateUserSwitcherFlags();
         onFinishInflate();
     }
@@ -898,6 +916,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private void onFinishInflate() {
         loadDimens();
         mKeyguardStatusBar = mView.findViewById(R.id.keyguard_header);
+        mIdleHostView = mView.findViewById(R.id.idle_host_view);
         mCommunalView = mView.findViewById(R.id.communal_host);
 
         FrameLayout userAvatarContainer = null;
@@ -920,10 +939,11 @@ public class NotificationPanelViewController extends PanelViewController {
                         .getKeyguardStatusBarViewController();
         mKeyguardStatusBarViewController.init();
 
-        IdleViewComponent idleViewComponent = mIdleViewComponentFactory
-                .build(mView.findViewById(R.id.idle_host_view));
-        mIdleHostViewController = idleViewComponent.getIdleHostViewController();
-        mIdleHostViewController.init();
+        if (mIdleHostView != null) {
+            IdleViewComponent idleViewComponent = mIdleViewComponentFactory.build(mIdleHostView);
+            mIdleHostViewController = idleViewComponent.getIdleHostViewController();
+            mIdleHostViewController.init();
+        }
 
         if (mCommunalView != null) {
             CommunalViewComponent communalViewComponent =
@@ -933,14 +953,14 @@ public class NotificationPanelViewController extends PanelViewController {
             mCommunalViewController.init();
         }
 
-
+        mNotificationContainerParent = mView.findViewById(R.id.notification_container_parent);
         updateViewControllers(
                 mView.findViewById(R.id.keyguard_status_view),
                 userAvatarContainer,
                 keyguardUserSwitcherView,
-                mView.findViewById(R.id.idle_host_view),
+                mIdleHostView,
                 mCommunalView);
-        mNotificationContainerParent = mView.findViewById(R.id.notification_container_parent);
+
         NotificationStackScrollLayout stackScrollLayout = mView.findViewById(
                 R.id.notification_stack_scroller);
         mNotificationStackScrollLayoutController.attach(stackScrollLayout);
@@ -991,6 +1011,7 @@ public class NotificationPanelViewController extends PanelViewController {
         }
 
         mTapAgainViewController.init();
+        mKeyguardUnfoldTransition.ifPresent(u -> u.setup(mView));
     }
 
     @Override
@@ -1036,9 +1057,12 @@ public class NotificationPanelViewController extends PanelViewController {
         mKeyguardStatusViewController = statusViewComponent.getKeyguardStatusViewController();
         mKeyguardStatusViewController.init();
 
-        IdleViewComponent idleViewComponent = mIdleViewComponentFactory.build(idleHostView);
-        mIdleHostViewController = idleViewComponent.getIdleHostViewController();
-        mIdleHostViewController.init();
+        if (idleHostView != null && idleHostView != mIdleHostView) {
+            mIdleHostView = idleHostView;
+            IdleViewComponent idleViewComponent = mIdleViewComponentFactory.build(idleHostView);
+            mIdleHostViewController = idleViewComponent.getIdleHostViewController();
+            mIdleHostViewController.init();
+        }
 
         if (mKeyguardUserSwitcherController != null) {
             // Try to close the switcher so that callbacks are triggered if necessary.
@@ -1238,6 +1262,8 @@ public class NotificationPanelViewController extends PanelViewController {
                     mBarState);
         }
         setKeyguardBottomAreaVisibility(mBarState, false);
+
+        mKeyguardUnfoldTransition.ifPresent(u -> u.setup(mView));
     }
 
     private void attachSplitShadeMediaPlayerContainer(FrameLayout container) {
@@ -1253,6 +1279,7 @@ public class NotificationPanelViewController extends PanelViewController {
         mKeyguardBottomArea.setFalsingManager(mFalsingManager);
         mKeyguardBottomArea.initWallet(mQuickAccessWalletController);
         mKeyguardBottomArea.initControls(mControlsComponent);
+        mKeyguardBottomArea.initQRCodeScanner(mQRCodeScannerController);
         EmergencyButton emergencyButton =
                 mKeyguardBottomArea.findViewById(R.id.emergency_call_button);
         mEmergencyButtonController = mEmergencyButtonControllerFactory.create(emergencyButton);
@@ -1689,7 +1716,7 @@ public class NotificationPanelViewController extends PanelViewController {
             // it's possible that nothing animated, so we replicate the termination
             // conditions of panelExpansionChanged here
             // TODO(b/200063118): This can likely go away in a future refactor CL.
-            mBar.updateState(STATE_CLOSED);
+            getPanelExpansionStateManager().updateState(STATE_CLOSED);
         }
     }
 
@@ -1774,7 +1801,7 @@ public class NotificationPanelViewController extends PanelViewController {
 
     @Override
     public void fling(float vel, boolean expand) {
-        GestureRecorder gr = ((PhoneStatusBarView) mBar).mBar.getGestureRecorder();
+        GestureRecorder gr = mStatusBar.getGestureRecorder();
         if (gr != null) {
             gr.tag("fling " + ((vel > 0) ? "open" : "closed"), "notifications,v=" + vel);
         }
@@ -2331,7 +2358,7 @@ public class NotificationPanelViewController extends PanelViewController {
         mQs.setExpanded(mQsExpanded);
     }
 
-    private void setQsExpansion(float height) {
+    void setQsExpansion(float height) {
         height = Math.min(Math.max(height, mQsMinExpansionHeight), mQsMaxExpansionHeight);
         mQsFullyExpanded = height == mQsMaxExpansionHeight && mQsMaxExpansionHeight != 0;
         if (height > mQsMinExpansionHeight && !mQsExpanded && !mStackScrollerOverscrolling
@@ -2358,10 +2385,6 @@ public class NotificationPanelViewController extends PanelViewController {
             mStatusBar.executeRunnableDismissingKeyguard(null, null /* cancelAction */,
                     false /* dismissShade */, true /* afterKeyguardGone */, false /* deferred */);
         }
-        for (int i = 0; i < mExpansionListeners.size(); i++) {
-            mExpansionListeners.get(i).onQsExpansionChanged(
-                    mQsMaxExpansionHeight != 0 ? mQsExpansionHeight / mQsMaxExpansionHeight : 0);
-        }
         if (DEBUG) {
             mView.invalidate();
         }
@@ -2370,13 +2393,22 @@ public class NotificationPanelViewController extends PanelViewController {
     private void updateQsExpansion() {
         if (mQs == null) return;
         float qsExpansionFraction = computeQsExpansionFraction();
+        float squishiness = mNotificationStackScrollLayoutController
+                .getNotificationSquishinessFraction();
         mQs.setQsExpansion(qsExpansionFraction, getExpandedFraction(), getHeaderTranslation(),
-                mNotificationStackScrollLayoutController.getNotificationSquishinessFraction());
+                mQsExpandImmediate || mQsExpanded ? 1f : squishiness);
+        mSplitShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
         mMediaHierarchyManager.setQsExpansion(qsExpansionFraction);
         int qsPanelBottomY = calculateQsBottomPosition(qsExpansionFraction);
         mScrimController.setQsPosition(qsExpansionFraction, qsPanelBottomY);
         setQSClippingBounds();
-        mNotificationStackScrollLayoutController.setQsExpansionFraction(qsExpansionFraction);
+
+        // Only need to notify the notification stack when we're not in split screen mode. If we
+        // do, then the notification panel starts scrolling along with the QS.
+        if (!mShouldUseSplitNotificationShade) {
+            mNotificationStackScrollLayoutController.setQsExpansionFraction(qsExpansionFraction);
+        }
+
         mDepthController.setQsPanelExpansion(qsExpansionFraction);
 
         if (mCommunalViewController != null) {
@@ -3687,7 +3719,12 @@ public class NotificationPanelViewController extends PanelViewController {
         mNotificationStackScrollLayoutController.setPulsing(pulsing, animatePulse);
     }
 
-    public void setAmbientIndicationBottomPadding(int ambientIndicationBottomPadding) {
+    public void setAmbientIndicationTop(int ambientIndicationTop, boolean ambientTextVisible) {
+        int ambientIndicationBottomPadding = 0;
+        if (ambientTextVisible) {
+            int stackBottom = mNotificationStackScrollLayoutController.getView().getBottom();
+            ambientIndicationBottomPadding = stackBottom - ambientIndicationTop;
+        }
         if (mAmbientIndicationBottomPadding != ambientIndicationBottomPadding) {
             mAmbientIndicationBottomPadding = ambientIndicationBottomPadding;
             updateMaxDisplayedNotifications(true);
@@ -3928,45 +3965,6 @@ public class NotificationPanelViewController extends PanelViewController {
             private long mLastTouchDownTime = -1L;
 
             @Override
-            public boolean onTouchForwardedFromStatusBar(MotionEvent event) {
-                // TODO(b/202981994): Move the touch debugging in this method to a central location.
-                //  (Right now, it's split between StatusBar and here.)
-
-                // If panels aren't enabled, ignore the gesture and don't pass it down to the
-                // panel view.
-                if (!mCommandQueue.panelsEnabled()) {
-                    if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                        Log.v(
-                                TAG,
-                                String.format(
-                                        "onTouchForwardedFromStatusBar: "
-                                                + "panel disabled, ignoring touch at (%d,%d)",
-                                        (int) event.getX(),
-                                        (int) event.getY()
-                                )
-                        );
-                    }
-                    return false;
-                }
-
-                // If the view that would receive the touch is disabled, just have status bar eat
-                // the gesture.
-                if (event.getAction() == MotionEvent.ACTION_DOWN && !mView.isEnabled()) {
-                    Log.v(TAG,
-                            String.format(
-                                    "onTouchForwardedFromStatusBar: "
-                                            + "panel view disabled, eating touch at (%d,%d)",
-                                    (int) event.getX(),
-                                    (int) event.getY()
-                            )
-                    );
-                    return true;
-                }
-
-                return mView.dispatchTouchEvent(event);
-            }
-
-            @Override
             public boolean onInterceptTouchEvent(MotionEvent event) {
                 if (mBlockTouches || mQs.disallowPanelTouches()) {
                     return false;
@@ -4076,6 +4074,55 @@ public class NotificationPanelViewController extends PanelViewController {
             }
         };
     }
+
+    private final PhoneStatusBarView.TouchEventHandler mStatusBarViewTouchEventHandler =
+            new PhoneStatusBarView.TouchEventHandler() {
+                @Override
+                public void onInterceptTouchEvent(MotionEvent event) {
+                    mStatusBar.onTouchEvent(event);
+                }
+
+                @Override
+                public boolean handleTouchEvent(MotionEvent event) {
+                    mStatusBar.onTouchEvent(event);
+
+                    // TODO(b/202981994): Move the touch debugging in this method to a central
+                    //  location. (Right now, it's split between StatusBar and here.)
+
+                    // If panels aren't enabled, ignore the gesture and don't pass it down to the
+                    // panel view.
+                    if (!mCommandQueue.panelsEnabled()) {
+                        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                            Log.v(
+                                    TAG,
+                                    String.format(
+                                            "onTouchForwardedFromStatusBar: "
+                                                    + "panel disabled, ignoring touch at (%d,%d)",
+                                            (int) event.getX(),
+                                            (int) event.getY()
+                                    )
+                            );
+                        }
+                        return false;
+                    }
+
+                    // If the view that would receive the touch is disabled, just have status bar
+                    // eat the gesture.
+                    if (event.getAction() == MotionEvent.ACTION_DOWN && !mView.isEnabled()) {
+                        Log.v(TAG,
+                                String.format(
+                                        "onTouchForwardedFromStatusBar: "
+                                                + "panel view disabled, eating touch at (%d,%d)",
+                                        (int) event.getX(),
+                                        (int) event.getY()
+                                )
+                        );
+                        return true;
+                    }
+
+                    return mView.dispatchTouchEvent(event);
+                }
+            };
 
     @Override
     protected PanelViewController.OnConfigurationChangedListener
@@ -4847,39 +4894,29 @@ public class NotificationPanelViewController extends PanelViewController {
         mView.removeCallbacks(mMaybeHideExpandedRunnable);
     }
 
-    private final PanelBar.PanelStateChangeListener mPanelStateChangeListener =
-            new PanelBar.PanelStateChangeListener() {
+    @PanelState
+    private int mCurrentPanelState = STATE_CLOSED;
 
-                @PanelBar.PanelState
-                private int mCurrentState = STATE_CLOSED;
+    private void onPanelStateChanged(@PanelState int state) {
+        mAmbientState.setIsShadeOpening(state == STATE_OPENING);
+        updateQSExpansionEnabledAmbient();
 
-                @Override
-                public void onStateChanged(@PanelBar.PanelState int state) {
-                    mAmbientState.setIsShadeOpening(state == STATE_OPENING);
-                    updateQSExpansionEnabledAmbient();
-
-                    if (state == STATE_OPEN && mCurrentState != state) {
-                        mView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
-                    }
-                    if (state == STATE_OPENING) {
-                        mStatusBar.makeExpandedVisible(false);
-                    }
-                    if (state == STATE_CLOSED) {
-                        // Close the status bar in the next frame so we can show the end of the
-                        // animation.
-                        mView.post(mMaybeHideExpandedRunnable);
-                    }
-                    mCurrentState = state;
-                }
-            };
-
-    public PanelBar.PanelStateChangeListener getPanelStateChangeListener() {
-        return mPanelStateChangeListener;
+        if (state == STATE_OPEN && mCurrentPanelState != state) {
+            mView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
+        }
+        if (state == STATE_OPENING) {
+            mStatusBar.makeExpandedVisible(false);
+        }
+        if (state == STATE_CLOSED) {
+            // Close the status bar in the next frame so we can show the end of the
+            // animation.
+            mView.post(mMaybeHideExpandedRunnable);
+        }
+        mCurrentPanelState = state;
     }
-
 
     /** Returns the handler that the status bar should forward touches to. */
     public PhoneStatusBarView.TouchEventHandler getStatusBarTouchEventHandler() {
-        return getTouchHandler()::onTouchForwardedFromStatusBar;
+        return mStatusBarViewTouchEventHandler;
     }
 }

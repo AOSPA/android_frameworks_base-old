@@ -92,6 +92,7 @@ import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
+import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
 import com.android.systemui.statusbar.phone.DozeParameters;
@@ -185,6 +186,8 @@ public class BubblesTest extends SysuiTestCase {
     private ArgumentCaptor<NotificationEntryListener> mEntryListenerCaptor;
     @Captor
     private ArgumentCaptor<NotificationRemoveInterceptor> mRemoveInterceptorCaptor;
+    @Captor
+    private ArgumentCaptor<List<Bubble>> mBubbleListCaptor;
 
     private BubblesManager mBubblesManager;
     // TODO(178618782): Move tests on the controller directly to the shell
@@ -225,6 +228,8 @@ public class BubblesTest extends SysuiTestCase {
     private NotificationShadeWindowView mNotificationShadeWindowView;
     @Mock
     private IStatusBarService mStatusBarService;
+    @Mock
+    private NotificationVisibilityProvider mVisibilityProvider;
     @Mock
     private LauncherApps mLauncherApps;
     @Mock
@@ -352,6 +357,7 @@ public class BubblesTest extends SysuiTestCase {
                 mConfigurationController,
                 mStatusBarService,
                 mock(INotificationManager.class),
+                mVisibilityProvider,
                 interruptionStateProvider,
                 mZenModeController,
                 mLockscreenUserManager,
@@ -1165,6 +1171,22 @@ public class BubblesTest extends SysuiTestCase {
         verify(mDataRepository, times(1)).loadBubbles(anyInt(), any());
     }
 
+    /**
+     * Verifies that shortcut deletions triggers that bubble being removed from XML.
+     */
+    @Test
+    public void testDeleteShortcutsDeletesXml() throws Exception {
+        ExpandableNotificationRow row = mNotificationTestHelper.createShortcutBubble("shortcutId");
+        BubbleEntry shortcutBubbleEntry = BubblesManager.notifToBubbleEntry(row.getEntry());
+        mBubbleController.updateBubble(shortcutBubbleEntry);
+
+        mBubbleData.dismissBubbleWithKey(shortcutBubbleEntry.getKey(),
+                Bubbles.DISMISS_SHORTCUT_REMOVED);
+
+        verify(mDataRepository, atLeastOnce()).removeBubbles(anyInt(), mBubbleListCaptor.capture());
+        assertThat(mBubbleListCaptor.getValue().get(0).getKey()).isEqualTo(
+                shortcutBubbleEntry.getKey());
+    }
 
     /**
      * Verifies that the package manager for the user is used when loading info for the bubble.

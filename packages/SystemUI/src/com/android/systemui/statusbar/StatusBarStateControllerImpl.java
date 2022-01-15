@@ -28,7 +28,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.os.SystemProperties;
-import android.os.Trace;
 import android.text.format.DateFormat;
 import android.util.FloatProperty;
 import android.util.Log;
@@ -174,7 +173,7 @@ public class StatusBarStateControllerImpl implements
         }
 
         // Record the to-be mState and mLastState
-        recordHistoricalState(state, mState);
+        recordHistoricalState(state /* newState */, mState /* lastState */, false);
 
         // b/139259891
         if (mState == StatusBarState.SHADE && state == StatusBarState.SHADE_LOCKED) {
@@ -182,7 +181,6 @@ public class StatusBarStateControllerImpl implements
         }
 
         synchronized (mListeners) {
-            Trace.beginSection(TAG + "#setState(" + StatusBarState.toShortString(state) + ")");
             String tag = getClass().getSimpleName() + "#setState(" + state + ")";
             DejankUtils.startDetectingBlockingIpcs(tag);
             for (RankedListener rl : new ArrayList<>(mListeners)) {
@@ -200,7 +198,6 @@ public class StatusBarStateControllerImpl implements
                 rl.mListener.onStatePostChange();
             }
             DejankUtils.stopDetectingBlockingIpcs(tag);
-            Trace.endSection();
         }
 
         return true;
@@ -209,6 +206,7 @@ public class StatusBarStateControllerImpl implements
     @Override
     public void setUpcomingState(int nextState) {
         mUpcomingState = nextState;
+        recordHistoricalState(mUpcomingState /* newState */, mState /* lastState */, true);
     }
 
     @Override
@@ -265,14 +263,12 @@ public class StatusBarStateControllerImpl implements
         mIsDozing = isDozing;
 
         synchronized (mListeners) {
-            Trace.beginSection(TAG + "#setDozing(" + isDozing + ")");
             String tag = getClass().getSimpleName() + "#setIsDozing";
             DejankUtils.startDetectingBlockingIpcs(tag);
             for (RankedListener rl : new ArrayList<>(mListeners)) {
                 rl.mListener.onDozingChanged(isDozing);
             }
             DejankUtils.stopDetectingBlockingIpcs(tag);
-            Trace.endSection();
         }
 
         return true;
@@ -338,14 +334,12 @@ public class StatusBarStateControllerImpl implements
         mDozeAmount = dozeAmount;
         float interpolatedAmount = mDozeInterpolator.getInterpolation(dozeAmount);
         synchronized (mListeners) {
-            Trace.beginSection(TAG + "#setDozeAmount");
             String tag = getClass().getSimpleName() + "#setDozeAmount";
             DejankUtils.startDetectingBlockingIpcs(tag);
             for (RankedListener rl : new ArrayList<>(mListeners)) {
                 rl.mListener.onDozeAmountChanged(mDozeAmount, interpolatedAmount);
             }
             DejankUtils.stopDetectingBlockingIpcs(tag);
-            Trace.endSection();
         }
     }
 
@@ -476,13 +470,11 @@ public class StatusBarStateControllerImpl implements
     public void setPulsing(boolean pulsing) {
         if (mPulsing != pulsing) {
             mPulsing = pulsing;
-            Trace.beginSection(TAG + "#setPulsing(" + pulsing + ")");
             synchronized (mListeners) {
                 for (RankedListener rl : new ArrayList<>(mListeners)) {
                     rl.mListener.onPulsingChanged(pulsing);
                 }
             }
-            Trace.endSection();
         }
     }
 
@@ -514,31 +506,36 @@ public class StatusBarStateControllerImpl implements
         }
     }
 
-    private void recordHistoricalState(int currentState, int lastState) {
+    private void recordHistoricalState(int newState, int lastState, boolean upcoming) {
         mHistoryIndex = (mHistoryIndex + 1) % HISTORY_SIZE;
         HistoricalState state = mHistoricalRecords[mHistoryIndex];
-        state.mState = currentState;
+        state.mNewState = newState;
         state.mLastState = lastState;
         state.mTimestamp = System.currentTimeMillis();
+        state.mUpcoming = upcoming;
     }
 
     /**
      * For keeping track of our previous state to help with debugging
      */
     private static class HistoricalState {
-        int mState;
+        int mNewState;
         int mLastState;
         long mTimestamp;
+        boolean mUpcoming;
 
         @Override
         public String toString() {
             if (mTimestamp != 0) {
                 StringBuilder sb = new StringBuilder();
-                sb.append("state=").append(mState)
-                        .append(" (").append(describe(mState)).append(")");
-                sb.append("lastState=").append(mLastState).append(" (").append(describe(mLastState))
+                if (mUpcoming) {
+                    sb.append("upcoming-");
+                }
+                sb.append("newState=").append(mNewState)
+                        .append("(").append(describe(mNewState)).append(")");
+                sb.append(" lastState=").append(mLastState).append("(").append(describe(mLastState))
                         .append(")");
-                sb.append("timestamp=")
+                sb.append(" timestamp=")
                         .append(DateFormat.format("MM-dd HH:mm:ss", mTimestamp));
 
                 return sb.toString();

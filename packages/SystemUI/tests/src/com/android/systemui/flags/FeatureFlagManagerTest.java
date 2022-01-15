@@ -20,13 +20,22 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
+
+import android.content.Context;
 
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.util.settings.SecureSettings;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
@@ -36,10 +45,15 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
+/**
+ * NOTE: This test is for the version of FeatureFlagManager in src-release, which should not allow
+ * overriding, and should never return any value other than the one provided as the default.
+ */
 @SmallTest
 public class FeatureFlagManagerTest extends SysuiTestCase {
     FeatureFlagManager mFeatureFlagManager;
 
+    @Mock private Context mContext;
     @Mock private DumpManager mDumpManager;
 
     @Before
@@ -47,6 +61,13 @@ public class FeatureFlagManagerTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
 
         mFeatureFlagManager = new FeatureFlagManager(mDumpManager);
+    }
+
+    @After
+    public void onFinished() {
+        // The dump manager should be registered with even for the release version, but that's it.
+        verify(mDumpManager).registerDumpable(anyString(), any());
+        verifyNoMoreInteractions(mDumpManager);
     }
 
     @Test

@@ -37,9 +37,10 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.phone.BiometricUnlockController
+import com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK
 import com.android.systemui.statusbar.phone.DozeParameters
-import com.android.systemui.statusbar.phone.PanelExpansionListener
 import com.android.systemui.statusbar.phone.ScrimController
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionListener
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.WallpaperController
 import java.io.FileDescriptor
@@ -73,10 +74,6 @@ class NotificationShadeDepthController @Inject constructor(
         private const val TAG = "DepthController"
     }
 
-    /**
-     * Did we already unblur while dozing?
-     */
-    private var alreadyUnblurredWhileDozing = false
     lateinit var root: View
     private var blurRoot: View? = null
     private var keyguardAnimator: Animator? = null
@@ -233,11 +230,9 @@ class NotificationShadeDepthController @Inject constructor(
     private val keyguardStateCallback = object : KeyguardStateController.Callback {
         override fun onKeyguardFadingAwayChanged() {
             if (!keyguardStateController.isKeyguardFadingAway ||
-                    !biometricUnlockController.isWakeAndUnlock) {
+                    biometricUnlockController.mode != MODE_WAKE_AND_UNLOCK) {
                 return
             }
-            // When wakeAndUnlocking the screen remains dozing, so we have to manually trigger
-            // the unblur earlier
 
             keyguardAnimator?.cancel()
             keyguardAnimator = ValueAnimator.ofFloat(1f, 0f).apply {
@@ -259,7 +254,6 @@ class NotificationShadeDepthController @Inject constructor(
                 })
                 start()
             }
-            alreadyUnblurredWhileDozing = statusBarStateController.dozeAmount != 0.0f
         }
 
         override fun onKeyguardShowingChanged() {
@@ -281,24 +275,10 @@ class NotificationShadeDepthController @Inject constructor(
             if (isDozing) {
                 shadeAnimation.finishIfRunning()
                 brightnessMirrorSpring.finishIfRunning()
-
-                // unset this for safety, to be ready for the next wakeup
-                alreadyUnblurredWhileDozing = false
             }
         }
 
         override fun onDozeAmountChanged(linear: Float, eased: Float) {
-            if (alreadyUnblurredWhileDozing) {
-                if (linear == 0.0f) {
-                    // We finished waking up, let's reset
-                    alreadyUnblurredWhileDozing = false
-                } else {
-                    // We've already handled the unbluring from the keyguardAnimator above.
-                    // if we would continue, we'd play another unzoom / blur animation from the
-                    // dozing changing.
-                    return
-                }
-            }
             wakeAndUnlockBlurRadius = blurUtils.blurRadiusOfRatio(eased)
             scheduleUpdate()
         }
@@ -329,10 +309,12 @@ class NotificationShadeDepthController @Inject constructor(
     /**
      * Update blurs when pulling down the shade
      */
-    override fun onPanelExpansionChanged(rawExpansion: Float, tracking: Boolean) {
+    override fun onPanelExpansionChanged(
+        rawFraction: Float, expanded: Boolean, tracking: Boolean
+    ) {
         val timestamp = SystemClock.elapsedRealtimeNanos()
         val expansion = MathUtils.saturate(
-                (rawExpansion - panelPullDownMinFraction) / (1f - panelPullDownMinFraction))
+                (rawFraction - panelPullDownMinFraction) / (1f - panelPullDownMinFraction))
 
         if (shadeExpansion == expansion && prevTracking == tracking) {
             prevTimestamp = timestamp
@@ -456,7 +438,6 @@ class NotificationShadeDepthController @Inject constructor(
             it.println("blursDisabledForAppLaunch: $blursDisabledForAppLaunch")
             it.println("qsPanelExpansion: $qsPanelExpansion")
             it.println("transitionToFullShadeProgress: $transitionToFullShadeProgress")
-            it.println("alreadyUnblurredWhileDozing: $alreadyUnblurredWhileDozing")
             it.println("lastAppliedBlur: $lastAppliedBlur")
         }
     }

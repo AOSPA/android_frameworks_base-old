@@ -16,6 +16,12 @@
 
 package androidx.window.extensions.embedding;
 
+import static androidx.window.extensions.embedding.SplitContainer.getFinishPrimaryWithSecondaryBehavior;
+import static androidx.window.extensions.embedding.SplitContainer.getFinishSecondaryWithPrimaryBehavior;
+import static androidx.window.extensions.embedding.SplitContainer.isStickyPlaceholderRule;
+import static androidx.window.extensions.embedding.SplitContainer.shouldFinishAssociatedContainerWhenAdjacent;
+import static androidx.window.extensions.embedding.SplitContainer.shouldFinishAssociatedContainerWhenStacked;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Activity;
@@ -460,6 +466,11 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             return false;
         }
 
+        if (isStickyPlaceholderRule(splitContainer.getSplitRule())) {
+            // The placeholder should remain after it was first shown.
+            return false;
+        }
+
         if (mPresenter.shouldShowSideBySide(splitContainer)) {
             return false;
         }
@@ -497,7 +508,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             return;
         }
         List<SplitInfo> currentSplitStates = getActiveSplitStates();
-        if (mLastReportedSplitStates.equals(currentSplitStates)) {
+        if (currentSplitStates == null || mLastReportedSplitStates.equals(currentSplitStates)) {
             return;
         }
         mLastReportedSplitStates.clear();
@@ -506,22 +517,22 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     }
 
     /**
-     * Returns a list of descriptors for currently active split states.
+     * @return a list of descriptors for currently active split states. If the value returned is
+     * null, that indicates that the active split states are in an intermediate state and should
+     * not be reported.
      */
+    @Nullable
     private List<SplitInfo> getActiveSplitStates() {
         List<SplitInfo> splitStates = new ArrayList<>();
         for (SplitContainer container : mSplitContainers) {
             if (container.getPrimaryContainer().isEmpty()
                     || container.getSecondaryContainer().isEmpty()) {
-                // Skipping containers that do not have any activities to report.
-                continue;
+                // We are in an intermediate state because either the split container is about to be
+                // removed or the primary or secondary container are about to receive an activity.
+                return null;
             }
-            ActivityStack primaryContainer =
-                    new ActivityStack(
-                            container.getPrimaryContainer().collectActivities());
-            ActivityStack secondaryContainer =
-                    new ActivityStack(
-                            container.getSecondaryContainer().collectActivities());
+            ActivityStack primaryContainer = container.getPrimaryContainer().toActivityStack();
+            ActivityStack secondaryContainer = container.getSecondaryContainer().toActivityStack();
             SplitInfo splitState = new SplitInfo(primaryContainer,
                     secondaryContainer,
                     // Splits that are not showing side-by-side are reported as having 0 split
@@ -641,6 +652,52 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             }
         }
         return false;
+    }
+
+    /**
+     * Checks whether the associated container should be destroyed together with a finishing
+     * container. There is a case when primary containers for placeholders should be retained
+     * despite the rule configuration to finish primary with secondary - if they are marked as
+     * 'sticky' and the placeholder was finished when fully overlapping the primary container.
+     * @return {@code true} if the associated container should be retained (and not be finished).
+     */
+    boolean shouldRetainAssociatedContainer(@NonNull TaskFragmentContainer finishingContainer,
+            @NonNull TaskFragmentContainer associatedContainer) {
+        SplitContainer splitContainer = getActiveSplitForContainers(associatedContainer,
+                finishingContainer);
+        if (splitContainer == null) {
+            // Containers are not in the same split, no need to retain.
+            return false;
+        }
+        // Find the finish behavior for the associated container
+        int finishBehavior;
+        SplitRule splitRule = splitContainer.getSplitRule();
+        if (finishingContainer == splitContainer.getPrimaryContainer()) {
+            finishBehavior = getFinishSecondaryWithPrimaryBehavior(splitRule);
+        } else {
+            finishBehavior = getFinishPrimaryWithSecondaryBehavior(splitRule);
+        }
+        // Decide whether the associated container should be retained based on the current
+        // presentation mode.
+        if (mPresenter.shouldShowSideBySide(splitContainer)) {
+            return !shouldFinishAssociatedContainerWhenAdjacent(finishBehavior);
+        } else {
+            return !shouldFinishAssociatedContainerWhenStacked(finishBehavior);
+        }
+    }
+
+    /**
+     * @see #shouldRetainAssociatedContainer(TaskFragmentContainer, TaskFragmentContainer)
+     */
+    boolean shouldRetainAssociatedActivity(@NonNull TaskFragmentContainer finishingContainer,
+            @NonNull Activity associatedActivity) {
+        TaskFragmentContainer associatedContainer = getContainerWithActivity(
+                associatedActivity.getActivityToken());
+        if (associatedContainer == null) {
+            return false;
+        }
+
+        return shouldRetainAssociatedContainer(finishingContainer, associatedContainer);
     }
 
     private final class LifecycleCallbacks implements ActivityLifecycleCallbacks {

@@ -58,7 +58,7 @@ import android.view.WindowManager;
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.SomeArgs;
-import com.android.systemui.SystemUI;
+import com.android.systemui.CoreStartable;
 import com.android.systemui.assist.ui.DisplayUtils;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -84,7 +84,7 @@ import kotlin.Unit;
  * {@link com.android.keyguard.KeyguardUpdateMonitor}
  */
 @SysUISingleton
-public class AuthController extends SystemUI implements CommandQueue.Callbacks,
+public class AuthController extends CoreStartable implements CommandQueue.Callbacks,
         AuthDialogCallback, DozeReceiver {
 
     private static final String TAG = "AuthController";
@@ -141,6 +141,10 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
                 if (prop.sensorId == sensorId) {
                     mUdfpsEnrolledForUser.put(userId, hasEnrollments);
                 }
+            }
+
+            for (Callback cb : mCallbacks) {
+                cb.onEnrollmentsChanged();
             }
         }
     };
@@ -566,8 +570,8 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         args.arg5 = requireConfirmation;
         args.argi1 = userId;
         args.arg6 = opPackageName;
-        args.arg7 = operationId;
-        args.arg8 = requestId;
+        args.argl1 = operationId;
+        args.argl2 = requestId;
         args.argi2 = multiSensorConfig;
 
         boolean skipAnimation = false;
@@ -725,8 +729,8 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         final boolean requireConfirmation = (boolean) args.arg5;
         final int userId = args.argi1;
         final String opPackageName = (String) args.arg6;
-        final long operationId = (long) args.arg7;
-        final long requestId = (long) args.arg8;
+        final long operationId = args.argl1;
+        final long requestId = args.argl2;
         final @BiometricMultiSensorMode int multiSensorConfig = args.argi2;
 
         // Create a new dialog but do not replace the current one yet.
@@ -844,5 +848,11 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
          * registered before this call, this callback will never be triggered.
          */
         void onAllAuthenticatorsRegistered();
+
+        /**
+         * Called when UDFPS enrollments have changed. This is called after boot and on changes to
+         * enrollment.
+         */
+        void onEnrollmentsChanged();
     }
 }

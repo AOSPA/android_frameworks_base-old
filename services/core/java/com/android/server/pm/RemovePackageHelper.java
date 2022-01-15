@@ -45,6 +45,7 @@ import com.android.server.pm.parsing.PackageCacher;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.utils.WatchedLongSparseArray;
 
 import java.io.File;
@@ -118,7 +119,7 @@ final class RemovePackageHelper {
 
     public void removePackageLI(AndroidPackage pkg, boolean chatty) {
         // Remove the parent package setting
-        PackageSetting ps = mPm.getPackageSetting(pkg.getPackageName());
+        PackageStateInternal ps = mPm.getPackageStateInternal(pkg.getPackageName());
         if (ps != null) {
             removePackageLI(ps.getPackageName(), chatty);
         } else if (DEBUG_REMOVE && chatty) {
@@ -220,7 +221,7 @@ final class RemovePackageHelper {
 
         // Remove the shared library overlays from its dependent packages.
         for (int currentUserId : UserManagerService.getInstance().getUserIds()) {
-            final List<VersionedPackage> dependents = mPm.getPackagesUsingSharedLibraryLPr(
+            final List<VersionedPackage> dependents = mPm.getPackagesUsingSharedLibrary(
                     libraryInfo, 0, Process.SYSTEM_UID, currentUserId);
             if (dependents == null) {
                 continue;
@@ -295,7 +296,7 @@ final class RemovePackageHelper {
             synchronized (mPm.mLock) {
                 mPm.mDomainVerificationManager.clearPackage(deletedPs.getPackageName());
                 mPm.mSettings.getKeySetManagerService().removeAppKeySetDataLPw(packageName);
-                mPm.mAppsFilter.removePackage(mPm.getPackageSetting(packageName),
+                mPm.mAppsFilter.removePackage(mPm.getPackageStateInternal(packageName),
                         false /* isReplace */);
                 removedAppId = mPm.mSettings.removePackageLPw(packageName);
                 if (outInfo != null) {

@@ -26,6 +26,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
+import android.util.Slog;
 import android.view.SurfaceControl;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -49,8 +50,10 @@ import com.android.internal.protolog.common.ProtoLog;
  */
 class SurfaceFreezer {
 
-    private final Freezable mAnimatable;
-    private final WindowManagerService mWmService;
+    private static final String TAG = "SurfaceFreezer";
+
+    private final @NonNull Freezable mAnimatable;
+    private final @NonNull WindowManagerService mWmService;
     @VisibleForTesting
     SurfaceControl mLeash;
     Snapshot mSnapshot = null;
@@ -59,7 +62,7 @@ class SurfaceFreezer {
     /**
      * @param animatable The object to animate.
      */
-    SurfaceFreezer(Freezable animatable, WindowManagerService service) {
+    SurfaceFreezer(@NonNull Freezable animatable, @NonNull WindowManagerService service) {
         mAnimatable = animatable;
         mWmService = service;
     }
@@ -75,6 +78,7 @@ class SurfaceFreezer {
      */
     void freeze(SurfaceControl.Transaction t, Rect startBounds, Point relativePosition,
             @Nullable SurfaceControl freezeTarget) {
+        reset(t);
         mFreezeBounds.set(startBounds);
 
         mLeash = SurfaceAnimator.createAnimationLeash(mAnimatable, mAnimatable.getSurfaceControl(),
@@ -85,11 +89,14 @@ class SurfaceFreezer {
 
         freezeTarget = freezeTarget != null ? freezeTarget : mAnimatable.getFreezeSnapshotTarget();
         if (freezeTarget != null) {
-            SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer = createSnapshotBuffer(
+            SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer = createSnapshotBufferInner(
                     freezeTarget, startBounds);
             final HardwareBuffer buffer = screenshotBuffer == null ? null
                     : screenshotBuffer.getHardwareBuffer();
             if (buffer == null || buffer.getWidth() <= 1 || buffer.getHeight() <= 1) {
+                // This can happen when display is not ready.
+                Slog.w(TAG, "Failed to capture screenshot for " + mAnimatable);
+                unfreeze(t);
                 return;
             }
             mSnapshot = new Snapshot(t, screenshotBuffer, mLeash);
@@ -123,6 +130,11 @@ class SurfaceFreezer {
      * snapshot.
      */
     void unfreeze(SurfaceControl.Transaction t) {
+        unfreezeInner(t);
+        mAnimatable.onUnfrozen();
+    }
+
+    private void unfreezeInner(SurfaceControl.Transaction t) {
         if (mSnapshot != null) {
             mSnapshot.cancelAnimation(t, false /* restarting */);
             mSnapshot = null;
@@ -136,6 +148,22 @@ class SurfaceFreezer {
                 true /* destroy */);
         if (scheduleAnim) {
             mWmService.scheduleAnimationLocked();
+        }
+    }
+
+    /** Resets the snapshot before taking another one if the animation hasn't been started yet. */
+    private void reset(SurfaceControl.Transaction t) {
+        // Those would have been taken by the SurfaceAnimator if the animation has been started, so
+        // we can remove the leash directly.
+        // No need to reset the mAnimatable leash, as this is called before a new animation leash is
+        // created, so another #onAnimationLeashCreated will be called.
+        if (mSnapshot != null) {
+            mSnapshot.destroy(t);
+            mSnapshot = null;
+        }
+        if (mLeash != null) {
+            t.remove(mLeash);
+            mLeash = null;
         }
     }
 
@@ -171,6 +199,18 @@ class SurfaceFreezer {
         return SurfaceControl.captureLayers(captureArgs);
     }
 
+    @VisibleForTesting
+    SurfaceControl.ScreenshotHardwareBuffer createSnapshotBufferInner(
+            SurfaceControl target, Rect bounds) {
+        return createSnapshotBuffer(target, bounds);
+    }
+
+    @VisibleForTesting
+    GraphicBuffer createFromHardwareBufferInner(
+            SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer) {
+        return GraphicBuffer.createFromHardwareBuffer(screenshotBuffer.getHardwareBuffer());
+    }
+
     class Snapshot {
         private SurfaceControl mSurfaceControl;
         private AnimationAdapter mAnimation;
@@ -181,10 +221,7 @@ class SurfaceFreezer {
          */
         Snapshot(SurfaceControl.Transaction t,
                 SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer, SurfaceControl parent) {
-            // We can't use a delegating constructor since we need to
-            // reference this::onAnimationFinished
-            GraphicBuffer graphicBuffer = GraphicBuffer.createFromHardwareBuffer(
-                    screenshotBuffer.getHardwareBuffer());
+            GraphicBuffer graphicBuffer = createFromHardwareBufferInner(screenshotBuffer);
 
             mSurfaceControl = mAnimatable.makeAnimationLeash()
                     .setName("snapshot anim: " + mAnimatable.toString())
@@ -258,5 +295,8 @@ class SurfaceFreezer {
          *         will be generated (but the rest of the freezing logic will still happen).
          */
         @Nullable SurfaceControl getFreezeSnapshotTarget();
+
+        /** Called when the {@link #unfreeze(SurfaceControl.Transaction)} is called. */
+        void onUnfrozen();
     }
 }

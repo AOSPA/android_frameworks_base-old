@@ -82,6 +82,8 @@ import android.view.WindowManagerPolicyConstants;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 
+import androidx.annotation.Nullable;
+
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.jank.InteractionJankMonitor.Configuration;
 import com.android.internal.policy.IKeyguardDismissCallback;
@@ -97,9 +99,9 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.KeyguardViewController;
 import com.android.keyguard.ViewMediatorCallback;
+import com.android.systemui.CoreStartable;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
-import com.android.systemui.SystemUI;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollector;
@@ -118,15 +120,17 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
+import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.unfold.UnfoldLightRevealOverlayAnimation;
-import com.android.systemui.unfold.config.UnfoldTransitionConfig;
 import com.android.systemui.util.DeviceConfigProxy;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -173,7 +177,7 @@ import dagger.Lazy;
  * directly to the keyguard UI is posted to a {@link android.os.Handler} to ensure it is taken on the UI
  * thread of the keyguard.
  */
-public class KeyguardViewMediator extends SystemUI implements Dumpable,
+public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         StatusBarStateController.StateListener {
     private static final int KEYGUARD_DISPLAY_TIMEOUT_DELAY_DEFAULT = 30000;
     private static final long KEYGUARD_DONE_PENDING_TIMEOUT_MS = 3000;
@@ -814,8 +818,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
     private DeviceConfigProxy mDeviceConfig;
     private DozeParameters mDozeParameters;
 
-    private final UnfoldTransitionConfig mUnfoldTransitionConfig;
-    private final Lazy<UnfoldLightRevealOverlayAnimation> mUnfoldLightRevealAnimation;
+    private final Optional<UnfoldLightRevealOverlayAnimation> mUnfoldLightRevealAnimation;
     private final AtomicInteger mPendingDrawnTasks = new AtomicInteger();
 
     private final KeyguardStateController mKeyguardStateController;
@@ -840,8 +843,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
             NavigationModeController navigationModeController,
             KeyguardDisplayManager keyguardDisplayManager,
             DozeParameters dozeParameters,
-            UnfoldTransitionConfig unfoldTransitionConfig,
-            Lazy<UnfoldLightRevealOverlayAnimation> unfoldLightRevealOverlayAnimation,
+            Optional<SysUIUnfoldComponent> unfoldComponent,
             SysuiStatusBarStateController statusBarStateController,
             KeyguardStateController keyguardStateController,
             Lazy<KeyguardUnlockAnimationController> keyguardUnlockAnimationControllerLazy,
@@ -875,8 +877,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                     mInGestureNavigationMode = QuickStepContract.isGesturalMode(mode);
                 }));
         mDozeParameters = dozeParameters;
-        mUnfoldTransitionConfig = unfoldTransitionConfig;
-        mUnfoldLightRevealAnimation = unfoldLightRevealOverlayAnimation;
+        mUnfoldLightRevealAnimation = unfoldComponent.map(
+                c -> c.getUnfoldLightRevealOverlayAnimation());
         mStatusBarStateController = statusBarStateController;
         statusBarStateController.addCallback(this);
 
@@ -2570,7 +2572,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurningOn");
 
-            if (mUnfoldTransitionConfig.isEnabled()) {
+            if (mUnfoldLightRevealAnimation.isPresent()) {
                 mPendingDrawnTasks.set(2); // unfold overlay and keyguard drawn
 
                 mUnfoldLightRevealAnimation.get()
@@ -2667,10 +2669,16 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
      */
     public KeyguardViewController registerStatusBar(StatusBar statusBar,
             NotificationPanelViewController panelView,
+            @Nullable PanelExpansionStateManager panelExpansionStateManager,
             BiometricUnlockController biometricUnlockController,
             View notificationContainer, KeyguardBypassController bypassController) {
-        mKeyguardViewControllerLazy.get().registerStatusBar(statusBar, panelView,
-                biometricUnlockController, notificationContainer, bypassController);
+        mKeyguardViewControllerLazy.get().registerStatusBar(
+                statusBar,
+                panelView,
+                panelExpansionStateManager,
+                biometricUnlockController,
+                notificationContainer,
+                bypassController);
         return mKeyguardViewControllerLazy.get();
     }
 

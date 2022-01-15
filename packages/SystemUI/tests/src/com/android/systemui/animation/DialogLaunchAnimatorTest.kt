@@ -12,6 +12,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.animation.DialogListener.DismissReason
 import junit.framework.Assert.assertEquals
 import junit.framework.Assert.assertFalse
 import junit.framework.Assert.assertTrue
@@ -59,13 +60,20 @@ class DialogLaunchAnimatorTest : SysuiTestCase() {
         assertEquals(0, dialog.findViewById<ViewGroup>(android.R.id.content).childCount)
         assertEquals(1, hostDialogContent.childCount)
 
+        // The original dialog content is added to another view that is the same size as the
+        // original dialog window.
         val hostDialogRoot = hostDialogContent.getChildAt(0) as ViewGroup
         assertEquals(1, hostDialogRoot.childCount)
-        assertEquals(dialog.contentView, hostDialogRoot.getChildAt(0))
 
-        // If we are dozing, the host dialog window also fades out.
-        runOnMainThreadAndWaitForIdleSync { dialogLaunchAnimator.onDozeAmountChanged(0.5f) }
-        assertTrue(hostDialog.window!!.decorView.alpha < 1f)
+        val dialogContentParent = hostDialogRoot.getChildAt(0) as ViewGroup
+        assertEquals(1, dialogContentParent.childCount)
+        assertEquals(TestDialog.DIALOG_WIDTH, dialogContentParent.layoutParams.width)
+        assertEquals(TestDialog.DIALOG_HEIGHT, dialogContentParent.layoutParams.height)
+
+        val dialogContent = dialogContentParent.getChildAt(0)
+        assertEquals(dialog.contentView, dialogContent)
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, dialogContent.layoutParams.width)
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, dialogContent.layoutParams.height)
 
         // Hiding/showing/dismissing the dialog should hide/show/dismiss the host dialog given that
         // it's a ListenableDialog.
@@ -78,7 +86,14 @@ class DialogLaunchAnimatorTest : SysuiTestCase() {
         assertFalse(dialog.isShowing)
 
         assertFalse(dialog.onStopCalled)
-        runOnMainThreadAndWaitForIdleSync { dialog.dismiss() }
+        runOnMainThreadAndWaitForIdleSync {
+            // TODO(b/204561691): Remove this call to disableAllCurrentDialogsExitAnimations() and
+            // make sure that the test still pass on git_master/cf_x86_64_phone-userdebug in
+            // Forrest.
+            dialogLaunchAnimator.disableAllCurrentDialogsExitAnimations()
+
+            dialog.dismiss()
+        }
         assertFalse(hostDialog.isShowing)
         assertFalse(dialog.isShowing)
         assertTrue(hostDialog.wasDismissed)
@@ -129,6 +144,11 @@ class DialogLaunchAnimatorTest : SysuiTestCase() {
     }
 
     private class TestDialog(context: Context) : Dialog(context), ListenableDialog {
+        companion object {
+            const val DIALOG_WIDTH = 100
+            const val DIALOG_HEIGHT = 200
+        }
+
         private val listeners = hashSetOf<DialogListener>()
         val contentView = View(context)
         var onStartCalled = false
@@ -141,6 +161,7 @@ class DialogLaunchAnimatorTest : SysuiTestCase() {
 
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
+            window.setLayout(DIALOG_WIDTH, DIALOG_HEIGHT)
             setContentView(contentView)
         }
 
@@ -164,7 +185,7 @@ class DialogLaunchAnimatorTest : SysuiTestCase() {
 
         override fun dismiss() {
             super.dismiss()
-            notifyListeners { onDismiss() }
+            notifyListeners { onDismiss(DismissReason.UNKNOWN) }
         }
 
         override fun hide() {

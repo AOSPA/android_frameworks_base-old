@@ -33,7 +33,7 @@ public final class BLASTBufferQueue {
     private static native Surface nativeGetSurface(long ptr, boolean includeSurfaceControlHandle);
     private static native void nativeSetUndequeuedBufferCount(long ptr, int count);
     private static native int nativeGetUndequeuedBufferCount(long ptr);
-    private static native void nativeSetNextTransaction(long ptr, long transactionPtr);
+    private static native void nativeSetSyncTransaction(long ptr, long transactionPtr);
     private static native void nativeUpdate(long ptr, long surfaceControl, long width, long height,
             int format, long transactionPtr);
     private static native void nativeMergeWithNextTransaction(long ptr, long transactionPtr,
@@ -86,8 +86,8 @@ public final class BLASTBufferQueue {
      * This gives the caller a chance to apply the transaction when it's ready.
      * @param t The transaction to add the frame to. This can be null to clear the transaction.
      */
-    public void setNextTransaction(@Nullable SurfaceControl.Transaction t) {
-        nativeSetNextTransaction(mNativeObject, t == null ? 0 : t.mNativeObject);
+    public void setSyncTransaction(@Nullable SurfaceControl.Transaction t) {
+        nativeSetSyncTransaction(mNativeObject, t == null ? 0 : t.mNativeObject);
     }
 
     /**

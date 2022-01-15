@@ -158,6 +158,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -182,9 +183,11 @@ import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
+import android.view.InsetsState;
 import android.view.RemoteAnimationAdapter;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.view.TaskTransitionSpec;
 import android.view.WindowManager;
 import android.view.WindowManager.TransitionOldType;
 import android.window.ITaskOrganizer;
@@ -219,7 +222,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -1123,7 +1125,11 @@ class Task extends TaskFragment {
         if (inMultiWindowMode() || !hasChild()) return false;
         if (intent != null) {
             final int returnHomeFlags = FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_TASK_ON_HOME;
-            return intent != null && (intent.getFlags() & returnHomeFlags) == returnHomeFlags;
+            final Task task = getDisplayArea() != null ? getDisplayArea().getRootHomeTask() : null;
+            final boolean isLockTaskModeViolation = task != null
+                    && mAtmService.getLockTaskController().isLockTaskModeViolation(task);
+            return (intent.getFlags() & returnHomeFlags) == returnHomeFlags
+                    && !isLockTaskModeViolation;
         }
         final Task bottomTask = getBottomMostTask();
         return bottomTask != this && bottomTask.returnsToHomeRootTask();
@@ -2377,6 +2383,16 @@ class Task extends TaskFragment {
         return true;
     }
 
+    /** Return the top-most leaf-task under this one, or this task if it is a leaf. */
+    public Task getTopLeafTask() {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final Task child = mChildren.get(i).asTask();
+            if (child == null) continue;
+            return child.getTopLeafTask();
+        }
+        return this;
+    }
+
     int getDescendantTaskCount() {
         final int[] currentCount = {0};
         final PooledConsumer c = PooledLambda.obtainConsumer((t, count) -> { count[0]++; },
@@ -2817,6 +2833,30 @@ class Task extends TaskFragment {
         return;
     }
 
+    /**
+     * Account for specified insets to crop the animation bounds by to avoid the animation
+     * occurring over "out of bounds" regions
+     *
+     * For example this is used to make sure the tasks are cropped to be fully above the
+     * taskbar when animating.
+     *
+     * @param animationBounds The animations bounds to adjust to account for the custom spec insets.
+     */
+    void adjustAnimationBoundsForTransition(Rect animationBounds) {
+        TaskTransitionSpec spec = mWmService.mTaskTransitionSpec;
+        if (spec != null) {
+            for (@InsetsState.InternalInsetsType int insetType : spec.animationBoundInsets) {
+                InsetsSourceProvider insetProvider = getDisplayContent()
+                        .getInsetsStateController()
+                        .getSourceProvider(insetType);
+
+                Insets insets = insetProvider.getSource().calculateVisibleInsets(
+                        animationBounds);
+                animationBounds.inset(insets);
+            }
+        }
+    }
+
     void setDragResizing(boolean dragResizing, int dragResizeMode) {
         if (mDragResizing != dragResizing) {
             // No need to check if the mode is allowed if it's leaving dragResize
@@ -3210,12 +3250,6 @@ class Task extends TaskFragment {
     @Override
     Task getRootTask(Predicate<Task> callback, boolean traverseTopToBottom) {
         return isRootTask() && callback.test(this) ? this : null;
-    }
-
-    @Nullable
-    @Override
-    <R> R getItemFromRootTasks(Function<Task, R> callback, boolean traverseTopToBottom) {
-        return isRootTask() ? callback.apply(this) : null;
     }
 
     /**
@@ -6241,11 +6275,13 @@ class Task extends TaskFragment {
 
     boolean shouldSleepActivities() {
         final DisplayContent display = mDisplayContent;
+        final boolean isKeyguardGoingAway = (mDisplayContent != null)
+                ? mDisplayContent.isKeyguardGoingAway()
+                : mRootWindowContainer.getDefaultDisplay().isKeyguardGoingAway();
 
         // Do not sleep activities in this root task if we're marked as focused and the keyguard
         // is in the process of going away.
-        if (mTaskSupervisor.getKeyguardController().isKeyguardGoingAway()
-                && isFocusedRootTaskOnDisplay()
+        if (isKeyguardGoingAway && isFocusedRootTaskOnDisplay()
                 // Avoid resuming activities on secondary displays since we don't want bubble
                 // activities to be resumed while bubble is still collapsed.
                 // TODO(b/113840485): Having keyguard going away state for secondary displays.

@@ -16,8 +16,10 @@
 
 package com.android.server.pm
 
+import android.content.Context
 import android.os.Build
 import android.os.Handler
+import android.os.PowerManager
 import android.provider.DeviceConfig
 import android.provider.DeviceConfig.NAMESPACE_APP_HIBERNATION
 import android.testing.AndroidTestingRunner
@@ -34,6 +36,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mock
+import org.mockito.Mockito
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 
@@ -55,6 +58,8 @@ class PackageManagerServiceHibernationTests {
 
     @Mock
     lateinit var appHibernationManager: AppHibernationManagerInternal
+    @Mock
+    lateinit var powerManager: PowerManager
 
     @Before
     @Throws(Exception::class)
@@ -68,6 +73,24 @@ class PackageManagerServiceHibernationTests {
             .thenReturn(appHibernationManager)
         whenever(rule.mocks().injector.handler)
             .thenReturn(Handler(TestableLooper.get(this).looper))
+        val injector = object : PackageDexOptimizer.Injector {
+            override fun getAppHibernationManagerInternal(): AppHibernationManagerInternal {
+                return appHibernationManager
+            }
+
+            override fun getPowerManager(context: Context?): PowerManager {
+                return powerManager
+            }
+        }
+        val packageDexOptimizer = PackageDexOptimizer(
+            injector,
+            rule.mocks().installer,
+            rule.mocks().installLock,
+            rule.mocks().context,
+            "*dexopt*")
+        whenever(rule.mocks().injector.packageDexOptimizer)
+            .thenReturn(packageDexOptimizer)
+        whenever(appHibernationManager.isOatArtifactDeletionEnabled).thenReturn(true)
     }
 
     @Test
@@ -78,8 +101,10 @@ class PackageManagerServiceHibernationTests {
             rule.system().dataAppDirectory)
         val pm = createPackageManagerService()
         rule.system().validateFinalState()
-        val ps = pm.getPackageSetting(TEST_PACKAGE_NAME)
-        ps!!.setStopped(true, TEST_USER_ID)
+
+        pm.setPackageStoppedState(TEST_PACKAGE_NAME, true, TEST_USER_ID)
+        TestableLooper.get(this).processAllMessages()
+        Mockito.clearInvocations(appHibernationManager)
 
         pm.setPackageStoppedState(TEST_PACKAGE_NAME, false, TEST_USER_ID)
 
@@ -119,6 +144,7 @@ class PackageManagerServiceHibernationTests {
             false /*isEngBuild*/,
             false /*isUserDebugBuild*/,
             Build.VERSION_CODES.CUR_DEVELOPMENT,
-            Build.VERSION.INCREMENTAL)
+            Build.VERSION.INCREMENTAL,
+            false /*snapshotEnabled*/)
     }
 }

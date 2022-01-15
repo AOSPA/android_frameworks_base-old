@@ -18,6 +18,7 @@ package com.android.server.criticalevents;
 
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.server.ServerProtoEnums;
 import android.util.Slog;
 
 import com.android.framework.protobuf.nano.MessageNanoPrinter;
@@ -26,7 +27,10 @@ import com.android.internal.util.RingBuffer;
 import com.android.server.criticalevents.nano.CriticalEventLogProto;
 import com.android.server.criticalevents.nano.CriticalEventLogStorageProto;
 import com.android.server.criticalevents.nano.CriticalEventProto;
+import com.android.server.criticalevents.nano.CriticalEventProto.AppNotResponding;
 import com.android.server.criticalevents.nano.CriticalEventProto.HalfWatchdog;
+import com.android.server.criticalevents.nano.CriticalEventProto.JavaCrash;
+import com.android.server.criticalevents.nano.CriticalEventProto.NativeCrash;
 import com.android.server.criticalevents.nano.CriticalEventProto.Watchdog;
 
 import java.io.File;
@@ -48,6 +52,9 @@ import java.util.UUID;
  */
 public class CriticalEventLog {
     private static final String TAG = CriticalEventLog.class.getSimpleName();
+
+    /** UID for system_server. */
+    private static final int AID_SYSTEM = 1000;
 
     private static CriticalEventLog sInstance;
 
@@ -153,21 +160,113 @@ public class CriticalEventLog {
         log(event);
     }
 
+    /**
+     * Logs an ANR.
+     *
+     * @param subject          the ANR subject line.
+     * @param processClassEnum {@link android.server.ServerProtoEnums} value for the ANRing process.
+     * @param processName      name of the ANRing process.
+     * @param uid              uid of the ANRing process.
+     * @param pid              pid of the ANRing process.
+     */
+    public void logAnr(String subject, int processClassEnum, String processName, int uid, int pid) {
+        AppNotResponding anr = new AppNotResponding();
+        anr.subject = subject;
+        anr.processClass = processClassEnum;
+        anr.process = processName;
+        anr.uid = uid;
+        anr.pid = pid;
+        CriticalEventProto event = new CriticalEventProto();
+        event.setAnr(anr);
+        log(event);
+    }
+
+    /**
+     * Logs a java crash.
+     *
+     * @param exceptionClass   the crash exception class.
+     * @param processClassEnum {@link android.server.ServerProtoEnums} value for the crashed
+     *                         process.
+     * @param processName      name of the crashed process.
+     * @param uid              uid of the crashed process.
+     * @param pid              pid of the crashed process.
+     */
+    public void logJavaCrash(String exceptionClass, int processClassEnum, String processName,
+            int uid, int pid) {
+        JavaCrash crash = new JavaCrash();
+        crash.exceptionClass = exceptionClass;
+        crash.processClass = processClassEnum;
+        crash.process = processName;
+        crash.uid = uid;
+        crash.pid = pid;
+        CriticalEventProto event = new CriticalEventProto();
+        event.setJavaCrash(crash);
+        log(event);
+    }
+
+    /**
+     * Logs a native crash.
+     *
+     * @param processClassEnum {@link android.server.ServerProtoEnums} value for the crashed
+     *                         process.
+     * @param processName      name of the crashed process.
+     * @param uid              uid of the crashed process.
+     * @param pid              pid of the crashed process.
+     */
+    public void logNativeCrash(int processClassEnum, String processName, int uid, int pid) {
+        NativeCrash crash = new NativeCrash();
+        crash.processClass = processClassEnum;
+        crash.process = processName;
+        crash.uid = uid;
+        crash.pid = pid;
+        CriticalEventProto event = new CriticalEventProto();
+        event.setNativeCrash(crash);
+        log(event);
+    }
+
     private void log(CriticalEventProto event) {
         event.timestampMs = getWallTimeMillis();
+        appendAndSave(event);
+    }
+
+    @VisibleForTesting
+    void appendAndSave(CriticalEventProto event) {
         mEvents.append(event);
         saveLogToFile();
     }
 
     /**
-     * Returns recent critical events in text format to include in logs such as ANR files.
+     * Returns recent critical events in text format to include in system server ANR stack trace
+     * file.
      *
      * Includes all events in the ring buffer with age less than or equal to {@code mWindowMs}.
      */
-    public String logLinesForAnrFile() {
+    public String logLinesForSystemServerTraceFile() {
+        return logLinesForTraceFile(ServerProtoEnums.SYSTEM_SERVER, "AID_SYSTEM", AID_SYSTEM);
+    }
+
+    /**
+     * Returns recent critical events in text format to include in logs such as ANR stack trace
+     * files.
+     *
+     * Includes all events in the ring buffer with age less than or equal to {@code mWindowMs}.
+     *
+     * Some data in the returned log may be redacted for privacy. For example, a log for a data
+     * app will not include specific crash information for a different data app. See
+     * {@link LogSanitizer} for more information.
+     *
+     * @param traceProcessClassEnum {@link android.server.ServerProtoEnums} value for the process
+     *                              the ANR trace file is for.
+     * @param traceProcessName      name of the process the ANR trace file is for.
+     * @param traceUid              uid of the process the ANR trace file is for.
+     */
+    public String logLinesForTraceFile(int traceProcessClassEnum, String traceProcessName,
+            int traceUid) {
+        CriticalEventLogProto outputLogProto = getOutputLogProto(traceProcessClassEnum,
+                traceProcessName, traceUid);
         return new StringBuilder()
                 .append("--- CriticalEventLog ---\n")
-                .append(MessageNanoPrinter.print(getRecentEvents()))
+                .append(MessageNanoPrinter.print(outputLogProto))
                 .append('\n').toString();
     }
 
@@ -177,12 +276,20 @@ public class CriticalEventLog {
      * Includes all events in the ring buffer with age less than or equal to {@code mWindowMs}.
      */
     @VisibleForTesting
-    protected CriticalEventLogProto getRecentEvents() {
+    protected CriticalEventLogProto getOutputLogProto(int traceProcessClassEnum,
+            String traceProcessName, int traceUid) {
         CriticalEventLogProto log = new CriticalEventLogProto();
         log.timestampMs = getWallTimeMillis();
         log.windowMs = mWindowMs;
         log.capacity = mEvents.capacity();
-        log.events = recentEventsWithMinTimestamp(log.timestampMs - mWindowMs);
+
+        CriticalEventProto[] events = recentEventsWithMinTimestamp(log.timestampMs - mWindowMs);
+        LogSanitizer sanitizer = new LogSanitizer(traceProcessClassEnum, traceProcessName,
+                traceUid);
+        for (int i = 0; i < events.length; i++) {
+            events[i] = sanitizer.process(events[i]);
+        }
+        log.events = events;
 
         return log;
     }
@@ -323,6 +430,112 @@ public class CriticalEventLog {
                 Slog.e(TAG, "Error reading log from disk.", e);
                 return new CriticalEventLogStorageProto();
             }
+        }
+    }
+
+    /**
+     * Redacts private data app fields from the critical event protos.
+     *
+     * When a critical event log is requested, this class is used to redact specific information
+     * so that the trace file for a data app does not leak private information about other data
+     * apps.
+     */
+    private static class LogSanitizer {
+        /**
+         * The {@link CriticalEventProto.ProcessClass} of the process the output trace file is for.
+         */
+        int mTraceProcessClassEnum;
+
+        /** The name of the process that the output trace file is for. */
+        String mTraceProcessName;
+
+        /** The uid of the process that the output trace file is for. */
+        int mTraceUid;
+
+        LogSanitizer(int traceProcessClassEnum, String traceProcessName, int traceUid) {
+            mTraceProcessClassEnum = traceProcessClassEnum;
+            mTraceProcessName = traceProcessName;
+            mTraceUid = traceUid;
+        }
+
+        /**
+         * Redacts information from a critical event proto where necessary.
+         *
+         * This function does not mutate its input. If redaction happens, it returns a new proto.
+         * Otherwise, it returns the original proto.
+         */
+        CriticalEventProto process(CriticalEventProto event) {
+            if (event.hasAnr()) {
+                AppNotResponding anr = event.getAnr();
+                if (shouldSanitize(anr.processClass, anr.process, anr.uid)) {
+                    return sanitizeAnr(event);
+                }
+            } else if (event.hasJavaCrash()) {
+                JavaCrash crash = event.getJavaCrash();
+                if (shouldSanitize(crash.processClass, crash.process, crash.uid)) {
+                    return sanitizeJavaCrash(event);
+                }
+            } else if (event.hasNativeCrash()) {
+                NativeCrash crash = event.getNativeCrash();
+                if (shouldSanitize(crash.processClass, crash.process, crash.uid)) {
+                    return sanitizeNativeCrash(event);
+                }
+            }
+            // No redaction needed.
+            return event;
+        }
+
+        private boolean shouldSanitize(int processClassEnum, String processName, int uid) {
+            boolean sameApp = processName != null && processName.equals(mTraceProcessName)
+                    && mTraceUid == uid;
+
+            // Only sanitize when both the critical event and trace file are for different data
+            // apps.
+            return processClassEnum == CriticalEventProto.DATA_APP
+                    && mTraceProcessClassEnum == CriticalEventProto.DATA_APP
+                    && !sameApp;
+        }
+
+        private static CriticalEventProto sanitizeAnr(CriticalEventProto base) {
+            AppNotResponding anr = new AppNotResponding();
+            // Do not set subject and process.
+            anr.processClass = base.getAnr().processClass;
+            anr.uid = base.getAnr().uid;
+            anr.pid = base.getAnr().pid;
+
+            CriticalEventProto sanitized = sanitizeCriticalEventProto(base);
+            sanitized.setAnr(anr);
+            return sanitized;
+        }
+
+        private static CriticalEventProto sanitizeJavaCrash(CriticalEventProto base) {
+            JavaCrash crash = new JavaCrash();
+            // Do not set exceptionClass and process.
+            crash.processClass = base.getJavaCrash().processClass;
+            crash.uid = base.getJavaCrash().uid;
+            crash.pid = base.getJavaCrash().pid;
+
+            CriticalEventProto sanitized = sanitizeCriticalEventProto(base);
+            sanitized.setJavaCrash(crash);
+            return sanitized;
+        }
+
+        private static CriticalEventProto sanitizeNativeCrash(CriticalEventProto base) {
+            NativeCrash crash = new NativeCrash();
+            // Do not set process.
+            crash.processClass = base.getNativeCrash().processClass;
+            crash.uid = base.getNativeCrash().uid;
+            crash.pid = base.getNativeCrash().pid;
+
+            CriticalEventProto sanitized = sanitizeCriticalEventProto(base);
+            sanitized.setNativeCrash(crash);
+            return sanitized;
+        }
+
+        private static CriticalEventProto sanitizeCriticalEventProto(CriticalEventProto base) {
+            CriticalEventProto sanitized = new CriticalEventProto();
+            sanitized.timestampMs = base.timestampMs;
+            return sanitized;
         }
     }
 }

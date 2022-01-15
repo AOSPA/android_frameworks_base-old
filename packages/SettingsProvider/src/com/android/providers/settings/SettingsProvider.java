@@ -43,7 +43,6 @@ import android.app.backup.BackupManager;
 import android.app.compat.CompatChanges;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
-import android.bluetooth.BluetoothProfile;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
 import android.content.BroadcastReceiver;
@@ -3595,7 +3594,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 205;
+            private static final int SETTINGS_VERSION = 206;
 
             private final int mUserId;
 
@@ -5304,16 +5303,6 @@ public class SettingsProvider extends ContentProvider {
                             Global.Wearable.WEAR_PLATFORM_MR_NUMBER,
                             SystemProperties.getInt("ro.cw_build.platform_mr", 0));
                     initGlobalSettingsDefaultValForWearLocked(
-                            Settings.Global.Wearable.BOTTOM_OFFSET, 0);
-                    initGlobalSettingsDefaultValForWearLocked(
-                            Settings.Global.Wearable.DISPLAY_SHAPE,
-                            Settings.Global.Wearable.DISPLAY_SHAPE_SQUARE);
-                    initGlobalSettingsDefaultValForWearLocked(
-                            Settings.Global.Wearable.SCREEN_BRIGHTNESS_LEVEL,
-                            getContext()
-                                    .getResources()
-                                    .getString(R.string.def_wearable_brightnessLevels));
-                    initGlobalSettingsDefaultValForWearLocked(
                             Settings.Global.Wearable.MOBILE_SIGNAL_DETECTOR,
                             getContext()
                                     .getResources()
@@ -5355,8 +5344,6 @@ public class SettingsProvider extends ContentProvider {
                             Settings.Global.Wearable.AMBIENT_PLUGGED_TIMEOUT_MIN,
                             SystemProperties.getInt("ro.ambient.plugged_timeout_min", -1));
                     initGlobalSettingsDefaultValForWearLocked(
-                            Settings.Global.Wearable.COMPANION_ADDRESS, "");
-                    initGlobalSettingsDefaultValForWearLocked(
                             Settings.Global.Wearable.PAIRED_DEVICE_OS_TYPE,
                             Settings.Global.Wearable.PAIRED_DEVICE_OS_TYPE_UNKNOWN);
                     initGlobalSettingsDefaultValForWearLocked(
@@ -5369,12 +5356,6 @@ public class SettingsProvider extends ContentProvider {
                             disabledProfileSetting.isNull()
                                     ? 0
                                     : Long.parseLong(disabledProfileSetting.getValue());
-                    final boolean isHfpClientProfileEnabled =
-                            (disabledProfileSettingValue & (1 << BluetoothProfile.HEADSET_CLIENT))
-                                    == 0;
-                    initGlobalSettingsDefaultValForWearLocked(
-                            Settings.Global.Wearable.HFP_CLIENT_PROFILE_ENABLED,
-                            isHfpClientProfileEnabled);
                     initGlobalSettingsDefaultValForWearLocked(
                             Settings.Global.Wearable.COMPANION_OS_VERSION,
                             Settings.Global.Wearable.COMPANION_OS_VERSION_UNDEFINED);
@@ -5450,6 +5431,23 @@ public class SettingsProvider extends ContentProvider {
                     }
                     currentVersion = 205;
                 }
+
+                if (currentVersion == 205) {
+                    // Version 205: Set the default value for QR Code Scanner Setting:
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    final Setting showQRCodeScannerOnLockScreen = secureSettings.getSettingLocked(
+                            Secure.LOCK_SCREEN_SHOW_QR_CODE_SCANNER);
+                    if (showQRCodeScannerOnLockScreen.isNull()) {
+                        final boolean defLockScreenShowQrCodeScanner = getContext().getResources()
+                                .getBoolean(R.bool.def_lock_screen_show_qr_code_scanner);
+                        secureSettings.insertSettingOverrideableByRestoreLocked(
+                                Secure.LOCK_SCREEN_SHOW_QR_CODE_SCANNER,
+                                defLockScreenShowQrCodeScanner ? "1" : "0", null, true,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    currentVersion = 206;
+                }
+
 
                 // vXXX: Add new settings above this point.
 

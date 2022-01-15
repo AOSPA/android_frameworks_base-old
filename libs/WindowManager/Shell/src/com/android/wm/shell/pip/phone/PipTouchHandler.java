@@ -139,7 +139,12 @@ public class PipTouchHandler {
 
         @Override
         public void onPipExpand() {
-            mMotionHelper.expandLeavePip();
+            mMotionHelper.expandLeavePip(false /* skipAnimation */);
+        }
+
+        @Override
+        public void onEnterSplit() {
+            mMotionHelper.expandIntoSplit();
         }
 
         @Override
@@ -252,6 +257,11 @@ public class PipTouchHandler {
         mImeOffset = res.getDimensionPixelSize(R.dimen.pip_ime_offset);
         mMinimumSizePercent = res.getFraction(R.fraction.config_pipShortestEdgePercent, 1, 1);
         mPipDismissTargetHandler.updateMagneticTargetSize();
+    }
+
+    public void onOverlayChanged() {
+        // onOverlayChanged is triggered upon theme change, update the dismiss target accordingly.
+        mPipDismissTargetHandler.init();
     }
 
     private boolean shouldShowResizeHandle() {
@@ -899,7 +909,7 @@ public class PipTouchHandler {
                     // Expand to fullscreen if this is a double tap
                     // the PiP should be frozen until the transition ends
                     setTouchEnabled(false);
-                    mMotionHelper.expandLeavePip();
+                    mMotionHelper.expandLeavePip(false /* skipAnimation */);
                 }
             } else if (mMenuState != MENU_STATE_FULL) {
                 if (mPipBoundsState.isStashed()) {

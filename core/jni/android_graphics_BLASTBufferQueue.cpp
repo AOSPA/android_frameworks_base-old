@@ -73,10 +73,10 @@ static jint nativeGetUndequeuedBufferCount(JNIEnv* env, jclass clazz, jlong ptr)
     return queue->getUndequeuedBufferCount();
 }
 
-static void nativeSetNextTransaction(JNIEnv* env, jclass clazz, jlong ptr, jlong transactionPtr) {
+static void nativeSetSyncTransaction(JNIEnv* env, jclass clazz, jlong ptr, jlong transactionPtr) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionPtr);
-    queue->setNextTransaction(transaction);
+    queue->setSyncTransaction(transaction);
 }
 
 static void nativeUpdate(JNIEnv* env, jclass clazz, jlong ptr, jlong surfaceControl, jlong width,
@@ -112,7 +112,7 @@ static const JNINativeMethod gMethods[] = {
         {"nativeSetUndequeuedBufferCount", "(JI)V", (void*)nativeSetUndequeuedBufferCount},
         {"nativeGetUndequeuedBufferCount", "(J)I", (void*)nativeGetUndequeuedBufferCount},
         {"nativeDestroy", "(J)V", (void*)nativeDestroy},
-        {"nativeSetNextTransaction", "(JJ)V", (void*)nativeSetNextTransaction},
+        {"nativeSetSyncTransaction", "(JJ)V", (void*)nativeSetSyncTransaction},
         {"nativeUpdate", "(JJJJIJ)V", (void*)nativeUpdate},
         {"nativeMergeWithNextTransaction", "(JJJ)V", (void*)nativeMergeWithNextTransaction},
         {"nativeGetLastAcquiredFrameNum", "(J)J", (void*)nativeGetLastAcquiredFrameNum},

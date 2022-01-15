@@ -58,7 +58,6 @@ public class KeyguardClockPositionAlgorithmTest extends SysuiTestCase {
     private KeyguardClockPositionAlgorithm.Result mClockPosition;
 
     private MockitoSession mStaticMockSession;
-    private int mNotificationStackHeight;
 
     private float mPanelExpansion;
     private int mKeyguardStatusBarHeaderHeight;
@@ -261,6 +260,58 @@ public class KeyguardClockPositionAlgorithmTest extends SysuiTestCase {
         positionClock();
         // THEN the notif padding DOESN'T adjust for keyguard status height.
         assertThat(mClockPosition.stackScrollerPadding).isEqualTo(0);
+    }
+
+    @Test
+    public void clockPositionedDependingOnMarginInSplitShade() {
+        when(mResources.getDimensionPixelSize(R.dimen.keyguard_split_shade_top_margin))
+                .thenReturn(400);
+        mClockPositionAlgorithm.loadDimens(mResources);
+        givenLockScreen();
+        mIsSplitShade = true;
+        // WHEN the position algorithm is run
+        positionClock();
+
+        assertThat(mClockPosition.clockY).isEqualTo(400);
+    }
+
+    @Test
+    public void notifPaddingMakesUpToFullMarginInSplitShade() {
+        when(mResources.getDimensionPixelSize(R.dimen.keyguard_split_shade_top_margin))
+                .thenReturn(100);
+        when(mResources.getDimensionPixelSize(R.dimen.split_shade_header_height))
+                .thenReturn(70);
+        mClockPositionAlgorithm.loadDimens(mResources);
+        givenLockScreen();
+        mIsSplitShade = true;
+        // WHEN the position algorithm is run
+        positionClock();
+        // THEN the notif padding makes up lacking margin (margin - header height = 30).
+        assertThat(mClockPosition.stackScrollerPadding).isEqualTo(30);
+    }
+
+    @Test
+    public void notifPaddingExpandedAlignedWithClockInSplitShadeMode() {
+        givenLockScreen();
+        mIsSplitShade = true;
+        mKeyguardStatusHeight = 200;
+        // WHEN the position algorithm is run
+        positionClock();
+        // THEN the padding DOESN'T adjust for keyguard status height.
+        assertThat(mClockPosition.stackScrollerPaddingExpanded)
+                .isEqualTo(mClockPosition.clockY);
+    }
+
+    @Test
+    public void notifMinPaddingAlignedWithClockInSplitShadeMode() {
+        givenLockScreen();
+        mIsSplitShade = true;
+        mKeyguardStatusHeight = 200;
+        // WHEN the position algorithm is run
+        positionClock();
+        // THEN the padding DOESN'T adjust for keyguard status height.
+        assertThat(mClockPositionAlgorithm.getMinStackScrollerPadding())
+                .isEqualTo(mKeyguardStatusBarHeaderHeight);
     }
 
     @Test

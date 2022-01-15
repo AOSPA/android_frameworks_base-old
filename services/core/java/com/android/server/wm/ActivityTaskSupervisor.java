@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.Manifest.permission.ACTIVITY_EMBEDDING;
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
+import static android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
 import static android.Manifest.permission.START_ANY_ACTIVITY;
 import static android.app.ActivityManager.LOCK_TASK_MODE_LOCKED;
 import static android.app.ActivityManager.START_DELIVERED_TO_TOP;
@@ -44,7 +45,6 @@ import static android.os.PowerManager.PARTIAL_WAKE_LOCK;
 import static android.os.Process.INVALID_UID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
@@ -151,6 +151,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.UserState;
+import com.android.server.utils.Slogf;
 import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
 
 import java.io.FileDescriptor;
@@ -1329,10 +1330,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
     /**
      * Called when all resumed tasks/root-tasks are idle.
-     * @return the state of mService.mAm.mBooting before this was called.
      */
     @GuardedBy("mService")
-    private boolean checkFinishBootingLocked() {
+    private void checkFinishBootingLocked() {
         final boolean booting = mService.isBooting();
         boolean enableScreen = false;
         mService.setBooting(false);
@@ -1343,14 +1343,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         if (booting || enableScreen) {
             mService.postFinishBooting(booting, enableScreen);
         }
-        return booting;
     }
 
     void activityIdleInternal(ActivityRecord r, boolean fromTimeout,
             boolean processPausingActivities, Configuration config) {
         if (DEBUG_ALL) Slog.v(TAG, "Activity idle: " + r);
-
-        boolean booting = false;
 
         if (r != null) {
             if (DEBUG_IDLE) Slog.d(TAG_IDLE, "activityIdleInternal: Callers="
@@ -1374,13 +1371,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // us, we can now deliver.
             r.idle = true;
 
-            //Slog.i(TAG, "IDLE: mBooted=" + mBooted + ", fromTimeout=" + fromTimeout);
-
             // Check if able to finish booting when device is booting and all resumed activities
             // are idle.
             if ((mService.isBooting() && mRootWindowContainer.allResumedActivitiesIdle())
                     || fromTimeout) {
-                booting = checkFinishBootingLocked();
+                checkFinishBootingLocked();
             }
 
             // When activity is idle, we consider the relaunch must be successful, so let's clear
@@ -1408,15 +1403,18 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         // Atomically retrieve all of the other things to do.
         processStoppingAndFinishingActivities(r, processPausingActivities, "idle");
 
+        if (DEBUG_IDLE) {
+            Slogf.i(TAG, "activityIdleInternal(): r=%s, mStartingUsers=%s", r, mStartingUsers);
+        }
+
         if (!mStartingUsers.isEmpty()) {
             final ArrayList<UserState> startingUsers = new ArrayList<>(mStartingUsers);
             mStartingUsers.clear();
-
-            if (!booting) {
-                // Complete user switch.
-                for (int i = 0; i < startingUsers.size(); i++) {
-                    mService.mAmInternal.finishUserSwitch(startingUsers.get(i));
-                }
+            // Complete user switch.
+            for (int i = 0; i < startingUsers.size(); i++) {
+                UserState userState = startingUsers.get(i);
+                Slogf.i(TAG, "finishing switch of user %d", userState.mHandle.getIdentifier());
+                mService.mAmInternal.finishUserSwitch(userState);
             }
         }
 
@@ -1623,19 +1621,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // Prevent recursion.
             return;
         }
-        if (task.isVisible()) {
-            if (task.mTransitionController.isCollecting()) {
-                // We don't want the finishing to change the transition ready state since there will
-                // not be corresponding setReady for finishing.
-                task.mTransitionController.collectExistenceChange(task);
-            } else {
-                task.mTransitionController.requestTransitionIfNeeded(TRANSIT_CLOSE, task);
-            }
-        } else {
-            // Removing a non-visible task doesn't require a transition, but if there is one
-            // collecting, this should be a member just in case.
-            task.mTransitionController.collect(task);
-        }
+        task.mTransitionController.requestCloseTransitionIfNeeded(task);
         task.mInRemoveTask = true;
         try {
             task.performClearTask(reason);
@@ -2130,6 +2116,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
     final void scheduleIdle() {
         if (!mHandler.hasMessages(IDLE_NOW_MSG)) {
+            if (DEBUG_IDLE) Slog.d(TAG_IDLE, "scheduleIdle: Callers=" + Debug.getCallers(4));
             mHandler.sendEmptyMessage(IDLE_NOW_MSG);
         }
     }
@@ -2167,6 +2154,16 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
         // Update the current top activity.
         mTopResumedActivity = topRootTask.getTopResumedActivity();
+        // Update process state if there is no activity state change (e.g. focus change between
+        // multi-window mode activities) to make sure that the current top has top oom-adj.
+        // If the previous top is null, there should be activity state change from it, Then the
+        // process state should also have been updated so no need to update again.
+        if (mTopResumedActivity != null && prevTopActivity != null) {
+            if (mTopResumedActivity.app != null) {
+                mTopResumedActivity.app.addToPendingTop();
+            }
+            mService.updateOomAdj();
+        }
         scheduleTopResumedActivityStateIfNeeded();
 
         mService.updateTopApp(mTopResumedActivity);
@@ -2322,10 +2319,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
         mService.getTaskChangeNotificationController().notifyActivityForcedResizable(
                 task.mTaskId, reason, topActivity.info.applicationInfo.packageName);
-    }
-
-    void logRootTaskState() {
-        mActivityMetricsLogger.logWindowState();
     }
 
     void scheduleUpdateMultiWindowMode(Task task) {
@@ -2607,7 +2600,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 activityType = activityOptions.getLaunchActivityType();
                 final int windowingMode = activityOptions.getLaunchWindowingMode();
                 if (activityOptions.freezeRecentTasksReordering()
-                        && mRecentTasks.isCallerRecents(callingUid)) {
+                        && mService.checkPermission(MANAGE_ACTIVITY_TASKS, callingPid, callingUid)
+                                == PERMISSION_GRANTED) {
                     mRecentTasks.setFreezeTaskListReordering();
                 }
                 if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY

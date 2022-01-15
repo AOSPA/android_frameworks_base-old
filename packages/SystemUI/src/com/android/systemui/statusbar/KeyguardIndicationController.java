@@ -818,7 +818,7 @@ public class KeyguardIndicationController {
     }
 
     private void showTryFingerprintMsg(int msgId, String a11yString) {
-        if (mKeyguardUpdateMonitor.isUdfpsAvailable()) {
+        if (mKeyguardUpdateMonitor.isUdfpsSupported()) {
             // if udfps available, there will always be a tappable affordance to unlock
             // For example, the lock icon
             if (mKeyguardBypassController.getUserHasDeviceEntryIntent()) {
@@ -912,7 +912,11 @@ public class KeyguardIndicationController {
             } else if (mKeyguardUpdateMonitor.isScreenOn()) {
                 if (biometricSourceType == BiometricSourceType.FACE
                         && shouldSuppressFaceMsgAndShowTryFingerprintMsg()) {
-                    showTryFingerprintMsg(msgId, helpString);
+                    // don't show any help messages, b/c they can come in right before a success
+                    // However, continue to announce help messages for a11y
+                    if (!TextUtils.isEmpty(helpString)) {
+                        mLockScreenIndicationView.announceForAccessibility(helpString);
+                    }
                     return;
                 }
                 showTransientIndication(helpString, false /* isError */, showActionToUnlock);

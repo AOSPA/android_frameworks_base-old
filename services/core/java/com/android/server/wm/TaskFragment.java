@@ -31,6 +31,7 @@ import static android.content.pm.ActivityInfo.FLAG_RESUME_WHILE_PAUSING;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
+import static android.os.Process.INVALID_UID;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.TRANSIT_CLOSE;
@@ -226,6 +227,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     /** Organizer that organizing this TaskFragment. */
     @Nullable
     private ITaskFragmentOrganizer mTaskFragmentOrganizer;
+    private int mTaskFragmentOrganizerUid = INVALID_UID;
+    private @Nullable String mTaskFragmentOrganizerProcessName;
 
     /** Client assigned unique token for this TaskFragment if this is created by an organizer. */
     @Nullable
@@ -237,13 +240,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * opportunity to perform other actions or animations.
      */
     private boolean mDelayLastActivityRemoval;
-
-    /**
-     * The PID of the organizer that created this TaskFragment. It should be the same as the PID
-     * of {@link android.window.TaskFragmentCreationParams#getOwnerToken()}.
-     * {@link ActivityRecord#INVALID_PID} if this is not an organizer-created TaskFragment.
-     */
-    private int mTaskFragmentOrganizerPid = ActivityRecord.INVALID_PID;
 
     final Point mLastSurfaceSize = new Point();
 
@@ -340,9 +336,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mDelayLastActivityRemoval = false;
     }
 
-    void setTaskFragmentOrganizer(TaskFragmentOrganizerToken organizer, int pid) {
+    void setTaskFragmentOrganizer(@NonNull TaskFragmentOrganizerToken organizer, int uid,
+            @NonNull String processName) {
         mTaskFragmentOrganizer = ITaskFragmentOrganizer.Stub.asInterface(organizer.asBinder());
-        mTaskFragmentOrganizerPid = pid;
+        mTaskFragmentOrganizerUid = uid;
+        mTaskFragmentOrganizerProcessName = processName;
     }
 
     /** Whether this TaskFragment is organized by the given {@code organizer}. */
@@ -780,6 +778,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         boolean gotOpaqueSplitScreenPrimary = false;
         boolean gotOpaqueSplitScreenSecondary = false;
         boolean gotTranslucentFullscreen = false;
+        boolean gotTranslucentAdjacent = false;
         boolean gotTranslucentSplitScreenPrimary = false;
         boolean gotTranslucentSplitScreenSecondary = false;
         boolean shouldBeVisible = true;
@@ -808,6 +807,18 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             final boolean hasRunningActivities = hasRunningActivity(other);
             if (other == this) {
+                if (!adjacentTaskFragments.isEmpty() && !gotTranslucentAdjacent) {
+                    // The z-order of this TaskFragment is in middle of two adjacent TaskFragments
+                    // and it cannot be visible if the TaskFragment on top is not translucent and
+                    // is fully occluding this one.
+                    for (int j = adjacentTaskFragments.size() - 1; j >= 0; --j) {
+                        final TaskFragment taskFragment = adjacentTaskFragments.get(j);
+                        if (!taskFragment.isTranslucent(starting)
+                                && taskFragment.getBounds().contains(this.getBounds())) {
+                            return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
+                        }
+                    }
+                }
                 // Should be visible if there is no other fragment occluding it, unless it doesn't
                 // have any running activities, not starting one and not home stack.
                 shouldBeVisible = hasRunningActivities
@@ -877,6 +888,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                             || otherTaskFrag.mAdjacentTaskFragment.isTranslucent(starting)) {
                         // Can be visible behind a translucent adjacent TaskFragments.
                         gotTranslucentFullscreen = true;
+                        gotTranslucentAdjacent = true;
                         continue;
                     }
                     // Can not be visible behind adjacent TaskFragments.
@@ -1780,7 +1792,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return false;
         }
 
-        return tda.supportsActivityMinWidthHeightMultiWindow(mMinWidth, mMinHeight);
+        final ActivityRecord rootActivity = getTask().getRootActivity();
+        return tda.supportsActivityMinWidthHeightMultiWindow(mMinWidth, mMinHeight,
+                rootActivity != null ? rootActivity.info : null);
     }
 
     private int getTaskId() {
@@ -2008,8 +2022,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mTmpBounds.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
 
         final DisplayPolicy policy = rootTask.mDisplayContent.getDisplayPolicy();
-        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.logicalWidth,
-                displayInfo.logicalHeight, displayInfo.displayCutout, mTmpInsets);
+        policy.getNonDecorInsetsLw(displayInfo.rotation,
+                displayInfo.displayCutout, mTmpInsets);
         intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, mTmpInsets);
 
         policy.convertNonDecorInsetsToStableInsets(mTmpInsets, displayInfo.rotation);
@@ -2186,9 +2200,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         List<IBinder> childActivities = new ArrayList<>();
         for (int i = 0; i < getChildCount(); i++) {
             WindowContainer wc = getChildAt(i);
-            if (mTaskFragmentOrganizerPid != ActivityRecord.INVALID_PID
+            if (mTaskFragmentOrganizerUid != INVALID_UID
                     && wc.asActivityRecord() != null
-                    && wc.asActivityRecord().getPid() == mTaskFragmentOrganizerPid) {
+                    && wc.asActivityRecord().info.processName.equals(
+                            mTaskFragmentOrganizerProcessName)
+                    && wc.asActivityRecord().getUid() == mTaskFragmentOrganizerUid) {
                 // Only includes Activities that belong to the organizer process for security.
                 childActivities.add(wc.asActivityRecord().token);
             }

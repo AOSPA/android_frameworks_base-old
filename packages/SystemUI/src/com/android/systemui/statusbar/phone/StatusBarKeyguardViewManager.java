@@ -63,6 +63,8 @@ import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.ViewGroupFadeHelper;
 import com.android.systemui.statusbar.phone.KeyguardBouncer.BouncerExpansionCallback;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionListener;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
@@ -266,6 +268,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     @Override
     public void registerStatusBar(StatusBar statusBar,
             NotificationPanelViewController notificationPanelViewController,
+            PanelExpansionStateManager panelExpansionStateManager,
             BiometricUnlockController biometricUnlockController,
             View notificationContainer,
             KeyguardBypassController bypassController) {
@@ -275,7 +278,9 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         ViewGroup container = mStatusBar.getBouncerContainer();
         mBouncer = mKeyguardBouncerFactory.create(container, mExpansionCallback);
         mNotificationPanelViewController = notificationPanelViewController;
-        notificationPanelViewController.addExpansionListener(this);
+        if (panelExpansionStateManager != null) {
+            panelExpansionStateManager.addExpansionListener(this);
+        }
         mBypassController = bypassController;
         mNotificationContainer = notificationContainer;
         mKeyguardMessageAreaController = mKeyguardMessageAreaFactory.create(
@@ -323,7 +328,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     @Override
-    public void onPanelExpansionChanged(float expansion, boolean tracking) {
+    public void onPanelExpansionChanged(float fraction, boolean expanded, boolean tracking) {
         // We don't want to translate the bounce when:
         // • Keyguard is occluded, because we're in a FLAG_SHOW_WHEN_LOCKED activity and need to
         //   conserve the original animation.
@@ -336,14 +341,14 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             mBouncer.setExpansion(KeyguardBouncer.EXPANSION_VISIBLE);
         } else if (mShowing) {
             if (!isWakeAndUnlocking() && !mStatusBar.isInLaunchTransition()) {
-                mBouncer.setExpansion(expansion);
+                mBouncer.setExpansion(fraction);
             }
-            if (expansion != KeyguardBouncer.EXPANSION_HIDDEN && tracking
+            if (fraction != KeyguardBouncer.EXPANSION_HIDDEN && tracking
                     && !mKeyguardStateController.canDismissLockScreen()
                     && !mBouncer.isShowing() && !mBouncer.isAnimatingAway()) {
                 mBouncer.show(false /* resetSecuritySelection */, false /* scrimmed */);
             }
-        } else if (mPulsing && expansion == KeyguardBouncer.EXPANSION_VISIBLE) {
+        } else if (mPulsing && fraction == KeyguardBouncer.EXPANSION_VISIBLE) {
             // Panel expanded while pulsing but didn't translate the bouncer (because we are
             // unlocked.) Let's simply wake-up to dismiss the lock screen.
             mStatusBar.wakeUpIfDozing(SystemClock.uptimeMillis(), mStatusBar.getBouncerContainer(),
@@ -622,7 +627,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             SysUiStatsLog.write(SysUiStatsLog.KEYGUARD_STATE_CHANGED,
                     SysUiStatsLog.KEYGUARD_STATE_CHANGED__STATE__OCCLUDED);
             if (mStatusBar.isInLaunchTransition()) {
-                mOccluded = true;
+                setOccludedAndUpdateStates(true);
                 mStatusBar.fadeKeyguardAfterLaunchTransition(null /* beforeFading */,
                         new Runnable() {
                             @Override
@@ -635,7 +640,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             }
 
             if (mStatusBar.isLaunchingActivityOverLockscreen()) {
-                mOccluded = true;
+                setOccludedAndUpdateStates(true);
 
                 // When isLaunchingActivityOverLockscreen() is true, we know for sure that the post
                 // collapse runnables will be run.
@@ -650,7 +655,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                     SysUiStatsLog.KEYGUARD_STATE_CHANGED__STATE__SHOWN);
         }
         boolean isOccluding = !mOccluded && occluded;
-        mOccluded = occluded;
+        setOccludedAndUpdateStates(occluded);
         if (mShowing) {
             mMediaManager.updateMediaMetaData(false, animate && !occluded);
         }
@@ -665,6 +670,11 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (animate && !occluded && mShowing && !mBouncer.isShowing()) {
             mStatusBar.animateKeyguardUnoccluding();
         }
+    }
+
+    private void setOccludedAndUpdateStates(boolean occluded) {
+        mOccluded = occluded;
+        updateStates();
     }
 
     public boolean isOccluded() {
@@ -907,7 +917,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     @Override
     public boolean bouncerIsOrWillBeShowing() {
-        return mBouncer.isShowing() || mBouncer.getShowingSoon();
+        return isBouncerShowing() || mBouncer.getShowingSoon();
     }
 
     public boolean isFullscreenBouncer() {

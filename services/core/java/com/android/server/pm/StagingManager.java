@@ -61,6 +61,8 @@ import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
+import com.android.server.pm.pkg.PackageStateInternal;
+import com.android.server.pm.pkg.PackageStateUtils;
 import com.android.server.rollback.RollbackManagerInternal;
 import com.android.server.rollback.WatchdogRollbackLogger;
 
@@ -344,13 +346,13 @@ public class StagingManager {
 
         int appId = -1;
         long ceDataInode = -1;
-        final PackageSetting ps = mPmi.getPackageSetting(packageName);
+        final PackageStateInternal ps = mPmi.getPackageStateInternal(packageName);
         if (ps != null) {
             appId = ps.getAppId();
-            ceDataInode = ps.getCeDataInode(UserHandle.USER_SYSTEM);
+            ceDataInode = ps.getUserStateOrDefault(UserHandle.USER_SYSTEM).getCeDataInode();
             // NOTE: We ignore the user specified in the InstallParam because we know this is
             // an update, and hence need to restore data for all installed users.
-            final int[] installedUsers = ps.queryInstalledUsers(allUsers, true);
+            final int[] installedUsers = PackageStateUtils.queryInstalledUsers(ps, allUsers, true);
 
             final String seInfo = AndroidPackageUtils.getSeInfo(pkg, ps);
             rm.snapshotAndRestoreUserData(packageName, UserHandle.toUserHandles(installedUsers),
@@ -523,26 +525,6 @@ public class StagingManager {
         if (session.isSessionReady() && session.containsApexSession()) {
             notifyStagedApexObservers();
         }
-    }
-
-    /**
-     * Returns id of a committed and non-finalized stated session that contains same
-     * {@code packageName}, or {@code -1} if no sessions have this {@code packageName} staged.
-     */
-    int getSessionIdByPackageName(@NonNull String packageName) {
-        synchronized (mStagedSessions) {
-            for (int i = 0; i < mStagedSessions.size(); i++) {
-                StagedSession stagedSession = mStagedSessions.valueAt(i);
-                if (!stagedSession.isCommitted() || stagedSession.isDestroyed()
-                        || stagedSession.isInTerminalState()) {
-                    continue;
-                }
-                if (stagedSession.getPackageName().equals(packageName)) {
-                    return stagedSession.sessionId();
-                }
-            }
-        }
-        return -1;
     }
 
     @VisibleForTesting
@@ -950,6 +932,9 @@ public class StagingManager {
                     info.diskImagePath = ai.modulePath;
                     info.versionCode = ai.versionCode;
                     info.versionName = ai.versionName;
+                    info.hasBootClassPathJars = ai.hasBootClassPathJars;
+                    info.hasDex2OatBootClassPathJars = ai.hasDex2OatBootClassPathJars;
+                    info.hasSystemServerClassPathJars = ai.hasSystemServerClassPathJars;
                     return info;
                 }
             }

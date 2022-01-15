@@ -42,6 +42,7 @@ public class SecureSettings {
         Settings.Secure.AUTOFILL_SERVICE,
         Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE,
         Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+        Settings.Secure.ENABLED_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT,
         Settings.Secure.ENABLED_VR_LISTENERS,
         Settings.Secure.TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES,
         Settings.Secure.TOUCH_EXPLORATION_ENABLED,
@@ -191,5 +192,6 @@ public class SecureSettings {
         Settings.Secure.LOCATION_TIME_ZONE_DETECTION_ENABLED,
         Settings.Secure.LOCKSCREEN_SHOW_CONTROLS,
         Settings.Secure.LOCKSCREEN_SHOW_WALLET,
+        Settings.Secure.LOCK_SCREEN_SHOW_QR_CODE_SCANNER,
     };
 }
