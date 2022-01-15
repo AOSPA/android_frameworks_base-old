@@ -21,6 +21,7 @@ import static android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST;
 import static android.Manifest.permission.FILTER_EVENTS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
+import static android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
 import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
 import static android.Manifest.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND;
 import static android.app.ActivityManager.INSTR_FLAG_DISABLE_HIDDEN_API_CHECKS;
@@ -31,6 +32,7 @@ import static android.app.ActivityManager.INTENT_SENDER_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
+import static android.app.ActivityManager.StopUserOnSwitch;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.AppOpsManager.OP_NONE;
@@ -167,6 +169,7 @@ import android.app.ContentProviderHolder;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
+import android.app.IForegroundServiceObserver;
 import android.app.IInstrumentationWatcher;
 import android.app.INotificationManager;
 import android.app.IProcessObserver;
@@ -445,6 +448,14 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private static final String SYSTEM_PROPERTY_DEVICE_PROVISIONED =
             "persist.sys.device_provisioned";
+
+    /**
+     * Enabling this flag enforces the requirement for context registered receivers to use one of
+     * {@link Context#RECEIVER_EXPORTED} or {@link Context#RECEIVER_NOT_EXPORTED} for unprotected
+     * broadcasts
+     */
+    private static final boolean ENFORCE_DYNAMIC_RECEIVER_EXPLICIT_EXPORT =
+            SystemProperties.getBoolean("fw.enforce_dynamic_receiver_explicit_export", false);
 
     static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityManagerService" : TAG_AM;
     static final String TAG_BACKUP = TAG + POSTFIX_BACKUP;
@@ -3822,12 +3833,12 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void makeServicesNonForeground(final String packageName, int userId) {
-        if (checkCallingPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
+        if (checkCallingPermission(MANAGE_ACTIVITY_TASKS)
                 != PackageManager.PERMISSION_GRANTED) {
             String msg = "Permission Denial: makeServicesNonForeground() from pid="
                     + Binder.getCallingPid()
                     + ", uid=" + Binder.getCallingUid()
-                    + " requires " + android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
+                    + " requires " + MANAGE_ACTIVITY_TASKS;
             Slog.w(TAG, msg);
             throw new SecurityException(msg);
         }
@@ -3840,6 +3851,27 @@ public class ActivityManagerService extends IActivityManager.Stub
             makeServicesNonForegroundUnchecked(packageName, userId);
         } finally {
             Binder.restoreCallingIdentity(callingId);
+        }
+    }
+
+    @Override
+    public boolean registerForegroundServiceObserver(IForegroundServiceObserver callback) {
+        final int callingUid = Binder.getCallingUid();
+        final int permActivityTasks = checkCallingPermission(MANAGE_ACTIVITY_TASKS);
+        final int permAcrossUsersFull = checkCallingPermission(INTERACT_ACROSS_USERS_FULL);
+        if (permActivityTasks != PackageManager.PERMISSION_GRANTED
+                || permAcrossUsersFull != PERMISSION_GRANTED) {
+            String msg = "Permission Denial: registerForegroundServiceObserver() from pid="
+                    + Binder.getCallingPid()
+                    + ", uid=" + callingUid
+                    + " requires " + MANAGE_ACTIVITY_TASKS
+                    + " and " + INTERACT_ACROSS_USERS_FULL;
+            Slog.w(TAG, msg);
+            throw new SecurityException(msg);
+        }
+
+        synchronized (this) {
+            return mServices.registerForegroundServiceObserverLocked(callingUid, callback);
         }
     }
 
@@ -5006,6 +5038,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void bootAnimationComplete() {
+        if (DEBUG_ALL) Slog.d(TAG, "bootAnimationComplete: Callers=" + Debug.getCallers(4));
+
         final boolean callFinishBooting;
         synchronized (this) {
             callFinishBooting = mCallFinishBooting;
@@ -7839,7 +7873,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // On Automotive, at this point the system user has already been started and unlocked,
         // and some of the tasks we do here have already been done. So skip those in that case.
-        // TODO(b/132262830): this workdound shouldn't be necessary once we move the
+        // TODO(b/132262830, b/203885241): this workdound shouldn't be necessary once we move the
         // headless-user start logic to UserManager-land
         final boolean bootingSystemUser = currentUserId == UserHandle.USER_SYSTEM;
 
@@ -8090,11 +8124,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 crashInfo.throwFileName,
                 crashInfo.throwLineNumber);
 
+        int processClassEnum = processName.equals("system_server") ? ServerProtoEnums.SYSTEM_SERVER
+                : (r != null) ? r.getProcessClassEnum()
+                        : ServerProtoEnums.ERROR_SOURCE_UNKNOWN;
+        int uid = (r != null) ? r.uid : -1;
+        int pid = (r != null) ? r.getPid() : -1;
         FrameworkStatsLog.write(FrameworkStatsLog.APP_CRASH_OCCURRED,
-                (r != null) ? r.uid : -1,
+                uid,
                 eventType,
                 processName,
-                (r != null) ? r.getPid() : -1,
+                pid,
                 (r != null && r.info != null) ? r.info.packageName : "",
                 (r != null && r.info != null) ? (r.info.isInstantApp()
                         ? FrameworkStatsLog.APP_CRASH_OCCURRED__IS_INSTANT_APP__TRUE
@@ -8104,9 +8143,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         ? FrameworkStatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__FOREGROUND
                         : FrameworkStatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__BACKGROUND)
                         : FrameworkStatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__UNKNOWN,
-                processName.equals("system_server") ? ServerProtoEnums.SYSTEM_SERVER
-                        : (r != null) ? r.getProcessClassEnum()
-                                      : ServerProtoEnums.ERROR_SOURCE_UNKNOWN,
+                processClassEnum,
                 incrementalMetrics != null /* isIncremental */, loadingProgress,
                 incrementalMetrics != null ? incrementalMetrics.getMillisSinceOldestPendingRead()
                         : -1,
@@ -8132,6 +8169,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                 incrementalMetrics != null ? incrementalMetrics.getTotalDelayedReadsDurationMillis()
                         : -1
         );
+
+        if (eventType.equals("native_crash")) {
+            CriticalEventLog.getInstance().logNativeCrash(processClassEnum, processName, uid, pid);
+        } else if (eventType.equals("crash")) {
+            CriticalEventLog.getInstance().logJavaCrash(crashInfo.exceptionClassName,
+                    processClassEnum, processName, uid, pid);
+        }
 
         final int relaunchReason = r == null ? RELAUNCH_REASON_NONE
                         : r.getWindowProcessController().computeRelaunchReason();
@@ -12717,28 +12761,43 @@ public class ActivityManagerService extends IActivityManager.Stub
             // an error so the consumer can know to explicitly set the value for their flag.
             // If the caller is registering for a sticky broadcast with a null receiver, we won't
             // require a flag
-            if (!onlyProtectedBroadcasts && receiver != null && (
-                    CompatChanges.isChangeEnabled(
-                            DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED, callingUid)
-                            && (flags & (Context.RECEIVER_EXPORTED | Context.RECEIVER_NOT_EXPORTED))
-                            == 0)) {
-                Slog.e(TAG,
-                        callerPackage + ": Targeting T+ (version " + Build.VERSION_CODES.TIRAMISU
-                                + " and above) requires that one of RECEIVER_EXPORTED or "
-                                + "RECEIVER_NOT_EXPORTED be specified when registering a receiver");
-            } else if (((flags & Context.RECEIVER_EXPORTED) != 0) && (
+            final boolean explicitExportStateDefined =
+                    (flags & (Context.RECEIVER_EXPORTED | Context.RECEIVER_NOT_EXPORTED)) != 0;
+            if (((flags & Context.RECEIVER_EXPORTED) != 0) && (
                     (flags & Context.RECEIVER_NOT_EXPORTED) != 0)) {
                 throw new IllegalArgumentException(
                         "Receiver can't specify both RECEIVER_EXPORTED and RECEIVER_NOT_EXPORTED"
                                 + "flag");
             }
+            if (CompatChanges.isChangeEnabled(DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED,
+                    callingUid)
+                    && !explicitExportStateDefined) {
+                if (ENFORCE_DYNAMIC_RECEIVER_EXPLICIT_EXPORT) {
+                    throw new SecurityException(
+                            callerPackage + ": Targeting T+ (version "
+                                    + Build.VERSION_CODES.TIRAMISU
+                                    + " and above) requires that one of RECEIVER_EXPORTED or "
+                                    + "RECEIVER_NOT_EXPORTED be specified when registering a "
+                                    + "receiver");
+                } else {
+                    Slog.wtf(TAG,
+                            callerPackage + ": Targeting T+ (version "
+                                    + Build.VERSION_CODES.TIRAMISU
+                                    + " and above) requires that one of RECEIVER_EXPORTED or "
+                                    + "RECEIVER_NOT_EXPORTED be specified when registering a "
+                                    + "receiver");
+                    // Assume default behavior-- flag check is not enforced
+                    flags |= Context.RECEIVER_EXPORTED;
+                }
+            } else if (!CompatChanges.isChangeEnabled(DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED,
+                    callingUid)) {
+                // Change is not enabled, thus not targeting T+. Assume exported.
+                flags |= Context.RECEIVER_EXPORTED;
+            }
         }
 
         // Dynamic receivers are exported by default for versions prior to T
-        final boolean exported =
-                ((flags & Context.RECEIVER_EXPORTED) != 0
-                        || (!CompatChanges.isChangeEnabled(
-                        DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED, callingUid)));
+        final boolean exported = (flags & Context.RECEIVER_EXPORTED) != 0;
 
         ArrayList<Intent> allSticky = null;
         if (stickyIntents != null) {
@@ -13399,7 +13458,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                         mAtmInternal.removeRecentTasksByPackageName(ssp, userId);
 
                                         mServices.forceStopPackageLocked(ssp, userId);
-                                        mAtmInternal.onPackageUninstalled(ssp);
+                                        mAtmInternal.onPackageUninstalled(ssp, userId);
                                         mBatteryStatsService.notePackageUninstalled(ssp);
                                     }
                                 } else {
@@ -13484,7 +13543,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Uri data = intent.getData();
                     String ssp;
                     if (data != null && (ssp = data.getSchemeSpecificPart()) != null) {
-                        mAtmInternal.onPackageDataCleared(ssp);
+                        mAtmInternal.onPackageDataCleared(ssp, userId);
                     }
                     break;
                 }
@@ -15427,6 +15486,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
+    public void setStopUserOnSwitch(@StopUserOnSwitch int value) {
+        mUserController.setStopUserOnSwitch(value);
+    }
+
+    @Override
     public int stopUser(final int userId, boolean force, final IStopUserCallback callback) {
         return mUserController.stopUser(userId, force, /* allowDelayedLocking= */ false,
                 /* callback= */ callback, /* keyEvictedCallback= */ null);
@@ -16753,6 +16817,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         public void setVoiceInteractionManagerProvider(
                 @Nullable ActivityManagerInternal.VoiceInteractionManagerProvider provider) {
             ActivityManagerService.this.setVoiceInteractionManagerProvider(provider);
+        }
+
+        @Override
+        public void setStopUserOnSwitch(int value) {
+            ActivityManagerService.this.setStopUserOnSwitch(value);
         }
     }
 

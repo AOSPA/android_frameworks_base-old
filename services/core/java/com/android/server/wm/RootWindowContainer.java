@@ -1902,34 +1902,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         return task != null && task == getTopDisplayFocusedRootTask();
     }
 
-    void updatePreviousProcess(ActivityRecord r) {
-        // Now that this process has stopped, we may want to consider it to be the previous app to
-        // try to keep around in case the user wants to return to it.
-
-        // First, found out what is currently the foreground app, so that we don't blow away the
-        // previous app if this activity is being hosted by the process that is actually still the
-        // foreground.
-        WindowProcessController fgApp = getItemFromRootTasks(rootTask -> {
-            if (isTopDisplayFocusedRootTask(rootTask)) {
-                final ActivityRecord resumedActivity = rootTask.getTopResumedActivity();
-                if (resumedActivity != null) {
-                    return resumedActivity.app;
-                } else if (rootTask.getTopPausingActivity() != null) {
-                    return rootTask.getTopPausingActivity().app;
-                }
-            }
-            return null;
-        });
-
-        // Now set this one as the previous process, only if that really makes sense to.
-        if (r.hasProcess() && fgApp != null && r.app != fgApp
-                && r.lastVisibleTime > mService.mPreviousProcessVisibleTime
-                && r.app != mService.mHomeProcess) {
-            mService.mPreviousProcess = r.app;
-            mService.mPreviousProcessVisibleTime = r.lastVisibleTime;
-        }
-    }
-
     boolean attachApplication(WindowProcessController app) throws RemoteException {
         try {
             return mAttachApplicationHelper.process(app);
@@ -2662,26 +2634,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
         // Store updated lists in DisplayManager. Callers from outside of AM should get them there.
         mDisplayManagerInternal.setDisplayAccessUIDs(mDisplayAccessUIDs);
-    }
-
-    Task findRootTaskBehind(Task rootTask) {
-        final TaskDisplayArea taskDisplayArea = rootTask.getDisplayArea();
-        if (taskDisplayArea != null) {
-            final boolean[] hasFound = new boolean[1];
-            // TODO(b/175136051): should this be only the direct child root task?
-            final Task rootTaskBehind = taskDisplayArea.getRootTask(task -> {
-                if (hasFound[0]) {
-                    return true;
-                }
-                hasFound[0] = task == rootTask;
-                return false;
-            });
-            if (rootTaskBehind != null) {
-                return rootTaskBehind;
-            }
-        }
-        throw new IllegalStateException("Failed to find a root task behind root task =" + rootTask
-                + " in=" + taskDisplayArea);
     }
 
     Configuration getDisplayOverrideConfiguration(int displayId) {
@@ -3609,7 +3561,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // avoid power mode from being cleared before that, add a special reason to consider whether
         // the unknown visibility is resolved. The case from SystemUI is excluded because it should
         // rely on keyguard-going-away.
-        if (mService.mKeyguardController.isKeyguardLocked() && targetActivity != null
+        final boolean isKeyguardLocked = (targetActivity != null)
+                ? targetActivity.isKeyguardLocked() : mDefaultDisplay.isKeyguardLocked();
+        if (isKeyguardLocked && targetActivity != null
                 && !targetActivity.isLaunchSourceType(ActivityRecord.LAUNCH_SOURCE_TYPE_SYSTEMUI)) {
             final ActivityOptions opts = targetActivity.getOptions();
             if (opts == null || opts.getSourceInfo() == null

@@ -87,7 +87,6 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -170,8 +169,6 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Mock
     private TelephonyListenerManager mTelephonyListenerManager;
     @Mock
-    private FeatureFlags mFeatureFlags;
-    @Mock
     private InteractionJankMonitor mInteractionJankMonitor;
     @Mock
     private LatencyTracker mLatencyTracker;
@@ -179,6 +176,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     private ArgumentCaptor<StatusBarStateController.StateListener> mStatusBarStateListenerCaptor;
     // Direct executor
     private Executor mBackgroundExecutor = Runnable::run;
+    private Executor mMainExecutor = Runnable::run;
     private TestableLooper mTestableLooper;
     private TestableKeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private TestableContext mSpiedContext;
@@ -474,7 +472,8 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mKeyguardUpdateMonitor.dispatchStartedGoingToSleep(0 /* why */);
         mTestableLooper.processAllMessages();
 
-        verify(mFingerprintManager).authenticate(any(), any(), any(), any(), anyInt(), anyInt());
+        verify(mFingerprintManager).authenticate(any(), any(), any(), any(), anyInt(), anyInt(),
+                        anyInt());
         verify(mFingerprintManager, never()).detectFingerprint(any(), any(), anyInt());
     }
 
@@ -860,6 +859,25 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     }
 
     @Test
+    public void testRegisterAuthControllerCallback() {
+        assertThat(mKeyguardUpdateMonitor.isUdfpsEnrolled()).isFalse();
+
+        // verify AuthController.Callback is added:
+        ArgumentCaptor<AuthController.Callback> captor = ArgumentCaptor.forClass(
+                AuthController.Callback.class);
+        verify(mAuthController).addCallback(captor.capture());
+        AuthController.Callback callback = captor.getValue();
+
+        // WHEN udfps is now enrolled
+        when(mAuthController.isUdfpsEnrolled(anyInt())).thenReturn(true);
+        callback.onEnrollmentsChanged();
+
+        // THEN isUdfspEnrolled is TRUE
+        assertThat(mKeyguardUpdateMonitor.isUdfpsEnrolled()).isTrue();
+    }
+
+
+    @Test
     public void testStartUdfpsServiceBeginsOnKeyguard() {
         // GIVEN
         // - status bar state is on the keyguard
@@ -1038,9 +1056,9 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
             super(context,
                     TestableLooper.get(KeyguardUpdateMonitorTest.this).getLooper(),
                     mBroadcastDispatcher, mDumpManager,
-                    mRingerModeTracker, mBackgroundExecutor,
+                    mRingerModeTracker, mBackgroundExecutor, mMainExecutor,
                     mStatusBarStateController, mLockPatternUtils,
-                    mAuthController, mTelephonyListenerManager, mFeatureFlags,
+                    mAuthController, mTelephonyListenerManager,
                     mInteractionJankMonitor, mLatencyTracker);
             setStrongAuthTracker(KeyguardUpdateMonitorTest.this.mStrongAuthTracker);
         }

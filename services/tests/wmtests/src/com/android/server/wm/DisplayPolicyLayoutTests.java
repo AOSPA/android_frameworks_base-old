@@ -24,7 +24,6 @@ import static android.view.InsetsState.ITYPE_TOP_GESTURES;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
-import static android.view.ViewRootImpl.INSETS_LAYOUT_GENERALIZATION;
 import static android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
@@ -35,13 +34,8 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INSET_PARENT_
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL;
-import static android.view.WindowManagerPolicyConstants.ALT_BAR_BOTTOM;
-import static android.view.WindowManagerPolicyConstants.ALT_BAR_LEFT;
-import static android.view.WindowManagerPolicyConstants.ALT_BAR_RIGHT;
-import static android.view.WindowManagerPolicyConstants.ALT_BAR_TOP;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
@@ -59,10 +53,8 @@ import android.graphics.Insets;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.util.Pair;
-import android.util.SparseArray;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
-import android.view.Gravity;
 import android.view.InsetsState;
 import android.view.InsetsVisibilities;
 import android.view.PrivacyIndicatorBounds;
@@ -221,13 +213,9 @@ public class DisplayPolicyLayoutTests extends DisplayPolicyTestsBase {
 
         InsetsSourceProvider provider =
                 mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_STATUS_BAR);
-        if (INSETS_LAYOUT_GENERALIZATION) {
-            // In the new flexible insets setup, the insets frame should always respect the window
-            // layout result.
-            assertEquals(new Rect(0, 0, 500, 100), provider.getSource().getFrame());
-        } else {
-            assertNotEquals(new Rect(0, 0, 500, 100), provider.getSource().getFrame());
-        }
+        // In the new flexible insets setup, the insets frame should always respect the window
+        // layout result.
+        assertEquals(new Rect(0, 0, 500, 100), provider.getSource().getFrame());
     }
 
     @Test
@@ -241,47 +229,6 @@ public class DisplayPolicyLayoutTests extends DisplayPolicyTestsBase {
         win2.mAttrs.providesInsetsTypes = new int[]{ITYPE_CLIMATE_BAR, ITYPE_EXTRA_NAVIGATION_BAR};
 
         expectThrows(IllegalArgumentException.class, () -> addWindow(win2));
-    }
-
-    @Test
-    public void addingWindow_variousGravities_alternateBarPosUpdated() {
-        mDisplayPolicy.removeWindowLw(mNavBarWindow);  // Removes the existing one.
-
-        WindowState win1 = createWindow(null, TYPE_NAVIGATION_BAR_PANEL, "NavBarPanel1");
-        win1.mAttrs.providesInsetsTypes = new int[]{ITYPE_NAVIGATION_BAR};
-        win1.mAttrs.gravity = Gravity.TOP;
-        win1.getFrame().set(0, 0, 200, 500);
-        addWindow(win1);
-
-        assertEquals(mDisplayPolicy.getAlternateNavBarPosition(), ALT_BAR_TOP);
-        mDisplayPolicy.removeWindowLw(win1);
-
-        WindowState win2 = createWindow(null, TYPE_NAVIGATION_BAR_PANEL, "NavBarPanel2");
-        win2.mAttrs.providesInsetsTypes = new int[]{ITYPE_NAVIGATION_BAR};
-        win2.mAttrs.gravity = Gravity.BOTTOM;
-        win2.getFrame().set(0, 0, 200, 500);
-        addWindow(win2);
-
-        assertEquals(mDisplayPolicy.getAlternateNavBarPosition(), ALT_BAR_BOTTOM);
-        mDisplayPolicy.removeWindowLw(win2);
-
-        WindowState win3 = createWindow(null, TYPE_NAVIGATION_BAR_PANEL, "NavBarPanel3");
-        win3.mAttrs.providesInsetsTypes = new int[]{ITYPE_NAVIGATION_BAR};
-        win3.mAttrs.gravity = Gravity.LEFT;
-        win3.getFrame().set(0, 0, 200, 500);
-        addWindow(win3);
-
-        assertEquals(mDisplayPolicy.getAlternateNavBarPosition(), ALT_BAR_LEFT);
-        mDisplayPolicy.removeWindowLw(win3);
-
-        WindowState win4 = createWindow(null, TYPE_NAVIGATION_BAR_PANEL, "NavBarPanel4");
-        win4.mAttrs.providesInsetsTypes = new int[]{ITYPE_NAVIGATION_BAR};
-        win4.mAttrs.gravity = Gravity.RIGHT;
-        win4.getFrame().set(0, 0, 200, 500);
-        addWindow(win4);
-
-        assertEquals(mDisplayPolicy.getAlternateNavBarPosition(), ALT_BAR_RIGHT);
-        mDisplayPolicy.removeWindowLw(win4);
     }
 
     @Test
@@ -706,8 +653,7 @@ public class DisplayPolicyLayoutTests extends DisplayPolicyTestsBase {
         // Force the display bounds because it is not synced with display frames in policy test.
         mDisplayContent.getWindowConfiguration().setBounds(mFrames.mUnrestricted);
         mDisplayContent.getInsetsStateController().onPostLayout();
-        mDisplayPolicy.simulateLayoutDisplay(simulatedDisplayFrames,
-                new SparseArray<>() /* barContentFrames */);
+        mDisplayPolicy.simulateLayoutDisplay(simulatedDisplayFrames);
 
         final StringWriter realFramesDump = new StringWriter();
         mFrames.dump(prefix, new PrintWriter(realFramesDump));

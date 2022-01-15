@@ -16,11 +16,9 @@
 
 package com.android.server.wm;
 
-import static android.view.ViewRootImpl.INSETS_LAYOUT_GENERALIZATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
@@ -47,7 +45,6 @@ import android.os.Debug;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Slog;
-import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayAdjustments.FixedRotationAdjustments;
 import android.view.DisplayInfo;
@@ -133,7 +130,6 @@ class WindowToken extends WindowContainer<WindowState> {
          */
         final ArrayList<WindowToken> mAssociatedTokens = new ArrayList<>(3);
         final ArrayList<WindowContainer<?>> mRotatedContainers = new ArrayList<>(3);
-        final SparseArray<Rect> mBarContentFrames = new SparseArray<>();
         boolean mIsTransforming = true;
 
         FixedRotationTransformState(DisplayInfo rotatedDisplayInfo,
@@ -438,27 +434,6 @@ class WindowToken extends WindowContainer<WindowState> {
                 : null;
     }
 
-    Rect getFixedRotationBarContentFrame(int windowType) {
-        if (!isFixedRotationTransforming()) {
-            return null;
-        }
-        if (!INSETS_LAYOUT_GENERALIZATION) {
-            return mFixedRotationTransformState.mBarContentFrames.get(windowType);
-        }
-        final DisplayFrames displayFrames = mFixedRotationTransformState.mDisplayFrames;
-        final Rect tmpRect = new Rect();
-        if (windowType == TYPE_NAVIGATION_BAR) {
-            tmpRect.set(displayFrames.mInsetsState.getSource(InsetsState.ITYPE_NAVIGATION_BAR)
-                    .getFrame());
-        }
-        if (windowType == TYPE_STATUS_BAR) {
-            tmpRect.set(displayFrames.mInsetsState.getSource(InsetsState.ITYPE_STATUS_BAR)
-                    .getFrame());
-        }
-        tmpRect.intersect(displayFrames.mDisplayCutoutSafe);
-        return tmpRect;
-    }
-
     InsetsState getFixedRotationTransformInsetsState() {
         return isFixedRotationTransforming()
                 ? mFixedRotationTransformState.mDisplayFrames.mInsetsState
@@ -474,8 +449,7 @@ class WindowToken extends WindowContainer<WindowState> {
         mFixedRotationTransformState = new FixedRotationTransformState(info, displayFrames,
                 new Configuration(config), mDisplayContent.getRotation());
         mFixedRotationTransformState.mAssociatedTokens.add(this);
-        mDisplayContent.getDisplayPolicy().simulateLayoutDisplay(displayFrames,
-                mFixedRotationTransformState.mBarContentFrames);
+        mDisplayContent.getDisplayPolicy().simulateLayoutDisplay(displayFrames);
         onFixedRotationStatePrepared();
     }
 

@@ -62,6 +62,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
 
 /**
@@ -178,8 +180,12 @@ import java.util.function.Supplier;
  * {@link #writeStrongInterface(IInterface)}, {@link #readStrongBinder()},
  * {@link #writeBinderArray(IBinder[])}, {@link #readBinderArray(IBinder[])},
  * {@link #createBinderArray()},
+ * {@link #writeInterfaceArray(T[])}, {@link #readInterfaceArray(T[], Function)},
+ * {@link #createInterfaceArray(IntFunction, Function)},
  * {@link #writeBinderList(List)}, {@link #readBinderList(List)},
- * {@link #createBinderArrayList()}.</p>
+ * {@link #createBinderArrayList()},
+ * {@link #writeInterfaceList(List)}, {@link #readInterfaceList(List, Function)},
+ * {@link #createInterfaceArrayList(Function)}.</p>
  *
  * <p>FileDescriptor objects, representing raw Linux file descriptor identifiers,
  * can be written and {@link ParcelFileDescriptor} objects returned to operate
@@ -381,6 +387,8 @@ public final class Parcel {
     private static native void nativeUnmarshall(
             long nativePtr, byte[] data, int offset, int length);
     private static native int nativeCompareData(long thisNativePtr, long otherNativePtr);
+    private static native boolean nativeCompareDataInRange(
+            long ptrA, int offsetA, long ptrB, int offsetB, int length);
     private static native void nativeAppendFrom(
             long thisNativePtr, long otherNativePtr, int offset, int length);
     @CriticalNative
@@ -678,8 +686,13 @@ public final class Parcel {
     }
 
     /** @hide */
-    public final int compareData(Parcel other) {
+    public int compareData(Parcel other) {
         return nativeCompareData(mNativePtr, other.mNativePtr);
+    }
+
+    /** @hide */
+    public static boolean compareData(Parcel a, int offsetA, Parcel b, int offsetB, int length) {
+        return nativeCompareDataInRange(a.mNativePtr, offsetA, b.mNativePtr, offsetB, length);
     }
 
     /** @hide */
@@ -740,57 +753,70 @@ public final class Parcel {
     }
 
     /**
-     * Check if the object used in {@link #readValue(ClassLoader)} / {@link #writeValue(Object)}
-     * has file descriptors.
+     * Check if the object has file descriptors.
+     *
+     * <p>Objects supported are {@link Parcel} and objects that can be passed to {@link
+     * #writeValue(Object)}}
      *
      * <p>For most cases, it will use the self-reported {@link Parcelable#describeContents()} method
      * for that.
      *
-     * @throws IllegalArgumentException if you provide any object not supported by above methods.
-     *         Most notably, if you pass {@link Parcel}, this method will throw, for that check
-     *         {@link Parcel#hasFileDescriptors()}
+     * @throws IllegalArgumentException if you provide any object not supported by above methods
+     *     (including if the unsupported object is inside a nested container).
      *
      * @hide
      */
     public static boolean hasFileDescriptors(Object value) {
-        if (value instanceof LazyValue) {
-            return ((LazyValue) value).hasFileDescriptors();
-        } else if (value instanceof Parcelable) {
-            if ((((Parcelable) value).describeContents()
-                    & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0) {
+        if (value instanceof Parcel) {
+            Parcel parcel = (Parcel) value;
+            if (parcel.hasFileDescriptors()) {
                 return true;
             }
-        } else if (value instanceof Parcelable[]) {
-            Parcelable[] array = (Parcelable[]) value;
-            for (int n = array.length - 1; n >= 0; n--) {
-                Parcelable p = array[n];
-                if (p != null && ((p.describeContents()
-                        & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0)) {
+        } else if (value instanceof LazyValue) {
+            LazyValue lazy = (LazyValue) value;
+            if (lazy.hasFileDescriptors()) {
+                return true;
+            }
+        } else if (value instanceof Parcelable) {
+            Parcelable parcelable = (Parcelable) value;
+            if ((parcelable.describeContents() & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0) {
+                return true;
+            }
+        } else if (value instanceof ArrayMap<?, ?>) {
+            ArrayMap<?, ?> map = (ArrayMap<?, ?>) value;
+            for (int i = 0, n = map.size(); i < n; i++) {
+                if (hasFileDescriptors(map.keyAt(i))
+                        || hasFileDescriptors(map.valueAt(i))) {
+                    return true;
+                }
+            }
+        } else if (value instanceof Map<?, ?>) {
+            Map<?, ?> map = (Map<?, ?>) value;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (hasFileDescriptors(entry.getKey())
+                        || hasFileDescriptors(entry.getValue())) {
+                    return true;
+                }
+            }
+        } else if (value instanceof List<?>) {
+            List<?> list = (List<?>) value;
+            for (int i = 0, n = list.size(); i < n; i++) {
+                if (hasFileDescriptors(list.get(i))) {
                     return true;
                 }
             }
         } else if (value instanceof SparseArray<?>) {
             SparseArray<?> array = (SparseArray<?>) value;
-            for (int n = array.size() - 1; n >= 0; n--) {
-                Object object = array.valueAt(n);
-                if (object instanceof Parcelable) {
-                    Parcelable p = (Parcelable) object;
-                    if (p != null && (p.describeContents()
-                            & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0) {
-                        return true;
-                    }
+            for (int i = 0, n = array.size(); i < n; i++) {
+                if (hasFileDescriptors(array.valueAt(i))) {
+                    return true;
                 }
             }
-        } else if (value instanceof ArrayList<?>) {
-            ArrayList<?> array = (ArrayList<?>) value;
-            for (int n = array.size() - 1; n >= 0; n--) {
-                Object object = array.get(n);
-                if (object instanceof Parcelable) {
-                    Parcelable p = (Parcelable) object;
-                    if (p != null && ((p.describeContents()
-                            & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0)) {
-                        return true;
-                    }
+        } else if (value instanceof Object[]) {
+            Object[] array = (Object[]) value;
+            for (int i = 0, n = array.length; i < n; i++) {
+                if (hasFileDescriptors(array[i])) {
+                    return true;
                 }
             }
         } else {
@@ -1710,6 +1736,30 @@ public final class Parcel {
     }
 
     /**
+     * Flatten a homogeneous array containing an IInterface type into the parcel,
+     * at the current dataPosition() and growing dataCapacity() if needed.  The
+     * type of the objects in the array must be one that implements IInterface.
+     *
+     * @param val The array of objects to be written.
+     *
+     * @see #createInterfaceArray
+     * @see #readInterfaceArray
+     * @see IInterface
+     */
+    public final <T extends IInterface> void writeInterfaceArray(
+            @SuppressLint("ArrayReturn") @Nullable T[] val) {
+        if (val != null) {
+            int N = val.length;
+            writeInt(N);
+            for (int i=0; i<N; i++) {
+                writeStrongInterface(val[i]);
+            }
+        } else {
+            writeInt(-1);
+        }
+    }
+
+    /**
      * @hide
      */
     public final void writeCharSequenceArray(@Nullable CharSequence[] val) {
@@ -1761,6 +1811,50 @@ public final class Parcel {
             }
         } else {
             throw new RuntimeException("bad array lengths");
+        }
+    }
+
+    /**
+     * Read and return a new array of T (IInterface) from the parcel.
+     *
+     * @return the IInterface array of type T
+     * @param newArray a function to create an array of T with a given length
+     * @param asInterface a function to convert IBinder object into T (IInterface)
+     */
+    @SuppressLint({"ArrayReturn", "NullableCollection", "SamShouldBeLast"})
+    @Nullable
+    public final <T extends IInterface> T[] createInterfaceArray(
+            @NonNull IntFunction<T[]> newArray, @NonNull Function<IBinder, T> asInterface) {
+        int N = readInt();
+        if (N >= 0) {
+            T[] val = newArray.apply(N);
+            for (int i=0; i<N; i++) {
+                val[i] = asInterface.apply(readStrongBinder());
+            }
+            return val;
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Read an array of T (IInterface) from a parcel.
+     *
+     * @param asInterface a function to convert IBinder object into T (IInterface)
+     *
+     * @throws BadParcelableException Throws BadParcelableException if the length of `val`
+     *    mismatches the number of items in the parcel.
+     */
+    public final <T extends IInterface> void readInterfaceArray(
+            @SuppressLint("ArrayReturn") @NonNull T[] val,
+            @NonNull Function<IBinder, T> asInterface) {
+        int N = readInt();
+        if (N == val.length) {
+            for (int i=0; i<N; i++) {
+                val[i] = asInterface.apply(readStrongBinder());
+            }
+        } else {
+            throw new BadParcelableException("bad array lengths");
         }
     }
 
@@ -1873,6 +1967,28 @@ public final class Parcel {
         writeInt(N);
         while (i < N) {
             writeStrongBinder(val.get(i));
+            i++;
+        }
+    }
+
+    /**
+     * Flatten a {@code List} containing T (IInterface) objects into this parcel
+     * at the current position. They can later be retrieved with
+     * {@link #createInterfaceArrayList} or {@link #readInterfaceList}.
+     *
+     * @see #createInterfaceArrayList
+     * @see #readInterfaceList
+     */
+    public final <T extends IInterface> void writeInterfaceList(@Nullable List<T> val) {
+        if (val == null) {
+            writeInt(-1);
+            return;
+        }
+        int N = val.size();
+        int i=0;
+        writeInt(N);
+        while (i < N) {
+            writeStrongInterface(val.get(i));
             i++;
         }
     }
@@ -2441,9 +2557,9 @@ public final class Parcel {
 
             writeByteArray(baos.toByteArray());
         } catch (IOException ioe) {
-            throw new RuntimeException("Parcelable encountered " +
-                "IOException writing serializable object (name = " + name +
-                ")", ioe);
+            throw new BadParcelableException("Parcelable encountered "
+                    + "IOException writing serializable object (name = "
+                    + name + ")", ioe);
         }
     }
 
@@ -2876,8 +2992,24 @@ public final class Parcel {
      * from the parcel at the current dataPosition().
      */
     public final void readMap(@NonNull Map outVal, @Nullable ClassLoader loader) {
-        int N = readInt();
-        readMapInternal(outVal, N, loader);
+        int n = readInt();
+        readMapInternal(outVal, n, loader, /* clazzKey */ null, /* clazzValue */ null);
+    }
+
+    /**
+     * Same as {@link #readMap(Map, ClassLoader)} but accepts {@code clazzKey} and
+     * {@code clazzValue} parameter as the types required for each key and value pair.
+     *
+     * @throws BadParcelableException If the item to be deserialized is not an instance of that
+     * class or any of its children class
+     */
+    public <K, V> void readMap(@NonNull Map<? super K, ? super V> outVal,
+            @Nullable ClassLoader loader, @NonNull Class<K> clazzKey,
+            @NonNull Class<V> clazzValue) {
+        Objects.requireNonNull(clazzKey);
+        Objects.requireNonNull(clazzValue);
+        int n = readInt();
+        readMapInternal(outVal, n, loader, clazzKey, clazzValue);
     }
 
     /**
@@ -2915,13 +3047,35 @@ public final class Parcel {
     @Nullable
     public final HashMap readHashMap(@Nullable ClassLoader loader)
     {
-        int N = readInt();
-        if (N < 0) {
+        int n = readInt();
+        if (n < 0) {
             return null;
         }
-        HashMap m = new HashMap(N);
-        readMapInternal(m, N, loader);
+        HashMap m = new HashMap(n);
+        readMapInternal(m, n, loader, /* clazzKey */ null, /* clazzValue */ null);
         return m;
+    }
+
+    /**
+     * Same as {@link #readHashMap(ClassLoader)} but accepts {@code clazzKey} and
+     * {@code clazzValue} parameter as the types required for each key and value pair.
+     *
+     * @throws BadParcelableException if the item to be deserialized is not an instance of that
+     * class or any of its children class
+     */
+    @SuppressLint({"ConcreteCollection", "NullableCollection"})
+    @Nullable
+    public <K, V> HashMap<K, V> readHashMap(@Nullable ClassLoader loader,
+            @NonNull Class<? extends K> clazzKey, @NonNull Class<? extends V> clazzValue) {
+        Objects.requireNonNull(clazzKey);
+        Objects.requireNonNull(clazzValue);
+        int n = readInt();
+        if (n < 0) {
+            return null;
+        }
+        HashMap<K, V> map = new HashMap<>(n);
+        readMapInternal(map, n, loader, clazzKey, clazzValue);
+        return map;
     }
 
     /**
@@ -3360,6 +3514,32 @@ public final class Parcel {
     }
 
     /**
+     * Read and return a new ArrayList containing T (IInterface) objects from
+     * the parcel that was written with {@link #writeInterfaceList} at the
+     * current dataPosition().  Returns null if the
+     * previously written list object was null.
+     *
+     * @return A newly created ArrayList containing T (IInterface)
+     *
+     * @see #writeInterfaceList
+     */
+    @SuppressLint({"ConcreteCollection", "NullableCollection"})
+    @Nullable
+    public final <T extends IInterface> ArrayList<T> createInterfaceArrayList(
+            @NonNull Function<IBinder, T> asInterface) {
+        int N = readInt();
+        if (N < 0) {
+            return null;
+        }
+        ArrayList<T> l = new ArrayList<T>(N);
+        while (N > 0) {
+            l.add(asInterface.apply(readStrongBinder()));
+            N--;
+        }
+        return l;
+    }
+
+    /**
      * Read into the given List items String objects that were written with
      * {@link #writeStringList} at the current dataPosition().
      *
@@ -3395,6 +3575,28 @@ public final class Parcel {
         }
         for (; i<N; i++) {
             list.add(readStrongBinder());
+        }
+        for (; i<M; i++) {
+            list.remove(N);
+        }
+    }
+
+    /**
+     * Read into the given List items IInterface objects that were written with
+     * {@link #writeInterfaceList} at the current dataPosition().
+     *
+     * @see #writeInterfaceList
+     */
+    public final <T extends IInterface> void readInterfaceList(@NonNull List<T> list,
+            @NonNull Function<IBinder, T> asInterface) {
+        int M = list.size();
+        int N = readInt();
+        int i = 0;
+        for (; i < M && i < N; i++) {
+            list.set(i, asInterface.apply(readStrongBinder()));
+        }
+        for (; i<N; i++) {
+            list.add(asInterface.apply(readStrongBinder()));
         }
         for (; i<M; i++) {
             list.remove(N);
@@ -3609,7 +3811,6 @@ public final class Parcel {
         private final int mType;
         @Nullable private final ClassLoader mLoader;
         @Nullable private Object mObject;
-        @Nullable private volatile Parcel mValueParcel;
 
         /**
          * This goes from non-null to null once. Always check the nullability of this object before
@@ -3707,24 +3908,13 @@ public final class Parcel {
                 return false;
             }
             // Finally we compare the payload.
-            return getValueParcel(source).compareData(value.getValueParcel(otherSource)) == 0;
+            return Parcel.compareData(source, mPosition, otherSource, value.mPosition, mLength);
         }
 
         @Override
         public int hashCode() {
             // Accessing mSource first to provide memory barrier for mObject
             return Objects.hash(mSource == null, mObject, mLoader, mType, mLength);
-        }
-
-        /** This extracts the parcel section responsible for the object and returns it. */
-        private Parcel getValueParcel(Parcel source) {
-            Parcel parcel = mValueParcel;
-            if (parcel == null) {
-                parcel = Parcel.obtain();
-                parcel.appendFrom(source, mPosition, mLength);
-                mValueParcel = parcel;
-            }
-            return parcel;
         }
     }
 
@@ -3823,7 +4013,7 @@ public final class Parcel {
                 break;
 
             case VAL_SERIALIZABLE:
-                object = readSerializable(loader);
+                object = readSerializableInternal(loader, clazz);
                 break;
 
             case VAL_PARCELABLEARRAY:
@@ -4149,12 +4339,37 @@ public final class Parcel {
      * wasn't found in the parcel.
      */
     @Nullable
-    public final Serializable readSerializable() {
-        return readSerializable(null);
+    public Serializable readSerializable() {
+        return readSerializableInternal(/* loader */ null, /* clazz */ null);
     }
 
+    /**
+     * Same as {@link #readSerializable()} but accepts {@code loader} parameter
+     * as the primary classLoader for resolving the Serializable class; and {@code clazz} parameter
+     * as the required type.
+     *
+     * @throws BadParcelableException Throws BadParcelableException if the item to be deserialized
+     * is not an instance of that class or any of its children class or there there was an error
+     * deserializing the object.
+     */
     @Nullable
-    private final Serializable readSerializable(@Nullable final ClassLoader loader) {
+    public <T extends Serializable> T readSerializable(@Nullable ClassLoader loader,
+            @NonNull Class<T> clazz) {
+        Objects.requireNonNull(clazz);
+        return readSerializableInternal(loader, clazz);
+    }
+
+    /**
+     * @param clazz The type of the serializable expected or {@code null} for performing no checks
+     */
+    @Nullable
+    private <T> T readSerializableInternal(@Nullable final ClassLoader loader,
+            @Nullable Class<T> clazz) {
+        if (clazz != null && !Serializable.class.isAssignableFrom(clazz)) {
+            throw new BadParcelableException("About to unparcel a serializable object "
+                    + " but class required " + clazz.getName() + " is not Serializable");
+        }
+
         String name = readString();
         if (name == null) {
             // For some reason we were unable to read the name of the Serializable (either there
@@ -4163,9 +4378,20 @@ public final class Parcel {
             return null;
         }
 
-        byte[] serializedData = createByteArray();
-        ByteArrayInputStream bais = new ByteArrayInputStream(serializedData);
         try {
+            if (clazz != null && loader != null) {
+                // If custom classloader is provided, resolve the type of serializable using the
+                // name, then check the type before deserialization. As in this case we can resolve
+                // the class the same way as ObjectInputStream, using the provided classloader.
+                Class<?> cl = Class.forName(name, false, loader);
+                if (!clazz.isAssignableFrom(cl)) {
+                    throw new BadParcelableException("Serializable object "
+                            + cl.getName() + " is not a subclass of required class "
+                            + clazz.getName() + " provided in the parameter");
+                }
+            }
+            byte[] serializedData = createByteArray();
+            ByteArrayInputStream bais = new ByteArrayInputStream(serializedData);
             ObjectInputStream ois = new ObjectInputStream(bais) {
                 @Override
                 protected Class<?> resolveClass(ObjectStreamClass osClass)
@@ -4173,22 +4399,31 @@ public final class Parcel {
                     // try the custom classloader if provided
                     if (loader != null) {
                         Class<?> c = Class.forName(osClass.getName(), false, loader);
-                        if (c != null) {
-                            return c;
-                        }
+                        return Objects.requireNonNull(c);
                     }
                     return super.resolveClass(osClass);
                 }
             };
-            return (Serializable) ois.readObject();
+            T object = (T) ois.readObject();
+            if (clazz != null && loader == null) {
+                // If custom classloader is not provided, check the type of the serializable using
+                // the deserialized object, as we cannot resolve the class the same way as
+                // ObjectInputStream.
+                if (!clazz.isAssignableFrom(object.getClass())) {
+                    throw new BadParcelableException("Serializable object "
+                            + object.getClass().getName() + " is not a subclass of required class "
+                            + clazz.getName() + " provided in the parameter");
+                }
+            }
+            return object;
         } catch (IOException ioe) {
-            throw new RuntimeException("Parcelable encountered " +
-                "IOException reading a Serializable object (name = " + name +
-                ")", ioe);
+            throw new BadParcelableException("Parcelable encountered "
+                    + "IOException reading a Serializable object (name = "
+                    + name + ")", ioe);
         } catch (ClassNotFoundException cnfe) {
-            throw new RuntimeException("Parcelable encountered " +
-                "ClassNotFoundException reading a Serializable object (name = "
-                + name + ")", cnfe);
+            throw new BadParcelableException("Parcelable encountered "
+                    + "ClassNotFoundException reading a Serializable object (name = "
+                    + name + ")", cnfe);
         }
     }
 
@@ -4275,13 +4510,23 @@ public final class Parcel {
         destroy();
     }
 
-    /* package */ void readMapInternal(@NonNull Map outVal, int N,
+    /**
+     * To be replaced by {@link #readMapInternal(Map, int, ClassLoader, Class, Class)}, but keep
+     * the old API for compatibility usages.
+     */
+    /* package */ void readMapInternal(@NonNull Map outVal, int n,
             @Nullable ClassLoader loader) {
-        while (N > 0) {
-            Object key = readValue(loader);
-            Object value = readValue(loader);
+        readMapInternal(outVal, n, loader, /* clazzKey */null, /* clazzValue */null);
+    }
+
+    /* package */ <K, V> void readMapInternal(@NonNull Map<? super K, ? super V> outVal, int n,
+            @Nullable ClassLoader loader, @Nullable Class<K> clazzKey,
+            @Nullable Class<V> clazzValue) {
+        while (n > 0) {
+            K key = readValue(loader, clazzKey);
+            V value = readValue(loader, clazzValue);
             outVal.put(key, value);
-            N--;
+            n--;
         }
     }
 

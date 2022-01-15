@@ -28,7 +28,6 @@ import android.app.ActivityClient;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RecentTaskInfo;
 import android.app.ActivityManager.RunningTaskInfo;
-import android.window.TaskSnapshot;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.AppGlobals;
@@ -50,6 +49,7 @@ import android.util.Log;
 import android.view.IRecentsAnimationController;
 import android.view.IRecentsAnimationRunner;
 import android.view.RemoteAnimationTarget;
+import android.window.TaskSnapshot;
 
 import com.android.internal.app.IVoiceInteractionManagerService;
 import com.android.systemui.shared.recents.model.Task;
@@ -189,14 +189,19 @@ public class ActivityManagerWrapper {
                     }
 
                     @Override
-                    public void onAnimationCanceled(TaskSnapshot taskSnapshot) {
+                    public void onAnimationCanceled(int[] taskIds, TaskSnapshot[] taskSnapshots) {
                         animationHandler.onAnimationCanceled(
-                                taskSnapshot != null ? new ThumbnailData(taskSnapshot) : null);
+                                ThumbnailData.wrap(taskIds, taskSnapshots));
                     }
 
                     @Override
-                    public void onTaskAppeared(RemoteAnimationTarget app) {
-                        animationHandler.onTaskAppeared(new RemoteAnimationTargetCompat(app));
+                    public void onTasksAppeared(RemoteAnimationTarget[] apps) {
+                        final RemoteAnimationTargetCompat[] compats =
+                                new RemoteAnimationTargetCompat[apps.length];
+                        for (int i = 0; i < apps.length; ++i) {
+                            compats[i] = new RemoteAnimationTargetCompat(apps[i]);
+                        }
+                        animationHandler.onTasksAppeared(compats);
                     }
                 };
             }

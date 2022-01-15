@@ -218,6 +218,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
 
 /**
  * The top of a view hierarchy, implementing the needed protocol between View
@@ -294,21 +295,6 @@ public final class ViewRootImpl implements ViewParent,
      * Maximum time to wait for {@link View#dispatchScrollCaptureSearch} to complete.
      */
     private static final int SCROLL_CAPTURE_REQUEST_TIMEOUT_MILLIS = 2500;
-
-    /**
-     * If set to {@code true}, the new logic to layout system bars as normal window and to use
-     * layout result to get insets will be applied. Otherwise, the old hard-coded window logic will
-     * be applied.
-     */
-    private static final String USE_FLEXIBLE_INSETS = "persist.debug.flexible_insets";
-
-    /**
-     * A flag to indicate to use the new generalized insets window logic, or the old hard-coded
-     * insets window layout logic.
-     * {@hide}
-     */
-    public static final boolean INSETS_LAYOUT_GENERALIZATION =
-            SystemProperties.getBoolean(USE_FLEXIBLE_INSETS, true);
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     static final ThreadLocal<HandlerActionQueue> sRunQueues = new ThreadLocal<HandlerActionQueue>();
@@ -745,7 +731,7 @@ public final class ViewRootImpl implements ViewParent,
 
     /**
      * This is only used on the RenderThread when handling a blast sync. Specifically, it's only
-     * used when calling {@link BLASTBufferQueue#setNextTransaction(Transaction)} and then merged
+     * used when calling {@link BLASTBufferQueue#setSyncTransaction(Transaction)} and then merged
      * with a tmp transaction on the Render Thread. The tmp transaction is then merged into
      * {@link #mSurfaceChangedTransaction} on the UI Thread, avoiding any threading issues.
      */
@@ -757,6 +743,8 @@ public final class ViewRootImpl implements ViewParent,
      * the RenderThread.
      */
     private long mRtLastAttemptedDrawFrameNum = 0;
+
+    private Consumer<SurfaceControl.Transaction> mBLASTDrawConsumer;
 
     private HashSet<ScrollCaptureCallback> mRootScrollCaptureCallbacks;
 
@@ -861,6 +849,13 @@ public final class ViewRootImpl implements ViewParent,
     public static void addConfigCallback(ConfigChangedCallback callback) {
         synchronized (sConfigCallbacks) {
             sConfigCallbacks.add(callback);
+        }
+    }
+
+    /** Remove a static config callback. */
+    public static void removeConfigCallback(ConfigChangedCallback callback) {
+        synchronized (sConfigCallbacks) {
+            sConfigCallbacks.remove(callback);
         }
     }
 
@@ -3270,6 +3265,9 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         boolean cancelDraw = mAttachInfo.mTreeObserver.dispatchOnPreDraw() || !isViewVisible;
+        if (mBLASTDrawConsumer != null) {
+            useBlastSync = true;
+        }
 
         if (!cancelDraw) {
             if (mPendingTransitions != null && mPendingTransitions.size() > 0) {
@@ -3387,14 +3385,12 @@ public final class ViewRootImpl implements ViewParent,
 
     private void handleWindowFocusChanged() {
         final boolean hasWindowFocus;
-        final boolean inTouchMode;
         synchronized (this) {
             if (!mWindowFocusChanged) {
                 return;
             }
             mWindowFocusChanged = false;
             hasWindowFocus = mUpcomingWindowFocus;
-            inTouchMode = mUpcomingInTouchMode;
         }
         // TODO (b/131181940): Make sure this doesn't leak Activity with mActivityConfigCallback
         // config changes.
@@ -3407,9 +3403,7 @@ public final class ViewRootImpl implements ViewParent,
 
         if (mAdded) {
             profileRendering(hasWindowFocus);
-
             if (hasWindowFocus) {
-                ensureTouchModeLocally(inTouchMode);
                 if (mAttachInfo.mThreadedRenderer != null && mSurface.isValid()) {
                     mFullRedrawNeeded = true;
                     try {
@@ -3479,6 +3473,14 @@ public final class ViewRootImpl implements ViewParent,
         if (hasWindowFocus) {
             handleContentCaptureFlush();
         }
+    }
+
+    private void handleWindowTouchModeChanged() {
+        final boolean inTouchMode;
+        synchronized (this) {
+            inTouchMode = mUpcomingInTouchMode;
+        }
+        ensureTouchModeLocally(inTouchMode);
     }
 
     private void fireAccessibilityFocusEventIfHasFocusedNode() {
@@ -3984,6 +3986,9 @@ public final class ViewRootImpl implements ViewParent,
             Log.d(mTag, "Creating frameCompleteCallback");
         }
 
+        final Consumer<SurfaceControl.Transaction> blastSyncConsumer = mBLASTDrawConsumer;
+        mBLASTDrawConsumer = null;
+
         mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(() -> {
             long frameNr = mBlastBufferQueue.getLastAcquiredFrameNum();
             if (DEBUG_BLAST) {
@@ -3997,7 +4002,7 @@ public final class ViewRootImpl implements ViewParent,
             // draw attempt. The next transaction and transaction complete callback were only set
             // for the current draw attempt.
             if (frameWasNotDrawn) {
-                mBlastBufferQueue.setNextTransaction(null);
+                mBlastBufferQueue.setSyncTransaction(null);
                 // Apply the transactions that were sent to mergeWithNextTransaction since the
                 // frame didn't draw on this vsync. It's possible the frame will draw later, but
                 // it's better to not be sync than to block on a frame that may never come.
@@ -4009,6 +4014,9 @@ public final class ViewRootImpl implements ViewParent,
             mHandler.postAtFrontOfQueue(() -> {
                 if (useBlastSync) {
                     mSurfaceChangedTransaction.merge(tmpTransaction);
+                    if (blastSyncConsumer != null) {
+                        blastSyncConsumer.accept(mSurfaceChangedTransaction);
+                    }
                 }
 
                 if (reportNextDraw) {
@@ -4090,7 +4098,7 @@ public final class ViewRootImpl implements ViewParent,
 
                 // We don't need to synchronize mRtBLASTSyncTransaction here since it's not
                 // being modified and only sent to BlastBufferQueue.
-                mBlastBufferQueue.setNextTransaction(mRtBLASTSyncTransaction);
+                mBlastBufferQueue.setSyncTransaction(mRtBLASTSyncTransaction);
             }
         };
         registerRtFrameCallback(frameDrawingCallback);
@@ -5138,6 +5146,7 @@ public final class ViewRootImpl implements ViewParent,
     private static final int MSG_SHOW_INSETS = 34;
     private static final int MSG_HIDE_INSETS = 35;
     private static final int MSG_REQUEST_SCROLL_CAPTURE = 36;
+    private static final int MSG_WINDOW_TOUCH_MODE_CHANGED = 37;
 
 
     final class ViewRootHandler extends Handler {
@@ -5204,6 +5213,8 @@ public final class ViewRootImpl implements ViewParent,
                     return "MSG_SHOW_INSETS";
                 case MSG_HIDE_INSETS:
                     return "MSG_HIDE_INSETS";
+                case MSG_WINDOW_TOUCH_MODE_CHANGED:
+                    return "MSG_WINDOW_TOUCH_MODE_CHANGED";
             }
             return super.getMessageName(message);
         }
@@ -5326,9 +5337,12 @@ public final class ViewRootImpl implements ViewParent,
                 case MSG_WINDOW_FOCUS_CHANGED: {
                     handleWindowFocusChanged();
                 } break;
-                case MSG_DIE:
+                case MSG_WINDOW_TOUCH_MODE_CHANGED: {
+                    handleWindowTouchModeChanged();
+                } break;
+                case MSG_DIE: {
                     doDie();
-                    break;
+                } break;
                 case MSG_DISPATCH_INPUT_EVENT: {
                     SomeArgs args = (SomeArgs) msg.obj;
                     InputEvent event = (InputEvent) args.arg1;
@@ -8706,6 +8720,11 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
+        public void onTouchModeChanged(boolean inTouchMode) {
+            touchModeChanged(inTouchMode);
+        }
+
+        @Override
         public void onPointerCaptureEvent(boolean pointerCaptureEnabled) {
             dispatchPointerCaptureChanged(pointerCaptureEnabled);
         }
@@ -8963,14 +8982,30 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.sendMessage(msg);
     }
 
-    public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {
+    /**
+     * Notifies this {@link ViewRootImpl} object that window focus has changed.
+     */
+    public void windowFocusChanged(boolean hasFocus, boolean unusedInTouchMode) {
+        // TODO(b/193718270): Remove inTouchMode parameter from this method and update related code
+        //     accordingly.
         synchronized (this) {
             mWindowFocusChanged = true;
             mUpcomingWindowFocus = hasFocus;
-            mUpcomingInTouchMode = inTouchMode;
         }
         Message msg = Message.obtain();
         msg.what = MSG_WINDOW_FOCUS_CHANGED;
+        mHandler.sendMessage(msg);
+    }
+
+    /**
+     * Notifies this {@link ViewRootImpl} object that touch mode state has changed.
+     */
+    public void touchModeChanged(boolean inTouchMode) {
+        synchronized (this) {
+            mUpcomingInTouchMode = inTouchMode;
+        }
+        Message msg = Message.obtain();
+        msg.what = MSG_WINDOW_TOUCH_MODE_CHANGED;
         mHandler.sendMessage(msg);
     }
 
@@ -10401,9 +10436,11 @@ public final class ViewRootImpl implements ViewParent,
 
     @Override
     public boolean applyTransactionOnDraw(@NonNull SurfaceControl.Transaction t) {
-        registerRtFrameCallback(frame -> {
-            mergeWithNextTransaction(t, frame);
-        });
+        if (mRemoved) {
+            t.apply();
+        } else {
+            registerRtFrameCallback(frame -> mergeWithNextTransaction(t, frame));
+        }
         return true;
     }
 
@@ -10442,4 +10479,35 @@ public final class ViewRootImpl implements ViewParent,
             listener.onBufferTransformHintChanged(hint);
         }
     }
+
+    /**
+     * Redirect the next draw of this ViewRoot (from the UI thread perspective)
+     * to the passed in consumer. This can be used to create P2P synchronization
+     * between ViewRoot's however it comes with many caveats.
+     *
+     * 1. You MUST consume the transaction, by either applying it immediately or
+     *    merging it in to another transaction. The threading model doesn't
+     *    allow you to hold in the passed transaction.
+     * 2. If you merge it in to another transaction, this ViewRootImpl will be
+     *    paused until you finally apply that transaction and it receives
+     *    the callback from SF. If you lose track of the transaction you will
+     *    ANR the app.
+     * 3. Only one person can consume the transaction at a time, if you already
+     *    have a pending consumer for this frame, the function will return false
+     * 4. Someone else may have requested to consume the next frame, in which case
+     *    this function will return false and you will not receive a callback.
+     * 5. This function does not trigger drawing so even if it returns true you
+     *    may not receive a callback unless there is some other UI thread work
+     *    to trigger drawing. If it returns true, and a draw occurs, the callback
+     *    will be called (Though again watch out for the null transaction case!)
+     * 6. This function must be called on the UI thread. The consumer will likewise
+     *    be called on the UI thread.
+     */
+    public boolean consumeNextDraw(Consumer<SurfaceControl.Transaction> consume) {
+       if (mBLASTDrawConsumer != null) {
+           return false;
+       }
+       mBLASTDrawConsumer = consume;
+       return true;
+   }
 }

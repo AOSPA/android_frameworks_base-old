@@ -26,8 +26,7 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
 import com.android.systemui.R
 import com.android.systemui.statusbar.phone.StatusBarLocationPublisher
-import com.android.systemui.statusbar.phone.StatusBarWindowController
-import com.android.systemui.statusbar.phone.StatusBarWindowView
+import com.android.systemui.statusbar.window.StatusBarWindowController
 import javax.inject.Inject
 
 /**
@@ -36,7 +35,6 @@ import javax.inject.Inject
  */
 class SystemEventChipAnimationController @Inject constructor(
     private val context: Context,
-    private val statusBarWindowView: StatusBarWindowView,
     private val statusBarWindowController: StatusBarWindowController,
     private val locationPublisher: StatusBarLocationPublisher
 ) : SystemStatusChipAnimationCallback {
@@ -127,7 +125,7 @@ class SystemEventChipAnimationController @Inject constructor(
         animationDotView = animationWindowView.findViewById(R.id.dot_view)
         val lp = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
         lp.gravity = Gravity.END or Gravity.CENTER_VERTICAL
-        statusBarWindowView.addView(animationWindowView, lp)
+        statusBarWindowController.addViewToWindow(animationWindowView, lp)
     }
 
     private fun start() = if (animationWindowView.isLayoutRtl) right() else left()

@@ -74,6 +74,7 @@ import android.os.StrictMode;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.os.storage.IStorageManager;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
@@ -193,6 +194,7 @@ import com.android.server.tracing.TracingServiceProxy;
 import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
+import com.android.server.tv.interactive.TvIAppManagerService;
 import com.android.server.tv.tunerresourcemanager.TunerResourceManagerService;
 import com.android.server.twilight.TwilightService;
 import com.android.server.uri.UriGrantsManagerService;
@@ -1359,6 +1361,7 @@ public final class SystemServer implements Dumpable {
      */
     private void startOtherServices(@NonNull TimingsTraceAndSlog t) {
         t.traceBegin("startOtherServices");
+        mSystemServiceManager.updateOtherServicesStartIndex();
 
         final Context context = mSystemContext;
         DynamicSystemService dynamicSystem = null;
@@ -2384,6 +2387,13 @@ public final class SystemServer implements Dumpable {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_LIVE_TV)
                     || mPackageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+                t.traceBegin("StartTvIAppManager");
+                mSystemServiceManager.startService(TvIAppManagerService.class);
+                t.traceEnd();
+            }
+
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_LIVE_TV)
+                    || mPackageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
                 t.traceBegin("StartTvInputManager");
                 mSystemServiceManager.startService(TvInputManagerService.class);
                 t.traceEnd();
@@ -2816,7 +2826,9 @@ public final class SystemServer implements Dumpable {
                 }, WEBVIEW_PREPARATION);
             }
 
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
+            boolean isAutomotive = mPackageManager
+                    .hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE);
+            if (isAutomotive) {
                 t.traceBegin("StartCarServiceHelperService");
                 final SystemService cshs = mSystemServiceManager
                         .startService(CAR_SERVICE_HELPER_SERVICE_CLASS);
@@ -2924,6 +2936,13 @@ public final class SystemServer implements Dumpable {
             }
             mSystemServiceManager.startBootPhase(t, SystemService.PHASE_THIRD_PARTY_APPS_CAN_START);
             t.traceEnd();
+
+            if (UserManager.isHeadlessSystemUserMode() && !isAutomotive) {
+                // TODO(b/204091126): remove isAutomotive check once the workflow is finalized
+                t.traceBegin("BootUserInitializer");
+                new BootUserInitializer(mActivityManagerService, mContentResolver).init(t);
+                t.traceEnd();
+            }
 
             t.traceBegin("StartNetworkStack");
             try {

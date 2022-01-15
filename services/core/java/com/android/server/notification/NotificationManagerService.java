@@ -2612,7 +2612,8 @@ public class NotificationManagerService extends SystemService {
     private int pullNotificationStates(int atomTag, List<StatsEvent> data) {
         switch(atomTag) {
             case PACKAGE_NOTIFICATION_PREFERENCES:
-                mPreferencesHelper.pullPackagePreferencesStats(data);
+                mPreferencesHelper.pullPackagePreferencesStats(data,
+                        getAllUsersNotificationPermissions());
                 break;
             case PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES:
                 mPreferencesHelper.pullPackageChannelPreferencesStats(data);
@@ -2647,7 +2648,12 @@ public class NotificationManagerService extends SystemService {
 
             @Override
             public void addAutoGroupSummary(int userId, String pkg, String triggeringKey) {
-                createAutoGroupSummary(userId, pkg, triggeringKey);
+                NotificationRecord r = createAutoGroupSummary(userId, pkg, triggeringKey);
+                if (r != null) {
+                    final boolean isAppForeground =
+                            mActivityManager.getPackageImportance(pkg) == IMPORTANCE_FOREGROUND;
+                    mHandler.post(new EnqueueNotificationRunnable(userId, r, isAppForeground));
+                }
             }
 
             @Override
@@ -5060,16 +5066,18 @@ public class NotificationManagerService extends SystemService {
             final DumpFilter filter = DumpFilter.parseFromArguments(args);
             final long token = Binder.clearCallingIdentity();
             try {
+                final ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions =
+                        getAllUsersNotificationPermissions();
                 if (filter.stats) {
-                    dumpJson(pw, filter);
+                    dumpJson(pw, filter, pkgPermissions);
                 } else if (filter.rvStats) {
                     dumpRemoteViewStats(pw, filter);
                 } else if (filter.proto) {
-                    dumpProto(fd, filter);
+                    dumpProto(fd, filter, pkgPermissions);
                 } else if (filter.criticalPriority) {
                     dumpNotificationRecords(pw, filter);
                 } else {
-                    dumpImpl(pw, filter);
+                    dumpImpl(pw, filter, pkgPermissions);
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -5086,6 +5094,13 @@ public class NotificationManagerService extends SystemService {
             // Because matchesCallFilter may use contact data to filter calls, the callers of this
             // method need to either have notification listener access or permission to read
             // contacts.
+            boolean systemAccess = false;
+            try {
+                enforceSystemOrSystemUI("INotificationManager.matchesCallFilter");
+                systemAccess = true;
+            } catch (SecurityException e) {
+            }
+
             boolean listenerAccess = false;
             try {
                 String[] pkgNames = mPackageManager.getPackagesForUid(Binder.getCallingUid());
@@ -5096,11 +5111,10 @@ public class NotificationManagerService extends SystemService {
                 }
             } catch (RemoteException e) {
             } finally {
-                if (!listenerAccess) {
-                    getContext().enforceCallingPermission(
-                            Manifest.permission.READ_CONTACTS,
-                            "matchesCallFilter requires listener permissions or "
-                                    + "contacts read access");
+                if (!systemAccess && !listenerAccess) {
+                    getContext().enforceCallingPermission(Manifest.permission.READ_CONTACTS,
+                            "matchesCallFilter requires listener permission, contacts read access,"
+                            + " or system level access");
                 }
             }
 
@@ -5580,6 +5594,12 @@ public class NotificationManagerService extends SystemService {
             return isPackagePausedOrSuspended(pkg, Binder.getCallingUid());
         }
 
+        @Override
+        public boolean isPermissionFixed(String pkg, @UserIdInt int userId) {
+            enforceSystemOrSystemUI("isPermissionFixed");
+            return mPermissionHelper.isPermissionFixed(pkg, userId);
+        }
+
         private void verifyPrivilegedListener(INotificationListener token, UserHandle user,
                 boolean assistantAllowed) {
             ManagedServiceInfo info;
@@ -5778,18 +5798,23 @@ public class NotificationManagerService extends SystemService {
         return summaries != null && summaries.containsKey(sbn.getPackageName());
     }
 
-    // Posts a 'fake' summary for a package that has exceeded the solo-notification limit.
-    private void createAutoGroupSummary(int userId, String pkg, String triggeringKey) {
+    // Creates a 'fake' summary for a package that has exceeded the solo-notification limit.
+    NotificationRecord createAutoGroupSummary(int userId, String pkg, String triggeringKey) {
         NotificationRecord summaryRecord = null;
-        final boolean isAppForeground =
-                mActivityManager.getPackageImportance(pkg) == IMPORTANCE_FOREGROUND;
+        boolean isPermissionFixed = mPermissionHelper.isMigrationEnabled()
+                ? mPermissionHelper.isPermissionFixed(pkg, userId) : false;
         synchronized (mNotificationLock) {
             NotificationRecord notificationRecord = mNotificationsByKey.get(triggeringKey);
             if (notificationRecord == null) {
                 // The notification could have been cancelled again already. A successive
                 // adjustment will post a summary if needed.
-                return;
+                return null;
             }
+            NotificationChannel channel = notificationRecord.getChannel();
+            boolean isImportanceFixed = mPermissionHelper.isMigrationEnabled()
+                    ? isPermissionFixed
+                    : (channel.isImportanceLockedByOEM()
+                            || channel.isImportanceLockedByCriticalDeviceFunction());
             final StatusBarNotification adjustedSbn = notificationRecord.getSbn();
             userId = adjustedSbn.getUser().getIdentifier();
             ArrayMap<String, String> summaries = mAutobundledSummaries.get(userId);
@@ -5833,6 +5858,7 @@ public class NotificationManagerService extends SystemService {
                                 System.currentTimeMillis());
                 summaryRecord = new NotificationRecord(getContext(), summarySbn,
                         notificationRecord.getChannel());
+                summaryRecord.setImportanceFixed(isImportanceFixed);
                 summaryRecord.setIsAppImportanceLocked(
                         notificationRecord.getIsAppImportanceLocked());
                 summaries.put(pkg, summarySbn.getKey());
@@ -5840,9 +5866,10 @@ public class NotificationManagerService extends SystemService {
             if (summaryRecord != null && checkDisqualifyingFeatures(userId, MY_UID,
                     summaryRecord.getSbn().getId(), summaryRecord.getSbn().getTag(), summaryRecord,
                     true)) {
-                mHandler.post(new EnqueueNotificationRunnable(userId, summaryRecord, isAppForeground));
+                return summaryRecord;
             }
         }
+        return null;
     }
 
     private String disableNotificationEffects(NotificationRecord record) {
@@ -5872,12 +5899,38 @@ public class NotificationManagerService extends SystemService {
         return null;
     }
 
-    private void dumpJson(PrintWriter pw, @NonNull DumpFilter filter) {
+    // Gets packages that have requested notification permission, and whether that has been
+    // allowed/denied, for all users on the device.
+    // Returns a single map containing that info keyed by (uid, package name) for all users.
+    // Because this calls into mPermissionHelper, this method must never be called with a lock held.
+    @VisibleForTesting
+    protected ArrayMap<Pair<Integer, String>, Boolean> getAllUsersNotificationPermissions() {
+        // don't bother if migration is not enabled
+        if (!mEnableAppSettingMigration) {
+            return null;
+        }
+        ArrayMap<Pair<Integer, String>, Boolean> allPermissions = new ArrayMap<>();
+        final List<UserInfo> allUsers = mUm.getUsers();
+        // for each of these, get the package notification permissions that are associated
+        // with this user and add it to the map
+        for (UserInfo ui : allUsers) {
+            ArrayMap<Pair<Integer, String>, Boolean> userPermissions =
+                    mPermissionHelper.getNotificationPermissionValues(
+                            ui.getUserHandle().getIdentifier());
+            for (Pair<Integer, String> pair : userPermissions.keySet()) {
+                allPermissions.put(pair, userPermissions.get(pair));
+            }
+        }
+        return allPermissions;
+    }
+
+    private void dumpJson(PrintWriter pw, @NonNull DumpFilter filter,
+            ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions) {
         JSONObject dump = new JSONObject();
         try {
             dump.put("service", "Notification Manager");
-            dump.put("bans", mPreferencesHelper.dumpBansJson(filter));
-            dump.put("ranking", mPreferencesHelper.dumpJson(filter));
+            dump.put("bans", mPreferencesHelper.dumpBansJson(filter, pkgPermissions));
+            dump.put("ranking", mPreferencesHelper.dumpJson(filter, pkgPermissions));
             dump.put("stats", mUsageStats.dumpJson(filter));
             dump.put("channels", mPreferencesHelper.dumpChannelsJson(filter));
         } catch (JSONException e) {
@@ -5895,7 +5948,8 @@ public class NotificationManagerService extends SystemService {
         stats.dump(REPORT_REMOTE_VIEWS, pw, filter);
     }
 
-    private void dumpProto(FileDescriptor fd, @NonNull DumpFilter filter) {
+    private void dumpProto(FileDescriptor fd, @NonNull DumpFilter filter,
+            ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions) {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
         synchronized (mNotificationLock) {
             int N = mNotificationList.size();
@@ -5962,7 +6016,7 @@ public class NotificationManagerService extends SystemService {
 
             long rankingToken = proto.start(NotificationServiceDumpProto.RANKING_CONFIG);
             mRankingHelper.dump(proto, filter);
-            mPreferencesHelper.dump(proto, filter);
+            mPreferencesHelper.dump(proto, filter, pkgPermissions);
             proto.end(rankingToken);
         }
 
@@ -5985,7 +6039,8 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    void dumpImpl(PrintWriter pw, @NonNull DumpFilter filter) {
+    void dumpImpl(PrintWriter pw, @NonNull DumpFilter filter,
+            ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions) {
         pw.print("Current Notification Manager state");
         if (filter.filtered) {
             pw.print(" (filtered to "); pw.print(filter); pw.print(")");
@@ -6064,7 +6119,7 @@ public class NotificationManagerService extends SystemService {
                 mRankingHelper.dump(pw, "    ", filter);
 
                 pw.println("\n Notification Preferences:");
-                mPreferencesHelper.dump(pw, "    ", filter);
+                mPreferencesHelper.dump(pw, "    ", filter, pkgPermissions);
 
                 pw.println("\n  Notification listeners:");
                 mListeners.dump(pw, filter);
@@ -6357,6 +6412,11 @@ public class NotificationManagerService extends SystemService {
         r.setPostSilently(postSilently);
         r.setFlagBubbleRemoved(false);
         r.setPkgAllowedAsConvo(mMsgPkgsAllowedAsConvos.contains(pkg));
+        boolean isImportanceFixed = mPermissionHelper.isMigrationEnabled()
+                ? mPermissionHelper.isPermissionFixed(pkg, userId)
+                : (channel.isImportanceLockedByOEM()
+                        || channel.isImportanceLockedByCriticalDeviceFunction());
+        r.setImportanceFixed(isImportanceFixed);
 
         if ((notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0) {
             final boolean fgServiceShown = channel.isFgServiceShown();
@@ -6755,11 +6815,13 @@ public class NotificationManagerService extends SystemService {
 
 
         // blocked apps
+        boolean isMediaNotification = n.isMediaNotification()
+                && n.extras.getParcelable(Notification.EXTRA_MEDIA_SESSION) != null;
         boolean isBlocked = !areNotificationsEnabledForPackageInt(pkg, uid);
         synchronized (mNotificationLock) {
             isBlocked |= isRecordBlockedLocked(r);
         }
-        if (isBlocked) {
+        if (isBlocked && !isMediaNotification) {
             if (DBG) {
                 Slog.e(TAG, "Suppressing notification from package " + r.getSbn().getPackageName()
                         + " by user request.");
@@ -7145,7 +7207,13 @@ public class NotificationManagerService extends SystemService {
                         return;
                     }
 
-                    if (appBanned || isRecordBlockedLocked(r)) {
+                    final StatusBarNotification n = r.getSbn();
+                    final Notification notification = n.getNotification();
+
+                    boolean isMediaNotification = notification.isMediaNotification()
+                            && notification.extras.getParcelable(
+                                    Notification.EXTRA_MEDIA_SESSION) != null;
+                    if (!isMediaNotification && (appBanned || isRecordBlockedLocked(r))) {
                         mUsageStats.registerBlocked(r);
                         if (DBG) {
                             Slog.e(TAG, "Suppressing notification from package " + pkg);
@@ -7160,8 +7228,6 @@ public class NotificationManagerService extends SystemService {
                         mUsageStats.registerSuspendedByAdmin(r);
                     }
                     NotificationRecord old = mNotificationsByKey.get(key);
-                    final StatusBarNotification n = r.getSbn();
-                    final Notification notification = n.getNotification();
 
                     // Make sure the SBN has an instance ID for statsd logging.
                     if (old == null || old.getSbn().getInstanceId() == null) {
@@ -7808,7 +7874,10 @@ public class NotificationManagerService extends SystemService {
                     final int waitMs = mAudioManager.getFocusRampTimeMs(
                             AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK,
                             record.getAudioAttributes());
-                    if (DBG) Slog.v(TAG, "Delaying vibration by " + waitMs + "ms");
+                    if (DBG) {
+                        Slog.v(TAG, "Delaying vibration for notification "
+                                + record.getKey() + " by " + waitMs + "ms");
+                    }
                     try {
                         Thread.sleep(waitMs);
                     } catch (InterruptedException e) { }
@@ -7816,9 +7885,17 @@ public class NotificationManagerService extends SystemService {
                     // so need to check the notification still valide for vibrate.
                     synchronized (mNotificationLock) {
                         if (mNotificationsByKey.get(record.getKey()) != null) {
-                            vibrate(record, effect, true);
+                            if (record.getKey().equals(mVibrateNotificationKey)) {
+                                vibrate(record, effect, true);
+                            } else {
+                                if (DBG) {
+                                    Slog.v(TAG, "No vibration for notification "
+                                            + record.getKey() + ": a new notification is "
+                                            + "vibrating, or effects were cleared while waiting");
+                                }
+                            }
                         } else {
-                            Slog.e(TAG, "No vibration for canceled notification : "
+                            Slog.w(TAG, "No vibration for canceled notification "
                                     + record.getKey());
                         }
                     }

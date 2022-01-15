@@ -499,6 +499,13 @@ public final class DeviceConfig {
     public static final String NAMESPACE_SYSTEM_TIME = "system_time";
 
     /**
+     * Namespace for TARE configurations.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_TARE = "tare";
+
+    /**
      * Telephony related properties.
      *
      * @hide
@@ -641,6 +648,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_GAME_OVERLAY = "game_overlay";
 
     /**
+     * Namespace for Android Virtualization Framework related features accessible by native code.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_VIRTUALIZATION_FRAMEWORK_NATIVE =
+            "virtualization_framework_native";
+
+    /**
      * Namespace for Constrain Display APIs related features.
      *
      * @hide
@@ -738,7 +753,7 @@ public final class DeviceConfig {
      * @param name      The name of the property to look up.
      * @param defaultValue The value to return if the property does not exist or has no non-null
      *                     value.
-     * @return the correspondfing value, or defaultValue if none exists.
+     * @return the corresponding value, or defaultValue if none exists.
      * @hide
      */
     @SystemApi

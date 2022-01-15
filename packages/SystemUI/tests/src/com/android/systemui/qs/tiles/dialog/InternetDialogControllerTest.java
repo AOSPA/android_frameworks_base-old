@@ -45,11 +45,11 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.settingslib.wifi.WifiUtils;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
-import com.android.systemui.statusbar.connectivity.NetworkController;
-import com.android.systemui.statusbar.connectivity.NetworkController.AccessPointController;
+import com.android.systemui.statusbar.connectivity.AccessPointController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.toast.SystemUIToast;
@@ -103,7 +103,7 @@ public class InternetDialogControllerTest extends SysuiTestCase {
     @Mock
     private KeyguardStateController mKeyguardStateController;
     @Mock
-    private NetworkController.AccessPointController mAccessPointController;
+    private AccessPointController mAccessPointController;
     @Mock
     private WifiEntry mConnectedEntry;
     @Mock
@@ -138,6 +138,8 @@ public class InternetDialogControllerTest extends SysuiTestCase {
     private CarrierConfigTracker mCarrierConfigTracker;
     @Mock
     private LocationController mLocationController;
+    @Mock
+    private DialogLaunchAnimator mDialogLaunchAnimator;
 
     private TestableResources mTestableResources;
     private MockInternetDialogController mInternetDialogController;
@@ -174,7 +176,7 @@ public class InternetDialogControllerTest extends SysuiTestCase {
                 mock(ConnectivityManager.class), mHandler, mExecutor, mBroadcastDispatcher,
                 mock(KeyguardUpdateMonitor.class), mGlobalSettings, mKeyguardStateController,
                 mWindowManager, mToastFactory, mWorkerHandler, mCarrierConfigTracker,
-                mLocationController);
+                mLocationController, mDialogLaunchAnimator);
         mSubscriptionManager.addOnSubscriptionsChangedListener(mExecutor,
                 mInternetDialogController.mOnSubscriptionsChangedListener);
         mInternetDialogController.onStart(mInternetDialogCallback, true);
@@ -654,12 +656,13 @@ public class InternetDialogControllerTest extends SysuiTestCase {
                 KeyguardStateController keyguardStateController, WindowManager windowManager,
                 ToastFactory toastFactory, Handler workerHandler,
                 CarrierConfigTracker carrierConfigTracker,
-                LocationController locationController) {
+                LocationController locationController,
+                DialogLaunchAnimator dialogLaunchAnimator) {
             super(context, uiEventLogger, starter, accessPointController, subscriptionManager,
                     telephonyManager, wifiManager, connectivityManager, handler, mainExecutor,
                     broadcastDispatcher, keyguardUpdateMonitor, globalSettings,
                     keyguardStateController, windowManager, toastFactory, workerHandler,
-                    carrierConfigTracker, locationController);
+                    carrierConfigTracker, locationController, dialogLaunchAnimator);
             mGlobalSettings = globalSettings;
         }
 

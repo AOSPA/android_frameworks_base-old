@@ -338,6 +338,11 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         applyReady();
     }
 
+    @VisibleForTesting
+    boolean allReady() {
+        return mReadyTracker.allReady();
+    }
+
     /**
      * Build a transaction that "resets" all the re-parenting and layer changes. This is
      * intended to be applied at the end of the transition but before the finish callback. This
@@ -508,7 +513,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         mState = STATE_PLAYING;
         mController.moveToPlaying(this);
 
-        if (mController.mAtm.mTaskSupervisor.getKeyguardController().isKeyguardLocked()) {
+        if (mController.mAtm.mTaskSupervisor.getKeyguardController().isKeyguardLocked(displayId)) {
             mFlags |= TRANSIT_FLAG_KEYGUARD_LOCKED;
         }
 

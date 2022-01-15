@@ -69,6 +69,7 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     private static final int UNSTASH_DURATION = 250;
     private static final int LEAVE_PIP_DURATION = 300;
     private static final int SHIFT_DURATION = 300;
+    private static final int ANIMATE_PIP_RESIZE_ANIMATION = 250;
 
     /** Friction to use for PIP when it moves via physics fling animations. */
     private static final float DEFAULT_FRICTION = 1.9f;
@@ -337,22 +338,29 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
      * Resizes the pinned stack back to unknown windowing mode, which could be freeform or
      *      * fullscreen depending on the display area's windowing mode.
      */
-    void expandLeavePip() {
-        expandLeavePip(false /* skipAnimation */);
+    void expandLeavePip(boolean skipAnimation) {
+        expandLeavePip(skipAnimation, false /* enterSplit */);
+    }
+
+    /**
+     * Resizes the pinned task to split-screen mode.
+     */
+    void expandIntoSplit() {
+        expandLeavePip(false, true /* enterSplit */);
     }
 
     /**
      * Resizes the pinned stack back to unknown windowing mode, which could be freeform or
      * fullscreen depending on the display area's windowing mode.
      */
-    void expandLeavePip(boolean skipAnimation) {
+    private void expandLeavePip(boolean skipAnimation, boolean enterSplit) {
         if (DEBUG) {
             Log.d(TAG, "exitPip: skipAnimation=" + skipAnimation
                     + " callers=\n" + Debug.getCallers(5, "    "));
         }
         cancelPhysicsAnimation();
         mMenuController.hideMenu(ANIM_TYPE_NONE, false /* resize */);
-        mPipTaskOrganizer.exitPip(skipAnimation ? 0 : LEAVE_PIP_DURATION);
+        mPipTaskOrganizer.exitPip(skipAnimation ? 0 : LEAVE_PIP_DURATION, enterSplit);
     }
 
     /**
@@ -538,6 +546,14 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
      */
     void animateToUnStashedBounds(Rect unstashedBounds) {
         resizeAndAnimatePipUnchecked(unstashedBounds, UNSTASH_DURATION);
+    }
+
+    /**
+     * Animates the PiP from an old bound to a new bound. This is mostly used when display
+     * has changed and PiP bounds needs to be changed.
+     */
+    void animateResizedBounds(Rect newBounds) {
+        resizeAndAnimatePipUnchecked(newBounds, ANIMATE_PIP_RESIZE_ANIMATION);
     }
 
     /**

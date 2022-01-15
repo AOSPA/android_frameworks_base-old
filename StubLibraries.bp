@@ -244,6 +244,7 @@ modules_public_stubs = [
     "framework-graphics.stubs",
     "framework-media.stubs",
     "framework-mediaprovider.stubs",
+    "framework-nearby.stubs",
     "framework-permission.stubs",
     "framework-permission-s.stubs",
     "framework-scheduling.stubs",
@@ -264,6 +265,7 @@ modules_system_stubs = [
     "framework-graphics.stubs.system",
     "framework-media.stubs.system",
     "framework-mediaprovider.stubs.system",
+    "framework-nearby.stubs.system",
     "framework-permission.stubs.system",
     "framework-permission-s.stubs.system",
     "framework-scheduling.stubs.system",
@@ -320,6 +322,7 @@ java_library {
     defaults: ["android-non-updatable_defaults_stubs_current"],
     srcs: [":module-lib-api-stubs-docs-non-updatable"],
     libs: [
+        "sdk_module-lib_current_framework-tethering",
         "sdk_system_current_android",
         // NOTE: The below can be removed once the prebuilt stub contains IKE.
         "sdk_system_current_android.net.ipsec.ike",

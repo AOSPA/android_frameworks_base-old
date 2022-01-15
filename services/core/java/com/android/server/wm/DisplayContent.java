@@ -1909,6 +1909,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (mRemoteInsetsControlTarget != null) {
             mRemoteInsetsControlTarget.notifyInsetsChanged();
         }
+        // In Accessibility side, we need to know what magnification mode is activated while IME
+        // is opened for logging metrics.
+        if (mWmService.mAccessibilityController.hasCallbacks()) {
+            final boolean isImeShow = mImeControlTarget != null
+                    && mImeControlTarget.getRequestedVisibility(ITYPE_IME);
+            mWmService.mAccessibilityController.updateImeVisibilityIfNeeded(mDisplayId, isImeShow);
+        }
     }
 
     /**
@@ -2020,7 +2027,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         final int appWidth = mDisplayPolicy.getNonDecorDisplayWidth(dw, dh, rotation, uiMode,
                 displayCutout);
-        final int appHeight = mDisplayPolicy.getNonDecorDisplayHeight(dw, dh, rotation, uiMode,
+        final int appHeight = mDisplayPolicy.getNonDecorDisplayHeight(dh, rotation,
                 displayCutout);
         mDisplayInfo.rotation = rotation;
         mDisplayInfo.logicalWidth = dw;
@@ -2158,9 +2165,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             int rotation, int uiMode, DisplayCutout displayCutout) {
         final int appWidth = mDisplayPolicy.getNonDecorDisplayWidth(dw, dh, rotation, uiMode,
                 displayCutout);
-        final int appHeight = mDisplayPolicy.getNonDecorDisplayHeight(dw, dh, rotation, uiMode,
+        final int appHeight = mDisplayPolicy.getNonDecorDisplayHeight(dh, rotation,
                 displayCutout);
-        mDisplayPolicy.getNonDecorInsetsLw(rotation, dw, dh, displayCutout, mTmpRect);
+        mDisplayPolicy.getNonDecorInsetsLw(rotation, displayCutout, mTmpRect);
         final int leftInset = mTmpRect.left;
         final int topInset = mTmpRect.top;
         // AppBounds at the root level should mirror the app screen size.
@@ -2314,7 +2321,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 rotation).getDisplayCutout();
         dm.noncompatWidthPixels = mDisplayPolicy.getNonDecorDisplayWidth(dw, dh, rotation, uiMode,
                 displayCutout);
-        dm.noncompatHeightPixels = mDisplayPolicy.getNonDecorDisplayHeight(dw, dh, rotation, uiMode,
+        dm.noncompatHeightPixels = mDisplayPolicy.getNonDecorDisplayHeight(dh, rotation,
                 displayCutout);
         float scale = CompatibilityInfo.computeCompatibleScaling(dm, null);
         int size = (int)(((dm.noncompatWidthPixels / scale) / dm.density) + .5f);
@@ -2368,7 +2375,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         // Get the app screen size at this rotation.
         int w = mDisplayPolicy.getNonDecorDisplayWidth(dw, dh, rotation, uiMode, displayCutout);
-        int h = mDisplayPolicy.getNonDecorDisplayHeight(dw, dh, rotation, uiMode, displayCutout);
+        int h = mDisplayPolicy.getNonDecorDisplayHeight(dh, rotation, displayCutout);
 
         // Compute the screen layout size class for this rotation.
         int longSize = w;
@@ -4923,6 +4930,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (imeTarget != null && !(imeTarget.mActivityRecord != null
                 && imeTarget.mActivityRecord.hasStartingWindow())) {
             final boolean canImeTargetSetRelativeLayer = imeTarget.getSurfaceControl() != null
+                    && imeTarget == mImeControlTarget
                     && !imeTarget.inMultiWindowMode()
                     && imeTarget.mToken.getActivity(app -> app.isAnimating(TRANSITION | PARENTS,
                             ANIMATION_TYPE_ALL & ~ANIMATION_TYPE_RECENTS)) == null;
@@ -5833,6 +5841,30 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return (flags & FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0;
     }
 
+    /**
+     * @return whether keyguard is locked for this display
+     */
+    boolean isKeyguardLocked() {
+        return mRootWindowContainer.mTaskSupervisor
+                .getKeyguardController().isKeyguardLocked(mDisplayId);
+    }
+
+    /**
+     * @return whether keyguard is going away on this display
+     */
+    boolean isKeyguardGoingAway() {
+        return mRootWindowContainer.mTaskSupervisor
+                .getKeyguardController().isKeyguardGoingAway(mDisplayId);
+    }
+
+    /**
+     * @return whether AOD is showing on this display
+     */
+    boolean isAodShowing() {
+        return mRootWindowContainer.mTaskSupervisor
+                .getKeyguardController().isAodShowing(mDisplayId);
+    }
+
     @VisibleForTesting
     void removeAllTasks() {
         forAllTasks((t) -> { t.getRootTask().removeChild(t, "removeAllTasks"); });
@@ -5973,7 +6005,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 // Reparent the SurfaceControl of this DisplayContent to null, to prevent content
                 // being added to it. This ensures that no app launched explicitly on the
                 // VirtualDisplay will show up as part of the mirrored content.
-                .reparent(mWindowingLayer, null);
+                .reparent(mWindowingLayer, null)
+                .reparent(mOverlayLayer, null);
         // Retrieve the size of the DisplayArea to mirror.
         updateMirroredSurface(transaction, wc.getDisplayContent().getBounds(), surfaceSize);
         mTokenToMirror = tokenToMirror;
@@ -6003,7 +6036,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     // Reparent the SurfaceControl of this DisplayContent back to mSurfaceControl,
                     // to allow content to be added to it. This allows this DisplayContent to stop
                     // mirroring and show content normally.
-                    .reparent(mWindowingLayer, mSurfaceControl).apply();
+                    .reparent(mWindowingLayer, mSurfaceControl)
+                    .reparent(mOverlayLayer, mSurfaceControl)
+                    .apply();
             // Stop mirroring by destroying the reference to the mirrored layer.
             mMirroredSurface = null;
             // Do not un-set the token, in case content is removed and mirroring should begin again.

@@ -15,14 +15,11 @@
  */
 package com.android.systemui.qs.tiles.dialog;
 
-import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-
 import static com.android.systemui.Prefs.Key.QS_HAS_TURNED_OFF_MOBILE_DATA;
 
 import android.app.AlertDialog;
 import android.content.Context;
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
+import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -41,10 +38,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
 import android.view.Window;
-import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -87,7 +81,6 @@ public class InternetDialog extends SystemUIDialog implements
 
     private final Handler mHandler;
     private final Executor mBackgroundExecutor;
-    private final LinearLayoutManager mLayoutManager;
 
     @VisibleForTesting
     protected InternetAdapter mAdapter;
@@ -130,12 +123,14 @@ public class InternetDialog extends SystemUIDialog implements
     private Switch mWiFiToggle;
     private FrameLayout mDoneLayout;
     private Drawable mBackgroundOn;
-    private int mListMaxHeight;
+    private Drawable mBackgroundOff = null;
     private int mDefaultDataSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private boolean mCanConfigMobileData;
 
     // Wi-Fi entries
+    @VisibleForTesting
     protected WifiEntry mConnectedWifiEntry;
+    @VisibleForTesting
     protected int mWifiEntriesCount;
 
     // Wi-Fi scanning progress bar
@@ -149,20 +144,11 @@ public class InternetDialog extends SystemUIDialog implements
         mInternetDialogSubTitle.setText(getSubtitleText());
     };
 
-    private final ViewTreeObserver.OnGlobalLayoutListener mInternetListLayoutListener = () -> {
-        // Set max height for list
-        if (mInternetDialogLayout.getHeight() > mListMaxHeight) {
-            ViewGroup.LayoutParams params = mInternetDialogLayout.getLayoutParams();
-            params.height = mListMaxHeight;
-            mInternetDialogLayout.setLayoutParams(params);
-        }
-    };
-
     public InternetDialog(Context context, InternetDialogFactory internetDialogFactory,
             InternetDialogController internetDialogController, boolean canConfigMobileData,
             boolean canConfigWifi, boolean aboveStatusBar, UiEventLogger uiEventLogger,
             @Main Handler handler, @Background Executor executor) {
-        super(context, R.style.Theme_SystemUI_Dialog_Internet);
+        super(context);
         if (DEBUG) {
             Log.d(TAG, "Init InternetDialog");
         }
@@ -178,14 +164,6 @@ public class InternetDialog extends SystemUIDialog implements
         mCanConfigMobileData = canConfigMobileData;
         mCanConfigWifi = canConfigWifi;
 
-        mLayoutManager = new LinearLayoutManager(mContext) {
-            @Override
-            public boolean canScrollVertically() {
-                return false;
-            }
-        };
-        mListMaxHeight = context.getResources().getDimensionPixelSize(
-                R.dimen.internet_dialog_list_max_height);
         mUiEventLogger = uiEventLogger;
         mAdapter = new InternetAdapter(mInternetDialogController);
         if (!aboveStatusBar) {
@@ -203,21 +181,9 @@ public class InternetDialog extends SystemUIDialog implements
         mDialogView = LayoutInflater.from(mContext).inflate(R.layout.internet_connectivity_dialog,
                 null);
         final Window window = getWindow();
-        final WindowManager.LayoutParams layoutParams = window.getAttributes();
-        layoutParams.gravity = Gravity.BOTTOM;
-        // Move down the dialog to overlay the navigation bar.
-        layoutParams.setFitInsetsTypes(
-                layoutParams.getFitInsetsTypes() & ~WindowInsets.Type.navigationBars());
-        layoutParams.setFitInsetsSides(WindowInsets.Side.all());
-        layoutParams.setFitInsetsIgnoringVisibility(true);
-        window.setAttributes(layoutParams);
         window.setContentView(mDialogView);
-        //Only fix the width for large screen or tablet.
-        window.setLayout(mContext.getResources().getDimensionPixelSize(
-                R.dimen.large_dialog_width), ViewGroup.LayoutParams.WRAP_CONTENT);
+
         window.setWindowAnimations(R.style.Animation_InternetDialog);
-        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        window.addFlags(FLAG_LAYOUT_NO_LIMITS);
 
         mInternetDialogLayout = mDialogView.requireViewById(R.id.internet_connectivity_dialog);
         mInternetDialogTitle = mDialogView.requireViewById(R.id.internet_dialog_title);
@@ -244,14 +210,20 @@ public class InternetDialog extends SystemUIDialog implements
         mMobileDataToggle = mDialogView.requireViewById(R.id.mobile_toggle);
         mWiFiToggle = mDialogView.requireViewById(R.id.wifi_toggle);
         mBackgroundOn = mContext.getDrawable(R.drawable.settingslib_switch_bar_bg_on);
-        mInternetDialogLayout.getViewTreeObserver().addOnGlobalLayoutListener(
-                mInternetListLayoutListener);
         mInternetDialogTitle.setText(getDialogTitleText());
         mInternetDialogTitle.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
 
+        TypedArray typedArray = mContext.obtainStyledAttributes(
+                new int[]{android.R.attr.selectableItemBackground});
+        try {
+            mBackgroundOff = typedArray.getDrawable(0 /* index */);
+        } finally {
+            typedArray.recycle();
+        }
+
         setOnClickListener();
         mTurnWifiOnLayout.setBackground(null);
-        mWifiRecyclerView.setLayoutManager(mLayoutManager);
+        mWifiRecyclerView.setLayoutManager(new LinearLayoutManager(mContext));
         mWifiRecyclerView.setAdapter(mAdapter);
     }
 
@@ -364,6 +336,9 @@ public class InternetDialog extends SystemUIDialog implements
         mSeeAllLayout.setOnClickListener(v -> onClickSeeMoreButton());
         mWiFiToggle.setOnCheckedChangeListener(
                 (buttonView, isChecked) -> {
+                    if (isChecked) {
+                        mWifiScanNotifyLayout.setVisibility(View.GONE);
+                    }
                     buttonView.setChecked(isChecked);
                     mWifiManager.setWifiEnabled(isChecked);
                 });
@@ -404,7 +379,8 @@ public class InternetDialog extends SystemUIDialog implements
             mMobileSummaryText.setTextAppearance(isCarrierNetworkConnected
                     ? R.style.TextAppearance_InternetDialog_Secondary_Active
                     : R.style.TextAppearance_InternetDialog_Secondary);
-            mMobileNetworkLayout.setBackground(isCarrierNetworkConnected ? mBackgroundOn : null);
+            mMobileNetworkLayout.setBackground(
+                    isCarrierNetworkConnected ? mBackgroundOn : mBackgroundOff);
 
             mMobileDataToggle.setVisibility(mCanConfigMobileData ? View.VISIBLE : View.INVISIBLE);
         }
@@ -502,10 +478,6 @@ public class InternetDialog extends SystemUIDialog implements
     }
 
     private void setProgressBarVisible(boolean visible) {
-        if (mWifiManager.isWifiEnabled() && mAdapter.mHolderView != null
-                && mAdapter.mHolderView.isAttachedToWindow()) {
-            mIsProgressBarVisible = true;
-        }
         mIsProgressBarVisible = visible;
         mProgressBar.setVisibility(mIsProgressBarVisible ? View.VISIBLE : View.GONE);
         mDivider.setVisibility(mIsProgressBarVisible ? View.GONE : View.VISIBLE);
@@ -609,12 +581,12 @@ public class InternetDialog extends SystemUIDialog implements
     @WorkerThread
     public void onAccessPointsChanged(@Nullable List<WifiEntry> wifiEntries,
             @Nullable WifiEntry connectedEntry) {
-        mConnectedWifiEntry = connectedEntry;
-        mWifiEntriesCount = wifiEntries == null ? 0 : wifiEntries.size();
-        mAdapter.setWifiEntries(wifiEntries, mWifiEntriesCount);
         mHandler.post(() -> {
-            mAdapter.notifyDataSetChanged();
+            mConnectedWifiEntry = connectedEntry;
+            mWifiEntriesCount = wifiEntries == null ? 0 : wifiEntries.size();
             updateDialog(false /* shouldUpdateMobileNetwork */);
+            mAdapter.setWifiEntries(wifiEntries, mWifiEntriesCount);
+            mAdapter.notifyDataSetChanged();
         });
     }
 

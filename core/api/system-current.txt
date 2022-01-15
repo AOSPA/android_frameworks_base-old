@@ -14,12 +14,14 @@ package android {
     field public static final String ACCESS_MTP = "android.permission.ACCESS_MTP";
     field public static final String ACCESS_NETWORK_CONDITIONS = "android.permission.ACCESS_NETWORK_CONDITIONS";
     field public static final String ACCESS_NOTIFICATIONS = "android.permission.ACCESS_NOTIFICATIONS";
+    field public static final String ACCESS_PDB_STATE = "android.permission.ACCESS_PDB_STATE";
     field public static final String ACCESS_RCS_USER_CAPABILITY_EXCHANGE = "android.permission.ACCESS_RCS_USER_CAPABILITY_EXCHANGE";
     field public static final String ACCESS_SHARED_LIBRARIES = "android.permission.ACCESS_SHARED_LIBRARIES";
     field public static final String ACCESS_SHORTCUTS = "android.permission.ACCESS_SHORTCUTS";
     field public static final String ACCESS_SURFACE_FLINGER = "android.permission.ACCESS_SURFACE_FLINGER";
     field public static final String ACCESS_TUNED_INFO = "android.permission.ACCESS_TUNED_INFO";
     field public static final String ACCESS_TV_DESCRAMBLER = "android.permission.ACCESS_TV_DESCRAMBLER";
+    field public static final String ACCESS_TV_SHARED_FILTER = "android.permission.ACCESS_TV_SHARED_FILTER";
     field public static final String ACCESS_TV_TUNER = "android.permission.ACCESS_TV_TUNER";
     field public static final String ACCESS_VIBRATOR_STATE = "android.permission.ACCESS_VIBRATOR_STATE";
     field public static final String ACTIVITY_EMBEDDING = "android.permission.ACTIVITY_EMBEDDING";
@@ -84,6 +86,7 @@ package android {
     field public static final String CLEAR_APP_USER_DATA = "android.permission.CLEAR_APP_USER_DATA";
     field public static final String COMPANION_APPROVE_WIFI_CONNECTIONS = "android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS";
     field public static final String CONFIGURE_DISPLAY_BRIGHTNESS = "android.permission.CONFIGURE_DISPLAY_BRIGHTNESS";
+    field public static final String CONFIGURE_INTERACT_ACROSS_PROFILES = "android.permission.CONFIGURE_INTERACT_ACROSS_PROFILES";
     field public static final String CONFIGURE_WIFI_DISPLAY = "android.permission.CONFIGURE_WIFI_DISPLAY";
     field @Deprecated public static final String CONNECTIVITY_INTERNAL = "android.permission.CONNECTIVITY_INTERNAL";
     field public static final String CONNECTIVITY_USE_RESTRICTED_NETWORKS = "android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS";
@@ -106,6 +109,7 @@ package android {
     field public static final String FORCE_BACK = "android.permission.FORCE_BACK";
     field public static final String FORCE_STOP_PACKAGES = "android.permission.FORCE_STOP_PACKAGES";
     field public static final String GET_APP_OPS_STATS = "android.permission.GET_APP_OPS_STATS";
+    field public static final String GET_HISTORICAL_APP_OPS_STATS = "android.permission.GET_HISTORICAL_APP_OPS_STATS";
     field public static final String GET_PROCESS_STATE_AND_OOM_SCORE = "android.permission.GET_PROCESS_STATE_AND_OOM_SCORE";
     field public static final String GET_RUNTIME_PERMISSIONS = "android.permission.GET_RUNTIME_PERMISSIONS";
     field public static final String GET_TOP_ACTIVITY_INFO = "android.permission.GET_TOP_ACTIVITY_INFO";
@@ -117,7 +121,9 @@ package android {
     field public static final String HDMI_CEC = "android.permission.HDMI_CEC";
     field @Deprecated public static final String HIDE_NON_SYSTEM_OVERLAY_WINDOWS = "android.permission.HIDE_NON_SYSTEM_OVERLAY_WINDOWS";
     field public static final String INJECT_EVENTS = "android.permission.INJECT_EVENTS";
+    field public static final String INSTALL_DPC_PACKAGES = "android.permission.INSTALL_DPC_PACKAGES";
     field public static final String INSTALL_DYNAMIC_SYSTEM = "android.permission.INSTALL_DYNAMIC_SYSTEM";
+    field public static final String INSTALL_EXISTING_PACKAGES = "com.android.permission.INSTALL_EXISTING_PACKAGES";
     field public static final String INSTALL_GRANT_RUNTIME_PERMISSIONS = "android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS";
     field public static final String INSTALL_LOCATION_TIME_ZONE_PROVIDER_SERVICE = "android.permission.INSTALL_LOCATION_TIME_ZONE_PROVIDER_SERVICE";
     field public static final String INSTALL_PACKAGE_UPDATES = "android.permission.INSTALL_PACKAGE_UPDATES";
@@ -144,12 +150,14 @@ package android {
     field public static final String MANAGE_CONTENT_CAPTURE = "android.permission.MANAGE_CONTENT_CAPTURE";
     field public static final String MANAGE_CONTENT_SUGGESTIONS = "android.permission.MANAGE_CONTENT_SUGGESTIONS";
     field public static final String MANAGE_DEBUGGING = "android.permission.MANAGE_DEBUGGING";
+    field public static final String MANAGE_DEVICE_ADMINS = "android.permission.MANAGE_DEVICE_ADMINS";
     field public static final String MANAGE_FACTORY_RESET_PROTECTION = "android.permission.MANAGE_FACTORY_RESET_PROTECTION";
     field public static final String MANAGE_HOTWORD_DETECTION = "android.permission.MANAGE_HOTWORD_DETECTION";
     field public static final String MANAGE_IPSEC_TUNNELS = "android.permission.MANAGE_IPSEC_TUNNELS";
     field public static final String MANAGE_MUSIC_RECOGNITION = "android.permission.MANAGE_MUSIC_RECOGNITION";
     field public static final String MANAGE_NOTIFICATION_LISTENERS = "android.permission.MANAGE_NOTIFICATION_LISTENERS";
     field public static final String MANAGE_ONE_TIME_PERMISSION_SESSIONS = "android.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS";
+    field public static final String MANAGE_PROFILE_AND_DEVICE_OWNERS = "android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS";
     field public static final String MANAGE_ROLE_HOLDERS = "android.permission.MANAGE_ROLE_HOLDERS";
     field public static final String MANAGE_ROLLBACKS = "android.permission.MANAGE_ROLLBACKS";
     field public static final String MANAGE_ROTATION_RESOLVER = "android.permission.MANAGE_ROTATION_RESOLVER";
@@ -165,7 +173,9 @@ package android {
     field public static final String MANAGE_USB = "android.permission.MANAGE_USB";
     field public static final String MANAGE_USERS = "android.permission.MANAGE_USERS";
     field public static final String MANAGE_USER_OEM_UNLOCK_STATE = "android.permission.MANAGE_USER_OEM_UNLOCK_STATE";
+    field public static final String MANAGE_WIFI_AUTO_JOIN = "android.permission.MANAGE_WIFI_AUTO_JOIN";
     field public static final String MANAGE_WIFI_COUNTRY_CODE = "android.permission.MANAGE_WIFI_COUNTRY_CODE";
+    field public static final String MARK_DEVICE_ORGANIZATION_OWNED = "android.permission.MARK_DEVICE_ORGANIZATION_OWNED";
     field public static final String MODIFY_APPWIDGET_BIND_PERMISSIONS = "android.permission.MODIFY_APPWIDGET_BIND_PERMISSIONS";
     field public static final String MODIFY_AUDIO_ROUTING = "android.permission.MODIFY_AUDIO_ROUTING";
     field public static final String MODIFY_CELL_BROADCASTS = "android.permission.MODIFY_CELL_BROADCASTS";
@@ -244,6 +254,7 @@ package android {
     field public static final String REMOVE_TASKS = "android.permission.REMOVE_TASKS";
     field public static final String RENOUNCE_PERMISSIONS = "android.permission.RENOUNCE_PERMISSIONS";
     field public static final String REQUEST_COMPANION_PROFILE_APP_STREAMING = "android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING";
+    field public static final String REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION = "android.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION";
     field public static final String REQUEST_NETWORK_SCORES = "android.permission.REQUEST_NETWORK_SCORES";
     field public static final String REQUEST_NOTIFICATION_ASSISTANT_SERVICE = "android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE";
     field public static final String RESET_PASSWORD = "android.permission.RESET_PASSWORD";
@@ -297,6 +308,7 @@ package android {
     field public static final String UPDATE_TIME_ZONE_RULES = "android.permission.UPDATE_TIME_ZONE_RULES";
     field public static final String UPGRADE_RUNTIME_PERMISSIONS = "android.permission.UPGRADE_RUNTIME_PERMISSIONS";
     field public static final String USER_ACTIVITY = "android.permission.USER_ACTIVITY";
+    field public static final String USE_COLORIZED_NOTIFICATIONS = "android.permission.USE_COLORIZED_NOTIFICATIONS";
     field public static final String USE_RESERVED_DISK = "android.permission.USE_RESERVED_DISK";
     field public static final String UWB_PRIVILEGED = "android.permission.UWB_PRIVILEGED";
     field public static final String WHITELIST_AUTO_REVOKE_PERMISSIONS = "android.permission.WHITELIST_AUTO_REVOKE_PERMISSIONS";
@@ -366,6 +378,7 @@ package android {
     field public static final int config_defaultCallScreening = 17039398; // 0x1040026
     field public static final int config_defaultDialer = 17039395; // 0x1040023
     field public static final int config_defaultSms = 17039396; // 0x1040024
+    field public static final int config_deviceManager;
     field public static final int config_feedbackIntentExtraKey = 17039391; // 0x104001f
     field public static final int config_feedbackIntentNameKey = 17039392; // 0x1040020
     field public static final int config_helpIntentExtraKey = 17039389; // 0x104001d
@@ -383,6 +396,7 @@ package android {
     field public static final int config_systemNotificationIntelligence = 17039413; // 0x1040035
     field public static final int config_systemShell = 17039402; // 0x104002a
     field public static final int config_systemSpeechRecognizer = 17039406; // 0x104002e
+    field public static final int config_systemSupervision;
     field public static final int config_systemTelevisionNotificationHandler = 17039409; // 0x1040031
     field public static final int config_systemTextIntelligence = 17039414; // 0x1040036
     field public static final int config_systemUi = 17039418; // 0x104003a
@@ -485,6 +499,8 @@ package android.app {
     field public static final String OPSTR_AUTO_REVOKE_PERMISSIONS_IF_UNUSED = "android:auto_revoke_permissions_if_unused";
     field public static final String OPSTR_BIND_ACCESSIBILITY_SERVICE = "android:bind_accessibility_service";
     field public static final String OPSTR_CHANGE_WIFI_STATE = "android:change_wifi_state";
+    field public static final String OPSTR_ESTABLISH_VPN_MANAGER = "android:establish_vpn_manager";
+    field public static final String OPSTR_ESTABLISH_VPN_SERVICE = "android:establish_vpn_service";
     field public static final String OPSTR_GET_ACCOUNTS = "android:get_accounts";
     field public static final String OPSTR_GPS = "android:gps";
     field public static final String OPSTR_INSTANT_APP_START_FOREGROUND = "android:instant_app_start_foreground";
@@ -740,6 +756,11 @@ package android.app {
     field public static final int PIN = 1; // 0x1
   }
 
+  public class LocaleManager {
+    method @NonNull @RequiresPermission(android.Manifest.permission.READ_APP_SPECIFIC_LOCALES) public android.os.LocaleList getApplicationLocales(@NonNull String);
+    method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public void setApplicationLocales(@NonNull String, @NonNull android.os.LocaleList);
+  }
+
   public class Notification implements android.os.Parcelable {
     field public static final String CATEGORY_CAR_EMERGENCY = "car_emergency";
     field public static final String CATEGORY_CAR_INFORMATION = "car_information";
@@ -774,7 +795,6 @@ package android.app {
     method public int getUserLockedFields();
     method public boolean isDeleted();
     method public void populateFromXml(org.xmlpull.v1.XmlPullParser);
-    method public void setBlockable(boolean);
     method public org.json.JSONObject toJson() throws org.json.JSONException;
     method public void writeXml(org.xmlpull.v1.XmlSerializer) throws java.io.IOException;
     field public static final int USER_LOCKED_SOUND = 32; // 0x20
@@ -939,7 +959,7 @@ package android.app.admin {
     method @Nullable public android.content.Intent createProvisioningIntentFromNfcIntent(@NonNull android.content.Intent);
     method @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS) public boolean getBluetoothContactSharingDisabled(@NonNull android.os.UserHandle);
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_USERS) public String getDeviceOwner();
-    method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, "android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS"}) public android.content.ComponentName getDeviceOwnerComponentOnAnyUser();
+    method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS}) public android.content.ComponentName getDeviceOwnerComponentOnAnyUser();
     method @RequiresPermission(android.Manifest.permission.MANAGE_USERS) public String getDeviceOwnerNameOnAnyUser();
     method @Nullable public CharSequence getDeviceOwnerOrganizationName();
     method @Nullable @RequiresPermission(android.Manifest.permission.MANAGE_USERS) public android.os.UserHandle getDeviceOwnerUser();
@@ -957,7 +977,7 @@ package android.app.admin {
     method @RequiresPermission("android.permission.NOTIFY_PENDING_SYSTEM_UPDATE") public void notifyPendingSystemUpdate(long);
     method @RequiresPermission("android.permission.NOTIFY_PENDING_SYSTEM_UPDATE") public void notifyPendingSystemUpdate(long, boolean);
     method @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL) public boolean packageHasActiveAdmins(String);
-    method @Deprecated @RequiresPermission("android.permission.MANAGE_DEVICE_ADMINS") public boolean setActiveProfileOwner(@NonNull android.content.ComponentName, String) throws java.lang.IllegalArgumentException;
+    method @Deprecated @RequiresPermission(android.Manifest.permission.MANAGE_DEVICE_ADMINS) public boolean setActiveProfileOwner(@NonNull android.content.ComponentName, String) throws java.lang.IllegalArgumentException;
     method @RequiresPermission(android.Manifest.permission.MANAGE_USERS) public void setDeviceProvisioningConfigApplied();
     method @Deprecated @RequiresPermission(value=android.Manifest.permission.GRANT_PROFILE_OWNER_DEVICE_IDS_ACCESS, conditional=true) public void setProfileOwnerCanAccessDeviceIds(@NonNull android.content.ComponentName);
     method public void setSecondaryLockscreenEnabled(@NonNull android.content.ComponentName, boolean);
@@ -2324,6 +2344,7 @@ package android.companion {
 
   public final class AssociationRequest implements android.os.Parcelable {
     field @RequiresPermission(android.Manifest.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING) public static final String DEVICE_PROFILE_APP_STREAMING = "android.app.role.COMPANION_DEVICE_APP_STREAMING";
+    field @RequiresPermission(android.Manifest.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION) public static final String DEVICE_PROFILE_AUTOMOTIVE_PROJECTION = "android.app.role.SYSTEM_AUTOMOTIVE_PROJECTION";
   }
 
   public final class CompanionDeviceManager {
@@ -6117,7 +6138,7 @@ package android.media.tv.tuner {
     method @Nullable public android.media.tv.tuner.DemuxCapabilities getDemuxCapabilities();
     method @Nullable public android.media.tv.tuner.frontend.FrontendInfo getFrontendInfo();
     method @Nullable public android.media.tv.tuner.frontend.FrontendStatus getFrontendStatus(@NonNull int[]);
-    method public boolean hasUnusedFrontend(int);
+    method @RequiresPermission("android.permission.TUNER_RESOURCE_ACCESS") public boolean hasUnusedFrontend(int);
     method public boolean isLowestPriority(int);
     method @Nullable @RequiresPermission(android.Manifest.permission.ACCESS_TV_DESCRAMBLER) public android.media.tv.tuner.Descrambler openDescrambler();
     method @Nullable public android.media.tv.tuner.dvr.DvrPlayback openDvrPlayback(long, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.dvr.OnPlaybackStatusChangedListener);
@@ -6125,6 +6146,7 @@ package android.media.tv.tuner {
     method @Nullable public android.media.tv.tuner.filter.Filter openFilter(int, int, long, @Nullable java.util.concurrent.Executor, @Nullable android.media.tv.tuner.filter.FilterCallback);
     method @Nullable public android.media.tv.tuner.Lnb openLnb(@NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.LnbCallback);
     method @Nullable public android.media.tv.tuner.Lnb openLnbByName(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.LnbCallback);
+    method @Nullable @RequiresPermission(android.Manifest.permission.ACCESS_TV_SHARED_FILTER) public static android.media.tv.tuner.filter.SharedFilter openSharedFilter(@NonNull android.content.Context, @NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.filter.SharedFilterCallback);
     method @Nullable public android.media.tv.tuner.filter.TimeFilter openTimeFilter();
     method public int scan(@NonNull android.media.tv.tuner.frontend.FrontendSettings, int, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.frontend.ScanCallback);
     method public int setLnaEnabled(boolean);
@@ -6132,7 +6154,7 @@ package android.media.tv.tuner {
     method public void setResourceLostListener(@NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.Tuner.OnResourceLostListener);
     method public void shareFrontendFromTuner(@NonNull android.media.tv.tuner.Tuner);
     method public int tune(@NonNull android.media.tv.tuner.frontend.FrontendSettings);
-    method public void updateResourcePriority(int, int);
+    method @RequiresPermission("android.permission.TUNER_RESOURCE_ACCESS") public void updateResourcePriority(int, int);
     field public static final int INVALID_AV_SYNC_ID = -1; // 0xffffffff
     field public static final int INVALID_FILTER_ID = -1; // 0xffffffff
     field public static final long INVALID_FILTER_ID_LONG = -1L; // 0xffffffffffffffffL
@@ -6333,10 +6355,12 @@ package android.media.tv.tuner.filter {
   public class Filter implements java.lang.AutoCloseable {
     method public void close();
     method public int configure(@NonNull android.media.tv.tuner.filter.FilterConfiguration);
+    method @Nullable public String createSharedFilter();
     method public int flush();
     method @Deprecated public int getId();
     method public long getIdLong();
     method public int read(@NonNull byte[], long, long);
+    method public void releaseSharedFilter(@NonNull String);
     method public int setDataSource(@Nullable android.media.tv.tuner.filter.Filter);
     method public int setMonitorEventMask(int);
     method public int start();
@@ -6584,6 +6608,20 @@ package android.media.tv.tuner.filter {
 
   public abstract class Settings {
     method public int getType();
+  }
+
+  public final class SharedFilter implements java.lang.AutoCloseable {
+    method public void close();
+    method public int flush();
+    method public int read(@NonNull byte[], long, long);
+    method public int start();
+    method public int stop();
+    field public static final int STATUS_INACCESSIBLE = 128; // 0x80
+  }
+
+  public interface SharedFilterCallback {
+    method public void onFilterEvent(@NonNull android.media.tv.tuner.filter.SharedFilter, @NonNull android.media.tv.tuner.filter.FilterEvent[]);
+    method public void onFilterStatusChanged(@NonNull android.media.tv.tuner.filter.SharedFilter, int);
   }
 
   public class TemiEvent extends android.media.tv.tuner.filter.FilterEvent {
@@ -7240,6 +7278,8 @@ package android.media.tv.tuner.frontend {
     method public int getHierarchy();
     method public long getInnerFec();
     method @NonNull public int[] getInterleaving();
+    method public int getIsdbtMode();
+    method public int getIsdbtPartialReceptionFlag();
     method @IntRange(from=0, to=255) @NonNull public int[] getIsdbtSegment();
     method @NonNull public boolean[] getLayerErrors();
     method public int getLnbVoltage();
@@ -7278,6 +7318,8 @@ package android.media.tv.tuner.frontend {
     field public static final int FRONTEND_STATUS_TYPE_GUARD_INTERVAL = 26; // 0x1a
     field public static final int FRONTEND_STATUS_TYPE_HIERARCHY = 19; // 0x13
     field public static final int FRONTEND_STATUS_TYPE_INTERLEAVINGS = 30; // 0x1e
+    field public static final int FRONTEND_STATUS_TYPE_ISDBT_MODE = 37; // 0x25
+    field public static final int FRONTEND_STATUS_TYPE_ISDBT_PARTIAL_RECEPTION_FLAG = 38; // 0x26
     field public static final int FRONTEND_STATUS_TYPE_ISDBT_SEGMENTS = 31; // 0x1f
     field public static final int FRONTEND_STATUS_TYPE_IS_LINEAR = 35; // 0x23
     field public static final int FRONTEND_STATUS_TYPE_IS_MISO_ENABLED = 34; // 0x22
@@ -7410,15 +7452,20 @@ package android.media.tv.tuner.frontend {
     method public int getGuardIntervalCapability();
     method public int getModeCapability();
     method public int getModulationCapability();
+    method public int getTimeInterleaveModeCapability();
+    method public boolean isFullSegmentSupported();
+    method public boolean isSegmentAutoSupported();
   }
 
   public class IsdbtFrontendSettings extends android.media.tv.tuner.frontend.FrontendSettings {
     method @NonNull public static android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder builder();
     method public int getBandwidth();
-    method public int getCodeRate();
+    method @Deprecated public int getCodeRate();
     method public int getGuardInterval();
+    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings[] getLayerSettings();
     method public int getMode();
-    method public int getModulation();
+    method @Deprecated public int getModulation();
+    method public int getPartialReceptionFlag();
     method public int getServiceAreaId();
     method public int getType();
     field public static final int BANDWIDTH_6MHZ = 8; // 0x8
@@ -7437,18 +7484,53 @@ package android.media.tv.tuner.frontend {
     field public static final int MODULATION_MOD_DQPSK = 2; // 0x2
     field public static final int MODULATION_MOD_QPSK = 4; // 0x4
     field public static final int MODULATION_UNDEFINED = 0; // 0x0
+    field public static final int PARTIAL_RECEPTION_FLAG_FALSE = 2; // 0x2
+    field public static final int PARTIAL_RECEPTION_FLAG_TRUE = 4; // 0x4
+    field public static final int PARTIAL_RECEPTION_FLAG_UNDEFINED = 0; // 0x0
+    field public static final int TIME_INTERLEAVE_MODE_1_0 = 2; // 0x2
+    field public static final int TIME_INTERLEAVE_MODE_1_16 = 16; // 0x10
+    field public static final int TIME_INTERLEAVE_MODE_1_4 = 4; // 0x4
+    field public static final int TIME_INTERLEAVE_MODE_1_8 = 8; // 0x8
+    field public static final int TIME_INTERLEAVE_MODE_2_0 = 32; // 0x20
+    field public static final int TIME_INTERLEAVE_MODE_2_2 = 64; // 0x40
+    field public static final int TIME_INTERLEAVE_MODE_2_4 = 128; // 0x80
+    field public static final int TIME_INTERLEAVE_MODE_2_8 = 256; // 0x100
+    field public static final int TIME_INTERLEAVE_MODE_3_0 = 512; // 0x200
+    field public static final int TIME_INTERLEAVE_MODE_3_1 = 1024; // 0x400
+    field public static final int TIME_INTERLEAVE_MODE_3_2 = 2048; // 0x800
+    field public static final int TIME_INTERLEAVE_MODE_3_4 = 4096; // 0x1000
+    field public static final int TIME_INTERLEAVE_MODE_AUTO = 1; // 0x1
+    field public static final int TIME_INTERLEAVE_MODE_UNDEFINED = 0; // 0x0
   }
 
   public static class IsdbtFrontendSettings.Builder {
     method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings build();
     method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setBandwidth(int);
-    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setCodeRate(int);
+    method @Deprecated @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setCodeRate(int);
     method @Deprecated @IntRange(from=1) @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setFrequency(int);
     method @IntRange(from=1) @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setFrequencyLong(long);
     method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setGuardInterval(int);
+    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setLayerSettings(@NonNull android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings[]);
     method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setMode(int);
-    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setModulation(int);
+    method @Deprecated @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setModulation(int);
+    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setPartialReceptionFlag(int);
     method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.Builder setServiceAreaId(int);
+  }
+
+  public static final class IsdbtFrontendSettings.IsdbtLayerSettings {
+    method @NonNull public static android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings.Builder builder();
+    method public int getCodeRate();
+    method public int getModulation();
+    method @IntRange(from=0, to=255) public int getNumOfSegment();
+    method public int getTimeInterleaveMode();
+  }
+
+  public static final class IsdbtFrontendSettings.IsdbtLayerSettings.Builder {
+    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings build();
+    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings.Builder setCodeRate(int);
+    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings.Builder setModulation(int);
+    method @IntRange(from=0, to=255) @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings.Builder setNumOfSegment(int);
+    method @NonNull public android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings.Builder setTimeInterleaveMode(int);
   }
 
   public interface OnTuneEventListener {
@@ -8715,7 +8797,6 @@ package android.os {
   public class SystemConfigManager {
     method @NonNull @RequiresPermission(android.Manifest.permission.READ_CARRIER_APP_INFO) public java.util.Set<java.lang.String> getDisabledUntilUsedPreinstalledCarrierApps();
     method @NonNull @RequiresPermission(android.Manifest.permission.READ_CARRIER_APP_INFO) public java.util.Map<java.lang.String,java.util.List<java.lang.String>> getDisabledUntilUsedPreinstalledCarrierAssociatedApps();
-    method @NonNull public java.util.List<java.lang.String> getEnabledComponentOverrides(@NonNull String);
     method @NonNull @RequiresPermission(android.Manifest.permission.GET_RUNTIME_PERMISSIONS) public int[] getSystemPermissionUids(@NonNull String);
   }
 
@@ -10392,7 +10473,7 @@ package android.service.oemlock {
 package android.service.persistentdata {
 
   public class PersistentDataBlockManager {
-    method @RequiresPermission("android.permission.ACCESS_PDB_STATE") public int getDataBlockSize();
+    method @RequiresPermission(android.Manifest.permission.ACCESS_PDB_STATE) public int getDataBlockSize();
     method @android.service.persistentdata.PersistentDataBlockManager.FlashLockState @RequiresPermission(anyOf={android.Manifest.permission.READ_OEM_UNLOCK_STATE, "android.permission.OEM_UNLOCK_STATE"}) public int getFlashLockState();
     method public long getMaximumDataBlockSize();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.READ_OEM_UNLOCK_STATE, "android.permission.OEM_UNLOCK_STATE"}) public boolean getOemUnlockEnabled();
@@ -13889,7 +13970,9 @@ package android.telephony.ims {
     method @RequiresPermission(android.Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION) public void createSipDelegate(@NonNull android.telephony.ims.DelegateRequest, @NonNull java.util.concurrent.Executor, @NonNull android.telephony.ims.stub.DelegateConnectionStateCallback, @NonNull android.telephony.ims.stub.DelegateConnectionMessageCallback) throws android.telephony.ims.ImsException;
     method @RequiresPermission(android.Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION) public void destroySipDelegate(@NonNull android.telephony.ims.SipDelegateConnection, int);
     method @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION}) public boolean isSupported() throws android.telephony.ims.ImsException;
+    method @RequiresPermission(anyOf={android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE, android.Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION}) public void registerImsStateCallback(@NonNull java.util.concurrent.Executor, @NonNull android.telephony.ims.ImsStateCallback) throws android.telephony.ims.ImsException;
     method @RequiresPermission(android.Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION) public void triggerFullNetworkRegistration(@NonNull android.telephony.ims.SipDelegateConnection, @IntRange(from=100, to=699) int, @Nullable String);
+    method public void unregisterImsStateCallback(@NonNull android.telephony.ims.ImsStateCallback);
     field public static final int DENIED_REASON_INVALID = 4; // 0x4
     field public static final int DENIED_REASON_IN_USE_BY_ANOTHER_DELEGATE = 1; // 0x1
     field public static final int DENIED_REASON_NOT_ALLOWED = 2; // 0x2

@@ -3316,6 +3316,66 @@ public final class Settings {
         }
     }
 
+    private static float parseFloatSetting(String settingValue, String settingName)
+            throws SettingNotFoundException {
+        if (settingValue == null) {
+            throw new SettingNotFoundException(settingName);
+        }
+        try {
+            return Float.parseFloat(settingValue);
+        } catch (NumberFormatException e) {
+            throw new SettingNotFoundException(settingName);
+        }
+    }
+
+    private static float parseFloatSettingWithDefault(String settingValue, float defaultValue) {
+        try {
+            return settingValue != null ? Float.parseFloat(settingValue) : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static int parseIntSetting(String settingValue, String settingName)
+            throws SettingNotFoundException {
+        if (settingValue == null) {
+            throw new SettingNotFoundException(settingName);
+        }
+        try {
+            return Integer.parseInt(settingValue);
+        } catch (NumberFormatException e) {
+            throw new SettingNotFoundException(settingName);
+        }
+    }
+
+    private static int parseIntSettingWithDefault(String settingValue, int defaultValue) {
+        try {
+            return settingValue != null ? Integer.parseInt(settingValue) : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static long parseLongSetting(String settingValue, String settingName)
+            throws SettingNotFoundException {
+        if (settingValue == null) {
+            throw new SettingNotFoundException(settingName);
+        }
+        try {
+            return Long.parseLong(settingValue);
+        } catch (NumberFormatException e) {
+            throw new SettingNotFoundException(settingName);
+        }
+    }
+
+    private static long parseLongSettingWithDefault(String settingValue, long defaultValue) {
+        try {
+            return settingValue != null ? Long.parseLong(settingValue) : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
     /**
      * System settings, containing miscellaneous system preferences.  This
      * table holds simple name/value pairs.  There are convenience
@@ -3605,11 +3665,7 @@ public final class Settings {
         @UnsupportedAppUsage
         public static int getIntForUser(ContentResolver cr, String name, int def, int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Integer.parseInt(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseIntSettingWithDefault(v, def);
         }
 
         /**
@@ -3640,11 +3696,7 @@ public final class Settings {
         public static int getIntForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return Integer.parseInt(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseIntSetting(v, name);
         }
 
         /**
@@ -3692,14 +3744,8 @@ public final class Settings {
         /** @hide */
         public static long getLongForUser(ContentResolver cr, String name, long def,
                 int userHandle) {
-            String valString = getStringForUser(cr, name, userHandle);
-            long value;
-            try {
-                value = valString != null ? Long.parseLong(valString) : def;
-            } catch (NumberFormatException e) {
-                value = def;
-            }
-            return value;
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSettingWithDefault(v, def);
         }
 
         /**
@@ -3727,12 +3773,8 @@ public final class Settings {
         /** @hide */
         public static long getLongForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
-            String valString = getStringForUser(cr, name, userHandle);
-            try {
-                return Long.parseLong(valString);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSetting(v, name);
         }
 
         /**
@@ -3780,11 +3822,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, float def,
                 int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Float.parseFloat(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseFloatSettingWithDefault(v, def);
         }
 
         /**
@@ -3814,14 +3852,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            if (v == null) {
-                throw new SettingNotFoundException(name);
-            }
-            try {
-                return Float.parseFloat(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseFloatSetting(v, name);
         }
 
         /**
@@ -6081,11 +6112,7 @@ public final class Settings {
         @UnsupportedAppUsage
         public static int getIntForUser(ContentResolver cr, String name, int def, int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Integer.parseInt(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseIntSettingWithDefault(v, def);
         }
 
         /**
@@ -6115,11 +6142,7 @@ public final class Settings {
         public static int getIntForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return Integer.parseInt(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseIntSetting(v, name);
         }
 
         /**
@@ -6168,14 +6191,8 @@ public final class Settings {
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static long getLongForUser(ContentResolver cr, String name, long def,
                 int userHandle) {
-            String valString = getStringForUser(cr, name, userHandle);
-            long value;
-            try {
-                value = valString != null ? Long.parseLong(valString) : def;
-            } catch (NumberFormatException e) {
-                value = def;
-            }
-            return value;
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSettingWithDefault(v, def);
         }
 
         /**
@@ -6203,12 +6220,8 @@ public final class Settings {
         /** @hide */
         public static long getLongForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
-            String valString = getStringForUser(cr, name, userHandle);
-            try {
-                return Long.parseLong(valString);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSetting(v, name);
         }
 
         /**
@@ -6257,11 +6270,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, float def,
                 int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Float.parseFloat(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseFloatSettingWithDefault(v, def);
         }
 
         /**
@@ -6291,14 +6300,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            if (v == null) {
-                throw new SettingNotFoundException(name);
-            }
-            try {
-                return Float.parseFloat(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseFloatSetting(v, name);
         }
 
         /**
@@ -7165,6 +7167,13 @@ public final class Settings {
          */
         @Readable
         public static final String ACCESSIBILITY_ENABLED = "accessibility_enabled";
+
+        /**
+         * Whether select sound track with audio description by default.
+         * @hide
+         */
+        public static final String ENABLED_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT =
+                "enabled_accessibility_audio_description_by_default";
 
         /**
          * Setting specifying if the accessibility shortcut is enabled.
@@ -9669,6 +9678,23 @@ public final class Settings {
         public static final String INSTANT_APPS_ENABLED = "instant_apps_enabled";
 
         /**
+         * Whether qr code scanner should be accessible from the lockscreen
+         *
+         * @hide
+         */
+        public static final String LOCK_SCREEN_SHOW_QR_CODE_SCANNER =
+                "lock_screen_show_qr_code_scanner";
+
+        /**
+         * Whether or not to enable qr code code scanner setting to enable/disable lockscreen
+         * entry point. Any value apart from null means setting needs to be enabled
+         *
+         * @hide
+         */
+        public static final String SHOW_QR_CODE_SCANNER_SETTING =
+                "show_qr_code_scanner_setting";
+
+        /**
          * Has this pairable device been paired or upgraded from a previously paired system.
          * @hide
          */
@@ -10278,6 +10304,15 @@ public final class Settings {
         public static final String COMMUNAL_MODE_PACKAGES = "communal_mode_packages";
 
         /**
+         * An array of SSIDs of Wi-Fi networks that, when connected, are considered safe to enable
+         * the communal mode.
+         *
+         * @hide
+         */
+        public static final String COMMUNAL_MODE_TRUSTED_NETWORKS =
+                "communal_mode_trusted_networks";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
@@ -10422,14 +10457,6 @@ public final class Settings {
         @Readable
         public static final String ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED =
                 "enable_accessibility_global_gesture_enabled";
-
-        /**
-         * Whether select sound track with audio description by default.
-         * @hide
-         */
-        @Readable
-        public static final String ENABLE_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT =
-                "enable_accessibility_audio_description_by_default";
 
         /**
          * Whether Airplane Mode is on.
@@ -13583,7 +13610,7 @@ public final class Settings {
          * Whether of not to send keycode sleep for ungaze when Home is the foreground activity on
          * watch type devices.
          * Type: int (0 for false, 1 for true)
-         * Default: 0
+         * Default: 1
          * @hide
          */
         @Readable
@@ -15452,11 +15479,7 @@ public final class Settings {
          */
         public static int getInt(ContentResolver cr, String name, int def) {
             String v = getString(cr, name);
-            try {
-                return v != null ? Integer.parseInt(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseIntSettingWithDefault(v, def);
         }
 
         /**
@@ -15480,11 +15503,7 @@ public final class Settings {
         public static int getInt(ContentResolver cr, String name)
                 throws SettingNotFoundException {
             String v = getString(cr, name);
-            try {
-                return Integer.parseInt(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseIntSetting(v, name);
         }
 
         /**
@@ -15519,14 +15538,8 @@ public final class Settings {
          * or not a valid {@code long}.
          */
         public static long getLong(ContentResolver cr, String name, long def) {
-            String valString = getString(cr, name);
-            long value;
-            try {
-                value = valString != null ? Long.parseLong(valString) : def;
-            } catch (NumberFormatException e) {
-                value = def;
-            }
-            return value;
+            String v = getString(cr, name);
+            return parseLongSettingWithDefault(v, def);
         }
 
         /**
@@ -15548,12 +15561,8 @@ public final class Settings {
          */
         public static long getLong(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            String valString = getString(cr, name);
-            try {
-                return Long.parseLong(valString);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            String v = getString(cr, name);
+            return parseLongSetting(v, name);
         }
 
         /**
@@ -15589,11 +15598,7 @@ public final class Settings {
          */
         public static float getFloat(ContentResolver cr, String name, float def) {
             String v = getString(cr, name);
-            try {
-                return v != null ? Float.parseFloat(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseFloatSettingWithDefault(v, def);
         }
 
         /**
@@ -15617,14 +15622,7 @@ public final class Settings {
         public static float getFloat(ContentResolver cr, String name)
                 throws SettingNotFoundException {
             String v = getString(cr, name);
-            if (v == null) {
-                throw new SettingNotFoundException(name);
-            }
-            try {
-                return Float.parseFloat(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseFloatSetting(v, name);
         }
 
         /**
@@ -16667,36 +16665,6 @@ public final class Settings {
             public static final String WEAR_PLATFORM_MR_NUMBER = "wear_platform_mr_number";
 
             /**
-             * The bluetooth settings storing duplicate address of companion device.
-             * @hide
-             */
-            public static final String COMPANION_BT_ADDRESS_DUAL = "companion_bt_address_dual";
-
-            /**
-             * The offset of the visible screen from the display bottom (overscan bottom).
-             * @hide
-             */
-            public static final String BOTTOM_OFFSET = "bottom_offset";
-
-            /**
-             * The shape of the display.
-             * @hide
-             */
-            public static final String DISPLAY_SHAPE = "display_shape";
-
-            // Possible display shapes
-            /** @hide */
-            public static final int DISPLAY_SHAPE_SQUARE = 0;
-            /** @hide */
-            public static final int DISPLAY_SHAPE_ROUND = 1;
-
-            /**
-             * The different levels of screen brightness the user can select.
-             * @hide
-             */
-            public static final String SCREEN_BRIGHTNESS_LEVEL = "screen_brightness_level";
-
-            /**
              * The mobile signal detector setting.
              * @hide
              */
@@ -16764,12 +16732,6 @@ public final class Settings {
             public static final String AMBIENT_PLUGGED_TIMEOUT_MIN = "ambient_plugged_timeout_min";
 
             /**
-             * The companion device's bluetooth address.
-             * @hide
-             */
-            public static final String COMPANION_ADDRESS = "companion_address";
-
-            /**
              * What OS does paired device has.
              * @hide
              */
@@ -16814,12 +16776,6 @@ public final class Settings {
             public static final int HFP_CLIENT_ENABLED = 1;
             /** @hide */
             public static final int HFP_CLIENT_DISABLED = 2;
-
-            /**
-             * The current HFP client profile setting.
-             * @hide
-             */
-            public static final String HFP_CLIENT_PROFILE_ENABLED = "hfp_client_profile_enabled";
 
             /**
              * The companion phone's android version.

@@ -18,15 +18,10 @@ package com.android.systemui.flags;
 
 import android.content.Context;
 import android.util.FeatureFlagUtils;
+import android.util.Log;
+import android.widget.Toast;
 
-import com.android.internal.annotations.VisibleForTesting;
-import com.android.systemui.R;
 import com.android.systemui.dagger.SysUISingleton;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import javax.inject.Inject;
 
@@ -37,28 +32,13 @@ import javax.inject.Inject;
  */
 @SysUISingleton
 public class FeatureFlags {
-    private final FeatureFlagReader mFlagReader;
+    private final FlagReader mFlagReader;
     private final Context mContext;
-    private final Map<Integer, Flag<?>> mFlagMap = new HashMap<>();
-    private final Map<Integer, List<Listener>> mListeners = new HashMap<>();
 
     @Inject
-    public FeatureFlags(FeatureFlagReader flagReader, Context context) {
+    public FeatureFlags(FlagReader flagReader, Context context) {
         mFlagReader = flagReader;
         mContext = context;
-
-        flagReader.addListener(mListener);
-    }
-
-    private final FlagReader.Listener mListener = id -> {
-        if (mListeners.containsKey(id) && mFlagMap.containsKey(id)) {
-            mListeners.get(id).forEach(listener -> listener.onFlagChanged(mFlagMap.get(id)));
-        }
-    };
-
-    @VisibleForTesting
-    void addFlag(Flag flag) {
-        mFlagMap.put(flag.getId(), flag);
     }
 
     /**
@@ -69,25 +49,20 @@ public class FeatureFlags {
         return mFlagReader.isEnabled(flag);
     }
 
-    /**
-     * @param flag The {@link IntFlag} of interest.
-
-    /** Add a listener for a specific flag. */
-    public void addFlagListener(Flag<?> flag, Listener listener) {
-        mListeners.putIfAbsent(flag.getId(), new ArrayList<>());
-        mListeners.get(flag.getId()).add(listener);
-        mFlagMap.putIfAbsent(flag.getId(), flag);
-    }
-
-    /** Remove a listener for a specific flag. */
-    public void removeFlagListener(Flag<?> flag, Listener listener) {
-        if (mListeners.containsKey(flag.getId())) {
-            mListeners.get(flag.getId()).remove(listener);
+    public void assertLegacyPipelineEnabled() {
+        if (isNewNotifPipelineRenderingEnabled()) {
+            throw new IllegalStateException("Old pipeline code running w/ new pipeline enabled");
         }
     }
 
-    public boolean isNewNotifPipelineEnabled() {
-        return isEnabled(Flags.NEW_NOTIFICATION_PIPELINE);
+    public boolean checkLegacyPipelineEnabled() {
+        if (!isNewNotifPipelineRenderingEnabled()) {
+            return true;
+        }
+        Log.d("NotifPipeline", "Old pipeline code running w/ new pipeline enabled",
+                new Exception());
+        Toast.makeText(mContext, "Old pipeline code running!", Toast.LENGTH_SHORT).show();
+        return false;
     }
 
     public boolean isNewNotifPipelineRenderingEnabled() {
@@ -100,13 +75,11 @@ public class FeatureFlags {
     }
 
     public boolean isPeopleTileEnabled() {
-        // TODO(b/202860494): different resource overlays have different values.
-        return mFlagReader.isEnabled(R.bool.flag_conversations);
+        return isEnabled(Flags.PEOPLE_TILE);
     }
 
     public boolean isMonetEnabled() {
-        // TODO(b/202860494): used in wallpaper picker. Always true, maybe delete.
-        return mFlagReader.isEnabled(R.bool.flag_monet);
+        return isEnabled(Flags.MONET);
     }
 
     public boolean isPMLiteEnabled() {
@@ -114,8 +87,7 @@ public class FeatureFlags {
     }
 
     public boolean isChargingRippleEnabled() {
-        // TODO(b/202860494): different resource overlays have different values.
-        return mFlagReader.isEnabled(R.bool.flag_charging_ripple);
+        return isEnabled(Flags.CHARGING_RIPPLE);
     }
 
     public boolean isOngoingCallStatusBarChipEnabled() {
@@ -132,8 +104,7 @@ public class FeatureFlags {
     }
 
     public boolean isSmartspaceEnabled() {
-        // TODO(b/202860494): different resource overlays have different values.
-        return mFlagReader.isEnabled(R.bool.flag_smartspace);
+        return isEnabled(Flags.SMARTSPACE);
     }
 
     public boolean isSmartspaceDedupingEnabled() {
@@ -145,7 +116,7 @@ public class FeatureFlags {
     }
 
     public boolean isKeyguardQsUserDetailsShortcutEnabled() {
-        return mFlagReader.isEnabled(R.bool.flag_lockscreen_qs_user_detail_shortcut);
+        return isEnabled(Flags.QS_USER_DETAIL_SHORTCUT);
     }
 
     public boolean isSmartSpaceSharedElementTransitionEnabled() {
@@ -169,14 +140,15 @@ public class FeatureFlags {
         return isEnabled(Flags.NEW_USER_SWITCHER);
     }
 
+    /**
+     * Use the new single view QS headers
+     */
+    public boolean useCombinedQSHeaders() {
+        return isEnabled(Flags.COMBINED_QS_HEADERS);
+    }
+
     /** static method for the system setting */
     public static boolean isProviderModelSettingEnabled(Context context) {
         return FeatureFlagUtils.isEnabled(context, FeatureFlagUtils.SETTINGS_PROVIDER_MODEL);
-    }
-
-    /** Simple interface for beinga alerted when a specific flag changes value. */
-    public interface Listener {
-        /** */
-        void onFlagChanged(Flag<?> flag);
     }
 }

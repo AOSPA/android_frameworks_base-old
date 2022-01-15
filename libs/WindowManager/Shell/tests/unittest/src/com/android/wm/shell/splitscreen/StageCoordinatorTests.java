@@ -22,6 +22,7 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__RETURN_HOME;
 import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_BOTTOM_OR_RIGHT;
 import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_TOP_OR_LEFT;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_RETURN_HOME;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -48,6 +49,7 @@ import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.split.SplitLayout;
+import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.transition.Transitions;
 
 import org.junit.Before;
@@ -113,10 +115,7 @@ public class StageCoordinatorTests extends ShellTestCase {
 
         mStageCoordinator.moveToSideStage(task, SPLIT_POSITION_BOTTOM_OR_RIGHT);
 
-        verify(mMainStage).activate(any(Rect.class), any(WindowContainerTransaction.class),
-                eq(true /* includingTopTask */));
-        verify(mSideStage).addTask(eq(task), any(Rect.class),
-                any(WindowContainerTransaction.class));
+        verify(mSideStage).addTask(eq(task), any(WindowContainerTransaction.class));
     }
 
     @Test
@@ -164,19 +163,19 @@ public class StageCoordinatorTests extends ShellTestCase {
 
     @Test
     public void testExitSplitScreen() {
-        mStageCoordinator.exitSplitScreen(INVALID_TASK_ID,
-                SPLITSCREEN_UICHANGED__EXIT_REASON__RETURN_HOME);
+        when(mMainStage.isActive()).thenReturn(true);
+        mStageCoordinator.exitSplitScreen(INVALID_TASK_ID, EXIT_REASON_RETURN_HOME);
         verify(mSideStage).removeAllTasks(any(WindowContainerTransaction.class), eq(false));
         verify(mMainStage).deactivate(any(WindowContainerTransaction.class), eq(false));
     }
 
     @Test
     public void testExitSplitScreenToMainStage() {
+        when(mMainStage.isActive()).thenReturn(true);
         final int testTaskId = 12345;
         when(mMainStage.containsTask(eq(testTaskId))).thenReturn(true);
         when(mSideStage.containsTask(eq(testTaskId))).thenReturn(false);
-        mStageCoordinator.exitSplitScreen(testTaskId,
-                SPLITSCREEN_UICHANGED__EXIT_REASON__RETURN_HOME);
+        mStageCoordinator.exitSplitScreen(testTaskId, EXIT_REASON_RETURN_HOME);
         verify(mMainStage).reorderChild(eq(testTaskId), eq(true),
                 any(WindowContainerTransaction.class));
         verify(mSideStage).removeAllTasks(any(WindowContainerTransaction.class), eq(false));
@@ -185,11 +184,11 @@ public class StageCoordinatorTests extends ShellTestCase {
 
     @Test
     public void testExitSplitScreenToSideStage() {
+        when(mMainStage.isActive()).thenReturn(true);
         final int testTaskId = 12345;
         when(mMainStage.containsTask(eq(testTaskId))).thenReturn(false);
         when(mSideStage.containsTask(eq(testTaskId))).thenReturn(true);
-        mStageCoordinator.exitSplitScreen(testTaskId,
-                SPLITSCREEN_UICHANGED__EXIT_REASON__RETURN_HOME);
+        mStageCoordinator.exitSplitScreen(testTaskId, EXIT_REASON_RETURN_HOME);
         verify(mSideStage).reorderChild(eq(testTaskId), eq(true),
                 any(WindowContainerTransaction.class));
         verify(mSideStage).removeAllTasks(any(WindowContainerTransaction.class), eq(true));
@@ -200,7 +199,8 @@ public class StageCoordinatorTests extends ShellTestCase {
         return new SplitTestUtils.TestStageCoordinator(mContext, DEFAULT_DISPLAY,
                 mSyncQueue, mRootTDAOrganizer, mTaskOrganizer, mMainStage, mSideStage,
                 mDisplayImeController, mDisplayInsetsController, splitLayout,
-                mTransitions, mTransactionPool, mLogger, new UnfoldControllerProvider());
+                mTransitions, mTransactionPool, mLogger, Optional.empty(),
+                new UnfoldControllerProvider());
     }
 
     private class UnfoldControllerProvider implements

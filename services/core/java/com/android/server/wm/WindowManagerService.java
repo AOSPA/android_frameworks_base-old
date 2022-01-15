@@ -398,21 +398,6 @@ public class WindowManagerService extends IWindowManager.Stub
     static final int LOGTAG_INPUT_FOCUS = 62001;
 
     /**
-     * Restrict ability of activities overriding transition animation in a way such that
-     * an activity can do it only when the transition happens within a same task.
-     *
-     * @see android.app.Activity#overridePendingTransition(int, int)
-     */
-    private static final String DISABLE_CUSTOM_TASK_ANIMATION_PROPERTY =
-            "persist.wm.disable_custom_task_animation";
-
-    /**
-     * @see #DISABLE_CUSTOM_TASK_ANIMATION_PROPERTY
-     */
-    static boolean sDisableCustomTaskAnimationProperty =
-            SystemProperties.getBoolean(DISABLE_CUSTOM_TASK_ANIMATION_PROPERTY, true);
-
-    /**
      * Use WMShell for app transition.
      */
     public static final String ENABLE_SHELL_TRANSITIONS = "persist.debug.shell_transit";
@@ -1852,7 +1837,7 @@ public class WindowManagerService extends IWindowManager.Stub
             ProtoLog.v(WM_DEBUG_ADD_REMOVE, "addWindow: New client %s"
                     + ": window=%s Callers=%s", client.asBinder(), win, Debug.getCallers(5));
 
-            if (win.isVisibleOrAdding() && displayContent.updateOrientation()) {
+            if (win.isVisibleRequestedOrAdding() && displayContent.updateOrientation()) {
                 displayContent.sendNewConfiguration();
             }
 
@@ -6980,8 +6965,7 @@ public class WindowManagerService extends IWindowManager.Stub
         final DisplayContent dc = mRoot.getDisplayContent(displayId);
         if (dc != null) {
             final DisplayInfo di = dc.getDisplayInfo();
-            dc.getDisplayPolicy().getStableInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight,
-                    di.displayCutout, outInsets);
+            dc.getDisplayPolicy().getStableInsetsLw(di.rotation, di.displayCutout, outInsets);
         }
     }
 

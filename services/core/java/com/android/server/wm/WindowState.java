@@ -33,7 +33,6 @@ import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.SurfaceControl.Transaction;
 import static android.view.SurfaceControl.getGlobalTransaction;
-import static android.view.ViewRootImpl.INSETS_LAYOUT_GENERALIZATION;
 import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_CONTENT;
 import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_FRAME;
 import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION;
@@ -466,9 +465,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private final WindowFrames mWindowFrames = new WindowFrames();
 
     private final ClientWindowFrames mClientWindowFrames = new ClientWindowFrames();
-
-    /** The frames used to compute a temporal layout appearance. */
-    private WindowFrames mSimulatedWindowFrames;
 
     /**
      * List of rects where system gestures should be ignored.
@@ -1308,10 +1304,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-    // TODO(b/161810301): Remove this after INSETS_LAYOUT_GENERALIZATION is removed.
-    void computeFrameAndUpdateSourceFrame(DisplayFrames displayFrames) {
-    }
-
     @Override
     public Rect getBounds() {
         // The window bounds are used for layout in screen coordinates. If the token has bounds for
@@ -1352,9 +1344,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     WindowManager.LayoutParams getLayoutingAttrs(int rotation) {
-        if (!INSETS_LAYOUT_GENERALIZATION) {
-            return mAttrs;
-        }
         final WindowManager.LayoutParams[] paramsForRotation = mAttrs.paramsForRotation;
         if (paramsForRotation == null || paramsForRotation.length != 4
                 || paramsForRotation[rotation] == null) {
@@ -1521,9 +1510,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     /** @return The display frames in use by this window. */
     DisplayFrames getDisplayFrames(DisplayFrames originalFrames) {
-        final DisplayFrames diplayFrames = mToken.getFixedRotationTransformDisplayFrames();
-        if (diplayFrames != null) {
-            return diplayFrames;
+        final DisplayFrames displayFrames = mToken.getFixedRotationTransformDisplayFrames();
+        if (displayFrames != null) {
+            return displayFrames;
         }
         return originalFrames;
     }
@@ -1832,14 +1821,20 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     /**
-     * Same as isVisible(), but we also count it as visible between the
-     * call to IWindowSession.add() and the first relayout().
+     * Is this window capable of being visible (policy and content), in a visible part of the
+     * hierarchy, and, if an activity window, the activity is visible-requested. Note, this means
+     * if the activity is going-away, this will be {@code false} even when the window is visible.
+     *
+     * The 'adding' part refers to the period of time between IWindowSession.add() and the first
+     * relayout() -- which, for activities, is the same as visibleRequested.
+     *
+     * TODO(b/206005136): This is very similar to isVisibleRequested(). Investigate merging them.
      */
-    boolean isVisibleOrAdding() {
+    boolean isVisibleRequestedOrAdding() {
         final ActivityRecord atoken = mActivityRecord;
         return (mHasSurface || (!mRelayoutCalled && mViewVisibility == View.VISIBLE))
                 && isVisibleByPolicy() && !isParentWindowHidden()
-                && (atoken == null || atoken.isVisible())
+                && (atoken == null || atoken.mVisibleRequested)
                 && !mAnimatingExit && !mDestroying;
     }
 
@@ -2548,8 +2543,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         if (DEBUG_INPUT_METHOD) {
-            Slog.i(TAG_WM, "isVisibleOrAdding " + this + ": " + isVisibleOrAdding());
-            if (!isVisibleOrAdding()) {
+            Slog.i(TAG_WM, "isVisibleRequestedOrAdding " + this + ": "
+                    + isVisibleRequestedOrAdding());
+            if (!isVisibleRequestedOrAdding()) {
                 Slog.i(TAG_WM, "  mSurfaceController=" + mWinAnimator.mSurfaceController
                         + " relayoutCalled=" + mRelayoutCalled
                         + " viewVis=" + mViewVisibility
@@ -2563,7 +2559,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
         }
-        return isVisibleOrAdding();
+        return isVisibleRequestedOrAdding();
     }
 
     private final class DeadWindowEventReceiver extends InputEventReceiver {
@@ -2989,7 +2985,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     public String canReceiveKeysReason(boolean fromUserTouch) {
         return "fromTouch= " + fromUserTouch
-                + " isVisibleOrAdding=" + isVisibleOrAdding()
+                + " isVisibleRequestedOrAdding=" + isVisibleRequestedOrAdding()
                 + " mViewVisibility=" + mViewVisibility
                 + " mRemoveOnExit=" + mRemoveOnExit
                 + " flags=" + mAttrs.flags
@@ -3001,7 +2997,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     public boolean canReceiveKeys(boolean fromUserTouch) {
-        final boolean canReceiveKeys = isVisibleOrAdding()
+        final boolean canReceiveKeys = isVisibleRequestedOrAdding()
                 && (mViewVisibility == View.VISIBLE) && !mRemoveOnExit
                 && ((mAttrs.flags & WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) == 0)
                 && (mActivityRecord == null || mActivityRecord.windowsAreFocusable(fromUserTouch))
@@ -3267,7 +3263,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     public void pokeDrawLockLw(long timeout) {
-        if (isVisibleOrAdding()) {
+        if (isVisibleRequestedOrAdding()) {
             if (mDrawLock == null) {
                 // We want the tag name to be somewhat stable so that it is easier to correlate
                 // in wake lock statistics.  So in particular, we don't want to include the
@@ -3420,9 +3416,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // apps won't always be considered as foreground state.
         if (mAttrs.type >= FIRST_SYSTEM_WINDOW && mAttrs.type != TYPE_TOAST) {
             mWmService.mAtmService.mActiveUids.onNonAppSurfaceVisibilityChanged(mOwnerUid, shown);
-        }
-        if (mIsImWindow && mWmService.mAccessibilityController.hasCallbacks()) {
-            mWmService.mAccessibilityController.onImeSurfaceShownChanged(this, shown);
         }
     }
 
@@ -5511,22 +5504,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     /** Returns the {@link WindowFrames} associated with this {@link WindowState}. */
     WindowFrames getWindowFrames() {
         return mWindowFrames;
-    }
-
-    /**
-     * If the simulated frame is set, the computed result won't be used in real layout. So this
-     * frames must be cleared when the simulated computation is done.
-     */
-    void setSimulatedWindowFrames(WindowFrames windowFrames) {
-        mSimulatedWindowFrames = windowFrames;
-    }
-
-    /**
-     * Use this method only when the simulated frames may be set, so it is clearer that the calling
-     * path may be used to simulate layout.
-     */
-    WindowFrames getLayoutingWindowFrames() {
-        return mSimulatedWindowFrames != null ? mSimulatedWindowFrames : mWindowFrames;
     }
 
     void resetContentChanged() {

@@ -22,7 +22,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Configuration;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.util.TypedValue;
+import android.view.ViewGroup;
+import android.view.ViewRootImpl;
 import android.view.Window;
 import android.view.WindowInsets.Type;
 import android.view.WindowManager;
@@ -31,6 +39,7 @@ import android.view.WindowManager.LayoutParams;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.animation.DialogListener;
+import com.android.systemui.animation.DialogListener.DismissReason;
 import com.android.systemui.animation.ListenableDialog;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -44,16 +53,31 @@ import java.util.Set;
  * The SystemUIDialog registers a listener for the screen off / close system dialogs broadcast,
  * and dismisses itself when it receives the broadcast.
  */
-public class SystemUIDialog extends AlertDialog implements ListenableDialog {
+public class SystemUIDialog extends AlertDialog implements ListenableDialog,
+        ViewRootImpl.ConfigChangedCallback {
+    // TODO(b/203389579): Remove this once the dialog width on large screens has been agreed on.
+    private static final String FLAG_TABLET_DIALOG_WIDTH =
+            "persist.systemui.flag_tablet_dialog_width";
+
     private final Context mContext;
     private final DismissReceiver mDismissReceiver;
     private final Set<DialogListener> mDialogListeners = new LinkedHashSet<>();
+    private final Handler mHandler = new Handler();
+
+    private int mLastWidth = Integer.MIN_VALUE;
+    private int mLastHeight = Integer.MIN_VALUE;
+    private int mLastConfigurationWidthDp = -1;
+    private int mLastConfigurationHeightDp = -1;
 
     public SystemUIDialog(Context context) {
         this(context, R.style.Theme_SystemUI_Dialog);
     }
 
     public SystemUIDialog(Context context, int theme) {
+        this(context, theme, true /* dismissOnDeviceLock */);
+    }
+
+    public SystemUIDialog(Context context, int theme, boolean dismissOnDeviceLock) {
         super(context, theme);
         mContext = context;
 
@@ -62,19 +86,113 @@ public class SystemUIDialog extends AlertDialog implements ListenableDialog {
         attrs.setTitle(getClass().getSimpleName());
         getWindow().setAttributes(attrs);
 
-        mDismissReceiver = new DismissReceiver(this);
+        mDismissReceiver = dismissOnDeviceLock ? new DismissReceiver(this) : null;
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        Configuration config = getContext().getResources().getConfiguration();
+        mLastConfigurationWidthDp = config.screenWidthDp;
+        mLastConfigurationHeightDp = config.screenHeightDp;
+        updateWindowSize();
+    }
+
+    private void updateWindowSize() {
+        // Only the thread that created this dialog can update its window size.
+        if (Looper.myLooper() != mHandler.getLooper()) {
+            mHandler.post(this::updateWindowSize);
+            return;
+        }
+
+        int width = getWidth();
+        int height = getHeight();
+        if (width == mLastWidth && height == mLastHeight) {
+            return;
+        }
+
+        mLastWidth = width;
+        mLastHeight = height;
+        getWindow().setLayout(width, height);
+
+        for (DialogListener listener : new LinkedHashSet<>(mDialogListeners)) {
+            listener.onSizeChanged();
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        if (mLastConfigurationWidthDp != configuration.screenWidthDp
+                || mLastConfigurationHeightDp != configuration.screenHeightDp) {
+            mLastConfigurationWidthDp = configuration.screenWidthDp;
+            mLastConfigurationHeightDp = configuration.compatScreenWidthDp;
+
+            updateWindowSize();
+        }
+    }
+
+    /**
+     * Return this dialog width. This method will be invoked when this dialog is created and when
+     * the device configuration changes, and the result will be used to resize this dialog window.
+     */
+    protected int getWidth() {
+        boolean isOnTablet =
+                mContext.getResources().getConfiguration().smallestScreenWidthDp >= 600;
+        if (!isOnTablet) {
+            return ViewGroup.LayoutParams.MATCH_PARENT;
+        }
+
+        int flagValue = SystemProperties.getInt(FLAG_TABLET_DIALOG_WIDTH, 0);
+        if (flagValue == -1) {
+            // The width of bottom sheets (624dp).
+            return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 624,
+                    mContext.getResources().getDisplayMetrics()));
+        } else if (flagValue == -2) {
+            // The suggested small width for all dialogs (348dp)
+            return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 348,
+                    mContext.getResources().getDisplayMetrics()));
+        } else if (flagValue > 0) {
+            // Any given width.
+            return Math.round(
+                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, flagValue,
+                            mContext.getResources().getDisplayMetrics()));
+        } else {
+            // By default we use the same width as the notification shade in portrait mode (504dp).
+            return mContext.getResources().getDimensionPixelSize(R.dimen.large_dialog_width);
+        }
+    }
+
+    /**
+     * Return this dialog height. This method will be invoked when this dialog is created and when
+     * the device configuration changes, and the result will be used to resize this dialog window.
+     */
+    protected int getHeight() {
+        return ViewGroup.LayoutParams.WRAP_CONTENT;
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        mDismissReceiver.register();
+
+        if (mDismissReceiver != null) {
+            mDismissReceiver.register();
+        }
+
+        // Listen for configuration changes to resize this dialog window. This is mostly necessary
+        // for foldables that often go from large <=> small screen when folding/unfolding.
+        ViewRootImpl.addConfigCallback(this);
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        mDismissReceiver.unregister();
+
+        if (mDismissReceiver != null) {
+            mDismissReceiver.unregister();
+        }
+
+        ViewRootImpl.removeConfigCallback(this);
     }
 
     @Override
@@ -89,10 +207,14 @@ public class SystemUIDialog extends AlertDialog implements ListenableDialog {
 
     @Override
     public void dismiss() {
+        dismiss(DismissReason.UNKNOWN);
+    }
+
+    private void dismiss(DismissReason reason) {
         super.dismiss();
 
         for (DialogListener listener : new LinkedHashSet<>(mDialogListeners)) {
-            listener.onDismiss();
+            listener.onDismiss(reason);
         }
     }
 
@@ -208,7 +330,11 @@ public class SystemUIDialog extends AlertDialog implements ListenableDialog {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            mDialog.dismiss();
+            if (mDialog instanceof SystemUIDialog) {
+                ((SystemUIDialog) mDialog).dismiss(DismissReason.DEVICE_LOCKED);
+            } else {
+                mDialog.dismiss();
+            }
         }
     }
 }

@@ -398,7 +398,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     volatile WindowProcessController mPreviousProcess;
     /** The time at which the previous process was last visible. */
-    long mPreviousProcessVisibleTime;
+    private long mPreviousProcessVisibleTime;
 
     /** List of intents that were used to start the most recent tasks. */
     private RecentTasks mRecentTasks;
@@ -956,7 +956,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         mActivityClientController = new ActivityClientController(this);
 
         mTaskChangeNotificationController =
-                new TaskChangeNotificationController(mGlobalLock, mTaskSupervisor, mH);
+                new TaskChangeNotificationController(mTaskSupervisor, mH);
         mLockTaskController = new LockTaskController(mContext, mTaskSupervisor, mH,
                 mTaskChangeNotificationController);
         mActivityStartController = new ActivityStartController(this);
@@ -2799,7 +2799,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mH.sendMessage(msg);
             }
             try {
-                mKeyguardController.setKeyguardShown(keyguardShowing, aodShowing);
+                mRootWindowContainer.forAllDisplays(displayContent -> {
+                    mKeyguardController.setKeyguardShown(displayContent.getDisplayId(),
+                            keyguardShowing, aodShowing);
+                });
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -3359,7 +3362,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                mKeyguardController.keyguardGoingAway(flags);
+                mRootWindowContainer.forAllDisplays(displayContent -> {
+                    mKeyguardController.keyguardGoingAway(displayContent.getDisplayId(), flags);
+                });
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -3442,7 +3447,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
         };
 
-        if (isKeyguardLocked()) {
+        if (r.isKeyguardLocked()) {
             // If the keyguard is showing or occluded, then try and dismiss it before
             // entering picture-in-picture (this will prompt the user to authenticate if the
             // device is currently locked).
@@ -3787,8 +3792,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         mRecentTasks.notifyTaskPersisterLocked(task, flush);
     }
 
-    boolean isKeyguardLocked() {
-        return mKeyguardController.isKeyguardLocked();
+    boolean isKeyguardLocked(int displayId) {
+        return mKeyguardController.isKeyguardLocked(displayId);
     }
 
     /**
@@ -4632,6 +4637,23 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 // If there is no resumed activity, it will choose the pausing or focused activity.
                 : mRootWindowContainer.getTopResumedActivity();
         mTopApp = top != null ? top.app : null;
+    }
+
+    /**
+     * The process state of previous activity is more important than the regular background to keep
+     * around in case the user wants to return to it.
+     */
+    void updatePreviousProcess(ActivityRecord stoppedActivity) {
+        if (stoppedActivity.app != null && mTopApp != null
+                // Don't replace the previous process if the stopped one is the top, e.g. sleeping.
+                && stoppedActivity.app != mTopApp
+                // The stopped activity must have been visible later than the previous.
+                && stoppedActivity.lastVisibleTime > mPreviousProcessVisibleTime
+                // Home has its own retained state, so don't let it occupy the previous.
+                && stoppedActivity.app != mHomeProcess) {
+            mPreviousProcess = stoppedActivity.app;
+            mPreviousProcessVisibleTime = stoppedActivity.lastVisibleTime;
+        }
     }
 
     void updateActivityUsageStats(ActivityRecord activity, int event) {
@@ -5488,10 +5510,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public boolean isGetTasksAllowed(String caller, int callingPid, int callingUid) {
-            synchronized (mGlobalLock) {
-                return ActivityTaskManagerService.this.isGetTasksAllowed(
-                        caller, callingPid, callingUid);
-            }
+            return ActivityTaskManagerService.this.isGetTasksAllowed(
+                    caller, callingPid, callingUid);
         }
 
         @HotPath(caller = HotPath.PROCESS_CHANGE)
@@ -5658,19 +5678,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public void onPackageDataCleared(String name) {
+        public void onPackageDataCleared(String name, int userId) {
             synchronized (mGlobalLock) {
                 mCompatModePackages.handlePackageDataClearedLocked(name);
                 mAppWarnings.onPackageDataCleared(name);
+                mPackageConfigPersister.onPackageDataCleared(name, userId);
             }
         }
 
         @Override
-        public void onPackageUninstalled(String name) {
+        public void onPackageUninstalled(String name, int userId) {
             synchronized (mGlobalLock) {
                 mAppWarnings.onPackageUninstalled(name);
                 mCompatModePackages.handlePackageUninstalledLocked(name);
-                mPackageConfigPersister.onPackageUninstall(name);
+                mPackageConfigPersister.onPackageUninstall(name, userId);
             }
         }
 
@@ -6019,7 +6040,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 final long ident = Binder.clearCallingIdentity();
                 try {
                     if (mAmInternal.shouldConfirmCredentials(userId)) {
-                        if (mKeyguardController.isKeyguardLocked()) {
+                        if (mKeyguardController.isKeyguardLocked(DEFAULT_DISPLAY)) {
                             // Showing launcher to avoid user entering credential twice.
                             startHomeActivity(currentUserId, "notifyLockedProfile");
                         }

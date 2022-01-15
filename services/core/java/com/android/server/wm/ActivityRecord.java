@@ -103,7 +103,6 @@ import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
 import static android.view.SurfaceControl.getGlobalTransaction;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
-import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
@@ -335,7 +334,6 @@ import com.android.server.am.AppTimeTracker;
 import com.android.server.am.PendingIntentRecord;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.display.color.ColorDisplayService;
-import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.uri.NeededUriGrants;
 import com.android.server.uri.UriPermissionOwner;
 import com.android.server.wm.ActivityMetricsLogger.TransitionInfoSnapshot;
@@ -457,9 +455,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private CharSequence nonLocalizedLabel;  // the label information from the package mgr.
     private int labelRes;           // the label information from the package mgr.
     private int icon;               // resource identifier of activity's icon.
-    private int logo;               // resource identifier of activity's logo.
     private int theme;              // resource identifier of activity's theme.
-    private int windowFlags;        // custom window flags for preview window.
     public int perfActivityBoostHandler = -1; //perflock handler when activity is created.
     private Task task;              // the task this is in.
     private long createTime = System.currentTimeMillis();
@@ -747,7 +743,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // Note: these are de-referenced before the starting window animates away.
     StartingData mStartingData;
     WindowState mStartingWindow;
-    WindowManagerPolicy.StartingSurface mStartingSurface;
+    StartingSurfaceController.StartingSurface mStartingSurface;
     boolean startingDisplayed;
     boolean startingMoved;
 
@@ -1757,11 +1753,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             labelRes = app.labelRes;
         }
         icon = aInfo.getIconResource();
-        logo = aInfo.getLogoResource();
         theme = aInfo.getThemeResource();
-        if ((aInfo.flags & ActivityInfo.FLAG_HARDWARE_ACCELERATED) != 0) {
-            windowFlags |= LayoutParams.FLAG_HARDWARE_ACCELERATED;
-        }
         if ((aInfo.flags & FLAG_MULTIPROCESS) != 0 && _caller != null
                 && (aInfo.applicationInfo.uid == SYSTEM_UID
                     || aInfo.applicationInfo.uid == _caller.mInfo.uid)) {
@@ -1998,33 +1990,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return true;
     }
 
-    private void applyStartingWindowTheme(String pkg, int theme) {
-        if (theme != 0) {
-            AttributeCache.Entry ent = AttributeCache.instance().get(pkg, theme,
-                    com.android.internal.R.styleable.Window,
-                    mWmService.mCurrentUserId);
-            if (ent == null) {
-                return;
-            }
-            final boolean windowShowWallpaper = ent.array.getBoolean(
-                    com.android.internal.R.styleable.Window_windowShowWallpaper, false);
-            if (windowShowWallpaper && getDisplayContent().mWallpaperController
-                    .getWallpaperTarget() == null) {
-                // If this theme is requesting a wallpaper, and the wallpaper
-                // is not currently visible, then this effectively serves as
-                // an opaque window and our starting window transition animation
-                // can still work.  We just need to make sure the starting window
-                // is also showing the wallpaper.
-                windowFlags |= FLAG_SHOW_WALLPAPER;
-            }
-        }
-    }
-
     @VisibleForTesting
-    boolean addStartingWindow(String pkg, int resolvedTheme, CompatibilityInfo compatInfo,
-            CharSequence nonLocalizedLabel, int labelRes, int icon, int logo, int windowFlags,
-            ActivityRecord from, boolean newTask, boolean taskSwitch, boolean processRunning,
-            boolean allowTaskSnapshot, boolean activityCreated, boolean useEmpty,
+    boolean addStartingWindow(String pkg, int resolvedTheme, ActivityRecord from, boolean newTask,
+            boolean taskSwitch, boolean processRunning, boolean allowTaskSnapshot,
+            boolean activityCreated, boolean useEmpty,
             boolean activityAllDrawn) {
         // If the display is frozen, we won't do anything until the actual window is
         // displayed so there is no reason to put in the starting window.
@@ -2081,7 +2050,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (resolvedTheme == 0 && theme != 0) {
             return false;
         }
-        applyStartingWindowTheme(pkg, resolvedTheme);
 
         if (from != null && transferStartingWindow(from)) {
             return true;
@@ -2094,9 +2062,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Creating SplashScreenStartingData");
-        mStartingData = new SplashScreenStartingData(mWmService, pkg,
-                resolvedTheme, compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
-                getMergedOverrideConfiguration(), typeParameter);
+        mStartingData = new SplashScreenStartingData(mWmService, resolvedTheme, typeParameter);
         scheduleAddStartingWindow();
         return true;
     }
@@ -2118,17 +2084,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     void scheduleAddStartingWindow() {
-        if (StartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER) {
-            mAddStartingWindow.run();
-        } else {
-            // Note: we really want to do sendMessageAtFrontOfQueue() because we
-            // want to process the message ASAP, before any other queued
-            // messages.
-            if (!mWmService.mAnimationHandler.hasCallbacks(mAddStartingWindow)) {
-                ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Enqueueing ADD_STARTING");
-                mWmService.mAnimationHandler.postAtFrontOfQueue(mAddStartingWindow);
-            }
-        }
+        mAddStartingWindow.run();
     }
 
     private class AddStartingWindow implements Runnable {
@@ -2139,9 +2095,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             final StartingData startingData;
             synchronized (mWmService.mGlobalLock) {
                 // There can only be one adding request, silly caller!
-                if (!StartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER) {
-                    mWmService.mAnimationHandler.removeCallbacks(this);
-                }
 
                 if (mStartingData == null) {
                     // Animation has been canceled... do nothing.
@@ -2156,7 +2109,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Add starting %s: startingData=%s",
                     this, startingData);
 
-            WindowManagerPolicy.StartingSurface surface = null;
+            StartingSurfaceController.StartingSurface surface = null;
             try {
                 surface = startingData.createStartingSurface(ActivityRecord.this);
             } catch (Exception e) {
@@ -2197,20 +2150,25 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private int getStartingWindowType(boolean newTask, boolean taskSwitch, boolean processRunning,
             boolean allowTaskSnapshot, boolean activityCreated, boolean activityAllDrawn,
             TaskSnapshot snapshot) {
-        if ((newTask || !processRunning || (taskSwitch && !activityCreated)
-                || (taskSwitch && !activityAllDrawn)) && !isActivityTypeHome()) {
+        final boolean isActivityHome = isActivityTypeHome();
+        if ((newTask || !processRunning || (taskSwitch && !activityCreated))
+                && !isActivityHome) {
             return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
-        } else if (taskSwitch && allowTaskSnapshot) {
-            if (isSnapshotCompatible(snapshot)) {
-                return STARTING_WINDOW_TYPE_SNAPSHOT;
+        }
+        if (taskSwitch) {
+            if (allowTaskSnapshot) {
+                if (isSnapshotCompatible(snapshot)) {
+                    return STARTING_WINDOW_TYPE_SNAPSHOT;
+                }
+                if (!isActivityHome) {
+                    return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
+                }
             }
-            if (!isActivityTypeHome()) {
+            if (!activityAllDrawn && !isActivityHome) {
                 return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
             }
-            return STARTING_WINDOW_TYPE_NONE;
-        } else {
-            return STARTING_WINDOW_TYPE_NONE;
         }
+        return STARTING_WINDOW_TYPE_NONE;
     }
 
     /**
@@ -2269,9 +2227,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     private boolean transferSplashScreenIfNeeded() {
-        if (!mWmService.mStartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER) {
-            return false;
-        }
         if (!mHandleExitSplashScreen || mStartingSurface == null || mStartingWindow == null
                 || mTransferringSplashScreenState == TRANSFER_SPLASH_SCREEN_FINISH) {
             return false;
@@ -2412,7 +2367,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
 
-        final WindowManagerPolicy.StartingSurface surface;
+        final StartingSurfaceController.StartingSurface surface;
         final StartingData startingData = mStartingData;
         if (mStartingData != null) {
             surface = mStartingSurface;
@@ -2446,13 +2401,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
         };
 
-        if (StartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER) {
-            removeSurface.run();
-        } else {
-            // Use the same thread to remove the window as we used to add it, as otherwise we end up
-            // with things in the view hierarchy being called from different threads.
-            mWmService.mAnimationHandler.post(removeSurface);
-        }
+        removeSurface.run();
     }
 
     /**
@@ -2708,7 +2657,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (windowingMode == WINDOWING_MODE_PINNED && info.supportsPictureInPicture()) {
             return false;
         }
-        if (WindowConfiguration.inMultiWindowMode(windowingMode) && supportsMultiWindow()
+        // Activity should be resizable if the task is.
+        final boolean supportsMultiWindow = task != null
+                ? task.supportsMultiWindow() || supportsMultiWindow()
+                : supportsMultiWindow();
+        if (WindowConfiguration.inMultiWindowMode(windowingMode) && supportsMultiWindow
                 && !mAtmService.mForceResizableActivities) {
             // The non resizable app will be letterboxed instead of being forced resizable.
             return false;
@@ -2785,7 +2738,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final ActivityInfo.WindowLayout windowLayout = info.windowLayout;
         return windowLayout == null
                 || tda.supportsActivityMinWidthHeightMultiWindow(windowLayout.minWidth,
-                windowLayout.minHeight);
+                windowLayout.minHeight, info);
     }
 
     /**
@@ -2821,14 +2774,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return false;
         }
 
-        boolean isKeyguardLocked = mAtmService.isKeyguardLocked();
         boolean isCurrentAppLocked =
                 mAtmService.getLockTaskModeState() != LOCK_TASK_MODE_NONE;
         final TaskDisplayArea taskDisplayArea = getDisplayArea();
         boolean hasRootPinnedTask = taskDisplayArea != null && taskDisplayArea.hasPinnedTask();
         // Don't return early if !isNotLocked, since we want to throw an exception if the activity
         // is in an incorrect state
-        boolean isNotLockedOrOnKeyguard = !isKeyguardLocked && !isCurrentAppLocked;
+        boolean isNotLockedOrOnKeyguard = !isKeyguardLocked() && !isCurrentAppLocked;
 
         // We don't allow auto-PiP when something else is already pipped.
         if (beforeStopping && hasRootPinnedTask) {
@@ -3065,9 +3017,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mAtmService.deferWindowLayout();
         try {
-            final Transition newTransition = (!mTransitionController.isCollecting()
-                    && mTransitionController.getTransitionPlayer() != null)
-                    ? mTransitionController.createTransition(TRANSIT_CLOSE) : null;
             mTaskSupervisor.mNoHistoryActivities.remove(this);
             makeFinishingLocked();
             // Make a local reference to its task since this.task could be set to null once this
@@ -3099,10 +3048,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
             final boolean endTask = task.getTopNonFinishingActivity() == null
                     && !task.isClearingToReuseTask();
-            if (newTransition != null) {
-                mTransitionController.requestStartTransition(newTransition,
-                        endTask ? task : null, null /* remote */);
-            }
+            mTransitionController.requestCloseTransitionIfNeeded(endTask ? task : this);
             if (isState(RESUMED)) {
                 if (endTask) {
                     mAtmService.getTaskChangeNotificationController().notifyTaskRemovalStarted(
@@ -3233,7 +3179,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 // If the current activity is not opaque, we need to make sure the visibilities of
                 // activities be updated, they may be seen by users.
                 ensureVisibility = true;
-            } else if (mTaskSupervisor.getKeyguardController().isKeyguardLocked()
+            } else if (isKeyguardLocked()
                     && mTaskSupervisor.getKeyguardController().topActivityOccludesKeyguard(this)) {
                 // Ensure activity visibilities and update lockscreen occluded/dismiss state when
                 // finishing the top activity that occluded keyguard. So that, the
@@ -3536,13 +3482,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (stopped) {
             abortAndClearOptionsAnimation();
         }
-        if (mTransitionController.isCollecting()) {
-            // We don't want the finishing to change the transition ready state since there will not
-            // be corresponding setReady for finishing.
-            mTransitionController.collectExistenceChange(this);
-        } else {
-            mTransitionController.requestTransitionIfNeeded(TRANSIT_CLOSE, this);
-        }
     }
 
     /**
@@ -3725,6 +3664,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // to the restarted activity.
             nowVisible = mVisibleRequested;
         }
+        mTransitionController.requestCloseTransitionIfNeeded(this);
         cleanUp(true /* cleanServices */, true /* setState */);
         if (remove) {
             if (mStartingData != null && mVisible && task != null) {
@@ -4075,6 +4015,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (fromActivity == this) return true;
             return !fromActivity.mVisibleRequested && transferStartingWindow(fromActivity);
         });
+    }
+
+    boolean isKeyguardLocked() {
+        return (mDisplayContent != null) ? mDisplayContent.isKeyguardLocked() :
+                mRootWindowContainer.getDefaultDisplay().isKeyguardLocked();
     }
 
     void checkKeyguardFlagsChanged() {
@@ -5338,7 +5283,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     void notifyUnknownVisibilityLaunchedForKeyguardTransition() {
         // No display activities never add a window, so there is no point in waiting them for
         // relayout.
-        if (noDisplay || !mTaskSupervisor.getKeyguardController().isKeyguardLocked()) {
+        if (noDisplay || !isKeyguardLocked()) {
             return;
         }
 
@@ -5876,7 +5821,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     destroyImmediately("stop-config");
                     mRootWindowContainer.resumeFocusedTasksTopActivities();
                 } else {
-                    mRootWindowContainer.updatePreviousProcess(this);
+                    mAtmService.updatePreviousProcess(this);
                 }
             }
             mTaskSupervisor.checkReadyForSleepLocked(true /* allowDelay */);
@@ -6612,14 +6557,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return sourceRecord.mSplashScreenStyleEmpty;
         }
 
-        // If this activity was launched from a system surface, never use an empty splash screen
-        // Need to check sourceRecord before in case this activity is launched from service.
-        if (launchedFromSystemSurface()) {
-            return false;
-        }
-
+        // If this activity was launched from a system surface for first start, never use an empty
+        // splash screen. Need to check sourceRecord before in case this activity is launched from
+        // service.
         // Otherwise use empty.
-        return true;
+        return !startActivity || !launchedFromSystemSurface();
     }
 
     private int getSplashscreenTheme() {
@@ -6667,9 +6609,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
 
-        final CompatibilityInfo compatInfo =
-                mAtmService.compatibilityInfoForPackageLocked(info.applicationInfo);
-
         mSplashScreenStyleEmpty = shouldUseEmptySplashScreen(sourceRecord, startActivity);
 
         final int splashScreenTheme = startActivity ? getSplashscreenTheme() : 0;
@@ -6684,7 +6623,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 && task.getActivity((r) -> !r.finishing && r != this) == null;
 
         final boolean scheduled = addStartingWindow(packageName, resolvedTheme,
-                compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
                 prev, newTask || newSingleActivity, taskSwitch, isProcessRunning(),
                 allowTaskSnapshot(), activityCreated, mSplashScreenStyleEmpty, allDrawn);
         if (DEBUG_STARTING_WINDOW_VERBOSE && scheduled) {
@@ -7330,7 +7268,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return false;
             }
         }
-        return !isResizeable() && (info.isFixedOrientation() || hasFixedAspectRatio())
+        // Activity should be resizable if the task is.
+        final boolean isResizeable = task != null
+                ? task.isResizeable() || isResizeable()
+                : isResizeable();
+        return !isResizeable && (info.isFixedOrientation() || hasFixedAspectRatio())
                 // The configuration of non-standard type should be enforced by system.
                 // {@link WindowConfiguration#ACTIVITY_TYPE_STANDARD} is set when this activity is
                 // added to a task, but this function is called when resolving the launch params, at
@@ -7700,7 +7642,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // orientation with insets applied.
             return;
         }
-        if (WindowConfiguration.inMultiWindowMode(windowingMode) && isResizeable()) {
+        // Activity should be resizable if the task is.
+        final boolean isResizeable = task != null
+                ? task.isResizeable() || isResizeable()
+                : isResizeable();
+        if (WindowConfiguration.inMultiWindowMode(windowingMode) && isResizeable) {
             // Ignore orientation request for resizable apps in multi window.
             return;
         }
@@ -9170,7 +9116,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 final int dh = rotated ? display.mBaseDisplayWidth : display.mBaseDisplayHeight;
                 final DisplayCutout cutout = display.calculateDisplayCutoutForRotation(rotation)
                         .getDisplayCutout();
-                policy.getNonDecorInsetsLw(rotation, dw, dh, cutout, mNonDecorInsets[rotation]);
+                policy.getNonDecorInsetsLw(rotation, cutout, mNonDecorInsets[rotation]);
                 mStableInsets[rotation].set(mNonDecorInsets[rotation]);
                 policy.convertNonDecorInsetsToStableInsets(mStableInsets[rotation], rotation);
 

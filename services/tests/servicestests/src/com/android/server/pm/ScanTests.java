@@ -554,12 +554,12 @@ public class ScanTests {
             String packageName, boolean isInstant, PackageSetting pkgSetting) {
         assertThat(pkgSetting.getPkg().getPackageName(), is(packageName));
         assertThat(pkgSetting.getInstantApp(0), is(isInstant));
-        assertThat(pkgSetting.usesStaticLibraries,
+        assertThat(pkgSetting.getUsesStaticLibraries(),
                 arrayContaining("some.static.library", "some.other.static.library"));
-        assertThat(pkgSetting.usesStaticLibrariesVersions, is(new long[]{234L, 456L}));
+        assertThat(pkgSetting.getUsesStaticLibrariesVersions(), is(new long[]{234L, 456L}));
         assertThat(pkgSetting.getPkg(), is(scanResult.mRequest.mParsedPackage));
         assertThat(pkgSetting.getPath(), is(new File(createCodePath(packageName))));
-        assertThat(pkgSetting.getLongVersionCode(),
+        assertThat(pkgSetting.getVersionCode(),
                 is(PackageInfo.composeLongVersionCode(1, 2345)));
     }
 

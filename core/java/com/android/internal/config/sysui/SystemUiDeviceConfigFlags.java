@@ -501,6 +501,17 @@ public final class SystemUiDeviceConfigFlags {
     public static final String IS_NEARBY_SHARE_FIRST_TARGET_IN_RANKED_APP =
             "is_nearby_share_first_target_in_ranked_app";
 
+    /**
+     * (boolean) Whether to enable the new unbundled "delegate chooser" implementation.
+     */
+    public static final String USE_DELEGATE_CHOOSER = "use_delegate_chooser";
+
+    /**
+     * (string) Name of the default QR code scanner activity. On the eligible devices this activity
+     * is provided by GMS core.
+     */
+    public static final String DEFAULT_QR_CODE_SCANNER = "default_qr_code_scanner";
+
     private SystemUiDeviceConfigFlags() {
     }
 }

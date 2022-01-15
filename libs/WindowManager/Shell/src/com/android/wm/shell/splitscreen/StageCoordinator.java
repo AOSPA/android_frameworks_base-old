@@ -17,6 +17,7 @@
 package com.android.wm.shell.splitscreen;
 
 import static android.app.ActivityOptions.KEY_LAUNCH_ROOT_TASK_TOKEN;
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.TRANSIT_OPEN;
@@ -25,12 +26,6 @@ import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.view.WindowManager.transitTypeToString;
 import static android.view.WindowManagerPolicyConstants.SPLIT_DIVIDER_LAYER;
 
-import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__APP_DOES_NOT_SUPPORT_MULTIWINDOW;
-import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__APP_FINISHED;
-import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__DEVICE_FOLDED;
-import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__DRAG_DIVIDER;
-import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__RETURN_HOME;
-import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__SCREEN_LOCKED_SHOW_ON_TOP;
 import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_BOTTOM_OR_RIGHT;
 import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_TOP_OR_LEFT;
 import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_UNDEFINED;
@@ -38,6 +33,13 @@ import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_MAIN;
 import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_SIDE;
 import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_UNDEFINED;
 import static com.android.wm.shell.splitscreen.SplitScreen.stageTypeToString;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_APP_DOES_NOT_SUPPORT_MULTIWINDOW;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_APP_FINISHED;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_DEVICE_FOLDED;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_DRAG_DIVIDER;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_RETURN_HOME;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_SCREEN_LOCKED_SHOW_ON_TOP;
+import static com.android.wm.shell.splitscreen.SplitScreenController.exitReasonToString;
 import static com.android.wm.shell.splitscreen.SplitScreenTransitions.FLAG_IS_DIVIDER_BAR;
 import static com.android.wm.shell.transition.Transitions.ENABLE_SHELL_TRANSITIONS;
 import static com.android.wm.shell.transition.Transitions.TRANSIT_SPLIT_DISMISS_SNAP;
@@ -91,7 +93,10 @@ import com.android.wm.shell.common.split.SplitLayout;
 import com.android.wm.shell.common.split.SplitLayout.SplitPosition;
 import com.android.wm.shell.common.split.SplitWindowManager;
 import com.android.wm.shell.protolog.ShellProtoLogGroup;
+import com.android.wm.shell.recents.RecentTasksController;
+import com.android.wm.shell.splitscreen.SplitScreenController.ExitReason;
 import com.android.wm.shell.transition.Transitions;
+import com.android.wm.shell.util.StagedSplitBounds;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -145,6 +150,10 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
     private final DisplayInsetsController mDisplayInsetsController;
     private final SplitScreenTransitions mSplitTransitions;
     private final SplitscreenEventLogger mLogger;
+    private final Optional<RecentTasksController> mRecentTasks;
+    // Tracks whether we should update the recent tasks.  Only allow this to happen in between enter
+    // and exit, since exit itself can trigger a number of changes that update the stages.
+    private boolean mShouldUpdateRecents;
     private boolean mExitSplitScreenOnHide;
     private boolean mKeyguardOccluded;
 
@@ -189,6 +198,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             DisplayInsetsController displayInsetsController, Transitions transitions,
             TransactionPool transactionPool, SplitscreenEventLogger logger,
             IconProvider iconProvider,
+            Optional<RecentTasksController> recentTasks,
             Provider<Optional<StageTaskUnfoldController>> unfoldControllerProvider) {
         mContext = context;
         mDisplayId = displayId;
@@ -196,6 +206,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         mRootTDAOrganizer = rootTDAOrganizer;
         mTaskOrganizer = taskOrganizer;
         mLogger = logger;
+        mRecentTasks = recentTasks;
         mMainUnfoldController = unfoldControllerProvider.get().orElse(null);
         mSideUnfoldController = unfoldControllerProvider.get().orElse(null);
 
@@ -236,6 +247,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             DisplayInsetsController displayInsetsController, SplitLayout splitLayout,
             Transitions transitions, TransactionPool transactionPool,
             SplitscreenEventLogger logger,
+            Optional<RecentTasksController> recentTasks,
             Provider<Optional<StageTaskUnfoldController>> unfoldControllerProvider) {
         mContext = context;
         mDisplayId = displayId;
@@ -253,6 +265,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         mMainUnfoldController = unfoldControllerProvider.get().orElse(null);
         mSideUnfoldController = unfoldControllerProvider.get().orElse(null);
         mLogger = logger;
+        mRecentTasks = recentTasks;
         transitions.addHandler(this);
     }
 
@@ -268,11 +281,19 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
     boolean moveToSideStage(ActivityManager.RunningTaskInfo task,
             @SplitPosition int sideStagePosition) {
         final WindowContainerTransaction wct = new WindowContainerTransaction();
+        return moveToSideStage(task, sideStagePosition, wct);
+    }
+
+    boolean moveToSideStage(ActivityManager.RunningTaskInfo task,
+            @SplitPosition int sideStagePosition, WindowContainerTransaction wct) {
+        final WindowContainerTransaction evictWct = new WindowContainerTransaction();
         setSideStagePosition(sideStagePosition, wct);
-        mMainStage.activate(getMainStageBounds(), wct, true /* reparent */);
-        mSideStage.addTask(task, getSideStageBounds(), wct);
-        mSyncQueue.queue(wct);
-        mSyncQueue.runInSync(t -> updateSurfaceBounds(null /* layout */, t));
+        mSideStage.evictAllChildren(evictWct);
+        mSideStage.addTask(task, wct);
+        if (!evictWct.isEmpty()) {
+            wct.merge(evictWct, true /* transfer */);
+        }
+        mTaskOrganizer.applyTransaction(wct);
         return true;
     }
 
@@ -337,8 +358,13 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                 }
                 augmentedNonApps[augmentedNonApps.length - 1] = getDividerBarLegacyTarget();
                 try {
-                    ActivityTaskManager.getService().setRunningRemoteTransitionDelegate(
-                            adapter.getCallingApplication());
+                    try {
+                        ActivityTaskManager.getService().setRunningRemoteTransitionDelegate(
+                                adapter.getCallingApplication());
+                    } catch (SecurityException e) {
+                        Slog.e(TAG, "Unable to boost animation thread. This should only happen"
+                                + " during unit tests");
+                    }
                     adapter.getRunner().onAnimationStart(transit, apps, wallpapers, nonApps,
                             finishedCallback);
                 } catch (RemoteException e) {
@@ -363,6 +389,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         } else {
             ActivityOptions mainActivityOptions = ActivityOptions.fromBundle(mainOptions);
             mainActivityOptions.update(ActivityOptions.makeRemoteAnimation(wrappedAdapter));
+            mainOptions = mainActivityOptions.toBundle();
         }
 
         sideOptions = sideOptions != null ? sideOptions : new Bundle();
@@ -511,7 +538,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         if (!showing && mMainStage.isActive()
                 && mTopStageAfterFoldDismiss != STAGE_TYPE_UNDEFINED) {
             exitSplitScreen(mTopStageAfterFoldDismiss == STAGE_TYPE_MAIN ? mMainStage : mSideStage,
-                    SPLITSCREEN_UICHANGED__EXIT_REASON__DEVICE_FOLDED);
+                    EXIT_REASON_DEVICE_FOLDED);
         }
     }
 
@@ -519,7 +546,9 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         mExitSplitScreenOnHide = exitSplitScreenOnHide;
     }
 
-    void exitSplitScreen(int toTopTaskId, int exitReason) {
+    void exitSplitScreen(int toTopTaskId, @ExitReason int exitReason) {
+        if (!mMainStage.isActive()) return;
+
         StageTaskListener childrenToTop = null;
         if (mMainStage.containsTask(toTopTaskId)) {
             childrenToTop = mMainStage;
@@ -534,27 +563,59 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         applyExitSplitScreen(childrenToTop, wct, exitReason);
     }
 
-    private void exitSplitScreen(StageTaskListener childrenToTop, int exitReason) {
+    private void exitSplitScreen(StageTaskListener childrenToTop, @ExitReason int exitReason) {
+        if (!mMainStage.isActive()) return;
+
         final WindowContainerTransaction wct = new WindowContainerTransaction();
         applyExitSplitScreen(childrenToTop, wct, exitReason);
     }
 
     private void applyExitSplitScreen(StageTaskListener childrenToTop,
-            WindowContainerTransaction wct, int exitReason) {
+            WindowContainerTransaction wct, @ExitReason int exitReason) {
+        mRecentTasks.ifPresent(recentTasks -> {
+            // Notify recents if we are exiting in a way that breaks the pair, and disable further
+            // updates to splits in the recents until we enter split again
+            if (shouldBreakPairedTaskInRecents(exitReason) && mShouldUpdateRecents) {
+                recentTasks.removeSplitPair(mMainStage.getTopVisibleChildTaskId());
+                recentTasks.removeSplitPair(mSideStage.getTopVisibleChildTaskId());
+            }
+        });
+        mShouldUpdateRecents = false;
+
         mSideStage.removeAllTasks(wct, childrenToTop == mSideStage);
         mMainStage.deactivate(wct, childrenToTop == mMainStage);
         mTaskOrganizer.applyTransaction(wct);
         mSyncQueue.runInSync(t -> t
                 .setWindowCrop(mMainStage.mRootLeash, null)
                 .setWindowCrop(mSideStage.mRootLeash, null));
+
         // Hide divider and reset its position.
         setDividerVisibility(false);
         mSplitLayout.resetDividerPosition();
         mTopStageAfterFoldDismiss = STAGE_TYPE_UNDEFINED;
+        Slog.i(TAG, "applyExitSplitScreen, reason = " + exitReasonToString(exitReason));
+        // Log the exit
         if (childrenToTop != null) {
             logExitToStage(exitReason, childrenToTop == mMainStage);
         } else {
             logExit(exitReason);
+        }
+    }
+
+    /**
+     * Returns whether the split pair in the recent tasks list should be broken.
+     */
+    private boolean shouldBreakPairedTaskInRecents(@ExitReason int exitReason) {
+        switch (exitReason) {
+            // One of the apps doesn't support MW
+            case EXIT_REASON_APP_DOES_NOT_SUPPORT_MULTIWINDOW:
+            // User has explicitly dragged the divider to dismiss split
+            case EXIT_REASON_DRAG_DIVIDER:
+            // Either of the split apps have finished
+            case EXIT_REASON_APP_FINISHED:
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -624,10 +685,40 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             mLogger.logSideStageAppChange(getSideStagePosition(), mSideStage.getTopChildTaskUid(),
                     mSplitLayout.isLandscape());
         }
+        updateRecentTasksSplitPair();
 
         for (int i = mListeners.size() - 1; i >= 0; --i) {
             mListeners.get(i).onTaskStageChanged(taskId, stage, visible);
         }
+    }
+
+    private void updateRecentTasksSplitPair() {
+        if (!mShouldUpdateRecents) {
+            return;
+        }
+
+        mRecentTasks.ifPresent(recentTasks -> {
+            Rect topLeftBounds = mSplitLayout.getBounds1();
+            Rect bottomRightBounds = mSplitLayout.getBounds2();
+            int mainStageTopTaskId = mMainStage.getTopVisibleChildTaskId();
+            int sideStageTopTaskId = mSideStage.getTopVisibleChildTaskId();
+            boolean sideStageTopLeft = mSideStagePosition == SPLIT_POSITION_TOP_OR_LEFT;
+            int leftTopTaskId;
+            int rightBottomTaskId;
+            if (sideStageTopLeft) {
+                leftTopTaskId = sideStageTopTaskId;
+                rightBottomTaskId = mainStageTopTaskId;
+            } else {
+                leftTopTaskId = mainStageTopTaskId;
+                rightBottomTaskId = sideStageTopTaskId;
+            }
+            StagedSplitBounds splitBounds = new StagedSplitBounds(topLeftBounds, bottomRightBounds,
+                    leftTopTaskId, rightBottomTaskId);
+            if (mainStageTopTaskId != INVALID_TASK_ID && sideStageTopTaskId != INVALID_TASK_ID) {
+                // Update the pair for the top tasks
+                recentTasks.addSplitPair(mainStageTopTaskId, sideStageTopTaskId, splitBounds);
+            }
+        });
     }
 
     private void sendSplitVisibilityChanged() {
@@ -703,8 +794,9 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                     // display, like the cases keyguard showing or screen off.
                     || (!mMainStage.mRootTaskInfo.isSleeping
                     && !mSideStage.mRootTaskInfo.isSleeping)) {
-                exitSplitScreen(null /* childrenToTop */,
-                        SPLITSCREEN_UICHANGED__EXIT_REASON__RETURN_HOME);
+            // Don't dismiss staged split when both stages are not visible due to sleeping display,
+            // like the cases keyguard showing or screen off.
+                exitSplitScreen(null /* childrenToTop */, EXIT_REASON_RETURN_HOME);
             }
         } else if (mKeyguardOccluded) {
             // At least one of the stages is visible while keyguard occluded. Dismiss split because
@@ -712,7 +804,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             // task contains show-when-locked activity remains on top after split dismissed.
             final StageTaskListener toTop =
                     mainStageVisible ? mMainStage : (sideStageVisible ? mSideStage : null);
-            exitSplitScreen(toTop, SPLITSCREEN_UICHANGED__EXIT_REASON__SCREEN_LOCKED_SHOW_ON_TOP);
+            exitSplitScreen(toTop, EXIT_REASON_SCREEN_LOCKED_SHOW_ON_TOP);
         }
 
         mSyncQueue.runInSync(t -> {
@@ -749,24 +841,29 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         if (!hasChildren) {
             if (isSideStage && mMainStageListener.mVisible) {
                 // Exit to main stage if side stage no longer has children.
-                exitSplitScreen(mMainStage, SPLITSCREEN_UICHANGED__EXIT_REASON__APP_FINISHED);
+                exitSplitScreen(mMainStage, EXIT_REASON_APP_FINISHED);
             } else if (!isSideStage && mSideStageListener.mVisible) {
                 // Exit to side stage if main stage no longer has children.
-                exitSplitScreen(mSideStage, SPLITSCREEN_UICHANGED__EXIT_REASON__APP_FINISHED);
+                exitSplitScreen(mSideStage, EXIT_REASON_APP_FINISHED);
             }
         } else if (isSideStage) {
             final WindowContainerTransaction wct = new WindowContainerTransaction();
             // Make sure the main stage is active.
             mMainStage.activate(getMainStageBounds(), wct, true /* reparent */);
-            mSideStage.setBounds(getSideStageBounds(), wct);
-            mTaskOrganizer.applyTransaction(wct);
+            mSideStage.moveToTop(getSideStageBounds(), wct);
+            mSyncQueue.queue(wct);
+            mSyncQueue.runInSync(t -> updateSurfaceBounds(mSplitLayout, t));
         }
-        if (!mLogger.hasStartedSession() && mMainStageListener.mHasChildren
-                && mSideStageListener.mHasChildren) {
-            mLogger.logEnter(mSplitLayout.getDividerPositionAsFraction(),
-                    getMainStagePosition(), mMainStage.getTopChildTaskUid(),
-                    getSideStagePosition(), mSideStage.getTopChildTaskUid(),
-                    mSplitLayout.isLandscape());
+        if (mMainStageListener.mHasChildren && mSideStageListener.mHasChildren) {
+            mShouldUpdateRecents = true;
+            updateRecentTasksSplitPair();
+
+            if (!mLogger.hasStartedSession()) {
+                mLogger.logEnter(mSplitLayout.getDividerPositionAsFraction(),
+                        getMainStagePosition(), mMainStage.getTopChildTaskUid(),
+                        getSideStagePosition(), mSideStage.getTopChildTaskUid(),
+                        mSplitLayout.isLandscape());
+            }
         }
     }
 
@@ -786,8 +883,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             onSnappedToDismissTransition(mainStageToTop);
             return;
         }
-        exitSplitScreen(mainStageToTop ? mMainStage : mSideStage,
-                SPLITSCREEN_UICHANGED__EXIT_REASON__DRAG_DIVIDER);
+        exitSplitScreen(mainStageToTop ? mMainStage : mSideStage, EXIT_REASON_DRAG_DIVIDER);
     }
 
     @Override
@@ -1245,7 +1341,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
     /**
      * Logs the exit of splitscreen.
      */
-    private void logExit(int exitReason) {
+    private void logExit(@ExitReason int exitReason) {
         mLogger.logExit(exitReason,
                 SPLIT_POSITION_UNDEFINED, 0 /* mainStageUid */,
                 SPLIT_POSITION_UNDEFINED, 0 /* sideStageUid */,
@@ -1256,7 +1352,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
      * Logs the exit of splitscreen to a specific stage. This must be called before the exit is
      * executed.
      */
-    private void logExitToStage(int exitReason, boolean toMainStage) {
+    private void logExitToStage(@ExitReason int exitReason, boolean toMainStage) {
         mLogger.logExit(exitReason,
                 toMainStage ? getMainStagePosition() : SPLIT_POSITION_UNDEFINED,
                 toMainStage ? mMainStage.getTopChildTaskUid() : 0 /* mainStageUid */,
@@ -1305,7 +1401,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         public void onNoLongerSupportMultiWindow() {
             if (mMainStage.isActive()) {
                 StageCoordinator.this.exitSplitScreen(null /* childrenToTop */,
-                        SPLITSCREEN_UICHANGED__EXIT_REASON__APP_DOES_NOT_SUPPORT_MULTIWINDOW);
+                        EXIT_REASON_APP_DOES_NOT_SUPPORT_MULTIWINDOW);
             }
         }
 

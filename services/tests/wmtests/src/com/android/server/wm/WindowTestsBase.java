@@ -30,7 +30,6 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.os.Process.SYSTEM_UID;
 import static android.view.View.VISIBLE;
-import static android.view.ViewRootImpl.INSETS_LAYOUT_GENERALIZATION;
 import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
 import static android.view.WindowManager.DISPLAY_IME_POLICY_LOCAL;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
@@ -54,7 +53,6 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
-import static com.android.server.wm.StartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
@@ -77,6 +75,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.hardware.HardwareBuffer;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -126,6 +125,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     // Default package name
     static final String DEFAULT_COMPONENT_PACKAGE_NAME = "com.foo";
+
+    static final int DEFAULT_TASK_FRAGMENT_ORGANIZER_UID = 10000;
+    static final String DEFAULT_TASK_FRAGMENT_ORGANIZER_PROCESS_NAME = "Test:TaskFragmentOrganizer";
 
     // Default base activity name
     private static final String DEFAULT_COMPONENT_CLASS_NAME = ".BarActivity";
@@ -280,12 +282,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
         }
         if (addAll || ArrayUtils.contains(requestedWindows, W_STATUS_BAR)) {
             mStatusBarWindow = createCommonWindow(null, TYPE_STATUS_BAR, "mStatusBarWindow");
-            if (INSETS_LAYOUT_GENERALIZATION) {
-                mStatusBarWindow.mAttrs.height = STATUS_BAR_HEIGHT;
-                mStatusBarWindow.mAttrs.gravity = Gravity.TOP;
-                mStatusBarWindow.mAttrs.layoutInDisplayCutoutMode =
-                        LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-            }
+            mStatusBarWindow.mAttrs.height = STATUS_BAR_HEIGHT;
+            mStatusBarWindow.mAttrs.gravity = Gravity.TOP;
+            mStatusBarWindow.mAttrs.layoutInDisplayCutoutMode =
+                    LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+            mStatusBarWindow.mAttrs.setFitInsetsTypes(0);
         }
         if (addAll || ArrayUtils.contains(requestedWindows, W_NOTIFICATION_SHADE)) {
             mNotificationShadeWindow = createCommonWindow(null, TYPE_NOTIFICATION_SHADE,
@@ -293,14 +294,13 @@ class WindowTestsBase extends SystemServiceTestsBase {
         }
         if (addAll || ArrayUtils.contains(requestedWindows, W_NAVIGATION_BAR)) {
             mNavBarWindow = createCommonWindow(null, TYPE_NAVIGATION_BAR, "mNavBarWindow");
-            if (INSETS_LAYOUT_GENERALIZATION) {
-                mNavBarWindow.mAttrs.height = NAV_BAR_HEIGHT;
-                mNavBarWindow.mAttrs.gravity = Gravity.BOTTOM;
-                mNavBarWindow.mAttrs.paramsForRotation = new WindowManager.LayoutParams[4];
-                for (int rot = Surface.ROTATION_0; rot <= Surface.ROTATION_270; rot++) {
-                    mNavBarWindow.mAttrs.paramsForRotation[rot] =
-                            getNavBarLayoutParamsForRotation(rot);
-                }
+            mNavBarWindow.mAttrs.height = NAV_BAR_HEIGHT;
+            mNavBarWindow.mAttrs.gravity = Gravity.BOTTOM;
+            mNavBarWindow.mAttrs.paramsForRotation = new WindowManager.LayoutParams[4];
+            mNavBarWindow.mAttrs.setFitInsetsTypes(0);
+            for (int rot = Surface.ROTATION_0; rot <= Surface.ROTATION_270; rot++) {
+                mNavBarWindow.mAttrs.paramsForRotation[rot] =
+                        getNavBarLayoutParamsForRotation(rot);
             }
         }
         if (addAll || ArrayUtils.contains(requestedWindows, W_DOCK_DIVIDER)) {
@@ -333,30 +333,27 @@ class WindowTestsBase extends SystemServiceTestsBase {
         int width = WindowManager.LayoutParams.MATCH_PARENT;
         int height = WindowManager.LayoutParams.MATCH_PARENT;
         int gravity = Gravity.BOTTOM;
-        if (INSETS_LAYOUT_GENERALIZATION) {
-            switch (rotation) {
-                case ROTATION_UNDEFINED:
-                case Surface.ROTATION_0:
-                case Surface.ROTATION_180:
-                    height = NAV_BAR_HEIGHT;
-                    break;
-                case Surface.ROTATION_90:
-                    gravity = Gravity.RIGHT;
-                    width = NAV_BAR_HEIGHT;
-                    break;
-                case Surface.ROTATION_270:
-                    gravity = Gravity.LEFT;
-                    width = NAV_BAR_HEIGHT;
-                    break;
-            }
+        switch (rotation) {
+            case ROTATION_UNDEFINED:
+            case Surface.ROTATION_0:
+            case Surface.ROTATION_180:
+                height = NAV_BAR_HEIGHT;
+                break;
+            case Surface.ROTATION_90:
+                gravity = Gravity.RIGHT;
+                width = NAV_BAR_HEIGHT;
+                break;
+            case Surface.ROTATION_270:
+                gravity = Gravity.LEFT;
+                width = NAV_BAR_HEIGHT;
+                break;
         }
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.TYPE_NAVIGATION_BAR);
         lp.width = width;
         lp.height = height;
-        if (INSETS_LAYOUT_GENERALIZATION) {
-            lp.gravity = gravity;
-        }
+        lp.gravity = gravity;
+        lp.setFitInsetsTypes(0);
         return lp;
     }
 
@@ -796,6 +793,14 @@ class WindowTestsBase extends SystemServiceTestsBase {
         };
     }
 
+    /** Sets up a simple implementation of transition player for shell transitions. */
+    TestTransitionPlayer registerTestTransitionPlayer() {
+        final TestTransitionPlayer testPlayer = new TestTransitionPlayer(
+                mAtm.getTransitionController(), mAtm.mWindowOrganizerController);
+        testPlayer.mController.registerTransitionPlayer(testPlayer, null /* appThread */);
+        return testPlayer;
+    }
+
     /**
      * Avoids rotating screen disturbed by some conditions. It is usually used for the default
      * display that is not the instance of {@link TestDisplayContent} (it bypasses the conditions).
@@ -866,6 +871,21 @@ class WindowTestsBase extends SystemServiceTestsBase {
     /** Sets the default minimum task size to 1 so that tests can use small task sizes */
     public void removeGlobalMinSizeRestriction() {
         mAtm.mRootWindowContainer.mDefaultMinSizeOfResizeableTaskDp = 1;
+    }
+
+    /** Mocks the behavior of taking a snapshot. */
+    void mockSurfaceFreezerSnapshot(SurfaceFreezer surfaceFreezer) {
+        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
+                mock(SurfaceControl.ScreenshotHardwareBuffer.class);
+        final HardwareBuffer hardwareBuffer = mock(HardwareBuffer.class);
+        spyOn(surfaceFreezer);
+        doReturn(screenshotBuffer).when(surfaceFreezer)
+                .createSnapshotBufferInner(any(), any());
+        doReturn(null).when(surfaceFreezer)
+                .createFromHardwareBufferInner(any());
+        doReturn(hardwareBuffer).when(screenshotBuffer).getHardwareBuffer();
+        doReturn(100).when(hardwareBuffer).getWidth();
+        doReturn(100).when(hardwareBuffer).getHeight();
     }
 
     /**
@@ -1217,7 +1237,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
             }
             if (mOrganizer != null) {
                 taskFragment.setTaskFragmentOrganizer(
-                        mOrganizer.getOrganizerToken(), 10000 /* pid */);
+                        mOrganizer.getOrganizerToken(), DEFAULT_TASK_FRAGMENT_ORGANIZER_UID,
+                        DEFAULT_TASK_FRAGMENT_ORGANIZER_PROCESS_NAME);
             }
             return taskFragment;
         }
@@ -1427,18 +1448,12 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mAtm = service;
             mWMService = mAtm.mWindowManager;
             mPowerManagerWrapper = powerManagerWrapper;
-            if (DEBUG_ENABLE_SHELL_DRAWER) {
-                mAtm.mTaskOrganizerController.setDeferTaskOrgCallbacksConsumer(Runnable::run);
-                mAtm.mTaskOrganizerController.registerTaskOrganizer(this);
-            }
+            mAtm.mTaskOrganizerController.setDeferTaskOrgCallbacksConsumer(Runnable::run);
+            mAtm.mTaskOrganizerController.registerTaskOrganizer(this);
         }
 
         void setRunnableWhenAddingSplashScreen(Runnable r) {
-            if (DEBUG_ENABLE_SHELL_DRAWER) {
-                mRunnableWhenAddingSplashScreen = r;
-            } else {
-                ((TestWindowManagerPolicy) mWMService.mPolicy).setRunnableWhenAddingSplashScreen(r);
-            }
+            mRunnableWhenAddingSplashScreen = r;
         }
 
         @Override
@@ -1604,7 +1619,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         }
     }
 
-    class TestTransitionPlayer extends ITransitionPlayer.Stub {
+    static class TestTransitionPlayer extends ITransitionPlayer.Stub {
         final TransitionController mController;
         final WindowOrganizerController mOrganizer;
         Transition mLastTransit = null;

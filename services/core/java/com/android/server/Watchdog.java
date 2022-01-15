@@ -675,7 +675,8 @@ public class Watchdog {
                 ArrayList<Integer> nativePids = getInterestingNativePids();
                 // Get critical event log before logging the half watchdog so that it doesn't
                 // occur in the log.
-                String criticalEvents = CriticalEventLog.getInstance().logLinesForAnrFile();
+                String criticalEvents =
+                        CriticalEventLog.getInstance().logLinesForSystemServerTraceFile();
                 CriticalEventLog.getInstance().logHalfWatchdog(subject);
 
                 // We've waited half the deadlock-detection interval.  Pull a stack
@@ -707,7 +708,8 @@ public class Watchdog {
 
             // Get critical event log before logging the watchdog so that it doesn't occur in the
             // log.
-            String criticalEvents = CriticalEventLog.getInstance().logLinesForAnrFile();
+            String criticalEvents =
+                    CriticalEventLog.getInstance().logLinesForSystemServerTraceFile();
             CriticalEventLog.getInstance().logWatchdog(subject, errorId);
 
             long anrTime = SystemClock.uptimeMillis();
