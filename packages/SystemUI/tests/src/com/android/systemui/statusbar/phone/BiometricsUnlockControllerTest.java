@@ -134,7 +134,7 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
                 .thenReturn(false);
         mBiometricUnlockController.onBiometricAuthenticated(UserHandle.USER_CURRENT,
                 BiometricSourceType.FINGERPRINT, true /* isStrongBiometric */);
-        verify(mStatusBarKeyguardViewManager).showBouncer(eq(false));
+        verify(mStatusBarKeyguardViewManager).showBouncer(anyBoolean());
         verify(mStatusBarKeyguardViewManager, never()).notifyKeyguardAuthenticated(anyBoolean());
         assertThat(mBiometricUnlockController.getMode())
                 .isEqualTo(BiometricUnlockController.MODE_SHOW_BOUNCER);
@@ -146,7 +146,7 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
                 .thenReturn(false);
         mBiometricUnlockController.onBiometricAuthenticated(UserHandle.USER_CURRENT,
                 BiometricSourceType.FINGERPRINT, false /* isStrongBiometric */);
-        verify(mStatusBarKeyguardViewManager).showBouncer(eq(false));
+        verify(mStatusBarKeyguardViewManager).showBouncer(anyBoolean());
         verify(mShadeController).animateCollapsePanels(anyInt(), anyBoolean(), anyBoolean(),
                 anyFloat());
         assertThat(mBiometricUnlockController.getMode())
@@ -265,12 +265,32 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
                 BiometricSourceType.FACE, true /* isStrongBiometric */);
 
         // Wake up before showing the bouncer
-        verify(mStatusBarKeyguardViewManager, never()).showBouncer(eq(false));
+        verify(mStatusBarKeyguardViewManager, never()).showBouncer(anyBoolean());
         mBiometricUnlockController.mWakefulnessObserver.onFinishedWakingUp();
 
-        verify(mStatusBarKeyguardViewManager).showBouncer(eq(false));
+        verify(mStatusBarKeyguardViewManager).showBouncer(anyBoolean());
         assertThat(mBiometricUnlockController.getMode())
                 .isEqualTo(BiometricUnlockController.MODE_SHOW_BOUNCER);
+    }
+
+    @Test
+    public void onBiometricAuthenticated_onLockScreen() {
+        // GIVEN not dozing
+        when(mUpdateMonitor.isDeviceInteractive()).thenReturn(true);
+
+        // WHEN we want to unlock collapse
+        mBiometricUnlockController.startWakeAndUnlock(
+                BiometricUnlockController.MODE_UNLOCK_COLLAPSING);
+
+        // THEN we collpase the panels and notify authenticated
+        verify(mShadeController).animateCollapsePanels(
+                /* flags */ anyInt(),
+                /* force */ eq(true),
+                /* delayed */ eq(false),
+                /* speedUpFactor */ anyFloat()
+        );
+        verify(mStatusBarKeyguardViewManager).notifyKeyguardAuthenticated(
+                /* strongAuth */ eq(false));
     }
 
     @Test

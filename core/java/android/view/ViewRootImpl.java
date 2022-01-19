@@ -802,11 +802,7 @@ public final class ViewRootImpl implements ViewParent,
                 context);
         mCompatibleVisibilityInfo = new SystemUiVisibilityInfo();
         mAccessibilityManager = AccessibilityManager.getInstance(context);
-        mAccessibilityManager.addAccessibilityStateChangeListener(
-                mAccessibilityInteractionConnectionManager, mHandler);
         mHighContrastTextManager = new HighContrastTextManager();
-        mAccessibilityManager.addHighTextContrastStateChangeListener(
-                mHighContrastTextManager, mHandler);
         mViewConfiguration = ViewConfiguration.get(context);
         mDensity = context.getResources().getDisplayMetrics().densityDpi;
         mNoncompatDensity = context.getResources().getDisplayMetrics().noncompatDensityDpi;
@@ -1006,8 +1002,6 @@ public final class ViewRootImpl implements ViewParent,
                 mView = view;
 
                 mAttachInfo.mDisplayState = mDisplay.getState();
-                mDisplayManager.registerDisplayListener(mDisplayListener, mHandler);
-
                 mViewLayoutDirectionInitial = mView.getRawLayoutDirection();
                 mFallbackEventHandler.setView(view);
                 mWindowAttributes.copyFrom(attrs);
@@ -1200,6 +1194,7 @@ public final class ViewRootImpl implements ViewParent,
                             "Unable to add window -- unknown error code " + res);
                 }
 
+                registerListeners();
                 if ((res & WindowManagerGlobal.ADD_FLAG_USE_BLAST) != 0) {
                     mUseBLASTAdapter = true;
                 }
@@ -1254,6 +1249,28 @@ public final class ViewRootImpl implements ViewParent,
                 mPendingInputEventQueueLengthCounterName = "aq:pending:" + counterSuffix;
             }
         }
+    }
+
+    /**
+     * Register any kind of listeners if setView was success.
+     */
+    private void registerListeners() {
+        mAccessibilityManager.addAccessibilityStateChangeListener(
+                mAccessibilityInteractionConnectionManager, mHandler);
+        mAccessibilityManager.addHighTextContrastStateChangeListener(
+                mHighContrastTextManager, mHandler);
+        mDisplayManager.registerDisplayListener(mDisplayListener, mHandler);
+    }
+
+    /**
+     * Unregister all listeners while detachedFromWindow.
+     */
+    private void unregisterListeners() {
+        mAccessibilityManager.removeAccessibilityStateChangeListener(
+                mAccessibilityInteractionConnectionManager);
+        mAccessibilityManager.removeHighTextContrastStateChangeListener(
+                mHighContrastTextManager);
+        mDisplayManager.unregisterDisplayListener(mDisplayListener);
     }
 
     private void setTag() {
@@ -2839,8 +2856,13 @@ public final class ViewRootImpl implements ViewParent,
                     }
                 }
 
+                final boolean surfaceControlChanged =
+                        (relayoutResult & RELAYOUT_RES_SURFACE_CHANGED)
+                                == RELAYOUT_RES_SURFACE_CHANGED;
+
                 if (mSurfaceControl.isValid()) {
-                    updateOpacity(mWindowAttributes, dragResizing);
+                    updateOpacity(mWindowAttributes, dragResizing,
+                            surfaceControlChanged /*forceUpdate */);
                 }
 
                 if (DEBUG_LAYOUT) Log.v(mTag, "relayout: frame=" + frame.toShortString()
@@ -2875,9 +2897,7 @@ public final class ViewRootImpl implements ViewParent,
                 // RELAYOUT_RES_SURFACE_CHANGED since it should indicate that WMS created a new
                 // SurfaceControl.
                 surfaceReplaced = (surfaceGenerationId != mSurface.getGenerationId()
-                        || (relayoutResult & RELAYOUT_RES_SURFACE_CHANGED)
-                        == RELAYOUT_RES_SURFACE_CHANGED)
-                        && mSurface.isValid();
+                        || surfaceControlChanged) && mSurface.isValid();
                 if (surfaceReplaced) {
                     mSurfaceSequenceId++;
                 }
@@ -4979,10 +4999,6 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         mAccessibilityInteractionConnectionManager.ensureNoConnection();
-        mAccessibilityManager.removeAccessibilityStateChangeListener(
-                mAccessibilityInteractionConnectionManager);
-        mAccessibilityManager.removeHighTextContrastStateChangeListener(
-                mHighContrastTextManager);
         removeSendWindowContentChangedCallback();
 
         destroyHardwareRenderer();
@@ -5015,8 +5031,7 @@ public final class ViewRootImpl implements ViewParent,
             mInputEventReceiver = null;
         }
 
-        mDisplayManager.unregisterDisplayListener(mDisplayListener);
-
+        unregisterListeners();
         unscheduleTraversals();
     }
 
@@ -7833,7 +7848,8 @@ public final class ViewRootImpl implements ViewParent,
         return relayoutResult;
     }
 
-    private void updateOpacity(WindowManager.LayoutParams params, boolean dragResizing) {
+    private void updateOpacity(WindowManager.LayoutParams params, boolean dragResizing,
+            boolean forceUpdate) {
         boolean opaque = false;
 
         if (!PixelFormat.formatHasAlpha(params.format)
@@ -7849,7 +7865,7 @@ public final class ViewRootImpl implements ViewParent,
             opaque = true;
         }
 
-        if (mIsSurfaceOpaque == opaque) {
+        if (!forceUpdate && mIsSurfaceOpaque == opaque) {
             return;
         }
 
@@ -9503,6 +9519,7 @@ public final class ViewRootImpl implements ViewParent,
 
         ScrollCaptureResponse.Builder response = new ScrollCaptureResponse.Builder();
         response.setWindowTitle(getTitle().toString());
+        response.setPackageName(mContext.getPackageName());
 
         StringWriter writer =  new StringWriter();
         IndentingPrintWriter pw = new IndentingPrintWriter(writer);

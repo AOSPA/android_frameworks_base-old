@@ -20,6 +20,7 @@ import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
 import android.app.WallpaperManager;
+import android.content.res.Resources;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -30,6 +31,7 @@ import com.android.keyguard.clock.ClockManager;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.plugins.ClockPlugin;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -65,17 +67,21 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final BroadcastDispatcher mBroadcastDispatcher;
     private final BatteryController mBatteryController;
     private final LockscreenSmartspaceController mSmartspaceController;
+    private final Resources mResources;
 
     /**
      * Clock for both small and large sizes
      */
     private AnimatableClockController mClockViewController;
-    private FrameLayout mClockFrame;
+    private FrameLayout mClockFrame; // top aligned clock
     private AnimatableClockController mLargeClockViewController;
-    private FrameLayout mLargeClockFrame;
+    private FrameLayout mLargeClockFrame; // centered clock
 
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final KeyguardBypassController mBypassController;
+
+    private int mLargeClockTopMargin = 0;
+    private int mKeyguardClockTopMargin = 0;
 
     /**
      * Listener for changes to the color palette.
@@ -113,7 +119,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             KeyguardBypassController bypassController,
             LockscreenSmartspaceController smartspaceController,
             KeyguardUnlockAnimationController keyguardUnlockAnimationController,
-            SmartspaceTransitionController smartspaceTransitionController) {
+            SmartspaceTransitionController smartspaceTransitionController,
+            @Main Resources resources) {
         super(keyguardClockSwitch);
         mStatusBarStateController = statusBarStateController;
         mColorExtractor = colorExtractor;
@@ -125,6 +132,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mBypassController = bypassController;
         mSmartspaceController = smartspaceController;
+        mResources = resources;
 
         mKeyguardUnlockAnimationController = keyguardUnlockAnimationController;
         mSmartspaceTransitionController = smartspaceTransitionController;
@@ -154,7 +162,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
                         mBroadcastDispatcher,
                         mBatteryController,
                         mKeyguardUpdateMonitor,
-                        mBypassController);
+                        mBypassController,
+                        mResources);
         mClockViewController.init();
 
         mLargeClockViewController =
@@ -164,7 +173,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
                         mBroadcastDispatcher,
                         mBatteryController,
                         mKeyguardUpdateMonitor,
-                        mBypassController);
+                        mBypassController,
+                        mResources);
         mLargeClockViewController.init();
     }
 
@@ -175,6 +185,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
         mColorExtractor.addOnColorsChangedListener(mColorsListener);
         mView.updateColors(getGradientColors());
+        mKeyguardClockTopMargin =
+                mView.getResources().getDimensionPixelSize(R.dimen.keyguard_clock_top_margin);
 
         if (mOnlyClock) {
             View ksa = mView.findViewById(R.id.keyguard_status_area);
@@ -187,36 +199,41 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
         updateAodIcons();
 
+        View ksa = mView.findViewById(R.id.keyguard_status_area);
+
+        // Place smartspace view below normal clock...
+        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
+                MATCH_PARENT, WRAP_CONTENT);
+        lp.addRule(RelativeLayout.BELOW, R.id.lockscreen_clock_view);
+
         if (mSmartspaceController.isEnabled()) {
             mSmartspaceView = mSmartspaceController.buildAndConnectView(mView);
 
-            View ksa = mView.findViewById(R.id.keyguard_status_area);
             int ksaIndex = mView.indexOfChild(ksa);
             ksa.setVisibility(View.GONE);
-
-            // Place smartspace view below normal clock...
-            RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
-                    MATCH_PARENT, WRAP_CONTENT);
-            lp.addRule(RelativeLayout.BELOW, R.id.lockscreen_clock_view);
-
             mView.addView(mSmartspaceView, ksaIndex, lp);
-            int startPadding = getContext().getResources()
-                    .getDimensionPixelSize(R.dimen.below_clock_padding_start);
-            int endPadding = getContext().getResources()
-                    .getDimensionPixelSize(R.dimen.below_clock_padding_end);
-            mSmartspaceView.setPaddingRelative(startPadding, 0, endPadding, 0);
-
-            updateClockLayout();
-
-            View nic = mView.findViewById(
-                    R.id.left_aligned_notification_icon_container);
-            lp = (RelativeLayout.LayoutParams) nic.getLayoutParams();
-            lp.addRule(RelativeLayout.BELOW, mSmartspaceView.getId());
-            nic.setLayoutParams(lp);
-
-            mView.setSmartspaceView(mSmartspaceView);
-            mSmartspaceTransitionController.setLockscreenSmartspace(mSmartspaceView);
+        } else {
+            // Use KSA as the smartspace view and apply the same layout rules to it
+            mSmartspaceView = ksa;
+            ksa.setLayoutParams(lp);
         }
+
+        int startPadding = getContext().getResources()
+                .getDimensionPixelSize(R.dimen.below_clock_padding_start);
+        int endPadding = getContext().getResources()
+                .getDimensionPixelSize(R.dimen.below_clock_padding_end);
+        mSmartspaceView.setPaddingRelative(startPadding, 0, endPadding, 0);
+
+        updateClockLayout();
+
+        View nic = mView.findViewById(
+                R.id.left_aligned_notification_icon_container);
+        lp = (RelativeLayout.LayoutParams) nic.getLayoutParams();
+        lp.addRule(RelativeLayout.BELOW, mSmartspaceView.getId());
+        nic.setLayoutParams(lp);
+
+        mView.setSmartspaceView(mSmartspaceView);
+        mSmartspaceTransitionController.setLockscreenSmartspace(mSmartspaceView);
     }
 
     int getNotificationIconAreaHeight() {
@@ -249,17 +266,22 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
      */
     public void onDensityOrFontScaleChanged() {
         mView.onDensityOrFontScaleChanged();
+        mKeyguardClockTopMargin =
+                mView.getResources().getDimensionPixelSize(R.dimen.keyguard_clock_top_margin);
 
         updateClockLayout();
     }
 
     private void updateClockLayout() {
-        if (mSmartspaceController.isEnabled()) {
+        if (mSmartspaceView != null) {
             RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(MATCH_PARENT,
                     MATCH_PARENT);
-            lp.topMargin = getContext().getResources().getDimensionPixelSize(
+            mLargeClockTopMargin = getContext().getResources().getDimensionPixelSize(
                     R.dimen.keyguard_large_clock_top_margin);
+            lp.topMargin = mLargeClockTopMargin;
             mLargeClockFrame.setLayoutParams(lp);
+        } else {
+            mLargeClockTopMargin = 0;
         }
     }
 
@@ -367,6 +389,28 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             mClockViewController.refreshFormat();
             mLargeClockViewController.refreshFormat();
         }
+    }
+
+    /**
+     * Get y-bottom position of the currently visible clock on the keyguard.
+     * We can't directly getBottom() because clock changes positions in AOD for burn-in
+     */
+    int getClockBottom(int statusBarHeaderHeight) {
+        if (mLargeClockFrame.getVisibility() == View.VISIBLE) {
+            View clock = mLargeClockFrame.findViewById(
+                    com.android.systemui.R.id.animatable_clock_view_large);
+            int frameHeight = mLargeClockFrame.getHeight();
+            int clockHeight = clock.getHeight();
+            return frameHeight / 2 + clockHeight / 2;
+        } else {
+            return mClockFrame.findViewById(
+                    com.android.systemui.R.id.animatable_clock_view).getHeight()
+                    + statusBarHeaderHeight + mKeyguardClockTopMargin;
+        }
+    }
+
+    boolean isClockTopAligned() {
+        return mLargeClockFrame.getVisibility() != View.VISIBLE;
     }
 
     private void updateAodIcons() {
