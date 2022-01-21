@@ -693,6 +693,10 @@ void FilterClientCallbackImpl::getTsRecordEvent(jobjectArray &arr, const int siz
         sc = tsRecordEvent.scIndexMask.get<DemuxFilterScIndexMask::Tag::scIndex>();
     } else if (tsRecordEvent.scIndexMask.getTag() == DemuxFilterScIndexMask::Tag::scHevc) {
         sc = tsRecordEvent.scIndexMask.get<DemuxFilterScIndexMask::Tag::scHevc>();
+    } else if (tsRecordEvent.scIndexMask.getTag() == DemuxFilterScIndexMask::Tag::scAvc) {
+        sc = tsRecordEvent.scIndexMask.get<DemuxFilterScIndexMask::Tag::scAvc>();
+        // Java uses the values defined by HIDL HAL. Left shift 4 bits.
+        sc = sc << 4;
     }
 
     jint ts = tsRecordEvent.tsIndexMask;
@@ -3391,8 +3395,11 @@ static DemuxFilterAvSettings getFilterAvSettings(JNIEnv *env, const jobject& set
     jclass clazz = env->FindClass("android/media/tv/tuner/filter/AvSettings");
     bool isPassthrough =
             env->GetBooleanField(settings, env->GetFieldID(clazz, "mIsPassthrough", "Z"));
-    DemuxFilterAvSettings filterAvSettings {
-        .isPassthrough = isPassthrough,
+    bool isSecureMemory =
+            env->GetBooleanField(settings, env->GetFieldID(clazz, "mUseSecureMemory", "Z"));
+    DemuxFilterAvSettings filterAvSettings{
+            .isPassthrough = isPassthrough,
+            .isSecureMemory = isSecureMemory,
     };
     return filterAvSettings;
 }
@@ -3440,6 +3447,11 @@ static DemuxFilterRecordSettings getFilterRecordSettings(JNIEnv *env, const jobj
             env->GetIntField(settings, env->GetFieldID(clazz, "mScIndexType", "I")));
     jint scIndexMask = env->GetIntField(settings, env->GetFieldID(clazz, "mScIndexMask", "I"));
 
+    // Backward compatibility for S- apps.
+    if (scIndexType == DemuxRecordScIndexType::SC &&
+        scIndexMask > static_cast<int32_t>(DemuxScIndex::SEQUENCE)) {
+        scIndexType = DemuxRecordScIndexType::SC_AVC;
+    }
     DemuxFilterRecordSettings filterRecordSettings {
         .tsIndexMask = tsIndexMask,
         .scIndexType = scIndexType,
@@ -3448,6 +3460,9 @@ static DemuxFilterRecordSettings getFilterRecordSettings(JNIEnv *env, const jobj
         filterRecordSettings.scIndexMask.set<DemuxFilterScIndexMask::Tag::scIndex>(scIndexMask);
     } else if (scIndexType == DemuxRecordScIndexType::SC_HEVC) {
         filterRecordSettings.scIndexMask.set<DemuxFilterScIndexMask::Tag::scHevc>(scIndexMask);
+    } else if (scIndexType == DemuxRecordScIndexType::SC_AVC) {
+        // Java uses the values defined by HIDL HAL. Right shift 4 bits.
+        filterRecordSettings.scIndexMask.set<DemuxFilterScIndexMask::Tag::scAvc>(scIndexMask >> 4);
     }
     return filterRecordSettings;
 }
@@ -3881,8 +3896,8 @@ static jint android_media_tv_Tuner_close_filter(JNIEnv *env, jobject filter) {
 
     Result r = filterClient->close();
     filterClient->decStrong(filter);
-       env->SetLongField(filter, gFields.sharedFilterContext, 0);
     if (shared) {
+        env->SetLongField(filter, gFields.sharedFilterContext, 0);
     } else {
         env->SetLongField(filter, gFields.filterContext, 0);
     }
@@ -3890,22 +3905,22 @@ static jint android_media_tv_Tuner_close_filter(JNIEnv *env, jobject filter) {
     return (jint)r;
 }
 
-static jstring android_media_tv_Tuner_create_shared_filter(JNIEnv *env, jobject filter) {
+static jstring android_media_tv_Tuner_acquire_shared_filter_token(JNIEnv *env, jobject filter) {
     sp<FilterClient> filterClient = getFilterClient(env, filter);
     if (filterClient == nullptr) {
         jniThrowException(env, "java/lang/IllegalStateException",
-                          "Failed to create shared filter: filter client not found");
+                          "Failed to acquire shared filter token: filter client not found");
         return nullptr;
     }
 
-    string token = filterClient->createSharedFilter();
+    string token = filterClient->acquireSharedFilterToken();
     if (token.empty()) {
         return nullptr;
     }
     return env->NewStringUTF(token.data());
 }
 
-static void android_media_tv_Tuner_release_shared_filter(
+static void android_media_tv_Tuner_free_shared_filter_token(
         JNIEnv *env, jobject filter, jstring token) {
     sp<FilterClient> filterClient = getFilterClient(env, filter);
     if (filterClient == nullptr) {
@@ -3915,7 +3930,7 @@ static void android_media_tv_Tuner_release_shared_filter(
     }
 
     std::string filterToken(env->GetStringUTFChars(token, nullptr));
-    filterClient->releaseSharedFilter(filterToken);
+    filterClient->freeSharedFilterToken(filterToken);
 }
 
 static sp<TimeFilterClient> getTimeFilterClient(JNIEnv *env, jobject filter) {
@@ -4408,10 +4423,10 @@ static const JNINativeMethod gFilterMethods[] = {
     { "nativeFlushFilter", "()I", (void *)android_media_tv_Tuner_flush_filter },
     { "nativeRead", "([BJJ)I", (void *)android_media_tv_Tuner_read_filter_fmq },
     { "nativeClose", "()I", (void *)android_media_tv_Tuner_close_filter },
-    {"nativeCreateSharedFilter", "()Ljava/lang/String;",
-            (void *)android_media_tv_Tuner_create_shared_filter},
-    {"nativeReleaseSharedFilter", "(Ljava/lang/String;)V",
-            (void *)android_media_tv_Tuner_release_shared_filter},
+    {"nativeAcquireSharedFilterToken", "()Ljava/lang/String;",
+            (void *)android_media_tv_Tuner_acquire_shared_filter_token},
+    {"nativeFreeSharedFilterToken", "(Ljava/lang/String;)V",
+            (void *)android_media_tv_Tuner_free_shared_filter_token},
 };
 
 static const JNINativeMethod gSharedFilterMethods[] = {

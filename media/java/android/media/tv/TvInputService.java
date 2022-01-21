@@ -53,6 +53,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
+import android.view.ViewRootImpl;
 import android.view.WindowManager;
 import android.view.accessibility.CaptioningManager;
 import android.widget.FrameLayout;
@@ -827,6 +828,27 @@ public abstract class TvInputService extends Service {
         }
 
         /**
+         * Notifies AIT info updated.
+         * @hide
+         */
+        public void notifyAitInfoUpdated(@NonNull final AitInfo aitInfo) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) Log.d(TAG, "notifyAitInfoUpdated");
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onAitInfoUpdated(aitInfo);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in notifyAitInfoUpdated", e);
+                    }
+                }
+            });
+        }
+
+        /**
          * Assigns a size and position to the surface passed in {@link #onSetSurface}. The position
          * is relative to the overlay view that sits on top of this surface.
          *
@@ -1017,6 +1039,14 @@ public abstract class TvInputService extends Service {
          */
         public boolean onSelectTrack(int type, @Nullable String trackId) {
             return false;
+        }
+
+        /**
+         * Enables or disables interactive app notification.
+         * @param enabled {@code true} to enable, {@code false} to disable.
+         * @hide
+         */
+        public void onSetIAppNotificationEnabled(boolean enabled) {
         }
 
         /**
@@ -1368,6 +1398,13 @@ public abstract class TvInputService extends Service {
         }
 
         /**
+         * Calls {@link #onSetIAppNotificationEnabled}.
+         */
+        void setIAppNotificationEnabled(boolean enabled) {
+            onSetIAppNotificationEnabled(enabled);
+        }
+
+        /**
          * Calls {@link #onAppPrivateCommand}.
          */
         void appPrivateCommand(String action, Bundle data) {
@@ -1581,7 +1618,8 @@ public abstract class TvInputService extends Service {
                 return TvInputManager.Session.DISPATCH_NOT_HANDLED;
             }
             if (!mOverlayViewContainer.hasWindowFocus()) {
-                mOverlayViewContainer.getViewRootImpl().windowFocusChanged(true, true);
+                ViewRootImpl viewRoot = mOverlayViewContainer.getViewRootImpl();
+                viewRoot.windowFocusChanged(true);
             }
             if (isNavigationKey && mOverlayViewContainer.hasFocusable()) {
                 // If mOverlayView has focusable views, navigation key events should be always

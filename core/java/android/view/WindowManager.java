@@ -129,17 +129,15 @@ import java.util.function.Consumer;
 
 /**
  * The interface that apps use to talk to the window manager.
- * </p><p>
- * Each window manager instance is bound to a particular {@link Display}.
- * To obtain a {@link WindowManager} for a different display, use
- * {@link Context#createDisplayContext} to obtain a {@link Context} for that
- * display, then use <code>Context.getSystemService(Context.WINDOW_SERVICE)</code>
- * to get the WindowManager.
- * </p><p>
- * The simplest way to show a window on another display is to create a
- * {@link Presentation}.  The presentation will automatically obtain a
- * {@link WindowManager} and {@link Context} for that display.
- * </p>
+ * <p>
+ * Each window manager instance is bound to a {@link Display}. To obtain the
+ * <code>WindowManager</code> associated with a display,
+ * call {@link Context#createWindowContext(Display, int, Bundle)} to get the display's UI context,
+ * then call {@link Context#getSystemService(String)} or {@link Context#getSystemService(Class)} on
+ * the UI context.
+ * <p>
+ * The simplest way to show a window on a particular display is to create a {@link Presentation},
+ * which automatically obtains a <code>WindowManager</code> and context for the display.
  */
 @SystemService(Context.WINDOW_SERVICE)
 public interface WindowManager extends ViewManager {
@@ -3574,6 +3572,17 @@ public interface WindowManager extends ViewManager {
         public Insets providedInternalImeInsets = Insets.NONE;
 
         /**
+         * If specified, the frame that used to calculate relative {@link RoundedCorner} will be
+         * the window frame of this window minus the insets that this window provides.
+         *
+         * Task bar will draw fake rounded corners above itself, so we need this insets to calculate
+         * correct rounded corners for this window.
+         *
+         * @hide
+         */
+        public boolean insetsRoundedCornerFrame = false;
+
+        /**
          * {@link LayoutParams} to be applied to the window when layout with a assigned rotation.
          * This will make layout during rotation change smoothly.
          *
@@ -3948,6 +3957,7 @@ public interface WindowManager extends ViewManager {
             }
             providedInternalInsets.writeToParcel(out, 0 /* parcelableFlags */);
             providedInternalImeInsets.writeToParcel(out, 0 /* parcelableFlags */);
+            out.writeBoolean(insetsRoundedCornerFrame);
             if (paramsForRotation != null) {
                 checkNonRecursiveParams();
                 out.writeInt(paramsForRotation.length);
@@ -4028,6 +4038,7 @@ public interface WindowManager extends ViewManager {
             }
             providedInternalInsets = Insets.CREATOR.createFromParcel(in);
             providedInternalImeInsets = Insets.CREATOR.createFromParcel(in);
+            insetsRoundedCornerFrame = in.readBoolean();
             int paramsForRotationLength = in.readInt();
             if (paramsForRotationLength > 0) {
                 paramsForRotation = new LayoutParams[paramsForRotationLength];
@@ -4339,6 +4350,11 @@ public interface WindowManager extends ViewManager {
                 changes |= LAYOUT_CHANGED;
             }
 
+            if (insetsRoundedCornerFrame != o.insetsRoundedCornerFrame) {
+                insetsRoundedCornerFrame = o.insetsRoundedCornerFrame;
+                changes |= LAYOUT_CHANGED;
+            }
+
             if (!Arrays.equals(paramsForRotation, o.paramsForRotation)) {
                 paramsForRotation = o.paramsForRotation;
                 checkNonRecursiveParams();
@@ -4547,6 +4563,10 @@ public interface WindowManager extends ViewManager {
             if (!providedInternalImeInsets.equals(Insets.NONE)) {
                 sb.append(" providedInternalImeInsets=");
                 sb.append(providedInternalImeInsets);
+            }
+            if (insetsRoundedCornerFrame) {
+                sb.append(" insetsRoundedCornerFrame=");
+                sb.append(insetsRoundedCornerFrame);
             }
             if (paramsForRotation != null && paramsForRotation.length != 0) {
                 sb.append(System.lineSeparator());
@@ -4769,6 +4789,16 @@ public interface WindowManager extends ViewManager {
                 default:
                     return Integer.toString(inputFeature);
             }
+        }
+
+        /**
+         * True if the window should consume all pointer events itself, regardless of whether they
+         * are inside of the window. If the window is modal, its touchable region will expand to the
+         * size of its task.
+         * @hide
+         */
+        public boolean isModal() {
+            return (flags & (FLAG_NOT_TOUCH_MODAL | FLAG_NOT_FOCUSABLE)) == 0;
         }
     }
 

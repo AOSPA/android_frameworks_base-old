@@ -20,6 +20,8 @@ import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 
 import android.Manifest;
+import android.accounts.Account;
+import android.accounts.AccountManager;
 import android.annotation.ColorRes;
 import android.annotation.DrawableRes;
 import android.annotation.NonNull;
@@ -44,6 +46,7 @@ import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
+import android.content.pm.PackagePartitions;
 import android.content.pm.ShortcutServiceInternal;
 import android.content.pm.UserInfo;
 import android.content.pm.UserInfo.UserInfoFlag;
@@ -85,6 +88,7 @@ import android.provider.Settings;
 import android.security.GateKeeper;
 import android.service.gatekeeper.IGateKeeperService;
 import android.stats.devicepolicy.DevicePolicyEnums;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
@@ -2393,6 +2397,25 @@ public class UserManagerService extends IUserManager.Stub {
         return count;
     }
 
+    /**
+     * Returns whether more users of the given type can be added (based on how many users of that
+     * type already exist).
+     */
+    @Override
+    public boolean canAddMoreUsersOfType(String userType) {
+        checkManageOrCreateUsersPermission("check if more users can be added.");
+        final UserTypeDetails userTypeDetails = mUserTypes.get(userType);
+        return userTypeDetails != null && canAddMoreUsersOfType(userTypeDetails);
+    }
+
+    /** Returns whether the creation of users of the given user type is enabled on this device. */
+    @Override
+    public boolean isUserTypeEnabled(String userType) {
+        checkManageOrCreateUsersPermission("check if user type is enabled.");
+        final UserTypeDetails userTypeDetails = mUserTypes.get(userType);
+        return userTypeDetails != null && userTypeDetails.isEnabled();
+    }
+
     @Override
     public boolean canAddMoreManagedProfiles(@UserIdInt int userId, boolean allowedToRemoveOne) {
         return canAddMoreProfilesToUser(UserManager.USER_TYPE_PROFILE_MANAGED, userId,
@@ -3512,6 +3535,39 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
+    @Override
+    public UserHandle createUserWithAttributes(
+            String userName, String userType, @UserInfoFlag int flags,
+            Bitmap userIcon,
+            String accountName, String accountType, PersistableBundle accountOptions) {
+        checkManageOrCreateUsersPermission(flags);
+
+        if (someUserHasAccountNoChecks(accountName, accountType)) {
+            throw new ServiceSpecificException(
+                    UserManager.USER_OPERATION_ERROR_USER_ACCOUNT_ALREADY_EXISTS);
+        }
+
+        UserInfo userInfo;
+        try {
+            userInfo = createUserInternal(userName, userType, flags,
+                    UserHandle.USER_NULL, null);
+
+            if (userInfo == null) {
+                throw new ServiceSpecificException(UserManager.USER_OPERATION_ERROR_UNKNOWN);
+            }
+        } catch (UserManager.CheckedUserOperationException e) {
+            throw e.toServiceSpecificException();
+        }
+
+        if (userIcon != null) {
+            mLocalService.setUserIcon(userInfo.id, userIcon);
+        }
+
+        setSeedAccountDataNoChecks(userInfo.id, accountName, accountType, accountOptions, true);
+
+        return userInfo.getUserHandle();
+    }
+
     private UserInfo createUserInternal(@Nullable String name, @NonNull String userType,
             @UserInfoFlag int flags, @UserIdInt int parentId,
             @Nullable String[] disallowedPackages)
@@ -3680,7 +3736,7 @@ public class UserManagerService extends IUserManager.Stub {
                     userInfo.creationTime = getCreationTime();
                     userInfo.partial = true;
                     userInfo.preCreated = preCreate;
-                    userInfo.lastLoggedInFingerprint = Build.FINGERPRINT;
+                    userInfo.lastLoggedInFingerprint = PackagePartitions.FINGERPRINT;
                     if (userTypeDetails.hasBadge() && parentId != UserHandle.USER_NULL) {
                         userInfo.profileBadge = getFreeProfileBadgeLU(parentId, userType);
                     }
@@ -4811,7 +4867,8 @@ public class UserManagerService extends IUserManager.Stub {
         t.traceBegin("onBeforeStartUser-" + userId);
         final int userSerial = userInfo.serialNumber;
         // Migrate only if build fingerprints mismatch
-        boolean migrateAppsData = !Build.FINGERPRINT.equals(userInfo.lastLoggedInFingerprint);
+        boolean migrateAppsData = !PackagePartitions.FINGERPRINT.equals(
+                userInfo.lastLoggedInFingerprint);
         t.traceBegin("prepareUserData");
         mUserDataPreparer.prepareUserData(userId, userSerial, StorageManager.FLAG_STORAGE_DE);
         t.traceEnd();
@@ -4841,7 +4898,8 @@ public class UserManagerService extends IUserManager.Stub {
         }
         final int userSerial = userInfo.serialNumber;
         // Migrate only if build fingerprints mismatch
-        boolean migrateAppsData = !Build.FINGERPRINT.equals(userInfo.lastLoggedInFingerprint);
+        boolean migrateAppsData = !PackagePartitions.FINGERPRINT.equals(
+                userInfo.lastLoggedInFingerprint);
 
         final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
         t.traceBegin("prepareUserData-" + userId);
@@ -4885,7 +4943,7 @@ public class UserManagerService extends IUserManager.Stub {
         if (now > EPOCH_PLUS_30_YEARS) {
             userData.info.lastLoggedInTime = now;
         }
-        userData.info.lastLoggedInFingerprint = Build.FINGERPRINT;
+        userData.info.lastLoggedInFingerprint = PackagePartitions.FINGERPRINT;
         scheduleWriteUser(userData);
     }
 
@@ -4934,7 +4992,12 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public void setSeedAccountData(@UserIdInt int userId, String accountName, String accountType,
             PersistableBundle accountOptions, boolean persist) {
-        checkManageUsersPermission("Require MANAGE_USERS permission to set user seed data");
+        checkManageUsersPermission("set user seed account data");
+        setSeedAccountDataNoChecks(userId, accountName, accountType, accountOptions, persist);
+    }
+
+    private void setSeedAccountDataNoChecks(@UserIdInt int userId, String accountName,
+            String accountType, PersistableBundle accountOptions, boolean persist) {
         synchronized (mPackagesLock) {
             final UserData userData;
             synchronized (mUsersLock) {
@@ -4996,14 +5059,18 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public boolean someUserHasSeedAccount(String accountName, String accountType)
-            throws RemoteException {
-        checkManageUsersPermission("Cannot check seed account information");
+    public boolean someUserHasSeedAccount(String accountName, String accountType) {
+        checkManageUsersPermission("check seed account information");
+        return someUserHasSeedAccountNoChecks(accountName, accountType);
+    }
+
+    private boolean someUserHasSeedAccountNoChecks(String accountName, String accountType) {
         synchronized (mUsersLock) {
             final int userSize = mUsers.size();
             for (int i = 0; i < userSize; i++) {
                 final UserData data = mUsers.valueAt(i);
                 if (data.info.isInitialized()) continue;
+                if (mRemovingUserIds.get(data.info.id)) continue;
                 if (data.seedAccountName == null || !data.seedAccountName.equals(accountName)) {
                     continue;
                 }
@@ -5014,6 +5081,25 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean someUserHasAccount(String accountName, String accountType) {
+        checkManageOrCreateUsersPermission("check seed account information");
+        return someUserHasAccountNoChecks(accountName, accountType);
+    }
+
+    private boolean someUserHasAccountNoChecks(
+            String accountName, String accountType) {
+        if (TextUtils.isEmpty(accountName) || TextUtils.isEmpty(accountType)) {
+            return false;
+        }
+
+        final Account account = new Account(accountName, accountType);
+
+        return Binder.withCleanCallingIdentity(() ->
+                AccountManager.get(mContext).someUserHasAccount(account)
+                        || someUserHasSeedAccountNoChecks(accountName, accountType));
     }
 
     @Override

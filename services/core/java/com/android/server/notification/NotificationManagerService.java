@@ -151,6 +151,7 @@ import android.app.NotificationHistory.HistoricalNotification;
 import android.app.NotificationManager;
 import android.app.NotificationManager.Policy;
 import android.app.PendingIntent;
+import android.app.RemoteServiceException.BadForegroundServiceNotificationException;
 import android.app.StatsManager;
 import android.app.StatusBarManager;
 import android.app.UriGrantsManager;
@@ -1265,10 +1266,11 @@ public class NotificationManagerService extends SystemService {
                 // Still crash for foreground services, preventing the not-crash behaviour abused
                 // by apps to give us a garbage notification and silently start a fg service.
                 Binder.withCleanCallingIdentity(
-                        () -> mAm.crashApplication(uid, initialPid, pkg, -1,
+                        () -> mAm.crashApplicationWithType(uid, initialPid, pkg, -1,
                             "Bad notification(tag=" + tag + ", id=" + id + ") posted from package "
                                 + pkg + ", crashing app(uid=" + uid + ", pid=" + initialPid + "): "
-                                + message, true /* force */));
+                                + message, true /* force */,
+                                BadForegroundServiceNotificationException.TYPE_ID));
             }
         }
 
@@ -4456,13 +4458,14 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void requestBindListener(ComponentName component) {
             checkCallerIsSystemOrSameApp(component.getPackageName());
+            int uid = Binder.getCallingUid();
             final long identity = Binder.clearCallingIdentity();
             try {
                 ManagedServices manager =
                         mAssistants.isComponentEnabledForCurrentProfiles(component)
                         ? mAssistants
                         : mListeners;
-                manager.setComponentState(component, true);
+                manager.setComponentState(component, UserHandle.getUserId(uid), true);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -4470,12 +4473,14 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void requestUnbindListener(INotificationListener token) {
+            int uid = Binder.getCallingUid();
             final long identity = Binder.clearCallingIdentity();
             try {
                 // allow bound services to disable themselves
                 synchronized (mNotificationLock) {
                     final ManagedServiceInfo info = mListeners.checkServiceTokenLocked(token);
-                    info.getOwner().setComponentState(info.component, false);
+                    info.getOwner().setComponentState(
+                            info.component, UserHandle.getUserId(uid), false);
                 }
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -4967,11 +4972,12 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void requestUnbindProvider(IConditionProvider provider) {
+            int uid = Binder.getCallingUid();
             final long identity = Binder.clearCallingIdentity();
             try {
                 // allow bound services to disable themselves
                 final ManagedServiceInfo info = mConditionProviders.checkServiceToken(provider);
-                info.getOwner().setComponentState(info.component, false);
+                info.getOwner().setComponentState(info.component, UserHandle.getUserId(uid), false);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -4980,9 +4986,10 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void requestBindProvider(ComponentName component) {
             checkCallerIsSystemOrSameApp(component.getPackageName());
+            int uid = Binder.getCallingUid();
             final long identity = Binder.clearCallingIdentity();
             try {
-                mConditionProviders.setComponentState(component, true);
+                mConditionProviders.setComponentState(component, UserHandle.getUserId(uid), true);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -5066,7 +5073,7 @@ public class NotificationManagerService extends SystemService {
             final DumpFilter filter = DumpFilter.parseFromArguments(args);
             final long token = Binder.clearCallingIdentity();
             try {
-                final ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions =
+                final ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> pkgPermissions =
                         getAllUsersNotificationPermissions();
                 if (filter.stats) {
                     dumpJson(pw, filter, pkgPermissions);
@@ -5904,17 +5911,18 @@ public class NotificationManagerService extends SystemService {
     // Returns a single map containing that info keyed by (uid, package name) for all users.
     // Because this calls into mPermissionHelper, this method must never be called with a lock held.
     @VisibleForTesting
-    protected ArrayMap<Pair<Integer, String>, Boolean> getAllUsersNotificationPermissions() {
+    protected ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>>
+            getAllUsersNotificationPermissions() {
         // don't bother if migration is not enabled
         if (!mEnableAppSettingMigration) {
             return null;
         }
-        ArrayMap<Pair<Integer, String>, Boolean> allPermissions = new ArrayMap<>();
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> allPermissions = new ArrayMap<>();
         final List<UserInfo> allUsers = mUm.getUsers();
         // for each of these, get the package notification permissions that are associated
         // with this user and add it to the map
         for (UserInfo ui : allUsers) {
-            ArrayMap<Pair<Integer, String>, Boolean> userPermissions =
+            ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> userPermissions =
                     mPermissionHelper.getNotificationPermissionValues(
                             ui.getUserHandle().getIdentifier());
             for (Pair<Integer, String> pair : userPermissions.keySet()) {
@@ -5925,7 +5933,7 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void dumpJson(PrintWriter pw, @NonNull DumpFilter filter,
-            ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions) {
+            ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> pkgPermissions) {
         JSONObject dump = new JSONObject();
         try {
             dump.put("service", "Notification Manager");
@@ -5949,7 +5957,7 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void dumpProto(FileDescriptor fd, @NonNull DumpFilter filter,
-            ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions) {
+            ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> pkgPermissions) {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
         synchronized (mNotificationLock) {
             int N = mNotificationList.size();
@@ -6040,7 +6048,7 @@ public class NotificationManagerService extends SystemService {
     }
 
     void dumpImpl(PrintWriter pw, @NonNull DumpFilter filter,
-            ArrayMap<Pair<Integer, String>, Boolean> pkgPermissions) {
+            ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> pkgPermissions) {
         pw.print("Current Notification Manager state");
         if (filter.filtered) {
             pw.print(" (filtered to "); pw.print(filter); pw.print(")");
@@ -6815,13 +6823,11 @@ public class NotificationManagerService extends SystemService {
 
 
         // blocked apps
-        boolean isMediaNotification = n.isMediaNotification()
-                && n.extras.getParcelable(Notification.EXTRA_MEDIA_SESSION) != null;
         boolean isBlocked = !areNotificationsEnabledForPackageInt(pkg, uid);
         synchronized (mNotificationLock) {
             isBlocked |= isRecordBlockedLocked(r);
         }
-        if (isBlocked && !isMediaNotification) {
+        if (isBlocked && !n.isMediaNotification()) {
             if (DBG) {
                 Slog.e(TAG, "Suppressing notification from package " + r.getSbn().getPackageName()
                         + " by user request.");
@@ -7210,10 +7216,8 @@ public class NotificationManagerService extends SystemService {
                     final StatusBarNotification n = r.getSbn();
                     final Notification notification = n.getNotification();
 
-                    boolean isMediaNotification = notification.isMediaNotification()
-                            && notification.extras.getParcelable(
-                                    Notification.EXTRA_MEDIA_SESSION) != null;
-                    if (!isMediaNotification && (appBanned || isRecordBlockedLocked(r))) {
+                    if (!notification.isMediaNotification()
+                            && (appBanned || isRecordBlockedLocked(r))) {
                         mUsageStats.registerBlocked(r);
                         if (DBG) {
                             Slog.e(TAG, "Suppressing notification from package " + pkg);
@@ -7240,7 +7244,9 @@ public class NotificationManagerService extends SystemService {
                     if (index < 0) {
                         mNotificationList.add(r);
                         mUsageStats.registerPostedByApp(r);
-                        r.setInterruptive(isVisuallyInterruptive(null, r));
+                        final boolean isInterruptive = isVisuallyInterruptive(null, r);
+                        r.setInterruptive(isInterruptive);
+                        r.setTextChanged(isInterruptive);
                     } else {
                         old = mNotificationList.get(index);  // Potentially *changes* old
                         mNotificationList.set(index, r);
@@ -9634,7 +9640,7 @@ public class NotificationManagerService extends SystemService {
         }
         final long identity = Binder.clearCallingIdentity();
         try {
-            List<String> associations = mCompanionManager.getAssociations(
+            List<?> associations = mCompanionManager.getAssociations(
                     info.component.getPackageName(), info.userid);
             if (!ArrayUtils.isEmpty(associations)) {
                 return true;

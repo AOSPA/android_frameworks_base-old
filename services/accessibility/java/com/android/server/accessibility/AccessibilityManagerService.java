@@ -2382,6 +2382,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         somethingChanged |= readTouchExplorationGrantedAccessibilityServicesLocked(userState);
         somethingChanged |= readTouchExplorationEnabledSettingLocked(userState);
         somethingChanged |= readHighTextContrastEnabledSettingLocked(userState);
+        somethingChanged |= readAudioDescriptionEnabledSettingLocked(userState);
         somethingChanged |= readMagnificationEnabledSettingsLocked(userState);
         somethingChanged |= readAutoclickEnabledSettingLocked(userState);
         somethingChanged |= readAccessibilityShortcutKeySettingLocked(userState);
@@ -2449,6 +2450,19 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 userState.mUserId) == 1;
         if (highTextContrastEnabled != userState.isTextHighContrastEnabledLocked()) {
             userState.setTextHighContrastEnabledLocked(highTextContrastEnabled);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean readAudioDescriptionEnabledSettingLocked(AccessibilityUserState userState) {
+        final boolean audioDescriptionByDefaultEnabled = Settings.Secure.getIntForUser(
+                mContext.getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT, 0,
+                userState.mUserId) == 1;
+        if (audioDescriptionByDefaultEnabled
+                    != userState.isAudioDescriptionByDefaultEnabledLocked()) {
+            userState.setAudioDescriptionByDefaultEnabledLocked(audioDescriptionByDefaultEnabled);
             return true;
         }
         return false;
@@ -3418,6 +3432,23 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
+    /**
+     * Gets the status of the audio description preference.
+     * @return {@code true} if the audio description is enabled, {@code false} otherwise.
+     */
+    @Override
+    public boolean isAudioDescriptionByDefaultEnabled() {
+        if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_ACCESSIBILITY_MANAGER)) {
+            mTraceManager.logTrace(LOG_TAG + ".isAudioDescriptionByDefaultEnabled",
+                    FLAGS_ACCESSIBILITY_MANAGER);
+        }
+        synchronized (mLock) {
+            final AccessibilityUserState userState = getCurrentUserStateLocked();
+
+            return userState.isAudioDescriptionByDefaultEnabledLocked();
+        }
+    }
+
     @Override
     public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
@@ -3528,9 +3559,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
             mConnectionId = service.mId;
 
-            mClient = AccessibilityInteractionClient.getInstance(/* initializeCache= */false,
-                    mContext);
-            mClient.addConnection(mConnectionId, service);
+            mClient = AccessibilityInteractionClient.getInstance(mContext);
+            mClient.addConnection(mConnectionId, service, /*initializeCache=*/false);
 
             //TODO: (multi-display) We need to support multiple displays.
             DisplayManager displayManager = (DisplayManager)
@@ -3576,31 +3606,36 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             }
 
             synchronized (mLock) {
-                Rect boundsInScreen = mTempRect;
-                focus.getBoundsInScreen(boundsInScreen);
+                Rect boundsInScreenBeforeMagnification = mTempRect;
 
-                // Apply magnification if needed.
+                focus.getBoundsInScreen(boundsInScreenBeforeMagnification);
+                final Point nodeCenter = new Point(boundsInScreenBeforeMagnification.centerX(),
+                        boundsInScreenBeforeMagnification.centerY());
+
+                // Invert magnification if needed.
                 MagnificationSpec spec = getCompatibleMagnificationSpecLocked(focus.getWindowId());
                 if (spec != null && !spec.isNop()) {
-                    boundsInScreen.offset((int) -spec.offsetX, (int) -spec.offsetY);
-                    boundsInScreen.scale(1 / spec.scale);
+                    boundsInScreenBeforeMagnification.offset((int) -spec.offsetX,
+                            (int) -spec.offsetY);
+                    boundsInScreenBeforeMagnification.scale(1 / spec.scale);
                 }
 
-                // Clip to the window bounds.
+                //Clip to the window bounds.
                 Rect windowBounds = mTempRect1;
                 getWindowBounds(focus.getWindowId(), windowBounds);
-                if (!boundsInScreen.intersect(windowBounds)) {
+                if (!boundsInScreenBeforeMagnification.intersect(windowBounds)) {
                     return false;
                 }
 
-                // Clip to the screen bounds.
+                //Clip to the screen bounds.
                 Point screenSize = mTempPoint;
                 mDefaultDisplay.getRealSize(screenSize);
-                if (!boundsInScreen.intersect(0, 0, screenSize.x, screenSize.y)) {
+                if (!boundsInScreenBeforeMagnification.intersect(0, 0, screenSize.x,
+                        screenSize.y)) {
                     return false;
                 }
 
-                outPoint.set(boundsInScreen.centerX(), boundsInScreen.centerY());
+                outPoint.set(nodeCenter.x, nodeCenter.y);
             }
 
             return true;
@@ -3704,6 +3739,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 }
                 updateMagnificationLocked(userState);
                 updateWindowsForAccessibilityCallbackLocked(userState);
+                notifyClearAccessibilityCacheLocked();
             }
         }
 
@@ -3800,6 +3836,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         private final Uri mHighTextContrastUri = Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED);
 
+        private final Uri mAudioDescriptionByDefaultUri = Settings.Secure.getUriFor(
+                Settings.Secure.ENABLED_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT);
+
         private final Uri mAccessibilitySoftKeyboardModeUri = Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE);
 
@@ -3845,6 +3884,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
                     mHighTextContrastUri, false, this, UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(
+                    mAudioDescriptionByDefaultUri, false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
                     mAccessibilitySoftKeyboardModeUri, false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
@@ -3897,6 +3938,10 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     }
                 } else if (mHighTextContrastUri.equals(uri)) {
                     if (readHighTextContrastEnabledSettingLocked(userState)) {
+                        onUserStateChangedLocked(userState);
+                    }
+                } else if (mAudioDescriptionByDefaultUri.equals(uri)) {
+                    if (readAudioDescriptionEnabledSettingLocked(userState)) {
                         onUserStateChangedLocked(userState);
                     }
                 } else if (mAccessibilitySoftKeyboardModeUri.equals(uri)

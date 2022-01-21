@@ -18,6 +18,7 @@ package com.android.keyguard;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.graphics.PointF;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
@@ -30,6 +31,7 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.internal.graphics.ColorUtils;
 import com.android.settingslib.Utils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
@@ -82,14 +84,18 @@ public class LockIconView extends FrameLayout implements Dumpable {
 
     void updateColorAndBackgroundVisibility() {
         if (mUseBackground && mLockIcon.getDrawable() != null) {
-            mLockIconColor = Utils.getColorAttrDefaultColor(getContext(),
-                    android.R.attr.textColorPrimary);
+            mLockIconColor = ColorUtils.blendARGB(
+                    Utils.getColorAttrDefaultColor(getContext(), android.R.attr.textColorPrimary),
+                    Color.WHITE,
+                    mDozeAmount);
             mBgView.setBackground(getContext().getDrawable(R.drawable.fingerprint_bg));
             mBgView.setAlpha(1f - mDozeAmount);
             mBgView.setVisibility(View.VISIBLE);
         } else {
-            mLockIconColor = Utils.getColorAttrDefaultColor(getContext(),
-                    R.attr.wallpaperTextColorAccent);
+            mLockIconColor = ColorUtils.blendARGB(
+                    Utils.getColorAttrDefaultColor(getContext(), R.attr.wallpaperTextColorAccent),
+                    Color.WHITE,
+                    mDozeAmount);
             mBgView.setVisibility(View.GONE);
         }
 
@@ -212,11 +218,14 @@ public class LockIconView extends FrameLayout implements Dumpable {
 
     @Override
     public void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
-        pw.println("Center in px (x, y)= (" + mLockIconCenter.x + ", " + mLockIconCenter.y + ")");
-        pw.println("Radius in pixels: " + mRadius);
-        pw.println("topLeft= (" + getX() + ", " + getY() + ")");
-        pw.println("topLeft= (" + getX() + ", " + getY() + ")");
-        pw.println("mIconType=" + typeToString(mIconType));
-        pw.println("mAod=" + mAod);
+        pw.println("Lock Icon View Parameters:");
+        pw.println("    Center in px (x, y)= ("
+                + mLockIconCenter.x + ", " + mLockIconCenter.y + ")");
+        pw.println("    Radius in pixels: " + mRadius);
+        pw.println("    mIconType=" + typeToString(mIconType));
+        pw.println("    mAod=" + mAod);
+        pw.println("Lock Icon View actual measurements:");
+        pw.println("    topLeft= (" + getX() + ", " + getY() + ")");
+        pw.println("    width=" + getWidth() + " height=" + getHeight());
     }
 }

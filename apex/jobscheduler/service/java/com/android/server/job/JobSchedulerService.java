@@ -1371,7 +1371,11 @@ public class JobSchedulerService extends com.android.server.SystemService
                     jobStatus.hasContentTriggerConstraint(),
                     jobStatus.isRequestedExpeditedJob(),
                     /* isRunningAsExpeditedJob */ false,
-                    JobProtoEnums.STOP_REASON_UNDEFINED);
+                    JobProtoEnums.STOP_REASON_UNDEFINED,
+                    jobStatus.getJob().isPrefetch(),
+                    jobStatus.getJob().getPriority(),
+                    jobStatus.getEffectivePriority(),
+                    jobStatus.getNumFailures());
 
             // If the job is immediately ready to run, then we can just immediately
             // put it in the pending list and try to schedule it.  This is especially
@@ -2299,7 +2303,7 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     /**
-     * Check if a job is restricted by any of the declared {@link JobRestriction}s.
+     * Check if a job is restricted by any of the declared {@link JobRestriction JobRestrictions}.
      * Note, that the jobs with {@link JobInfo#BIAS_FOREGROUND_SERVICE} bias or higher may not
      * be restricted, thus we won't even perform the check, but simply return null early.
      *

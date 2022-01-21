@@ -198,6 +198,13 @@ class WindowTestsBase extends SystemServiceTestsBase {
         SystemServicesTestRule.checkHoldsLock(mWm.mGlobalLock);
 
         mDefaultDisplay = mWm.mRoot.getDefaultDisplay();
+        // Update the display policy to make the screen fully turned on so animation is allowed
+        final DisplayPolicy displayPolicy = mDefaultDisplay.getDisplayPolicy();
+        displayPolicy.screenTurnedOn(null /* screenOnListener */);
+        displayPolicy.finishKeyguardDrawn();
+        displayPolicy.finishWindowsDrawn();
+        displayPolicy.finishScreenTurningOn();
+
         mTransaction = mSystemServicesTestRule.mTransaction;
         mMockSession = mock(Session.class);
 
@@ -1653,10 +1660,17 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mLastRequest = request;
         }
 
-        public void start() {
+        void startTransition() {
             mOrganizer.startTransition(mLastRequest.getType(), mLastTransit, null);
-            mLastTransit.onTransactionReady(mLastTransit.getSyncId(),
-                    mock(SurfaceControl.Transaction.class));
+        }
+
+        void onTransactionReady(SurfaceControl.Transaction t) {
+            mLastTransit.onTransactionReady(mLastTransit.getSyncId(), t);
+        }
+
+        void start() {
+            startTransition();
+            onTransactionReady(mock(SurfaceControl.Transaction.class));
         }
 
         public void finish() {

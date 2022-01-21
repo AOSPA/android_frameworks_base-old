@@ -356,9 +356,6 @@ public class SystemWindows {
         public void dispatchGetNewSurface() {}
 
         @Override
-        public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {}
-
-        @Override
         public void executeCommand(String command, String parameters, ParcelFileDescriptor out) {}
 
         @Override

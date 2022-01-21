@@ -57,6 +57,7 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
 import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.BarTransitions.TransitionMode;
+import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 
 import java.io.FileDescriptor;
@@ -100,11 +101,12 @@ public class NavigationBarController implements
             CommandQueue commandQueue,
             @Main Handler mainHandler,
             ConfigurationController configurationController,
-            NavigationBarA11yHelper navigationBarA11yHelper,
+            NavBarHelper navBarHelper,
             TaskbarDelegate taskbarDelegate,
             NavigationBar.Factory navigationBarFactory,
             DumpManager dumpManager,
-            AutoHideController autoHideController) {
+            AutoHideController autoHideController,
+            LightBarController lightBarController) {
         mContext = context;
         mHandler = mainHandler;
         mNavigationBarFactory = navigationBarFactory;
@@ -115,8 +117,8 @@ public class NavigationBarController implements
         mNavMode = navigationModeController.addListener(this);
         mTaskbarDelegate = taskbarDelegate;
         mTaskbarDelegate.setDependencies(commandQueue, overviewProxyService,
-                navigationBarA11yHelper, navigationModeController, sysUiFlagsContainer,
-                dumpManager, autoHideController);
+                navBarHelper, navigationModeController, sysUiFlagsContainer,
+                dumpManager, autoHideController, lightBarController);
         mIsTablet = isTablet(mContext);
         dumpManager.registerDumpable(this);
     }
@@ -391,6 +393,24 @@ public class NavigationBarController implements
     public @Nullable NavigationBarView getNavigationBarView(int displayId) {
         NavigationBar navBar = mNavigationBars.get(displayId);
         return (navBar == null) ? null : navBar.getView();
+    }
+
+    public void showPinningEnterExitToast(int displayId, boolean entering) {
+        final NavigationBarView navBarView = getNavigationBarView(displayId);
+        if (navBarView != null) {
+            navBarView.showPinningEnterExitToast(entering);
+        } else if (displayId == DEFAULT_DISPLAY && mTaskbarDelegate.isInitialized()) {
+            mTaskbarDelegate.showPinningEnterExitToast(entering);
+        }
+    }
+
+    public void showPinningEscapeToast(int displayId) {
+        final NavigationBarView navBarView = getNavigationBarView(displayId);
+        if (navBarView != null) {
+            navBarView.showPinningEscapeToast();
+        } else if (displayId == DEFAULT_DISPLAY && mTaskbarDelegate.isInitialized()) {
+            mTaskbarDelegate.showPinningEscapeToast();
+        }
     }
 
     /** @return {@link NavigationBar} on the default display. */

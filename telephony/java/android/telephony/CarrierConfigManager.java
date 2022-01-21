@@ -5179,13 +5179,11 @@ public class CarrierConfigManager {
     public static final String KEY_APN_PRIORITY_STRING_ARRAY = "apn_priority_string_array";
 
     /**
-     * Network capability priority for determine the satisfy order in telephony. This is used when
-     * the network only allows single PDN. The priority is from the lowest 0 to the highest 100.
-     * The long-lived network request usually has the lowest priority. This allows other short-lived
-     * requests like MMS requests to be established. Emergency request always has the highest
-     * priority.
+     * Network capability priority for determine the satisfy order in telephony. The priority is
+     * from the lowest 0 to the highest 100. The long-lived network shall have the lowest priority.
+     * This allows other short-lived requests like MMS requests to be established. Emergency request
+     * always has the highest priority.
      *
-     * // TODO: Remove KEY_APN_PRIORITY_STRING_ARRAY
      * @hide
      */
     public static final String KEY_TELEPHONY_NETWORK_CAPABILITY_PRIORITIES_STRING_ARRAY =
@@ -5195,17 +5193,17 @@ public class CarrierConfigManager {
      * Defines the rules for data retry.
      *
      * The syntax of the retry rule:
-     * 1. Retry based on {@link NetworkCapabilities}
-     * "capabilities=[netCaps1|netCaps2|...], [retry_interval=x], [backoff=[true|false]],
-     *     [maximum_retries=y]"
+     * 1. Retry based on {@link NetworkCapabilities}. Note that only APN-type network capabilities
+     *    are supported.
+     * "capabilities=[netCaps1|netCaps2|...], [retry_interval=n1|n2|n3|n4...], [maximum_retries=n]"
      *
      * 2. Retry based on {@link DataFailCause}
-     * "fail_causes=[cause1|cause2|cause3|...], [retry_interval=x], [backoff=[true|false]],
-     *     [maximum_retries=y]"
+     * "fail_causes=[cause1|cause2|cause3|..], [retry_interval=n1|n2|n3|n4...], [maximum_retries=n]"
      *
-     * 3. Retry based on {@link NetworkCapabilities} and {@link DataFailCause}
+     * 3. Retry based on {@link NetworkCapabilities} and {@link DataFailCause}. Note that only
+     *    APN-type network capabilities are supported.
      * "capabilities=[netCaps1|netCaps2|...], fail_causes=[cause1|cause2|cause3|...],
-     *     [retry_interval=x], [backoff=[true|false]], [maximum_retries=y]"
+     *     [retry_interval=n1|n2|n3|n4...], [maximum_retries=n]"
      *
      * For example,
      * "capabilities=eims, retry_interval=1000, maximum_retries=20" means if the attached
@@ -5214,7 +5212,12 @@ public class CarrierConfigManager {
      *
      * "fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|2253|2254
      * , maximum_retries=0" means for those fail causes, never retry with timers. Note that
-     * when environment changes, retry can still happens.
+     * when environment changes, retry can still happen.
+     *
+     * "capabilities=internet|enterprise|dun|ims|fota, retry_interval=2500|3000|"
+     * "5000|10000|15000|20000|40000|60000|120000|240000|600000|1200000|1800000"
+     * "1800000, maximum_retries=20" means for those capabilities, retry happens in 2.5s, 3s, 5s,
+     * 10s, 15s, 20s, 40s, 1m, 2m, 4m, 10m, 20m, 30m, 30m, 30m, until reaching 20 retries.
      *
      * // TODO: remove KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS
      * @hide
@@ -5268,16 +5271,6 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CALL_COMPOSER_PICTURE_SERVER_URL_STRING =
             "call_composer_picture_server_url_string";
-
-    /**
-     * For Android 11, provide a temporary solution for OEMs to use the lower of the two MTU values
-     * for IPv4 and IPv6 if both are sent.
-     * TODO: remove in later release
-     *
-     * @hide
-     */
-    public static final String KEY_USE_LOWER_MTU_VALUE_IF_BOTH_RECEIVED =
-            "use_lower_mtu_value_if_both_received";
 
     /**
      * Determines the default RTT mode.
@@ -6060,6 +6053,9 @@ public class CarrierConfigManager {
                 "enterprise:0", "default:1", "mms:2", "supl:2", "dun:2", "hipri:3", "fota:2",
                 "ims:2", "cbs:2", "ia:2", "emergency:2", "mcx:3", "xcap:3"
         });
+
+        // Do not modify the priority unless you know what you are doing. This will have significant
+        // impacts on the order of data network setup.
         sDefaults.putStringArray(
                 KEY_TELEPHONY_NETWORK_CAPABILITY_PRIORITIES_STRING_ARRAY, new String[] {
                         "eims:90", "supl:80", "mms:70", "xcap:70", "cbs:50", "mcx:50", "fota:50",
@@ -6070,16 +6066,16 @@ public class CarrierConfigManager {
                         "capabilities=eims, retry_interval=1000, maximum_retries=20",
                         "fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|2253|"
                                 + "2254, maximum_retries=0", // No retry for those causes
-                        "capabilities=internet|enterprise|dun|ims|fota, retry_interval=2000, "
-                                + "backoff=true, maximum_retries=13",
-                        "capabilities=mms|supl|cbs, retry_interval=2000"
+                        "capabilities=mms|supl|cbs, retry_interval=2000",
+                        "capabilities=internet|enterprise|dun|ims|fota, retry_interval=2500|3000|"
+                                + "5000|10000|15000|20000|40000|60000|120000|240000|"
+                                + "600000|1200000|1800000, maximum_retries=20"
                 });
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_DISABLE_DUN_APN_WHILE_ROAMING_WITH_PRESET_APN_BOOL, false);
         sDefaults.putString(KEY_DEFAULT_PREFERRED_APN_NAME_STRING, "");
         sDefaults.putBoolean(KEY_SUPPORTS_CALL_COMPOSER_BOOL, false);
         sDefaults.putString(KEY_CALL_COMPOSER_PICTURE_SERVER_URL_STRING, "");
-        sDefaults.putBoolean(KEY_USE_LOWER_MTU_VALUE_IF_BOTH_RECEIVED, false);
         sDefaults.putBoolean(KEY_USE_ACS_FOR_RCS_BOOL, false);
         sDefaults.putBoolean(KEY_NETWORK_TEMP_NOT_METERED_SUPPORTED_BOOL, true);
         sDefaults.putInt(KEY_DEFAULT_RTT_MODE_INT, 0);
@@ -6114,7 +6110,7 @@ public class CarrierConfigManager {
         });
         sDefaults.putBoolean(KEY_REQUIRE_APN_FILTERING_WITH_RADIO_CAPABILITY, false);
         sDefaults.putBoolean(KEY_USE_SMS_CALLBACK_MODE_BOOL, false);
-        sDefaults.putBoolean(KEY_VONR_SETTING_VISIBILITY_BOOL, false);
+        sDefaults.putBoolean(KEY_VONR_SETTING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_VONR_ENABLED_BOOL, false);
     }
 

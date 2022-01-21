@@ -35,6 +35,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.os.SystemClock;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.View;
@@ -44,7 +45,6 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.google.common.base.Throwables;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -79,13 +79,6 @@ public class AccessibilityCacheTest {
         mAccessibilityNodeRefresher = mock(AccessibilityCache.AccessibilityNodeRefresher.class);
         when(mAccessibilityNodeRefresher.refreshNode(anyObject(), anyBoolean())).thenReturn(true);
         mAccessibilityCache = new AccessibilityCache(mAccessibilityNodeRefresher);
-    }
-
-    @After
-    public void tearDown() {
-        // Make sure we're recycling all of our window and node infos.
-        mAccessibilityCache.clear();
-        AccessibilityInteractionClient.getInstance().clearCache();
     }
 
     @Test
@@ -299,7 +292,8 @@ public class AccessibilityCacheTest {
             SparseArray<List<AccessibilityWindowInfo>> allWindows = new SparseArray<>();
             allWindows.put(Display.DEFAULT_DISPLAY, windowsIn1);
             allWindows.put(SECONDARY_DISPLAY_ID, windowsIn2);
-            mAccessibilityCache.setWindowsOnAllDisplays(allWindows);
+            final long populationTimeStamp = SystemClock.uptimeMillis();
+            mAccessibilityCache.setWindowsOnAllDisplays(allWindows, populationTimeStamp);
             // Gets windows at default display.
             windowsOut1 = getWindowsByDisplay(Display.DEFAULT_DISPLAY);
             window1Out = mAccessibilityCache.getWindow(WINDOW_ID_1);
@@ -335,6 +329,46 @@ public class AccessibilityCacheTest {
             for (AccessibilityWindowInfo windowInfo : windowsOut2) {
                 windowInfo.recycle();
             }
+        }
+    }
+
+    @Test
+    public void setInvalidWindowsAfterWindowsChangedEvent_notInCache() {
+        final AccessibilityEvent event = new AccessibilityEvent(
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED);
+        final long eventTime = 1000L;
+        event.setEventTime(eventTime);
+        mAccessibilityCache.onAccessibilityEvent(event);
+
+        final AccessibilityWindowInfo windowInfo1 = obtainAccessibilityWindowInfo(WINDOW_ID_1,
+                SPECIFIC_WINDOW_LAYER);
+        List<AccessibilityWindowInfo> windowsIn = Arrays.asList(windowInfo1);
+        setWindowsByDisplay(Display.DEFAULT_DISPLAY, windowsIn, eventTime - 10);
+
+        try {
+            assertNull(getWindowsByDisplay(Display.DEFAULT_DISPLAY));
+        } finally {
+            windowInfo1.recycle();
+        }
+    }
+
+    @Test
+    public void setInvalidWindowsAfterStateChangedEvent_notInCache() {
+        final AccessibilityEvent event = new AccessibilityEvent(
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
+        final long eventTime = 1000L;
+        event.setEventTime(eventTime);
+        mAccessibilityCache.onAccessibilityEvent(event);
+
+        final AccessibilityWindowInfo windowInfo1 = obtainAccessibilityWindowInfo(WINDOW_ID_1,
+                SPECIFIC_WINDOW_LAYER);
+        List<AccessibilityWindowInfo> windowsIn = Arrays.asList(windowInfo1);
+        setWindowsByDisplay(Display.DEFAULT_DISPLAY, windowsIn, eventTime - 10);
+
+        try {
+            assertNull(getWindowsByDisplay(Display.DEFAULT_DISPLAY));
+        } finally {
+            windowInfo1.recycle();
         }
     }
 
@@ -1063,9 +1097,14 @@ public class AccessibilityCacheTest {
     }
 
     private void setWindowsByDisplay(int displayId, List<AccessibilityWindowInfo> windows) {
+        setWindowsByDisplay(displayId, windows, SystemClock.uptimeMillis());
+    }
+
+    private void setWindowsByDisplay(int displayId, List<AccessibilityWindowInfo> windows,
+            long populationTimeStamp) {
         SparseArray<List<AccessibilityWindowInfo>> allWindows = new SparseArray<>();
         allWindows.put(displayId, windows);
-        mAccessibilityCache.setWindowsOnAllDisplays(allWindows);
+        mAccessibilityCache.setWindowsOnAllDisplays(allWindows, populationTimeStamp);
     }
 
     private List<AccessibilityWindowInfo> getWindowsByDisplay(int displayId) {

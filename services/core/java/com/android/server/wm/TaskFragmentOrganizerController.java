@@ -31,10 +31,8 @@ import android.os.RemoteException;
 import android.util.ArrayMap;
 import android.util.Slog;
 import android.view.RemoteAnimationDefinition;
-import android.view.SurfaceControl;
 import android.window.ITaskFragmentOrganizer;
 import android.window.ITaskFragmentOrganizerController;
-import android.window.TaskFragmentAppearedInfo;
 import android.window.TaskFragmentInfo;
 
 import com.android.internal.protolog.common.ProtoLog;
@@ -135,11 +133,8 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         void onTaskFragmentAppeared(ITaskFragmentOrganizer organizer, TaskFragment tf) {
             ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "TaskFragment appeared name=%s", tf.getName());
             final TaskFragmentInfo info = tf.getTaskFragmentInfo();
-            final SurfaceControl outSurfaceControl = new SurfaceControl(tf.getSurfaceControl(),
-                    "TaskFragmentOrganizerController.onTaskFragmentInfoAppeared");
             try {
-                organizer.onTaskFragmentAppeared(
-                        new TaskFragmentAppearedInfo(info, outSurfaceControl));
+                organizer.onTaskFragmentAppeared(info);
                 mLastSentTaskFragmentInfos.put(tf, info);
                 tf.mTaskFragmentAppearedSent = true;
             } catch (RemoteException e) {
@@ -434,6 +429,9 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         private final TaskFragment mTaskFragment;
         private final IBinder mErrorCallback;
         private final Throwable mException;
+        // Set when the event is deferred due to the host task is invisible. The defer time will
+        // be the last active time of the host task.
+        private long mDeferTime;
 
         private PendingTaskFragmentEvent(TaskFragment taskFragment,
                 ITaskFragmentOrganizer taskFragmentOrg, @EventType int eventType) {
@@ -503,11 +501,45 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
                 || mPendingTaskFragmentEvents.isEmpty()) {
             return;
         }
+
+        final ArrayList<Task> visibleTasks = new ArrayList<>();
+        final ArrayList<Task> invisibleTasks = new ArrayList<>();
+        final ArrayList<PendingTaskFragmentEvent> candidateEvents = new ArrayList<>();
         for (int i = 0, n = mPendingTaskFragmentEvents.size(); i < n; i++) {
-            PendingTaskFragmentEvent event = mPendingTaskFragmentEvents.get(i);
-            dispatchEvent(event);
+            final PendingTaskFragmentEvent event = mPendingTaskFragmentEvents.get(i);
+            final Task task = event.mTaskFragment != null ? event.mTaskFragment.getTask() : null;
+            if (task != null && (task.lastActiveTime <= event.mDeferTime
+                    || !isTaskVisible(task, visibleTasks, invisibleTasks))) {
+                // Defer sending events to the TaskFragment until the host task is active again.
+                event.mDeferTime = task.lastActiveTime;
+                continue;
+            }
+            candidateEvents.add(event);
         }
-        mPendingTaskFragmentEvents.clear();
+        final int numEvents = candidateEvents.size();
+        for (int i = 0; i < numEvents; i++) {
+            dispatchEvent(candidateEvents.get(i));
+        }
+        if (numEvents > 0) {
+            mPendingTaskFragmentEvents.removeAll(candidateEvents);
+        }
+    }
+
+    private static boolean isTaskVisible(Task task, ArrayList<Task> knownVisibleTasks,
+            ArrayList<Task> knownInvisibleTasks) {
+        if (knownVisibleTasks.contains(task)) {
+            return true;
+        }
+        if (knownInvisibleTasks.contains(task)) {
+            return false;
+        }
+        if (task.shouldBeVisible(null /* starting */)) {
+            knownVisibleTasks.add(task);
+            return true;
+        } else {
+            knownInvisibleTasks.add(task);
+            return false;
+        }
     }
 
     void dispatchPendingInfoChangedEvent(TaskFragment taskFragment) {

@@ -270,7 +270,7 @@ public class RemoteTransitionCompat implements Parcelable {
                 mOpeningLeashes.add(openingTasks.get(i).getLeash());
                 // We are receiving new opening tasks, so convert to onTasksAppeared.
                 final RemoteAnimationTargetCompat target = new RemoteAnimationTargetCompat(
-                        openingTasks.get(i), layer, mInfo, t);
+                        openingTasks.get(i), layer, info, t);
                 mLeashMap.put(mOpeningLeashes.get(i), target.leash.mSurfaceControl);
                 t.reparent(target.leash.mSurfaceControl, mInfo.getRootLeash());
                 t.setLayer(target.leash.mSurfaceControl, layer);
@@ -321,7 +321,7 @@ public class RemoteTransitionCompat implements Parcelable {
                     // re-showing it's task).
                     final WindowContainerTransaction wct = new WindowContainerTransaction();
                     final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-                    for (int i = mPausingTasks.size() - 1; i >= 0; ++i) {
+                    for (int i = mPausingTasks.size() - 1; i >= 0; --i) {
                         // reverse order so that index 0 ends up on top
                         wct.reorder(mPausingTasks.get(i), true /* onTop */);
                         t.show(mInfo.getChange(mPausingTasks.get(i)).getLeash());

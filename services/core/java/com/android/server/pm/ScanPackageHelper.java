@@ -294,6 +294,12 @@ final class ScanPackageHelper {
             }
         }
 
+        String[] usesSdkLibraries = null;
+        if (!parsedPackage.getUsesSdkLibraries().isEmpty()) {
+            usesSdkLibraries = new String[parsedPackage.getUsesSdkLibraries().size()];
+            parsedPackage.getUsesSdkLibraries().toArray(usesSdkLibraries);
+        }
+
         String[] usesStaticLibraries = null;
         if (!parsedPackage.getUsesStaticLibraries().isEmpty()) {
             usesStaticLibraries = new String[parsedPackage.getUsesStaticLibraries().size()];
@@ -324,7 +330,8 @@ final class ScanPackageHelper {
                     AndroidPackageUtils.getRawSecondaryCpuAbi(parsedPackage),
                     parsedPackage.getLongVersionCode(), pkgFlags, pkgPrivateFlags, user,
                     true /*allowInstall*/, instantApp, virtualPreload,
-                    UserManagerService.getInstance(), usesStaticLibraries,
+                    UserManagerService.getInstance(), usesSdkLibraries,
+                    parsedPackage.getUsesSdkLibrariesVersionsMajor(), usesStaticLibraries,
                     parsedPackage.getUsesStaticLibrariesVersions(), parsedPackage.getMimeGroups(),
                     newDomainSetId);
         } else {
@@ -344,6 +351,7 @@ final class ScanPackageHelper {
                     PackageInfoUtils.appInfoFlags(parsedPackage, pkgSetting),
                     PackageInfoUtils.appInfoPrivateFlags(parsedPackage, pkgSetting),
                     UserManagerService.getInstance(),
+                    usesSdkLibraries, parsedPackage.getUsesSdkLibrariesVersionsMajor(),
                     usesStaticLibraries, parsedPackage.getUsesStaticLibrariesVersions(),
                     parsedPackage.getMimeGroups(), newDomainSetId);
         }
@@ -552,6 +560,10 @@ final class ScanPackageHelper {
             pkgSetting.setVolumeUuid(volumeUuid);
         }
 
+        SharedLibraryInfo sdkLibraryInfo = null;
+        if (!TextUtils.isEmpty(parsedPackage.getSdkLibName())) {
+            sdkLibraryInfo = AndroidPackageUtils.createSharedLibraryForSdk(parsedPackage);
+        }
         SharedLibraryInfo staticSharedLibraryInfo = null;
         if (!TextUtils.isEmpty(parsedPackage.getStaticSharedLibName())) {
             staticSharedLibraryInfo =
@@ -568,7 +580,7 @@ final class ScanPackageHelper {
 
         return new ScanResult(request, true, pkgSetting, changedAbiCodePath,
                 !createNewPackage /* existingSettingCopied */,
-                previousAppId, staticSharedLibraryInfo,
+                previousAppId, sdkLibraryInfo, staticSharedLibraryInfo,
                 dynamicSharedLibraryInfos);
     }
 
@@ -894,14 +906,15 @@ final class ScanPackageHelper {
      * Returns if forced apk verification can be skipped for the whole package, including splits.
      */
     private boolean canSkipForcedPackageVerification(AndroidPackage pkg) {
-        if (!canSkipForcedApkVerification(pkg.getBaseApkPath())) {
+        final String packageName = pkg.getPackageName();
+        if (!canSkipForcedApkVerification(packageName, pkg.getBaseApkPath())) {
             return false;
         }
         // TODO: Allow base and splits to be verified individually.
         String[] splitCodePaths = pkg.getSplitCodePaths();
         if (!ArrayUtils.isEmpty(splitCodePaths)) {
             for (int i = 0; i < splitCodePaths.length; i++) {
-                if (!canSkipForcedApkVerification(splitCodePaths[i])) {
+                if (!canSkipForcedApkVerification(packageName, splitCodePaths[i])) {
                     return false;
                 }
             }
@@ -914,7 +927,7 @@ final class ScanPackageHelper {
      * whether the apk contains signed root hash.  Note that the signer's certificate still needs to
      * match one in a trusted source, and should be done separately.
      */
-    private boolean canSkipForcedApkVerification(String apkPath) {
+    private boolean canSkipForcedApkVerification(String packageName, String apkPath) {
         if (!PackageManagerServiceUtils.isLegacyApkVerityEnabled()) {
             return VerityUtils.hasFsverity(apkPath);
         }
@@ -926,7 +939,8 @@ final class ScanPackageHelper {
             }
             synchronized (mPm.mInstallLock) {
                 // Returns whether the observed root hash matches what kernel has.
-                mPm.mInstaller.assertFsverityRootHashMatches(apkPath, rootHashObserved);
+                mPm.mInstaller.assertFsverityRootHashMatches(packageName, apkPath,
+                        rootHashObserved);
                 return true;
             }
         } catch (Installer.InstallerException | IOException | DigestException

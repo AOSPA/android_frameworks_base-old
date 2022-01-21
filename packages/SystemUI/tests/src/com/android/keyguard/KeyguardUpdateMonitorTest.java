@@ -19,6 +19,7 @@ package com.android.keyguard;
 import static android.telephony.SubscriptionManager.DATA_ROAMING_DISABLE;
 import static android.telephony.SubscriptionManager.NAME_SOURCE_CARRIER_ID;
 
+import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.SOME_AUTH_REQUIRED_AFTER_USER_REQUEST;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -939,6 +940,19 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     }
 
     @Test
+    public void testStartUdfpsServiceStrongAuthRequiredAfterTimeout() {
+        // GIVEN status bar state is on the keyguard
+        mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
+
+        // WHEN user loses smart unlock trust
+        when(mStrongAuthTracker.getStrongAuthForUser(KeyguardUpdateMonitor.getCurrentUser()))
+                .thenReturn(SOME_AUTH_REQUIRED_AFTER_USER_REQUEST);
+
+        // THEN we should still listen for udfps
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(true)).isEqualTo(true);
+    }
+
+    @Test
     public void testShouldNotListenForUdfps_whenTrustEnabled() {
         // GIVEN a "we should listen for udfps" state
         mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
@@ -1018,6 +1032,16 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mTestableLooper.processAllMessages();
 
         verify(callback, atLeastOnce()).onRequireUnlockForNfc();
+    }
+
+    @Test
+    public void testFaceDoesNotAuth_afterPinAttempt() {
+        mTestableLooper.processAllMessages();
+        mKeyguardUpdateMonitor.setCredentialAttempted();
+        verify(mFingerprintManager, never()).authenticate(any(), any(), any(),
+                any(), anyInt());
+        verify(mFaceManager, never()).authenticate(any(), any(), any(), any(), anyInt(),
+                anyBoolean());
     }
 
     private void setKeyguardBouncerVisibility(boolean isVisible) {

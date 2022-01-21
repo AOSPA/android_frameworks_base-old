@@ -463,6 +463,7 @@
   <java-symbol type="integer" name="config_shortPressOnStemPrimaryBehavior" />
   <java-symbol type="integer" name="config_doublePressOnStemPrimaryBehavior" />
   <java-symbol type="integer" name="config_triplePressOnStemPrimaryBehavior" />
+  <java-symbol type="string" name="config_doublePressOnPowerTargetActivity" />
   <java-symbol type="integer" name="config_windowOutsetBottom" />
   <java-symbol type="integer" name="db_connection_pool_size" />
   <java-symbol type="integer" name="db_journal_size_limit" />
@@ -1454,6 +1455,7 @@
   <java-symbol type="drawable" name="ic_qs_flashlight" />
   <java-symbol type="drawable" name="ic_qs_auto_rotate" />
   <java-symbol type="drawable" name="ic_qs_dnd" />
+  <java-symbol type="drawable" name="ic_qs_one_handed_mode" />
 
   <java-symbol type="drawable" name="sim_light_blue" />
   <java-symbol type="drawable" name="sim_light_green" />
@@ -1716,6 +1718,10 @@
   <java-symbol type="anim" name="activity_translucent_close_exit" />
   <java-symbol type="anim" name="activity_open_enter" />
   <java-symbol type="anim" name="activity_close_exit" />
+  <java-symbol type="anim" name="task_fragment_close_enter" />
+  <java-symbol type="anim" name="task_fragment_close_exit" />
+  <java-symbol type="anim" name="task_fragment_open_enter" />
+  <java-symbol type="anim" name="task_fragment_open_exit" />
 
   <java-symbol type="array" name="config_autoRotationTiltTolerance" />
   <java-symbol type="array" name="config_longPressVibePattern" />
@@ -1850,10 +1856,14 @@
   <java-symbol type="string" name="bugreport_status" />
   <java-symbol type="string" name="bugreport_title" />
   <java-symbol type="string" name="faceunlock_multiple_failures" />
-  <java-symbol type="string" name="fp_enrollment_powerbutton_intent_title" />
-  <java-symbol type="string" name="fp_enrollment_powerbutton_intent_message" />
-  <java-symbol type="string" name="fp_enrollment_powerbutton_intent_positive_button" />
-  <java-symbol type="string" name="fp_enrollment_powerbutton_intent_negative_button" />
+  <java-symbol type="string" name="fp_power_button_bp_title" />
+  <java-symbol type="string" name="fp_power_button_bp_message" />
+  <java-symbol type="string" name="fp_power_button_bp_positive_button" />
+  <java-symbol type="string" name="fp_power_button_bp_negative_button" />
+  <java-symbol type="string" name="fp_power_button_enrollment_title" />
+  <java-symbol type="string" name="fp_power_button_enrollment_message" />
+  <java-symbol type="string" name="fp_power_button_enrollment_positive_button" />
+  <java-symbol type="string" name="fp_power_button_enrollment_negative_button" />
   <java-symbol type="string" name="global_actions" />
   <java-symbol type="string" name="global_action_power_off" />
   <java-symbol type="string" name="global_action_power_options" />
@@ -1913,6 +1923,7 @@
   <java-symbol type="array" name="config_autoBrightnessLcdBacklightValues" />
   <java-symbol type="array" name="config_autoBrightnessLcdBacklightValues_doze" />
   <java-symbol type="array" name="config_autoBrightnessLevels" />
+  <java-symbol type="array" name="config_autoBrightnessLevelsIdle" />
   <java-symbol type="array" name="config_ambientThresholdLevels" />
   <java-symbol type="array" name="config_ambientBrighteningThresholds" />
   <java-symbol type="array" name="config_ambientDarkeningThresholds" />
@@ -2065,6 +2076,7 @@
   <java-symbol type="dimen" name="config_screenBrightnessSettingDefaultFloat" />
   <java-symbol type="dimen" name="config_screenBrightnessDozeFloat" />
   <java-symbol type="dimen" name="config_screenBrightnessDimFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessMinimumDimAmountFloat" />
   <java-symbol type="integer" name="config_screenBrightnessDark" />
   <java-symbol type="integer" name="config_screenBrightnessDim" />
   <java-symbol type="integer" name="config_screenBrightnessDoze" />
@@ -2248,6 +2260,7 @@
   <java-symbol type="string" name="config_primaryLocationTimeZoneProviderPackageName" />
   <java-symbol type="bool" name="config_enableSecondaryLocationTimeZoneProvider" />
   <java-symbol type="string" name="config_secondaryLocationTimeZoneProviderPackageName" />
+  <java-symbol type="bool" name="config_supportTelephonyTimeZoneFallback" />
   <java-symbol type="bool" name="config_autoResetAirplaneMode" />
   <java-symbol type="string" name="config_notificationAccessConfirmationActivity" />
   <java-symbol type="bool" name="config_killableInputMethods" />
@@ -3801,7 +3814,9 @@
   <java-symbol type="bool" name="config_fillMainBuiltInDisplayCutout" />
   <java-symbol type="drawable" name="ic_logout" />
 
+  <java-symbol type="bool" name="config_enableIdleScreenBrightnessMode" />
   <java-symbol type="array" name="config_autoBrightnessDisplayValuesNits" />
+  <java-symbol type="array" name="config_autoBrightnessDisplayValuesNitsIdle" />
   <java-symbol type="array" name="config_screenBrightnessBacklight" />
   <java-symbol type="array" name="config_screenBrightnessNits" />
 
@@ -3883,7 +3898,8 @@
 
   <!-- For Foldables -->
   <java-symbol type="array" name="config_foldedDeviceStates" />
-  <java-symbol type="integer" name="config_deviceStateOnWhichToWakeUp" />
+  <java-symbol type="array" name="config_deviceStatesOnWhichToWakeUp" />
+  <java-symbol type="array" name="config_deviceStatesOnWhichToSleep" />
   <java-symbol type="string" name="config_foldedArea" />
   <java-symbol type="bool" name="config_supportsConcurrentInternalDisplays" />
   <java-symbol type="bool" name="config_unfoldTransitionEnabled" />
@@ -4342,8 +4358,6 @@
 
   <java-symbol type="bool" name="config_voice_data_sms_auto_fallback" />
 
-  <java-symbol type="bool" name="config_enableDynamicKeyguardPositioning" />
-
   <java-symbol type="attr" name="colorAccentPrimary" />
   <java-symbol type="attr" name="colorAccentSecondary" />
   <java-symbol type="attr" name="colorAccentTertiary" />
@@ -4616,7 +4630,6 @@
   <java-symbol type="fraction" name="global_actions_vertical_padding_percentage" />
   <java-symbol type="fraction" name="global_actions_horizontal_padding_percentage" />
   <java-symbol type="drawable" name="global_actions_item_red_background" />
-  <java-symbol type="color" name="wear_material_grey_900" />
 
   <java-symbol type="string" name="config_wearSysUiPackage"/>
   <java-symbol type="string" name="config_wearSysUiMainActivity"/>
@@ -4635,4 +4648,7 @@
   <java-symbol type="array" name="config_roundedCornerBottomRadiusAdjustmentArray" />
   <java-symbol type="bool" name="config_secondaryBuiltInDisplayIsRound" />
   <java-symbol type="array" name="config_builtInDisplayIsRoundArray" />
+  <java-symbol type="array" name="config_gnssParameters" />
+
+  <java-symbol type="integer" name="config_mashPressVibrateTimeOnPowerButton" />
 </resources>

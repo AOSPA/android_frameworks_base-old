@@ -16,9 +16,9 @@
 
 package com.android.wm.shell.flicker.legacysplitscreen
 
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -27,6 +27,7 @@ import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.exitSplitScreen
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.launchSplitScreen
 import com.android.server.wm.flicker.helpers.openQuickStepAndClearRecentAppsFromOverview
 import com.android.server.wm.flicker.helpers.setRotation
@@ -40,6 +41,7 @@ import com.android.server.wm.flicker.statusBarWindowIsVisible
 import com.android.server.wm.traces.common.FlickerComponentName
 import com.android.wm.shell.flicker.dockedStackDividerBecomesInvisible
 import com.android.wm.shell.flicker.helpers.SimpleAppHelper
+import org.junit.Assume.assumeFalse
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -110,17 +112,21 @@ class LegacySplitScreenToLauncher(
 
     @Presubmit
     @Test
-    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
+    fun statusBarLayerRotatesScales() {
+        // This test doesn't work in shell transitions because of b/206753786
+        assumeFalse(isShellTransitionsEnabled)
+        testSpec.statusBarLayerRotatesScales()
+    }
 
     @Presubmit
     @Test
     fun statusBarLayerIsVisible() = testSpec.statusBarLayerIsVisible()
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun dockedStackDividerBecomesInvisible() = testSpec.dockedStackDividerBecomesInvisible()
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun layerBecomesInvisible() {
         testSpec.assertLayers {
@@ -130,7 +136,7 @@ class LegacySplitScreenToLauncher(
         }
     }
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun focusDoesNotChange() {
         testSpec.assertEventLog {

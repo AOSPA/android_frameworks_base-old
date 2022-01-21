@@ -16,9 +16,14 @@
 
 package android.media.tv.interactive;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.media.tv.TvInputManager;
+import android.media.tv.TvView;
 import android.media.tv.interactive.TvIAppManager.Session;
 import android.media.tv.interactive.TvIAppManager.SessionCallback;
 import android.os.Handler;
@@ -39,6 +44,11 @@ public class TvIAppView extends ViewGroup {
     private static final String TAG = "TvIAppView";
     private static final boolean DEBUG = false;
 
+    private static final int SET_TVVIEW_SUCCESS = 1;
+    private static final int SET_TVVIEW_FAIL = 2;
+    private static final int UNSET_TVVIEW_SUCCESS = 3;
+    private static final int UNSET_TVVIEW_FAIL = 4;
+
     private final TvIAppManager mTvIAppManager;
     private final Handler mHandler = new Handler();
     private Session mSession;
@@ -56,6 +66,9 @@ public class TvIAppView extends ViewGroup {
     private int mSurfaceViewRight;
     private int mSurfaceViewTop;
     private int mSurfaceViewBottom;
+
+    private boolean mMediaViewCreated;
+    private Rect mMediaViewFrame;
 
     private final AttributeSet mAttrs;
     private final int mDefStyleAttr;
@@ -111,6 +124,18 @@ public class TvIAppView extends ViewGroup {
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        createSessionMediaView();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        removeSessionMediaView();
+        super.onDetachedFromWindow();
+    }
+
+    @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         if (DEBUG) {
             Log.d(TAG, "onLayout (left=" + left + ", top=" + top + ", right=" + right
@@ -139,6 +164,11 @@ public class TvIAppView extends ViewGroup {
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         mSurfaceView.setVisibility(visibility);
+        if (visibility == View.VISIBLE) {
+            createSessionMediaView();
+        } else {
+            removeSessionMediaView();
+        }
     }
 
     private void resetSurfaceView() {
@@ -147,7 +177,12 @@ public class TvIAppView extends ViewGroup {
             removeView(mSurfaceView);
         }
         mSurface = null;
-        mSurfaceView = new SurfaceView(getContext(), mAttrs, mDefStyleAttr);
+        mSurfaceView = new SurfaceView(getContext(), mAttrs, mDefStyleAttr) {
+            @Override
+            protected void updateSurface() {
+                super.updateSurface();
+                relayoutSessionMediaView();
+            }};
         // The surface view's content should be treated as secure all the time.
         mSurfaceView.setSecure(true);
         mSurfaceView.getHolder().addCallback(mSurfaceHolderCallback);
@@ -160,6 +195,46 @@ public class TvIAppView extends ViewGroup {
     public void reset() {
         if (DEBUG) Log.d(TAG, "reset()");
         resetInternal();
+    }
+
+    private void createSessionMediaView() {
+        // TODO: handle z-order
+        if (mSession == null || !isAttachedToWindow() || mMediaViewCreated) {
+            return;
+        }
+        mMediaViewFrame = getViewFrameOnScreen();
+        mSession.createMediaView(this, mMediaViewFrame);
+        mMediaViewCreated = true;
+    }
+
+    private void removeSessionMediaView() {
+        if (mSession == null || !mMediaViewCreated) {
+            return;
+        }
+        mSession.removeMediaView();
+        mMediaViewCreated = false;
+        mMediaViewFrame = null;
+    }
+
+    private void relayoutSessionMediaView() {
+        if (mSession == null || !isAttachedToWindow() || !mMediaViewCreated) {
+            return;
+        }
+        Rect viewFrame = getViewFrameOnScreen();
+        if (viewFrame.equals(mMediaViewFrame)) {
+            return;
+        }
+        mSession.relayoutMediaView(viewFrame);
+        mMediaViewFrame = viewFrame;
+    }
+
+    private Rect getViewFrameOnScreen() {
+        Rect frame = new Rect();
+        getGlobalVisibleRect(frame);
+        RectF frameF = new RectF(frame);
+        getMatrix().mapRect(frameF);
+        frameF.round(frame);
+        return frame;
     }
 
     private void setSessionSurface(Surface surface) {
@@ -206,11 +281,45 @@ public class TvIAppView extends ViewGroup {
         mSessionCallback = null;
         if (mSession != null) {
             setSessionSurface(null);
+            removeSessionMediaView();
             mUseRequestedSurfaceLayout = false;
             mSession.release();
             mSession = null;
             resetSurfaceView();
         }
+    }
+
+    public Session getIAppSession() {
+        return mSession;
+    }
+
+    /**
+     * Sets the TvIAppView to receive events from TIS. This method links the session of
+     * TvIAppManager to TvInputManager session, so the TIAS can get the TIS events.
+     *
+     * @param tvView the TvView to be linked to this TvIAppView via linking of Sessions.
+     * @return to be added
+     */
+    public int setTvView(@Nullable TvView tvView) {
+        if (tvView == null) {
+            return unsetTvView();
+        }
+        TvInputManager.Session inputSession = tvView.getInputSession();
+        if (inputSession == null || mSession == null) {
+            return SET_TVVIEW_FAIL;
+        }
+        mSession.setInputSession(inputSession);
+        inputSession.setIAppSession(mSession);
+        return SET_TVVIEW_SUCCESS;
+    }
+
+    private int unsetTvView() {
+        if (mSession == null || mSession.getInputSession() == null) {
+            return UNSET_TVVIEW_FAIL;
+        }
+        mSession.getInputSession().setIAppSession(null);
+        mSession.setInputSession(null);
+        return UNSET_TVVIEW_SUCCESS;
     }
 
     private class MySessionCallback extends SessionCallback {
@@ -246,6 +355,7 @@ public class TvIAppView extends ViewGroup {
                         dispatchSurfaceChanged(mSurfaceFormat, mSurfaceWidth, mSurfaceHeight);
                     }
                 }
+                createSessionMediaView();
             } else {
                 // Failed to create
                 // Todo: forward error to Tv App
@@ -262,6 +372,8 @@ public class TvIAppView extends ViewGroup {
                 Log.w(TAG, "onSessionReleased - session not created");
                 return;
             }
+            mMediaViewCreated = false;
+            mMediaViewFrame = null;
             mSessionCallback = null;
             mSession = null;
         }

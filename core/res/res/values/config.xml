@@ -654,10 +654,23 @@
         -->
     </integer-array>
 
-    <!-- When entering this device state (defined in device_state_configuration.xml),
-         we should wake the device. -1 to disable the feature (do not wake on any device-state
-         transition). -->
-    <integer name="config_deviceStateOnWhichToWakeUp">-1</integer>
+    <!-- When a device enters any of these states, it should be woken up. States are defined in
+         device_state_configuration.xml. -->
+    <integer-array name="config_deviceStatesOnWhichToWakeUp">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        -->
+    </integer-array>
+
+    <!-- When a device enters any of these states, it should go to sleep. States are defined in
+         device_state_configuration.xml. -->
+    <integer-array name="config_deviceStatesOnWhichToSleep">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        -->
+    </integer-array>
 
     <!-- Indicate the display area rect for foldable devices in folded state. -->
     <string name="config_foldedArea"></string>
@@ -1035,8 +1048,15 @@
             0 - Nothing
             1 - Toggle theater mode setting
             2 - Brightness boost
+            3 - Launch target activity defined by config_doublePressOnPowerTargetActivity
+                if available
     -->
     <integer name="config_doublePressOnPowerBehavior">0</integer>
+
+    <!-- Activity name for the default target activity to be launched. Note that
+            config_doublePressOnPowerBehavior must be set to 3 for this to work. [DO NOT TRANSLATE]
+    -->
+    <string name="config_doublePressOnPowerTargetActivity" translatable="false"></string>
 
     <!-- Control the behavior when the user triple presses the power button.
             0 - Nothing
@@ -1406,6 +1426,12 @@
     <integer name="config_screenBrightnessDim">10</integer>
     <item name="config_screenBrightnessDimFloat" format="float" type="dimen">0.05</item>
 
+    <!-- If the screen brightness is already set at or below config_screenBrightnessDim, and the
+         user activity timeout expires, we still want to dim the screen slightly to indicate that
+         the device is about to go to sleep. The screen will dim by this amount in that case.
+         -->
+    <item name="config_screenBrightnessMinimumDimAmountFloat" format="float" type="dimen">0.04</item>
+
     <!-- Minimum allowable screen brightness to use in a very dark room.
          This value sets the floor for the darkest possible auto-brightness
          adjustment.  It is expected to be somewhat less than the first entry in
@@ -1464,6 +1490,30 @@
     <integer-array name="config_autoBrightnessLevels">
     </integer-array>
 
+    <!-- Array of light sensor lux values to define our levels for auto backlight brightness
+         support whilst in idle mode.
+         The N entries of this array define N + 1 control points as follows:
+         (1-based arrays)
+
+         Point 1:            (0, value[1]):             lux <= 0
+         Point 2:     (level[1], value[2]):  0        < lux <= level[1]
+         Point 3:     (level[2], value[3]):  level[2] < lux <= level[3]
+         ...
+         Point N+1: (level[N], value[N+1]):  level[N] < lux
+
+         The control points must be strictly increasing. Each control point
+         corresponds to an entry in the brightness backlight values arrays.
+         For example, if lux == level[1] (first element of the levels array)
+         then the brightness will be determined by value[2] (second element
+         of the brightness values array).
+
+         Spline interpolation is used to determine the auto-brightness
+         backlight values for lux levels between these control points.
+
+         Must be overridden in platform specific overlays -->
+    <integer-array name="config_autoBrightnessLevelsIdle">
+    </integer-array>
+
     <!-- Timeout (in milliseconds) after which we remove the effects any user interactions might've
          had on the brightness mapping. This timeout doesn't start until we transition to a
          non-interactive display policy so that we don't reset while users are using their devices,
@@ -1487,6 +1537,10 @@
     <integer-array name="config_autoBrightnessLcdBacklightValues_doze">
     </integer-array>
 
+    <!-- Enables idle screen brightness mode on this device.
+         If this is true, config_autoBrightnessDisplayValuesNitsIdle must be defined. -->
+    <bool name="config_enableIdleScreenBrightnessMode">false</bool>
+
     <!-- Array of desired screen brightness in nits corresponding to the lux values
          in the config_autoBrightnessLevels array. As with config_screenBrightnessMinimumNits and
          config_screenBrightnessMaximumNits, the display brightness is defined as the measured
@@ -1501,6 +1555,13 @@
          array. The brightness values must be non-negative and non-decreasing. This must be
          overridden in platform specific overlays -->
     <array name="config_autoBrightnessDisplayValuesNits">
+    </array>
+
+    <!-- Array of desired screen brightness in nits for idle screen brightness mode.
+         This array should meet the same requirements as config_autoBrightnessDisplayValuesNits.
+         This array also corresponds to the lux values given in config_autoBrightnessLevelsIdle.
+         In order to activate this mode, config_enableIdleScreenBrightnessMode must be true. -->
+    <array name="config_autoBrightnessDisplayValuesNitsIdle">
     </array>
 
     <!-- Array of output values for button backlight corresponding to the luX values
@@ -1747,6 +1808,13 @@
          See android.service.timezone.TimeZoneProviderService for how to host location time zone
          provider services. -->
     <string name="config_secondaryLocationTimeZoneProviderPackageName" translatable="false"></string>
+
+    <!-- Whether the time zone detection logic supports fall back from geolocation suggestions to
+         telephony suggestions temporarily in certain circumstances. Reduces time zone detection
+         latency during some scenarios like air travel. Only useful when both geolocation and
+         telephony time zone detection are supported on a device.
+         See com.android.server.timezonedetector.TimeZoneDetectorStrategy for more information. -->
+    <bool name="config_supportTelephonyTimeZoneFallback" translatable="false">true</bool>
 
     <!-- Whether to enable network location overlay which allows network location provider to be
          replaced by an app at run-time. When disabled, only the
@@ -4903,12 +4971,6 @@
          button. -->
     <integer name="config_mashPressVibrateTimeOnPowerButton">0</integer>
 
-    <!-- Control the behavior when the user presses the power button 5 times.
-           0 - Nothing
-           1 - Launch panic button gesture
-    -->
-    <integer name="config_mashPressOnPowerBehavior">0</integer>
-
     <!-- Whether or not to enable the binder heavy hitter watcher by default -->
     <bool name="config_defaultBinderHeavyHitterWatcherEnabled">false</bool>
 
@@ -4947,9 +5009,10 @@
          the app in the letterbox mode. -->
     <item name="config_fixedOrientationLetterboxAspectRatio" format="float" type="dimen">0.0</item>
 
-    <!-- Corners radius for activity presented the letterbox mode. Values < 0 will be ignored and
-         min between device bottom corner radii will be used instead. -->
-    <integer name="config_letterboxActivityCornersRadius">-1</integer>
+    <!-- Corners radius for activity presented the letterbox mode. Values < 0 enable rounded
+         corners with radius equal to min between device bottom corner radii. Default 0 value turns
+         off rounded corners logic in LetterboxUiController. -->
+    <integer name="config_letterboxActivityCornersRadius">0</integer>
 
     <!-- Blur radius for the Option 3 in R.integer.config_letterboxBackgroundType. Values < 0 are
         ignored and 0 is used. -->
@@ -5047,10 +5110,6 @@
 
     <!-- Whether to select voice/data/sms preference without user confirmation -->
     <bool name="config_voice_data_sms_auto_fallback">false</bool>
-
-    <!-- Whether to enable dynamic keyguard positioning for wide screen devices (e.g. only using
-         half of the screen, to be accessible using only one hand). -->
-    <bool name="config_enableDynamicKeyguardPositioning">false</bool>
 
     <!-- Whether to allow the caching of the SIM PIN for verification after unattended reboot -->
     <bool name="config_allow_pin_storage_for_unattended_reboot">true</bool>
@@ -5470,4 +5529,10 @@
     <string name="config_work_badge_path_24" translatable="false">
         M20,6h-4L16,4c0,-1.11 -0.89,-2 -2,-2h-4c-1.11,0 -2,0.89 -2,2v2L4,6c-1.11,0 -1.99,0.89 -1.99,2L2,19c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2L22,8c0,-1.11 -0.89,-2 -2,-2zM14,6h-4L10,4h4v2z
     </string>
+
+    <!-- GNSS configurations to override carrier config. Empty by default-->
+    <string-array name="config_gnssParameters" translatable="false">
+        <!-- Add configurations here, example: -->
+        <!-- <item>SUPL_HOST=supl.google.com</item> -->
+    </string-array>
 </resources>

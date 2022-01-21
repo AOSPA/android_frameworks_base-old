@@ -16,8 +16,6 @@
 
 package com.android.systemui.biometrics;
 
-import static android.media.AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY;
-
 import static junit.framework.Assert.assertEquals;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -44,6 +42,7 @@ import android.hardware.fingerprint.IUdfpsOverlayControllerCallback;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.VibrationAttributes;
 import android.os.Vibrator;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
@@ -642,17 +641,17 @@ public class UdfpsControllerTest extends SysuiTestCase {
         mTouchListenerCaptor.getValue().onTouch(mUdfpsView, moveEvent);
         moveEvent.recycle();
 
-        // THEN click haptic is played
+        // THEN low-tick haptic is played
         verify(mVibrator).vibrate(
                 anyInt(),
                 anyString(),
-                eq(mUdfpsController.EFFECT_CLICK),
-                eq("udfps-onStart"),
-                eq(UdfpsController.VIBRATION_SONIFICATION_ATTRIBUTES));
+                any(),
+                eq("udfps-onStart-tick"),
+                eq(UdfpsController.VIBRATION_ATTRIBUTES));
 
         // THEN make sure vibration attributes has so that it always will play the haptic,
         // even in battery saver mode
-        assertEquals(USAGE_ASSISTANCE_ACCESSIBILITY,
-                UdfpsController.VIBRATION_SONIFICATION_ATTRIBUTES.getUsage());
+        assertEquals(VibrationAttributes.USAGE_COMMUNICATION_REQUEST,
+                UdfpsController.VIBRATION_ATTRIBUTES.getUsage());
     }
 }

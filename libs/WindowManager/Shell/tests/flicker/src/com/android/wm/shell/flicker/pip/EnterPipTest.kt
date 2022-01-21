@@ -26,7 +26,11 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.LAUNCHER_COMPONENT
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
+import com.android.server.wm.flicker.rules.WMFlickerServiceRuleForTestSpec
+import org.junit.Assume.assumeFalse
 import org.junit.FixMethodOrder
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
@@ -55,6 +59,9 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group3
 class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
+    @get:Rule
+    val flickerRule = WMFlickerServiceRuleForTestSpec(testSpec)
+
     /**
      * Defines the transition used to run the test
      */
@@ -64,6 +71,33 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
                 pipApp.clickEnterPipButton(wmHelper)
             }
         }
+
+    @FlakyTest
+    @Test
+    fun runPresubmitAssertion() {
+        flickerRule.checkPresubmitAssertions()
+    }
+
+    @FlakyTest
+    @Test
+    fun runPostsubmitAssertion() {
+        flickerRule.checkPostsubmitAssertions()
+    }
+
+    @FlakyTest
+    @Test
+    fun runFlakyAssertion() {
+        flickerRule.checkFlakyAssertions()
+    }
+
+    /** {@inheritDoc}  */
+    @Presubmit
+    @Test
+    override fun statusBarLayerRotatesScales() {
+        // This test doesn't work in shell transitions because of b/206753786
+        assumeFalse(isShellTransitionsEnabled)
+        super.statusBarLayerRotatesScales()
+    }
 
     /**
      * Checks [pipApp] window remains visible throughout the animation

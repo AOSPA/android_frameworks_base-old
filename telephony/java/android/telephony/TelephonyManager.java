@@ -131,6 +131,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -143,6 +145,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
 
 /**
  * Provides access to information about the telephony services on
@@ -1924,9 +1927,10 @@ public class TelephonyManager {
      * the IMEI/SV for GSM phones. Return null if the software version is
      * not available.
      * <p>
-     * Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}.
      */
-    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.READ_BASIC_PHONE_STATE})
     @Nullable
     public String getDeviceSoftwareVersion() {
         return getDeviceSoftwareVersion(getSlotIndex());
@@ -2991,7 +2995,9 @@ public class TelephonyManager {
      * when opportunistic network is providing cellular internet connection to the user.
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
-     * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     * or {@link android.Manifest.permission#READ_BASIC_PHONE_STATE
+     * READ_BASIC_PHONE_STATE} or that the calling app has carrier privileges
+     * (see {@link #hasCarrierPrivileges}).
      *
      * @return the network type
      *
@@ -3014,7 +3020,9 @@ public class TelephonyManager {
      * @see #NETWORK_TYPE_NR
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
-    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.READ_BASIC_PHONE_STATE})
     public @NetworkType int getDataNetworkType() {
         return getDataNetworkType(getSubId(SubscriptionManager.getActiveDataSubscriptionId()));
     }
@@ -3052,10 +3060,14 @@ public class TelephonyManager {
      * Returns the NETWORK_TYPE_xxxx for voice
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
-     * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     * or {@link android.Manifest.permission#READ_BASIC_PHONE_STATE
+     * READ_BASIC_PHONE_STATE} or that the calling app has carrier privileges
+     * (see {@link #hasCarrierPrivileges}).
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
-    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.READ_BASIC_PHONE_STATE})
     public @NetworkType int getVoiceNetworkType() {
         return getVoiceNetworkType(getSubId());
     }
@@ -3494,14 +3506,38 @@ public class TelephonyManager {
      * @see #SIM_STATE_PRESENT
      *
      * @hide
+     * @deprecated instead use {@link #getSimCardState(int, int)}
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @Deprecated
     public @SimState int getSimCardState(int physicalSlotIndex) {
-        int simState = getSimState(getLogicalSlotIndex(physicalSlotIndex));
+        int simState = getSimState(getLogicalSlotIndex(physicalSlotIndex, DEFAULT_PORT_INDEX));
         return getSimCardStateFromSimState(simState);
     }
 
+    /**
+     * Returns a constant indicating the state of the device SIM card in a physical slot and
+     * port index.
+     *
+     * @param physicalSlotIndex physical slot index
+     * @param portIndex The port index is an enumeration of the ports available on the UICC.
+     *                  Use {@link UiccPortInfo#getPortIndex()} to get portIndex.
+     *
+     * @see #SIM_STATE_UNKNOWN
+     * @see #SIM_STATE_ABSENT
+     * @see #SIM_STATE_CARD_IO_ERROR
+     * @see #SIM_STATE_CARD_RESTRICTED
+     * @see #SIM_STATE_PRESENT
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public @SimState int getSimCardState(int physicalSlotIndex, int portIndex) {
+        int simState = getSimState(getLogicalSlotIndex(physicalSlotIndex, portIndex));
+        return getSimCardStateFromSimState(simState);
+    }
     /**
      * Converts SIM state to SIM card state.
      * @param simState
@@ -3522,13 +3558,19 @@ public class TelephonyManager {
     /**
      * Converts a physical slot index to logical slot index.
      * @param physicalSlotIndex physical slot index
+     * @param portIndex The port index is an enumeration of the ports available on the UICC.
+     *                  Use {@link UiccPortInfo#getPortIndex()} to get portIndex.
      * @return logical slot index
      */
-    private int getLogicalSlotIndex(int physicalSlotIndex) {
+    private int getLogicalSlotIndex(int physicalSlotIndex, int portIndex) {
         UiccSlotInfo[] slotInfos = getUiccSlotsInfo();
         if (slotInfos != null && physicalSlotIndex >= 0 && physicalSlotIndex < slotInfos.length
                 && slotInfos[physicalSlotIndex] != null) {
-            return slotInfos[physicalSlotIndex].getLogicalSlotIdx();
+            for (UiccPortInfo portInfo : slotInfos[physicalSlotIndex].getPorts()) {
+                if (portInfo.getPortIndex() == portIndex) {
+                    return portInfo.getLogicalSlotIndex();
+                }
+            }
         }
 
         return SubscriptionManager.INVALID_SIM_SLOT_INDEX;
@@ -3568,12 +3610,42 @@ public class TelephonyManager {
      * @see #SIM_STATE_LOADED
      *
      * @hide
+     * @deprecated instead use {@link #getSimApplicationState(int, int)}
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @Deprecated
     public @SimState int getSimApplicationState(int physicalSlotIndex) {
         int simState =
-                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex));
+                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex,
+                        DEFAULT_PORT_INDEX));
+        return getSimApplicationStateFromSimState(simState);
+    }
+
+    /**
+     * Returns a constant indicating the state of the card applications on the device SIM card in
+     * a physical slot.
+     *
+     * @param physicalSlotIndex physical slot index
+     * @param portIndex The port index is an enumeration of the ports available on the UICC.
+     *                  Use {@link UiccPortInfo#getPortIndex()} to get portIndex.
+     *
+     * @see #SIM_STATE_UNKNOWN
+     * @see #SIM_STATE_PIN_REQUIRED
+     * @see #SIM_STATE_PUK_REQUIRED
+     * @see #SIM_STATE_NETWORK_LOCKED
+     * @see #SIM_STATE_NOT_READY
+     * @see #SIM_STATE_PERM_DISABLED
+     * @see #SIM_STATE_LOADED
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public @SimState int getSimApplicationState(int physicalSlotIndex, int portIndex) {
+        int simState =
+                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex,
+                        portIndex));
         return getSimApplicationStateFromSimState(simState);
     }
 
@@ -3964,8 +4036,8 @@ public class TelephonyManager {
      * <p>
      * If the caller has carrier priviliges on any active subscription, then they have permission to
      * get simple information like the card ID ({@link UiccCardInfo#getCardId()}), whether the card
-     * is an eUICC ({@link UiccCardInfo#isEuicc()}), and the slot index where the card is inserted
-     * ({@link UiccCardInfo#getSlotIndex()}).
+     * is an eUICC ({@link UiccCardInfo#isEuicc()}), and the physical slot index where the card is
+     * inserted ({@link UiccCardInfo#getPhysicalSlotIndex()}.
      * <p>
      * To get private information such as the EID ({@link UiccCardInfo#getEid()}) or ICCID
      * ({@link UiccCardInfo#getIccId()}), the caller must have carrier priviliges on that specific
@@ -4009,7 +4081,7 @@ public class TelephonyManager {
             if (telephony == null) {
                 return null;
             }
-            return telephony.getUiccSlotsInfo();
+            return telephony.getUiccSlotsInfo(mContext.getOpPackageName());
         } catch (RemoteException e) {
             return null;
         }
@@ -4042,8 +4114,13 @@ public class TelephonyManager {
      *        size should be same as {@link #getUiccSlotsInfo()}.
      * @return boolean Return true if the switch succeeds, false if the switch fails.
      * @hide
+     * @deprecated {@link #setSimSlotMapping(Collection, Executor, Consumer)}
      */
+     // TODO: once integrating the HAL changes we can  convert int[] to List<UiccSlotMapping> and
+     // converge API's in ITelephony.aidl and PhoneInterfaceManager
+
     @SystemApi
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public boolean switchSlots(int[] physicalSlots) {
         try {
@@ -4058,6 +4135,109 @@ public class TelephonyManager {
     }
 
     /**
+     * @param slotMapping Logical to physical slot and port mapping.
+     * @return {@code true} if slotMapping is valid.
+     * @return {@code false} if slotMapping is invalid.
+     *
+     * slotMapping is invalid if there are different entries (physical slot + port) mapping to the
+     * same logical slot or if there are same {physical slot + port} mapping to the different
+     * logical slot
+     * @hide
+     */
+    private static boolean isSlotMappingValid(@NonNull Collection<UiccSlotMapping> slotMapping) {
+        // Grouping the collection by logicalSlotIndex, finding different entries mapping to the
+        // same logical slot
+        Map<Integer, List<UiccSlotMapping>> slotMappingInfo = slotMapping.stream().collect(
+                Collectors.groupingBy(UiccSlotMapping::getLogicalSlotIndex));
+        for (Map.Entry<Integer, List<UiccSlotMapping>> entry : slotMappingInfo.entrySet()) {
+            List<UiccSlotMapping> logicalSlotMap = entry.getValue();
+            if (logicalSlotMap.size() > 1) {
+                // duplicate logicalSlotIndex found
+                return false;
+            }
+        }
+
+        // Grouping the collection by physical slot and port, finding same entries mapping to the
+        // different logical slot
+        Map<List<Integer>, List<UiccSlotMapping>> slotMapInfos = slotMapping.stream().collect(
+                Collectors.groupingBy(
+                        slot -> Arrays.asList(slot.getPhysicalSlotIndex(), slot.getPortIndex())));
+        for (Map.Entry<List<Integer>, List<UiccSlotMapping>> entry : slotMapInfos.entrySet()) {
+            List<UiccSlotMapping> portAndPhysicalSlotList = entry.getValue();
+            if (portAndPhysicalSlotList.size() > 1) {
+                // duplicate pair of portIndex and physicalSlotIndex found
+                return false;
+            }
+        }
+        return true;
+    }
+    /**
+     * Maps the logical slots to physical slots and ports. Mapping is specified from
+     * {@link UiccSlotMapping} which consist of both physical slot index and port index.
+     * Logical slot is the slot that is seen by modem. Physical slot is the actual physical slot.
+     * Port index is the index (enumerated value) for the associated port available on the SIM.
+     * Each physical slot can have multiple ports if multi-enabled profile(MEP) is supported.
+     *
+     * Example: no. of logical slots 1 and physical slots 2 do not support MEP, each physical slot
+     * has one port:
+     * The only logical slot (index 0) can be mapped to first physical slot (value 0), port(index
+     * 0) or
+     * second physical slot(value 1), port (index 0), while the other physical slot remains unmapped
+     * and inactive.
+     * slotMapping[0] = UiccSlotMapping{0 //port index, 0 //physical slot, 0 //logical slot} or
+     * slotMapping[0] = UiccSlotMapping{0 //port index, 1 //physical slot, 0 //logical slot}
+     *
+     * Example no. of logical slots 2 and physical slots 2 supports MEP with 2 ports available:
+     * Each logical slot must be mapped to a port (physical slot and port combination).
+     * First logical slot (index 0) can be mapped to physical slot 1 and the second logical slot
+     * can be mapped to either port from physical slot 2.
+     *
+     * slotMapping[0] = UiccSlotMapping{0, 0, 0} and slotMapping[1] = UiccSlotMapping{0, 1, 1} or
+     * slotMapping[0] = UiccSlotMapping{0, 0, 0} and slotMapping[1] = UiccSlotMapping{1, 1, 1}
+     *
+     * or the other way around, the second logical slot(index 1) can be mapped to physical slot 1
+     * and the first logical slot can be mapped to either port from physical slot 2.
+     *
+     * slotMapping[1] = UiccSlotMapping{0, 0, 0} and slotMapping[0] = UiccSlotMapping{0, 1, 1} or
+     * slotMapping[1] = UiccSlotMapping{0, 0, 0} and slotMapping[0] = UiccSlotMapping{1, 1, 1}
+     *
+     * another possible mapping is each logical slot maps to each port of physical slot 2 and there
+     * is no active logical modem mapped to physical slot 1.
+     *
+     * slotMapping[0] = UiccSlotMapping{0, 1, 0} and slotMapping[1] = UiccSlotMapping{1, 1, 1} or
+     * slotMapping[0] = UiccSlotMapping{1, 1, 0} and slotMapping[1] = UiccSlotMapping{0, 1, 1}
+     *
+     * @param slotMapping Logical to physical slot and port mapping.
+     * @throws IllegalStateException if telephony service is null or slot mapping was sent when the
+     *         radio in middle of a silent restart or other invalid states to handle the command
+     * @throws IllegalArgumentException if the caller passes in an invalid collection of
+     *         UiccSlotMapping like duplicate data, etc
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public void setSimSlotMapping(@NonNull Collection<UiccSlotMapping> slotMapping) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                if (isSlotMappingValid(slotMapping)) {
+                    boolean result = telephony.setSimSlotMapping(new ArrayList(slotMapping));
+                    if (!result) {
+                        throw new IllegalStateException("setSimSlotMapping has failed");
+                    }
+                } else {
+                    throw new IllegalArgumentException("Duplicate UiccSlotMapping data found");
+                }
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
      * Get the mapping from logical slots to physical slots. The key of the map is the logical slot
      * id and the value is the physical slots id mapped to this logical slot id.
      *
@@ -4065,18 +4245,21 @@ public class TelephonyManager {
      * should be {@link #getPhoneCount()} if success, otherwise return an empty map.
      *
      * @hide
+     * @deprecated use {@link #getSimSlotMapping()} instead.
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     @NonNull
+    @Deprecated
     public Map<Integer, Integer> getLogicalToPhysicalSlotMapping() {
         Map<Integer, Integer> slotMapping = new HashMap<>();
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                int[] slotMappingArray = telephony.getSlotsMapping();
-                for (int i = 0; i < slotMappingArray.length; i++) {
-                    slotMapping.put(i, slotMappingArray[i]);
+                List<UiccSlotMapping> simSlotsMapping = telephony.getSlotsMapping(
+                        mContext.getOpPackageName());
+                for (UiccSlotMapping slotMap : simSlotsMapping) {
+                    slotMapping.put(slotMap.getLogicalSlotIndex(), slotMap.getPhysicalSlotIndex());
                 }
             }
         } catch (RemoteException e) {
@@ -4085,6 +4268,33 @@ public class TelephonyManager {
         return slotMapping;
     }
 
+    /**
+     * Get the mapping from logical slots to physical sim slots and port indexes. Initially the
+     * logical slot index was mapped to physical slot index, but with support for multi-enabled
+     * profile(MEP) logical slot is now mapped to port index.
+     *
+     * @return a collection of {@link UiccSlotMapping} which indicates the mapping from logical
+     *         slots to ports and physical slots.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @NonNull
+    public Collection<UiccSlotMapping> getSimSlotMapping() {
+        List<UiccSlotMapping> slotMap;
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                slotMap = telephony.getSlotsMapping(mContext.getOpPackageName());
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+        return slotMap;
+    }
     //
     //
     // Subscriber Info
@@ -4714,7 +4924,10 @@ public class TelephonyManager {
      *     for any API level.
      *     {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      *     for apps targeting SDK API level 29 and below.
+     *
+     * @deprecated use {@link SubscriptionManager#getPhoneNumber(int)} instead.
      */
+    @Deprecated
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges or default SMS app
     @RequiresPermission(anyOf = {
             android.Manifest.permission.READ_PHONE_STATE,
@@ -4788,7 +5001,9 @@ public class TelephonyManager {
      * @param alphaTag alpha-tagging of the dailing nubmer
      * @param number The dialing number
      * @return true if the operation was executed correctly.
+     * @deprecated use {@link SubscriptionManager#setCarrierPhoneNumber(int, String)} instead.
      */
+    @Deprecated
     public boolean setLine1NumberForDisplay(String alphaTag, String number) {
         return setLine1NumberForDisplay(getSubId(), alphaTag, number);
     }
@@ -4809,6 +5024,10 @@ public class TelephonyManager {
      */
     public boolean setLine1NumberForDisplay(int subId, String alphaTag, String number) {
         try {
+            // This API is deprecated; call the new API to allow smooth migartion.
+            // The new API doesn't accept null so convert null to empty string.
+            mSubscriptionManager.setCarrierPhoneNumber(subId, (number == null ? "" : number));
+
             ITelephony telephony = getITelephony();
             if (telephony != null)
                 return telephony.setLine1NumberForDisplayForSubscriber(subId, alphaTag, number);
@@ -6623,12 +6842,7 @@ public class TelephonyManager {
      * @param AID Application id. See ETSI 102.221 and 101.220.
      * @param p2 P2 parameter (described in ISO 7816-4).
      * @return an IccOpenLogicalChannelResponse object.
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openLogicalChannel(byte[], byte)}.
      */
-    @Deprecated
     public IccOpenLogicalChannelResponse iccOpenLogicalChannel(String AID, int p2) {
         return iccOpenLogicalChannel(getSubId(), AID, p2);
     }
@@ -6659,12 +6873,7 @@ public class TelephonyManager {
      * @param p2 P2 parameter (described in ISO 7816-4).
      * @return an IccOpenLogicalChannelResponse object.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openLogicalChannel(byte[], byte)}.
      */
-    @Deprecated
     public IccOpenLogicalChannelResponse iccOpenLogicalChannel(int subId, String AID, int p2) {
         try {
             ITelephony telephony = getITelephony();
@@ -6692,10 +6901,7 @@ public class TelephonyManager {
      *            iccOpenLogicalChannel.
      * @return true if the channel was closed successfully.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.Channel#close()}.
      */
-    @Deprecated
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     @SystemApi
     public boolean iccCloseLogicalChannelBySlot(int slotIndex, int channel) {
@@ -6722,10 +6928,7 @@ public class TelephonyManager {
      * @param channel is the channel id to be closed as returned by a successful
      *            iccOpenLogicalChannel.
      * @return true if the channel was closed successfully.
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.Channel#close()}.
      */
-    @Deprecated
     public boolean iccCloseLogicalChannel(int channel) {
         return iccCloseLogicalChannel(getSubId(), channel);
     }
@@ -6744,10 +6947,7 @@ public class TelephonyManager {
      *            iccOpenLogicalChannel.
      * @return true if the channel was closed successfully.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.Channel#close()}.
      */
-    @Deprecated
     public boolean iccCloseLogicalChannel(int subId, int channel) {
         try {
             ITelephony telephony = getITelephony();
@@ -6783,10 +6983,7 @@ public class TelephonyManager {
      * @return The APDU response from the ICC card with the status appended at the end, or null if
      * there is an issue connecting to the Telephony service.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     @SystemApi
     @Nullable
@@ -6824,10 +7021,7 @@ public class TelephonyManager {
      * @param data Data to be sent with the APDU.
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public String iccTransmitApduLogicalChannel(int channel, int cla,
             int instruction, int p1, int p2, int p3, String data) {
         return iccTransmitApduLogicalChannel(getSubId(), channel, cla,
@@ -6856,10 +7050,7 @@ public class TelephonyManager {
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public String iccTransmitApduLogicalChannel(int subId, int channel, int cla,
             int instruction, int p1, int p2, int p3, String data) {
         try {
@@ -6895,13 +7086,7 @@ public class TelephonyManager {
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openBasicChannel(byte[], byte)},
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     @SystemApi
     @NonNull
@@ -6937,13 +7122,7 @@ public class TelephonyManager {
      * @param data Data to be sent with the APDU.
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openBasicChannel(byte[], byte)},
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public String iccTransmitApduBasicChannel(int cla,
             int instruction, int p1, int p2, int p3, String data) {
         return iccTransmitApduBasicChannel(getSubId(), cla,
@@ -6970,13 +7149,7 @@ public class TelephonyManager {
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openBasicChannel(byte[], byte)},
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public String iccTransmitApduBasicChannel(int subId, int cla,
             int instruction, int p1, int p2, int p3, String data) {
         try {
@@ -7004,13 +7177,7 @@ public class TelephonyManager {
      * @param p3 P3 value of the APDU command.
      * @param filePath
      * @return The APDU response.
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openBasicChannel(byte[], byte)},
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public byte[] iccExchangeSimIO(int fileID, int command, int p1, int p2, int p3,
             String filePath) {
         return iccExchangeSimIO(getSubId(), fileID, command, p1, p2, p3, filePath);
@@ -7032,13 +7199,7 @@ public class TelephonyManager {
      * @param filePath
      * @return The APDU response.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openBasicChannel(byte[], byte)},
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public byte[] iccExchangeSimIO(int subId, int fileID, int command, int p1, int p2,
             int p3, String filePath) {
         try {
@@ -7064,13 +7225,7 @@ public class TelephonyManager {
      * @return The APDU response from the ICC card in hexadecimal format
      *         with the last 4 bytes being the status word. If the command fails,
      *         returns an empty string.
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openBasicChannel(byte[], byte)},
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public String sendEnvelopeWithStatus(String content) {
         return sendEnvelopeWithStatus(getSubId(), content);
     }
@@ -7090,13 +7245,7 @@ public class TelephonyManager {
      *         with the last 4 bytes being the status word. If the command fails,
      *         returns an empty string.
      * @hide
-     * @deprecated Use {@link android.se.omapi.SEService} APIs instead. See
-     *             {@link android.se.omapi.SEService#getUiccReader(int)},
-     *             {@link android.se.omapi.Reader#openSession()},
-     *             {@link android.se.omapi.Session#openBasicChannel(byte[], byte)},
-     *             {@link android.se.omapi.Channel#transmit(byte[])}.
      */
-    @Deprecated
     public String sendEnvelopeWithStatus(int subId, String content) {
         try {
             ITelephony telephony = getITelephony();
@@ -10013,7 +10162,9 @@ public class TelephonyManager {
      *
      * <p>Requires one of the following permissions:
      * {@link android.Manifest.permission#ACCESS_NETWORK_STATE},
-     * {@link android.Manifest.permission#MODIFY_PHONE_STATE}, or that the calling app has carrier
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE}, or
+     * {@link android.Manifest.permission#READ_BASIC_PHONE_STATE
+     * READ_BASIC_PHONE_STATE} or that the calling app has carrier
      * privileges (see {@link #hasCarrierPrivileges}).
      *
      * <p>Note that this does not take into account any data restrictions that may be present on the
@@ -10024,7 +10175,8 @@ public class TelephonyManager {
      */
     @RequiresPermission(anyOf = {android.Manifest.permission.ACCESS_NETWORK_STATE,
             android.Manifest.permission.MODIFY_PHONE_STATE,
-            android.Manifest.permission.READ_PHONE_STATE})
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.READ_BASIC_PHONE_STATE})
     public boolean isDataEnabled() {
         try {
             return isDataEnabledForReason(DATA_ENABLED_REASON_USER);
@@ -10043,14 +10195,17 @@ public class TelephonyManager {
      *
      * <p>Requires one of the following permissions:
      * {@link android.Manifest.permission#ACCESS_NETWORK_STATE},
-     * {@link android.Manifest.permission#READ_PHONE_STATE} or that the calling app
+     * {@link android.Manifest.permission#READ_PHONE_STATE} or
+     * {@link android.Manifest.permission#READ_BASIC_PHONE_STATE
+     * READ_BASIC_PHONE_STATE} or that the calling app
      * has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
      * @return {@code true} if the data roaming is enabled on the subscription, otherwise return
      * {@code false}.
      */
     @RequiresPermission(anyOf = {android.Manifest.permission.ACCESS_NETWORK_STATE,
-            android.Manifest.permission.READ_PHONE_STATE})
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.READ_BASIC_PHONE_STATE})
     public boolean isDataRoamingEnabled() {
         boolean isDataRoamingEnabled = false;
         try {
@@ -12445,16 +12600,21 @@ public class TelephonyManager {
      * <p>If this object has been created with {@link #createForSubscriptionId}, applies
      *      to the given subId. Otherwise, applies to
      * {@link SubscriptionManager#getDefaultDataSubscriptionId()}
-     *
      * @param reason the reason the data enable change is taking place
      * @return whether data is enabled for a reason.
      * <p>Requires Permission:
+     * The calling app has carrier privileges (see {@link #hasCarrierPrivileges}) or
      * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} or
-     * {@link android.Manifest.permission#ACCESS_NETWORK_STATE}
+     * {@link android.Manifest.permission#ACCESS_NETWORK_STATE} or
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE}
+     * {@link android.Manifest.permission#READ_BASIC_PHONE_STATE}
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(anyOf = {android.Manifest.permission.ACCESS_NETWORK_STATE,
-            android.Manifest.permission.READ_PHONE_STATE})
+            android.Manifest.permission.READ_PHONE_STATE,
+            android.Manifest.permission.MODIFY_PHONE_STATE,
+            android.Manifest.permission.READ_BASIC_PHONE_STATE
+    })
     public boolean isDataEnabledForReason(@DataEnabledReason int reason) {
         return isDataEnabledForReason(getSubId(), reason);
     }
@@ -12589,14 +12749,11 @@ public class TelephonyManager {
      *   <LI>And possibly others.</LI>
      * </UL>
      * @return {@code true} if the overall data connection is allowed; {@code false} if not.
-     * <p>Requires Permission:
-     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} or
-     * {@link android.Manifest.permission#ACCESS_NETWORK_STATE} or
-     * android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE
      */
     @RequiresPermission(anyOf = {android.Manifest.permission.ACCESS_NETWORK_STATE,
             android.Manifest.permission.READ_PHONE_STATE,
-            android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE})
+            android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
+            android.Manifest.permission.READ_BASIC_PHONE_STATE})
     public boolean isDataConnectionAllowed() {
         boolean retVal = false;
         try {

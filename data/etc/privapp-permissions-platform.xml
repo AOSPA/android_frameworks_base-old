@@ -225,6 +225,8 @@ applications that come with the platform
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
+        <permission name="android.permission.READ_COMPAT_CHANGE_CONFIG" />
+        <permission name="android.permission.LOG_COMPAT_CHANGE" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.providers.downloads">
@@ -420,6 +422,11 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_NOTIFICATIONS"/>
         <!-- Permission required for CompanionDeviceManager CTS test. -->
         <permission name="android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS" />
+        <permission name="android.permission.MANAGE_COMPANION_DEVICES" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
+        <permission name="android.permission.REQUEST_COMPANION_SELF_MANAGED" />
         <!-- Permission required for testing registering pull atom callbacks. -->
         <permission name="android.permission.REGISTER_STATS_PULL_ATOM"/>
         <!-- Permission required for testing system audio effect APIs. -->
@@ -505,6 +512,8 @@ applications that come with the platform
         <permission name="android.permission.NOTIFY_PENDING_SYSTEM_UPDATE" />
         <!-- Permission required for GTS test - GtsAssistIntentTestCases -->
         <permission name="android.permission.MANAGE_VOICE_KEYPHRASES" />
+        <!-- Permission required for ATS test - CarDevicePolicyManagerTest -->
+        <permission name="android.permission.LOCK_DEVICE" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

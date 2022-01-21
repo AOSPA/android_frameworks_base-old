@@ -20,10 +20,10 @@ import android.service.notification.StatusBarNotification
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.people.widget.PeopleSpaceWidgetManager
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption
-import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.statusbar.NotificationListener
 import com.android.systemui.statusbar.NotificationPresenter
 import com.android.systemui.statusbar.notification.AnimatedImageNotificationManager
+import com.android.systemui.statusbar.notification.NotifPipelineFlags
 import com.android.systemui.statusbar.notification.NotificationActivityStarter
 import com.android.systemui.statusbar.notification.NotificationClicker
 import com.android.systemui.statusbar.notification.NotificationEntryManager
@@ -34,6 +34,7 @@ import com.android.systemui.statusbar.notification.collection.TargetSdkResolver
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl
 import com.android.systemui.statusbar.notification.collection.init.NotifPipelineInitializer
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy
+import com.android.systemui.statusbar.notification.collection.render.NotifStackController
 import com.android.systemui.statusbar.notification.interruption.HeadsUpController
 import com.android.systemui.statusbar.notification.interruption.HeadsUpViewBinder
 import com.android.systemui.statusbar.notification.row.NotifBindPipelineInitializer
@@ -59,7 +60,7 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class NotificationsControllerImpl @Inject constructor(
-    private val featureFlags: FeatureFlags,
+    private val notifPipelineFlags: NotifPipelineFlags,
     private val notificationListener: NotificationListener,
     private val entryManager: NotificationEntryManager,
     private val legacyRanker: NotificationRankingManager,
@@ -85,6 +86,7 @@ class NotificationsControllerImpl @Inject constructor(
         bubblesOptional: Optional<Bubbles>,
         presenter: NotificationPresenter,
         listContainer: NotificationListContainer,
+        stackController: NotifStackController,
         notificationActivityStarter: NotificationActivityStarter,
         bindRowCallback: NotificationRowBinderImpl.BindRowCallback
     ) {
@@ -112,10 +114,11 @@ class NotificationsControllerImpl @Inject constructor(
             newNotifPipeline.get().initialize(
                     notificationListener,
                     notificationRowBinder,
-                    listContainer)
+                    listContainer,
+                    stackController)
         }
 
-        if (featureFlags.isNewNotifPipelineRenderingEnabled) {
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
             targetSdkResolver.initialize(notifPipeline.get())
             // TODO
         } else {
@@ -152,8 +155,14 @@ class NotificationsControllerImpl @Inject constructor(
     }
 
     override fun resetUserExpandedStates() {
-        for (entry in entryManager.visibleNotifications) {
-            entry.resetUserExpansion()
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
+            for (entry in notifPipeline.get().allNotifs) {
+                entry.resetUserExpansion()
+            }
+        } else {
+            for (entry in entryManager.visibleNotifications) {
+                entry.resetUserExpansion()
+            }
         }
     }
 
@@ -167,9 +176,12 @@ class NotificationsControllerImpl @Inject constructor(
         }
     }
 
-    override fun getActiveNotificationsCount(): Int {
-        return entryManager.activeNotificationsCount
-    }
+    override fun getActiveNotificationsCount(): Int =
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
+            notifPipeline.get().getShadeListCount()
+        } else {
+            entryManager.activeNotificationsCount
+        }
 
     companion object {
         // NOTE: The new pipeline is always active, even if the old pipeline is *rendering*.

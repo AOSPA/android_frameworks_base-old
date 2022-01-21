@@ -1357,6 +1357,12 @@
       phone number and device IDs, whether a call is active, and the remote number
       connected by a call.</string>
 
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=80]-->
+    <string name="permlab_readBasicPhoneState">read basic telephony status and identity </string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permdesc_readBasicPhoneState">Allows the app to access the basic telephony
+        features of the device.</string>
+
     <!-- Title of an application permission.  When granted the user is giving access to a third
          party app to route its calls through the system. -->
     <string name="permlab_manageOwnCalls">route calls through the system</string>
@@ -2029,6 +2035,10 @@
     typed when unlocking the screen, and lock your Android TV device or erase all your Android TV device\'s
     data if too many incorrect passwords are typed.</string>
     <!-- Description of policy access to watch user login attempts -->
+    <string name="policydesc_watchLogin" product="automotive">Monitor the number of incorrect passwords
+    typed. when unlocking the screen, and lock the infotainment system or erase all the infotainment system\'s
+    data if too many incorrect passwords are typed.</string>
+    <!-- Description of policy access to watch user login attempts -->
     <string name="policydesc_watchLogin" product="default">Monitor the number of incorrect passwords
     typed. when unlocking the screen, and lock the phone or erase all the phone\'s
     data if too many incorrect passwords are typed.</string>
@@ -2037,6 +2047,9 @@
     if too many incorrect passwords are typed.</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv">Monitor the number of incorrect passwords
     typed when unlocking the screen, and lock your Android TV device or erase all this user\'s data
+    if too many incorrect passwords are typed.</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive">Monitor the number of incorrect passwords
+    typed when unlocking the screen, and lock the infotainment system or erase all this profile\'s data
     if too many incorrect passwords are typed.</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default">Monitor the number of incorrect passwords
     typed when unlocking the screen, and lock the phone or erase all this user\'s data
@@ -2056,13 +2069,19 @@
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData" product="tv">Erase your Android TV device\'s data without warning by performing a factory data reset.</string>
     <!-- Description of policy access to wipe the user's data -->
+    <string name="policydesc_wipeData" product="automotive">Erase the infotainment system\'s data without warning by performing a factory data reset.</string>
+    <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData" product="default">Erase the phone\'s data without warning by performing a factory data reset.</string>
     <!-- Title of policy access to wipe secondary user's data -->
-    <string name="policylab_wipeData_secondaryUser">Erase user data</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive">Erase profile data</string>
+    <!-- Title of policy access to wipe secondary user's data -->
+    <string name="policylab_wipeData_secondaryUser" product="default">Erase user data</string>
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData_secondaryUser" product="tablet">Erase this user\'s data on this tablet without warning.</string>
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData_secondaryUser" product="tv">Erase this user\'s data on this Android TV device without warning.</string>
+    <!-- Description of policy access to wipe the user's data -->
+    <string name="policydesc_wipeData_secondaryUser" product="automotive">Erase this profile\'s data on this infotainment system without warning.</string>
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData_secondaryUser" product="default">Erase this user\'s data on this phone without warning.</string>
     <!-- Title of policy access to set global proxy -->
@@ -3494,20 +3513,35 @@
 
     <!-- [CHAR LIMIT=40] Title of dialog shown to confirm device going to sleep if the power button
     is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_title">Turn off screen?</string>
+    <string name="fp_power_button_enrollment_title">Continue setup?</string>
 
     <!-- [CHAR LIMIT=NONE] Message of dialog shown to confirm device going to sleep if the power
     button is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_message">While setting up your fingerprint, you
-        pressed the Power button.\n\nThis usually turns off your screen.</string>
+    <string name="fp_power_button_enrollment_message">You pressed the power button — this usually turns off the screen.\n\nTry tapping lightly while setting up your fingerprint.</string>
 
     <!-- [CHAR LIMIT=20] Positive button of dialog shown to confirm device going to sleep if the
     power button is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_positive_button">Turn off</string>
+    <string name="fp_power_button_enrollment_positive_button">Turn off screen</string>
 
     <!-- [CHAR LIMIT=20] Negative button of dialog shown to confirm device going to sleep if the
     power button is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_negative_button">Cancel</string>
+    <string name="fp_power_button_enrollment_negative_button">Continue setup</string>
+
+    <!-- [CHAR LIMIT=40] Title of dialog shown to confirm device going to sleep if the power button
+    is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_title">Continue verifying your fingerprint?</string>
+
+    <!-- [CHAR LIMIT=NONE] Message of dialog shown to confirm device going to sleep if the power
+    button is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_message">You pressed the power button — this usually turns off the screen.\n\nTry tapping lightly to verify your fingerprint.</string>
+
+    <!-- [CHAR LIMIT=20] Positive button of dialog shown to confirm device going to sleep if the
+    power button is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_positive_button">Turn off screen</string>
+
+    <!-- [CHAR LIMIT=20] Negative button of dialog shown to confirm device going to sleep if the
+    power button is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_negative_button">Continue</string>
 
     <!-- Notification text to tell the user that a heavy-weight application is running. -->
     <string name="heavy_weight_notification"><xliff:g id="app">%1$s</xliff:g> running</string>

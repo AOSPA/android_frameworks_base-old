@@ -70,6 +70,7 @@ import android.content.pm.DataLoaderParamsParcel;
 import android.content.pm.FileSystemControlParcel;
 import android.content.pm.IDataLoader;
 import android.content.pm.IDataLoaderStatusListener;
+import android.content.pm.IOnChecksumsReadyListener;
 import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.IPackageInstallerSession;
 import android.content.pm.IPackageInstallerSessionFileSystemConnector;
@@ -167,6 +168,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileFilter;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
@@ -566,7 +568,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 Slog.d(TAG, "Marking session " + sessionId + " as failed: " + errorMessage);
                 childSessions = getChildSessionsLocked();
             }
-            cleanStageDir(childSessions);
+            destroy();
             mCallback.onStagedSessionChanged(PackageInstallerSession.this);
         }
 
@@ -584,7 +586,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 Slog.d(TAG, "Marking session " + sessionId + " as applied");
                 childSessions = getChildSessionsLocked();
             }
-            cleanStageDir(childSessions);
+            destroy();
             mCallback.onStagedSessionChanged(PackageInstallerSession.this);
         }
 
@@ -707,13 +709,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     return;
                 }
                 mDestroyed = true;
-                List<PackageInstallerSession> childSessions = getChildSessionsLocked();
                 r = () -> {
                     assertNotLocked("abandonStaged");
                     if (mCommitted.get()) {
                         mStagingManager.abortCommittedSession(this);
                     }
-                    cleanStageDir(childSessions);
                     destroyInternal();
                     dispatchSessionFinished(INSTALL_FAILED_ABORTED, "Session was abandoned", null);
                     maybeCleanUpChildSessions();
@@ -1403,6 +1403,20 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
 
             mChecksums.put(name, new PerFileChecksum(checksums, signature));
+        }
+    }
+
+    @Override
+    public void requestChecksums(@NonNull String name, @Checksum.TypeMask int optional,
+            @Checksum.TypeMask int required, @Nullable List trustedInstallers,
+            @NonNull IOnChecksumsReadyListener onChecksumsReadyListener) {
+        final File file = new File(stageDir, name);
+        final String installerPackageName = getInstallSource().initiatingPackageName;
+        try {
+            mPm.requestFileChecksums(file, installerPackageName, optional, required,
+                    trustedInstallers, onChecksumsReadyListener);
+        } catch (FileNotFoundException e) {
+            throw new ParcelableException(e);
         }
     }
 
@@ -2122,27 +2136,19 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         destroyInternal();
         // Dispatch message to remove session from PackageInstallerService.
         dispatchSessionFinished(error, detailMessage, null);
-        // TODO(b/173194203): clean up staged session in destroyInternal() call instead
-        if (isStaged() && stageDir != null) {
-            cleanStageDir();
-        }
     }
 
     private void onSessionVerificationFailure(int error, String msg) {
         final String msgWithErrorCode = PackageManager.installStatusToString(error, msg);
         Slog.e(TAG, "Failed to verify session " + sessionId + " [" + msgWithErrorCode + "]");
-        // Session is sealed and committed but could not be verified, we need to destroy it.
-        destroyInternal();
-        if (isMultiPackage()) {
-            for (PackageInstallerSession childSession : getChildSessions()) {
-                childSession.destroyInternal();
-            }
-        }
         if (isStaged()) {
+            // This will clean up the session when it reaches the terminal state
             mStagedSession.setSessionFailed(
                     SessionInfo.STAGED_SESSION_VERIFICATION_FAILED, msgWithErrorCode);
             mStagedSession.notifyEndPreRebootVerification();
         } else {
+            // Session is sealed and committed but could not be verified, we need to destroy it.
+            destroy();
             // Dispatch message to remove session from PackageInstallerService.
             dispatchSessionFinished(error, msg, null);
         }
@@ -2432,6 +2438,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             try {
                 final List<File> fromFiles = mResolvedInheritedFiles;
                 final File toDir = stageDir;
+                final String tempPackageName = toDir.getName();
 
                 if (LOGD) Slog.d(TAG, "Inherited files: " + mResolvedInheritedFiles);
                 if (!mResolvedInheritedFiles.isEmpty() && mInheritedFilesBase == null) {
@@ -2441,7 +2448,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 if (isLinkPossible(fromFiles, toDir)) {
                     if (!mResolvedInstructionSets.isEmpty()) {
                         final File oatDir = new File(toDir, "oat");
-                        createOatDirs(mResolvedInstructionSets, oatDir);
+                        createOatDirs(tempPackageName, mResolvedInstructionSets, oatDir);
                     }
                     // pre-create lib dirs for linking if necessary
                     if (!mResolvedNativeLibPaths.isEmpty()) {
@@ -2464,7 +2471,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                                     new File(libDir, archDirPath));
                         }
                     }
-                    linkFiles(fromFiles, toDir, mInheritedFilesBase);
+                    linkFiles(tempPackageName, fromFiles, toDir, mInheritedFilesBase);
                 } else {
                     // TODO: this should delegate to DCS so the system process
                     // avoids holding open FDs into containers.
@@ -2914,7 +2921,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         final PackageInfo pkgInfo = mPm.getPackageInfo(
                 params.appPackageName, PackageManager.GET_SIGNATURES
-                        | PackageManager.MATCH_STATIC_SHARED_LIBRARIES /*flags*/, userId);
+                        | PackageManager.MATCH_STATIC_SHARED_AND_SDK_LIBRARIES /*flags*/, userId);
 
         // Partial installs must be consistent with existing install
         if (params.mode == SessionParams.MODE_INHERIT_EXISTING
@@ -3559,18 +3566,19 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         throw new IOException("File: " + pathStr + " outside base: " + baseStr);
     }
 
-    private void createOatDirs(List<String> instructionSets, File fromDir)
+    private void createOatDirs(String packageName, List<String> instructionSets, File fromDir)
             throws PackageManagerException {
         for (String instructionSet : instructionSets) {
             try {
-                mInstaller.createOatDir(fromDir.getAbsolutePath(), instructionSet);
+                mInstaller.createOatDir(packageName, fromDir.getAbsolutePath(), instructionSet);
             } catch (InstallerException e) {
                 throw PackageManagerException.from(e);
             }
         }
     }
 
-    private void linkFile(String relativePath, String fromBase, String toBase) throws IOException {
+    private void linkFile(String packageName, String relativePath, String fromBase, String toBase)
+            throws IOException {
         try {
             // Try
             final IncrementalFileStorages incrementalFileStorages = getIncrementalFileStorages();
@@ -3578,21 +3586,21 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     fromBase, toBase)) {
                 return;
             }
-            mInstaller.linkFile(relativePath, fromBase, toBase);
+            mInstaller.linkFile(packageName, relativePath, fromBase, toBase);
         } catch (InstallerException | IOException e) {
             throw new IOException("failed linkOrCreateDir(" + relativePath + ", "
                     + fromBase + ", " + toBase + ")", e);
         }
     }
 
-    private void linkFiles(List<File> fromFiles, File toDir, File fromDir)
+    private void linkFiles(String packageName, List<File> fromFiles, File toDir, File fromDir)
             throws IOException {
         for (File fromFile : fromFiles) {
             final String relativePath = getRelativePath(fromFile, fromDir);
             final String fromBase = fromDir.getAbsolutePath();
             final String toBase = toDir.getAbsolutePath();
 
-            linkFile(relativePath, fromBase, toBase);
+            linkFile(packageName, relativePath, fromBase, toBase);
         }
 
         Slog.d(TAG, "Linked " + fromFiles.size() + " files into " + toDir);
@@ -4290,6 +4298,28 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         return params.isStaged ? mStagedSession.getSessionErrorMessage() : "";
     }
 
+    /**
+     * Free up storage used by this session and its children.
+     * Must not be called on a child session.
+     */
+    private void destroy() {
+        // TODO(b/173194203): destroy() is called indirectly by
+        //  PackageInstallerService#restoreAndApplyStagedSessionIfNeeded on an orphan child session.
+        //  Enable this assertion when we figure out a better way to clean up orphan sessions.
+        // assertNotChild("destroy");
+
+        // TODO(b/173194203): destroyInternal() should be used by destroy() only.
+        //  For the sake of consistency, a session should be destroyed as a whole. The caller
+        //  should always call destroy() for cleanup without knowing it has child sessions or not.
+        destroyInternal();
+        for (PackageInstallerSession child : getChildSessions()) {
+            child.destroyInternal();
+        }
+    }
+
+    /**
+     * Free up storage used by this session.
+     */
     private void destroyInternal() {
         final IncrementalFileStorages incrementalFileStorages;
         synchronized (mLock) {
@@ -4307,41 +4337,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             incrementalFileStorages = mIncrementalFileStorages;
             mIncrementalFileStorages = null;
         }
-        // For staged sessions, we don't delete the directory where the packages have been copied,
-        // since these packages are supposed to be read on reboot.
-        // Those dirs are deleted when the staged session has reached a final state.
-        if (stageDir != null && !params.isStaged) {
-            try {
-                if (incrementalFileStorages != null) {
-                    incrementalFileStorages.cleanUpAndMarkComplete();
-                }
-                mInstaller.rmPackageDir(stageDir.getAbsolutePath());
-            } catch (InstallerException ignored) {
-            }
-        }
-    }
-
-    private void cleanStageDir(List<PackageInstallerSession> childSessions) {
-        if (isMultiPackage()) {
-            for (PackageInstallerSession childSession : childSessions) {
-                childSession.cleanStageDir();
-            }
-        } else {
-            cleanStageDir();
-        }
-    }
-
-    private void cleanStageDir() {
-        final IncrementalFileStorages incrementalFileStorages;
-        synchronized (mLock) {
-            incrementalFileStorages = mIncrementalFileStorages;
-            mIncrementalFileStorages = null;
-        }
         try {
             if (incrementalFileStorages != null) {
                 incrementalFileStorages.cleanUpAndMarkComplete();
             }
-            mInstaller.rmPackageDir(stageDir.getAbsolutePath());
+            if (stageDir != null) {
+                final String tempPackageName = stageDir.getName();
+                mInstaller.rmPackageDir(tempPackageName, stageDir.getAbsolutePath());
+            }
         } catch (InstallerException ignored) {
         }
     }

@@ -24,6 +24,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.StringDef;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
@@ -54,6 +55,7 @@ import android.database.Cursor;
 import android.database.SQLException;
 import android.location.ILocationManager;
 import android.location.LocationManager;
+import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkScoreManager;
 import android.net.Uri;
@@ -269,6 +271,16 @@ public final class Settings {
     public static final String EXTRA_NETWORK_TEMPLATE = "network_template";
 
     /**
+     * Activity Action: Show One-handed mode Settings page.
+     * <p>
+     * Input: Nothing
+     * <p>
+     * Output: Nothing
+     * @hide
+     */
+    public static final String ACTION_ONE_HANDED_SETTINGS =
+            "android.settings.action.ONE_HANDED_SETTINGS";
+    /**
      * The return values for {@link Settings.Config#set}
      * @hide
      */
@@ -377,6 +389,21 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_REDUCE_BRIGHT_COLORS_SETTINGS =
             "android.settings.REDUCE_BRIGHT_COLORS_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of Color inversion.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_COLOR_INVERSION_SETTINGS =
+            "android.settings.COLOR_INVERSION_SETTINGS";
 
     /**
      * Activity Action: Show settings to control access to usage information.
@@ -2051,8 +2078,56 @@ public final class Settings {
     // Intent#EXTRA_USER_ID can also be used
     @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_SHOW_ADMIN_SUPPORT_DETAILS
-            = "android.settings.SHOW_ADMIN_SUPPORT_DETAILS";
+    public static final String ACTION_SHOW_ADMIN_SUPPORT_DETAILS =
+            "android.settings.SHOW_ADMIN_SUPPORT_DETAILS";
+
+    /**
+     * Intent extra: The id of a setting restricted by supervisors.
+     * <p>
+     * Type: String with a value from the SupervisorVerificationSetting annotation below.
+     * <ul>
+     * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_UNKNOWN}
+     * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS}
+     * </ul>
+     * </p>
+     */
+    public static final String EXTRA_SUPERVISOR_RESTRICTED_SETTING_KEY =
+            "android.provider.extra.SUPERVISOR_RESTRICTED_SETTING_KEY";
+
+    /**
+     * Unknown setting.
+     */
+    public static final String SUPERVISOR_VERIFICATION_SETTING_UNKNOWN = "";
+
+    /**
+     * Biometric settings for supervisors.
+     */
+    public static final String SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS =
+            "supervisor_restricted_biometrics_controller";
+
+    /**
+     * Keys for {@link #EXTRA_SUPERVISOR_RESTRICTED_SETTING_KEY}.
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @StringDef(prefix = { "SUPERVISOR_VERIFICATION_SETTING_" }, value = {
+            SUPERVISOR_VERIFICATION_SETTING_UNKNOWN,
+            SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS,
+    })
+    public @interface SupervisorVerificationSetting {}
+
+    /**
+     * Activity action: Launch UI to manage a setting restricted by supervisors.
+     * <p>
+     * Input: {@link #EXTRA_SUPERVISOR_RESTRICTED_SETTING_KEY} specifies what setting to open.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_SUPERVISOR_RESTRICTED_SETTING =
+            "android.settings.MANAGE_SUPERVISOR_RESTRICTED_SETTING";
 
     /**
      * Activity Action: Show a dialog for remote bugreport flow.
@@ -3608,6 +3683,12 @@ public final class Settings {
 
         private static boolean putStringForUser(ContentResolver resolver, String name, String value,
                 int userHandle, boolean overrideableByRestore) {
+            return putStringForUser(resolver, name, value, /* tag= */ null,
+                    /* makeDefault= */ false, userHandle, overrideableByRestore);
+        }
+
+        private static boolean putStringForUser(ContentResolver resolver, String name, String value,
+                String tag, boolean makeDefault, int userHandle, boolean overrideableByRestore) {
             android.util.SeempLog.record(android.util.SeempLog.getSeempPutApiIdFromValue(name));
             if (MOVED_TO_SECURE.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
@@ -3619,8 +3700,8 @@ public final class Settings {
                         + " to android.provider.Settings.Global, value is unchanged.");
                 return false;
             }
-            return sNameValueCache.putStringForUser(resolver, name, value, null, false, userHandle,
-                    overrideableByRestore);
+            return sNameValueCache.putStringForUser(resolver, name, value, tag, makeDefault,
+                    userHandle, overrideableByRestore);
         }
 
         /**
@@ -4463,6 +4544,15 @@ public final class Settings {
         public static final String VIBRATE_ON = "vibrate_on";
 
         /**
+         * Whether applying ramping ringer on incoming phone call ringtone.
+         * <p>1 = apply ramping ringer
+         * <p>0 = do not apply ramping ringer
+         * @hide
+         */
+        @Readable
+        public static final String APPLY_RAMPING_RINGER = "apply_ramping_ringer";
+
+        /**
          * If 1, redirects the system vibrator to all currently attached input devices
          * that support vibration.  If there are no such input devices, then the system
          * vibrator is used instead.
@@ -4529,6 +4619,25 @@ public final class Settings {
         @Readable
         public static final String HAPTIC_FEEDBACK_INTENSITY =
                 "haptic_feedback_intensity";
+
+        /**
+         * The intensity of haptic feedback vibrations for interaction with hardware components from
+         * the device, like buttons and sensors, if configurable.
+         *
+         * Not all devices are capable of changing their feedback intensity; on these devices
+         * there will likely be no difference between the various vibration intensities except for
+         * intensity 0 (off) and the rest.
+         *
+         * <b>Values:</b><br/>
+         * 0 - Vibration is disabled<br/>
+         * 1 - Weak vibrations<br/>
+         * 2 - Medium vibrations<br/>
+         * 3 - Strong vibrations
+         * @hide
+         */
+        @Readable
+        public static final String HARDWARE_HAPTIC_FEEDBACK_INTENSITY =
+                "hardware_haptic_feedback_intensity";
 
         /**
          * Ringer volume. This is used internally, changing this value will not
@@ -5313,6 +5422,7 @@ public final class Settings {
             PUBLIC_SETTINGS.add(HAPTIC_FEEDBACK_ENABLED);
             PUBLIC_SETTINGS.add(SHOW_WEB_SUGGESTIONS);
             PUBLIC_SETTINGS.add(VIBRATE_WHEN_RINGING);
+            PUBLIC_SETTINGS.add(APPLY_RAMPING_RINGER);
         }
 
         /**
@@ -5849,6 +5959,10 @@ public final class Settings {
         /** @hide */
         public static void getMovedToGlobalSettings(Set<String> outKeySet) {
             outKeySet.addAll(MOVED_TO_GLOBAL);
+        }
+
+        /** @hide */
+        public static void getMovedToSystemSettings(Set<String> outKeySet) {
         }
 
         /** @hide */
@@ -9669,6 +9783,14 @@ public final class Settings {
         public static final String LOCKSCREEN_SHOW_WALLET = "lockscreen_show_wallet";
 
         /**
+         * Whether to use the lockscreen double-line clock
+         *
+         * @hide
+         */
+        public static final String LOCKSCREEN_USE_DOUBLE_LINE_CLOCK =
+                "lockscreen_use_double_line_clock";
+
+        /**
          * Specifies whether the web action API is enabled.
          *
          * @hide
@@ -10441,7 +10563,9 @@ public final class Settings {
          * Whether applying ramping ringer on incoming phone call ringtone.
          * <p>1 = apply ramping ringer
          * <p>0 = do not apply ramping ringer
+         * @deprecated Use {@link AudioManager#isRampingRingerEnabled()} instead
          */
+        @Deprecated
         @Readable
         public static final String APPLY_RAMPING_RINGER = "apply_ramping_ringer";
 
@@ -11323,31 +11447,47 @@ public final class Settings {
                 "night_display_forced_auto_mode_available";
 
         /**
-        * If the NITZ_UPDATE_DIFF time is exceeded then an automatic adjustment
-        * to SystemClock will be allowed even if NITZ_UPDATE_SPACING has not been
-        * exceeded.
-        * @hide
-        */
+         * If UTC time between two NITZ signals is greater than this value then the second signal
+         * cannot be ignored.
+         *
+         * <p>This value is in milliseconds. It is used for telephony-based time and time zone
+         * detection.
+         * @hide
+         */
         @Readable
         public static final String NITZ_UPDATE_DIFF = "nitz_update_diff";
 
         /**
-        * The length of time in milli-seconds that automatic small adjustments to
-        * SystemClock are ignored if NITZ_UPDATE_DIFF is not exceeded.
-        * @hide
-        */
+         * If the elapsed realtime between two NITZ signals is greater than this value then the
+         * second signal cannot be ignored.
+         *
+         * <p>This value is in milliseconds. It is used for telephony-based time and time zone
+         * detection.
+         * @hide
+         */
         @Readable
         public static final String NITZ_UPDATE_SPACING = "nitz_update_spacing";
 
-       /** Preferred NTP server. {@hide} */
-       @Readable
-       public static final String NTP_SERVER = "ntp_server";
-       /** Timeout in milliseconds to wait for NTP server. {@hide} */
-       @Readable
-       public static final String NTP_TIMEOUT = "ntp_timeout";
-       /** Secondary NTP server. {@hide} */
-       @Readable
-       public static final String NTP_SERVER_2 = "ntp_server_2";
+        /**
+         * If the device connects to a telephony network and was disconnected from a telephony
+         * network for less than this time, a previously received NITZ signal can be restored.
+         *
+         * <p>This value is in milliseconds. It is used for telephony-based time and time zone
+         * detection.
+         * @hide
+         */
+        public static final String NITZ_NETWORK_DISCONNECT_RETENTION =
+                "nitz_network_disconnect_retention";
+
+        /** Preferred NTP server. {@hide} */
+        @Readable
+        public static final String NTP_SERVER = "ntp_server";
+        /** Timeout in milliseconds to wait for NTP server. {@hide} */
+        @Readable
+        public static final String NTP_TIMEOUT = "ntp_timeout";
+        /** Secondary NTP server. {@hide} */
+        @Readable
+        public static final String NTP_SERVER_2 = "ntp_server_2";
 
         /** {@hide} */
         @Readable
@@ -11962,8 +12102,10 @@ public final class Settings {
          * Value to specify whether network quality scores and badging should be shown in the UI.
          *
          * Type: int (0 for false, 1 for true)
+         * @deprecated {@link NetworkScoreManager} is deprecated.
          * @hide
          */
+        @Deprecated
         @Readable
         public static final String NETWORK_SCORING_UI_ENABLED = "network_scoring_ui_enabled";
 
@@ -11972,8 +12114,10 @@ public final class Settings {
          * when generating SSID only bases score curves.
          *
          * Type: long
+         * @deprecated {@link NetworkScoreManager} is deprecated.
          * @hide
          */
+        @Deprecated
         @Readable
         public static final String SPEED_LABEL_CACHE_EVICTION_AGE_MILLIS =
                 "speed_label_cache_eviction_age_millis";
@@ -12006,8 +12150,10 @@ public final class Settings {
          * {@link NetworkScoreManager#setActiveScorer(String)} to write it.
          *
          * Type: string - package name
+         * @deprecated {@link NetworkScoreManager} is deprecated.
          * @hide
          */
+        @Deprecated
         @Readable
         public static final String NETWORK_RECOMMENDATIONS_PACKAGE =
                 "network_recommendations_package";
@@ -12017,8 +12163,10 @@ public final class Settings {
          * networks automatically.
          *
          * Type: string package name or null if the feature is either not provided or disabled.
+         * @deprecated {@link NetworkScoreManager} is deprecated.
          * @hide
          */
+        @Deprecated
         @TestApi
         @Readable
         public static final String USE_OPEN_WIFI_PACKAGE = "use_open_wifi_package";
@@ -12028,8 +12176,10 @@ public final class Settings {
          * {@link com.android.server.wifi.RecommendedNetworkEvaluator}.
          *
          * Type: long
+         * @deprecated {@link NetworkScoreManager} is deprecated.
          * @hide
          */
+        @Deprecated
         @Readable
         public static final String RECOMMENDED_NETWORK_EVALUATOR_CACHE_EXPIRY_MS =
                 "recommended_network_evaluator_cache_expiry_ms";
@@ -15103,22 +15253,6 @@ public final class Settings {
                 "max_sound_trigger_detection_service_ops_per_day";
 
         /**
-         * Setting indicating the name of the Wear OS app package containing the device's sysui.
-         *
-         * @hide
-         */
-        public static final String CLOCKWORK_SYSUI_PACKAGE_NAME =
-                "clockwork_sysui_package_name";
-
-        /**
-         * Setting indicating the name of the main activity of the Wear OS sysui.
-         *
-         * @hide
-         */
-        public static final String CLOCKWORK_SYSUI_MAIN_ACTIVITY_NAME =
-                "clockwork_sysui_main_activity_name";
-
-        /**
          * Setting to determine if the Clockwork Home application is ready.
          *
          * <p>
@@ -15248,9 +15382,21 @@ public final class Settings {
             MOVED_TO_SECURE.add(Global.NOTIFICATION_BUBBLES);
         }
 
+        // Certain settings have been moved from global to the per-user system namespace
+        private static final HashSet<String> MOVED_TO_SYSTEM;
+        static {
+            MOVED_TO_SYSTEM = new HashSet<>(1);
+            MOVED_TO_SYSTEM.add(Global.APPLY_RAMPING_RINGER);
+        }
+
         /** @hide */
         public static void getMovedToSecureSettings(Set<String> outKeySet) {
             outKeySet.addAll(MOVED_TO_SECURE);
+        }
+
+        /** @hide */
+        public static void getMovedToSystemSettings(Set<String> outKeySet) {
+            outKeySet.addAll(MOVED_TO_SYSTEM);
         }
 
         /** @hide */
@@ -15284,6 +15430,11 @@ public final class Settings {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
                         + " to android.provider.Settings.Secure, returning read-only value.");
                 return Secure.getStringForUser(resolver, name, userHandle);
+            }
+            if (MOVED_TO_SYSTEM.contains(name)) {
+                Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
+                        + " to android.provider.Settings.System, returning read-only value.");
+                return System.getStringForUser(resolver, name, userHandle);
             }
             return sNameValueCache.getStringForUser(resolver, name, userHandle);
         }
@@ -15447,6 +15598,13 @@ public final class Settings {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
                         + " to android.provider.Settings.Secure, value is unchanged.");
                 return Secure.putStringForUser(resolver, name, value, tag,
+                        makeDefault, userHandle, overrideableByRestore);
+            }
+            // Global and System have the same access policy so we can forward writes
+            if (MOVED_TO_SYSTEM.contains(name)) {
+                Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
+                        + " to android.provider.Settings.System, value is unchanged.");
+                return System.putStringForUser(resolver, name, value, tag,
                         makeDefault, userHandle, overrideableByRestore);
             }
             return sNameValueCache.putStringForUser(resolver, name, value, tag,
@@ -16617,12 +16775,6 @@ public final class Settings {
             public static final String WEAR_OS_VERSION_STRING = "wear_os_version_string";
 
             /**
-             * If an alternate launcher is enabled.
-             * @hide
-             */
-            public static final String ALTERNATE_LAUNCHER_ENABLED = "alternate_launcher_enabled";
-
-            /**
              * How round the corners of square screens are.
              * @hide
              */
@@ -16712,12 +16864,6 @@ public final class Settings {
              * @hide
              */
             public static final String AMBIENT_FORCE_WHEN_DOCKED = "ambient_force_when_docked";
-
-            /**
-             * The id of the gesture sensor.
-             * @hide
-             */
-            public static final String AMBIENT_GESTURE_SENSOR_ID = "ambient_gesture_sensor_id";
 
             /**
              * Whether the ambient low bit mode is enabled.

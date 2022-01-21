@@ -47,6 +47,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.AttributeSet;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Pair;
@@ -678,7 +679,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         // TODO: move this logic to controller, which will invoke updateFooterView directly
         boolean showDismissView = mClearAllEnabled &&
                 mController.hasActiveClearableNotifications(ROWS_ALL);
-        boolean showFooterView = (showDismissView || getVisibleNotificationCount() > 0)
+        boolean showFooterView = (showDismissView || mController.getVisibleNotificationCount() > 0)
                 && mIsCurrentUserSetup  // see: b/193149550
                 && mStatusBarState != StatusBarState.KEYGUARD
                 && !mUnlockedScreenOffAnimationController.isScreenOffAnimationPlaying()
@@ -1173,20 +1174,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         }
     }
 
-    /**
-     * Returns best effort count of visible notifications.
-     */
-    public int getVisibleNotificationCount() {
-        int count = 0;
-        for (int i = 0; i < getChildCount(); i++) {
-            final View child = getChildAt(i);
-            if (child.getVisibility() != View.GONE && child instanceof ExpandableNotificationRow) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     private boolean isCurrentlyAnimating() {
         return mStateAnimator.isRunning();
@@ -1458,7 +1445,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     private float getAppearEndPosition() {
         int appearPosition = 0;
-        int visibleNotifCount = getVisibleNotificationCount();
+        int visibleNotifCount = mController.getVisibleNotificationCount();
         if (mEmptyShadeView.getVisibility() == GONE && visibleNotifCount > 0) {
             if (isHeadsUpTransition()
                     || (mInHeadsUpPinnedMode && !mAmbientState.isDozing())) {
@@ -4642,7 +4629,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     private void ensureRemovedFromTransientContainer(View v) {
-        if (v.getParent() == this && v instanceof SectionHeaderView) {
+        if (v.getParent() == this && v instanceof ExpandableView) {
             ExpandableView expandableView = (ExpandableView) v;
             ViewGroup transientContainer = expandableView.getTransientContainer();
             // If the child is animating away, it will still have a parent, so
@@ -4915,7 +4902,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+    public void dump(FileDescriptor fd, PrintWriter pwOriginal, String[] args) {
+        IndentingPrintWriter pw = DumpUtilsKt.asIndenting(pwOriginal);
         StringBuilder sb = new StringBuilder("[")
                 .append(this.getClass().getSimpleName()).append(":")
                 .append(" pulsing=").append(mPulsing ? "T" : "f")
@@ -4929,15 +4917,15 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                 .append(" hideAmount=").append(mAmbientState.getHideAmount())
                 .append("]");
         pw.println(sb.toString());
-        DumpUtilsKt.withIndenting(pw, ipw -> {
+        DumpUtilsKt.withIncreasedIndent(pw, () -> {
             int childCount = getChildCount();
-            ipw.println("Number of children: " + childCount);
-            ipw.println();
+            pw.println("Number of children: " + childCount);
+            pw.println();
 
             for (int i = 0; i < childCount; i++) {
                 ExpandableView child = (ExpandableView) getChildAt(i);
-                child.dump(fd, ipw, args);
-                ipw.println();
+                child.dump(fd, pw, args);
+                pw.println();
             }
             int transientViewCount = getTransientViewCount();
             pw.println("Transient Views: " + transientViewCount);
@@ -6106,6 +6094,14 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     public ExpandHelper.Callback getExpandHelperCallback() {
         return mExpandHelperCallback;
+    }
+
+    float getAppearFraction() {
+        return mLastSentAppear;
+    }
+
+    float getExpandedHeight() {
+        return mLastSentExpandedHeight;
     }
 
     /** Enum for selecting some or all notification rows (does not included non-notif views). */

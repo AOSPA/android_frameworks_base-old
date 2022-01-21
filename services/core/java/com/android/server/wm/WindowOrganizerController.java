@@ -335,10 +335,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     // Go through all tasks and collect them before the rotation
                     // TODO(shell-transitions): move collect() to onConfigurationChange once
                     //       wallpaper handling is synchronized.
-                    dc.forAllTasks(task -> {
-                        if (task.isVisible()) transition.collect(task);
-                    });
-                    dc.getInsetsStateController().addProvidersToTransition();
+                    dc.mTransitionController.collectForDisplayChange(dc, transition);
                     dc.sendNewConfiguration();
                     effects |= TRANSACT_EFFECTS_LIFECYCLE;
                 }
@@ -587,7 +584,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             case HIERARCHY_OP_TYPE_CREATE_TASK_FRAGMENT: {
                 final TaskFragmentCreationParams taskFragmentCreationOptions =
                         hop.getTaskFragmentCreationOptions();
-                createTaskFragment(taskFragmentCreationOptions, errorCallbackToken);
+                createTaskFragment(taskFragmentCreationOptions, errorCallbackToken, caller);
                 break;
             }
             case HIERARCHY_OP_TYPE_DELETE_TASK_FRAGMENT: {
@@ -630,7 +627,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 final TaskFragment tf = mLaunchTaskFragments.get(fragmentToken);
                 final int result = mService.getActivityStartController()
                         .startActivityInTaskFragment(tf, activityIntent, activityOptions,
-                                hop.getCallingActivity());
+                                hop.getCallingActivity(), caller.mUid, caller.mPid);
                 if (!isStartResultSuccessful(result)) {
                     sendTaskFragmentOperationFailure(tf.getTaskFragmentOrganizer(),
                             errorCallbackToken,
@@ -664,7 +661,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
                     break;
                 }
-                tf1.setAdjacentTaskFragment(tf2);
+                tf1.setAdjacentTaskFragment(tf2, false /* moveAdjacentTogether */);
                 effects |= TRANSACT_EFFECTS_LIFECYCLE;
 
                 final Bundle bundle = hop.getLaunchOptions();
@@ -977,7 +974,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             throw new IllegalArgumentException("setAdjacentRootsHierarchyOp: Not created by"
                     + " organizer root1=" + root1 + " root2=" + root2);
         }
-        root1.setAdjacentTaskFragment(root2);
+        root1.setAdjacentTaskFragment(root2, hop.getMoveAdjacentTogether());
         return TRANSACT_EFFECTS_LIFECYCLE;
     }
 
@@ -1199,7 +1196,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     }
 
     void createTaskFragment(@NonNull TaskFragmentCreationParams creationParams,
-            @Nullable IBinder errorCallbackToken) {
+            @Nullable IBinder errorCallbackToken, @NonNull CallerInfo caller) {
         final ActivityRecord ownerActivity =
                 ActivityRecord.forTokenLocked(creationParams.getOwnerToken());
         final ITaskFragmentOrganizer organizer = ITaskFragmentOrganizer.Stub.asInterface(
@@ -1217,9 +1214,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
             return;
         }
-        // The ownerActivity has to belong to the same app as the root Activity of the target Task.
-        final ActivityRecord rootActivity = ownerActivity.getTask().getRootActivity();
-        if (rootActivity.getUid() != ownerActivity.getUid()) {
+        // The ownerActivity has to belong to the same app as the target Task.
+        if (ownerActivity.getTask().effectiveUid != ownerActivity.getUid()
+                || ownerActivity.getTask().effectiveUid != caller.mUid) {
             final Throwable exception =
                     new IllegalArgumentException("Not allowed to operate with the ownerToken while "
                             + "the root activity of the target task belong to the different app");

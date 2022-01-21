@@ -569,10 +569,10 @@ public class DisplayRotation {
         mDisplayContent.setLayoutNeeded();
 
         if (useShellTransitions) {
-            final boolean wasInTransition = mDisplayContent.inTransition();
+            final boolean wasCollecting = mDisplayContent.mTransitionController.isCollecting();
             mDisplayContent.requestChangeTransitionIfNeeded(
                     ActivityInfo.CONFIG_WINDOW_CONFIGURATION);
-            if (wasInTransition) {
+            if (wasCollecting) {
                 // Use remote-rotation infra since the transition has already been requested
                 // TODO(shell-transitions): Remove this once lifecycle management can cover all
                 //                          rotation cases.
@@ -656,12 +656,8 @@ public class DisplayRotation {
                 // Go through all tasks and collect them before the rotation
                 // TODO(shell-transitions): move collect() to onConfigurationChange once wallpaper
                 //       handling is synchronized.
-                mDisplayContent.forAllTasks(task -> {
-                    if (task.isVisible()) {
-                        mDisplayContent.mTransitionController.collect(task);
-                    }
-                });
-                mDisplayContent.getInsetsStateController().addProvidersToTransition();
+                mDisplayContent.mTransitionController.collectForDisplayChange(mDisplayContent,
+                        null /* use collecting transition */);
             }
             mService.mAtmService.deferWindowLayout();
             try {
