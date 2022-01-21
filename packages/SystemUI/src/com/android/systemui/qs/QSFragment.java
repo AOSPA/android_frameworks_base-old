@@ -15,10 +15,10 @@
 package com.android.systemui.qs;
 
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
-import static com.android.systemui.statusbar.DisableFlagsLogger.DisableState;
 
 import static com.android.systemui.media.dagger.MediaModule.QS_PANEL;
 import static com.android.systemui.media.dagger.MediaModule.QUICK_QS_PANEL;
+import static com.android.systemui.statusbar.DisableFlagsLogger.DisableState;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -696,6 +696,11 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mQSPanelController.closeDetail();
     }
 
+    @Override
+    public void closeCustomizer() {
+        mQSCustomizerController.hide();
+    }
+
     public void notifyCustomizeChanged() {
         // The customize state changed, so our height changed.
         mContainer.updateExpansion();
@@ -765,6 +770,8 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         public void onAnimationEnd(Animator animation) {
             mHeaderAnimating = false;
             updateQsState();
+            // Unset the listener, otherwise this may persist for another view property animation
+            getView().animate().setListener(null);
         }
     };
 

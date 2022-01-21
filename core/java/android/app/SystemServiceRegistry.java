@@ -196,14 +196,18 @@ import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
 import android.print.IPrintManager;
 import android.print.PrintManager;
+import android.safetycenter.SafetyCenterFrameworkInitializer;
 import android.scheduling.SchedulingFrameworkInitializer;
 import android.security.FileIntegrityManager;
 import android.security.IFileIntegrityService;
+import android.security.attestationverification.AttestationVerificationManager;
+import android.security.attestationverification.IAttestationVerificationManagerService;
 import android.service.oemlock.IOemLockService;
 import android.service.oemlock.OemLockManager;
 import android.service.persistentdata.IPersistentDataBlockService;
 import android.service.persistentdata.PersistentDataBlockManager;
 import android.service.vr.IVrManager;
+import android.supplementalprocess.SupplementalProcessFrameworkInitializer;
 import android.telecom.TelecomManager;
 import android.telephony.MmsManager;
 import android.telephony.TelephonyFrameworkInitializer;
@@ -1423,6 +1427,19 @@ public final class SystemServiceRegistry {
                         return new FileIntegrityManager(ctx.getOuterContext(),
                                 IFileIntegrityService.Stub.asInterface(b));
                     }});
+
+        registerService(Context.ATTESTATION_VERIFICATION_SERVICE,
+                AttestationVerificationManager.class,
+                new CachedServiceFetcher<AttestationVerificationManager>() {
+                    @Override
+                    public AttestationVerificationManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.ATTESTATION_VERIFICATION_SERVICE);
+                        return new AttestationVerificationManager(ctx.getOuterContext(),
+                                IAttestationVerificationManagerService.Stub.asInterface(b));
+                    }});
+
         //CHECKSTYLE:ON IndentationCheck
         registerService(Context.APP_INTEGRITY_SERVICE, AppIntegrityManager.class,
                 new CachedServiceFetcher<AppIntegrityManager>() {
@@ -1527,7 +1544,9 @@ public final class SystemServiceRegistry {
             MediaFrameworkInitializer.registerServiceWrappers();
             RoleFrameworkInitializer.registerServiceWrappers();
             SchedulingFrameworkInitializer.registerServiceWrappers();
+            SupplementalProcessFrameworkInitializer.registerServiceWrappers();
             UwbFrameworkInitializer.registerServiceWrappers();
+            SafetyCenterFrameworkInitializer.registerServiceWrappers();
         } finally {
             // If any of the above code throws, we're in a pretty bad shape and the process
             // will likely crash, but we'll reset it just in case there's an exception handler...

@@ -20,7 +20,9 @@ import static android.provider.Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_
 import static android.provider.Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN;
 import static android.provider.Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_NONE;
 import static android.provider.Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW;
+import static android.view.accessibility.MagnificationAnimationCallback.STUB_ANIMATION_CALLBACK;
 
+import android.accessibilityservice.MagnificationConfig;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -74,6 +76,7 @@ public class MagnificationController implements WindowMagnificationManager.Callb
     private final PointF mTempPoint = new PointF();
     private final Object mLock;
     private final Context mContext;
+    @GuardedBy("mLock")
     private final SparseArray<DisableMagnificationCallback>
             mMagnificationEndRunnableSparseArray = new SparseArray();
 
@@ -84,6 +87,8 @@ public class MagnificationController implements WindowMagnificationManager.Callb
 
     @GuardedBy("mLock")
     private int mActivatedMode = ACCESSIBILITY_MAGNIFICATION_MODE_NONE;
+    @GuardedBy("mLock")
+    private int mLastActivatedMode = ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN;
     // Track the active user to reset the magnification and get the associated user settings.
     private @UserIdInt int mUserId = UserHandle.USER_SYSTEM;
     @GuardedBy("mLock")
@@ -206,7 +211,7 @@ public class MagnificationController implements WindowMagnificationManager.Callb
         final float scale = mScaleProvider.getScale(displayId);
         final DisableMagnificationCallback animationEndCallback =
                 new DisableMagnificationCallback(transitionCallBack, displayId, targetMode,
-                        scale, magnificationCenter);
+                        scale, magnificationCenter, true);
         if (targetMode == ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW) {
             screenMagnificationController.reset(displayId, animationEndCallback);
         } else {
@@ -214,6 +219,77 @@ public class MagnificationController implements WindowMagnificationManager.Callb
                     animationEndCallback);
         }
         setDisableMagnificationCallbackLocked(displayId, animationEndCallback);
+    }
+
+    /**
+     * Transitions to the targeting magnification config mode with current center of the
+     * magnification mode if it is available. It disables the current magnifier immediately then
+     * transitions to the targeting magnifier.
+     *
+     * @param displayId  The logical display id
+     * @param config The targeting magnification config
+     * @param animate    {@code true} to animate the transition, {@code false}
+     *                   to transition immediately
+     */
+    public void transitionMagnificationConfigMode(int displayId, MagnificationConfig config,
+            boolean animate) {
+        synchronized (mLock) {
+            final int targetMode = config.getMode();
+            final PointF currentBoundsCenter = getCurrentMagnificationBoundsCenterLocked(displayId,
+                    targetMode);
+            final PointF magnificationCenter = new PointF(config.getCenterX(), config.getCenterY());
+            if (currentBoundsCenter != null) {
+                final float centerX = Float.isNaN(config.getCenterX())
+                        ? currentBoundsCenter.x
+                        : config.getCenterX();
+                final float centerY = Float.isNaN(config.getCenterY())
+                        ? currentBoundsCenter.y
+                        : config.getCenterY();
+                magnificationCenter.set(centerX, centerY);
+            }
+
+            final DisableMagnificationCallback animationCallback =
+                    getDisableMagnificationEndRunnableLocked(displayId);
+            if (animationCallback != null) {
+                Slog.w(TAG, "Discard previous animation request");
+                animationCallback.setExpiredAndRemoveFromListLocked();
+            }
+
+            final FullScreenMagnificationController screenMagnificationController =
+                    getFullScreenMagnificationController();
+            final WindowMagnificationManager windowMagnificationMgr = getWindowMagnificationMgr();
+            final float scale = mScaleProvider.getScale(displayId);
+            if (targetMode == ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW) {
+                screenMagnificationController.reset(displayId, false);
+                windowMagnificationMgr.enableWindowMagnification(displayId,
+                        scale, magnificationCenter.x, magnificationCenter.y,
+                        animate ? STUB_ANIMATION_CALLBACK : null);
+            } else if (targetMode == ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN) {
+                windowMagnificationMgr.disableWindowMagnification(displayId, false, null);
+                if (!screenMagnificationController.isRegistered(displayId)) {
+                    screenMagnificationController.register(displayId);
+                }
+                screenMagnificationController.setScaleAndCenter(displayId, scale,
+                        magnificationCenter.x, magnificationCenter.y, animate,
+                        AccessibilityManagerService.MAGNIFICATION_GESTURE_HANDLER_ID);
+            }
+        }
+    }
+
+    /**
+     * Return {@code true} if disable magnification animation callback of the display is running.
+     *
+     * @param displayId The logical display id
+     */
+    public boolean hasDisableMagnificationCallback(int displayId) {
+        synchronized (mLock) {
+            final DisableMagnificationCallback animationCallback =
+                    getDisableMagnificationEndRunnableLocked(displayId);
+            if (animationCallback != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -239,6 +315,7 @@ public class MagnificationController implements WindowMagnificationManager.Callb
 
             synchronized (mLock) {
                 mActivatedMode = ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW;
+                mLastActivatedMode = mActivatedMode;
             }
             logMagnificationModeWithImeOnIfNeeded();
             disableFullScreenMagnificationIfNeeded(displayId);
@@ -264,7 +341,8 @@ public class MagnificationController implements WindowMagnificationManager.Callb
         // Internal request may be for transition, so we just need to check external request.
         final boolean isMagnifyByExternalRequest =
                 fullScreenMagnificationController.getIdOfLastServiceToMagnify(displayId) > 0;
-        if (isMagnifyByExternalRequest) {
+        if (isMagnifyByExternalRequest || isActivated(displayId,
+                ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN)) {
             fullScreenMagnificationController.reset(displayId, false);
         }
     }
@@ -276,8 +354,10 @@ public class MagnificationController implements WindowMagnificationManager.Callb
 
             synchronized (mLock) {
                 mActivatedMode = ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN;
+                mLastActivatedMode = mActivatedMode;
             }
             logMagnificationModeWithImeOnIfNeeded();
+            disableWindowMagnificationIfNeeded(displayId);
         } else {
             logMagnificationUsageState(ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN,
                     SystemClock.uptimeMillis() - mFullScreenModeEnabledTime);
@@ -289,12 +369,30 @@ public class MagnificationController implements WindowMagnificationManager.Callb
         updateMagnificationButton(displayId, ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
     }
 
+    private void disableWindowMagnificationIfNeeded(int displayId) {
+        final WindowMagnificationManager windowMagnificationManager =
+                getWindowMagnificationMgr();
+        if (isActivated(displayId, ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW)) {
+            windowMagnificationManager.disableWindowMagnification(displayId, false);
+        }
+    }
+
     @Override
     public void onImeWindowVisibilityChanged(boolean shown) {
         synchronized (mLock) {
             mImeWindowVisible = shown;
         }
         logMagnificationModeWithImeOnIfNeeded();
+    }
+
+    /**
+     * Returns the last activated magnification mode. If there is no activated magnifier before, it
+     * returns fullscreen mode by default.
+     */
+    public int getLastActivatedMode() {
+        synchronized (mLock) {
+            return mLastActivatedMode;
+        }
     }
 
     /**
@@ -336,6 +434,7 @@ public class MagnificationController implements WindowMagnificationManager.Callb
         synchronized (mLock) {
             fullMagnificationController = mFullScreenMagnificationController;
             windowMagnificationManager = mWindowMagnificationMgr;
+            mLastActivatedMode = ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN;
         }
 
         mScaleProvider.onUserChanged(userId);
@@ -462,7 +561,15 @@ public class MagnificationController implements WindowMagnificationManager.Callb
         return mTempPoint;
     }
 
-    private boolean isActivated(int displayId, int mode) {
+    /**
+     * Return {@code true} if the specified magnification mode on the given display is activated
+     * or not.
+     *
+     * @param displayId The logical displayId.
+     * @param mode It's either ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN or
+     * ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW.
+     */
+    public boolean isActivated(int displayId, int mode) {
         boolean isActivated = false;
         if (mode == ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN) {
             synchronized (mLock) {
@@ -495,15 +602,17 @@ public class MagnificationController implements WindowMagnificationManager.Callb
         private final int mCurrentMode;
         private final float mCurrentScale;
         private final PointF mCurrentCenter = new PointF();
+        private final boolean mAnimate;
 
-        DisableMagnificationCallback(TransitionCallBack transitionCallBack,
-                int displayId, int targetMode, float scale, PointF currentCenter) {
+        DisableMagnificationCallback(@Nullable TransitionCallBack transitionCallBack,
+                int displayId, int targetMode, float scale, PointF currentCenter, boolean animate) {
             mTransitionCallBack = transitionCallBack;
             mDisplayId = displayId;
             mTargetMode = targetMode;
             mCurrentMode = mTargetMode ^ ACCESSIBILITY_MAGNIFICATION_MODE_ALL;
             mCurrentScale = scale;
             mCurrentCenter.set(currentCenter);
+            mAnimate = animate;
         }
 
         @Override
@@ -521,7 +630,9 @@ public class MagnificationController implements WindowMagnificationManager.Callb
                     applyMagnificationModeLocked(mTargetMode);
                 }
                 updateMagnificationButton(mDisplayId, mTargetMode);
-                mTransitionCallBack.onResult(mDisplayId, success);
+                if (mTransitionCallBack != null) {
+                    mTransitionCallBack.onResult(mDisplayId, success);
+                }
             }
         }
 
@@ -546,7 +657,9 @@ public class MagnificationController implements WindowMagnificationManager.Callb
                 setExpiredAndRemoveFromListLocked();
                 applyMagnificationModeLocked(mCurrentMode);
                 updateMagnificationButton(mDisplayId, mCurrentMode);
-                mTransitionCallBack.onResult(mDisplayId, true);
+                if (mTransitionCallBack != null) {
+                    mTransitionCallBack.onResult(mDisplayId, true);
+                }
             }
         }
 
@@ -557,9 +670,13 @@ public class MagnificationController implements WindowMagnificationManager.Callb
 
         private void applyMagnificationModeLocked(int mode) {
             if (mode == ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN) {
-                getFullScreenMagnificationController().setScaleAndCenter(mDisplayId,
-                        mCurrentScale, mCurrentCenter.x,
-                        mCurrentCenter.y, true,
+                final FullScreenMagnificationController fullScreenMagnificationController =
+                        getFullScreenMagnificationController();
+                if (!fullScreenMagnificationController.isRegistered(mDisplayId)) {
+                    fullScreenMagnificationController.register(mDisplayId);
+                }
+                fullScreenMagnificationController.setScaleAndCenter(mDisplayId, mCurrentScale,
+                        mCurrentCenter.x, mCurrentCenter.y, mAnimate,
                         AccessibilityManagerService.MAGNIFICATION_GESTURE_HANDLER_ID);
             } else {
                 getWindowMagnificationMgr().enableWindowMagnification(mDisplayId,

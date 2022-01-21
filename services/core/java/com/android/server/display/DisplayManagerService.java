@@ -16,11 +16,13 @@
 
 package com.android.server.display;
 
+import static android.Manifest.permission.ADD_ALWAYS_UNLOCKED_DISPLAY;
 import static android.Manifest.permission.ADD_TRUSTED_DISPLAY;
 import static android.Manifest.permission.CAPTURE_SECURE_VIDEO_OUTPUT;
 import static android.Manifest.permission.CAPTURE_VIDEO_OUTPUT;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.hardware.display.DisplayManager.EventsMask;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
@@ -94,6 +96,8 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.DeviceConfig;
+import android.provider.DeviceConfigInterface;
 import android.provider.Settings;
 import android.sysprop.DisplayProperties;
 import android.text.TextUtils;
@@ -111,6 +115,7 @@ import android.view.DisplayInfo;
 import android.view.DisplayAddress;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.window.DisplayWindowPolicyController;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -239,6 +244,10 @@ public final class DisplayManagerService extends SystemService {
     // All callback records indexed by calling process id.
     public final SparseArray<CallbackRecord> mCallbacks =
             new SparseArray<CallbackRecord>();
+
+    /** All {@link DisplayWindowPolicyController}s indexed by {@link DisplayInfo#displayId}. */
+    final SparseArray<DisplayWindowPolicyController> mDisplayWindowPolicyController =
+            new SparseArray<>();
 
     // List of all currently registered display adapters.
     private final ArrayList<DisplayAdapter> mDisplayAdapters = new ArrayList<DisplayAdapter>();
@@ -389,6 +398,7 @@ public final class DisplayManagerService extends SystemService {
     private final SparseArray<IntArray> mDisplayAccessUIDs = new SparseArray<>();
 
     private final Injector mInjector;
+    private final DeviceConfigInterface mDeviceConfig;
 
     // The minimum brightness curve, which guarantess that any brightness curve that dips below it
     // is rejected by the system.
@@ -446,6 +456,7 @@ public final class DisplayManagerService extends SystemService {
     DisplayManagerService(Context context, Injector injector) {
         super(context);
         mInjector = injector;
+        mDeviceConfig = mInjector.getDeviceConfig();
         mContext = context;
         mHandler = new DisplayManagerHandler(DisplayThread.get().getLooper());
         mUiHandler = UiThread.getHandler();
@@ -533,6 +544,7 @@ public final class DisplayManagerService extends SystemService {
             }
         } else if (phase == PHASE_BOOT_COMPLETED) {
             mDisplayModeDirector.onBootCompleted();
+            mLogicalDisplayMapper.onBootCompleted();
         }
     }
 
@@ -1125,46 +1137,236 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private int createVirtualDisplayInternal(IVirtualDisplayCallback callback,
-            IMediaProjection projection, int callingUid, String packageName, Surface surface,
-            int flags, VirtualDisplayConfig virtualDisplayConfig) {
-        synchronized (mSyncRoot) {
-            if (mVirtualDisplayAdapter == null) {
-                Slog.w(TAG, "Rejecting request to create private virtual display "
-                        + "because the virtual display adapter is not available.");
-                return -1;
+    private boolean validatePackageName(int uid, String packageName) {
+        if (packageName != null) {
+            String[] packageNames = mContext.getPackageManager().getPackagesForUid(uid);
+            if (packageNames != null) {
+                for (String n : packageNames) {
+                    if (n.equals(packageName)) {
+                        return true;
+                    }
+                }
             }
-
-            DisplayDevice device = mVirtualDisplayAdapter.createVirtualDisplayLocked(
-                    callback, projection, callingUid, packageName, surface, flags,
-                    virtualDisplayConfig);
-            if (device == null) {
-                return -1;
-            }
-
-            // DisplayDevice events are handled manually for Virtual Displays.
-            // TODO: multi-display Fix this so that generic add/remove events are not handled in a
-            // different code path for virtual displays.  Currently this happens so that we can
-            // return a valid display ID synchronously upon successful Virtual Display creation.
-            // This code can run on any binder thread, while onDisplayDeviceAdded() callbacks are
-            // called on the DisplayThread (which we don't want to wait for?).
-            // One option would be to actually wait here on the binder thread
-            // to be notified when the virtual display is created (or failed).
-            mDisplayDeviceRepo.onDisplayDeviceEvent(device,
-                    DisplayAdapter.DISPLAY_DEVICE_EVENT_ADDED);
-
-            final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
-            if (display != null) {
-                return display.getDisplayIdLocked();
-            }
-
-            // Something weird happened and the logical display was not created.
-            Slog.w(TAG, "Rejecting request to create virtual display "
-                    + "because the logical display was not created.");
-            mVirtualDisplayAdapter.releaseVirtualDisplayLocked(callback.asBinder());
-            mDisplayDeviceRepo.onDisplayDeviceEvent(device,
-                    DisplayAdapter.DISPLAY_DEVICE_EVENT_REMOVED);
         }
+        return false;
+    }
+
+    private boolean canProjectVideo(IMediaProjection projection) {
+        if (projection != null) {
+            try {
+                if (projection.canProjectVideo()) {
+                    return true;
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Unable to query projection service for permissions", e);
+            }
+        }
+        if (checkCallingPermission(CAPTURE_VIDEO_OUTPUT, "canProjectVideo()")) {
+            return true;
+        }
+        return canProjectSecureVideo(projection);
+    }
+
+    private boolean canProjectSecureVideo(IMediaProjection projection) {
+        if (projection != null) {
+            try {
+                if (projection.canProjectSecureVideo()) {
+                    return true;
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Unable to query projection service for permissions", e);
+            }
+        }
+        return checkCallingPermission(CAPTURE_SECURE_VIDEO_OUTPUT, "canProjectSecureVideo()");
+    }
+
+    private boolean checkCallingPermission(String permission, String func) {
+        if (mContext.checkCallingPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+        final String msg = "Permission Denial: " + func + " from pid=" + Binder.getCallingPid()
+                + ", uid=" + Binder.getCallingUid() + " requires " + permission;
+        Slog.w(TAG, msg);
+        return false;
+    }
+
+    private int createVirtualDisplayInternal(VirtualDisplayConfig virtualDisplayConfig,
+            IVirtualDisplayCallback callback, IMediaProjection projection, String packageName,
+            DisplayWindowPolicyController controller) {
+        final int callingUid = Binder.getCallingUid();
+        if (!validatePackageName(callingUid, packageName)) {
+            throw new SecurityException("packageName must match the calling uid");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("appToken must not be null");
+        }
+        if (virtualDisplayConfig == null) {
+            throw new IllegalArgumentException("virtualDisplayConfig must not be null");
+        }
+        final Surface surface = virtualDisplayConfig.getSurface();
+        int flags = virtualDisplayConfig.getFlags();
+
+        if (surface != null && surface.isSingleBuffered()) {
+            throw new IllegalArgumentException("Surface can't be single-buffered");
+        }
+
+        if ((flags & VIRTUAL_DISPLAY_FLAG_PUBLIC) != 0) {
+            flags |= VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
+
+            // Public displays can't be allowed to show content when locked.
+            if ((flags & VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
+                throw new IllegalArgumentException(
+                        "Public display must not be marked as SHOW_WHEN_LOCKED_INSECURE");
+            }
+        }
+        if ((flags & VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY) != 0) {
+            flags &= ~VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
+        }
+        if ((flags & VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR) != 0) {
+            flags &= ~VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP;
+        }
+
+        if (projection != null) {
+            try {
+                if (!getProjectionService().isValidMediaProjection(projection)) {
+                    throw new SecurityException("Invalid media projection");
+                }
+                flags = projection.applyVirtualDisplayFlags(flags);
+            } catch (RemoteException e) {
+                throw new SecurityException("unable to validate media projection or flags");
+            }
+        }
+
+        if (callingUid != Process.SYSTEM_UID
+                && (flags & VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR) != 0) {
+            if (!canProjectVideo(projection)) {
+                throw new SecurityException("Requires CAPTURE_VIDEO_OUTPUT or "
+                        + "CAPTURE_SECURE_VIDEO_OUTPUT permission, or an appropriate "
+                        + "MediaProjection token in order to create a screen sharing virtual "
+                        + "display.");
+            }
+        }
+        if (callingUid != Process.SYSTEM_UID && (flags & VIRTUAL_DISPLAY_FLAG_SECURE) != 0) {
+            if (!canProjectSecureVideo(projection)) {
+                throw new SecurityException("Requires CAPTURE_SECURE_VIDEO_OUTPUT "
+                        + "or an appropriate MediaProjection token to create a "
+                        + "secure virtual display.");
+            }
+        }
+
+        if (callingUid != Process.SYSTEM_UID && (flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) != 0) {
+            if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
+                EventLog.writeEvent(0x534e4554, "162627132", callingUid,
+                        "Attempt to create a trusted display without holding permission!");
+                throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "
+                        + "create a trusted virtual display.");
+            }
+        }
+
+        if (callingUid != Process.SYSTEM_UID
+                && (flags & VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP) != 0) {
+            if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
+                throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "
+                        + "create a virtual display which is not in the default DisplayGroup.");
+            }
+        }
+
+        if ((flags & VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED) != 0) {
+            if (callingUid != Process.SYSTEM_UID
+                    && !checkCallingPermission(ADD_ALWAYS_UNLOCKED_DISPLAY,
+                    "createVirtualDisplay()")) {
+                throw new SecurityException(
+                        "Requires ADD_ALWAYS_UNLOCKED_DISPLAY permission to "
+                                + "create an always unlocked virtual display.");
+            }
+            boolean allowedByDeviceConfig = false;
+            final long token = Binder.clearCallingIdentity();
+            try {
+                allowedByDeviceConfig = mDeviceConfig.getBoolean(
+                        DeviceConfig.NAMESPACE_DISPLAY_MANAGER,
+                        DisplayManager.DeviceConfig.KEY_ALLOW_ALWAYS_UNLOCKED_VIRTUAL_DISPLAYS,
+                        false);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+            if (!allowedByDeviceConfig) {
+                Slog.w(TAG, "Ignoring flag VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED "
+                        + "because it is not allowed by DeviceConfig");
+                flags &= ~VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED;
+            }
+        }
+
+        if ((flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) == 0) {
+            flags &= ~VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS;
+        }
+
+        // Sometimes users can have sensitive information in system decoration windows. An app
+        // could create a virtual display with system decorations support and read the user info
+        // from the surface.
+        // We should only allow adding flag VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+        // to trusted virtual displays.
+        final int trustedDisplayWithSysDecorFlag =
+                (VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+                        | VIRTUAL_DISPLAY_FLAG_TRUSTED);
+        if ((flags & trustedDisplayWithSysDecorFlag)
+                == VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+                && !checkCallingPermission(INTERNAL_SYSTEM_WINDOW, "createVirtualDisplay()")) {
+            throw new SecurityException("Requires INTERNAL_SYSTEM_WINDOW permission");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mSyncRoot) {
+                return createVirtualDisplayLocked(callback, projection, callingUid, packageName,
+                        surface, flags, virtualDisplayConfig, controller);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private int createVirtualDisplayLocked(IVirtualDisplayCallback callback,
+            IMediaProjection projection, int callingUid, String packageName, Surface surface,
+            int flags, VirtualDisplayConfig virtualDisplayConfig,
+            DisplayWindowPolicyController controller) {
+        if (mVirtualDisplayAdapter == null) {
+            Slog.w(TAG, "Rejecting request to create private virtual display "
+                    + "because the virtual display adapter is not available.");
+            return -1;
+        }
+
+        DisplayDevice device = mVirtualDisplayAdapter.createVirtualDisplayLocked(
+                callback, projection, callingUid, packageName, surface, flags,
+                virtualDisplayConfig);
+        if (device == null) {
+            return -1;
+        }
+
+        // DisplayDevice events are handled manually for Virtual Displays.
+        // TODO: multi-display Fix this so that generic add/remove events are not handled in a
+        // different code path for virtual displays.  Currently this happens so that we can
+        // return a valid display ID synchronously upon successful Virtual Display creation.
+        // This code can run on any binder thread, while onDisplayDeviceAdded() callbacks are
+        // called on the DisplayThread (which we don't want to wait for?).
+        // One option would be to actually wait here on the binder thread
+        // to be notified when the virtual display is created (or failed).
+        mDisplayDeviceRepo.onDisplayDeviceEvent(device,
+                DisplayAdapter.DISPLAY_DEVICE_EVENT_ADDED);
+
+        final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
+        if (display != null) {
+            if (controller != null) {
+                mDisplayWindowPolicyController.put(display.getDisplayIdLocked(), controller);
+            }
+            return display.getDisplayIdLocked();
+        }
+
+        // Something weird happened and the logical display was not created.
+        Slog.w(TAG, "Rejecting request to create virtual display "
+                + "because the logical display was not created.");
+        mVirtualDisplayAdapter.releaseVirtualDisplayLocked(callback.asBinder());
+        mDisplayDeviceRepo.onDisplayDeviceEvent(device,
+                DisplayAdapter.DISPLAY_DEVICE_EVENT_REMOVED);
         return -1;
     }
 
@@ -1198,6 +1400,10 @@ public final class DisplayManagerService extends SystemService {
             DisplayDevice device =
                     mVirtualDisplayAdapter.releaseVirtualDisplayLocked(appToken);
             if (device != null) {
+                final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
+                if (display != null) {
+                    mDisplayWindowPolicyController.delete(display.getDisplayIdLocked());
+                }
                 // TODO: multi-display - handle virtual displays the same as other display adapters.
                 mDisplayDeviceRepo.onDisplayDeviceEvent(device,
                         DisplayAdapter.DISPLAY_DEVICE_EVENT_REMOVED);
@@ -2157,6 +2363,15 @@ public final class DisplayManagerService extends SystemService {
             }
             pw.println();
             mPersistentDataStore.dump(pw);
+
+            final int displayWindowPolicyControllerCount = mDisplayWindowPolicyController.size();
+            pw.println();
+            pw.println("Display Window Policy Controllers: size="
+                    + displayWindowPolicyControllerCount);
+            for (int i = 0; i < displayWindowPolicyControllerCount; i++) {
+                pw.print("Display " + mDisplayWindowPolicyController.keyAt(i) + ":");
+                mDisplayWindowPolicyController.valueAt(i).dump("  ", pw);
+            }
         }
         pw.println();
         mDisplayModeDirector.dump(pw);
@@ -2203,6 +2418,11 @@ public final class DisplayManagerService extends SystemService {
         boolean getAllowNonNativeRefreshRateOverride() {
             return DisplayProperties
                     .debug_allow_non_native_refresh_rate_override().orElse(false);
+        }
+
+        @NonNull
+        public DeviceConfigInterface getDeviceConfig() {
+            return DeviceConfigInterface.REAL;
         }
     }
 
@@ -2725,109 +2945,8 @@ public final class DisplayManagerService extends SystemService {
         @Override // Binder call
         public int createVirtualDisplay(VirtualDisplayConfig virtualDisplayConfig,
                 IVirtualDisplayCallback callback, IMediaProjection projection, String packageName) {
-            final int callingUid = Binder.getCallingUid();
-            if (!validatePackageName(callingUid, packageName)) {
-                throw new SecurityException("packageName must match the calling uid");
-            }
-            if (callback == null) {
-                throw new IllegalArgumentException("appToken must not be null");
-            }
-            if (virtualDisplayConfig == null) {
-                throw new IllegalArgumentException("virtualDisplayConfig must not be null");
-            }
-            final Surface surface = virtualDisplayConfig.getSurface();
-            int flags = virtualDisplayConfig.getFlags();
-
-            if (surface != null && surface.isSingleBuffered()) {
-                throw new IllegalArgumentException("Surface can't be single-buffered");
-            }
-
-            if ((flags & VIRTUAL_DISPLAY_FLAG_PUBLIC) != 0) {
-                flags |= VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
-
-                // Public displays can't be allowed to show content when locked.
-                if ((flags & VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
-                    throw new IllegalArgumentException(
-                            "Public display must not be marked as SHOW_WHEN_LOCKED_INSECURE");
-                }
-            }
-            if ((flags & VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY) != 0) {
-                flags &= ~VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
-            }
-            if ((flags & VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR) != 0) {
-                flags &= ~VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP;
-            }
-
-            if (projection != null) {
-                try {
-                    if (!getProjectionService().isValidMediaProjection(projection)) {
-                        throw new SecurityException("Invalid media projection");
-                    }
-                    flags = projection.applyVirtualDisplayFlags(flags);
-                } catch (RemoteException e) {
-                    throw new SecurityException("unable to validate media projection or flags");
-                }
-            }
-
-            if (callingUid != Process.SYSTEM_UID &&
-                    (flags & VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR) != 0) {
-                if (!canProjectVideo(projection)) {
-                    throw new SecurityException("Requires CAPTURE_VIDEO_OUTPUT or "
-                            + "CAPTURE_SECURE_VIDEO_OUTPUT permission, or an appropriate "
-                            + "MediaProjection token in order to create a screen sharing virtual "
-                            + "display.");
-                }
-            }
-            if (callingUid != Process.SYSTEM_UID && (flags & VIRTUAL_DISPLAY_FLAG_SECURE) != 0) {
-                if (!canProjectSecureVideo(projection)) {
-                    throw new SecurityException("Requires CAPTURE_SECURE_VIDEO_OUTPUT "
-                            + "or an appropriate MediaProjection token to create a "
-                            + "secure virtual display.");
-                }
-            }
-
-            if (callingUid != Process.SYSTEM_UID && (flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) != 0) {
-                if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
-                    EventLog.writeEvent(0x534e4554, "162627132", callingUid,
-                            "Attempt to create a trusted display without holding permission!");
-                    throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "
-                            + "create a trusted virtual display.");
-                }
-            }
-
-            if (callingUid != Process.SYSTEM_UID
-                    && (flags & VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP) != 0) {
-                if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
-                    throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "
-                            + "create a virtual display which is not in the default DisplayGroup.");
-                }
-            }
-
-            if ((flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) == 0) {
-                flags &= ~VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS;
-            }
-
-            // Sometimes users can have sensitive information in system decoration windows. An app
-            // could create a virtual display with system decorations support and read the user info
-            // from the surface.
-            // We should only allow adding flag VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
-            // to trusted virtual displays.
-            final int trustedDisplayWithSysDecorFlag =
-                    (VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
-                            | VIRTUAL_DISPLAY_FLAG_TRUSTED);
-            if ((flags & trustedDisplayWithSysDecorFlag)
-                    == VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
-                    && !checkCallingPermission(INTERNAL_SYSTEM_WINDOW, "createVirtualDisplay()")) {
-                    throw new SecurityException("Requires INTERNAL_SYSTEM_WINDOW permission");
-            }
-
-            final long token = Binder.clearCallingIdentity();
-            try {
-                return createVirtualDisplayInternal(callback, projection, callingUid, packageName,
-                        surface, flags, virtualDisplayConfig);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
+            return createVirtualDisplayInternal(virtualDisplayConfig, callback, projection,
+                    packageName, null /* controller */);
         }
 
         @Override // Binder call
@@ -3257,60 +3376,6 @@ public final class DisplayManagerService extends SystemService {
                 Binder.restoreCallingIdentity(token);
             }
         }
-
-        private boolean validatePackageName(int uid, String packageName) {
-            if (packageName != null) {
-                String[] packageNames = mContext.getPackageManager().getPackagesForUid(uid);
-                if (packageNames != null) {
-                    for (String n : packageNames) {
-                        if (n.equals(packageName)) {
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
-        }
-
-        private boolean canProjectVideo(IMediaProjection projection) {
-            if (projection != null) {
-                try {
-                    if (projection.canProjectVideo()) {
-                        return true;
-                    }
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Unable to query projection service for permissions", e);
-                }
-            }
-            if (checkCallingPermission(CAPTURE_VIDEO_OUTPUT, "canProjectVideo()")) {
-                return true;
-            }
-            return canProjectSecureVideo(projection);
-        }
-
-        private boolean canProjectSecureVideo(IMediaProjection projection) {
-            if (projection != null) {
-                try {
-                    if (projection.canProjectSecureVideo()){
-                        return true;
-                    }
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Unable to query projection service for permissions", e);
-                }
-            }
-            return checkCallingPermission(CAPTURE_SECURE_VIDEO_OUTPUT, "canProjectSecureVideo()");
-        }
-
-        private boolean checkCallingPermission(String permission, String func) {
-            if (mContext.checkCallingPermission(permission) == PackageManager.PERMISSION_GRANTED) {
-                return true;
-            }
-            final String msg = "Permission Denial: " + func + " from pid=" + Binder.getCallingPid()
-                    + ", uid=" + Binder.getCallingUid() + " requires " + permission;
-            Slog.w(TAG, msg);
-            return false;
-        }
-
     }
 
     private static boolean isValidBrightness(float brightness) {
@@ -3639,6 +3704,26 @@ public final class DisplayManagerService extends SystemService {
                 }
             }
             return device.getDisplaySurfaceDefaultSize();
+        }
+
+        @Override
+        public void onEarlyInteractivityChange(boolean interactive) {
+            mLogicalDisplayMapper.onEarlyInteractivityChange(interactive);
+        }
+
+        @Override
+        public int createVirtualDisplay(VirtualDisplayConfig virtualDisplayConfig,
+                IVirtualDisplayCallback callback, IMediaProjection projection, String packageName,
+                DisplayWindowPolicyController controller) {
+            return createVirtualDisplayInternal(virtualDisplayConfig, callback, projection,
+                    packageName, controller);
+        }
+
+        @Override
+        public DisplayWindowPolicyController getDisplayWindowPolicyController(int displayId) {
+            synchronized (mSyncRoot) {
+                return mDisplayWindowPolicyController.get(displayId);
+            }
         }
     }
 

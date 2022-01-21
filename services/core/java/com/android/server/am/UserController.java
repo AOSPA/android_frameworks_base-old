@@ -67,10 +67,10 @@ import android.content.Intent;
 import android.content.PermissionChecker;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.content.pm.PackagePartitions;
 import android.content.pm.UserInfo;
 import android.os.BatteryStats;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
@@ -103,6 +103,7 @@ import android.util.proto.ProtoOutputStream;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.widget.LockPatternUtils;
@@ -162,6 +163,7 @@ class UserController implements Handler.Callback {
     static final int USER_UNLOCKED_MSG = 105;
     static final int REPORT_LOCKED_BOOT_COMPLETE_MSG = 110;
     static final int START_USER_SWITCH_FG_MSG = 120;
+    static final int COMPLETE_USER_SWITCH_MSG = 130;
 
     // Message constant to clear {@link UserJourneySession} from {@link mUserIdToUserJourneyMap} if
     // the user journey, defined in the UserLifecycleJourneyReported atom for statsd, is not
@@ -385,6 +387,7 @@ class UserController implements Handler.Callback {
     @VisibleForTesting
     UserController(Injector injector) {
         mInjector = injector;
+        // This should be called early to avoid a null mHandler inside the injector
         mHandler = mInjector.getHandler(this);
         mUiHandler = mInjector.getUiHandler(this);
         // User 0 is the first and only user that runs at boot.
@@ -716,7 +719,7 @@ class UserController implements Handler.Callback {
         // purposefully block sending BOOT_COMPLETED until after all
         // PRE_BOOT receivers are finished to avoid ANR'ing apps
         final UserInfo info = getUserInfo(userId);
-        if (!Objects.equals(info.lastLoggedInFingerprint, Build.FINGERPRINT)
+        if (!Objects.equals(info.lastLoggedInFingerprint, PackagePartitions.FINGERPRINT)
                 || SystemProperties.getBoolean("persist.pm.mock-upgrade", false)) {
             // Suppress double notifications for managed profiles that
             // were unlocked automatically as part of their parent user
@@ -1535,7 +1538,10 @@ class UserController implements Handler.Callback {
                 // with the option to show the user switcher on the keyguard.
                 if (userSwitchUiEnabled) {
                     mInjector.getWindowManager().setSwitchingUser(true);
-                    mInjector.getWindowManager().lockNow(null);
+                    // Only lock if the user has a secure keyguard PIN/Pattern/Pwd
+                    if (mInjector.getKeyguardManager().isDeviceSecure(userId)) {
+                        mInjector.getWindowManager().lockNow(null);
+                    }
                 }
             } else {
                 final Integer currentUserIdInt = mCurrentUserId;
@@ -1803,7 +1809,8 @@ class UserController implements Handler.Callback {
     private void showUserSwitchDialog(Pair<UserInfo, UserInfo> fromToUserPair) {
         // The dialog will show and then initiate the user switch by calling startUserInForeground
         mInjector.showUserSwitchingDialog(fromToUserPair.first, fromToUserPair.second,
-                getSwitchingFromSystemUserMessage(), getSwitchingToSystemUserMessage());
+                getSwitchingFromSystemUserMessageUnchecked(),
+                getSwitchingToSystemUserMessageUnchecked());
     }
 
     private void dispatchForegroundProfileChanged(@UserIdInt int userId) {
@@ -1967,11 +1974,10 @@ class UserController implements Handler.Callback {
 
         EventLog.writeEvent(EventLogTags.UC_CONTINUE_USER_SWITCH, oldUserId, newUserId);
 
-        if (isUserSwitchUiEnabled()) {
-            t.traceBegin("stopFreezingScreen");
-            mInjector.getWindowManager().stopFreezingScreen();
-            t.traceEnd();
-        }
+        // Do the keyguard dismiss and unfreeze later
+        mHandler.removeMessages(COMPLETE_USER_SWITCH_MSG);
+        mHandler.sendMessage(mHandler.obtainMessage(COMPLETE_USER_SWITCH_MSG, newUserId, 0));
+
         uss.switching = false;
         mHandler.removeMessages(REPORT_USER_SWITCH_COMPLETE_MSG);
         mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_COMPLETE_MSG, newUserId, 0));
@@ -1979,6 +1985,34 @@ class UserController implements Handler.Callback {
         stopUserOnSwitchIfEnforced(oldUserId);
 
         t.traceEnd(); // end continueUserSwitch
+    }
+
+    @VisibleForTesting
+    void completeUserSwitch(int newUserId) {
+        if (isUserSwitchUiEnabled()) {
+            // If there is no challenge set, dismiss the keyguard right away
+            if (!mInjector.getKeyguardManager().isDeviceSecure(newUserId)) {
+                // Wait until the keyguard is dismissed to unfreeze
+                mInjector.dismissKeyguard(
+                        new Runnable() {
+                            public void run() {
+                                unfreezeScreen();
+                            }
+                        },
+                        "User Switch");
+                return;
+            } else {
+                unfreezeScreen();
+            }
+        }
+    }
+
+    @VisibleForTesting
+    void unfreezeScreen() {
+        TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("stopFreezingScreen");
+        mInjector.getWindowManager().stopFreezingScreen();
+        t.traceEnd();
     }
 
     private void moveUserToForeground(UserState uss, int oldUserId, int newUserId) {
@@ -2589,15 +2623,37 @@ class UserController implements Handler.Callback {
         }
     }
 
-    private String getSwitchingFromSystemUserMessage() {
+    // Called by AMS, must check permission
+    String getSwitchingFromSystemUserMessage() {
+        checkHasManageUsersPermission("getSwitchingFromSystemUserMessage()");
+
+        return getSwitchingFromSystemUserMessageUnchecked();
+    }
+
+    // Called by AMS, must check permission
+    String getSwitchingToSystemUserMessage() {
+        checkHasManageUsersPermission("getSwitchingToSystemUserMessage()");
+
+        return getSwitchingToSystemUserMessageUnchecked();
+    }
+
+    private String getSwitchingFromSystemUserMessageUnchecked() {
         synchronized (mLock) {
             return mSwitchingFromSystemUserMessage;
         }
     }
 
-    private String getSwitchingToSystemUserMessage() {
+    private String getSwitchingToSystemUserMessageUnchecked() {
         synchronized (mLock) {
             return mSwitchingToSystemUserMessage;
+        }
+    }
+
+    private void checkHasManageUsersPermission(String operation) {
+        if (mInjector.checkCallingPermission(
+                android.Manifest.permission.MANAGE_USERS) == PackageManager.PERMISSION_DENIED) {
+            throw new SecurityException(
+                    "You need MANAGE_USERS permission to call " + operation);
         }
     }
 
@@ -2673,6 +2729,12 @@ class UserController implements Handler.Callback {
             pw.println("  mMaxRunningUsers:" + mMaxRunningUsers);
             pw.println("  mUserSwitchUiEnabled:" + mUserSwitchUiEnabled);
             pw.println("  mInitialized:" + mInitialized);
+            if (mSwitchingFromSystemUserMessage != null) {
+                pw.println("  mSwitchingFromSystemUserMessage: " + mSwitchingFromSystemUserMessage);
+            }
+            if (mSwitchingToSystemUserMessage != null) {
+                pw.println("  mSwitchingToSystemUserMessage: " + mSwitchingToSystemUserMessage);
+            }
         }
     }
 
@@ -2771,6 +2833,9 @@ class UserController implements Handler.Callback {
                 break;
             case CLEAR_USER_JOURNEY_SESSION_MSG:
                 logAndClearSessionId(msg.arg1);
+                break;
+            case COMPLETE_USER_SWITCH_MSG:
+                completeUserSwitch(msg.arg1);
                 break;
         }
         return false;
@@ -2961,13 +3026,14 @@ class UserController implements Handler.Callback {
         private final ActivityManagerService mService;
         private UserManagerService mUserManager;
         private UserManagerInternal mUserManagerInternal;
+        private Handler mHandler;
 
         Injector(ActivityManagerService service) {
             mService = service;
         }
 
         protected Handler getHandler(Handler.Callback callback) {
-            return new Handler(mService.mHandlerThread.getLooper(), callback);
+            return mHandler = new Handler(mService.mHandlerThread.getLooper(), callback);
         }
 
         protected Handler getUiHandler(Handler.Callback callback) {
@@ -3164,6 +3230,25 @@ class UserController implements Handler.Callback {
 
         protected IStorageManager getStorageManager() {
             return IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
+        }
+
+        protected void dismissKeyguard(Runnable runnable, String reason) {
+            getWindowManager().dismissKeyguard(new IKeyguardDismissCallback.Stub() {
+                @Override
+                public void onDismissError() throws RemoteException {
+                    mHandler.post(runnable);
+                }
+
+                @Override
+                public void onDismissSucceeded() throws RemoteException {
+                    mHandler.post(runnable);
+                }
+
+                @Override
+                public void onDismissCancelled() throws RemoteException {
+                    mHandler.post(runnable);
+                }
+            }, reason);
         }
     }
 }

@@ -150,6 +150,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FileRotator;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.net.module.util.BinderUtils;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
 
@@ -214,8 +215,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private final File mBaseDir;
 
     private final PowerManager.WakeLock mWakeLock;
-
-    private final boolean mUseBpfTrafficStats;
 
     private final ContentObserver mContentObserver;
     private final ContentResolver mContentResolver;
@@ -438,7 +437,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mStatsObservers = Objects.requireNonNull(statsObservers, "missing NetworkStatsObservers");
         mSystemDir = Objects.requireNonNull(systemDir, "missing systemDir");
         mBaseDir = Objects.requireNonNull(baseDir, "missing baseDir");
-        mUseBpfTrafficStats = new File("/sys/fs/bpf/map_netd_app_uid_stats_map").exists();
         mDeps = Objects.requireNonNull(deps, "missing Dependencies");
 
         final HandlerThread handlerThread = mDeps.makeHandlerThread();
@@ -1084,13 +1082,13 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         if (callingUid != android.os.Process.SYSTEM_UID && callingUid != uid) {
             return UNSUPPORTED;
         }
-        return nativeGetUidStat(uid, type, checkBpfStatsEnable());
+        return nativeGetUidStat(uid, type);
     }
 
     @Override
     public long getIfaceStats(@NonNull String iface, int type) {
         Objects.requireNonNull(iface);
-        long nativeIfaceStats = nativeGetIfaceStat(iface, type, checkBpfStatsEnable());
+        long nativeIfaceStats = nativeGetIfaceStat(iface, type);
         if (nativeIfaceStats == -1) {
             return nativeIfaceStats;
         } else {
@@ -1104,7 +1102,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     @Override
     public long getTotalStats(int type) {
-        long nativeTotalStats = nativeGetTotalStat(type, checkBpfStatsEnable());
+        long nativeTotalStats = nativeGetTotalStat(type);
         if (nativeTotalStats == -1) {
             return nativeTotalStats;
         } else {
@@ -1135,10 +1133,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             default:
                 return 0;
         }
-    }
-
-    private boolean checkBpfStatsEnable() {
-        return mUseBpfTrafficStats;
     }
 
     /**
@@ -2104,14 +2098,18 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
         @Override
         public void notifyAlertReached() throws RemoteException {
-            mAlertObserver.limitReached(LIMIT_GLOBAL_ALERT, null /* unused */);
+            // This binder object can only have been obtained by a process that holds
+            // NETWORK_STATS_PROVIDER. Thus, no additional permission check is required.
+            BinderUtils.withCleanCallingIdentity(() ->
+                    mAlertObserver.limitReached(LIMIT_GLOBAL_ALERT, null /* unused */));
         }
 
         @Override
         public void notifyWarningOrLimitReached() {
             Log.d(TAG, mTag + ": notifyWarningOrLimitReached");
-            LocalServices.getService(NetworkPolicyManagerInternal.class)
-                    .onStatsProviderWarningOrLimitReached(mTag);
+            BinderUtils.withCleanCallingIdentity(() ->
+                    LocalServices.getService(NetworkPolicyManagerInternal.class)
+                            .onStatsProviderWarningOrLimitReached(mTag));
         }
 
         @Override
@@ -2249,7 +2247,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    private static native long nativeGetTotalStat(int type, boolean useBpfStats);
-    private static native long nativeGetIfaceStat(String iface, int type, boolean useBpfStats);
-    private static native long nativeGetUidStat(int uid, int type, boolean useBpfStats);
+    private static native long nativeGetTotalStat(int type);
+    private static native long nativeGetIfaceStat(String iface, int type);
+    private static native long nativeGetUidStat(int uid, int type);
 }

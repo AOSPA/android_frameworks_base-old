@@ -1244,6 +1244,14 @@
         android:description="@string/permdesc_readPhoneState"
         android:protectionLevel="dangerous" />
 
+    <!-- Allows read only access to phone state with a non dangerous permission,
+         including the information like cellular network type, software version. -->
+    <permission android:name="android.permission.READ_BASIC_PHONE_STATE"
+            android:permissionGroup="android.permission-group.UNDEFINED"
+            android:label="@string/permlab_readBasicPhoneState"
+            android:description="@string/permdesc_readBasicPhoneState"
+            android:protectionLevel="normal" />
+
     <!-- Allows read access to the device's phone number(s). This is a subset of the capabilities
          granted by {@link #READ_PHONE_STATE} but is exposed to instant applications.
          <p>Protection level: dangerous-->
@@ -1790,6 +1798,13 @@
     <permission android:name="android.permission.ACCESS_MOCK_LOCATION"
         android:protectionLevel="signature" />
 
+    <!-- @SystemApi @hide Allows automotive applications to control location
+         suspend state for power management use cases.
+         <p>Not for use by third-party applications.
+    -->
+    <permission android:name="android.permission.AUTOMOTIVE_GNSS_CONTROLS"
+        android:protectionLevel="signature|privileged" />
+
     <!-- ======================================= -->
     <!-- Permissions for accessing networks -->
     <!-- ======================================= -->
@@ -1872,11 +1887,11 @@
     <permission android:name="android.permission.OVERRIDE_WIFI_CONFIG"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Allows applications to act as network scorers. @hide @SystemApi-->
+    <!-- @deprecated Allows applications to act as network scorers. @hide @SystemApi-->
     <permission android:name="android.permission.SCORE_NETWORKS"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Allows applications to request network
+    <!-- @deprecated Allows applications to request network
          recommendations and scores from the NetworkScoreService.
          @SystemApi
          <p>Not for use by third-party applications. @hide -->
@@ -2825,6 +2840,11 @@
         android:label="@string/permlab_manageProfileAndDeviceOwners"
         android:description="@string/permdesc_manageProfileAndDeviceOwners" />
 
+    <!-- @SystemApi @hide Allows an application to query device policies set by any admin on
+         the device.-->
+    <permission android:name="android.permission.QUERY_ADMIN_POLICY"
+                android:protectionLevel="signature|role" />
+
     <!-- @TestApi @hide Allows an application to reset the record of previous system update freeze
          periods. -->
     <permission android:name="android.permission.CLEAR_FREEZE_PERIOD"
@@ -3046,6 +3066,13 @@
     -->
     <permission android:name="android.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION"
                 android:protectionLevel="internal|role" />
+
+    <!-- Allows an application to create a "self-managed" association.
+         @hide
+         @SystemApi
+    -->
+    <permission android:name="android.permission.REQUEST_COMPANION_SELF_MANAGED"
+                android:protectionLevel="signature|privileged" />
 
     <!-- Allows a companion app to associate to Wi-Fi.
          <p>Only for use by a single pre-approved app.
@@ -3494,6 +3521,23 @@
          font files. @SystemApi @hide -->
     <permission android:name="android.permission.UPDATE_FONTS"
         android:protectionLevel="signature|privileged" />
+
+    <!-- Allows an application to use the AttestationVerificationService.
+         @hide -->
+    <permission android:name="android.permission.USE_ATTESTATION_VERIFICATION_SERVICE"
+                android:protectionLevel="signature" />
+
+    <!-- Allows an application to export a AttestationVerificationService to verify attestations on
+         behalf of AttestationVerificationManager for system-defined attestation profiles.
+         @hide -->
+    <permission android:name="android.permission.VERIFY_ATTESTATION"
+                android:protectionLevel="signature" />
+
+    <!-- Must be required by any AttestationVerificationService to ensure that only the system can
+         bind to it.
+         @hide -->
+    <permission android:name="android.permission.BIND_ATTESTATION_VERIFICATION_SERVICE"
+                android:protectionLevel="signature" />
 
     <!-- ========================================= -->
     <!-- Permissions for special development tools -->
@@ -4883,6 +4927,11 @@
     <permission android:name="android.permission.CHANGE_APP_IDLE_STATE"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @hide @SystemApi Allows an application to change the estimated launch time of an app.
+         <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE"
+        android:protectionLevel="signature|privileged" />
+
     <!-- @hide @SystemApi Allows an application to temporarily allowlist an inactive app to
          access the network and acquire wakelocks.
          <p>Not for use by third-party applications. -->
@@ -5885,6 +5934,10 @@
     <permission android:name="android.permission.ADD_TRUSTED_DISPLAY"
                 android:protectionLevel="signature" />
 
+    <!-- Allows an application to create always-unlocked displays. @hide -->
+    <permission android:name="android.permission.ADD_ALWAYS_UNLOCKED_DISPLAY"
+                android:protectionLevel="signature"/>
+
     <!-- @hide @SystemApi Allows an application to access locusId events in the usage stats. -->
     <permission android:name="android.permission.ACCESS_LOCUS_ID_USAGE_STATS"
                 android:protectionLevel="signature|role" />
@@ -5948,11 +6001,10 @@
     <permission android:name="android.permission.RENOUNCE_PERMISSIONS"
                 android:protectionLevel="signature|privileged" />
 
-    <!-- Allows an application to read nearby streaming policy. The policy allows the device
-         to stream its notifications and apps to nearby devices.
-         @hide -->
+    <!-- Allows an application to read nearby streaming policy. The policy controls
+         whether to allow the device to stream its notifications and apps to nearby devices. -->
     <permission android:name="android.permission.READ_NEARBY_STREAMING_POLICY"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="normal" />
 
     <!-- @SystemApi Allows the holder to set the source of the data when setting a clip on the
          clipboard.
@@ -5994,6 +6046,14 @@
          @hide -->
     <permission android:name="android.permission.CREATE_VIRTUAL_DEVICE"
                 android:protectionLevel="internal|role" />
+
+    <!-- @SystemApi Must be required by a safety source to send an update using the
+             {@link android.safetycenter.SafetyCenterManager}.
+             <p>Protection level: signature|privileged
+             @hide
+        -->
+    <permission android:name="android.permission.SEND_SAFETY_CENTER_UPDATE"
+                android:protectionLevel="signature|privileged" />
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>
@@ -6424,6 +6484,10 @@
         </service>
 
         <service android:name="com.android.server.pm.DynamicCodeLoggingService"
+                 android:permission="android.permission.BIND_JOB_SERVICE">
+        </service>
+
+        <service android:name="com.android.server.compos.IsolatedCompilationJobService"
                  android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
 

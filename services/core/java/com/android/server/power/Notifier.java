@@ -24,8 +24,8 @@ import android.app.trust.TrustManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManagerInternal;
-import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
@@ -41,6 +41,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.WorkSource;
@@ -109,9 +110,8 @@ public class Notifier {
     private static final VibrationEffect CHARGING_VIBRATION_EFFECT =
             VibrationEffect.createWaveform(CHARGING_VIBRATION_TIME, CHARGING_VIBRATION_AMPLITUDE,
                     -1);
-    private static final AudioAttributes VIBRATION_ATTRIBUTES = new AudioAttributes.Builder()
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build();
+    private static final VibrationAttributes HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES =
+            VibrationAttributes.createForUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK);
 
     private final Object mLock = new Object();
 
@@ -129,6 +129,7 @@ public class Notifier {
     private final TrustManager mTrustManager;
     private final Vibrator mVibrator;
     private final WakeLockLog mWakeLockLog;
+    private final DisplayManagerInternal mDisplayManagerInternal;
 
     private final NotifierHandler mHandler;
     private final Intent mScreenOnIntent;
@@ -181,6 +182,7 @@ public class Notifier {
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mInputMethodManagerInternal = LocalServices.getService(InputMethodManagerInternal.class);
         mStatusBarManagerInternal = LocalServices.getService(StatusBarManagerInternal.class);
+        mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
         mTrustManager = mContext.getSystemService(TrustManager.class);
         mVibrator = mContext.getSystemService(Vibrator.class);
 
@@ -460,7 +462,10 @@ public class Notifier {
         synchronized (mLock) {
             if (mInteractive) {
                 // Waking up...
-                mHandler.post(() -> mPolicy.startedWakingUp(mInteractiveChangeReason));
+                mHandler.post(() -> {
+                    mPolicy.startedWakingUp(mInteractiveChangeReason);
+                    mDisplayManagerInternal.onEarlyInteractivityChange(true /*isInteractive*/);
+                });
 
                 // Send interactive broadcast.
                 mPendingInteractiveState = INTERACTIVE_STATE_AWAKE;
@@ -469,7 +474,10 @@ public class Notifier {
             } else {
                 // Going to sleep...
                 // Tell the policy that we started going to sleep.
-                mHandler.post(() -> mPolicy.startedGoingToSleep(mInteractiveChangeReason));
+                mHandler.post(() -> {
+                    mPolicy.startedGoingToSleep(mInteractiveChangeReason);
+                    mDisplayManagerInternal.onEarlyInteractivityChange(false /*isInteractive*/);
+                });
             }
         }
     }
@@ -799,7 +807,7 @@ public class Notifier {
         final boolean vibrate = Settings.Secure.getIntForUser(mContext.getContentResolver(),
                 Settings.Secure.CHARGING_VIBRATION_ENABLED, 1, userId) != 0;
         if (vibrate) {
-            mVibrator.vibrate(CHARGING_VIBRATION_EFFECT, VIBRATION_ATTRIBUTES);
+            mVibrator.vibrate(CHARGING_VIBRATION_EFFECT, HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES);
         }
 
         // play sound

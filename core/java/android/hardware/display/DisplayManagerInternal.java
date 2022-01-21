@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.graphics.Point;
 import android.hardware.SensorManager;
+import android.media.projection.IMediaProjection;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -30,6 +31,7 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
+import android.window.DisplayWindowPolicyController;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -370,6 +372,46 @@ public abstract class DisplayManagerInternal {
      * For now, only used for mirroring started from MediaProjection.
      */
     public abstract Point getDisplaySurfaceDefaultSize(int displayId);
+
+    /**
+     * Receives early interactivity changes from power manager.
+     *
+     * @param interactive The interactive state that the device is moving into.
+     */
+    public abstract void onEarlyInteractivityChange(boolean interactive);
+
+    /**
+     * A special API for creates a virtual display with a DisplayPolicyController in system_server.
+     * <p>
+     * If this method is called without original calling uid, the caller must enforce the
+     * corresponding permissions according to the flags.
+     *   {@link android.Manifest.permission#CAPTURE_VIDEO_OUTPUT}
+     *   {@link android.Manifest.permission#CAPTURE_SECURE_VIDEO_OUTPUT}
+     *   {@link android.Manifest.permission#ADD_TRUSTED_DISPLAY}
+     *   {@link android.Manifest.permission#INTERNAL_SYSTEM_WINDOW}
+     * </p>
+     *
+     * @param virtualDisplayConfig The arguments for the virtual display configuration. See
+     *                             {@link VirtualDisplayConfig} for using it.
+     * @param callback Callback to call when the virtual display's state changes, or null if none.
+     * @param projection MediaProjection token.
+     * @param packageName The package name of the app.
+     * @param controller The DisplayWindowPolicyControl that can control what contents are
+     *                   allowed to be displayed.
+     * @return The newly created virtual display id , or {@link Display#INVALID_DISPLAY} if the
+     * virtual display cannot be created.
+     */
+    public abstract int createVirtualDisplay(VirtualDisplayConfig virtualDisplayConfig,
+            IVirtualDisplayCallback callback, IMediaProjection projection, String packageName,
+            DisplayWindowPolicyController controller);
+
+    /**
+     * Get {@link DisplayWindowPolicyController} associated to the {@link DisplayInfo#displayId}
+     *
+     * @param displayId The id of the display.
+     * @return The associated {@link DisplayWindowPolicyController}.
+     */
+    public abstract DisplayWindowPolicyController getDisplayWindowPolicyController(int displayId);
 
     /**
      * Describes the requested power state of the display.

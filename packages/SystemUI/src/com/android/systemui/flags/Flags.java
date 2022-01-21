@@ -33,7 +33,7 @@ import java.util.Map;
  * On public release builds, flags will always return their default value. There is no way to
  * change their value on release builds.
  *
- * See {@link FeatureFlagManager} for instructions on flipping the flags via adb.
+ * See {@link FeatureFlagsDebug} for instructions on flipping the flags via adb.
  */
 public class Flags {
     public static final BooleanFlag TEAMFOOD = new BooleanFlag(1, false);
@@ -46,6 +46,10 @@ public class Flags {
     public static final BooleanFlag NOTIFICATION_UPDATES =
             new BooleanFlag(102, true);
 
+    public static final BooleanFlag NOTIFICATION_PIPELINE_DEVELOPER_LOGGING =
+            new BooleanFlag(103, false);
+
+
     /***************************************/
     // 200 - keyguard/lockscreen
     public static final BooleanFlag KEYGUARD_LAYOUT =
@@ -57,8 +61,8 @@ public class Flags {
     public static final BooleanFlag NEW_UNLOCK_SWIPE_ANIMATION =
             new BooleanFlag(202, true);
 
-    public static final BooleanFlag CHARGING_RIPPLE =
-            new BooleanFlag(203, false, R.bool.flag_charging_ripple);
+    public static final ResourceBooleanFlag CHARGING_RIPPLE =
+            new ResourceBooleanFlag(203, R.bool.flag_charging_ripple);
 
     /***************************************/
     // 300 - power menu
@@ -73,8 +77,8 @@ public class Flags {
     public static final BooleanFlag SMARTSPACE_SHARED_ELEMENT_TRANSITION_ENABLED =
             new BooleanFlag(401, false);
 
-    public static final BooleanFlag SMARTSPACE =
-            new BooleanFlag(402, false, R.bool.flag_smartspace);
+    public static final ResourceBooleanFlag SMARTSPACE =
+            new ResourceBooleanFlag(402, R.bool.flag_smartspace);
 
     /***************************************/
     // 500 - quick settings
@@ -84,14 +88,17 @@ public class Flags {
     public static final BooleanFlag COMBINED_QS_HEADERS =
             new BooleanFlag(501, false);
 
-    public static final BooleanFlag PEOPLE_TILE =
-            new BooleanFlag(502, false, R.bool.flag_conversations);
+    public static final ResourceBooleanFlag PEOPLE_TILE =
+            new ResourceBooleanFlag(502, R.bool.flag_conversations);
 
-    public static final BooleanFlag QS_USER_DETAIL_SHORTCUT =
-            new BooleanFlag(503, false, R.bool.flag_lockscreen_qs_user_detail_shortcut);
+    public static final ResourceBooleanFlag QS_USER_DETAIL_SHORTCUT =
+            new ResourceBooleanFlag(503, R.bool.flag_lockscreen_qs_user_detail_shortcut);
 
     /***************************************/
     // 600- status bar
+    public static final BooleanFlag STATUS_BAR_PROVIDER_MODEL =
+            new BooleanFlag(600, false);
+
     public static final BooleanFlag COMBINED_STATUS_BAR_SIGNAL_ICONS =
             new BooleanFlag(601, false);
 
@@ -108,8 +115,13 @@ public class Flags {
 
     /***************************************/
     // 800 - general visual/theme
-    public static final BooleanFlag MONET =
-            new BooleanFlag(800, true, R.bool.flag_monet);
+    public static final ResourceBooleanFlag MONET =
+            new ResourceBooleanFlag(800, R.bool.flag_monet);
+
+    /***************************************/
+    // 900 - media
+    public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, false);
+    public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, false);
 
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================

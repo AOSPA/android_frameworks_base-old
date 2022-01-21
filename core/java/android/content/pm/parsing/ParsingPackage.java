@@ -103,11 +103,11 @@ public interface ParsingPackage extends ParsingPackageRead {
 
     ParsingPackage addUsesOptionalNativeLibrary(String libraryName);
 
-    ParsingPackage addUsesStaticLibrary(String libraryName);
+    ParsingPackage addUsesSdkLibrary(String libraryName, long versionMajor,
+            String[] certSha256Digests);
 
-    ParsingPackage addUsesStaticLibraryCertDigests(String[] certSha256Digests);
-
-    ParsingPackage addUsesStaticLibraryVersion(long version);
+    ParsingPackage addUsesStaticLibrary(String libraryName, long version,
+            String[] certSha256Digests);
 
     ParsingPackage addQueriesIntent(Intent intent);
 
@@ -211,6 +211,12 @@ public interface ParsingPackage extends ParsingPackageRead {
     ParsingPackage setPreserveLegacyExternalStorage(boolean preserveLegacyExternalStorage);
 
     ParsingPackage setRestoreAnyVersion(boolean restoreAnyVersion);
+
+    ParsingPackage setSdkLibName(String sdkLibName);
+
+    ParsingPackage setSdkLibVersionMajor(int sdkLibVersionMajor);
+
+    ParsingPackage setSdkLibrary(boolean sdkLibrary);
 
     ParsingPackage setSplitHasCode(int splitIndex, boolean splitHasCode);
 
@@ -361,6 +367,9 @@ public interface ParsingPackage extends ParsingPackageRead {
     ParsingPackage setCompileSdkVersionCodeName(String compileSdkVersionCodeName);
 
     ParsingPackage setAttributionsAreUserVisible(boolean attributionsAreUserVisible);
+
+    ParsingPackage setResetEnabledSettingsOnAppDataCleared(
+            boolean resetEnabledSettingsOnAppDataCleared);
 
     // TODO(b/135203078): This class no longer has access to ParsedPackage, find a replacement
     //  for moving to the next step

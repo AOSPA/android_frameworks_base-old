@@ -77,6 +77,7 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.InitController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.accessibility.floatingmenu.AccessibilityFloatingMenuController;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -86,6 +87,7 @@ import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
@@ -114,6 +116,7 @@ import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.connectivity.NetworkController;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
+import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationFilter;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
@@ -133,6 +136,7 @@ import com.android.systemui.statusbar.notification.stack.NotificationListContain
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
+import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragmentLogger;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.BatteryController;
@@ -216,6 +220,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private NotificationGutsManager mNotificationGutsManager;
     @Mock private NotificationMediaManager mNotificationMediaManager;
     @Mock private NavigationBarController mNavigationBarController;
+    @Mock private AccessibilityFloatingMenuController mAccessibilityFloatingMenuController;
     @Mock private BypassHeadsUpNotifier mBypassHeadsUpNotifier;
     @Mock private SysuiColorExtractor mColorExtractor;
     @Mock private ColorExtractor.GradientColors mGradientColors;
@@ -276,8 +281,8 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private StartingSurface mStartingSurface;
     @Mock private OperatorNameViewController mOperatorNameViewController;
     @Mock private OperatorNameViewController.Factory mOperatorNameViewControllerFactory;
-    @Mock private PhoneStatusBarViewController.Factory mPhoneStatusBarViewControllerFactory;
     @Mock private ActivityLaunchAnimator mActivityLaunchAnimator;
+    @Mock private NotifPipelineFlags mNotifPipelineFlags;
     private ShadeController mShadeController;
     private final FakeSystemClock mFakeSystemClock = new FakeSystemClock();
     private FakeExecutor mMainExecutor = new FakeExecutor(mFakeSystemClock);
@@ -309,7 +314,7 @@ public class StatusBarTest extends SysuiTestCase {
         NotificationLogger notificationLogger = new NotificationLogger(
                 mNotificationListener,
                 mUiBgExecutor,
-                mFeatureFlags,
+                mNotifPipelineFlags,
                 mVisibilityProvider,
                 mock(NotificationEntryManager.class),
                 mock(NotifPipeline.class),
@@ -371,6 +376,7 @@ public class StatusBarTest extends SysuiTestCase {
         mStatusBar = new StatusBar(
                 mContext,
                 mNotificationsController,
+                mock(FragmentService.class),
                 mLightBarController,
                 mAutoHideController,
                 mStatusBarWindowController,
@@ -412,6 +418,7 @@ public class StatusBarTest extends SysuiTestCase {
                 mVisualStabilityManager,
                 mDeviceProvisionedController,
                 mNavigationBarController,
+                mAccessibilityFloatingMenuController,
                 () -> mAssistManager,
                 configurationController,
                 mNotificationShadeWindowController,
@@ -441,7 +448,6 @@ public class StatusBarTest extends SysuiTestCase {
                 mExtensionController,
                 mUserInfoControllerImpl,
                 mOperatorNameViewControllerFactory,
-                mPhoneStatusBarViewControllerFactory,
                 mPhoneStatusBarPolicy,
                 mKeyguardIndicationController,
                 mDemoModeController,
@@ -466,7 +472,8 @@ public class StatusBarTest extends SysuiTestCase {
                 Optional.of(mStartingSurface),
                 mTunerService,
                 mDumpManager,
-                mActivityLaunchAnimator);
+                mActivityLaunchAnimator,
+                mNotifPipelineFlags);
         when(mKeyguardViewMediator.registerStatusBar(
                 any(StatusBar.class),
                 any(NotificationPanelViewController.class),

@@ -2378,6 +2378,14 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_VIEW_APP_FEATURES =
             "android.intent.action.VIEW_APP_FEATURES";
 
+    /**
+     * Activity action: Launch UI to open the Safety Center, which highlights the user's security
+     * and privacy status.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_SAFETY_CENTER =
+            "android.intent.action.SAFETY_CENTER";
+
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // Standard intent broadcast actions (see action variable).
@@ -3164,9 +3172,8 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Broadcast Action: The receiver's effective locale has changed.
      *
-     * This happens when the device locale, or the
-     *  {(TODO: will only compile after ag/15518063) @link LocaleManager#setApplicationLocales}
-     *  receiving app's locale changed.
+     * This happens when the device locale, or the receiving app's locale
+     * (set via {@link android.app.LocaleManager#setApplicationLocales}) changed.
      *
      * Can be received by manifest-declared receivers.
      *
@@ -5535,8 +5542,8 @@ public class Intent implements Parcelable, Cloneable {
 
     /**
      * A boolean extra, when used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD},
-     * that specifies whether the system displayed attribution information in the
-     * permission usage system UI for the chosen entry.
+     * that specifies whether the permission usage system UI is showing attribution information
+     * for the chosen entry.
      *
      * <p> The extra can only be true if application has specified attributionsAreUserVisible
      * in its manifest. </p>
@@ -6428,6 +6435,7 @@ public class Intent implements Parcelable, Cloneable {
             FLAG_RECEIVER_FROM_SHELL,
             FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS,
             FLAG_RECEIVER_OFFLOAD,
+            FLAG_RECEIVER_OFFLOAD_FOREGROUND,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Flags {}
@@ -6473,6 +6481,7 @@ public class Intent implements Parcelable, Cloneable {
             FLAG_RECEIVER_FROM_SHELL,
             FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS,
             FLAG_RECEIVER_OFFLOAD,
+            FLAG_RECEIVER_OFFLOAD_FOREGROUND,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface MutableFlags {}
@@ -6926,6 +6935,13 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final int FLAG_RECEIVER_OFFLOAD = 0x80000000;
+    /**
+     * If set, when sending a broadcast the recipient will run on the system dedicated queue.
+     *
+     * @hide
+     */
+    public static final int FLAG_RECEIVER_OFFLOAD_FOREGROUND = 0x00000800;
+
     /**
      * If this is an ordered broadcast, don't allow receivers to abort the broadcast.
      * They can still propagate results through to later receivers, but they can not prevent

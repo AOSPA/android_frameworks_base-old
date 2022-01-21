@@ -24,7 +24,6 @@ import android.content.res.TypedArray;
 import android.graphics.drawable.ColorDrawable;
 import android.service.notification.StatusBarNotification;
 import android.util.AttributeSet;
-import android.util.Pair;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.NotificationHeaderView;
@@ -33,11 +32,15 @@ import android.view.ViewGroup;
 import android.widget.RemoteViews;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.widget.NotificationExpandButton;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.NotificationGroupingUtil;
+import com.android.systemui.statusbar.notification.FeedbackIcon;
+import com.android.systemui.statusbar.notification.NotificationFadeAware;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
@@ -51,7 +54,8 @@ import java.util.List;
 /**
  * A container containing child notifications
  */
-public class NotificationChildrenContainer extends ViewGroup {
+public class NotificationChildrenContainer extends ViewGroup
+        implements NotificationFadeAware {
 
     @VisibleForTesting
     static final int NUMBER_OF_CHILDREN_WHEN_COLLAPSED = 2;
@@ -111,6 +115,7 @@ public class NotificationChildrenContainer extends ViewGroup {
     private int mCurrentHeaderTranslation = 0;
     private float mHeaderVisibleAmount = 1.0f;
     private int mUntruncatedChildCount;
+    private boolean mContainingNotificationIsFaded = false;
 
     public NotificationChildrenContainer(Context context) {
         this(context, null);
@@ -277,6 +282,7 @@ public class NotificationChildrenContainer extends ViewGroup {
         mDividers.add(newIndex, divider);
 
         row.setContentTransformationAmount(0, false /* isLastChild */);
+        row.setNotificationFaded(mContainingNotificationIsFaded);
         // It doesn't make sense to keep old animations around, lets cancel them!
         ExpandableViewState viewState = row.getViewState();
         if (viewState != null) {
@@ -301,6 +307,7 @@ public class NotificationChildrenContainer extends ViewGroup {
         });
 
         row.setSystemChildExpanded(false);
+        row.setNotificationFaded(false);
         row.setUserLocked(false);
         if (!row.isRemoved()) {
             mGroupingUtil.restoreChildNotification(row);
@@ -473,7 +480,8 @@ public class NotificationChildrenContainer extends ViewGroup {
         return result;
     }
 
-    private void updateExpansionStates() {
+    /** To be called any time the rows have been updated */
+    public void updateExpansionStates() {
         if (mChildrenExpanded || mUserLocked) {
             // we don't modify it the group is expanded or if we are expanding it
             return;
@@ -1288,15 +1296,13 @@ public class NotificationChildrenContainer extends ViewGroup {
         mCurrentHeaderTranslation = (int) ((1.0f - headerVisibleAmount) * mTranslationForHeader);
     }
 
-    /**
-     * Shows or hides feedback icon.
-     */
-    public void showFeedbackIcon(boolean show, Pair<Integer, Integer> resIds) {
+    /** Shows the given feedback icon, or hides the icon if null. */
+    public void setFeedbackIcon(@Nullable FeedbackIcon icon) {
         if (mNotificationHeaderWrapper != null) {
-            mNotificationHeaderWrapper.showFeedbackIcon(show, resIds);
+            mNotificationHeaderWrapper.setFeedbackIcon(icon);
         }
         if (mNotificationHeaderWrapperLowPriority != null) {
-            mNotificationHeaderWrapperLowPriority.showFeedbackIcon(show, resIds);
+            mNotificationHeaderWrapperLowPriority.setFeedbackIcon(icon);
         }
     }
 
@@ -1306,6 +1312,20 @@ public class NotificationChildrenContainer extends ViewGroup {
         }
         if (mNotificationHeaderWrapperLowPriority != null) {
             mNotificationHeaderWrapperLowPriority.setRecentlyAudiblyAlerted(audiblyAlertedRecently);
+        }
+    }
+
+    @Override
+    public void setNotificationFaded(boolean faded) {
+        mContainingNotificationIsFaded = faded;
+        if (mNotificationHeaderWrapper != null) {
+            mNotificationHeaderWrapper.setNotificationFaded(faded);
+        }
+        if (mNotificationHeaderWrapperLowPriority != null) {
+            mNotificationHeaderWrapperLowPriority.setNotificationFaded(faded);
+        }
+        for (ExpandableNotificationRow child : mAttachedChildren) {
+            child.setNotificationFaded(faded);
         }
     }
 }

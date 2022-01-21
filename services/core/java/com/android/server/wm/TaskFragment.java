@@ -174,6 +174,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     private TaskFragment mAdjacentTaskFragment;
 
     /**
+     * Whether to move adjacent task fragment together when re-positioning.
+     *
+     * @see #mAdjacentTaskFragment
+     */
+    // TODO(b/207185041): Remove this once having a single-top root for split screen.
+    boolean mMoveAdjacentTogether;
+
+    /**
      * Prevents duplicate calls to onTaskAppeared.
      */
     boolean mTaskFragmentAppearedSent;
@@ -315,14 +323,15 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return service.mWindowOrganizerController.getTaskFragment(token);
     }
 
-    void setAdjacentTaskFragment(@Nullable TaskFragment taskFragment) {
+    void setAdjacentTaskFragment(@Nullable TaskFragment taskFragment, boolean moveTogether) {
         if (mAdjacentTaskFragment == taskFragment) {
             return;
         }
         resetAdjacentTaskFragment();
         if (taskFragment != null) {
             mAdjacentTaskFragment = taskFragment;
-            taskFragment.setAdjacentTaskFragment(this);
+            mMoveAdjacentTogether = moveTogether;
+            taskFragment.setAdjacentTaskFragment(this, moveTogether);
         }
     }
 
@@ -331,9 +340,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (mAdjacentTaskFragment != null && mAdjacentTaskFragment.mAdjacentTaskFragment == this) {
             mAdjacentTaskFragment.mAdjacentTaskFragment = null;
             mAdjacentTaskFragment.mDelayLastActivityRemoval = false;
+            mAdjacentTaskFragment.mMoveAdjacentTogether = false;
         }
         mAdjacentTaskFragment = null;
         mDelayLastActivityRemoval = false;
+        mMoveAdjacentTogether = false;
     }
 
     void setTaskFragmentOrganizer(@NonNull TaskFragmentOrganizerToken organizer, int uid,
@@ -1439,29 +1450,29 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         boolean pauseImmediately = false;
         boolean shouldAutoPip = false;
-        if (resuming != null && (resuming.info.flags & FLAG_RESUME_WHILE_PAUSING) != 0) {
-            // If the flag RESUME_WHILE_PAUSING is set, then continue to schedule the previous
-            // activity to be paused, while at the same time resuming the new resume activity
-            // only if the previous activity can't go into Pip since we want to give Pip
-            // activities a chance to enter Pip before resuming the next activity.
-            final boolean lastResumedCanPip = prev != null && prev.checkEnterPictureInPictureState(
-                    "shouldResumeWhilePausing", userLeaving);
+        if (resuming != null) {
+            // Resuming the new resume activity only if the previous activity can't go into Pip
+            // since we want to give Pip activities a chance to enter Pip before resuming the
+            // next activity.
+            final boolean lastResumedCanPip = prev.checkEnterPictureInPictureState(
+                    "shouldAutoPipWhilePausing", userLeaving);
             if (lastResumedCanPip && prev.pictureInPictureArgs.isAutoEnterEnabled()) {
                 shouldAutoPip = true;
             } else if (!lastResumedCanPip) {
-                pauseImmediately = true;
+                // If the flag RESUME_WHILE_PAUSING is set, then continue to schedule the previous
+                // activity to be paused.
+                pauseImmediately = (resuming.info.flags & FLAG_RESUME_WHILE_PAUSING) != 0;
             } else {
                 // The previous activity may still enter PIP even though it did not allow auto-PIP.
             }
         }
 
-        boolean didAutoPip = false;
         if (prev.attachedToProcess()) {
             if (shouldAutoPip) {
+                boolean didAutoPip = mAtmService.enterPictureInPictureMode(
+                        prev, prev.pictureInPictureArgs);
                 ProtoLog.d(WM_DEBUG_STATES, "Auto-PIP allowed, entering PIP mode "
-                        + "directly: %s", prev);
-
-                didAutoPip = mAtmService.enterPictureInPictureMode(prev, prev.pictureInPictureArgs);
+                        + "directly: %s, didAutoPip: %b", prev, didAutoPip);
             } else {
                 schedulePauseActivity(prev, userLeaving, pauseImmediately, reason);
             }
@@ -1968,7 +1979,15 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             if (inOutConfig.smallestScreenWidthDp
                     == Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED) {
-                if (WindowConfiguration.isFloating(windowingMode)) {
+                // When entering to or exiting from Pip, the PipTaskOrganizer will set the
+                // windowing mode of the activity in the task to WINDOWING_MODE_FULLSCREEN and
+                // temporarily set the bounds of the task to fullscreen size for transitioning.
+                // It will get the wrong value if the calculation is based on this temporary
+                // fullscreen bounds.
+                // We should just inherit the value from parent for this temporary state.
+                final boolean inPipTransition = windowingMode == WINDOWING_MODE_PINNED
+                        && !mTmpFullBounds.isEmpty() && mTmpFullBounds.equals(parentBounds);
+                if (WindowConfiguration.isFloating(windowingMode) && !inPipTransition) {
                     // For floating tasks, calculate the smallest width from the bounds of the task
                     inOutConfig.smallestScreenWidthDp = (int) (
                             Math.min(mTmpFullBounds.width(), mTmpFullBounds.height()) / density);
@@ -2147,13 +2166,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     /** Whether we should prepare a transition for this {@link TaskFragment} bounds change. */
     private boolean shouldStartChangeTransition(Rect startBounds) {
-        if (mWmService.mDisableTransitionAnimation
-                || mDisplayContent == null
-                || mTaskFragmentOrganizer == null
-                || getSurfaceControl() == null
-                // The change transition will be covered by display.
-                || mDisplayContent.inTransition()
-                || !isVisible()) {
+        if (mTaskFragmentOrganizer == null || !canStartChangeTransition()) {
             return false;
         }
 

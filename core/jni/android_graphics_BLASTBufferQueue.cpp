@@ -73,10 +73,11 @@ static jint nativeGetUndequeuedBufferCount(JNIEnv* env, jclass clazz, jlong ptr)
     return queue->getUndequeuedBufferCount();
 }
 
-static void nativeSetSyncTransaction(JNIEnv* env, jclass clazz, jlong ptr, jlong transactionPtr) {
+static void nativeSetSyncTransaction(JNIEnv* env, jclass clazz, jlong ptr, jlong transactionPtr,
+                                     jboolean acquireSingleBuffer) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionPtr);
-    queue->setSyncTransaction(transaction);
+    queue->setSyncTransaction(transaction, acquireSingleBuffer);
 }
 
 static void nativeUpdate(JNIEnv* env, jclass clazz, jlong ptr, jlong surfaceControl, jlong width,
@@ -91,7 +92,7 @@ static void nativeMergeWithNextTransaction(JNIEnv*, jclass clazz, jlong ptr, jlo
                                            jlong framenumber) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionPtr);
-    queue->mergeWithNextTransaction(transaction, framenumber);
+    queue->mergeWithNextTransaction(transaction, CC_UNLIKELY(framenumber < 0) ? 0 : framenumber);
 }
 
 static jlong nativeGetLastAcquiredFrameNum(JNIEnv* env, jclass clazz, jlong ptr) {
@@ -112,7 +113,7 @@ static const JNINativeMethod gMethods[] = {
         {"nativeSetUndequeuedBufferCount", "(JI)V", (void*)nativeSetUndequeuedBufferCount},
         {"nativeGetUndequeuedBufferCount", "(J)I", (void*)nativeGetUndequeuedBufferCount},
         {"nativeDestroy", "(J)V", (void*)nativeDestroy},
-        {"nativeSetSyncTransaction", "(JJ)V", (void*)nativeSetSyncTransaction},
+        {"nativeSetSyncTransaction", "(JJZ)V", (void*)nativeSetSyncTransaction},
         {"nativeUpdate", "(JJJJIJ)V", (void*)nativeUpdate},
         {"nativeMergeWithNextTransaction", "(JJJ)V", (void*)nativeMergeWithNextTransaction},
         {"nativeGetLastAcquiredFrameNum", "(J)J", (void*)nativeGetLastAcquiredFrameNum},

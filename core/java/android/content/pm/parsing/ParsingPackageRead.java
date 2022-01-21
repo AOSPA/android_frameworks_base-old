@@ -196,6 +196,17 @@ public interface ParsingPackageRead extends PkgWithoutStateAppInfo, PkgWithoutSt
     int[] getSplitFlags();
 
     /**
+     * @see R.styleable#AndroidManifestSdkLibrary_name
+     */
+    @Nullable
+    String getSdkLibName();
+
+    /**
+     * @see R.styleable#AndroidManifestSdkLibrary_versionMajor
+     */
+    int getSdkLibVersionMajor();
+
+    /**
      * @see R.styleable#AndroidManifestStaticLibrary_name
      */
     @Nullable
@@ -267,6 +278,26 @@ public interface ParsingPackageRead extends PkgWithoutStateAppInfo, PkgWithoutSt
     @Nullable
     long[] getUsesStaticLibrariesVersions();
 
+    /**
+     * TODO(b/135203078): Move SDK library stuff to an inner data class
+     *
+     * @see R.styleable#AndroidManifestUsesSdkLibrary
+     */
+    @NonNull
+    List<String> getUsesSdkLibraries();
+
+    /**
+     * @see R.styleable#AndroidManifestUsesSdkLibrary_certDigest
+     */
+    @Nullable
+    String[][] getUsesSdkLibrariesCertDigests();
+
+    /**
+     * @see R.styleable#AndroidManifestUsesSdkLibrary_versionMajor
+     */
+    @Nullable
+    long[] getUsesSdkLibrariesVersionsMajor();
+
     boolean hasPreserveLegacyExternalStorage();
 
     /**
@@ -297,4 +328,12 @@ public interface ParsingPackageRead extends PkgWithoutStateAppInfo, PkgWithoutSt
      * @see R.styleable#AndroidManifestService_visibleToInstantApps
      */
     boolean isVisibleToInstantApps();
+
+    /**
+     * Whether the enabled settings of components in the application should be reset to the default,
+     * when the application's user data is cleared.
+     *
+     * @see R.styleable#AndroidManifestApplication_resetEnabledSettingsOnAppDataCleared
+     */
+    boolean isResetEnabledSettingsOnAppDataCleared();
 }

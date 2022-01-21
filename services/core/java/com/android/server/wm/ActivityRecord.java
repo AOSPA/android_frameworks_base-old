@@ -842,6 +842,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // SystemUi sets the pinned mode on activity after transition is done.
     boolean mWaitForEnteringPinnedMode;
 
+    private final ActivityRecordInputSink mActivityRecordInputSink;
+
     private final Runnable mPauseTimeoutRunnable = new Runnable() {
         @Override
         public void run() {
@@ -1058,6 +1060,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 pw.print(" forceNewConfig="); pw.println(forceNewConfig);
         pw.print(prefix); pw.print("mActivityType=");
                 pw.println(activityTypeToString(getActivityType()));
+        pw.print(prefix); pw.print("mImeInsetsFrozenUntilStartInput=");
+                pw.println(mImeInsetsFrozenUntilStartInput);
         if (requestedVrComponent != null) {
             pw.print(prefix);
             pw.print("requestedVrComponent=");
@@ -1388,9 +1392,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     /** Whether we should prepare a transition for this {@link ActivityRecord} parent change. */
     private boolean shouldStartChangeTransition(
             @Nullable TaskFragment newParent, @Nullable TaskFragment oldParent) {
-        if (mWmService.mDisableTransitionAnimation
-                || mDisplayContent == null || newParent == null || oldParent == null
-                || getSurfaceControl() == null || !isVisible() || !isVisibleRequested()) {
+        if (newParent == null || oldParent == null || !canStartChangeTransition()) {
             return false;
         }
 
@@ -1802,6 +1804,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             createTime = _createTime;
         }
         mAtmService.mPackageConfigPersister.updateConfigIfNeeded(this, mUserId, packageName);
+
+        mActivityRecordInputSink = new ActivityRecordInputSink(this);
 
         if (mPerf == null)
             mPerf = new BoostFramework();
@@ -6084,10 +6088,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // because it may be a trampoline.
         if (!wasTaskVisible && mStartingData != null && !finishing && !mLaunchedFromBubble
                 && !mDisplayContent.mAppTransition.isReady()
-                && !mDisplayContent.mAppTransition.isRunning()) {
+                && !mDisplayContent.mAppTransition.isRunning()
+                && mDisplayContent.isNextTransitionForward()) {
             // The pending transition state will be cleared after the transition is started, so
             // save the state for launching the client later (used by LaunchActivityItem).
-            mStartingData.mIsTransitionForward = mDisplayContent.isNextTransitionForward();
+            mStartingData.mIsTransitionForward = true;
             mDisplayContent.executeAppTransition();
         }
     }
@@ -6338,15 +6343,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     public boolean inputDispatchingTimedOut(String reason, int windowPid) {
         ActivityRecord anrActivity;
         WindowProcessController anrApp;
-        boolean windowFromSameProcessAsActivity;
+        boolean blameActivityProcess;
         synchronized (mAtmService.mGlobalLock) {
             anrActivity = getWaitingHistoryRecordLocked();
             anrApp = app;
-            windowFromSameProcessAsActivity =
-                    !hasProcess() || app.getPid() == windowPid || windowPid == INVALID_PID;
+            blameActivityProcess =  hasProcess()
+                    && (app.getPid() == windowPid || windowPid == INVALID_PID);
         }
 
-        if (windowFromSameProcessAsActivity) {
+        if (blameActivityProcess) {
             return mAtmService.mAmInternal.inputDispatchingTimedOut(anrApp.mOwner,
                     anrActivity.shortComponentName, anrActivity.info.applicationInfo,
                     shortComponentName, app, false, reason);
@@ -6548,6 +6553,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             } else if (optionsStyle == SplashScreen.SPLASH_SCREEN_STYLE_ICON) {
                 return false;
             }
+            // Choose the default behavior for Launcher and SystemUI when the SplashScreen style is
+            // not specified in the ActivityOptions.
+            if (mLaunchSourceType == LAUNCH_SOURCE_TYPE_HOME) {
+                return false;
+            } else if (mLaunchSourceType == LAUNCH_SOURCE_TYPE_SYSTEMUI) {
+                return true;
+            }
         }
         if (sourceRecord == null) {
             sourceRecord = searchCandidateLaunchingActivity();
@@ -6557,11 +6569,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return sourceRecord.mSplashScreenStyleEmpty;
         }
 
-        // If this activity was launched from a system surface for first start, never use an empty
-        // splash screen. Need to check sourceRecord before in case this activity is launched from
-        // service.
-        // Otherwise use empty.
-        return !startActivity || !launchedFromSystemSurface();
+        // If this activity was launched from Launcher or System for first start, never use an
+        // empty splash screen.
+        // Need to check sourceRecord before in case this activity is launched from service.
+        return !startActivity || !(mLaunchSourceType == LAUNCH_SOURCE_TYPE_SYSTEM
+                || mLaunchSourceType == LAUNCH_SOURCE_TYPE_HOME);
     }
 
     private int getSplashscreenTheme() {
@@ -6888,6 +6900,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 getSyncTransaction().show(mSurfaceControl);
             } else if (!show && mLastSurfaceShowing) {
                 getSyncTransaction().hide(mSurfaceControl);
+            }
+            if (show) {
+                mActivityRecordInputSink.applyChangesToSurfaceIfChanged(
+                        getSyncTransaction(), mSurfaceControl);
             }
         }
         if (mThumbnail != null) {
@@ -7901,9 +7917,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Above coordinates are in "@" space, now place "*" and "#" to screen space.
         final boolean fillContainer = resolvedBounds.equals(containingBounds);
         final int screenPosX = fillContainer ? containerBounds.left : containerAppBounds.left;
-        final int screenPosY = mSizeCompatBounds == null
+        // If the activity is not in size compat mode, calculate vertical centering
+        //     from the container and resolved bounds.
+        // If the activity is in size compat mode, calculate vertical centering
+        //     from the container and size compat bounds.
+        // The container bounds contain the parent bounds offset in the display, for
+        // example when an activity is in the lower split of split screen.
+        final int screenPosY = (mSizeCompatBounds == null
                 ? (containerBounds.height() - resolvedBounds.height()) / 2
-                : (containerBounds.height() - mSizeCompatBounds.height()) / 2;
+                : (containerBounds.height() - mSizeCompatBounds.height()) / 2)
+                + containerBounds.top;
+
         if (screenPosX != 0 || screenPosY != 0) {
             if (mSizeCompatBounds != null) {
                 mSizeCompatBounds.offset(screenPosX, screenPosY);
@@ -8106,7 +8130,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (mVisibleRequested) {
             // It may toggle the UI for user to restart the size compatibility mode activity.
             display.handleActivitySizeCompatModeIfNeeded(this);
-        } else if (mCompatDisplayInsets != null && !visibleIgnoringKeyguard) {
+        } else if (mCompatDisplayInsets != null && !visibleIgnoringKeyguard
+                && (app == null || !app.hasVisibleActivities())) {
             // visibleIgnoringKeyguard is checked to avoid clearing mCompatDisplayInsets during
             // displays change. Displays are turned off during the change so mVisibleRequested
             // can be false.
