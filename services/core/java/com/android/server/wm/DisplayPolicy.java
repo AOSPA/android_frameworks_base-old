@@ -319,6 +319,10 @@ public class DisplayPolicy {
     // needs to be opaque.
     private WindowState mNavBarBackgroundWindow;
 
+    // The window that draws fake rounded corners and should provide insets to calculate the correct
+    // rounded corner insets.
+    private WindowState mRoundedCornerWindow;
+
     /**
      * Windows to determine the color of status bar. See {@link #mNavBarColorWindowCandidate} for
      * the conditions of being candidate window.
@@ -471,7 +475,7 @@ public class DisplayPolicy {
                 : service.mContext.createDisplayContext(displayContent.getDisplay());
         mUiContext = displayContent.isDefaultDisplay ? service.mAtmService.mUiContext
                 : service.mAtmService.mSystemThread
-                        .createSystemUiContext(displayContent.getDisplayId());
+                        .getSystemUiContext(displayContent.getDisplayId());
         mDisplayContent = displayContent;
         mLock = service.getWindowManagerLock();
 
@@ -1073,6 +1077,18 @@ public class DisplayPolicy {
             mExtraNavBarAltPosition = getAltBarPosition(attrs);
         }
 
+        if (attrs.insetsRoundedCornerFrame) {
+            // Currently, only support one rounded corner window which is the TaskBar.
+            if (mRoundedCornerWindow != null && mRoundedCornerWindow != win) {
+                throw new IllegalArgumentException("Found multiple rounded corner window :"
+                        + " current = " + mRoundedCornerWindow
+                        + " new = " + win);
+            }
+            mRoundedCornerWindow = win;
+        } else if (mRoundedCornerWindow == win) {
+            mRoundedCornerWindow = null;
+        }
+
         attrs.flags = sanitizeFlagSlippery(attrs.flags, attrs.privateFlags, win.getName());
     }
 
@@ -1396,6 +1412,10 @@ public class DisplayPolicy {
         if (mLastFocusedWindow == win) {
             mLastFocusedWindow = null;
         }
+        if (mRoundedCornerWindow == win) {
+            mRoundedCornerWindow = null;
+        }
+
         mInsetsSourceWindowsExceptIme.remove(win);
     }
 
@@ -1424,6 +1444,10 @@ public class DisplayPolicy {
 
     WindowState getNavigationBar() {
         return mNavigationBar != null ? mNavigationBar : mNavigationBarAlt;
+    }
+
+    WindowState getRoundedCornerWindow() {
+        return mRoundedCornerWindow;
     }
 
     /**
@@ -1612,6 +1636,9 @@ public class DisplayPolicy {
      * @param displayFrames The display frames.
      */
     public void layoutWindowLw(WindowState win, WindowState attached, DisplayFrames displayFrames) {
+        if (win.skipLayout()) {
+            return;
+        }
 
         // This window might be in the simulated environment.
         // We invoke this to get the proper DisplayFrames.
@@ -1699,7 +1726,7 @@ public class DisplayPolicy {
         applyKeyguardPolicy(win, imeTarget);
 
         // Check if the freeform window overlaps with the navigation bar area.
-        final boolean isOverlappingWithNavBar = isOverlappingWithNavBar(win, mNavigationBar);
+        final boolean isOverlappingWithNavBar = isOverlappingWithNavBar(win);
         if (isOverlappingWithNavBar && !mIsFreeformWindowOverlappingWithNavBar
                 && win.inFreeformWindowingMode()) {
             mIsFreeformWindowOverlappingWithNavBar = true;
@@ -1860,7 +1887,7 @@ public class DisplayPolicy {
      * @param imeTarget The current IME target window.
      */
     private void applyKeyguardPolicy(WindowState win, WindowState imeTarget) {
-        if (mService.mPolicy.canBeHiddenByKeyguardLw(win)) {
+        if (win.canBeHiddenByKeyguard()) {
             if (shouldBeHiddenByKeyguard(win, imeTarget)) {
                 win.hide(false /* doAnimation */, true /* requestAnim */);
             } else {
@@ -1889,7 +1916,7 @@ public class DisplayPolicy {
         // Show IME over the keyguard if the target allows it.
         final boolean showImeOverKeyguard = imeTarget != null && imeTarget.isVisible()
                 && win.mIsImWindow && (imeTarget.canShowWhenLocked()
-                        || !mService.mPolicy.canBeHiddenByKeyguardLw(imeTarget));
+                        || !imeTarget.canBeHiddenByKeyguard());
         if (showImeOverKeyguard) {
             return false;
         }
@@ -2009,7 +2036,8 @@ public class DisplayPolicy {
         // user's package info (see ContextImpl.createDisplayContext)
         final LoadedApk pi = ActivityThread.currentActivityThread().getPackageInfo(
                 uiContext.getPackageName(), null, 0, userId);
-        mCurrentUserResources = ResourcesManager.getInstance().getResources(null,
+        mCurrentUserResources = ResourcesManager.getInstance().getResources(
+                uiContext.getWindowContextToken(),
                 pi.getResDir(),
                 null /* splitResDirs */,
                 pi.getOverlayDirs(),
@@ -2465,7 +2493,7 @@ public class DisplayPolicy {
     private int getStatusBarAppearance(WindowState opaque, WindowState opaqueOrDimming) {
         final boolean onKeyguard = isKeyguardShowing() && !isKeyguardOccluded();
         final WindowState colorWin = onKeyguard ? mNotificationShade : opaqueOrDimming;
-        return isLightBarAllowed(colorWin, ITYPE_STATUS_BAR) && (colorWin == opaque || onKeyguard)
+        return isLightBarAllowed(colorWin, Type.statusBars()) && (colorWin == opaque || onKeyguard)
                 ? (colorWin.mAttrs.insetsFlags.appearance & APPEARANCE_LIGHT_STATUS_BARS)
                 : 0;
     }
@@ -2513,7 +2541,7 @@ public class DisplayPolicy {
     @VisibleForTesting
     int updateLightNavigationBarLw(int appearance, WindowState navColorWin) {
         if (navColorWin == null || navColorWin.isDimming()
-                || !isLightBarAllowed(navColorWin, ITYPE_NAVIGATION_BAR)) {
+                || !isLightBarAllowed(navColorWin, Type.navigationBars())) {
             // Clear the light flag while not allowed.
             appearance &= ~APPEARANCE_LIGHT_NAVIGATION_BARS;
             return appearance;
@@ -2578,12 +2606,11 @@ public class DisplayPolicy {
         return appearance;
     }
 
-    private boolean isLightBarAllowed(WindowState win, @InternalInsetsType int type) {
+    private static boolean isLightBarAllowed(WindowState win, @InsetsType int type) {
         if (win == null) {
             return false;
         }
-        final InsetsSource source = win.getInsetsState().peekSource(type);
-        return source != null && Rect.intersects(win.getFrame(), source.getFrame());
+        return intersectsAnyInsets(win.getFrame(), win.getInsetsState(), type);
     }
 
     private Rect getBarContentFrameForWindow(WindowState win, @InternalInsetsType int type) {
@@ -2960,17 +2987,34 @@ public class DisplayPolicy {
     }
 
     @VisibleForTesting
-    static boolean isOverlappingWithNavBar(@NonNull WindowState targetWindow,
-            WindowState navBarWindow) {
-        if (navBarWindow == null || !navBarWindow.isVisible()
-                || targetWindow.mActivityRecord == null || !targetWindow.isVisible()) {
+    static boolean isOverlappingWithNavBar(@NonNull WindowState win) {
+        if (win.mActivityRecord == null || !win.isVisible()) {
             return false;
         }
 
         // When the window is dimming means it's requesting dim layer to its host container, so
-        // checking whether it's overlapping with navigation bar by its container's bounds.
-        return Rect.intersects(targetWindow.isDimming()
-                ? targetWindow.getBounds() : targetWindow.getFrame(), navBarWindow.getFrame());
+        // checking whether it's overlapping with a navigation bar by its container's bounds.
+        return intersectsAnyInsets(win.isDimming() ? win.getBounds() : win.getFrame(),
+                win.getInsetsState(), Type.navigationBars());
+    }
+
+    /**
+     * Returns whether the given {@param bounds} intersects with any insets of the
+     * provided {@param insetsType}.
+     */
+    private static boolean intersectsAnyInsets(Rect bounds, InsetsState insetsState,
+            @InsetsType int insetsType) {
+        final ArraySet<Integer> internalTypes = InsetsState.toInternalType(insetsType);
+        for (int i = 0; i < internalTypes.size(); i++) {
+            final InsetsSource source = insetsState.peekSource(internalTypes.valueAt(i));
+            if (source == null || !source.isVisible()) {
+                continue;
+            }
+            if (Rect.intersects(bounds, source.getFrame())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

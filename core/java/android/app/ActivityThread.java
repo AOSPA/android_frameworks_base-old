@@ -29,6 +29,7 @@ import static android.app.servertransaction.ActivityLifecycleItem.ON_STOP;
 import static android.app.servertransaction.ActivityLifecycleItem.PRE_ON_CREATE;
 import static android.content.ContentResolver.DEPRECATE_DATA_COLUMNS;
 import static android.content.ContentResolver.DEPRECATE_DATA_PREFIX;
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.window.ConfigurationHelper.diffPublicWithSizeBuckets;
 import static android.window.ConfigurationHelper.freeTextLayoutCachesIfNeeded;
@@ -37,8 +38,16 @@ import static android.window.ConfigurationHelper.shouldUpdateResources;
 
 import static com.android.internal.annotations.VisibleForTesting.Visibility.PACKAGE;
 
+import android.annotation.ElapsedRealtimeLong;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UptimeMillisLong;
+import android.app.RemoteServiceException.BadForegroundServiceNotificationException;
+import android.app.RemoteServiceException.CannotDeliverBroadcastException;
+import android.app.RemoteServiceException.CannotPostForegroundServiceNotificationException;
+import android.app.RemoteServiceException.CrashedByAdbException;
+import android.app.RemoteServiceException.ForegroundServiceDidNotStartInTimeException;
+import android.app.RemoteServiceException.MissingRequestPasswordComplexityPermissionException;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.backup.BackupAgent;
@@ -315,7 +324,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
     @UnsupportedAppUsage
     private ContextImpl mSystemContext;
-    private ContextImpl mSystemUiContext;
+    private final SparseArray<ContextImpl> mDisplaySystemUiContexts = new SparseArray<>();
 
     @UnsupportedAppUsage
     static volatile IPackageManager sPackageManager;
@@ -889,6 +898,9 @@ public final class ActivityThread extends ClientTransactionHandler
 
         SharedMemory mSerializedSystemFontMap;
 
+        long startRequestedElapsedTime;
+        long startRequestedUptime;
+
         @Override
         public String toString() {
             return "AppBindData{appInfo=" + appInfo + "}";
@@ -1100,7 +1112,8 @@ public final class ActivityThread extends ClientTransactionHandler
                 CompatibilityInfo compatInfo, Map services, Bundle coreSettings,
                 String buildSerial, AutofillOptions autofillOptions,
                 ContentCaptureOptions contentCaptureOptions, long[] disabledCompatChanges,
-                SharedMemory serializedSystemFontMap) {
+                SharedMemory serializedSystemFontMap,
+                long startRequestedElapsedTime, long startRequestedUptime) {
             if (services != null) {
                 if (false) {
                     // Test code to make sure the app could see the passed-in services.
@@ -1150,6 +1163,8 @@ public final class ActivityThread extends ClientTransactionHandler
             data.contentCaptureOptions = contentCaptureOptions;
             data.disabledCompatChanges = disabledCompatChanges;
             data.mSerializedSystemFontMap = serializedSystemFontMap;
+            data.startRequestedElapsedTime = startRequestedElapsedTime;
+            data.startRequestedUptime = startRequestedUptime;
             sendMessage(H.BIND_APPLICATION, data);
         }
 
@@ -1288,8 +1303,11 @@ public final class ActivityThread extends ClientTransactionHandler
         }
 
         @Override
-        public void scheduleCrash(String msg, int typeId) {
-            sendMessage(H.SCHEDULE_CRASH, msg, typeId);
+        public void scheduleCrash(String msg, int typeId, @Nullable Bundle extras) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = msg;
+            args.arg2 = extras;
+            sendMessage(H.SCHEDULE_CRASH, args, typeId);
         }
 
         public void dumpActivity(ParcelFileDescriptor pfd, IBinder activitytoken,
@@ -1919,15 +1937,40 @@ public final class ActivityThread extends ClientTransactionHandler
         }
     }
 
-    private void throwRemoteServiceException(String message, int typeId) {
+    private void throwRemoteServiceException(String message, int typeId, @Nullable Bundle extras) {
         // Use a switch to ensure all the type IDs are unique.
         switch (typeId) {
-            case ForegroundServiceDidNotStartInTimeException.TYPE_ID: // 1
-                throw new ForegroundServiceDidNotStartInTimeException(message);
-            case RemoteServiceException.TYPE_ID: // 0
+            case ForegroundServiceDidNotStartInTimeException.TYPE_ID:
+                throw generateForegroundServiceDidNotStartInTimeException(message, extras);
+
+            case CannotDeliverBroadcastException.TYPE_ID:
+                throw new CannotDeliverBroadcastException(message);
+
+            case CannotPostForegroundServiceNotificationException.TYPE_ID:
+                throw new CannotPostForegroundServiceNotificationException(message);
+
+            case BadForegroundServiceNotificationException.TYPE_ID:
+                throw new BadForegroundServiceNotificationException(message);
+
+            case MissingRequestPasswordComplexityPermissionException.TYPE_ID:
+                throw new MissingRequestPasswordComplexityPermissionException(message);
+
+            case CrashedByAdbException.TYPE_ID:
+                throw new CrashedByAdbException(message);
+
             default:
-                throw new RemoteServiceException(message);
+                throw new RemoteServiceException(message
+                        + " (with unwknown typeId:" + typeId + ")");
         }
+    }
+
+    private ForegroundServiceDidNotStartInTimeException
+            generateForegroundServiceDidNotStartInTimeException(String message, Bundle extras) {
+        final String serviceClassName =
+                ForegroundServiceDidNotStartInTimeException.getServiceClassNameFromExtras(extras);
+        final Exception inner = (serviceClassName == null) ? null
+                : Service.getStartForegroundServiceStackTrace(serviceClassName);
+        throw new ForegroundServiceDidNotStartInTimeException(message, inner);
     }
 
     class H extends Handler {
@@ -2147,9 +2190,14 @@ public final class ActivityThread extends ClientTransactionHandler
                     handleDispatchPackageBroadcast(msg.arg1, (String[])msg.obj);
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
-                case SCHEDULE_CRASH:
-                    throwRemoteServiceException((String) msg.obj, msg.arg1);
+                case SCHEDULE_CRASH: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    String message = (String) args.arg1;
+                    Bundle extras = (Bundle) args.arg2;
+                    args.recycle();
+                    throwRemoteServiceException(message, msg.arg1, extras);
                     break;
+                }
                 case DUMP_HEAP:
                     handleDumpHeap((DumpHeapData) msg.obj);
                     break;
@@ -2612,22 +2660,26 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     @Override
+    @NonNull
     public ContextImpl getSystemUiContext() {
-        synchronized (this) {
-            if (mSystemUiContext == null) {
-                mSystemUiContext = ContextImpl.createSystemUiContext(getSystemContext());
-            }
-            return mSystemUiContext;
-        }
+        return getSystemUiContext(DEFAULT_DISPLAY);
     }
 
     /**
-     * Create the context instance base on system resources & display information which used for UI.
+     * Gets the context instance base on system resources & display information which used for UI.
      * @param displayId The ID of the display where the UI is shown.
      * @see ContextImpl#createSystemUiContext(ContextImpl, int)
      */
-    public ContextImpl createSystemUiContext(int displayId) {
-        return ContextImpl.createSystemUiContext(getSystemUiContext(), displayId);
+    @NonNull
+    public ContextImpl getSystemUiContext(int displayId) {
+        synchronized (this) {
+            ContextImpl systemUiContext = mDisplaySystemUiContexts.get(displayId);
+            if (systemUiContext == null) {
+                systemUiContext = ContextImpl.createSystemUiContext(getSystemContext(), displayId);
+                mDisplaySystemUiContexts.put(displayId, systemUiContext);
+            }
+            return systemUiContext;
+        }
     }
 
     public void installSystemApplicationInfo(ApplicationInfo info, ClassLoader classLoader) {
@@ -3746,7 +3798,7 @@ public final class ActivityThread extends ClientTransactionHandler
         if (pkgName != null && !pkgName.isEmpty()
                 && r.packageInfo.mPackageName.contains(pkgName)) {
             for (int id : dm.getDisplayIds()) {
-                if (id != Display.DEFAULT_DISPLAY) {
+                if (id != DEFAULT_DISPLAY) {
                     Display display =
                             dm.getCompatibleDisplay(id, appContext.getResources());
                     appContext = (ContextImpl) appContext.createDisplayContext(display);
@@ -6410,7 +6462,8 @@ public final class ActivityThread extends ClientTransactionHandler
             DdmVmInternal.setRecentAllocationsTrackingEnabled(true);
         }
         // Note when this process has started.
-        Process.setStartTimes(SystemClock.elapsedRealtime(), SystemClock.uptimeMillis());
+        Process.setStartTimes(SystemClock.elapsedRealtime(), SystemClock.uptimeMillis(),
+                data.startRequestedElapsedTime, data.startRequestedUptime);
 
         AppCompatCallbacks.install(data.disabledCompatChanges);
         // Let libcore handle any compat changes after installing the list of compat changes.

@@ -35,7 +35,6 @@ import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.wifi.WifiStatusTracker;
 import com.android.systemui.R;
-import com.android.systemui.flags.FeatureFlags;
 
 import java.io.PrintWriter;
 
@@ -61,7 +60,7 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
             WifiManager wifiManager,
             ConnectivityManager connectivityManager,
             NetworkScoreManager networkScoreManager,
-            FeatureFlags featureFlags) {
+            StatusBarFlags statusBarFlags) {
         super("WifiSignalController", context, NetworkCapabilities.TRANSPORT_WIFI,
                 callbackHandler, networkController);
         mWifiManager = wifiManager;
@@ -123,8 +122,7 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
                 );
 
         mCurrentState.iconGroup = mLastState.iconGroup = mDefaultWifiIconGroup;
-        mProviderModelSetting = featureFlags.isProviderModelSettingEnabled();
-
+        mProviderModelSetting = statusBarFlags.isProviderModelSettingEnabled();
     }
 
     @Override

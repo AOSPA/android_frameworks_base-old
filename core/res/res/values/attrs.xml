@@ -5383,6 +5383,16 @@
             <!-- Standard amount of hyphenation, useful for running text and for
             screens with limited space for text. -->
             <enum name="full" value="2" />
+
+            <!-- Same to hyphenationFrequency="normal" but using faster algorithm for measuring
+            hyphenation break points. To make text rendering faster with hyphenation, this algorithm
+             ignores some hyphen character related typographic features, e.g. kerning. -->
+            <enum name="normalFast" value="3" />
+
+            <!-- Same to hyphenationFrequency="full" but using faster algorithm for measuring
+            hyphenation break points. To make text rendering faster with hyphenation, this algorithm
+             ignores some hyphen character related typographic features, e.g. kerning. -->
+            <enum name="fullFast" value="4" />
         </attr>
         <!-- Specify the type of auto-size. Note that this feature is not supported by EditText,
         works only for TextView. -->
@@ -9315,6 +9325,18 @@
              . -->
         <attr name="canPauseRecording" format="boolean" />
     </declare-styleable>
+
+    <!-- Use <code>tv-iapp</code> as the root tag of the XML resource that describes a
+         {@link android.media.tv.interactive.TvIAppService}, which is referenced from its
+         {@link android.media.tv.interactive.TvIAppService#SERVICE_META_DATA} meta-data entry.
+         Described here are the attributes that can be included in that tag. -->
+    <declare-styleable name="TvIAppService">
+        <!-- The interactive app types that the TV interactive app service supports.
+             Reference to a string array resource that describes the supported types,
+             e.g. HbbTv, Ginga. -->
+        <attr name="supportedTypes" format="reference" />
+    </declare-styleable>
+
 
     <!-- Attributes that can be used with <code>rating-system-definition</code> tags inside of the
          XML resource that describes TV content rating of a {@link android.media.tv.TvInputService},

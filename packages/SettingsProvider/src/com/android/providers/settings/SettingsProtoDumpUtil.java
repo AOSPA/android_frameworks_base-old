@@ -1067,14 +1067,17 @@ class SettingsProtoDumpUtil {
                 Settings.Global.NIGHT_DISPLAY_FORCED_AUTO_MODE_AVAILABLE,
                 GlobalSettingsProto.NIGHT_DISPLAY_FORCED_AUTO_MODE_AVAILABLE);
 
-        final long nitzUpdateToken = p.start(GlobalSettingsProto.NITZ_UPDATE);
+        final long nitzToken = p.start(GlobalSettingsProto.NITZ);
         dumpSetting(s, p,
                 Settings.Global.NITZ_UPDATE_DIFF,
-                GlobalSettingsProto.NitzUpdate.DIFF);
+                GlobalSettingsProto.Nitz.UPDATE_DIFF);
         dumpSetting(s, p,
                 Settings.Global.NITZ_UPDATE_SPACING,
-                GlobalSettingsProto.NitzUpdate.SPACING);
-        p.end(nitzUpdateToken);
+                GlobalSettingsProto.Nitz.UPDATE_SPACING);
+        dumpSetting(s, p,
+                Settings.Global.NITZ_NETWORK_DISCONNECT_RETENTION,
+                GlobalSettingsProto.Nitz.NETWORK_DISCONNECT_RETENTION);
+        p.end(nitzToken);
 
         final long notificationToken = p.start(GlobalSettingsProto.NOTIFICATION);
         dumpSetting(s, p,
@@ -1623,7 +1626,11 @@ class SettingsProtoDumpUtil {
         p.end(token);
         // Please insert new settings using the same order as in GlobalSettingsProto.
 
+        // The rest of the settings were moved to Settings.Secure or Settings.System, and are thus
+        // excluded here since they're deprecated from Settings.Global.
+
         // Settings.Global.INSTALL_NON_MARKET_APPS intentionally excluded since it's deprecated.
+        // Settings.Global.APPLY_RAMPING_RINGER intentionally excluded since it's deprecated.
     }
 
     private static void dumpProtoConfigSettingsLocked(
@@ -2955,6 +2962,10 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.System.WHEN_TO_MAKE_WIFI_CALLS,
                 SystemSettingsProto.WHEN_TO_MAKE_WIFI_CALLS);
+
+        dumpSetting(s, p,
+                Settings.System.APPLY_RAMPING_RINGER,
+                SystemSettingsProto.APPLY_RAMPING_RINGER);
 
         // Please insert new settings using the same order as in SecureSettingsProto.
 

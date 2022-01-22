@@ -334,6 +334,18 @@ public class AppTransitionControllerTest extends WindowTestsBase {
     }
 
     @Test
+    public void testExitAnimationDone_beforeAppTransition() {
+        final Task task = createTask(mDisplayContent);
+        final WindowState win = createAppWindow(task, ACTIVITY_TYPE_STANDARD, "Win");
+        spyOn(win);
+        win.mAnimatingExit = true;
+        mDisplayContent.mAppTransition.setTimeout();
+        mDisplayContent.mAppTransitionController.handleAppTransitionReady();
+
+        verify(win).onExitAnimationDone();
+    }
+
+    @Test
     public void testGetAnimationTargets_windowsAreBeingReplaced() {
         // [DisplayContent] -+- [Task1] - [ActivityRecord1] (opening, visible)
         //                                       +- [AppWindow1] (being-replaced)
@@ -803,6 +815,7 @@ public class AppTransitionControllerTest extends WindowTestsBase {
         final TaskFragment taskFragment = createTaskFragmentWithEmbeddedActivity(task, organizer);
         final ActivityRecord openingActivity = taskFragment.getTopMostActivity();
         openingActivity.allDrawn = true;
+        task.effectiveUid = openingActivity.getUid();
         spyOn(mDisplayContent.mAppTransition);
 
         // Prepare a transition.
@@ -879,6 +892,7 @@ public class AppTransitionControllerTest extends WindowTestsBase {
         final ActivityRecord closingActivity = taskFragment.getTopMostActivity();
         closingActivity.allDrawn = true;
         closingActivity.info.applicationInfo.uid = 12345;
+        task.effectiveUid = closingActivity.getUid();
         // Opening non-embedded activity with different UID.
         final ActivityRecord openingActivity = createActivityRecord(task);
         openingActivity.info.applicationInfo.uid = 54321;

@@ -533,6 +533,11 @@ public final class ViewRootImpl implements ViewParent,
     boolean mPerformContentCapture;
 
     boolean mReportNextDraw;
+    /**
+     * Set if the reportDraw was requested from WM. If just a local report draw was invoked, there's
+     * no need to report back to system server and can just apply immediately on the client.
+     */
+    boolean mReportDrawToWm;
     boolean mFullRedrawNeeded;
     boolean mNewSurfaceNeeded;
     boolean mForceNextWindowRelayout;
@@ -754,6 +759,8 @@ public final class ViewRootImpl implements ViewParent,
      * Increment this value when the surface has been replaced.
      */
     private int mSurfaceSequenceId = 0;
+
+    private boolean mRelayoutRequested;
 
     private String mTag = TAG;
     boolean mHaveMoveEvent = false;
@@ -1556,9 +1563,14 @@ public final class ViewRootImpl implements ViewParent,
 
     void handleAppVisibility(boolean visible) {
         if (mAppVisible != visible) {
+            final boolean previousVisible = getHostVisibility() == View.VISIBLE;
             mAppVisible = visible;
-            mAppVisibilityChanged = true;
-            scheduleTraversals();
+            final boolean currentVisible = getHostVisibility() == View.VISIBLE;
+            // Root view only cares about whether it is visible or not.
+            if (previousVisible != currentVisible) {
+                mAppVisibilityChanged = true;
+                scheduleTraversals();
+            }
             if (!mAppVisible) {
                 WindowManagerGlobal.trimForeground();
             }
@@ -1848,8 +1860,13 @@ public final class ViewRootImpl implements ViewParent,
                 renderer.setStopped(mStopped);
             }
             if (!mStopped) {
-                mNewSurfaceNeeded = true;
-                scheduleTraversals();
+                // Unnecessary to traverse if the window is not yet visible.
+                if (getHostVisibility() == View.VISIBLE) {
+                    // Make sure that relayoutWindow will be called to get valid surface because
+                    // the previous surface may have been released.
+                    mAppVisibilityChanged = true;
+                    scheduleTraversals();
+                }
             } else {
                 if (renderer != null) {
                     renderer.destroyHardwareResources(mView);
@@ -2031,7 +2048,8 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     int getHostVisibility() {
-        return (mAppVisible || mForceDecorViewVisibility) ? mView.getVisibility() : View.GONE;
+        return mView != null && (mAppVisible || mForceDecorViewVisibility)
+                ? mView.getVisibility() : View.GONE;
     }
 
     /**
@@ -3303,6 +3321,7 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         mIsInTraversal = false;
+        mRelayoutRequested = false;
     }
 
     private void notifyContentCatpureEvents() {
@@ -3933,10 +3952,18 @@ public final class ViewRootImpl implements ViewParent,
         mDrawsNeededToReport++;
     }
 
-    void pendingDrawFinished() {
+    void pendingDrawFinished(Transaction t) {
         if (mDrawsNeededToReport == 0) {
             throw new RuntimeException("Unbalanced drawPending/pendingDrawFinished calls");
         }
+
+        if (t != null) {
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Merging transaction into main window transaction");
+            }
+            mSurfaceChangedTransaction.merge(t);
+        }
+
         mDrawsNeededToReport--;
         if (mDrawsNeededToReport == 0) {
             reportDrawFinished();
@@ -3946,17 +3973,31 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    void pendingDrawFinished() {
+        pendingDrawFinished(null);
+    }
+
     private void postDrawFinished() {
         mHandler.sendEmptyMessage(MSG_DRAW_FINISHED);
     }
 
     private void reportDrawFinished() {
-        try {
+        if (DEBUG_BLAST) {
+            Log.d(mTag, "reportDrawFinished");
+        }
+        mDrawsNeededToReport = 0;
+
+        if (!mReportDrawToWm) {
             if (DEBUG_BLAST) {
-                Log.d(mTag, "reportDrawFinished");
+                Log.d(mTag, "No need to report finishDrawing. Apply immediately");
             }
-            mDrawsNeededToReport = 0;
+            mSurfaceChangedTransaction.apply();
+            return;
+        }
+
+        try {
             mWindowSession.finishDrawing(mWindow, mSurfaceChangedTransaction);
+            mReportDrawToWm = false;
         } catch (RemoteException e) {
             Log.e(mTag, "Unable to report draw finished", e);
             mSurfaceChangedTransaction.apply();
@@ -7754,6 +7795,7 @@ public final class ViewRootImpl implements ViewParent,
     private int relayoutWindow(WindowManager.LayoutParams params, int viewVisibility,
             boolean insetsPending) throws RemoteException {
 
+        mRelayoutRequested = true;
         float appScale = mAttachInfo.mApplicationScale;
         boolean restore = false;
         if (params != null && mTranslator != null) {
@@ -8289,7 +8331,7 @@ public final class ViewRootImpl implements ViewParent,
         if (mTranslator != null) {
             mTranslator.translateInsetsStateInScreenToAppWindow(insetsState);
         }
-        if (insetsState != null && insetsState.getSource(ITYPE_IME).isVisible()) {
+        if (insetsState != null && insetsState.getSourceOrDefaultVisibility(ITYPE_IME)) {
             ImeTracing.getInstance().triggerClientDump("ViewRootImpl#dispatchInsetsChanged",
                     getInsetsController().getHost().getInputMethodManager(), null /* icProto */);
         }
@@ -8314,7 +8356,7 @@ public final class ViewRootImpl implements ViewParent,
             mTranslator.translateInsetsStateInScreenToAppWindow(insetsState);
             mTranslator.translateSourceControlsInScreenToAppWindow(activeControls);
         }
-        if (insetsState != null && insetsState.getSource(ITYPE_IME).isVisible()) {
+        if (insetsState != null && insetsState.getSourceOrDefaultVisibility(ITYPE_IME)) {
             ImeTracing.getInstance().triggerClientDump("ViewRootImpl#dispatchInsetsControlChanged",
                     getInsetsController().getHost().getInputMethodManager(), null /* icProto */);
         }
@@ -8464,13 +8506,13 @@ public final class ViewRootImpl implements ViewParent,
             MotionEvent me = (MotionEvent) event;
             if (me.getAction() == MotionEvent.ACTION_CANCEL) {
                 EventLog.writeEvent(EventLogTags.VIEW_ENQUEUE_INPUT_EVENT, "Motion - Cancel",
-                        getTitle());
+                        getTitle().toString());
             }
         } else if (event instanceof KeyEvent) {
             KeyEvent ke = (KeyEvent) event;
             if (ke.isCanceled()) {
                 EventLog.writeEvent(EventLogTags.VIEW_ENQUEUE_INPUT_EVENT, "Key - Cancel",
-                        getTitle());
+                        getTitle().toString());
             }
         }
         // Always enqueue the input event in order, regardless of its time stamp.
@@ -8715,8 +8757,8 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void onFocusEvent(boolean hasFocus, boolean inTouchMode) {
-            windowFocusChanged(hasFocus, inTouchMode);
+        public void onFocusEvent(boolean hasFocus) {
+            windowFocusChanged(hasFocus);
         }
 
         @Override
@@ -8985,9 +9027,7 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * Notifies this {@link ViewRootImpl} object that window focus has changed.
      */
-    public void windowFocusChanged(boolean hasFocus, boolean unusedInTouchMode) {
-        // TODO(b/193718270): Remove inTouchMode parameter from this method and update related code
-        //     accordingly.
+    public void windowFocusChanged(boolean hasFocus) {
         synchronized (this) {
             mWindowFocusChanged = true;
             mUpcomingWindowFocus = hasFocus;
@@ -9574,6 +9614,7 @@ public final class ViewRootImpl implements ViewParent,
         if (mReportNextDraw == false) {
             drawPending();
         }
+        mReportDrawToWm = true;
         mReportNextDraw = true;
     }
 
@@ -9738,14 +9779,6 @@ public final class ViewRootImpl implements ViewParent,
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
                 viewAncestor.dispatchGetNewSurface();
-            }
-        }
-
-        @Override
-        public void windowFocusChanged(boolean hasFocus, boolean inTouchMode) {
-            final ViewRootImpl viewAncestor = mViewAncestor.get();
-            if (viewAncestor != null) {
-                viewAncestor.windowFocusChanged(hasFocus, inTouchMode);
             }
         }
 
@@ -10436,7 +10469,7 @@ public final class ViewRootImpl implements ViewParent,
 
     @Override
     public boolean applyTransactionOnDraw(@NonNull SurfaceControl.Transaction t) {
-        if (mRemoved) {
+        if (mRemoved || !isHardwareEnabled()) {
             t.apply();
         } else {
             registerRtFrameCallback(frame -> mergeWithNextTransaction(t, frame));
@@ -10510,4 +10543,8 @@ public final class ViewRootImpl implements ViewParent,
        mBLASTDrawConsumer = consume;
        return true;
    }
+
+    boolean wasRelayoutRequested() {
+        return mRelayoutRequested;
+    }
 }

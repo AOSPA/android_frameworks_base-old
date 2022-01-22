@@ -1,6 +1,9 @@
 {
   "imports": [
     {
+      "path": "frameworks/base/core/tests/coretests/src/android/content/pm"
+    },
+    {
       "path": "frameworks/base/services/tests/PackageManagerServiceTests"
     },
     {
@@ -8,6 +11,9 @@
     },
     {
       "path": "frameworks/base/services/tests/PackageManagerComponentOverrideTests"
+    },
+    {
+      "path": "frameworks/base/services/tests/servicestests/src/com/android/server/pm"
     },
     {
       "path": "cts/tests/tests/packageinstaller"

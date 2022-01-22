@@ -60,6 +60,7 @@ import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.RemoteInputController;
+import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.ViewGroupFadeHelper;
 import com.android.systemui.statusbar.phone.KeyguardBouncer.BouncerExpansionCallback;
@@ -337,6 +338,12 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         // • Full-screen user switcher is displayed.
         if (mNotificationPanelViewController.isUnlockHintRunning()) {
             mBouncer.setExpansion(KeyguardBouncer.EXPANSION_HIDDEN);
+        } else if (mStatusBarStateController.getState() == StatusBarState.SHADE_LOCKED
+                && mKeyguardUpdateManager.isUdfpsEnrolled()) {
+            // Don't expand to the bouncer. Instead transition back to the lock screen (see
+            // StatusBar#showBouncerOrLockScreenIfKeyguard) where the user can use the UDFPS
+            // affordance to enter the device (or swipe up to the input bouncer)
+            return;
         } else if (bouncerNeedsScrimming()) {
             mBouncer.setExpansion(KeyguardBouncer.EXPANSION_VISIBLE);
         } else if (mShowing) {
@@ -441,6 +448,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
      * dragging it and translation should be deferred {@see KeyguardBouncer#show(boolean, boolean)}
      */
     public void showBouncer(boolean scrimmed) {
+        resetAlternateAuth(false);
+
         if (mShowing && !mBouncer.isShowing()) {
             mBouncer.show(false /* resetSecuritySelection */, scrimmed);
         }
@@ -553,12 +562,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     public void onStartedWakingUp() {
         mStatusBar.getNotificationShadeWindowView().getWindowInsetsController()
                 .setAnimationsDisabled(false);
-        View currentView = getCurrentNavBarView();
-        if (currentView != null) {
-            currentView.animate()
-                    .alpha(1f)
-                    .setDuration(NAV_BAR_CONTENT_FADE_DURATION)
-                    .start();
+        NavigationBarView navBarView = mStatusBar.getNavigationBarView();
+        if (navBarView != null) {
+            navBarView.forEachView(view ->
+                    view.animate()
+                            .alpha(1f)
+                            .setDuration(NAV_BAR_CONTENT_FADE_DURATION)
+                            .start());
         }
     }
 
@@ -566,12 +576,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     public void onStartedGoingToSleep() {
         mStatusBar.getNotificationShadeWindowView().getWindowInsetsController()
                 .setAnimationsDisabled(true);
-        View currentView = getCurrentNavBarView();
-        if (currentView != null) {
-            currentView.animate()
-                    .alpha(0f)
-                    .setDuration(NAV_BAR_CONTENT_FADE_DURATION)
-                    .start();
+        NavigationBarView navBarView = mStatusBar.getNavigationBarView();
+        if (navBarView != null) {
+            navBarView.forEachView(view ->
+                    view.animate()
+                            .alpha(0f)
+                            .setDuration(NAV_BAR_CONTENT_FADE_DURATION)
+                            .start());
         }
     }
 
@@ -1011,17 +1022,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mLastGesturalNav = mGesturalNav;
         mLastIsDocked = mIsDocked;
         mStatusBar.onKeyguardViewManagerStatesUpdated();
-    }
-
-    /**
-     * Updates the visibility of the nav bar content views.
-     */
-    private void updateNavigationBarContentVisibility(boolean navBarContentVisible) {
-        final NavigationBarView navBarView = mStatusBar.getNavigationBarView();
-        if (navBarView != null && navBarView.getCurrentView() != null) {
-            final View currentView = navBarView.getCurrentView();
-            currentView.setVisibility(navBarContentVisible ? View.VISIBLE : View.INVISIBLE);
-        }
     }
 
     private View getCurrentNavBarView() {

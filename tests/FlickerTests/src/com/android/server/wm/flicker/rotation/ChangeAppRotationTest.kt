@@ -16,7 +16,6 @@
 
 package com.android.server.wm.flicker.rotation
 
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
@@ -26,11 +25,13 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.rules.WMFlickerServiceRuleForTestSpec
 import com.android.server.wm.flicker.statusBarLayerIsVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsVisible
 import com.android.server.wm.traces.common.FlickerComponentName
+import org.junit.Assume.assumeFalse
 import org.junit.FixMethodOrder
 import org.junit.Rule
 import org.junit.Test
@@ -95,13 +96,13 @@ class ChangeAppRotationTest(
             }
         }
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun runPresubmitAssertion() {
         flickerRule.checkPresubmitAssertions()
     }
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun runPostsubmitAssertion() {
         flickerRule.checkPostsubmitAssertions()
@@ -113,11 +114,16 @@ class ChangeAppRotationTest(
         flickerRule.checkFlakyAssertions()
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Windows maybe recreated when rotated. Checks that the focus does not change or if it does,
+     * focus returns to [testApp]
+     */
     @FlakyTest(bugId = 190185577)
     @Test
-    override fun focusDoesNotChange() {
-        super.focusDoesNotChange()
+    fun focusChanges() {
+        testSpec.assertEventLog {
+            this.focusChanges(testApp.`package`)
+        }
     }
 
     /**
@@ -161,7 +167,11 @@ class ChangeAppRotationTest(
      */
     @Presubmit
     @Test
-    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
+    fun statusBarLayerRotatesScales() {
+        // This test doesn't work in shell transitions because of b/206753786
+        assumeFalse(isShellTransitionsEnabled)
+        testSpec.statusBarLayerRotatesScales()
+    }
 
     /** {@inheritDoc} */
     @FlakyTest

@@ -30,13 +30,18 @@ import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.compat.CompatChanges;
 import android.bluetooth.BluetoothCodecConfig;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothLeAudioCodecConfig;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes.AttributeSystemUsage;
+import android.media.CallbackUtil.ListenerInfo;
 import android.media.audiopolicy.AudioPolicy;
 import android.media.audiopolicy.AudioPolicy.AudioPolicyFocusListener;
 import android.media.audiopolicy.AudioProductStrategy;
@@ -58,6 +63,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -1014,6 +1020,29 @@ public class AudioManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Returns the current user setting for ramping ringer on incoming phone call ringtone.
+     *
+     * @return true if the incoming phone call ringtone is configured to gradually increase its
+     * volume, false otherwise.
+     */
+    public boolean isRampingRingerEnabled() {
+        return Settings.System.getInt(getContext().getContentResolver(),
+                Settings.System.APPLY_RAMPING_RINGER, 0) != 0;
+    }
+
+    /**
+     * Sets the flag for enabling ramping ringer on incoming phone call ringtone.
+     *
+     * @see #isRampingRingerEnabled()
+     * @hide
+     */
+    @TestApi
+    public void setRampingRingerEnabled(boolean enabled) {
+        Settings.System.putInt(getContext().getContentResolver(),
+                Settings.System.APPLY_RAMPING_RINGER, enabled ? 1 : 0);
     }
 
     /**
@@ -2858,6 +2887,14 @@ public class AudioManager {
     }
 
     /**
+     * This change id controls use of audio modes for call audio redirection.
+     * @hide
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    public static final long CALL_REDIRECTION_AUDIO_MODES = 189472651L; // buganizer id
+
+    /**
      * Returns the current audio mode.
      *
      * @return      the current audio mode.
@@ -2876,6 +2913,12 @@ public class AudioManager {
             }
             if (mode == MODE_CALL_SCREENING && sdk <= Build.VERSION_CODES.Q) {
                 mode = MODE_IN_CALL;
+            } else if (mode == MODE_CALL_REDIRECT
+                    && !CompatChanges.isChangeEnabled(CALL_REDIRECTION_AUDIO_MODES)) {
+                mode = MODE_IN_CALL;
+            } else if (mode == MODE_COMMUNICATION_REDIRECT
+                    && !CompatChanges.isChangeEnabled(CALL_REDIRECTION_AUDIO_MODES)) {
+                mode = MODE_IN_COMMUNICATION;
             }
             return mode;
         } catch (RemoteException e) {
@@ -2901,77 +2944,31 @@ public class AudioManager {
      * List is lazy-initialized on first registration
      */
     @GuardedBy("mModeListenerLock")
-    private @Nullable ArrayList<ModeListenerInfo> mModeListeners;
+    private @Nullable ArrayList<ListenerInfo<OnModeChangedListener>> mModeListeners;
 
     @GuardedBy("mModeListenerLock")
     private ModeDispatcherStub mModeDispatcherStub;
 
-    private final class ModeDispatcherStub
-            extends IAudioModeDispatcher.Stub {
+    private final class ModeDispatcherStub extends IAudioModeDispatcher.Stub {
+
+        public void register(boolean register) {
+            try {
+                if (register) {
+                    getService().registerModeDispatcher(this);
+                } else {
+                    getService().unregisterModeDispatcher(this);
+                }
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
+        }
 
         @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
         public void dispatchAudioModeChanged(int mode) {
-            // make a shallow copy of listeners so callback is not executed under lock
-            final ArrayList<ModeListenerInfo> modeListeners;
-            synchronized (mModeListenerLock) {
-                if (mModeListeners == null || mModeListeners.size() == 0) {
-                    return;
-                }
-                modeListeners = (ArrayList<ModeListenerInfo>) mModeListeners.clone();
-            }
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                for (ModeListenerInfo info : modeListeners) {
-                    info.mExecutor.execute(() ->
-                            info.mListener.onModeChanged(mode));
-                }
-            } finally {
-                Binder.restoreCallingIdentity(ident);
-            }
+            CallbackUtil.callListeners(mModeListeners, mModeListenerLock,
+                    (listener) -> listener.onModeChanged(mode));
         }
-    }
-
-    private static class ModeListenerInfo {
-        final @NonNull OnModeChangedListener mListener;
-        final @NonNull Executor mExecutor;
-
-        ModeListenerInfo(OnModeChangedListener listener, Executor exe) {
-            mListener = listener;
-            mExecutor = exe;
-        }
-    }
-
-    @GuardedBy("mModeListenerLock")
-    private boolean hasModeListener(OnModeChangedListener listener) {
-        return getModeListenerInfo(listener) != null;
-    }
-
-    @GuardedBy("mModeListenerLock")
-    private @Nullable ModeListenerInfo getModeListenerInfo(
-            OnModeChangedListener listener) {
-        if (mModeListeners == null) {
-            return null;
-        }
-        for (ModeListenerInfo info : mModeListeners) {
-            if (info.mListener == listener) {
-                return info;
-            }
-        }
-        return null;
-    }
-
-
-    @GuardedBy("mModeListenerLock")
-    /**
-     * @return true if the listener was removed from the list
-     */
-    private boolean removeModeListener(OnModeChangedListener listener) {
-        final ModeListenerInfo infoToRemove = getModeListenerInfo(listener);
-        if (infoToRemove != null) {
-            mModeListeners.remove(infoToRemove);
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -2983,30 +2980,14 @@ public class AudioManager {
     public void addOnModeChangedListener(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull OnModeChangedListener listener) {
-        Objects.requireNonNull(executor);
-        Objects.requireNonNull(listener);
         synchronized (mModeListenerLock) {
-            if (hasModeListener(listener)) {
-                throw new IllegalArgumentException("attempt to call addOnModeChangedListener() "
-                        + "on a previously registered listener");
-            }
-            // lazy initialization of the list of strategy-preferred device listener
-            if (mModeListeners == null) {
-                mModeListeners = new ArrayList<>();
-            }
-            final int oldCbCount = mModeListeners.size();
-            mModeListeners.add(new ModeListenerInfo(listener, executor));
-            if (oldCbCount == 0) {
-                // register binder for callbacks
-                if (mModeDispatcherStub == null) {
-                    mModeDispatcherStub = new ModeDispatcherStub();
-                }
-                try {
-                    getService().registerModeDispatcher(mModeDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-            }
+            final Pair<ArrayList<ListenerInfo<OnModeChangedListener>>, ModeDispatcherStub> res =
+                    CallbackUtil.addListener("addOnModeChangedListener",
+                            executor, listener, mModeListeners, mModeDispatcherStub,
+                            () -> new ModeDispatcherStub(),
+                            stub -> stub.register(true));
+            mModeListeners = res.first;
+            mModeDispatcherStub = res.second;
         }
     }
 
@@ -3016,23 +2997,13 @@ public class AudioManager {
      * @param listener
      */
     public void removeOnModeChangedListener(@NonNull OnModeChangedListener listener) {
-        Objects.requireNonNull(listener);
         synchronized (mModeListenerLock) {
-            if (!removeModeListener(listener)) {
-                throw new IllegalArgumentException("attempt to call removeOnModeChangedListener() "
-                        + "on an unregistered listener");
-            }
-            if (mModeListeners.size() == 0) {
-                // unregister binder for callbacks
-                try {
-                    getService().unregisterModeDispatcher(mModeDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                } finally {
-                    mModeDispatcherStub = null;
-                    mModeListeners = null;
-                }
-            }
+            final Pair<ArrayList<ListenerInfo<OnModeChangedListener>>, ModeDispatcherStub> res =
+                    CallbackUtil.removeListener("removeOnModeChangedListener",
+                            listener, mModeListeners, mModeDispatcherStub,
+                            stub -> stub.register(false));
+            mModeListeners = res.first;
+            mModeDispatcherStub = res.second;
         }
     }
 
@@ -3093,13 +3064,26 @@ public class AudioManager {
      */
     public static final int MODE_CALL_SCREENING     = AudioSystem.MODE_CALL_SCREENING;
 
+    /**
+     * A telephony call is established and its audio is being redirected to another device.
+     */
+    public static final int MODE_CALL_REDIRECT   = AudioSystem.MODE_CALL_REDIRECT;
+
+    /**
+     * An audio/video chat or VoIP call is established and its audio is being redirected to another
+     * device.
+     */
+    public static final int MODE_COMMUNICATION_REDIRECT = AudioSystem.MODE_COMMUNICATION_REDIRECT;
+
     /** @hide */
     @IntDef(flag = false, prefix = "MODE_", value = {
             MODE_NORMAL,
             MODE_RINGTONE,
             MODE_IN_CALL,
             MODE_IN_COMMUNICATION,
-            MODE_CALL_SCREENING }
+            MODE_CALL_SCREENING,
+            MODE_CALL_REDIRECT,
+            MODE_COMMUNICATION_REDIRECT}
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface AudioMode {}
@@ -6841,30 +6825,56 @@ public class AudioManager {
 
     /**
      * Returns a list of audio formats that corresponds to encoding formats
-     * supported on offload path for A2DP playback.
+     * supported on offload path for A2DP and LE audio playback.
      *
+     * @param deviceType Indicates the target device type {@link AudioSystem.DeviceType}
      * @return a list of {@link BluetoothCodecConfig} objects containing encoding formats
-     * supported for offload A2DP playback
+     * supported for offload A2DP playback or a list of {@link BluetoothLeAudioCodecConfig}
+     * objects containing encoding formats supported for offload LE Audio playback
      * @hide
      */
-    public List<BluetoothCodecConfig> getHwOffloadEncodingFormatsSupportedForA2DP() {
+    public List<?> getHwOffloadFormatsSupportedForBluetoothMedia(
+            @AudioSystem.DeviceType int deviceType) {
         ArrayList<Integer> formatsList = new ArrayList<Integer>();
-        ArrayList<BluetoothCodecConfig> codecConfigList = new ArrayList<BluetoothCodecConfig>();
+        ArrayList<BluetoothCodecConfig> a2dpCodecConfigList = new ArrayList<BluetoothCodecConfig>();
+        ArrayList<BluetoothLeAudioCodecConfig> leAudioCodecConfigList =
+                new ArrayList<BluetoothLeAudioCodecConfig>();
 
-        int status = AudioSystem.getHwOffloadEncodingFormatsSupportedForA2DP(formatsList);
+        if (deviceType != AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP
+                && deviceType != AudioSystem.DEVICE_OUT_BLE_HEADSET) {
+            throw new IllegalArgumentException(
+                    "Illegal devicetype for the getHwOffloadFormatsSupportedForBluetoothMedia");
+        }
+
+        int status = AudioSystem.getHwOffloadFormatsSupportedForBluetoothMedia(deviceType,
+                                                                                formatsList);
         if (status != AudioManager.SUCCESS) {
-            Log.e(TAG, "getHwOffloadEncodingFormatsSupportedForA2DP failed:" + status);
-            return codecConfigList;
+            Log.e(TAG, "getHwOffloadFormatsSupportedForBluetoothMedia for deviceType "
+                    + deviceType + " failed:" + status);
+            return a2dpCodecConfigList;
         }
 
-        for (Integer format : formatsList) {
-            int btSourceCodec = AudioSystem.audioFormatToBluetoothSourceCodec(format);
-            if (btSourceCodec
-                    != BluetoothCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
-                codecConfigList.add(new BluetoothCodecConfig(btSourceCodec));
+        if (deviceType == AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP) {
+            for (Integer format : formatsList) {
+                int btSourceCodec = AudioSystem.audioFormatToBluetoothSourceCodec(format);
+                if (btSourceCodec != BluetoothCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
+                    a2dpCodecConfigList.add(new BluetoothCodecConfig(btSourceCodec));
+                }
             }
+            return a2dpCodecConfigList;
+        } else if (deviceType == AudioSystem.DEVICE_OUT_BLE_HEADSET) {
+            for (Integer format : formatsList) {
+                int btLeAudioCodec = AudioSystem.audioFormatToBluetoothLeAudioSourceCodec(format);
+                if (btLeAudioCodec != BluetoothLeAudioCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
+                    leAudioCodecConfigList.add(new BluetoothLeAudioCodecConfig.Builder()
+                                                .setCodecType(btLeAudioCodec)
+                                                .build());
+                }
+            }
+            return leAudioCodecConfigList;
         }
-        return codecConfigList;
+        Log.e(TAG, "Input deviceType " + deviceType + " doesn't support.");
+        return a2dpCodecConfigList;
     }
 
     // Since we need to calculate the changes since THE LAST NOTIFICATION, and not since the
@@ -7672,31 +7682,15 @@ public class AudioManager {
     public void addOnCommunicationDeviceChangedListener(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull OnCommunicationDeviceChangedListener listener) {
-        Objects.requireNonNull(executor);
-        Objects.requireNonNull(listener);
         synchronized (mCommDevListenerLock) {
-            if (hasCommDevListener(listener)) {
-                throw new IllegalArgumentException(
-                        "attempt to call addOnCommunicationDeviceChangedListener() "
-                                + "on a previously registered listener");
-            }
-            // lazy initialization of the list of strategy-preferred device listener
-            if (mCommDevListeners == null) {
-                mCommDevListeners = new ArrayList<>();
-            }
-            final int oldCbCount = mCommDevListeners.size();
-            mCommDevListeners.add(new CommDevListenerInfo(listener, executor));
-            if (oldCbCount == 0 && mCommDevListeners.size() > 0) {
-                // register binder for callbacks
-                if (mCommDevDispatcherStub == null) {
-                    mCommDevDispatcherStub = new CommunicationDeviceDispatcherStub();
-                }
-                try {
-                    getService().registerCommunicationDeviceDispatcher(mCommDevDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-            }
+            final Pair<ArrayList<ListenerInfo<OnCommunicationDeviceChangedListener>>,
+                    CommunicationDeviceDispatcherStub> res =
+                    CallbackUtil.addListener("addOnCommunicationDeviceChangedListener",
+                            executor, listener, mCommDevListeners, mCommDevDispatcherStub,
+                            () -> new CommunicationDeviceDispatcherStub(),
+                            stub -> stub.register(true));
+            mCommDevListeners = res.first;
+            mCommDevDispatcherStub = res.second;
         }
     }
 
@@ -7707,25 +7701,14 @@ public class AudioManager {
      */
     public void removeOnCommunicationDeviceChangedListener(
             @NonNull OnCommunicationDeviceChangedListener listener) {
-        Objects.requireNonNull(listener);
         synchronized (mCommDevListenerLock) {
-            if (!removeCommDevListener(listener)) {
-                throw new IllegalArgumentException(
-                        "attempt to call removeOnCommunicationDeviceChangedListener() "
-                                + "on an unregistered listener");
-            }
-            if (mCommDevListeners.size() == 0) {
-                // unregister binder for callbacks
-                try {
-                    getService().unregisterCommunicationDeviceDispatcher(
-                            mCommDevDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                } finally {
-                    mCommDevDispatcherStub = null;
-                    mCommDevListeners = null;
-                }
-            }
+            final Pair<ArrayList<ListenerInfo<OnCommunicationDeviceChangedListener>>,
+                    CommunicationDeviceDispatcherStub> res =
+                    CallbackUtil.removeListener("removeOnCommunicationDeviceChangedListener",
+                            listener, mCommDevListeners, mCommDevDispatcherStub,
+                            stub -> stub.register(false));
+            mCommDevListeners = res.first;
+            mCommDevDispatcherStub = res.second;
         }
     }
 
@@ -7735,17 +7718,8 @@ public class AudioManager {
      * List is lazy-initialized on first registration
      */
     @GuardedBy("mCommDevListenerLock")
-    private @Nullable ArrayList<CommDevListenerInfo> mCommDevListeners;
-
-    private static class CommDevListenerInfo {
-        final @NonNull OnCommunicationDeviceChangedListener mListener;
-        final @NonNull Executor mExecutor;
-
-        CommDevListenerInfo(OnCommunicationDeviceChangedListener listener, Executor exe) {
-            mListener = listener;
-            mExecutor = exe;
-        }
-    }
+    private @Nullable
+            ArrayList<ListenerInfo<OnCommunicationDeviceChangedListener>> mCommDevListeners;
 
     @GuardedBy("mCommDevListenerLock")
     private CommunicationDeviceDispatcherStub mCommDevDispatcherStub;
@@ -7753,59 +7727,25 @@ public class AudioManager {
     private final class CommunicationDeviceDispatcherStub
             extends ICommunicationDeviceDispatcher.Stub {
 
-        @Override
-        public void dispatchCommunicationDeviceChanged(int portId) {
-            // make a shallow copy of listeners so callback is not executed under lock
-            final ArrayList<CommDevListenerInfo> commDevListeners;
-            synchronized (mCommDevListenerLock) {
-                if (mCommDevListeners == null || mCommDevListeners.size() == 0) {
-                    return;
-                }
-                commDevListeners = (ArrayList<CommDevListenerInfo>) mCommDevListeners.clone();
-            }
-            AudioDeviceInfo device = getDeviceForPortId(portId, GET_DEVICES_OUTPUTS);
-            final long ident = Binder.clearCallingIdentity();
+        public void register(boolean register) {
             try {
-                for (CommDevListenerInfo info : commDevListeners) {
-                    info.mExecutor.execute(() ->
-                            info.mListener.onCommunicationDeviceChanged(device));
+                if (register) {
+                    getService().registerCommunicationDeviceDispatcher(this);
+                } else {
+                    getService().unregisterCommunicationDeviceDispatcher(this);
                 }
-            } finally {
-                Binder.restoreCallingIdentity(ident);
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
-    }
 
-    @GuardedBy("mCommDevListenerLock")
-    private @Nullable CommDevListenerInfo getCommDevListenerInfo(
-            OnCommunicationDeviceChangedListener listener) {
-        if (mCommDevListeners == null) {
-            return null;
+        @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
+        public void dispatchCommunicationDeviceChanged(int portId) {
+            AudioDeviceInfo device = getDeviceForPortId(portId, GET_DEVICES_OUTPUTS);
+            CallbackUtil.callListeners(mCommDevListeners, mCommDevListenerLock,
+                    (listener) -> listener.onCommunicationDeviceChanged(device));
         }
-        for (CommDevListenerInfo info : mCommDevListeners) {
-            if (info.mListener == listener) {
-                return info;
-            }
-        }
-        return null;
-    }
-
-    @GuardedBy("mCommDevListenerLock")
-    private boolean hasCommDevListener(OnCommunicationDeviceChangedListener listener) {
-        return getCommDevListenerInfo(listener) != null;
-    }
-
-    @GuardedBy("mCommDevListenerLock")
-    /**
-     * @return true if the listener was removed from the list
-     */
-    private boolean removeCommDevListener(OnCommunicationDeviceChangedListener listener) {
-        final CommDevListenerInfo infoToRemove = getCommDevListenerInfo(listener);
-        if (infoToRemove != null) {
-            mCommDevListeners.remove(infoToRemove);
-            return true;
-        }
-        return false;
     }
 
     //---------------------------------------------------------

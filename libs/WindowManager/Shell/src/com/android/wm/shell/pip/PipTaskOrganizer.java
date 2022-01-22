@@ -98,7 +98,7 @@ import java.util.function.IntConsumer;
  * see also {@link PipMotionHelper}.
  */
 public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
-        DisplayController.OnDisplaysChangedListener {
+        DisplayController.OnDisplaysChangedListener, ShellTaskOrganizer.FocusListener {
     private static final String TAG = PipTaskOrganizer.class.getSimpleName();
     private static final boolean DEBUG = false;
     /**
@@ -286,6 +286,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mMainExecutor.execute(() -> {
             mTaskOrganizer.addListenerForType(this, TASK_LISTENER_TYPE_PIP);
         });
+        mTaskOrganizer.addFocusListener(this);
         mPipTransitionController.setPipOrganizer(this);
         displayController.addDisplayWindowListener(this);
     }
@@ -772,6 +773,11 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     }
 
     @Override
+    public void onFocusTaskChanged(ActivityManager.RunningTaskInfo taskInfo) {
+        mPipMenuController.onFocusTaskChanged(taskInfo);
+    }
+
+    @Override
     public boolean supportSizeCompatUI() {
         // PIP doesn't support size compat.
         return false;
@@ -1249,11 +1255,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         } else if (isOutPipDirection(direction)) {
             // If we are animating to fullscreen or split screen, then we need to reset the
             // override bounds on the task to ensure that the task "matches" the parent's bounds.
-            if (direction == TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN) {
-                taskBounds = destinationBounds;
-            } else {
-                taskBounds = null;
-            }
+            taskBounds = null;
             applyWindowingModeChangeOnExit(wct, direction);
         } else {
             // Just a resize in PIP
@@ -1282,6 +1284,9 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     }
 
     private boolean isPipTopLeft() {
+        if (!mSplitScreenOptional.isPresent()) {
+            return false;
+        }
         final Rect topLeft = new Rect();
         final Rect bottomRight = new Rect();
         mSplitScreenOptional.get().getStageBounds(topLeft, bottomRight);

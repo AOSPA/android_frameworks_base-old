@@ -123,6 +123,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     private static final String TAG = "PackageInstaller";
     private static final boolean LOGD = false;
 
+    private static final boolean DEBUG = Build.IS_DEBUGGABLE;
+
     // TODO: remove outstanding sessions when installer package goes away
     // TODO: notify listeners in other users when package has been installed there
     // TODO: purge expired sessions periodically in addition to at reboot
@@ -409,13 +411,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             }
         }
         removeStagingDirs(unclaimedStagingDirsOnVolume);
-    }
-
-    public static boolean isStageName(String name) {
-        final boolean isFile = name.startsWith("vmdl") && name.endsWith(".tmp");
-        final boolean isContainer = name.startsWith("smdl") && name.endsWith(".tmp");
-        final boolean isLegacyContainer = name.startsWith("smdl2tmp");
-        return isFile || isContainer || isLegacyContainer;
     }
 
     @Deprecated
@@ -936,6 +931,23 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         throw new IllegalStateException("Failed to allocate session ID");
     }
 
+    static boolean isStageName(String name) {
+        final boolean isFile = name.startsWith("vmdl") && name.endsWith(".tmp");
+        final boolean isContainer = name.startsWith("smdl") && name.endsWith(".tmp");
+        final boolean isLegacyContainer = name.startsWith("smdl2tmp");
+        return isFile || isContainer || isLegacyContainer;
+    }
+
+    static int tryParseSessionId(@NonNull String tmpSessionDir)
+            throws IllegalArgumentException {
+        if (!tmpSessionDir.startsWith("vmdl") || !tmpSessionDir.endsWith(".tmp")) {
+            throw new IllegalArgumentException("Not a temporary session directory");
+        }
+        String sessionId = tmpSessionDir.substring("vmdl".length(),
+                tmpSessionDir.length() - ".tmp".length());
+        return Integer.parseInt(sessionId);
+    }
+
     private File getTmpSessionDir(String volumeUuid) {
         return Environment.getDataAppDirectory(volumeUuid);
     }
@@ -950,7 +962,12 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             final File sessionStagingDir = Environment.getDataStagingDirectory(params.volumeUuid);
             return new File(sessionStagingDir, "session_" + sessionId);
         }
-        return buildTmpSessionDir(sessionId, params.volumeUuid);
+        final File result = buildTmpSessionDir(sessionId, params.volumeUuid);
+        if (DEBUG && !Objects.equals(tryParseSessionId(result.getName()), sessionId)) {
+            throw new RuntimeException(
+                    "session folder format is off: " + result.getName() + " (" + sessionId + ")");
+        }
+        return result;
     }
 
     static void prepareStageDir(File stageDir) throws IOException {
@@ -1312,7 +1329,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         PackageInfo packageInfo = null;
         try {
             packageInfo = AppGlobals.getPackageManager().getPackageInfo(
-                    basePackageName, PackageManager.MATCH_STATIC_SHARED_LIBRARIES, userId);
+                    basePackageName, PackageManager.MATCH_STATIC_SHARED_AND_SDK_LIBRARIES, userId);
         } catch (RemoteException ignored) {
         }
         if (packageInfo == null || packageInfo.applicationInfo == null) {
@@ -1445,8 +1462,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         private TreeMap<PackageInstallerSession, TreeSet<PackageInstallerSession>> mSessionMap;
 
         private final Comparator<PackageInstallerSession> mSessionCreationComparator =
-                Comparator.comparingLong((PackageInstallerSession sess) -> sess.createdMillis)
-                          .thenComparingInt(sess -> sess.sessionId);
+                Comparator.comparingLong(
+                        (PackageInstallerSession sess) -> sess != null ? sess.createdMillis : -1)
+                        .thenComparingInt(sess -> sess != null ? sess.sessionId : -1);
 
         ParentChildSessionMap() {
             mSessionMap = new TreeMap<>(mSessionCreationComparator);
@@ -1484,10 +1502,12 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             for (Map.Entry<PackageInstallerSession, TreeSet<PackageInstallerSession>> entry
                     : mSessionMap.entrySet()) {
                 PackageInstallerSession parentSession = entry.getKey();
-                pw.print(tag + " ");
-                parentSession.dump(pw);
-                pw.println();
-                pw.increaseIndent();
+                if (parentSession != null) {
+                    pw.print(tag + " ");
+                    parentSession.dump(pw);
+                    pw.println();
+                    pw.increaseIndent();
+                }
 
                 for (PackageInstallerSession childSession : entry.getValue()) {
                     pw.print(tag + " Child ");

@@ -254,12 +254,11 @@ final class InstallPackageHelper {
             final List<SharedLibraryInfo> allowedSharedLibInfos =
                     SharedLibraryHelper.getAllowedSharedLibInfos(scanResult,
                             request.mSharedLibrarySource);
-            final SharedLibraryInfo staticLib = scanResult.mStaticSharedLibraryInfo;
             if (allowedSharedLibInfos != null) {
                 for (SharedLibraryInfo info : allowedSharedLibInfos) {
                     if (!SharedLibraryHelper.addSharedLibraryToPackageVersionMap(
                             incomingSharedLibraries, info)) {
-                        throw new ReconcileFailure("Static Shared Library " + staticLib.getName()
+                        throw new ReconcileFailure("Shared Library " + info.getName()
                                 + " is being installed twice in this set!");
                     }
                 }
@@ -649,12 +648,17 @@ final class InstallPackageHelper {
             mPm.checkPackageFrozen(pkgName);
         }
 
-        // Also need to kill any apps that are dependent on the library.
+        final boolean isReplace =
+                reconciledPkg.mPrepareResult != null && reconciledPkg.mPrepareResult.mReplace;
+        // Also need to kill any apps that are dependent on the library, except the case of
+        // installation of new version static shared library.
         if (clientLibPkgs != null) {
-            for (int i = 0; i < clientLibPkgs.size(); i++) {
-                AndroidPackage clientPkg = clientLibPkgs.get(i);
-                mPm.killApplication(clientPkg.getPackageName(),
-                        clientPkg.getUid(), "update lib");
+            if (pkg.getStaticSharedLibName() == null || isReplace) {
+                for (int i = 0; i < clientLibPkgs.size(); i++) {
+                    AndroidPackage clientPkg = clientLibPkgs.get(i);
+                    mPm.killApplication(clientPkg.getPackageName(),
+                            clientPkg.getUid(), "update lib");
+                }
             }
         }
 
@@ -676,8 +680,6 @@ final class InstallPackageHelper {
             ksms.addScannedPackageLPw(pkg);
 
             mPm.mComponentResolver.addAllComponents(pkg, chatty);
-            final boolean isReplace =
-                    reconciledPkg.mPrepareResult != null && reconciledPkg.mPrepareResult.mReplace;
             mPm.mAppsFilter.addPackage(pkgSetting, isReplace);
             mPm.addAllPackageProperties(pkg);
 
@@ -1185,7 +1187,8 @@ final class InstallPackageHelper {
                     createdAppId.put(packageName, optimisticallyRegisterAppId(result));
                     versionInfos.put(result.mPkgSetting.getPkg().getPackageName(),
                             mPm.getSettingsVersionForPackage(result.mPkgSetting.getPkg()));
-                    if (result.mStaticSharedLibraryInfo != null) {
+                    if (result.mStaticSharedLibraryInfo != null
+                            || result.mSdkSharedLibraryInfo != null) {
                         final PackageSetting sharedLibLatestVersionSetting =
                                 mPm.getSharedLibLatestVersionSetting(result);
                         if (sharedLibLatestVersionSetting != null) {
@@ -2050,6 +2053,7 @@ final class InstallPackageHelper {
             }
         }
 
+        final String packageName = pkg.getPackageName();
         for (Map.Entry<String, String> entry : fsverityCandidates.entrySet()) {
             final String filePath = entry.getKey();
             final String signaturePath = entry.getValue();
@@ -2077,10 +2081,13 @@ final class InstallPackageHelper {
                     try {
                         // A file may already have fs-verity, e.g. when reused during a split
                         // install. If the measurement succeeds, no need to attempt to set up.
-                        mPm.mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                        mPm.mInstaller.assertFsverityRootHashMatches(packageName, filePath,
+                                rootHash);
                     } catch (Installer.InstallerException e) {
-                        mPm.mInstaller.installApkVerity(filePath, fd, result.getContentSize());
-                        mPm.mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                        mPm.mInstaller.installApkVerity(packageName, filePath, fd,
+                                result.getContentSize());
+                        mPm.mInstaller.assertFsverityRootHashMatches(packageName, filePath,
+                                rootHash);
                     }
                 } finally {
                     IoUtils.closeQuietly(fd);
@@ -2349,10 +2356,9 @@ final class InstallPackageHelper {
                 // Set install reason for users that are having the package newly installed.
                 final int[] allUsersList = mPm.mUserManager.getUserIds();
                 if (userId == UserHandle.USER_ALL) {
-                    // TODO(b/152629990): It appears that the package doesn't actually get newly
-                    //  installed in this case, so the installReason shouldn't get modified?
                     for (int currentUserId : allUsersList) {
-                        if (!previousUserIds.contains(currentUserId)) {
+                        if (!previousUserIds.contains(currentUserId)
+                                && ps.getInstalled(currentUserId)) {
                             ps.setInstallReason(installReason, currentUserId);
                         }
                     }
@@ -2689,7 +2695,7 @@ final class InstallPackageHelper {
                 }
             }
 
-            if (dataOwnerPkg != null) {
+            if (dataOwnerPkg != null && !dataOwnerPkg.isSdkLibrary()) {
                 if (!PackageManagerServiceUtils.isDowngradePermitted(installFlags,
                         dataOwnerPkg.isDebuggable())) {
                     try {
@@ -3126,10 +3132,12 @@ final class InstallPackageHelper {
                             true, true, pkgList, uidArray, null);
                 }
             } else if (!ArrayUtils.isEmpty(res.mLibraryConsumers)) { // if static shared lib
+                // No need to kill consumers if it's installation of new version static shared lib.
+                final boolean dontKillApp = !update && res.mPkg.getStaticSharedLibName() != null;
                 for (int i = 0; i < res.mLibraryConsumers.size(); i++) {
                     AndroidPackage pkg = res.mLibraryConsumers.get(i);
                     // send broadcast that all consumers of the static shared library have changed
-                    mPm.sendPackageChangedBroadcast(pkg.getPackageName(), false /* dontKillApp */,
+                    mPm.sendPackageChangedBroadcast(pkg.getPackageName(), dontKillApp,
                             new ArrayList<>(Collections.singletonList(pkg.getPackageName())),
                             pkg.getUid(), null);
                 }
@@ -3712,7 +3720,7 @@ final class InstallPackageHelper {
     }
 
     @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
-    public void installSystemPackagesFromDir(File scanDir, int parseFlags, int scanFlags,
+    public void installPackagesFromDir(File scanDir, int parseFlags, int scanFlags,
             long currentTime, PackageParser2 packageParser, ExecutorService executorService) {
         final File[] files = scanDir.listFiles();
         if (ArrayUtils.isEmpty(files)) {

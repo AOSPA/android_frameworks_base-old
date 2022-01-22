@@ -1224,7 +1224,7 @@ class StorageManagerService extends IStorageManager.Stub
             }
             for (int i = 0; i < mVolumes.size(); i++) {
                 final VolumeInfo vol = mVolumes.valueAt(i);
-                if (vol.isVisibleForRead(userId) && vol.isMountedReadable()) {
+                if (vol.isVisibleForUser(userId) && vol.isMountedReadable()) {
                     final StorageVolume userVol = vol.buildStorageVolume(mContext, userId, false);
                     mHandler.obtainMessage(H_VOLUME_BROADCAST, userVol).sendToTarget();
 
@@ -1571,7 +1571,7 @@ class StorageManagerService extends IStorageManager.Stub
                     || Objects.equals(privateVol.fsUuid, mPrimaryStorageUuid)) {
                 Slog.v(TAG, "Found primary storage at " + vol);
                 vol.mountFlags |= VolumeInfo.MOUNT_FLAG_PRIMARY;
-                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE;
+                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE_FOR_WRITE;
                 mHandler.obtainMessage(H_VOLUME_MOUNT, vol).sendToTarget();
             }
 
@@ -1581,13 +1581,13 @@ class StorageManagerService extends IStorageManager.Stub
                     && vol.disk.isDefaultPrimary()) {
                 Slog.v(TAG, "Found primary storage at " + vol);
                 vol.mountFlags |= VolumeInfo.MOUNT_FLAG_PRIMARY;
-                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE;
+                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE_FOR_WRITE;
             }
 
             // Adoptable public disks are visible to apps, since they meet
             // public API requirement of being in a stable location.
             if (vol.disk.isAdoptable()) {
-                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE;
+                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE_FOR_WRITE;
             }
 
             vol.mountUserId = mCurrentUserId;
@@ -1598,7 +1598,9 @@ class StorageManagerService extends IStorageManager.Stub
 
         } else if (vol.type == VolumeInfo.TYPE_STUB) {
             if (vol.disk.isStubVisible()) {
-                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE;
+                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE_FOR_WRITE;
+            } else {
+                vol.mountFlags |= VolumeInfo.MOUNT_FLAG_VISIBLE_FOR_READ;
             }
             vol.mountUserId = mCurrentUserId;
             mHandler.obtainMessage(H_VOLUME_MOUNT, vol).sendToTarget();
@@ -1745,7 +1747,7 @@ class StorageManagerService extends IStorageManager.Stub
                 // started after this point will trigger additional
                 // user-specific broadcasts.
                 for (int userId : mSystemUnlockedUsers) {
-                    if (vol.isVisibleForRead(userId)) {
+                    if (vol.isVisibleForUser(userId)) {
                         final StorageVolume userVol = vol.buildStorageVolume(mContext, userId,
                                 false);
                         mHandler.obtainMessage(H_VOLUME_BROADCAST, userVol).sendToTarget();
@@ -3582,24 +3584,24 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         @Override
-        public ParcelFileDescriptor open() throws NativeDaemonConnectorException {
+        public ParcelFileDescriptor open() throws AppFuseMountException {
             try {
                 final FileDescriptor fd = mVold.mountAppFuse(uid, mountId);
                 mMounted = true;
                 return new ParcelFileDescriptor(fd);
             } catch (Exception e) {
-                throw new NativeDaemonConnectorException("Failed to mount", e);
+                throw new AppFuseMountException("Failed to mount", e);
             }
         }
 
         @Override
         public ParcelFileDescriptor openFile(int mountId, int fileId, int flags)
-                throws NativeDaemonConnectorException {
+                throws AppFuseMountException {
             try {
                 return new ParcelFileDescriptor(
                         mVold.openAppFuseFile(uid, mountId, fileId, flags));
             } catch (Exception e) {
-                throw new NativeDaemonConnectorException("Failed to open", e);
+                throw new AppFuseMountException("Failed to open", e);
             }
         }
 
@@ -3639,7 +3641,7 @@ class StorageManagerService extends IStorageManager.Stub
                         // It seems the thread of mAppFuseBridge has already been terminated.
                         mAppFuseBridge = null;
                     }
-                } catch (NativeDaemonConnectorException e) {
+                } catch (AppFuseMountException e) {
                     throw e.rethrowAsParcelableException();
                 }
             }
@@ -3730,8 +3732,19 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     @Override
-    public StorageVolume[] getVolumeList(int uid, String packageName, int flags) {
-        final int userId = UserHandle.getUserId(uid);
+    public StorageVolume[] getVolumeList(int userId, String callingPackage, int flags) {
+        final int callingUid = Binder.getCallingUid();
+        final int callingUserId = UserHandle.getUserId(callingUid);
+
+        if (!isUidOwnerOfPackageOrSystem(callingPackage, callingUid)) {
+            throw new SecurityException("callingPackage does not match UID");
+        }
+        if (callingUserId != userId) {
+            // Callers can ask for volumes of different users, but only with the correct permissions
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.INTERACT_ACROSS_USERS,
+                    "Need INTERACT_ACROSS_USERS to get volumes for another user");
+        }
 
         final boolean forWrite = (flags & StorageManager.FLAG_FOR_WRITE) != 0;
         final boolean realState = (flags & StorageManager.FLAG_REAL_STATE) != 0;
@@ -3747,7 +3760,7 @@ class StorageManagerService extends IStorageManager.Stub
         // should never attempt to augment the actual storage volume state,
         // otherwise we risk confusing it with race conditions as users go
         // through various unlocked states
-        final boolean callerIsMediaStore = UserHandle.isSameApp(Binder.getCallingUid(),
+        final boolean callerIsMediaStore = UserHandle.isSameApp(callingUid,
                 mMediaStoreAuthorityAppId);
 
         final boolean userIsDemo;
@@ -3757,8 +3770,9 @@ class StorageManagerService extends IStorageManager.Stub
         try {
             userIsDemo = LocalServices.getService(UserManagerInternal.class)
                     .getUserInfo(userId).isDemo();
+            storagePermission = mStorageManagerInternal.hasExternalStorage(callingUid,
+                    callingPackage);
             userKeyUnlocked = isUserKeyUnlocked(userId);
-            storagePermission = mStorageManagerInternal.hasExternalStorage(uid, packageName);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -3788,7 +3802,7 @@ class StorageManagerService extends IStorageManager.Stub
                 if (forWrite) {
                     match = vol.isVisibleForWrite(userId);
                 } else {
-                    match = vol.isVisibleForRead(userId)
+                    match = vol.isVisibleForUser(userId)
                             || (includeInvisible && vol.getPath() != null);
                 }
                 if (!match) continue;
@@ -3847,14 +3861,15 @@ class StorageManagerService extends IStorageManager.Stub
             final boolean primary = false;
             final boolean removable = false;
             final boolean emulated = true;
+            final boolean stub = false;
             final boolean allowMassStorage = false;
             final long maxFileSize = 0;
             final UserHandle user = new UserHandle(userId);
             final String envState = Environment.MEDIA_MOUNTED_READ_ONLY;
             final String description = mContext.getString(android.R.string.unknownName);
 
-            res.add(new StorageVolume(id, path, path, description, primary, removable,
-                    emulated, allowMassStorage, maxFileSize, user, null /*uuid */, id, envState));
+            res.add(new StorageVolume(id, path, path, description, primary, removable, emulated,
+                    stub, allowMassStorage, maxFileSize, user, null /*uuid */, id, envState));
         }
 
         if (!foundPrimary) {
@@ -3869,6 +3884,7 @@ class StorageManagerService extends IStorageManager.Stub
             final boolean primary = true;
             final boolean removable = primaryPhysical;
             final boolean emulated = !primaryPhysical;
+            final boolean stub = false;
             final boolean allowMassStorage = false;
             final long maxFileSize = 0L;
             final UserHandle owner = new UserHandle(userId);
@@ -3877,7 +3893,7 @@ class StorageManagerService extends IStorageManager.Stub
             final String state = Environment.MEDIA_REMOVED;
 
             res.add(0, new StorageVolume(id, path, path,
-                    description, primary, removable, emulated,
+                    description, primary, removable, emulated, stub,
                     allowMassStorage, maxFileSize, owner, uuid, fsUuid, state));
         }
 

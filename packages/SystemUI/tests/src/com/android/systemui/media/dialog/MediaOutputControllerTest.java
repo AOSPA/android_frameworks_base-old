@@ -19,6 +19,7 @@ package com.android.systemui.media.dialog;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -234,7 +235,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
 
         mMediaOutputController.onRequestFailed(0 /* reason */);
 
-        verify(mCb).onRouteChanged();
+        verify(mCb, atLeastOnce()).onRouteChanged();
     }
 
     @Test
@@ -469,7 +470,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
         when(entry.getSbn()).thenReturn(sbn);
         when(sbn.getNotification()).thenReturn(notification);
         when(sbn.getPackageName()).thenReturn(TEST_PACKAGE_NAME);
-        when(notification.hasMediaSession()).thenReturn(true);
+        when(notification.isMediaNotification()).thenReturn(true);
         when(notification.getLargeIcon()).thenReturn(null);
 
         assertThat(mMediaOutputController.getNotificationIcon()).isNull();
@@ -489,7 +490,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
         when(entry.getSbn()).thenReturn(sbn);
         when(sbn.getNotification()).thenReturn(notification);
         when(sbn.getPackageName()).thenReturn(TEST_PACKAGE_NAME);
-        when(notification.hasMediaSession()).thenReturn(true);
+        when(notification.isMediaNotification()).thenReturn(true);
         when(notification.getLargeIcon()).thenReturn(icon);
 
         assertThat(mMediaOutputController.getNotificationIcon() instanceof IconCompat).isTrue();
@@ -509,7 +510,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
         when(entry.getSbn()).thenReturn(sbn);
         when(sbn.getNotification()).thenReturn(notification);
         when(sbn.getPackageName()).thenReturn(TEST_PACKAGE_NAME);
-        when(notification.hasMediaSession()).thenReturn(false);
+        when(notification.isMediaNotification()).thenReturn(false);
         when(notification.getLargeIcon()).thenReturn(icon);
 
         assertThat(mMediaOutputController.getNotificationIcon()).isNull();

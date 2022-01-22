@@ -16,16 +16,16 @@
 
 package com.android.wm.shell.dagger;
 
+import static com.android.wm.shell.onehanded.OneHandedController.SUPPORT_ONE_HANDED_MODE;
+
 import android.app.ActivityTaskManager;
 import android.content.Context;
-import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.os.Handler;
+import android.os.SystemProperties;
 import android.view.IWindowManager;
-import android.view.WindowManager;
 
 import com.android.internal.logging.UiEventLogger;
-import com.android.internal.statusbar.IStatusBarService;
 import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.RootDisplayAreaOrganizer;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
@@ -56,6 +56,7 @@ import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelper;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelperController;
+import com.android.wm.shell.draganddrop.DragAndDrop;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformTaskListener;
 import com.android.wm.shell.fullscreen.FullscreenTaskListener;
@@ -74,26 +75,23 @@ import com.android.wm.shell.pip.phone.PipAppOpsListener;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.recents.RecentTasks;
 import com.android.wm.shell.recents.RecentTasksController;
+import com.android.wm.shell.sizecompatui.SizeCompatUI;
 import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.splitscreen.SplitScreenController;
-import com.android.wm.shell.splitscreen.StageTaskUnfoldController;
 import com.android.wm.shell.startingsurface.StartingSurface;
 import com.android.wm.shell.startingsurface.StartingWindowController;
 import com.android.wm.shell.startingsurface.StartingWindowTypeAlgorithm;
+import com.android.wm.shell.startingsurface.phone.PhoneStartingWindowTypeAlgorithm;
 import com.android.wm.shell.tasksurfacehelper.TaskSurfaceHelper;
 import com.android.wm.shell.tasksurfacehelper.TaskSurfaceHelperController;
 import com.android.wm.shell.transition.ShellTransitions;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
-import com.android.wm.shell.unfold.UnfoldBackgroundController;
 
 import java.util.Optional;
 
-import javax.inject.Provider;
-
 import dagger.BindsOptionalOf;
-import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
@@ -128,6 +126,28 @@ public abstract class WMShellBaseModule {
         return new DisplayInsetsController(wmService, displayController, mainExecutor);
     }
 
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract DisplayImeController optionalDisplayImeController();
+
+    @WMSingleton
+    @Provides
+    static DisplayImeController provideDisplayImeController(
+            @DynamicOverride Optional<DisplayImeController> overrideDisplayImeController,
+            IWindowManager wmService,
+            DisplayController displayController,
+            DisplayInsetsController displayInsetsController,
+            @ShellMainThread ShellExecutor mainExecutor,
+            TransactionPool transactionPool
+    ) {
+        if (overrideDisplayImeController.isPresent()) {
+            return overrideDisplayImeController.get();
+        }
+        return new DisplayImeController(wmService, displayController, displayInsetsController,
+                mainExecutor, transactionPool);
+    }
+
     @WMSingleton
     @Provides
     static DisplayLayout provideDisplayLayout() {
@@ -137,8 +157,16 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static DragAndDropController provideDragAndDropController(Context context,
-            DisplayController displayController, UiEventLogger uiEventLogger) {
-        return new DragAndDropController(context, displayController, uiEventLogger);
+            DisplayController displayController, UiEventLogger uiEventLogger,
+            IconProvider iconProvider, @ShellMainThread ShellExecutor mainExecutor) {
+        return new DragAndDropController(context, displayController, uiEventLogger, iconProvider,
+                mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static DragAndDrop provideDragAndDrop(DragAndDropController dragAndDropController) {
+        return dragAndDropController.asDragAndDrop();
     }
 
     @WMSingleton
@@ -153,11 +181,18 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
+    static SizeCompatUI provideSizeCompatUI(SizeCompatUIController sizeCompatUIController) {
+        return sizeCompatUIController.asSizeCompatUI();
+    }
+
+    @WMSingleton
+    @Provides
     static SizeCompatUIController provideSizeCompatUIController(Context context,
             DisplayController displayController, DisplayInsetsController displayInsetsController,
-            DisplayImeController imeController, SyncTransactionQueue syncQueue) {
+            DisplayImeController imeController, SyncTransactionQueue syncQueue,
+            @ShellMainThread ShellExecutor mainExecutor) {
         return new SizeCompatUIController(context, displayController, displayInsetsController,
-                imeController, syncQueue);
+                imeController, syncQueue, mainExecutor);
     }
 
     @WMSingleton
@@ -202,7 +237,7 @@ public abstract class WMShellBaseModule {
     }
 
     //
-    // Bubbles
+    // Bubbles (optional feature)
     //
 
     @WMSingleton
@@ -211,100 +246,76 @@ public abstract class WMShellBaseModule {
         return bubbleController.map((controller) -> controller.asBubbles());
     }
 
-    // Note: Handler needed for LauncherApps.register
-    @WMSingleton
-    @Provides
-    static Optional<BubbleController> provideBubbleController(Context context,
-            FloatingContentCoordinator floatingContentCoordinator,
-            IStatusBarService statusBarService,
-            WindowManager windowManager,
-            WindowManagerShellWrapper windowManagerShellWrapper,
-            LauncherApps launcherApps,
-            TaskStackListenerImpl taskStackListener,
-            UiEventLogger uiEventLogger,
-            ShellTaskOrganizer organizer,
-            DisplayController displayController,
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ShellMainThread Handler mainHandler,
-            SyncTransactionQueue syncQueue) {
-        return Optional.of(BubbleController.create(context, null /* synchronizer */,
-                floatingContentCoordinator, statusBarService, windowManager,
-                windowManagerShellWrapper, launcherApps, taskStackListener,
-                uiEventLogger, organizer, displayController, mainExecutor, mainHandler, syncQueue));
-    }
+    @BindsOptionalOf
+    abstract BubbleController optionalBubblesController();
 
     //
     // Fullscreen
     //
 
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract FullscreenTaskListener optionalFullscreenTaskListener();
+
     @WMSingleton
     @Provides
     static FullscreenTaskListener provideFullscreenTaskListener(
+            @DynamicOverride Optional<FullscreenTaskListener> fullscreenTaskListener,
             SyncTransactionQueue syncQueue,
             Optional<FullscreenUnfoldController> optionalFullscreenUnfoldController,
-            Optional<RecentTasksController> recentTasksOptional
-    ) {
-        return new FullscreenTaskListener(syncQueue, optionalFullscreenUnfoldController,
-                recentTasksOptional);
+            Optional<RecentTasksController> recentTasksOptional) {
+        if (fullscreenTaskListener.isPresent()) {
+            return fullscreenTaskListener.get();
+        } else {
+            return new FullscreenTaskListener(syncQueue, optionalFullscreenUnfoldController,
+                    recentTasksOptional);
+        }
     }
 
     //
     // Unfold transition
     //
 
+    @BindsOptionalOf
+    abstract ShellUnfoldProgressProvider optionalShellUnfoldProgressProvider();
+
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract FullscreenUnfoldController optionalFullscreenUnfoldController();
+
     @WMSingleton
     @Provides
     static Optional<FullscreenUnfoldController> provideFullscreenUnfoldController(
-            Context context,
-            Optional<ShellUnfoldProgressProvider> progressProvider,
-            Lazy<UnfoldBackgroundController> unfoldBackgroundController,
-            DisplayInsetsController displayInsetsController,
-            @ShellMainThread ShellExecutor mainExecutor
-    ) {
-        return progressProvider.map(shellUnfoldTransitionProgressProvider ->
-                new FullscreenUnfoldController(context, mainExecutor,
-                        unfoldBackgroundController.get(), shellUnfoldTransitionProgressProvider,
-                        displayInsetsController));
-    }
-
-    @Provides
-    static Optional<StageTaskUnfoldController> provideStageTaskUnfoldController(
-            Optional<ShellUnfoldProgressProvider> progressProvider,
-            Context context,
-            TransactionPool transactionPool,
-            Lazy<UnfoldBackgroundController> unfoldBackgroundController,
-            DisplayInsetsController displayInsetsController,
-            @ShellMainThread ShellExecutor mainExecutor
-    ) {
-        return progressProvider.map(shellUnfoldTransitionProgressProvider ->
-                new StageTaskUnfoldController(
-                        context,
-                        transactionPool,
-                        shellUnfoldTransitionProgressProvider,
-                        displayInsetsController,
-                        unfoldBackgroundController.get(),
-                        mainExecutor
-                ));
-    }
-
-    @WMSingleton
-    @Provides
-    static UnfoldBackgroundController provideUnfoldBackgroundController(
-            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
-            Context context
-    ) {
-        return new UnfoldBackgroundController(
-                context,
-                rootTaskDisplayAreaOrganizer
-        );
+            @DynamicOverride Optional<FullscreenUnfoldController> fullscreenUnfoldController,
+            Optional<ShellUnfoldProgressProvider> progressProvider) {
+        if (progressProvider.isPresent()
+                && progressProvider.get() != ShellUnfoldProgressProvider.NO_PROVIDER) {
+            return fullscreenUnfoldController;
+        }
+        return Optional.empty();
     }
 
     //
     // Freeform (optional feature)
     //
 
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
     @BindsOptionalOf
-    abstract Optional<FreeformTaskListener> optionalFreeformTaskListener();
+    @DynamicOverride
+    abstract FreeformTaskListener optionalFreeformTaskListener();
+
+    @WMSingleton
+    @Provides
+    static Optional<FreeformTaskListener> provideFreeformTaskListener(
+            @DynamicOverride Optional<FreeformTaskListener> freeformTaskListener,
+            Context context) {
+        if (FreeformTaskListener.isFreeformEnabled(context)) {
+            return freeformTaskListener;
+        }
+        return Optional.empty();
+    }
 
     //
     // Hide display cutout
@@ -335,19 +346,21 @@ public abstract class WMShellBaseModule {
         return oneHandedController.map((controller) -> controller.asOneHanded());
     }
 
-    // Needs the shell main handler for ContentObserver callbacks
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract OneHandedController optionalOneHandedController();
+
     @WMSingleton
     @Provides
-    static Optional<OneHandedController> provideOneHandedController(Context context,
-            WindowManager windowManager, DisplayController displayController,
-            DisplayLayout displayLayout, TaskStackListenerImpl taskStackListener,
-            UiEventLogger uiEventLogger,
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ShellMainThread Handler mainHandler) {
-        return Optional.ofNullable(OneHandedController.create(context, windowManager,
-                displayController, displayLayout, taskStackListener, uiEventLogger, mainExecutor,
-                mainHandler));
+    static Optional<OneHandedController> providesOneHandedController(
+            @DynamicOverride Optional<OneHandedController> oneHandedController) {
+        if (SystemProperties.getBoolean(SUPPORT_ONE_HANDED_MODE, false)) {
+            return oneHandedController;
+        }
+        return Optional.empty();
     }
+
 
     //
     // Task to Surface communication
@@ -364,15 +377,6 @@ public abstract class WMShellBaseModule {
     static Optional<TaskSurfaceHelperController> provideTaskSurfaceHelperController(
             ShellTaskOrganizer taskOrganizer, @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.ofNullable(new TaskSurfaceHelperController(taskOrganizer, mainExecutor));
-    }
-
-    @WMSingleton
-    @Provides
-    static Optional<DisplayAreaHelper> provideDisplayAreaHelper(
-            @ShellMainThread ShellExecutor mainExecutor,
-            RootDisplayAreaOrganizer rootDisplayAreaOrganizer) {
-        return Optional.ofNullable(new DisplayAreaHelperController(mainExecutor,
-                rootDisplayAreaOrganizer));
     }
 
     //
@@ -460,7 +464,7 @@ public abstract class WMShellBaseModule {
     }
 
     //
-    // Split/multiwindow
+    // Display areas
     //
 
     @WMSingleton
@@ -479,31 +483,38 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
+    static Optional<DisplayAreaHelper> provideDisplayAreaHelper(
+            @ShellMainThread ShellExecutor mainExecutor,
+            RootDisplayAreaOrganizer rootDisplayAreaOrganizer) {
+        return Optional.of(new DisplayAreaHelperController(mainExecutor,
+                rootDisplayAreaOrganizer));
+    }
+
+    //
+    // Splitscreen (optional feature)
+    //
+
+    @WMSingleton
+    @Provides
     static Optional<SplitScreen> provideSplitScreen(
             Optional<SplitScreenController> splitScreenController) {
         return splitScreenController.map((controller) -> controller.asSplitScreen());
     }
 
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract SplitScreenController optionalSplitScreenController();
+
     @WMSingleton
     @Provides
-    static Optional<SplitScreenController> provideSplitScreenController(
-            ShellTaskOrganizer shellTaskOrganizer,
-            SyncTransactionQueue syncQueue, Context context,
-            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
-            @ShellMainThread ShellExecutor mainExecutor,
-            DisplayImeController displayImeController,
-            DisplayInsetsController displayInsetsController, Transitions transitions,
-            TransactionPool transactionPool, IconProvider iconProvider,
-            Optional<RecentTasksController> recentTasks,
-            Provider<Optional<StageTaskUnfoldController>> stageTaskUnfoldControllerProvider) {
+    static Optional<SplitScreenController> providesSplitScreenController(
+            @DynamicOverride Optional<SplitScreenController> splitscreenController,
+            Context context) {
         if (ActivityTaskManager.supportsSplitScreenMultiWindow(context)) {
-            return Optional.of(new SplitScreenController(shellTaskOrganizer, syncQueue, context,
-                    rootTaskDisplayAreaOrganizer, mainExecutor, displayImeController,
-                    displayInsetsController, transitions, transactionPool, iconProvider,
-                    recentTasks, stageTaskUnfoldControllerProvider));
-        } else {
-            return Optional.empty();
+            return splitscreenController;
         }
+        return Optional.empty();
     }
 
     // Legacy split (optional feature)
@@ -529,7 +540,9 @@ public abstract class WMShellBaseModule {
     @BindsOptionalOf
     abstract AppPairsController optionalAppPairs();
 
+    //
     // Starting window
+    //
 
     @WMSingleton
     @Provides
@@ -546,6 +559,23 @@ public abstract class WMShellBaseModule {
             TransactionPool pool) {
         return new StartingWindowController(context, splashScreenExecutor,
                 startingWindowTypeAlgorithm, iconProvider, pool);
+    }
+
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract StartingWindowTypeAlgorithm optionalStartingWindowTypeAlgorithm();
+
+    @WMSingleton
+    @Provides
+    static StartingWindowTypeAlgorithm provideStartingWindowTypeAlgorithm(
+            @DynamicOverride Optional<StartingWindowTypeAlgorithm> startingWindowTypeAlgorithm
+    ) {
+        if (startingWindowTypeAlgorithm.isPresent()) {
+            return startingWindowTypeAlgorithm.get();
+        }
+        // Default to phone starting window type
+        return new PhoneStartingWindowTypeAlgorithm();
     }
 
     //
@@ -591,7 +621,7 @@ public abstract class WMShellBaseModule {
             Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
             Optional<FullscreenUnfoldController> appUnfoldTransitionController,
-            Optional<Optional<FreeformTaskListener>> freeformTaskListener,
+            Optional<FreeformTaskListener> freeformTaskListener,
             Optional<RecentTasksController> recentTasksOptional,
             Transitions transitions,
             StartingWindowController startingWindow,

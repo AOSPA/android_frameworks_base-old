@@ -37,6 +37,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.ContentObserver;
+import android.hardware.display.DisplayManager;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.HdmiHotplugEvent;
@@ -81,6 +82,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.view.Display;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -408,7 +410,13 @@ public class HdmiControlService extends SystemService {
     private PowerManagerWrapper mPowerManager;
 
     @Nullable
+    private PowerManagerInternalWrapper mPowerManagerInternal;
+
+    @Nullable
     private Looper mIoLooper;
+
+    @Nullable
+    private DisplayManager mDisplayManager;
 
     @HdmiControlManager.HdmiCecVersion
     private int mCecVersion;
@@ -676,6 +684,11 @@ public class HdmiControlService extends SystemService {
                 }, mServiceThreadExecutor);
     }
 
+    /** Returns true if the device screen is off */
+    boolean isScreenOff() {
+        return mDisplayManager.getDisplay(Display.DEFAULT_DISPLAY).getState() == Display.STATE_OFF;
+    }
+
     private void bootCompleted() {
         // on boot, if device is interactive, set HDMI CEC state as powered on as well
         if (mPowerManager.isInteractive() && isPowerStandbyOrTransient()) {
@@ -731,9 +744,11 @@ public class HdmiControlService extends SystemService {
     @Override
     public void onBootPhase(int phase) {
         if (phase == SystemService.PHASE_SYSTEM_SERVICES_READY) {
+            mDisplayManager = getContext().getSystemService(DisplayManager.class);
             mTvInputManager = (TvInputManager) getContext().getSystemService(
                     Context.TV_INPUT_SERVICE);
             mPowerManager = new PowerManagerWrapper(getContext());
+            mPowerManagerInternal = new PowerManagerInternalWrapper();
         } else if (phase == SystemService.PHASE_BOOT_COMPLETED) {
             runOnServiceThread(this::bootCompleted);
         }
@@ -758,8 +773,17 @@ public class HdmiControlService extends SystemService {
         mPowerManager = powerManager;
     }
 
+    @VisibleForTesting
+    void setPowerManagerInternal(PowerManagerInternalWrapper powerManagerInternal) {
+        mPowerManagerInternal = powerManagerInternal;
+    }
+
     PowerManagerWrapper getPowerManager() {
         return mPowerManager;
+    }
+
+    PowerManagerInternalWrapper getPowerManagerInternal() {
+        return mPowerManagerInternal;
     }
 
     /**
@@ -3239,18 +3263,19 @@ public class HdmiControlService extends SystemService {
         assertRunOnServiceThread();
         Slog.v(TAG, "onPendingActionsCleared");
 
-        if (!mPowerStatusController.isPowerStatusTransientToStandby()) {
-            return;
+        if (mPowerStatusController.isPowerStatusTransientToStandby()) {
+            mPowerStatusController.setPowerStatus(HdmiControlManager.POWER_STATUS_STANDBY);
+            for (HdmiCecLocalDevice device : mHdmiCecNetwork.getLocalDeviceList()) {
+                device.onStandby(mStandbyMessageReceived, standbyAction);
+            }
+            if (!isAudioSystemDevice()) {
+                mCecController.setOption(OptionKey.SYSTEM_CEC_CONTROL, false);
+                mMhlController.setOption(OPTION_MHL_SERVICE_CONTROL, DISABLED);
+            }
         }
-        mPowerStatusController.setPowerStatus(HdmiControlManager.POWER_STATUS_STANDBY);
-        for (HdmiCecLocalDevice device : mHdmiCecNetwork.getLocalDeviceList()) {
-            device.onStandby(mStandbyMessageReceived, standbyAction);
-        }
+
+        // Always reset this flag to set up for the next standby
         mStandbyMessageReceived = false;
-        if (!isAudioSystemDevice()) {
-            mCecController.setOption(OptionKey.SYSTEM_CEC_CONTROL, false);
-            mMhlController.setOption(OPTION_MHL_SERVICE_CONTROL, DISABLED);
-        }
     }
 
     private void addVendorCommandListener(IHdmiVendorCommandListener listener, int deviceType) {

@@ -68,6 +68,7 @@ import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.ConstraintSet;
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.testing.UiEventLoggerFake;
@@ -120,6 +121,7 @@ import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
+import com.android.systemui.statusbar.QsFrameTranslateController;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
@@ -353,7 +355,11 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock
     private DumpManager mDumpManager;
     @Mock
+    private InteractionJankMonitor mInteractionJankMonitor;
+    @Mock
     private NotificationsQSContainerController mNotificationsQSContainerController;
+    @Mock
+    private QsFrameTranslateController mQsFrameTranslateController;
     private Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
@@ -361,11 +367,13 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private NotificationsQuickSettingsContainer mNotificationContainerParent;
     private List<View.OnAttachStateChangeListener> mOnAttachStateChangeListeners;
     private FalsingManagerFake mFalsingManager = new FalsingManagerFake();
+    private FakeExecutor mExecutor = new FakeExecutor(new FakeSystemClock());
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        mStatusBarStateController = new StatusBarStateControllerImpl(mUiEventLogger, mDumpManager);
+        mStatusBarStateController = new StatusBarStateControllerImpl(mUiEventLogger, mDumpManager,
+                mInteractionJankMonitor);
 
         mKeyguardStatusView = new KeyguardStatusView(mContext);
         mKeyguardStatusView.setId(R.id.keyguard_status_view);
@@ -428,7 +436,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         NotificationWakeUpCoordinator coordinator =
                 new NotificationWakeUpCoordinator(
                         mock(HeadsUpManagerPhone.class),
-                        new StatusBarStateControllerImpl(new UiEventLoggerFake(), mDumpManager),
+                        new StatusBarStateControllerImpl(new UiEventLoggerFake(), mDumpManager,
+                                mInteractionJankMonitor),
                         mKeyguardBypassController,
                         mDozeParameters,
                         mUnlockedScreenOffAnimationController);
@@ -467,8 +476,12 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 .thenReturn(mUserSwitcherView);
         when(mLayoutInflater.inflate(eq(R.layout.keyguard_bottom_area), any(), anyBoolean()))
                 .thenReturn(mKeyguardBottomArea);
-        when(mNotificationRemoteInputManager.isRemoteInputActive()).thenReturn(false);
-
+        when(mNotificationRemoteInputManager.isRemoteInputActive())
+                .thenReturn(false);
+        when(mInteractionJankMonitor.begin(any(), anyInt()))
+                .thenReturn(true);
+        when(mInteractionJankMonitor.end(anyInt()))
+                .thenReturn(true);
         reset(mView);
 
         mNotificationPanelViewController = new NotificationPanelViewController(mView,
@@ -514,7 +527,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mQuickAccessWalletController,
                 mQrCodeScannerController,
                 mRecordingController,
-                new FakeExecutor(new FakeSystemClock()),
+                mExecutor,
                 mSecureSettings,
                 mSplitShadeHeaderController,
                 mUnlockedScreenOffAnimationController,
@@ -523,6 +536,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mNotificationRemoteInputManager,
                 mSysUIUnfoldComponent,
                 mControlsComponent,
+                mInteractionJankMonitor,
+                mQsFrameTranslateController,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
                 mStatusBar,
@@ -940,6 +955,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 ArgumentCaptor.forClass(WeakReference.class);
 
         monitorCallback.getValue().onSourceAvailable(new WeakReference<>(mCommunalSource));
+        mExecutor.runAllReady();
         verify(mCommunalHostViewController).show(sourceCapture.capture());
         assertThat(sourceCapture.getValue().get()).isEqualTo(mCommunalSource);
 

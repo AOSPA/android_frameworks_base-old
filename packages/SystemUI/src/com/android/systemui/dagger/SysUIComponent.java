@@ -23,6 +23,7 @@ import com.android.systemui.InitController;
 import com.android.systemui.SystemUIAppComponentFactory;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardSliceProvider;
+import com.android.systemui.media.taptotransfer.MediaTttChipController;
 import com.android.systemui.people.PeopleProvider;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
@@ -32,11 +33,13 @@ import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelper;
+import com.android.wm.shell.draganddrop.DragAndDrop;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.recents.RecentTasks;
+import com.android.wm.shell.sizecompatui.SizeCompatUI;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.startingsurface.StartingSurface;
 import com.android.wm.shell.tasksurfacehelper.TaskSurfaceHelper;
@@ -107,6 +110,12 @@ public interface SysUIComponent {
         @BindsInstance
         Builder setRecentTasks(Optional<RecentTasks> r);
 
+        @BindsInstance
+        Builder setSizeCompatUI(Optional<SizeCompatUI> s);
+
+        @BindsInstance
+        Builder setDragAndDrop(Optional<DragAndDrop> d);
+
         SysUIComponent build();
     }
 
@@ -122,6 +131,8 @@ public interface SysUIComponent {
             c.getUnfoldTransitionWallpaperController().init();
         });
         getNaturalRotationUnfoldProgressProvider().ifPresent(o -> o.init());
+        // No init method needed, just needs to be gotten so that it's created.
+        getMediaTttChipController();
     }
 
     /**
@@ -167,6 +178,9 @@ public interface SysUIComponent {
      * For devices with a hinge: the rotation animation
      */
     Optional<NaturalRotationUnfoldProgressProvider> getNaturalRotationUnfoldProgressProvider();
+
+    /** */
+    Optional<MediaTttChipController> getMediaTttChipController();
 
     /**
      * Member injection into the supplied argument.

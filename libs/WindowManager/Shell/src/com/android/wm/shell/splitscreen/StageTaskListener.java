@@ -37,11 +37,13 @@ import android.window.WindowContainerTransaction;
 
 import androidx.annotation.NonNull;
 
+import com.android.internal.R;
 import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.SurfaceUtils;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.split.SplitDecorManager;
+import com.android.wm.shell.splitscreen.SplitScreen.StageType;
 
 import java.io.PrintWriter;
 
@@ -102,7 +104,12 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         mSurfaceSession = surfaceSession;
         mIconProvider = iconProvider;
         mStageTaskUnfoldController = stageTaskUnfoldController;
-        taskOrganizer.createRootTask(displayId, WINDOWING_MODE_MULTI_WINDOW, this);
+
+        // No need to create root task if the device is using legacy split screen.
+        // TODO(b/199236198): Remove this check after totally deprecated legacy split.
+        if (!context.getResources().getBoolean(R.bool.config_useLegacySplit)) {
+            taskOrganizer.createRootTask(displayId, WINDOWING_MODE_MULTI_WINDOW, this);
+        }
     }
 
     int getChildCount() {
@@ -287,6 +294,10 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         }
     }
 
+    void addTask(ActivityManager.RunningTaskInfo task, WindowContainerTransaction wct) {
+        wct.reparent(task.token, mRootTaskInfo.token, true /* onTop*/);
+    }
+
     void setBounds(Rect bounds, WindowContainerTransaction wct) {
         wct.setBounds(mRootTaskInfo.token, bounds);
     }
@@ -311,7 +322,7 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
     }
 
     void onSplitScreenListenerRegistered(SplitScreen.SplitScreenListener listener,
-            @SplitScreen.StageType int stage) {
+            @StageType int stage) {
         for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
             int taskId = mChildrenTaskInfo.keyAt(i);
             listener.onTaskStageChanged(taskId, stage,

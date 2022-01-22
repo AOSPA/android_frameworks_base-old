@@ -21,9 +21,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.media.AudioAttributes;
-import android.os.vibrator.PrebakedSegment;
-import android.os.vibrator.VibrationEffectSegment;
-import android.util.Slog;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -81,6 +78,11 @@ public final class VibrationAttributes implements Parcelable {
      * actions, such as emulation of physical effects, and texting feedback vibration.
      */
     public static final int USAGE_CLASS_FEEDBACK = 0x2;
+    /**
+     * Vibration usage class value to use when the vibration is part of media, such as music, movie,
+     * soundtrack, game or animations.
+     */
+    public static final int USAGE_CLASS_MEDIA = 0x3;
 
     /**
      * Mask for vibration usage class value.
@@ -121,11 +123,20 @@ public final class VibrationAttributes implements Parcelable {
      * such as a fingerprint sensor.
      */
     public static final int USAGE_HARDWARE_FEEDBACK = 0x30 | USAGE_CLASS_FEEDBACK;
+    /**
+     * Usage value to use for accessibility vibrations, such as with a screen reader.
+     */
+    public static final int USAGE_ACCESSIBILITY = 0x40 | USAGE_CLASS_FEEDBACK;
+    /**
+     * Usage value to use for media vibrations, such as music, movie, soundtrack, animations, games,
+     * or any interactive media that isn't for touch feedback specifically.
+     */
+    public static final int USAGE_MEDIA = 0x10 | USAGE_CLASS_MEDIA;
 
     /**
      * @hide
      */
-    @IntDef(prefix = { "FLAG_" }, value = {
+    @IntDef(prefix = { "FLAG_" }, flag = true, value = {
             FLAG_BYPASS_INTERRUPTION_POLICY,
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -142,14 +153,17 @@ public final class VibrationAttributes implements Parcelable {
      */
     public static final int FLAG_ALL_SUPPORTED = FLAG_BYPASS_INTERRUPTION_POLICY;
 
-    // If a vibration is playing for longer than 5s, it's probably not haptic feedback
-    private static final long MAX_HAPTIC_FEEDBACK_DURATION = 5000;
+    /** Creates a new {@link VibrationAttributes} instance with given usage. */
+    public static @NonNull VibrationAttributes createForUsage(int usage) {
+        return new VibrationAttributes.Builder().setUsage(usage).build();
+    }
 
     private final int mUsage;
     private final int mFlags;
     private final int mOriginalAudioUsage;
 
-    private VibrationAttributes(int usage, int audioUsage, int flags) {
+    private VibrationAttributes(@Usage int usage, @AudioAttributes.AttributeUsage int audioUsage,
+            @Flag int flags) {
         mUsage = usage;
         mOriginalAudioUsage = audioUsage;
         mFlags = flags & FLAG_ALL_SUPPORTED;
@@ -159,6 +173,7 @@ public final class VibrationAttributes implements Parcelable {
      * Return the vibration usage class.
      * @return USAGE_CLASS_ALARM, USAGE_CLASS_FEEDBACK or USAGE_CLASS_UNKNOWN
      */
+    @UsageClass
     public int getUsageClass() {
         return mUsage & USAGE_CLASS_MASK;
     }
@@ -167,6 +182,7 @@ public final class VibrationAttributes implements Parcelable {
      * Return the vibration usage.
      * @return one of the values that can be set in {@link Builder#setUsage(int)}
      */
+    @Usage
     public int getUsage() {
         return mUsage;
     }
@@ -175,6 +191,7 @@ public final class VibrationAttributes implements Parcelable {
      * Return the flags.
      * @return a combined mask of all flags
      */
+    @Flag
     public int getFlags() {
         return mFlags;
     }
@@ -183,7 +200,7 @@ public final class VibrationAttributes implements Parcelable {
      * Check whether a flag is set
      * @return true if a flag is set and false otherwise
      */
-    public boolean isFlagSet(int flag) {
+    public boolean isFlagSet(@Flag int flag) {
         return (mFlags & flag) > 0;
     }
 
@@ -193,6 +210,7 @@ public final class VibrationAttributes implements Parcelable {
      * @hide
      */
     @TestApi
+    @AudioAttributes.AttributeUsage
     public int getAudioUsage() {
         if (mOriginalAudioUsage != AudioAttributes.USAGE_UNKNOWN) {
             // Return same audio usage set in the Builder.
@@ -203,13 +221,17 @@ public final class VibrationAttributes implements Parcelable {
             case USAGE_NOTIFICATION:
                 return AudioAttributes.USAGE_NOTIFICATION;
             case USAGE_COMMUNICATION_REQUEST:
-                return AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST;
+                return AudioAttributes.USAGE_VOICE_COMMUNICATION;
             case USAGE_RINGTONE:
                 return AudioAttributes.USAGE_NOTIFICATION_RINGTONE;
             case USAGE_TOUCH:
                 return AudioAttributes.USAGE_ASSISTANCE_SONIFICATION;
             case USAGE_ALARM:
                 return AudioAttributes.USAGE_ALARM;
+            case USAGE_ACCESSIBILITY:
+                return AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY;
+            case USAGE_MEDIA:
+                return AudioAttributes.USAGE_MEDIA;
             default:
                 return AudioAttributes.USAGE_UNKNOWN;
         }
@@ -275,18 +297,22 @@ public final class VibrationAttributes implements Parcelable {
     }
 
     /** @hide */
-    public static String usageToString(int usage) {
+    public static String usageToString(@Usage int usage) {
         switch (usage) {
             case USAGE_UNKNOWN:
                 return "UNKNOWN";
             case USAGE_ALARM:
                 return "ALARM";
+            case USAGE_ACCESSIBILITY:
+                return "ACCESSIBILITY";
             case USAGE_RINGTONE:
                 return "RINGTONE";
             case USAGE_NOTIFICATION:
                 return "NOTIFICATION";
             case USAGE_COMMUNICATION_REQUEST:
                 return "COMMUNICATION_REQUEST";
+            case USAGE_MEDIA:
+                return "MEDIA";
             case USAGE_TOUCH:
                 return "TOUCH";
             case USAGE_PHYSICAL_EMULATION:
@@ -326,54 +352,10 @@ public final class VibrationAttributes implements Parcelable {
 
         /**
          * Constructs a new Builder from AudioAttributes.
-         * @hide
          */
-        @TestApi
-        public Builder(@NonNull AudioAttributes audio, @Nullable VibrationEffect effect) {
+        public Builder(@NonNull AudioAttributes audio) {
             setUsage(audio);
             setFlags(audio);
-            applyHapticFeedbackHeuristics(effect);
-        }
-
-        private void applyHapticFeedbackHeuristics(@Nullable VibrationEffect effect) {
-            if (effect != null) {
-                PrebakedSegment prebaked = extractPrebakedSegment(effect);
-                if (mUsage == USAGE_UNKNOWN && prebaked != null) {
-                    switch (prebaked.getEffectId()) {
-                        case VibrationEffect.EFFECT_CLICK:
-                        case VibrationEffect.EFFECT_DOUBLE_CLICK:
-                        case VibrationEffect.EFFECT_HEAVY_CLICK:
-                        case VibrationEffect.EFFECT_TEXTURE_TICK:
-                        case VibrationEffect.EFFECT_TICK:
-                        case VibrationEffect.EFFECT_POP:
-                        case VibrationEffect.EFFECT_THUD:
-                            mUsage = USAGE_TOUCH;
-                            break;
-                        default:
-                            Slog.w(TAG, "Unknown prebaked vibration effect, assuming it isn't "
-                                    + "haptic feedback");
-                    }
-                }
-                final long duration = effect.getDuration();
-                if (mUsage == USAGE_UNKNOWN && duration >= 0
-                        && duration < MAX_HAPTIC_FEEDBACK_DURATION) {
-                    mUsage = USAGE_TOUCH;
-                }
-            }
-        }
-
-        @Nullable
-        private PrebakedSegment extractPrebakedSegment(VibrationEffect effect) {
-            if (effect instanceof VibrationEffect.Composed) {
-                VibrationEffect.Composed composed = (VibrationEffect.Composed) effect;
-                if (composed.getSegments().size() == 1) {
-                    VibrationEffectSegment segment = composed.getSegments().get(0);
-                    if (segment instanceof PrebakedSegment) {
-                        return (PrebakedSegment) segment;
-                    }
-                }
-            }
-            return null;
         }
 
         private void setUsage(@NonNull AudioAttributes audio) {
@@ -383,20 +365,30 @@ public final class VibrationAttributes implements Parcelable {
                 case AudioAttributes.USAGE_NOTIFICATION_EVENT:
                 case AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_DELAYED:
                 case AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT:
+                case AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST:
                     mUsage = USAGE_NOTIFICATION;
                     break;
-                case AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST:
-                case AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY:
+                case AudioAttributes.USAGE_VOICE_COMMUNICATION:
+                case AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING:
+                case AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE:
+                case AudioAttributes.USAGE_ASSISTANT:
                     mUsage = USAGE_COMMUNICATION_REQUEST;
                     break;
                 case AudioAttributes.USAGE_NOTIFICATION_RINGTONE:
                     mUsage = USAGE_RINGTONE;
+                    break;
+                case AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY:
+                    mUsage = USAGE_ACCESSIBILITY;
                     break;
                 case AudioAttributes.USAGE_ASSISTANCE_SONIFICATION:
                     mUsage = USAGE_TOUCH;
                     break;
                 case AudioAttributes.USAGE_ALARM:
                     mUsage = USAGE_ALARM;
+                    break;
+                case AudioAttributes.USAGE_MEDIA:
+                case AudioAttributes.USAGE_GAME:
+                    mUsage = USAGE_MEDIA;
                     break;
                 default:
                     mUsage = USAGE_UNKNOWN;
@@ -428,9 +420,11 @@ public final class VibrationAttributes implements Parcelable {
          * {@link VibrationAttributes#USAGE_TOUCH},
          * {@link VibrationAttributes#USAGE_PHYSICAL_EMULATION},
          * {@link VibrationAttributes#USAGE_HARDWARE_FEEDBACK}.
+         * {@link VibrationAttributes#USAGE_ACCESSIBILITY}.
+         * {@link VibrationAttributes#USAGE_MEDIA}.
          * @return the same Builder instance.
          */
-        public @NonNull Builder setUsage(int usage) {
+        public @NonNull Builder setUsage(@Usage int usage) {
             mOriginalAudioUsage = AudioAttributes.USAGE_UNKNOWN;
             mUsage = usage;
             return this;
@@ -442,7 +436,7 @@ public final class VibrationAttributes implements Parcelable {
          * @param mask Bit range that should be changed.
          * @return the same Builder instance.
          */
-        public @NonNull Builder setFlags(int flags, int mask) {
+        public @NonNull Builder setFlags(@Flag int flags, int mask) {
             mask &= FLAG_ALL_SUPPORTED;
             mFlags = (mFlags & ~mask) | (flags & mask);
             return this;

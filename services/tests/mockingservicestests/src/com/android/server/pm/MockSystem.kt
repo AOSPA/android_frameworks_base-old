@@ -47,6 +47,7 @@ import com.android.dx.mockito.inline.extended.ExtendedMockito
 import com.android.dx.mockito.inline.extended.ExtendedMockito.any
 import com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean
 import com.android.dx.mockito.inline.extended.ExtendedMockito.anyInt
+import com.android.dx.mockito.inline.extended.ExtendedMockito.anyLong
 import com.android.dx.mockito.inline.extended.ExtendedMockito.anyString
 import com.android.dx.mockito.inline.extended.ExtendedMockito.argThat
 import com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn
@@ -149,7 +150,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
         }
         whenever(mocks.settings.addPackageLPw(nullable(), nullable(), nullable(), nullable(),
                 nullable(), nullable(), nullable(), nullable(), nullable(), nullable(), nullable(),
-                nullable(), nullable(), nullable(), nullable())) {
+                nullable(), nullable(), nullable(), nullable(), nullable(), nullable())) {
             val name: String = getArgument(0)
             val pendingAdd = mPendingPackageAdds.firstOrNull { it.first == name }
                     ?: return@whenever null
@@ -617,7 +618,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     private fun mockQueryActivities(action: String, vararg activities: ActivityInfo) {
         whenever(mocks.componentResolver.queryActivities(
                 argThat { intent: Intent? -> intent != null && (action == intent.action) },
-                nullable(), anyInt(), anyInt())) {
+                nullable(), anyLong(), anyInt())) {
             ArrayList(activities.asList().map { info: ActivityInfo? ->
                 ResolveInfo().apply { activityInfo = info }
             })
@@ -627,7 +628,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     private fun mockQueryServices(action: String, vararg services: ServiceInfo) {
         whenever(mocks.componentResolver.queryServices(
                 argThat { intent: Intent? -> intent != null && (action == intent.action) },
-                nullable(), anyInt(), anyInt())) {
+                nullable(), anyLong(), anyInt())) {
             ArrayList(services.asList().map { info ->
                 ResolveInfo().apply { serviceInfo = info }
             })

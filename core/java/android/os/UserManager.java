@@ -70,6 +70,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -118,6 +119,7 @@ public class UserManager {
      * User type representing a guest user that may be transient.
      * @hide
      */
+    @SystemApi
     public static final String USER_TYPE_FULL_GUEST = "android.os.usertype.full.GUEST";
 
     /**
@@ -304,6 +306,25 @@ public class UserManager {
      * @see #getUserRestrictions()
      */
     public static final String DISALLOW_WIFI_TETHERING = "no_wifi_tethering";
+
+    /**
+     * Specifies if users are disallowed from sharing Wi-Fi for admin configured networks.
+     *
+     * <p>Device owner and profile owner can set this restriction.
+     * When it is set by any of these owners, it prevents all users from
+     * sharing Wi-Fi for networks configured by these owners.
+     * Other networks not configured by these owners are not affected.
+     *
+     * <p>The default value is <code>false</code>.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_SHARING_ADMIN_CONFIGURED_WIFI =
+            "no_sharing_admin_configured_wifi";
 
     /**
      * Specifies if a user is disallowed from changing the device
@@ -1476,6 +1497,9 @@ public class UserManager {
             DISALLOW_CAMERA_TOGGLE,
             KEY_RESTRICTIONS_PENDING,
             DISALLOW_BIOMETRIC,
+            DISALLOW_CHANGE_WIFI_STATE,
+            DISALLOW_WIFI_TETHERING,
+            DISALLOW_SHARING_ADMIN_CONFIGURED_WIFI,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UserRestrictionKey {}
@@ -1660,6 +1684,14 @@ public class UserManager {
     public static final int USER_OPERATION_ERROR_MAX_USERS = 6;
 
     /**
+     * Indicates user operation failed because a user with that account already exists.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int USER_OPERATION_ERROR_USER_ACCOUNT_ALREADY_EXISTS = 7;
+
+    /**
      * Result returned from various user operations.
      *
      * @hide
@@ -1672,7 +1704,8 @@ public class UserManager {
             USER_OPERATION_ERROR_MAX_RUNNING_USERS,
             USER_OPERATION_ERROR_CURRENT_USER,
             USER_OPERATION_ERROR_LOW_STORAGE,
-            USER_OPERATION_ERROR_MAX_USERS
+            USER_OPERATION_ERROR_MAX_USERS,
+            USER_OPERATION_ERROR_USER_ACCOUNT_ALREADY_EXISTS
     })
     public @interface UserOperationResult {}
 
@@ -3148,6 +3181,37 @@ public class UserManager {
     }
 
     /**
+     * Creates a user with the specified {@link NewUserRequest}.
+     *
+     * @param newUserRequest specify the user information
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
+            Manifest.permission.CREATE_USERS})
+    public @NonNull NewUserResponse createUser(@NonNull NewUserRequest newUserRequest) {
+        try {
+            final UserHandle userHandle = mService.createUserWithAttributes(
+                    newUserRequest.getName(),
+                    newUserRequest.getUserType(),
+                    newUserRequest.getFlags(),
+                    newUserRequest.getUserIcon(),
+                    newUserRequest.getAccountName(),
+                    newUserRequest.getAccountType(),
+                    newUserRequest.getAccountOptions());
+
+            return new NewUserResponse(userHandle, USER_OPERATION_SUCCESS);
+
+        } catch (ServiceSpecificException e) {
+            Log.w(TAG, "Exception while creating user " + newUserRequest, e);
+            return new NewUserResponse(null, e.errorCode);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Pre-creates a user of the specified type. Default user restrictions will be applied.
      *
      * <p>This method can be used by OEMs to "warm" up the user creation by pre-creating some users
@@ -3812,13 +3876,19 @@ public class UserManager {
     }
 
     /**
-     * Checks whether it's possible to add more users. Caller must hold the MANAGE_USERS
-     * permission.
+     * Checks whether it's possible to add more users.
      *
      * @return true if more users can be added, false if limit has been reached.
+     *
+     * @deprecated use {@link #canAddMoreUsers(String)} instead.
+     *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    @Deprecated
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS
+    })
     public boolean canAddMoreUsers() {
         // TODO(b/142482943): UMS has different logic, excluding Demo and Profile from counting. Why
         //                    not here? The logic is inconsistent. See UMS.canAddMoreManagedProfiles
@@ -3832,6 +3902,25 @@ public class UserManager {
             }
         }
         return aliveUserCount < getMaxSupportedUsers();
+    }
+
+    /**
+     * Checks whether it is possible to add more users of the given user type.
+     *
+     * @param userType the type of user, such as {@link UserManager#USER_TYPE_FULL_SECONDARY}.
+     * @return true if more users of the given type can be added, otherwise false.
+     * @hide
+     */
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS
+    })
+    public boolean canAddMoreUsers(@NonNull String userType) {
+        try {
+            return canAddMoreUsers() && mService.canAddMoreUsersOfType(userType);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -3863,6 +3952,25 @@ public class UserManager {
     public boolean canAddMoreProfilesToUser(@NonNull String userType, @UserIdInt int userId) {
         try {
             return mService.canAddMoreProfilesToUser(userType, userId, false);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Checks whether this device supports users of the given user type.
+     *
+     * @param userType the type of user, such as {@link UserManager#USER_TYPE_FULL_SECONDARY}.
+     * @return true if the creation of users of the given user type is enabled on this device.
+     * @hide
+     */
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS
+    })
+    public boolean isUserTypeEnabled(@NonNull String userType) {
+        try {
+            return mService.isUserTypeEnabled(userType);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -4879,17 +4987,40 @@ public class UserManager {
     }
 
     /**
-     * @hide
      * Checks if any uninitialized user has the specific seed account name and type.
      *
      * @param accountName The account name to check for
      * @param accountType The account type of the account to check for
      * @return whether the seed account was found
+     * @hide
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean someUserHasSeedAccount(String accountName, String accountType) {
         try {
             return mService.someUserHasSeedAccount(accountName, accountType);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Checks if any initialized or uninitialized user has the specific account name and type.
+     *
+     * @param accountName The account name to check for
+     * @param accountType The account type of the account to check for
+     * @return whether the account was found
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
+            Manifest.permission.CREATE_USERS})
+    public boolean someUserHasAccount(
+            @NonNull String accountName, @NonNull String accountType) {
+        Objects.requireNonNull(accountName, "accountName must not be null");
+        Objects.requireNonNull(accountType, "accountType must not be null");
+
+        try {
+            return mService.someUserHasAccount(accountName, accountType);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

@@ -19,7 +19,12 @@ package com.android.systemui.media.dialog;
 import android.app.Notification;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.media.MediaMetadata;
@@ -181,6 +186,20 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
         mMetricLogger.logOutputFailure(mMediaDevices, reason);
     }
 
+    Drawable getAppSourceIcon() {
+        if (mPackageName.isEmpty()) {
+            return null;
+        }
+        try {
+            Log.d(TAG, "try to get app icon");
+            return mContext.getPackageManager()
+                    .getApplicationIcon(mPackageName);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.d(TAG, "icon not found");
+            return null;
+        }
+    }
+
     CharSequence getHeaderTitle() {
         if (mMediaController != null) {
             final MediaMetadata metadata = mMediaController.getMetadata();
@@ -232,7 +251,22 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
             // Use default Bluetooth device icon to handle getIcon() is null case.
             drawable = mContext.getDrawable(com.android.internal.R.drawable.ic_bt_headphones_a2dp);
         }
+        if (!(drawable instanceof BitmapDrawable)) {
+            setColorFilter(drawable,
+                    mLocalMediaManager.getCurrentConnectedDevice().getId().equals(device.getId()));
+        }
         return BluetoothUtils.createIconWithDrawable(drawable);
+    }
+
+    void setColorFilter(Drawable drawable, boolean isConnected) {
+        final ColorStateList list =
+                mContext.getResources().getColorStateList(
+                        !hasAdjustVolumeUserRestriction() && isConnected && !isTransferring()
+                                ? R.color.media_dialog_active_item_main_content
+                                : R.color.media_dialog_inactive_item_main_content,
+                        mContext.getTheme());
+        drawable.setColorFilter(new PorterDuffColorFilter(list.getDefaultColor(),
+                PorterDuff.Mode.SRC_IN));
     }
 
     IconCompat getNotificationIcon() {
@@ -242,7 +276,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
         for (NotificationEntry entry
                 : mNotificationEntryManager.getActiveNotificationsForCurrentUser()) {
             final Notification notification = entry.getSbn().getNotification();
-            if (notification.hasMediaSession()
+            if (notification.isMediaNotification()
                     && TextUtils.equals(entry.getSbn().getPackageName(), mPackageName)) {
                 final Icon icon = notification.getLargeIcon();
                 if (icon == null) {
