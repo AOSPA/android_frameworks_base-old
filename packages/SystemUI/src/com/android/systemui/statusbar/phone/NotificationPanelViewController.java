@@ -26,6 +26,7 @@ import static androidx.constraintlayout.widget.ConstraintSet.TOP;
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE;
 import static com.android.keyguard.KeyguardClockSwitch.LARGE;
 import static com.android.keyguard.KeyguardClockSwitch.SMALL;
+import static com.android.systemui.animation.Interpolators.EMPHASIZED_DECELERATE;
 import static com.android.systemui.classifier.Classifier.QS_COLLAPSE;
 import static com.android.systemui.classifier.Classifier.QUICK_SETTINGS;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
@@ -34,6 +35,7 @@ import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
 import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
+import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_FOLD_TO_AOD;
 import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_CLOSED;
 import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_OPEN;
 import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_OPENING;
@@ -111,6 +113,7 @@ import com.android.keyguard.dagger.KeyguardUserSwitcherComponent;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.animation.LaunchAnimator;
 import com.android.systemui.biometrics.AuthController;
@@ -240,7 +243,8 @@ public class NotificationPanelViewController extends PanelViewController {
      */
     private static final int FLING_HIDE = 2;
     private static final long ANIMATION_DELAY_ICON_FADE_IN =
-            LaunchAnimator.ANIMATION_DURATION - CollapsedStatusBarFragment.FADE_IN_DURATION
+            ActivityLaunchAnimator.TIMINGS.getTotalDuration()
+                    - CollapsedStatusBarFragment.FADE_IN_DURATION
                     - CollapsedStatusBarFragment.FADE_IN_DELAY - 48;
 
     private final DozeParameters mDozeParameters;
@@ -353,7 +357,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private NotificationsQSContainerController mNotificationsQSContainerController;
     private boolean mAnimateNextPositionUpdate;
     private float mQuickQsOffsetHeight;
-    private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
+    private ScreenOffAnimationController mScreenOffAnimationController;
 
     private final EmergencyButtonController.Factory mEmergencyButtonControllerFactory;
     private EmergencyButtonController mEmergencyButtonController;
@@ -521,8 +525,6 @@ public class NotificationPanelViewController extends PanelViewController {
     private final CommunalSourceMonitor.Callback mCommunalSourceMonitorCallback;
 
     private WeakReference<CommunalSource> mCommunalSource;
-
-    private final CommunalSource.Callback mCommunalSourceCallback;
 
     private final CommandQueue mCommandQueue;
     private final NotificationLockscreenUserManager mLockscreenUserManager;
@@ -776,7 +778,7 @@ public class NotificationPanelViewController extends PanelViewController {
             @Main Executor uiExecutor,
             SecureSettings secureSettings,
             SplitShadeHeaderController splitShadeHeaderController,
-            UnlockedScreenOffAnimationController unlockedScreenOffAnimationController,
+            ScreenOffAnimationController screenOffAnimationController,
             LockscreenGestureLogger lockscreenGestureLogger,
             PanelExpansionStateManager panelExpansionStateManager,
             NotificationRemoteInputManager remoteInputManager,
@@ -786,6 +788,7 @@ public class NotificationPanelViewController extends PanelViewController {
             QsFrameTranslateController qsFrameTranslateController,
             EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         super(view,
+                featureFlags,
                 falsingManager,
                 dozeLog,
                 keyguardStateController,
@@ -888,7 +891,7 @@ public class NotificationPanelViewController extends PanelViewController {
         mConversationNotificationManager = conversationNotificationManager;
         mAuthController = authController;
         mLockIconViewController = lockIconViewController;
-        mUnlockedScreenOffAnimationController = unlockedScreenOffAnimationController;
+        mScreenOffAnimationController = screenOffAnimationController;
         mRemoteInputManager = remoteInputManager;
 
         int currentMode = navigationModeController.addListener(
@@ -910,9 +913,6 @@ public class NotificationPanelViewController extends PanelViewController {
 
         mMaxKeyguardNotifications = resources.getInteger(R.integer.keyguard_max_notification_count);
         mKeyguardUnfoldTransition = unfoldComponent.map(c -> c.getKeyguardUnfoldTransition());
-        mCommunalSourceCallback = () -> {
-            mUiExecutor.execute(() -> setCommunalSource(null /*source*/));
-        };
 
         mCommunalSourceMonitorCallback = (source) -> {
             mUiExecutor.execute(() -> setCommunalSource(source));
@@ -1419,7 +1419,7 @@ public class NotificationPanelViewController extends PanelViewController {
         }
 
         float expandedFraction =
-                mUnlockedScreenOffAnimationController.isScreenOffAnimationPlaying()
+                mScreenOffAnimationController.shouldExpandNotifications()
                         ? 1.0f : getExpandedFraction();
         mCommunalPositionAlgorithm.setup(expandedFraction, mCommunalView.getHeight());
         mCommunalPositionAlgorithm.run(mCommunalPositionResult);
@@ -1436,20 +1436,21 @@ public class NotificationPanelViewController extends PanelViewController {
                 .getVisibleNotificationCount() != 0 || mMediaDataManager.hasActiveMedia();
         boolean splitShadeWithActiveMedia =
                 mShouldUseSplitNotificationShade && mMediaDataManager.hasActiveMedia();
+        boolean shouldAnimateClockChange = mScreenOffAnimationController.shouldAnimateClockChange();
         if ((hasVisibleNotifications && !mShouldUseSplitNotificationShade)
                 || (splitShadeWithActiveMedia && !mDozing)) {
-            mKeyguardStatusViewController.displayClock(SMALL);
+            mKeyguardStatusViewController.displayClock(SMALL, shouldAnimateClockChange);
         } else {
-            mKeyguardStatusViewController.displayClock(LARGE);
+            mKeyguardStatusViewController.displayClock(LARGE, shouldAnimateClockChange);
         }
         updateKeyguardStatusViewAlignment(true /* animate */);
         int userIconHeight = mKeyguardQsUserSwitchController != null
                 ? mKeyguardQsUserSwitchController.getUserIconHeight() : 0;
         float expandedFraction =
-                mUnlockedScreenOffAnimationController.isScreenOffAnimationPlaying()
+                mScreenOffAnimationController.shouldExpandNotifications()
                         ? 1.0f : getExpandedFraction();
         float darkamount =
-                mUnlockedScreenOffAnimationController.isScreenOffAnimationPlaying()
+                mScreenOffAnimationController.shouldExpandNotifications()
                         ? 1.0f : mInterpolatedDarkAmount;
 
         float udfpsAodTopLocation = -1f;
@@ -1476,7 +1477,7 @@ public class NotificationPanelViewController extends PanelViewController {
                 mKeyguardStatusViewController.isClockTopAligned());
         mClockPositionAlgorithm.run(mClockPositionResult);
         boolean animate = mNotificationStackScrollLayoutController.isAddOrRemoveAnimationPending();
-        boolean animateClock = animate || mAnimateNextPositionUpdate;
+        boolean animateClock = (animate || mAnimateNextPositionUpdate) && shouldAnimateClockChange;
         mKeyguardStatusViewController.updatePosition(
                 mClockPositionResult.clockX, mClockPositionResult.clockY,
                 mClockPositionResult.clockScale, animateClock);
@@ -2403,11 +2404,14 @@ public class NotificationPanelViewController extends PanelViewController {
 
     private void updateQsExpansion() {
         if (mQs == null) return;
-        float qsExpansionFraction = computeQsExpansionFraction();
-        float squishiness = mNotificationStackScrollLayoutController
-                .getNotificationSquishinessFraction();
-        mQs.setQsExpansion(qsExpansionFraction, getExpandedFraction(), getHeaderTranslation(),
-                mQsExpandImmediate || mQsExpanded ? 1f : squishiness);
+        final float squishiness =
+                mQsExpandImmediate || mQsExpanded ? 1f : mNotificationStackScrollLayoutController
+                        .getNotificationSquishinessFraction();
+        final float qsExpansionFraction = computeQsExpansionFraction();
+        final float adjustedExpansionFraction = mShouldUseSplitNotificationShade
+                ? 1f : computeQsExpansionFraction();
+        mQs.setQsExpansion(adjustedExpansionFraction, getExpandedFraction(), getHeaderTranslation(),
+                squishiness);
         mSplitShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
         mMediaHierarchyManager.setQsExpansion(qsExpansionFraction);
         int qsPanelBottomY = calculateQsBottomPosition(qsExpansionFraction);
@@ -3424,12 +3428,6 @@ public class NotificationPanelViewController extends PanelViewController {
                     mStatusBarStateController.setState(KEYGUARD);
                 }
                 return true;
-            case StatusBarState.SHADE:
-
-                // This gets called in the middle of the touch handling, where the state is still
-                // that we are tracking the panel. Collapse the panel after this is done.
-                mView.post(mPostCollapseRunnable);
-                return false;
             default:
                 return true;
         }
@@ -3793,8 +3791,8 @@ public class NotificationPanelViewController extends PanelViewController {
     }
 
     public void applyLaunchAnimationProgress(float linearProgress) {
-        boolean hideIcons = LaunchAnimator.getProgress(linearProgress,
-                ANIMATION_DELAY_ICON_FADE_IN, 100) == 0.0f;
+        boolean hideIcons = LaunchAnimator.getProgress(ActivityLaunchAnimator.TIMINGS,
+                linearProgress, ANIMATION_DELAY_ICON_FADE_IN, 100) == 0.0f;
         if (hideIcons != mHideIconsDuringLaunchAnimation) {
             mHideIconsDuringLaunchAnimation = hideIcons;
             if (!hideIcons) {
@@ -3835,6 +3833,45 @@ public class NotificationPanelViewController extends PanelViewController {
                     false /* goingToFullShade */,
                     mBarState);
         }
+    }
+
+    /**
+     * Updates the views to the initial state for the fold to AOD animation
+     */
+    public void prepareFoldToAodAnimation() {
+        // Force show AOD UI even if we are not locked
+        showAodUi();
+
+        // Move the content of the AOD all the way to the left
+        // so we can animate to the initial position
+        final int translationAmount = mView.getResources().getDimensionPixelSize(
+                R.dimen.below_clock_padding_start);
+        mView.setTranslationX(-translationAmount);
+        mView.setAlpha(0);
+    }
+
+    /**
+     * Starts fold to AOD animation
+     */
+    public void startFoldToAodAnimation(Runnable endAction) {
+        mView.animate()
+            .translationX(0)
+            .alpha(1f)
+            .setDuration(ANIMATION_DURATION_FOLD_TO_AOD)
+            .setInterpolator(EMPHASIZED_DECELERATE)
+            .setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationCancel(Animator animation) {
+                    endAction.run();
+                }
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    endAction.run();
+                }
+            })
+            .start();
+
+        mKeyguardStatusViewController.animateFoldToAod();
     }
 
     /** */
@@ -3949,6 +3986,10 @@ public class NotificationPanelViewController extends PanelViewController {
 
     public void setAlpha(float alpha) {
         mView.setAlpha(alpha);
+    }
+
+    public void resetTranslation() {
+        mView.setTranslationX(0f);
     }
 
     public ViewPropertyAnimator fadeOut(long startDelayMs, long durationMs, Runnable endAction) {
@@ -4568,7 +4609,7 @@ public class NotificationPanelViewController extends PanelViewController {
             int oldState = mBarState;
             boolean keyguardShowing = statusBarState == KEYGUARD;
 
-            if (mDozeParameters.shouldControlUnlockedScreenOff()
+            if (mDozeParameters.shouldDelayKeyguardShow()
                     && oldState == StatusBarState.SHADE
                     && statusBarState == KEYGUARD) {
                 // This means we're doing the screen off animation - position the keyguard status
@@ -4630,7 +4671,7 @@ public class NotificationPanelViewController extends PanelViewController {
             } else {
                 final boolean animatingUnlockedShadeToKeyguard = oldState == SHADE
                         && statusBarState == KEYGUARD
-                        && mUnlockedScreenOffAnimationController.isScreenOffAnimationPlaying();
+                        && mScreenOffAnimationController.isKeyguardShowDelayed();
                 if (!animatingUnlockedShadeToKeyguard) {
                     // Only make the status bar visible if we're not animating the screen off, since
                     // we only want to be showing the clock/notifications during the animation.
@@ -4724,7 +4765,6 @@ public class NotificationPanelViewController extends PanelViewController {
         CommunalSource existingSource = mCommunalSource != null ? mCommunalSource.get() : null;
 
         if (existingSource != null) {
-            existingSource.removeCallback(mCommunalSourceCallback);
             mCommunalViewController.show(null /*source*/);
         }
 
@@ -4733,7 +4773,6 @@ public class NotificationPanelViewController extends PanelViewController {
         CommunalSource currentSource = mCommunalSource != null ? mCommunalSource.get() : null;
         // Set source and register callback
         if (currentSource != null && mCommunalViewController != null) {
-            currentSource.addCallback(mCommunalSourceCallback);
             mCommunalViewController.show(source);
         }
 

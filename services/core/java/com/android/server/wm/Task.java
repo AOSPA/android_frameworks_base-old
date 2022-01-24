@@ -1453,11 +1453,11 @@ class Task extends TaskFragment {
     }
 
     /** Called when an {@link ActivityRecord} is added as a descendant */
-    void onDescendantActivityAdded(boolean hadChild, int activityType, ActivityRecord r) {
+    void onDescendantActivityAdded(boolean hadActivity, int activityType, ActivityRecord r) {
         warnForNonLeafTask("onDescendantActivityAdded");
 
         // Only set this based on the first activity
-        if (!hadChild) {
+        if (!hadActivity) {
             if (r.getActivityType() == ACTIVITY_TYPE_UNDEFINED) {
                 // Normally non-standard activity type for the activity record will be set when the
                 // object is created, however we delay setting the standard application type until
@@ -3128,14 +3128,6 @@ class Task extends TaskFragment {
     }
 
     @Override
-    boolean fillsParent() {
-        // From the perspective of policy, we still want to report that this task fills parent
-        // in fullscreen windowing mode even it doesn't match parent bounds because there will be
-        // letterbox around its real content.
-        return getWindowingMode() == WINDOWING_MODE_FULLSCREEN || matchParentBounds();
-    }
-
-    @Override
     void forAllLeafTasks(Consumer<Task> callback, boolean traverseTopToBottom) {
         final int count = mChildren.size();
         boolean isLeafTask = true;
@@ -4547,14 +4539,15 @@ class Task extends TaskFragment {
             }
             super.setWindowingMode(windowingMode);
 
-            // Try reparent pinned activity back to its original task after onConfigurationChanged
-            // cascade finishes. This is done on Task level instead of
-            // {@link ActivityRecord#onConfigurationChanged(Configuration)} since when we exit PiP,
-            // we set final windowing mode on the ActivityRecord first and then on its Task when
-            // the exit PiP transition finishes. Meanwhile, the exit transition is always
-            // performed on its original task, reparent immediately in ActivityRecord breaks it.
-            if (currentMode == WINDOWING_MODE_PINNED) {
-                if (topActivity != null && topActivity.getLastParentBeforePip() != null) {
+            if (currentMode == WINDOWING_MODE_PINNED && topActivity != null) {
+                // Try reparent pinned activity back to its original task after
+                // onConfigurationChanged cascade finishes. This is done on Task level instead of
+                // {@link ActivityRecord#onConfigurationChanged(Configuration)} since when we exit
+                // PiP, we set final windowing mode on the ActivityRecord first and then on its
+                // Task when the exit PiP transition finishes. Meanwhile, the exit transition is
+                // always performed on its original task, reparent immediately in ActivityRecord
+                // breaks it.
+                if (topActivity.getLastParentBeforePip() != null) {
                     // Do not reparent if the pinned task is in removal, indicated by the
                     // force hidden flag.
                     if (!isForceHidden()) {
@@ -4566,6 +4559,11 @@ class Task extends TaskFragment {
                             lastParentBeforePip.moveToFront("movePinnedActivityToOriginalTask");
                         }
                     }
+                }
+                // Resume app-switches-allowed flag when exiting from pinned mode since
+                // it does not follow the ActivityStarter path.
+                if (topActivity.shouldBeVisible()) {
+                    mAtmService.resumeAppSwitches();
                 }
             }
 

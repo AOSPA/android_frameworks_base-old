@@ -16,6 +16,8 @@
 
 package com.android.systemui.media.dialog;
 
+import static android.provider.Settings.ACTION_BLUETOOTH_PAIRING_SETTINGS;
+
 import android.app.Notification;
 import android.content.Context;
 import android.content.Intent;
@@ -35,6 +37,7 @@ import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -51,7 +54,6 @@ import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.settingslib.media.InfoMediaManager;
 import com.android.settingslib.media.LocalMediaManager;
 import com.android.settingslib.media.MediaDevice;
-import com.android.settingslib.media.MediaOutputConstants;
 import com.android.settingslib.utils.ThreadUtils;
 import com.android.systemui.R;
 import com.android.systemui.animation.DialogLaunchAnimator;
@@ -59,6 +61,7 @@ import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -74,7 +77,8 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
 
     private static final String TAG = "MediaOutputController";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
-
+    private static final String PAGE_CONNECTED_DEVICES_KEY =
+            "top_level_connected_devices";
     private final String mPackageName;
     private final Context mContext;
     private final MediaSessionManager mMediaSessionManager;
@@ -82,6 +86,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
     private final ShadeController mShadeController;
     private final ActivityStarter mActivityStarter;
     private final DialogLaunchAnimator mDialogLaunchAnimator;
+    private final SystemUIDialogManager mDialogManager;
     private final List<MediaDevice> mGroupMediaDevices = new CopyOnWriteArrayList<>();
     private final boolean mAboveStatusbar;
     private final boolean mVolumeAdjustmentForRemoteGroupSessions;
@@ -103,7 +108,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
             boolean aboveStatusbar, MediaSessionManager mediaSessionManager, LocalBluetoothManager
             lbm, ShadeController shadeController, ActivityStarter starter,
             NotificationEntryManager notificationEntryManager, UiEventLogger uiEventLogger,
-            DialogLaunchAnimator dialogLaunchAnimator) {
+            DialogLaunchAnimator dialogLaunchAnimator, SystemUIDialogManager dialogManager) {
         mContext = context;
         mPackageName = packageName;
         mMediaSessionManager = mediaSessionManager;
@@ -119,6 +124,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
         mDialogLaunchAnimator = dialogLaunchAnimator;
         mVolumeAdjustmentForRemoteGroupSessions = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_volumeAdjustmentForRemoteGroupSessions);
+        mDialogManager = dialogManager;
     }
 
     void start(@NonNull Callback cb) {
@@ -485,23 +491,34 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
         mDialogLaunchAnimator.disableAllCurrentDialogsExitAnimations();
 
         mCallback.dismissDialog();
-        final ActivityStarter.OnDismissAction postKeyguardAction = () -> {
-            mContext.sendBroadcast(new Intent()
-                    .setAction(MediaOutputConstants.ACTION_LAUNCH_BLUETOOTH_PAIRING)
-                    .setPackage(MediaOutputConstants.SETTINGS_PACKAGE_NAME));
-            mShadeController.animateCollapsePanels();
-            return true;
-        };
-        mActivityStarter.dismissKeyguardThenExecute(postKeyguardAction, null, true);
+        Intent launchIntent =
+                new Intent(ACTION_BLUETOOTH_PAIRING_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        final Intent deepLinkIntent =
+                new Intent(Settings.ACTION_SETTINGS_EMBED_DEEP_LINK_ACTIVITY);
+        if (deepLinkIntent.resolveActivity(mContext.getPackageManager()) != null) {
+            Log.d(TAG, "Device support split mode, launch page with deep link");
+            deepLinkIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            deepLinkIntent.putExtra(
+                    Settings.EXTRA_SETTINGS_EMBEDDED_DEEP_LINK_INTENT_URI,
+                    launchIntent.toUri(Intent.URI_INTENT_SCHEME));
+            deepLinkIntent.putExtra(
+                    Settings.EXTRA_SETTINGS_EMBEDDED_DEEP_LINK_HIGHLIGHT_MENU_KEY,
+                    PAGE_CONNECTED_DEVICES_KEY);
+            mActivityStarter.startActivity(deepLinkIntent, true);
+            return;
+        }
+        mActivityStarter.startActivity(launchIntent, true);
     }
 
     void launchMediaOutputGroupDialog(View mediaOutputDialog) {
         // We show the output group dialog from the output dialog.
         MediaOutputController controller = new MediaOutputController(mContext, mPackageName,
                 mAboveStatusbar, mMediaSessionManager, mLocalBluetoothManager, mShadeController,
-                mActivityStarter, mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator);
+                mActivityStarter, mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator,
+                mDialogManager);
         MediaOutputGroupDialog dialog = new MediaOutputGroupDialog(mContext, mAboveStatusbar,
-                controller);
+                controller, mDialogManager);
         mDialogLaunchAnimator.showFromView(dialog, mediaOutputDialog);
     }
 

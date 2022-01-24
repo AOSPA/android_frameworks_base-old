@@ -839,7 +839,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public @NonNull List<UserInfo> getUsers(boolean excludePartial, boolean excludeDying,
             boolean excludePreCreated) {
-        checkManageOrCreateUsersPermission("query users");
+        checkCreateUsersPermission("query users");
         return getUsersInternal(excludePartial, excludeDying, excludePreCreated);
     }
 
@@ -865,10 +865,10 @@ public class UserManagerService extends IUserManager.Stub {
     public List<UserInfo> getProfiles(@UserIdInt int userId, boolean enabledOnly) {
         boolean returnFullInfo;
         if (userId != UserHandle.getCallingUserId()) {
-            checkManageOrCreateUsersPermission("getting profiles related to user " + userId);
+            checkQueryOrCreateUsersPermission("getting profiles related to user " + userId);
             returnFullInfo = true;
         } else {
-            returnFullInfo = hasManageOrCreateUsersPermission();
+            returnFullInfo = hasCreateUsersPermission();
         }
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -898,7 +898,7 @@ public class UserManagerService extends IUserManager.Stub {
     public int[] getProfileIds(@UserIdInt int userId, @Nullable String userType,
             boolean enabledOnly) {
         if (userId != UserHandle.getCallingUserId()) {
-            checkManageOrCreateUsersPermission("getting profiles related to user " + userId);
+            checkQueryOrCreateUsersPermission("getting profiles related to user " + userId);
         }
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -987,7 +987,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public boolean isSameProfileGroup(@UserIdInt int userId, int otherUserId) {
         if (userId == otherUserId) return true;
-        checkManageUsersPermission("check if in the same profile group");
+        checkQueryUsersPermission("check if in the same profile group");
         return isSameProfileGroupNoChecks(userId, otherUserId);
     }
 
@@ -1388,7 +1388,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public UserInfo getUserInfo(@UserIdInt int userId) {
-        checkManageOrCreateUsersPermission("query user");
+        checkQueryOrCreateUsersPermission("query user");
         synchronized (mUsersLock) {
             return userWithName(getUserInfoLU(userId));
         }
@@ -1519,7 +1519,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean isProfile(@UserIdInt int userId) {
-        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isProfile");
+        checkQueryOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isProfile");
         synchronized (mUsersLock) {
             UserInfo userInfo = getUserInfoLU(userId);
             return userInfo != null && userInfo.isProfile();
@@ -1528,7 +1528,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean isManagedProfile(@UserIdInt int userId) {
-        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isManagedProfile");
+        checkQueryOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isManagedProfile");
         synchronized (mUsersLock) {
             UserInfo userInfo = getUserInfoLU(userId);
             return userInfo != null && userInfo.isManagedProfile();
@@ -1592,7 +1592,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public String getUserName() {
         final int callingUid = Binder.getCallingUid();
-        if (!hasManageOrCreateUsersPermission()
+        if (!hasQueryOrCreateUsersPermission()
                 && !hasPermissionGranted(
                         android.Manifest.permission.GET_ACCOUNTS_PRIVILEGED, callingUid)) {
             throw new SecurityException("You need MANAGE_USERS or CREATE_USERS or "
@@ -1628,18 +1628,59 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
+    /**
+     * Enforces that the calling user is in the same profile group as {@code userId} or that only
+     * the system UID or root's UID or apps that have the
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS INTERACT_ACROSS_USERS}
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS}
+     * can make certain calls to the UserManager.
+     *
+     * @param name used as message if SecurityException is thrown
+     * @throws SecurityException if the caller lacks the required permissions.
+     */
     private void checkManageOrInteractPermissionIfCallerInOtherProfileGroup(@UserIdInt int userId,
             String name) {
         final int callingUserId = UserHandle.getCallingUserId();
-        if (callingUserId == userId || isSameProfileGroupNoChecks(callingUserId, userId) ||
-                hasManageUsersPermission()) {
+        if (callingUserId == userId || isSameProfileGroupNoChecks(callingUserId, userId)) {
             return;
         }
-        if (!hasPermissionGranted(Manifest.permission.INTERACT_ACROSS_USERS,
-                Binder.getCallingUid())) {
-            throw new SecurityException("You need INTERACT_ACROSS_USERS or MANAGE_USERS permission "
-                    + "to: check " + name);
+        if (hasManageUsersPermission()) {
+            return;
         }
+        if (hasPermissionGranted(Manifest.permission.INTERACT_ACROSS_USERS,
+                Binder.getCallingUid())) {
+            return;
+        }
+        throw new SecurityException("You need INTERACT_ACROSS_USERS or MANAGE_USERS permission "
+                + "to: check " + name);
+    }
+
+    /**
+     * Enforces that the calling user is in the same profile group as {@code userId} or that only
+     * the system UID or root's UID or apps that have the
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS INTERACT_ACROSS_USERS}
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS} or
+     * {@link android.Manifest.permission#QUERY_USERS QUERY_USERS}
+     * can make certain calls to the UserManager.
+     *
+     * @param name used as message if SecurityException is thrown
+     * @throws SecurityException if the caller lacks the required permissions.
+     */
+    private void checkQueryOrInteractPermissionIfCallerInOtherProfileGroup(
+            @UserIdInt int userId, String name) {
+        final int callingUserId = UserHandle.getCallingUserId();
+        if (callingUserId == userId || isSameProfileGroupNoChecks(callingUserId, userId)) {
+            return;
+        }
+        if (hasQueryUsersPermission()) {
+            return;
+        }
+        if (hasPermissionGranted(
+                Manifest.permission.INTERACT_ACROSS_USERS, Binder.getCallingUid())) {
+            return;
+        }
+        throw new SecurityException("You need INTERACT_ACROSS_USERS, MANAGE_USERS, or QUERY_USERS "
+                + "permission to: check " + name);
     }
 
     @Override
@@ -1667,7 +1708,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public boolean isRestricted(@UserIdInt int userId) {
         if (userId != UserHandle.getCallingUserId()) {
-            checkManageOrCreateUsersPermission("query isRestricted for user " + userId);
+            checkCreateUsersPermission("query isRestricted for user " + userId);
         }
         synchronized (mUsersLock) {
             final UserInfo userInfo = getUserInfoLU(userId);
@@ -2147,7 +2188,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public List<EnforcingUser> getUserRestrictionSources(
             String restrictionKey, @UserIdInt int userId) {
-        checkManageUsersPermission("getUserRestrictionSource");
+        checkQueryUsersPermission("call getUserRestrictionSources.");
 
         // Shortcut for the most common case
         if (!hasUserRestriction(restrictionKey, userId)) {
@@ -2186,7 +2227,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean hasBaseUserRestriction(String restrictionKey, @UserIdInt int userId) {
-        checkManageOrCreateUsersPermission("hasBaseUserRestriction");
+        checkCreateUsersPermission("hasBaseUserRestriction");
         if (!UserRestrictionsUtils.isValidRestriction(restrictionKey)) {
             return false;
         }
@@ -2403,7 +2444,7 @@ public class UserManagerService extends IUserManager.Stub {
      */
     @Override
     public boolean canAddMoreUsersOfType(String userType) {
-        checkManageOrCreateUsersPermission("check if more users can be added.");
+        checkCreateUsersPermission("check if more users can be added.");
         final UserTypeDetails userTypeDetails = mUserTypes.get(userType);
         return userTypeDetails != null && canAddMoreUsersOfType(userTypeDetails);
     }
@@ -2411,7 +2452,7 @@ public class UserManagerService extends IUserManager.Stub {
     /** Returns whether the creation of users of the given user type is enabled on this device. */
     @Override
     public boolean isUserTypeEnabled(String userType) {
-        checkManageOrCreateUsersPermission("check if user type is enabled.");
+        checkCreateUsersPermission("check if user type is enabled.");
         final UserTypeDetails userTypeDetails = mUserTypes.get(userType);
         return userTypeDetails != null && userTypeDetails.isEnabled();
     }
@@ -2426,7 +2467,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public boolean canAddMoreProfilesToUser(String userType, @UserIdInt int userId,
             boolean allowedToRemoveOne) {
-        checkManageUsersPermission("check if more profiles can be added.");
+        checkQueryUsersPermission("check if more profiles can be added.");
         final UserTypeDetails type = mUserTypes.get(userType);
         if (type == null || !type.isEnabled()) {
             return false;
@@ -2536,24 +2577,58 @@ public class UserManagerService extends IUserManager.Stub {
      *
      * @param message used as message if SecurityException is thrown
      * @throws SecurityException if the caller is not system or root
-     * @see #hasManageOrCreateUsersPermission()
+     * @see #hasCreateUsersPermission()
      */
-    private static final void checkManageOrCreateUsersPermission(String message) {
-        if (!hasManageOrCreateUsersPermission()) {
+    private static final void checkCreateUsersPermission(String message) {
+        if (!hasCreateUsersPermission()) {
             throw new SecurityException(
                     "You either need MANAGE_USERS or CREATE_USERS permission to: " + message);
         }
     }
 
     /**
-     * Similar to {@link #checkManageOrCreateUsersPermission(String)} but when the caller is tries
+    * Enforces that only the system UID or root's UID or apps that have the
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS} or
+     * {@link android.Manifest.permission#QUERY_USERS QUERY_USERS}
+     * can make certain calls to the UserManager.
+     *
+     * @param message used as message if SecurityException is thrown
+     * @throws SecurityException if the caller lacks the required permissions.
+     */
+    private static final void checkQueryUsersPermission(String message) {
+        if (!hasQueryUsersPermission()) {
+            throw new SecurityException(
+                    "You either need MANAGE_USERS or QUERY_USERS permission to: " + message);
+        }
+    }
+
+    /**
+     * Enforces that only the system UID or root's UID or apps that have the
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS} or
+     * {@link android.Manifest.permission#CREATE_USERS CREATE_USERS} or
+     * {@link android.Manifest.permission#QUERY_USERS QUERY_USERS}
+     * can make certain calls to the UserManager.
+     *
+     * @param message used as message if SecurityException is thrown
+     * @throws SecurityException if the caller lacks the required permissions.
+     */
+    private static final void checkQueryOrCreateUsersPermission(String message) {
+        if (!hasQueryOrCreateUsersPermission()) {
+            throw new SecurityException(
+                    "You either need MANAGE_USERS, CREATE_USERS, or QUERY_USERS permission to: "
+                            + message);
+        }
+    }
+
+    /**
+     * Similar to {@link #checkCreateUsersPermission(String)} but when the caller is tries
      * to create user/profiles other than what is allowed for
      * {@link android.Manifest.permission#CREATE_USERS CREATE_USERS} permission, then it will only
      * allow callers with {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS} permission.
      */
-    private static final void checkManageOrCreateUsersPermission(int creationFlags) {
+    private static final void checkCreateUsersPermission(int creationFlags) {
         if ((creationFlags & ~ALLOWED_FLAGS_FOR_CREATE_USERS_PERMISSION) == 0) {
-            if (!hasManageOrCreateUsersPermission()) {
+            if (!hasCreateUsersPermission()) {
                 throw new SecurityException("You either need MANAGE_USERS or CREATE_USERS "
                         + "permission to create an user with flags: " + creationFlags);
             }
@@ -2597,8 +2672,28 @@ public class UserManagerService extends IUserManager.Stub {
      * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS} or
      * {@link android.Manifest.permission#CREATE_USERS CREATE_USERS}.
      */
-    private static final boolean hasManageOrCreateUsersPermission() {
+    private static final boolean hasCreateUsersPermission() {
         return hasManageUsersOrPermission(android.Manifest.permission.CREATE_USERS);
+    }
+
+    /**
+     * @return whether the calling UID is system UID or root's UID or the calling app has the
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS} or
+     * {@link android.Manifest.permission#QUERY_USERS QUERY_USERS}.
+     */
+    private static final boolean hasQueryUsersPermission() {
+        return hasManageUsersOrPermission(android.Manifest.permission.QUERY_USERS);
+    }
+
+    /**
+     * @return whether the calling UID is system UID or root's UID or the calling app has
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS} or
+     * {@link android.Manifest.permission#CREATE_USERS CREATE_USERS} or
+     * {@link android.Manifest.permission#QUERY_USERS QUERY_USERS}.
+     */
+    private static final boolean hasQueryOrCreateUsersPermission() {
+        return hasCreateUsersPermission()
+                || hasPermissionGranted(Manifest.permission.QUERY_USERS, Binder.getCallingUid());
     }
 
     /**
@@ -3477,7 +3572,7 @@ public class UserManagerService extends IUserManager.Stub {
     public UserInfo createProfileForUserWithThrow(@Nullable String name, @NonNull String userType,
             @UserInfoFlag int flags, @UserIdInt int userId, @Nullable String[] disallowedPackages)
             throws ServiceSpecificException {
-        checkManageOrCreateUsersPermission(flags);
+        checkCreateUsersPermission(flags);
         try {
             return createUserInternal(name, userType, flags, userId, disallowedPackages);
         } catch (UserManager.CheckedUserOperationException e) {
@@ -3493,7 +3588,7 @@ public class UserManagerService extends IUserManager.Stub {
             @NonNull String userType,
             @UserInfoFlag int flags, @UserIdInt int userId, @Nullable String[] disallowedPackages)
             throws ServiceSpecificException {
-        checkManageOrCreateUsersPermission(flags);
+        checkCreateUsersPermission(flags);
         try {
             return createUserInternalUnchecked(name, userType, flags, userId,
                     /* preCreate= */ false, disallowedPackages, /* token= */ null);
@@ -3506,7 +3601,7 @@ public class UserManagerService extends IUserManager.Stub {
     public UserInfo createUserWithThrow(String name, @NonNull String userType,
             @UserInfoFlag int flags)
             throws ServiceSpecificException {
-        checkManageOrCreateUsersPermission(flags);
+        checkCreateUsersPermission(flags);
         try {
             return createUserInternal(name, userType, flags, UserHandle.USER_NULL,
                     /* disallowedPackages= */ null);
@@ -3520,7 +3615,7 @@ public class UserManagerService extends IUserManager.Stub {
         final UserTypeDetails userTypeDetails = mUserTypes.get(userType);
         final int flags = userTypeDetails != null ? userTypeDetails.getDefaultUserInfoFlags() : 0;
 
-        checkManageOrCreateUsersPermission(flags);
+        checkCreateUsersPermission(flags);
 
         Preconditions.checkArgument(isUserTypeEligibleForPreCreation(userTypeDetails),
                 "cannot pre-create user of type " + userType);
@@ -3540,7 +3635,7 @@ public class UserManagerService extends IUserManager.Stub {
             String userName, String userType, @UserInfoFlag int flags,
             Bitmap userIcon,
             String accountName, String accountType, PersistableBundle accountOptions) {
-        checkManageOrCreateUsersPermission(flags);
+        checkCreateUsersPermission(flags);
 
         if (someUserHasAccountNoChecks(accountName, accountType)) {
             throw new ServiceSpecificException(
@@ -3985,7 +4080,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public String[] getPreInstallableSystemPackages(@NonNull String userType) {
-        checkManageOrCreateUsersPermission("getPreInstallableSystemPackages");
+        checkCreateUsersPermission("getPreInstallableSystemPackages");
         final Set<String> installableSystemPackages =
                 mSystemPackageInstaller.getInstallablePackagesForUserType(userType);
         if (installableSystemPackages == null) {
@@ -4110,7 +4205,7 @@ public class UserManagerService extends IUserManager.Stub {
      */
     @Override
     public UserInfo createRestrictedProfileWithThrow(@Nullable String name, int parentUserId) {
-        checkManageOrCreateUsersPermission("setupRestrictedProfile");
+        checkCreateUsersPermission("setupRestrictedProfile");
         final UserInfo user = createProfileForUserWithThrow(
                 name, UserManager.USER_TYPE_FULL_RESTRICTED, 0, parentUserId, null);
         if (user == null) {
@@ -4207,7 +4302,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public boolean removeUser(@UserIdInt int userId) {
         Slog.i(LOG_TAG, "removeUser u" + userId);
-        checkManageOrCreateUsersPermission("Only the system can remove users");
+        checkCreateUsersPermission("Only the system can remove users");
 
         final String restriction = getUserRemovalRestriction(userId);
         if (getUserRestrictions(UserHandle.getCallingUserId()).getBoolean(restriction, false)) {
@@ -4219,7 +4314,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean removeUserEvenWhenDisallowed(@UserIdInt int userId) {
-        checkManageOrCreateUsersPermission("Only the system can remove users");
+        checkCreateUsersPermission("Only the system can remove users");
         return removeUserUnchecked(userId);
     }
 
@@ -4334,7 +4429,7 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public @UserManager.RemoveResult int removeUserOrSetEphemeral(@UserIdInt int userId,
             boolean evenWhenDisallowed) {
-        checkManageOrCreateUsersPermission("Only the system can remove users");
+        checkCreateUsersPermission("Only the system can remove users");
 
         if (!evenWhenDisallowed) {
             final String restriction = getUserRemovalRestriction(userId);
@@ -5085,7 +5180,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     @Override
     public boolean someUserHasAccount(String accountName, String accountType) {
-        checkManageOrCreateUsersPermission("check seed account information");
+        checkCreateUsersPermission("check seed account information");
         return someUserHasAccountNoChecks(accountName, accountType);
     }
 

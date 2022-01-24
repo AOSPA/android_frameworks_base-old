@@ -91,11 +91,13 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
      */
     public void startActivityToSide(@NonNull Activity launchingActivity, @NonNull Intent intent,
             @Nullable Bundle options, @NonNull SplitRule sideRule,
-            @NonNull Consumer<Exception> failureCallback) {
+            @Nullable Consumer<Exception> failureCallback) {
         try {
             mPresenter.startActivityToSide(launchingActivity, intent, options, sideRule);
         } catch (Exception e) {
-            failureCallback.accept(e);
+            if (failureCallback != null) {
+                failureCallback.accept(e);
+            }
         }
     }
 
@@ -293,11 +295,12 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             @NonNull TaskFragmentContainer primaryContainer, @NonNull Activity primaryActivity,
             @NonNull TaskFragmentContainer secondaryContainer,
             @NonNull SplitRule splitRule) {
+        SplitContainer splitContainer = new SplitContainer(primaryContainer, primaryActivity,
+                secondaryContainer, splitRule);
+        // Remove container later to prevent pinning escaping toast showing in lock task mode.
         if (splitRule instanceof SplitPairRule && ((SplitPairRule) splitRule).shouldClearTop()) {
             removeExistingSecondaryContainers(wct, primaryContainer);
         }
-        SplitContainer splitContainer = new SplitContainer(primaryContainer, primaryActivity,
-                secondaryContainer, splitRule);
         mSplitContainers.add(splitContainer);
     }
 
@@ -857,5 +860,13 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             options.putBinder(ActivityOptions.KEY_LAUNCH_TASK_FRAGMENT_TOKEN,
                     launchingContainer.getTaskFragmentToken());
         }
+    }
+
+    /**
+     * Checks if an activity is embedded and its presentation is customized by a
+     * {@link android.window.TaskFragmentOrganizer} to only occupy a portion of Task bounds.
+     */
+    public boolean isActivityEmbedded(@NonNull Activity activity) {
+        return mPresenter.isActivityEmbedded(activity.getActivityToken());
     }
 }

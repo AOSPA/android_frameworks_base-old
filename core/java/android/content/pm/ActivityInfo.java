@@ -304,12 +304,23 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * @see android.R.attr#colorMode
      */
     public static final int COLOR_MODE_HDR = 2;
+    // 3 Corresponds to android::uirenderer::ColorMode::Hdr10.
+    /**
+     * Value of {@link #colorMode} indicating that the activity should use an
+     * 8 bit alpha buffer if the presentation display supports it.
+     *
+     * @see android.R.attr#colorMode
+     * @hide
+     */
+    public static final int COLOR_MODE_A8 = 4;
+
 
     /** @hide */
     @IntDef(prefix = { "COLOR_MODE_" }, value = {
             COLOR_MODE_DEFAULT,
             COLOR_MODE_WIDE_COLOR_GAMUT,
             COLOR_MODE_HDR,
+            COLOR_MODE_A8,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ColorMode {}
@@ -1017,12 +1028,12 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * This change id restricts treatments that force a given min aspect ratio to activities
      * whose orientation is fixed to portrait.
      *
-     * This treatment only takes effect if OVERRIDE_MIN_ASPECT_RATIO is also enabled.
+     * This treatment is enabled by default and only takes effect if OVERRIDE_MIN_ASPECT_RATIO is
+     * also enabled.
      * @hide
      */
     @ChangeId
     @Overridable
-    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.S_V2)
     @TestApi
     public static final long OVERRIDE_MIN_ASPECT_RATIO_PORTRAIT_ONLY = 203647190L; // buganizer id
 
@@ -1374,18 +1385,18 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * Returns if the activity should never be sandboxed to the activity window bounds.
      * @hide
      */
-    public boolean neverSandboxDisplayApis() {
+    public boolean neverSandboxDisplayApis(ConstrainDisplayApisConfig constrainDisplayApisConfig) {
         return isChangeEnabled(NEVER_SANDBOX_DISPLAY_APIS)
-                || ConstrainDisplayApisConfig.neverConstrainDisplayApis(applicationInfo);
+                || constrainDisplayApisConfig.getNeverConstrainDisplayApis(applicationInfo);
     }
 
     /**
      * Returns if the activity should always be sandboxed to the activity window bounds.
      * @hide
      */
-    public boolean alwaysSandboxDisplayApis() {
+    public boolean alwaysSandboxDisplayApis(ConstrainDisplayApisConfig constrainDisplayApisConfig) {
         return isChangeEnabled(ALWAYS_SANDBOX_DISPLAY_APIS)
-                || ConstrainDisplayApisConfig.alwaysConstrainDisplayApis(applicationInfo);
+                || constrainDisplayApisConfig.getAlwaysConstrainDisplayApis(applicationInfo);
     }
 
     /** @hide */
@@ -1682,6 +1693,8 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
                 return "COLOR_MODE_WIDE_COLOR_GAMUT";
             case COLOR_MODE_HDR:
                 return "COLOR_MODE_HDR";
+            case COLOR_MODE_A8:
+                return "COLOR_MODE_A8";
             default:
                 return Integer.toString(colorMode);
         }

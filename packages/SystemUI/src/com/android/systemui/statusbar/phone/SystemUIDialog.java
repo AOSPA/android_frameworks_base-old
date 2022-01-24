@@ -45,6 +45,10 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 /**
  * Base class for dialogs that should appear over panels and keyguard.
+ *
+ * Optionally provide a {@link SystemUIDialogManager} to its constructor to send signals to
+ * listeners on whether this dialog is showing.
+ *
  * The SystemUIDialog registers a listener for the screen off / close system dialogs broadcast,
  * and dismisses itself when it receives the broadcast.
  */
@@ -54,8 +58,9 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
             "persist.systemui.flag_tablet_dialog_width";
 
     private final Context mContext;
-    private final DismissReceiver mDismissReceiver;
+    @Nullable private final DismissReceiver mDismissReceiver;
     private final Handler mHandler = new Handler();
+    @Nullable private final SystemUIDialogManager mDialogManager;
 
     private int mLastWidth = Integer.MIN_VALUE;
     private int mLastHeight = Integer.MIN_VALUE;
@@ -66,11 +71,27 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
         this(context, R.style.Theme_SystemUI_Dialog);
     }
 
+    public SystemUIDialog(Context context, SystemUIDialogManager dialogManager) {
+        this(context, R.style.Theme_SystemUI_Dialog, true, dialogManager);
+    }
+
     public SystemUIDialog(Context context, int theme) {
         this(context, theme, true /* dismissOnDeviceLock */);
     }
 
+    public SystemUIDialog(Context context, int theme, SystemUIDialogManager dialogManager) {
+        this(context, theme, true /* dismissOnDeviceLock */, dialogManager);
+    }
+
     public SystemUIDialog(Context context, int theme, boolean dismissOnDeviceLock) {
+        this(context, theme, dismissOnDeviceLock, null);
+    }
+
+    /**
+     * @param udfpsDialogManager If set, UDFPS will hide if this dialog is showing.
+     */
+    public SystemUIDialog(Context context, int theme, boolean dismissOnDeviceLock,
+            SystemUIDialogManager dialogManager) {
         super(context, theme);
         mContext = context;
 
@@ -80,6 +101,7 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
         getWindow().setAttributes(attrs);
 
         mDismissReceiver = dismissOnDeviceLock ? new DismissReceiver(this) : null;
+        mDialogManager = dialogManager;
     }
 
     @Override
@@ -126,30 +148,7 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
      * the device configuration changes, and the result will be used to resize this dialog window.
      */
     protected int getWidth() {
-        boolean isOnTablet =
-                mContext.getResources().getConfiguration().smallestScreenWidthDp >= 600;
-        if (!isOnTablet) {
-            return ViewGroup.LayoutParams.MATCH_PARENT;
-        }
-
-        int flagValue = SystemProperties.getInt(FLAG_TABLET_DIALOG_WIDTH, 0);
-        if (flagValue == -1) {
-            // The width of bottom sheets (624dp).
-            return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 624,
-                    mContext.getResources().getDisplayMetrics()));
-        } else if (flagValue == -2) {
-            // The suggested small width for all dialogs (348dp)
-            return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 348,
-                    mContext.getResources().getDisplayMetrics()));
-        } else if (flagValue > 0) {
-            // Any given width.
-            return Math.round(
-                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, flagValue,
-                            mContext.getResources().getDisplayMetrics()));
-        } else {
-            // By default we use the same width as the notification shade in portrait mode (504dp).
-            return mContext.getResources().getDimensionPixelSize(R.dimen.large_dialog_width);
-        }
+        return getDefaultDialogWidth(mContext);
     }
 
     /**
@@ -157,7 +156,7 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
      * the device configuration changes, and the result will be used to resize this dialog window.
      */
     protected int getHeight() {
-        return ViewGroup.LayoutParams.WRAP_CONTENT;
+        return getDefaultDialogHeight();
     }
 
     @Override
@@ -166,6 +165,10 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
 
         if (mDismissReceiver != null) {
             mDismissReceiver.register();
+        }
+
+        if (mDialogManager != null) {
+            mDialogManager.setShowing(this, true);
         }
 
         // Listen for configuration changes to resize this dialog window. This is mostly necessary
@@ -179,6 +182,10 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
 
         if (mDismissReceiver != null) {
             mDismissReceiver.unregister();
+        }
+
+        if (mDialogManager != null) {
+            mDialogManager.setShowing(this, false);
         }
 
         ViewRootImpl.removeConfigCallback(this);
@@ -265,6 +272,45 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
             if (dismissAction != null) dismissAction.run();
         });
         dismissReceiver.register();
+    }
+
+    /** Set an appropriate size to {@code dialog} depending on the current configuration. */
+    public static void setDialogSize(Dialog dialog) {
+        // We need to create the dialog first, otherwise the size will be overridden when it is
+        // created.
+        dialog.create();
+        dialog.getWindow().setLayout(getDefaultDialogWidth(dialog.getContext()),
+                getDefaultDialogHeight());
+    }
+
+    private static int getDefaultDialogWidth(Context context) {
+        boolean isOnTablet = context.getResources().getConfiguration().smallestScreenWidthDp >= 600;
+        if (!isOnTablet) {
+            return ViewGroup.LayoutParams.MATCH_PARENT;
+        }
+
+        int flagValue = SystemProperties.getInt(FLAG_TABLET_DIALOG_WIDTH, 0);
+        if (flagValue == -1) {
+            // The width of bottom sheets (624dp).
+            return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 624,
+                    context.getResources().getDisplayMetrics()));
+        } else if (flagValue == -2) {
+            // The suggested small width for all dialogs (348dp)
+            return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 348,
+                    context.getResources().getDisplayMetrics()));
+        } else if (flagValue > 0) {
+            // Any given width.
+            return Math.round(
+                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, flagValue,
+                            context.getResources().getDisplayMetrics()));
+        } else {
+            // By default we use the same width as the notification shade in portrait mode (504dp).
+            return context.getResources().getDimensionPixelSize(R.dimen.large_dialog_width);
+        }
+    }
+
+    private static int getDefaultDialogHeight() {
+        return ViewGroup.LayoutParams.WRAP_CONTENT;
     }
 
     private static class DismissReceiver extends BroadcastReceiver {

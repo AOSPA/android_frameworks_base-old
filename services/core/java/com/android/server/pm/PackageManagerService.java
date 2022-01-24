@@ -2614,7 +2614,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private PackageInfo generatePackageInfo(@NonNull PackageStateInternal ps,
-            @PackageManager.PackageInfoFlags long flags, int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, int userId) {
         return mComputer.generatePackageInfo(ps, flags, userId);
     }
 
@@ -2654,13 +2654,13 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public PackageInfo getPackageInfo(String packageName,
-            @PackageManager.PackageInfoFlags long flags, int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, int userId) {
         return mComputer.getPackageInfo(packageName, flags, userId);
     }
 
     @Override
     public PackageInfo getPackageInfoVersioned(VersionedPackage versionedPackage,
-            @PackageManager.PackageInfoFlags long flags, int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, int userId) {
         return mComputer.getPackageInfoInternal(versionedPackage.getPackageName(),
                 versionedPackage.getLongVersionCode(), flags, Binder.getCallingUid(), userId);
     }
@@ -2697,7 +2697,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private boolean filterSharedLibPackage(@Nullable PackageStateInternal ps, int uid,
-            int userId, @PackageManager.ComponentInfoFlags long flags) {
+            int userId, @PackageManager.ComponentInfoFlagsBits long flags) {
         return mComputer.filterSharedLibPackage(ps, uid, userId, flags);
     }
 
@@ -2713,17 +2713,17 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public int getPackageUid(@NonNull String packageName,
-        @PackageManager.PackageInfoFlags long flags, @UserIdInt int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, @UserIdInt int userId) {
         return mComputer.getPackageUid(packageName, flags, userId);
     }
 
     private int getPackageUidInternal(String packageName,
-            @PackageManager.PackageInfoFlags long flags, int userId, int callingUid) {
+            @PackageManager.PackageInfoFlagsBits long flags, int userId, int callingUid) {
         return mComputer.getPackageUidInternal(packageName, flags, userId, callingUid);
     }
 
     @Override
-    public int[] getPackageGids(String packageName, @PackageManager.PackageInfoFlags long flags,
+    public int[] getPackageGids(String packageName, @PackageManager.PackageInfoFlagsBits long flags,
             int userId) {
         return mComputer.getPackageGids(packageName, flags, userId);
     }
@@ -2738,14 +2738,14 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private ApplicationInfo generateApplicationInfoFromSettings(String packageName,
-            @PackageManager.ApplicationInfoFlags long flags, int filterCallingUid, int userId) {
+            @PackageManager.ApplicationInfoFlagsBits long flags, int filterCallingUid, int userId) {
         return mComputer.generateApplicationInfoFromSettings(packageName, flags, filterCallingUid,
                 userId);
     }
 
     @Override
     public ApplicationInfo getApplicationInfo(String packageName,
-            @PackageManager.ApplicationInfoFlags long flags, int userId) {
+            @PackageManager.ApplicationInfoFlagsBits long flags, int userId) {
         return mComputer.getApplicationInfo(packageName, flags, userId);
     }
 
@@ -2756,7 +2756,7 @@ public class PackageManagerService extends IPackageManager.Stub
      * trusted and will be used as-is; unlike userId which will be validated by this method.
      */
     private ApplicationInfo getApplicationInfoInternal(String packageName,
-            @PackageManager.ApplicationInfoFlags long flags,
+            @PackageManager.ApplicationInfoFlagsBits long flags,
             int filterCallingUid, int userId) {
         return mComputer.getApplicationInfoInternal(packageName, flags,
                 filterCallingUid, userId);
@@ -2773,13 +2773,13 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public void freeStorageAndNotify(final String volumeUuid, final long freeStorageSize,
-            final int storageFlags, final IPackageDataObserver observer) {
+            final @StorageManager.AllocateFlags int flags, final IPackageDataObserver observer) {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.CLEAR_APP_CACHE, null);
         mHandler.post(() -> {
             boolean success = false;
             try {
-                freeStorage(volumeUuid, freeStorageSize, storageFlags);
+                freeStorage(volumeUuid, freeStorageSize, flags);
                 success = true;
             } catch (IOException e) {
                 Slog.w(TAG, e);
@@ -2796,13 +2796,13 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public void freeStorage(final String volumeUuid, final long freeStorageSize,
-            final int storageFlags, final IntentSender pi) {
+            final @StorageManager.AllocateFlags int flags, final IntentSender pi) {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.CLEAR_APP_CACHE, TAG);
         mHandler.post(() -> {
             boolean success = false;
             try {
-                freeStorage(volumeUuid, freeStorageSize, storageFlags);
+                freeStorage(volumeUuid, freeStorageSize, flags);
                 success = true;
             } catch (IOException e) {
                 Slog.w(TAG, e);
@@ -2821,7 +2821,8 @@ public class PackageManagerService extends IPackageManager.Stub
      * Blocking call to clear various types of cached data across the system
      * until the requested bytes are available.
      */
-    public void freeStorage(String volumeUuid, long bytes, int storageFlags) throws IOException {
+    public void freeStorage(String volumeUuid, long bytes,
+            @StorageManager.AllocateFlags int flags) throws IOException {
         final StorageManager storage = mInjector.getSystemService(StorageManager.class);
         final File file = storage.findPathForUuid(volumeUuid);
         if (file.getUsableSpace() >= bytes) return;
@@ -2829,8 +2830,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if (mEnableFreeCacheV2) {
             final boolean internalVolume = Objects.equals(StorageManager.UUID_PRIVATE_INTERNAL,
                     volumeUuid);
-            final boolean aggressive = (storageFlags
-                    & StorageManager.FLAG_ALLOCATE_AGGRESSIVE) != 0;
+            final boolean aggressive = (flags & StorageManager.FLAG_ALLOCATE_AGGRESSIVE) != 0;
 
             // 1. Pre-flight to determine if we have any chance to succeed
             // 2. Consider preloaded data (after 1w honeymoon, unless aggressive)
@@ -3043,7 +3043,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public ActivityInfo getActivityInfo(ComponentName component,
-            @PackageManager.ComponentInfoFlags long flags, int userId) {
+            @PackageManager.ComponentInfoFlagsBits long flags, int userId) {
         return mComputer.getActivityInfo(component, flags, userId);
     }
 
@@ -3054,7 +3054,7 @@ public class PackageManagerService extends IPackageManager.Stub
      * trusted and will be used as-is; unlike userId which will be validated by this method.
      */
     private ActivityInfo getActivityInfoInternal(ComponentName component,
-            @PackageManager.ComponentInfoFlags long flags, int filterCallingUid, int userId) {
+            @PackageManager.ComponentInfoFlagsBits long flags, int filterCallingUid, int userId) {
         return mComputer.getActivityInfoInternal(component, flags,
                 filterCallingUid, userId);
     }
@@ -3068,42 +3068,42 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public ActivityInfo getReceiverInfo(ComponentName component,
-            @PackageManager.ComponentInfoFlags long flags, int userId) {
+            @PackageManager.ComponentInfoFlagsBits long flags, int userId) {
         return mComputer.getReceiverInfo(component, flags, userId);
     }
 
     @Override
     public ParceledListSlice<SharedLibraryInfo> getSharedLibraries(String packageName,
-            @PackageManager.PackageInfoFlags long flags, int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, int userId) {
         return mComputer.getSharedLibraries(packageName, flags, userId);
     }
 
     @Nullable
     @Override
     public ParceledListSlice<SharedLibraryInfo> getDeclaredSharedLibraries(
-            @NonNull String packageName, @PackageManager.PackageInfoFlags long flags,
+            @NonNull String packageName, @PackageManager.PackageInfoFlagsBits long flags,
             @NonNull int userId) {
         return mComputer.getDeclaredSharedLibraries(packageName, flags, userId);
     }
 
     @Nullable
     List<VersionedPackage> getPackagesUsingSharedLibrary(
-            SharedLibraryInfo libInfo, @PackageManager.PackageInfoFlags long flags, int callingUid,
-            int userId) {
+            SharedLibraryInfo libInfo, @PackageManager.PackageInfoFlagsBits long flags,
+            int callingUid, int userId) {
         return mComputer.getPackagesUsingSharedLibrary(libInfo, flags, callingUid, userId);
     }
 
     @Nullable
     @Override
     public ServiceInfo getServiceInfo(@NonNull ComponentName component,
-            @PackageManager.ComponentInfoFlags long flags, @UserIdInt int userId) {
+            @PackageManager.ComponentInfoFlagsBits long flags, @UserIdInt int userId) {
         return mComputer.getServiceInfo(component, flags, userId);
     }
 
     @Nullable
     @Override
     public ProviderInfo getProviderInfo(@NonNull ComponentName component,
-            @PackageManager.ComponentInfoFlags long flags, @UserIdInt int userId) {
+            @PackageManager.ComponentInfoFlagsBits long flags, @UserIdInt int userId) {
         return mComputer.getProviderInfo(component, flags, userId);
     }
 
@@ -3392,7 +3392,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public ResolveInfo resolveIntent(Intent intent, String resolvedType,
-            @PackageManager.ResolveInfoFlags long flags, int userId) {
+            @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         return mResolveIntentHelper.resolveIntentInternal(intent, resolvedType, flags,
                 0 /*privateResolveFlags*/, userId, false, Binder.getCallingUid());
     }
@@ -3437,7 +3437,7 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     @GuardedBy("mLock")
     boolean isImplicitImageCaptureIntentAndNotSetByDpcLocked(Intent intent, int userId,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags) {
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags) {
         return mComputer.isImplicitImageCaptureIntentAndNotSetByDpcLocked(intent, userId,
                 resolvedType, flags);
     }
@@ -3445,7 +3445,7 @@ public class PackageManagerService extends IPackageManager.Stub
     @GuardedBy("mLock")
     ResolveInfo findPersistentPreferredActivityLP(Intent intent,
             String resolvedType,
-            @PackageManager.ResolveInfoFlags long flags, List<ResolveInfo> query, boolean debug,
+            @PackageManager.ResolveInfoFlagsBits long flags, List<ResolveInfo> query, boolean debug,
             int userId) {
         return mComputer.findPersistentPreferredActivityLP(intent,
                 resolvedType, flags, query, debug, userId);
@@ -3459,7 +3459,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     FindPreferredActivityBodyResult findPreferredActivityInternal(
-            Intent intent, String resolvedType, @PackageManager.ResolveInfoFlags long flags,
+            Intent intent, String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags,
             List<ResolveInfo> query, boolean always,
             boolean removeMatches, boolean debug, int userId, boolean queryMayBeFiltered) {
         return mComputer.findPreferredActivityInternal(
@@ -3489,7 +3489,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public @NonNull ParceledListSlice<ResolveInfo> queryIntentActivities(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int userId) {
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         try {
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "queryIntentActivities");
 
@@ -3509,13 +3509,13 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @NonNull List<ResolveInfo> queryIntentActivitiesInternal(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int userId) {
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         return mComputer.queryIntentActivitiesInternal(intent,
                 resolvedType, flags, userId);
     }
 
     @NonNull List<ResolveInfo> queryIntentActivitiesInternal(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags,
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags,
             @PrivateResolveFlags long privateResolveFlags, int filterCallingUid, int userId,
             boolean resolveForStart, boolean allowDynamicSplits) {
         return mComputer.queryIntentActivitiesInternal(intent,
@@ -3524,7 +3524,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private CrossProfileDomainInfo getCrossProfileDomainPreferredLpr(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int sourceUserId,
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int sourceUserId,
             int parentUserId) {
         return mComputer.getCrossProfileDomainPreferredLpr(intent,
                 resolvedType, flags, sourceUserId, parentUserId);
@@ -3552,21 +3552,21 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     public @NonNull ParceledListSlice<ResolveInfo> queryIntentActivityOptions(ComponentName caller,
             Intent[] specifics, String[] specificTypes, Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int userId) {
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         return new ParceledListSlice<>(mResolveIntentHelper.queryIntentActivityOptionsInternal(
                 caller, specifics, specificTypes, intent, resolvedType, flags, userId));
     }
 
     @Override
     public @NonNull ParceledListSlice<ResolveInfo> queryIntentReceivers(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int userId) {
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         return new ParceledListSlice<>(mResolveIntentHelper.queryIntentReceiversInternal(intent,
                 resolvedType, flags, userId, Binder.getCallingUid()));
     }
 
     @Override
     public ResolveInfo resolveService(Intent intent, String resolvedType,
-            @PackageManager.ResolveInfoFlags long flags, int userId) {
+            @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         final int callingUid = Binder.getCallingUid();
         return mResolveIntentHelper.resolveServiceInternal(intent, resolvedType, flags, userId,
                 callingUid);
@@ -3574,14 +3574,14 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public @NonNull ParceledListSlice<ResolveInfo> queryIntentServices(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int userId) {
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         final int callingUid = Binder.getCallingUid();
         return new ParceledListSlice<>(queryIntentServicesInternal(
                 intent, resolvedType, flags, userId, callingUid, false /*includeInstantApps*/));
     }
 
     @NonNull List<ResolveInfo> queryIntentServicesInternal(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int userId,
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId,
             int callingUid, boolean includeInstantApps) {
         return mComputer.queryIntentServicesInternal(intent,
                 resolvedType, flags, userId, callingUid,
@@ -3590,27 +3590,27 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public @NonNull ParceledListSlice<ResolveInfo> queryIntentContentProviders(Intent intent,
-            String resolvedType, @PackageManager.ResolveInfoFlags long flags, int userId) {
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         return new ParceledListSlice<>(mResolveIntentHelper.queryIntentContentProvidersInternal(
                 intent, resolvedType, flags, userId));
     }
 
     @Override
     public ParceledListSlice<PackageInfo> getInstalledPackages(
-            @PackageManager.PackageInfoFlags long flags, int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, int userId) {
         return mComputer.getInstalledPackages(flags, userId);
     }
 
     @Override
     public ParceledListSlice<PackageInfo> getPackagesHoldingPermissions(
-            @NonNull String[] permissions, @PackageManager.PackageInfoFlags long flags,
+            @NonNull String[] permissions, @PackageManager.PackageInfoFlagsBits long flags,
             @UserIdInt int userId) {
         return mComputer.getPackagesHoldingPermissions(permissions, flags, userId);
     }
 
     @Override
     public ParceledListSlice<ApplicationInfo> getInstalledApplications(
-            @PackageManager.ApplicationInfoFlags long flags, int userId) {
+            @PackageManager.ApplicationInfoFlagsBits long flags, int userId) {
         final int callingUid = Binder.getCallingUid();
         return new ParceledListSlice<>(
                 mComputer.getInstalledApplications(flags, userId, callingUid));
@@ -3715,7 +3715,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public ProviderInfo resolveContentProvider(String name,
-            @PackageManager.ResolveInfoFlags long flags, int userId) {
+            @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         return mComputer.resolveContentProvider(name, flags, userId, Binder.getCallingUid());
     }
 
@@ -3727,7 +3727,8 @@ public class PackageManagerService extends IPackageManager.Stub
     @NonNull
     @Override
     public ParceledListSlice<ProviderInfo> queryContentProviders(@Nullable  String processName,
-            int uid, @PackageManager.ComponentInfoFlags long flags, @Nullable String metaDataKey) {
+            int uid, @PackageManager.ComponentInfoFlagsBits long flags,
+            @Nullable String metaDataKey) {
         return mComputer.queryContentProviders(processName, uid, flags, metaDataKey);
     }
 
@@ -7608,7 +7609,7 @@ public class PackageManagerService extends IPackageManager.Stub
     private class PackageManagerInternalImpl extends PackageManagerInternal {
         @Override
         public List<ApplicationInfo> getInstalledApplications(
-                @PackageManager.ApplicationInfoFlags long flags, int userId, int callingUid) {
+                @PackageManager.ApplicationInfoFlagsBits long flags, int userId, int callingUid) {
             return PackageManagerService.this.mComputer.getInstalledApplications(flags, userId,
                     callingUid);
         }
@@ -7803,7 +7804,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public PackageInfo getPackageInfo(
-                String packageName, @PackageManager.PackageInfoFlags long flags,
+                String packageName, @PackageManager.PackageInfoFlagsBits long flags,
                 int filterCallingUid, int userId) {
             return PackageManagerService.this.mComputer
                     .getPackageInfoInternal(packageName, PackageManager.VERSION_CODE_HIGHEST,
@@ -7932,15 +7933,15 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
-        public int getPackageUid(String packageName, @PackageManager.PackageInfoFlags long flags,
-                int userId) {
+        public int getPackageUid(String packageName,
+                @PackageManager.PackageInfoFlagsBits long flags, int userId) {
             return PackageManagerService.this
                     .getPackageUidInternal(packageName, flags, userId, Process.SYSTEM_UID);
         }
 
         @Override
         public ApplicationInfo getApplicationInfo(
-                String packageName, @PackageManager.ApplicationInfoFlags long flags,
+                String packageName, @PackageManager.ApplicationInfoFlagsBits long flags,
                 int filterCallingUid, int userId) {
             return PackageManagerService.this
                     .getApplicationInfoInternal(packageName, flags, filterCallingUid, userId);
@@ -7948,7 +7949,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public ActivityInfo getActivityInfo(
-                ComponentName component, @PackageManager.ComponentInfoFlags long flags,
+                ComponentName component, @PackageManager.ComponentInfoFlagsBits long flags,
                 int filterCallingUid, int userId) {
             return PackageManagerService.this
                     .getActivityInfoInternal(component, flags, filterCallingUid, userId);
@@ -7956,7 +7957,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public List<ResolveInfo> queryIntentActivities(
-                Intent intent, String resolvedType, @PackageManager.ResolveInfoFlags long flags,
+                Intent intent, String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags,
                 int filterCallingUid, int userId) {
             return PackageManagerService.this
                     .queryIntentActivitiesInternal(intent, resolvedType, flags, 0, filterCallingUid,
@@ -7965,7 +7966,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public List<ResolveInfo> queryIntentReceivers(Intent intent,
-                String resolvedType, @PackageManager.ResolveInfoFlags long flags,
+                String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags,
                 int filterCallingUid, int userId) {
             return PackageManagerService.this.mResolveIntentHelper.queryIntentReceiversInternal(
                     intent, resolvedType, flags, userId, filterCallingUid);
@@ -7973,7 +7974,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public List<ResolveInfo> queryIntentServices(
-                Intent intent, @PackageManager.ResolveInfoFlags long flags, int callingUid,
+                Intent intent, @PackageManager.ResolveInfoFlagsBits long flags, int callingUid,
                 int userId) {
             final String resolvedType = intent.resolveTypeIfNeeded(mContext.getContentResolver());
             return PackageManagerService.this
@@ -8242,7 +8243,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public ResolveInfo resolveIntent(Intent intent, String resolvedType,
-                @PackageManager.ResolveInfoFlags long flags,
+                @PackageManager.ResolveInfoFlagsBits long flags,
                 @PackageManagerInternal.PrivateResolveFlags long privateResolveFlags, int userId,
                 boolean resolveForStart, int filterCallingUid) {
             return mResolveIntentHelper.resolveIntentInternal(
@@ -8252,14 +8253,14 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public ResolveInfo resolveService(Intent intent, String resolvedType,
-                @PackageManager.ResolveInfoFlags long flags, int userId, int callingUid) {
+                @PackageManager.ResolveInfoFlagsBits long flags, int userId, int callingUid) {
             return mResolveIntentHelper.resolveServiceInternal(intent, resolvedType, flags, userId,
                     callingUid);
         }
 
         @Override
         public ProviderInfo resolveContentProvider(String name,
-                @PackageManager.ResolveInfoFlags long flags, int userId, int callingUid) {
+                @PackageManager.ResolveInfoFlagsBits long flags, int userId, int callingUid) {
             return PackageManagerService.this.mComputer
                     .resolveContentProvider(name, flags, userId,callingUid);
         }
@@ -8344,9 +8345,9 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
-        public void freeStorage(String volumeUuid, long bytes, int storageFlags)
-                throws IOException {
-            PackageManagerService.this.freeStorage(volumeUuid, bytes, storageFlags);
+        public void freeStorage(String volumeUuid, long bytes,
+                @StorageManager.AllocateFlags int flags) throws IOException {
+            PackageManagerService.this.freeStorage(volumeUuid, bytes, flags);
         }
 
         @Override
@@ -8728,7 +8729,8 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
-        public void reconcileAppsData(int userId, int flags, boolean migrateAppsData) {
+        public void reconcileAppsData(int userId, @StorageManager.StorageFlags int flags,
+                boolean migrateAppsData) {
             PackageManagerService.this.mAppDataHelper.reconcileAppsData(userId, flags,
                     migrateAppsData);
         }

@@ -88,7 +88,8 @@ import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * AudioManager provides access to volume and ringer mode control.
@@ -4026,8 +4027,7 @@ public class AudioManager {
      * @hide
      * flag set on test API calls,
      * see {@link #requestAudioFocusForTest(AudioFocusRequest, String, int, int)},
-     * note that it isn't used in conjunction with other flags, it is passed as the single
-     * value for flags */
+     */
     public static final int AUDIOFOCUS_FLAG_TEST = 0x1 << 3;
     /** @hide */
     public static final int AUDIOFOCUS_FLAGS_APPS = AUDIOFOCUS_FLAG_DELAY_OK
@@ -4210,7 +4210,9 @@ public class AudioManager {
                     afr.getFocusGain(),
                     mICallBack,
                     mAudioFocusDispatcher,
-                    clientFakeId, "com.android.test.fakeclient", clientFakeUid, clientTargetSdk);
+                    clientFakeId, "com.android.test.fakeclient",
+                    afr.getFlags() | AudioManager.AUDIOFOCUS_FLAG_TEST,
+                    clientFakeUid, clientTargetSdk);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5793,6 +5795,23 @@ public class AudioManager {
         try {
             service.setWiredDeviceConnectionState(type, state, address, name,
                     mApplicationContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Indicate wired accessory connection state change.
+     * @param device {@link AudioDeviceAttributes} of the device to "fake-connect"
+     * @param connected true for connected, false for disconnected
+     * {@hide}
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void setTestDeviceConnectionState(@NonNull AudioDeviceAttributes device,
+            boolean connected) {
+        try {
+            getService().setTestDeviceConnectionState(device, connected);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -7626,7 +7645,7 @@ public class AudioManager {
         return getDeviceInfoFromTypeAndAddress(deviceType, null);
     }
 
-        /**
+    /**
      * @hide
      * Returns an {@link AudioDeviceInfo} corresponding to a connected device of the type and
      * address provided.
@@ -7745,6 +7764,506 @@ public class AudioManager {
             AudioDeviceInfo device = getDeviceForPortId(portId, GET_DEVICES_OUTPUTS);
             CallbackUtil.callListeners(mCommDevListeners, mCommDevListenerLock,
                     (listener) -> listener.onCommunicationDeviceChanged(device));
+        }
+    }
+
+
+    /**
+     * @hide
+     * Indicates if the platform allows accessing the uplink and downlink audio of an ongoing
+     * PSTN call.
+     * When true, {@link getCallUplinkInjectionAudioTrack(AudioFormat)} can be used to obtain
+     * an AudioTrack for call uplink audio injection and
+     * {@link getCallDownlinkExtractionAudioRecord(AudioFormat)} can be used to obtain
+     * an AudioRecord for call downlink audio extraction.
+     * @return true if PSTN call audio is accessible, false otherwise.
+     */
+    @TestApi
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION)
+    public boolean isPstnCallAudioInterceptable() {
+        final IAudioService service = getService();
+        try {
+            return service.isPstnCallAudioInterceptable();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /** @hide */
+    @IntDef(flag = false, prefix = "CALL_REDIRECT_", value = {
+            CALL_REDIRECT_NONE,
+            CALL_REDIRECT_PSTN,
+            CALL_REDIRECT_VOIP }
+            )
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CallRedirectionMode {}
+
+    /**
+     * Not used for call redirection
+     * @hide
+     */
+    public static final int CALL_REDIRECT_NONE = 0;
+    /**
+     * Used to redirect  PSTN call
+     * @hide
+     */
+    public static final int CALL_REDIRECT_PSTN = 1;
+    /**
+     * Used to redirect  VoIP call
+     * @hide
+     */
+    public static final int CALL_REDIRECT_VOIP = 2;
+
+
+    private @CallRedirectionMode int getCallRedirectMode() {
+        int mode = getMode();
+        if (mode == MODE_IN_CALL || mode == MODE_CALL_SCREENING
+                || mode == MODE_CALL_REDIRECT) {
+            return CALL_REDIRECT_PSTN;
+        } else if (mode == MODE_IN_COMMUNICATION || mode == MODE_COMMUNICATION_REDIRECT) {
+            return CALL_REDIRECT_VOIP;
+        }
+        return CALL_REDIRECT_NONE;
+    }
+
+    private void checkCallRedirectionFormat(AudioFormat format, boolean isOutput) {
+        if (format.getEncoding() != AudioFormat.ENCODING_PCM_16BIT
+                && format.getEncoding() != AudioFormat.ENCODING_PCM_FLOAT) {
+            throw new UnsupportedOperationException(" Unsupported encoding ");
+        }
+        if (format.getSampleRate() < 8000
+                || format.getSampleRate() > 48000) {
+            throw new UnsupportedOperationException(" Unsupported sample rate ");
+        }
+        if (isOutput && format.getChannelMask() != AudioFormat.CHANNEL_OUT_MONO
+                && format.getChannelMask() != AudioFormat.CHANNEL_OUT_STEREO) {
+            throw new UnsupportedOperationException(" Unsupported output channel mask ");
+        }
+        if (!isOutput && format.getChannelMask() != AudioFormat.CHANNEL_IN_MONO
+                && format.getChannelMask() != AudioFormat.CHANNEL_IN_STEREO) {
+            throw new UnsupportedOperationException(" Unsupported input channel mask ");
+        }
+    }
+
+    class CallIRedirectionClientInfo {
+        public WeakReference trackOrRecord;
+        public int redirectMode;
+    }
+
+    private Object mCallRedirectionLock = new Object();
+    @GuardedBy("mCallRedirectionLock")
+    private CallInjectionModeChangedListener mCallRedirectionModeListener;
+    @GuardedBy("mCallRedirectionLock")
+    private ArrayList<CallIRedirectionClientInfo> mCallIRedirectionClients;
+
+    /**
+     * @hide
+     * Returns an AudioTrack that can be used to inject audio to an active call uplink.
+     * This can be used for functions like call screening or call audio redirection and is reserved
+     * to system apps with privileged permission.
+     * @param format the desired audio format for audio playback.
+     * p>Formats accepted are:
+     * <ul>
+     *   <li><em>Sampling rate</em> - 8kHz to 48kHz. </li>
+     *   <li><em>Channel mask</em> - Mono or Stereo </li>
+     *   <li><em>Sample format</em> - PCM 16 bit or FLOAT 32 bit </li>
+     * </ul>
+     *
+     * @return The AudioTrack used for audio injection
+     * @throws NullPointerException if AudioFormat argument is null.
+     * @throws UnsupportedOperationException if on unsupported AudioFormat is specified.
+     * @throws IllegalArgumentException if an invalid AudioFormat is specified.
+     * @throws SecurityException if permission CALL_AUDIO_INTERCEPTION  is missing .
+     * @throws IllegalStateException if current audio mode is not MODE_IN_CALL,
+     *         MODE_IN_COMMUNICATION, MODE_CALL_SCREENING, MODE_CALL_REDIRECT
+     *         or MODE_COMMUNICATION_REDIRECT.
+     */
+    @TestApi
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION)
+    public @NonNull AudioTrack getCallUplinkInjectionAudioTrack(@NonNull AudioFormat format) {
+        Objects.requireNonNull(format);
+        checkCallRedirectionFormat(format, true /* isOutput */);
+
+        AudioTrack track = null;
+        int redirectMode = getCallRedirectMode();
+        if (redirectMode == CALL_REDIRECT_NONE) {
+            throw new IllegalStateException(
+                    " not available in mode " + AudioSystem.modeToString(getMode()));
+        } else if (redirectMode == CALL_REDIRECT_PSTN && !isPstnCallAudioInterceptable()) {
+            throw new UnsupportedOperationException(" PSTN Call audio not accessible ");
+        }
+
+        track = new AudioTrack.Builder()
+                .setAudioAttributes(new AudioAttributes.Builder()
+                        .setSystemUsage(AudioAttributes.USAGE_CALL_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build())
+                .setAudioFormat(format)
+                .setCallRedirectionMode(redirectMode)
+                .build();
+
+        if (track != null && track.getState() != AudioTrack.STATE_UNINITIALIZED) {
+            synchronized (mCallRedirectionLock) {
+                if (mCallRedirectionModeListener == null) {
+                    mCallRedirectionModeListener = new CallInjectionModeChangedListener();
+                    try {
+                        addOnModeChangedListener(
+                                Executors.newSingleThreadExecutor(), mCallRedirectionModeListener);
+                    } catch (Exception e) {
+                        Log.e(TAG, "addOnModeChangedListener failed with exception: " + e);
+                        mCallRedirectionModeListener = null;
+                        throw new UnsupportedOperationException(" Cannot register mode listener ");
+                    }
+                    mCallIRedirectionClients = new ArrayList<CallIRedirectionClientInfo>();
+                }
+                CallIRedirectionClientInfo info = new CallIRedirectionClientInfo();
+                info.redirectMode = redirectMode;
+                info.trackOrRecord = new WeakReference<AudioTrack>(track);
+                mCallIRedirectionClients.add(info);
+            }
+        } else {
+            throw new UnsupportedOperationException(" Cannot create the AudioTrack");
+        }
+        return track;
+    }
+
+    /**
+     * @hide
+     * Returns an AudioRecord that can be used to extract audio from an active call downlink.
+     * This can be used for functions like call screening or call audio redirection and is reserved
+     * to system apps with privileged permission.
+     * @param format the desired audio format for audio capture.
+     *<p>Formats accepted are:
+     * <ul>
+     *   <li><em>Sampling rate</em> - 8kHz to 48kHz. </li>
+     *   <li><em>Channel mask</em> - Mono or Stereo </li>
+     *   <li><em>Sample format</em> - PCM 16 bit or FLOAT 32 bit </li>
+     * </ul>
+     *
+     * @return The AudioRecord used for audio extraction
+     * @throws UnsupportedOperationException if on unsupported AudioFormat is specified.
+     * @throws IllegalArgumentException if an invalid AudioFormat is specified.
+     * @throws NullPointerException if AudioFormat argument is null.
+     * @throws SecurityException if permission CALL_AUDIO_INTERCEPTION  is missing .
+     * @throws IllegalStateException if current audio mode is not MODE_IN_CALL,
+     *         MODE_IN_COMMUNICATION, MODE_CALL_SCREENING, MODE_CALL_REDIRECT
+     *         or MODE_COMMUNICATION_REDIRECT.
+     */
+    @TestApi
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION)
+    public @NonNull AudioRecord getCallDownlinkExtractionAudioRecord(@NonNull AudioFormat format) {
+        Objects.requireNonNull(format);
+        checkCallRedirectionFormat(format, false /* isOutput */);
+
+        AudioRecord record = null;
+        int redirectMode = getCallRedirectMode();
+        if (redirectMode == CALL_REDIRECT_NONE) {
+            throw new IllegalStateException(
+                    " not available in mode " + AudioSystem.modeToString(getMode()));
+        } else if (redirectMode == CALL_REDIRECT_PSTN && !isPstnCallAudioInterceptable()) {
+            throw new UnsupportedOperationException(" PSTN Call audio not accessible ");
+        }
+
+        record = new AudioRecord.Builder()
+                .setAudioAttributes(new AudioAttributes.Builder()
+                        .setInternalCapturePreset(MediaRecorder.AudioSource.VOICE_DOWNLINK)
+                        .build())
+                .setAudioFormat(format)
+                .setCallRedirectionMode(redirectMode)
+                .build();
+
+        if (record != null && record.getState() != AudioRecord.STATE_UNINITIALIZED) {
+            synchronized (mCallRedirectionLock) {
+                if (mCallRedirectionModeListener == null) {
+                    mCallRedirectionModeListener = new CallInjectionModeChangedListener();
+                    try {
+                        addOnModeChangedListener(
+                                Executors.newSingleThreadExecutor(), mCallRedirectionModeListener);
+                    } catch (Exception e) {
+                        Log.e(TAG, "addOnModeChangedListener failed with exception: " + e);
+                        mCallRedirectionModeListener = null;
+                        throw new UnsupportedOperationException(" Cannot register mode listener ");
+                    }
+                    mCallIRedirectionClients = new ArrayList<CallIRedirectionClientInfo>();
+                }
+                CallIRedirectionClientInfo info = new CallIRedirectionClientInfo();
+                info.redirectMode = redirectMode;
+                info.trackOrRecord = new WeakReference<AudioRecord>(record);
+                mCallIRedirectionClients.add(info);
+            }
+        } else {
+            throw new UnsupportedOperationException(" Cannot create the AudioRecord");
+        }
+        return record;
+    }
+
+    class CallInjectionModeChangedListener implements OnModeChangedListener {
+        @Override
+        public void onModeChanged(@AudioMode int mode) {
+            synchronized (mCallRedirectionLock) {
+                final ArrayList<CallIRedirectionClientInfo> clientInfos =
+                        (ArrayList<CallIRedirectionClientInfo>) mCallIRedirectionClients.clone();
+                for (CallIRedirectionClientInfo info : clientInfos) {
+                    Object trackOrRecord = info.trackOrRecord.get();
+                    if (trackOrRecord != null) {
+                        if ((info.redirectMode ==  CALL_REDIRECT_PSTN
+                                && mode != MODE_IN_CALL && mode != MODE_CALL_SCREENING
+                                && mode != MODE_CALL_REDIRECT)
+                                || (info.redirectMode == CALL_REDIRECT_VOIP
+                                    && mode != MODE_IN_COMMUNICATION
+                                    && mode != MODE_COMMUNICATION_REDIRECT)) {
+                            if (trackOrRecord instanceof AudioTrack) {
+                                AudioTrack track = (AudioTrack) trackOrRecord;
+                                track.release();
+                            } else {
+                                AudioRecord record = (AudioRecord) trackOrRecord;
+                                record.release();
+                            }
+                            mCallIRedirectionClients.remove(info);
+                        }
+                    }
+                }
+                if (mCallIRedirectionClients.isEmpty()) {
+                    try {
+                        if (mCallRedirectionModeListener != null) {
+                            removeOnModeChangedListener(mCallRedirectionModeListener);
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "removeOnModeChangedListener failed with exception: " + e);
+                    } finally {
+                        mCallRedirectionModeListener = null;
+                        mCallIRedirectionClients = null;
+                    }
+                }
+            }
+        }
+    }
+
+    //---------------------------------------------------------
+    // audio device connection-dependent muting
+    /**
+     * @hide
+     * Mute a set of playback use cases until a given audio device is connected.
+     * Automatically unmute upon connection of the device, or after the given timeout, whichever
+     * happens first.
+     * @param usagesToMute non-empty array of {@link AudioAttributes} usages (for example
+     *                     {@link AudioAttributes#USAGE_MEDIA}) to mute until the
+     *                     device connects
+     * @param device the audio device expected to connect within the timeout duration
+     * @param timeout the maximum amount of time to wait for the device connection
+     * @param timeUnit the unit for the timeout
+     * @throws IllegalStateException when trying to issue the command while another is already in
+     *         progress and hasn't been cancelled by
+     *         {@link #cancelMuteAwaitConnection(AudioDeviceAttributes)}. See
+     *         {@link #getMutingExpectedDevice()} to check if a muting command is active.
+     * @see #registerMuteAwaitConnectionCallback(Executor, AudioManager.MuteAwaitConnectionCallback)
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void muteAwaitConnection(@NonNull int[] usagesToMute,
+            @NonNull AudioDeviceAttributes device,
+            long timeout, @NonNull TimeUnit timeUnit) throws IllegalStateException {
+        if (timeout <= 0) {
+            throw new IllegalArgumentException("Timeout must be greater than 0");
+        }
+        Objects.requireNonNull(usagesToMute);
+        if (usagesToMute.length == 0) {
+            throw new IllegalArgumentException("Array of usages to mute cannot be empty");
+        }
+        Objects.requireNonNull(device);
+        Objects.requireNonNull(timeUnit);
+        try {
+            getService().muteAwaitConnection(usagesToMute, device, timeUnit.toMillis(timeout));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Query which audio device, if any, is causing some playback use cases to be muted until it
+     * connects.
+     * @return the audio device used in
+     *        {@link #muteAwaitConnection(int[], AudioDeviceAttributes, long, TimeUnit)}, or null
+     *        if there is no active muting command (either because the muting command was not issued
+     *        or because it timed out)
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public @Nullable AudioDeviceAttributes getMutingExpectedDevice() {
+        try {
+            return getService().getMutingExpectedDevice();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Cancel a {@link #muteAwaitConnection(int[], AudioDeviceAttributes, long, TimeUnit)}
+     * command.
+     * @param device the device whose connection was expected when the {@code muteAwaitConnection}
+     *               command was issued.
+     * @throws IllegalStateException when trying to issue the command for a device whose connection
+     *         is not anticipated by a previous call to
+     *         {@link #muteAwaitConnection(int[], AudioDeviceAttributes, long, TimeUnit)}
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void cancelMuteAwaitConnection(@NonNull AudioDeviceAttributes device)
+            throws IllegalStateException {
+        Objects.requireNonNull(device);
+        try {
+            getService().cancelMuteAwaitConnection(device);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * A callback class to receive events about the muting and unmuting of playback use cases
+     * conditional on the upcoming connection of an audio device.
+     * @see #registerMuteAwaitConnectionCallback(Executor, AudioManager.MuteAwaitConnectionCallback)
+     */
+    @SystemApi
+    public abstract static class MuteAwaitConnectionCallback {
+
+        /**
+         * An event where the expected audio device connected
+         * @see MuteAwaitConnectionCallback#onUnmutedEvent(int, AudioDeviceAttributes, int[])
+         */
+        public static final int EVENT_CONNECTION = 1;
+        /**
+         * An event where the expected audio device failed connect before the timeout happened
+         * @see MuteAwaitConnectionCallback#onUnmutedEvent(int, AudioDeviceAttributes, int[])
+         */
+        public static final int EVENT_TIMEOUT    = 2;
+        /**
+         * An event where the {@code muteAwaitConnection()} command
+         * was cancelled with {@link #cancelMuteAwaitConnection(AudioDeviceAttributes)}
+         * @see MuteAwaitConnectionCallback#onUnmutedEvent(int, AudioDeviceAttributes, int[])
+         */
+        public static final int EVENT_CANCEL     = 3;
+
+        /** @hide */
+        @IntDef(flag = false, prefix = "EVENT_", value = {
+                EVENT_CONNECTION,
+                EVENT_TIMEOUT,
+                EVENT_CANCEL }
+        )
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface UnmuteEvent {}
+
+        /**
+         * Called when a number of playback use cases are muted in response to a call to
+         * {@link #muteAwaitConnection(int[], AudioDeviceAttributes, long, TimeUnit)}.
+         * @param device the audio device whose connection is expected. Playback use cases are
+         *               unmuted when that device connects
+         * @param mutedUsages an array of {@link AudioAttributes} usages that describe the affected
+         *                    playback use cases.
+         */
+        public void onMutedUntilConnection(
+                @NonNull AudioDeviceAttributes device,
+                @NonNull int[] mutedUsages) {}
+
+        /**
+         * Called when an event occurred that caused playback uses cases to be unmuted
+         * @param unmuteEvent the nature of the event
+         * @param device the device that was expected to connect
+         * @param mutedUsages the array of {@link AudioAttributes} usages that were muted until
+         *                    the event occurred
+         */
+        public void onUnmutedEvent(
+                @UnmuteEvent int unmuteEvent,
+                @NonNull AudioDeviceAttributes device, @NonNull int[] mutedUsages) {}
+    }
+
+
+    /**
+     * @hide
+     * Register a callback to receive updates on the playback muting conditional on a specific
+     * audio device connection.
+     * @param executor the {@link Executor} handling the callback
+     * @param callback the callback to register
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void registerMuteAwaitConnectionCallback(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull MuteAwaitConnectionCallback callback) {
+        synchronized (mMuteAwaitConnectionListenerLock) {
+            final Pair<ArrayList<ListenerInfo<MuteAwaitConnectionCallback>>,
+                    MuteAwaitConnectionDispatcherStub> res =
+                    CallbackUtil.addListener("registerMuteAwaitConnectionCallback",
+                            executor, callback, mMuteAwaitConnectionListeners,
+                            mMuteAwaitConnDispatcherStub,
+                            () -> new MuteAwaitConnectionDispatcherStub(),
+                            stub -> stub.register(true));
+            mMuteAwaitConnectionListeners = res.first;
+            mMuteAwaitConnDispatcherStub = res.second;
+        }
+    }
+
+    /**
+     * @hide
+     * Unregister a previously registered callback for playback muting conditional on device
+     * connection.
+     * @param callback the callback to unregister
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void unregisterMuteAwaitConnectionCallback(
+            @NonNull MuteAwaitConnectionCallback callback) {
+        synchronized (mMuteAwaitConnectionListenerLock) {
+            final Pair<ArrayList<ListenerInfo<MuteAwaitConnectionCallback>>,
+                    MuteAwaitConnectionDispatcherStub> res =
+                    CallbackUtil.removeListener("unregisterMuteAwaitConnectionCallback",
+                            callback, mMuteAwaitConnectionListeners, mMuteAwaitConnDispatcherStub,
+                            stub -> stub.register(false));
+            mMuteAwaitConnectionListeners = res.first;
+            mMuteAwaitConnDispatcherStub = res.second;
+        }
+    }
+
+    private final Object mMuteAwaitConnectionListenerLock = new Object();
+
+    @GuardedBy("mMuteAwaitConnectionListenerLock")
+    private @Nullable ArrayList<ListenerInfo<MuteAwaitConnectionCallback>>
+            mMuteAwaitConnectionListeners;
+
+    @GuardedBy("mMuteAwaitConnectionListenerLock")
+    private MuteAwaitConnectionDispatcherStub mMuteAwaitConnDispatcherStub;
+
+    private final class MuteAwaitConnectionDispatcherStub
+            extends IMuteAwaitConnectionCallback.Stub {
+        public void register(boolean register) {
+            try {
+                getService().registerMuteAwaitConnectionDispatcher(this, register);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
+        public void dispatchOnMutedUntilConnection(AudioDeviceAttributes device,
+                int[] mutedUsages) {
+            CallbackUtil.callListeners(mMuteAwaitConnectionListeners,
+                    mMuteAwaitConnectionListenerLock,
+                    (listener) -> listener.onMutedUntilConnection(device, mutedUsages));
+        }
+
+        @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
+        public void dispatchOnUnmutedEvent(int event, AudioDeviceAttributes device,
+                int[] mutedUsages) {
+            CallbackUtil.callListeners(mMuteAwaitConnectionListeners,
+                    mMuteAwaitConnectionListenerLock,
+                    (listener) -> listener.onUnmutedEvent(event, device, mutedUsages));
         }
     }
 

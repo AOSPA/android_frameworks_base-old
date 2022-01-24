@@ -287,6 +287,7 @@
     <dimen name="screenshot_action_chip_text_size">14sp</dimen>
     <dimen name="screenshot_dismissal_height_delta">80dp</dimen>
     <dimen name="screenshot_crop_handle_thickness">3dp</dimen>
+    <dimen name="long_screenshot_action_bar_top_margin">8dp</dimen>
 
 
     <!-- The width of the view containing navigation buttons -->
@@ -1097,8 +1098,6 @@
     <dimen name="media_output_dialog_header_icon_padding">16dp</dimen>
     <dimen name="media_output_dialog_icon_corner_radius">16dp</dimen>
     <dimen name="media_output_dialog_title_anim_y_delta">12.5dp</dimen>
-    <dimen name="media_output_dialog_button_padding_horizontal">16dp</dimen>
-    <dimen name="media_output_dialog_button_padding_vertical">8dp</dimen>
 
     <!-- Distance that the full shade transition takes in order for qs to fully transition to the
          shade -->
@@ -1304,4 +1303,9 @@
     <dimen name="keyguard_unfold_translation_x">16dp</dimen>
 
     <dimen name="fgs_manager_min_width_minor">100%</dimen>
+
+    <!-- Dream overlay related dimensions -->
+    <dimen name="dream_overlay_status_bar_height">80dp</dimen>
+    <dimen name="dream_overlay_status_bar_margin">40dp</dimen>
+    <dimen name="dream_overlay_status_icon_margin">8dp</dimen>
 </resources>

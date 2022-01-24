@@ -68,7 +68,7 @@ public class DozeParameters implements
     private final Resources mResources;
     private final BatteryController mBatteryController;
     private final FeatureFlags mFeatureFlags;
-    private final UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
+    private final ScreenOffAnimationController mScreenOffAnimationController;
 
     private final Set<Callback> mCallbacks = new HashSet<>();
 
@@ -85,7 +85,7 @@ public class DozeParameters implements
             TunerService tunerService,
             DumpManager dumpManager,
             FeatureFlags featureFlags,
-            UnlockedScreenOffAnimationController unlockedScreenOffAnimationController) {
+            ScreenOffAnimationController screenOffAnimationController) {
         mResources = resources;
         mAmbientDisplayConfiguration = ambientDisplayConfiguration;
         mAlwaysOnPolicy = alwaysOnDisplayPolicy;
@@ -96,7 +96,7 @@ public class DozeParameters implements
         mPowerManager = powerManager;
         mPowerManager.setDozeAfterScreenOff(!mControlScreenOffAnimation);
         mFeatureFlags = featureFlags;
-        mUnlockedScreenOffAnimationController = unlockedScreenOffAnimationController;
+        mScreenOffAnimationController = screenOffAnimationController;
 
         tunerService.addTunable(
                 this,
@@ -228,7 +228,23 @@ public class DozeParameters implements
      * then abruptly showing AOD.
      */
     public boolean shouldControlUnlockedScreenOff() {
-        return mUnlockedScreenOffAnimationController.shouldPlayUnlockedScreenOffAnimation();
+        return mScreenOffAnimationController.shouldControlUnlockedScreenOff();
+    }
+
+    public boolean shouldDelayKeyguardShow() {
+        return mScreenOffAnimationController.shouldDelayKeyguardShow();
+    }
+
+    public boolean shouldClampToDimBrightness() {
+        return mScreenOffAnimationController.shouldClampDozeScreenBrightness();
+    }
+
+    public boolean shouldShowLightRevealScrim() {
+        return mScreenOffAnimationController.shouldShowLightRevealScrim();
+    }
+
+    public boolean shouldAnimateDozingChange() {
+        return mScreenOffAnimationController.shouldAnimateDozingChange();
     }
 
     /**
@@ -312,6 +328,7 @@ public class DozeParameters implements
         for (Callback callback : mCallbacks) {
             callback.onAlwaysOnChange();
         }
+        mScreenOffAnimationController.onAlwaysOnChanged(getAlwaysOn());
     }
 
     @Override

@@ -277,6 +277,13 @@ public interface BluetoothProfile {
     int CSIP_SET_COORDINATOR = 25;
 
     /**
+     * LE Audio Broadcast Source
+     *
+     * @hide
+     */
+    int LE_AUDIO_BROADCAST = 26;
+
+    /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
      * the largest value assigned to a profile.
      *
