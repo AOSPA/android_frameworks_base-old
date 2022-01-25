@@ -108,7 +108,7 @@ import static com.android.internal.util.LatencyTracker.ACTION_ROTATE_SCREEN;
 import static com.android.server.LockGuard.INDEX_WINDOW;
 import static com.android.server.LockGuard.installLock;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static com.android.server.wm.ActivityTaskManagerService.POWER_MODE_REASON_FREEZE_DISPLAY;
+import static com.android.server.wm.ActivityTaskManagerService.POWER_MODE_REASON_CHANGE_DISPLAY;
 import static com.android.server.wm.DisplayContent.IME_TARGET_CONTROL;
 import static com.android.server.wm.DisplayContent.IME_TARGET_INPUT;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
@@ -1657,6 +1657,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
             final DisplayPolicy displayPolicy = displayContent.getDisplayPolicy();
             displayPolicy.adjustWindowParamsLw(win, win.mAttrs);
+            attrs.flags = sanitizeFlagSlippery(attrs.flags, win.getName(), callingUid, callingPid);
             win.setRequestedVisibilities(requestedVisibilities);
 
             res = displayPolicy.validateAddingWindowLw(attrs, callingPid, callingUid);
@@ -2212,6 +2213,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (attrs != null) {
                 displayPolicy.adjustWindowParamsLw(win, attrs);
                 win.mToken.adjustWindowParams(win, attrs);
+                attrs.flags = sanitizeFlagSlippery(attrs.flags, win.getName(), uid, pid);
                 int disableFlags =
                         (attrs.systemUiVisibility | attrs.subtreeSystemUiVisibility) & DISABLE_MASK;
                 if (disableFlags != 0 && !hasStatusBarPermission(pid, uid)) {
@@ -5870,7 +5872,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mScreenFrozenLock.acquire();
         // Apply launch power mode to reduce screen frozen time because orientation change may
         // relaunch activity and redraw windows. This may also help speed up user switching.
-        mAtmService.startLaunchPowerMode(POWER_MODE_REASON_FREEZE_DISPLAY);
+        mAtmService.startLaunchPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
 
         mDisplayFrozen = true;
         mDisplayFreezeTime = SystemClock.elapsedRealtime();
@@ -6020,7 +6022,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (configChanged) {
             displayContent.sendNewConfiguration();
         }
-        mAtmService.endLaunchPowerMode(POWER_MODE_REASON_FREEZE_DISPLAY);
+        mAtmService.endLaunchPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
         mLatencyTracker.onActionEnd(ACTION_ROTATE_SCREEN);
         if (mPerf != null) {
             mPerf.perfLockRelease();
@@ -8250,6 +8252,23 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     /**
+     * You need ALLOW_SLIPPERY_TOUCHES permission to be able to set FLAG_SLIPPERY.
+     */
+    private int sanitizeFlagSlippery(int flags, String windowName, int callingUid, int callingPid) {
+        if ((flags & FLAG_SLIPPERY) == 0) {
+            return flags;
+        }
+        final int permissionResult = mContext.checkPermission(
+                    android.Manifest.permission.ALLOW_SLIPPERY_TOUCHES, callingPid, callingUid);
+        if (permissionResult != PackageManager.PERMISSION_GRANTED) {
+            Slog.w(TAG, "Removing FLAG_SLIPPERY from '" + windowName
+                    + "' because it doesn't have ALLOW_SLIPPERY_TOUCHES permission");
+            return flags & ~FLAG_SLIPPERY;
+        }
+        return flags;
+    }
+
+    /**
      * Assigns an InputChannel to a SurfaceControl and configures it to receive
      * touch input according to it's on-screen geometry.
      *
@@ -8288,7 +8307,7 @@ public class WindowManagerService extends IWindowManager.Stub
         h.setWindowToken(window);
         h.name = name;
 
-        flags = DisplayPolicy.sanitizeFlagSlippery(flags, privateFlags, name);
+        flags = sanitizeFlagSlippery(flags, name, callingUid, callingPid);
 
         final int sanitizedFlags = flags & (LayoutParams.FLAG_NOT_TOUCHABLE
                 | FLAG_SLIPPERY | LayoutParams.FLAG_NOT_FOCUSABLE);

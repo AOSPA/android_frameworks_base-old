@@ -550,7 +550,7 @@
     <attr name="allowTaskReparenting" format="boolean" />
 
     <!-- Declare that this application may use cleartext traffic, such as HTTP rather than HTTPS;
-         WebSockets rather than WebSockets Secure; XMPP, IMAP, STMP without STARTTLS or TLS.
+         WebSockets rather than WebSockets Secure; XMPP, IMAP, SMTP without STARTTLS or TLS.
          Defaults to true. If set to false {@code false}, the application declares that it does not
          intend to use cleartext network traffic, in which case platform components (e.g. HTTP
          stacks, {@code DownloadManager}, {@code MediaPlayer}) will refuse applications's requests
@@ -1785,7 +1785,7 @@
         <!-- @deprecated replaced by setting appCategory attribute to "game" -->
         <attr name="isGame" />
         <!-- Declare that this application may use cleartext traffic, such as HTTP rather than
-             HTTPS; WebSockets rather than WebSockets Secure; XMPP, IMAP, STMP without STARTTLS or
+             HTTPS; WebSockets rather than WebSockets Secure; XMPP, IMAP, SMTP without STARTTLS or
              TLS). Defaults to true. If set to false {@code false}, the application declares that it
              does not intend to use cleartext network traffic, in which case platform components
              (e.g. HTTP stacks, {@code DownloadManager}, {@code MediaPlayer}) will refuse
@@ -2808,6 +2808,22 @@
         <attr name="attributionTags" />
     </declare-styleable>
 
+    <!-- @hide The <code>apex-system-service</code> tag declares an apex system service
+         that is contained within an application.
+
+         The apex system service tag appears as a child tag of the
+         {@link #AndroidManifestApplication application} tag. -->
+    <declare-styleable name="AndroidManifestApexSystemService"
+                       parent="AndroidManifestApplication">
+        <!-- The fully qualified class name of the system service. -->
+        <attr name="name" />
+        <!-- The filepath to the .jar that contains the system service. If this is not provided, it
+             is assumed that the system service exists in SYSTEMSERVERCLASSPATH. -->
+        <attr name="path" />
+        <attr name="minSdkVersion" />
+        <attr name="maxSdkVersion" />
+    </declare-styleable>
+
     <!-- The <code>receiver</code> tag declares an
          {@link android.content.BroadcastReceiver} class that is available
          as part of the package's application components, allowing the
@@ -3051,6 +3067,7 @@
     <declare-styleable name="AndroidManifestMetaData"
          parent="AndroidManifestApplication
                  AndroidManifestActivity
+                 AndroidManifestApexSystemService
                  AndroidManifestReceiver
                  AndroidManifestProvider
                  AndroidManifestService
@@ -3085,6 +3102,7 @@
     <declare-styleable name="AndroidManifestProperty"
          parent="AndroidManifestApplication
                  AndroidManifestActivity
+                 AndroidManifestApexSystemService
                  AndroidManifestReceiver
                  AndroidManifestProvider
                  AndroidManifestService">

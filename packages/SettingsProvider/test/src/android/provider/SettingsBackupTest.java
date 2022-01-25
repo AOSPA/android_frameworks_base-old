@@ -611,7 +611,6 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.AUTO_WIFI,
                     Settings.Global.Wearable.WIFI_POWER_SAVE,
                     Settings.Global.Wearable.ALT_BYPASS_WIFI_REQUIREMENT_TIME_MILLIS,
-                    Settings.Global.Wearable.UPDOWN_GESTURES_ENABLED,
                     Settings.Global.Wearable.SETUP_SKIPPED,
                     Settings.Global.Wearable.LAST_CALL_FORWARD_ACTION,
                     Settings.Global.Wearable.STEM_1_TYPE,
@@ -656,7 +655,8 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.BURN_IN_PROTECTION_ENABLED,
                     Settings.Global.Wearable.WRIST_ORIENTATION_MODE,
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_PACKAGE,
-                    Settings.Global.Wearable.CLOCKWORK_SYSUI_MAIN_ACTIVITY);
+                    Settings.Global.Wearable.CLOCKWORK_SYSUI_MAIN_ACTIVITY,
+                    Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER);
 
     private static final Set<String> BACKUP_DENY_LIST_SECURE_SETTINGS =
              newHashSet(

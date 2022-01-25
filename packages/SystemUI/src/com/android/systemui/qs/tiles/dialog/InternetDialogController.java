@@ -90,6 +90,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
@@ -316,15 +317,11 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     }
 
     CharSequence getSubtitleText(boolean isProgressBarVisible) {
-        if (isAirplaneModeEnabled()) {
-            return null;
-        }
-
         if (mCanConfigWifi && !mWifiManager.isWifiEnabled()) {
-            // When the airplane mode is off and Wi-Fi is disabled.
+            // When Wi-Fi is disabled.
             //   Sub-Title: Wi-Fi is off
             if (DEBUG) {
-                Log.d(TAG, "Airplane mode off + Wi-Fi off.");
+                Log.d(TAG, "Wi-Fi off.");
             }
             return mContext.getText(SUBTITLE_TEXT_WIFI_IS_OFF);
         }
@@ -346,6 +343,10 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             // When the Wi-Fi scan result callback is received
             //   Sub-Title: Searching for networks...
             return mContext.getText(SUBTITLE_TEXT_SEARCHING_FOR_NETWORKS);
+        }
+
+        if (isCarrierNetworkActive()) {
+            return mContext.getText(SUBTITLE_TEXT_NON_CARRIER_NETWORK_UNAVAILABLE);
         }
 
         // Sub-Title:
@@ -485,6 +486,11 @@ public class InternetDialogController implements AccessPointController.AccessPoi
 
     private Map<Integer, CharSequence> getUniqueSubscriptionDisplayNames(Context context) {
         class DisplayInfo {
+            DisplayInfo(SubscriptionInfo subscriptionInfo, CharSequence originalName) {
+                this.subscriptionInfo = subscriptionInfo;
+                this.originalName = originalName;
+            }
+
             public SubscriptionInfo subscriptionInfo;
             public CharSequence originalName;
             public CharSequence uniqueName;
@@ -498,12 +504,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                             // Filter out null values.
                             return (i != null && i.getDisplayName() != null);
                         })
-                        .map(i -> {
-                            DisplayInfo info = new DisplayInfo();
-                            info.subscriptionInfo = i;
-                            info.originalName = i.getDisplayName().toString().trim();
-                            return info;
-                        });
+                        .map(i -> new DisplayInfo(i, i.getDisplayName().toString().trim()));
 
         // A Unique set of display names
         Set<CharSequence> uniqueNames = new HashSet<>();
@@ -582,7 +583,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             return "";
         }
 
-        int resId = mapIconSets(config).get(iconKey).dataContentDescription;
+        int resId = Objects.requireNonNull(mapIconSets(config).get(iconKey)).dataContentDescription;
         if (isCarrierNetworkActive()) {
             SignalIcon.MobileIconGroup carrierMergedWifiIconGroup =
                     TelephonyIcons.CARRIER_MERGED_WIFI;
@@ -878,21 +879,24 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         if (accessPoints == null || accessPoints.size() == 0) {
             mConnectedEntry = null;
             mWifiEntriesCount = 0;
-            if (mCallback != null) {
-                mCallback.onAccessPointsChanged(null /* wifiEntries */, null /* connectedEntry */);
-            }
+            mCallback.onAccessPointsChanged(null /* wifiEntries */, null /* connectedEntry */,
+                    false /* hasMoreEntry */);
             return;
         }
 
+        boolean hasMoreEntry = false;
         int count = MAX_WIFI_ENTRY_COUNT;
         if (mHasEthernet) {
             count -= 1;
         }
-        if (hasActiveSubId()) {
+        if (hasActiveSubId() || isCarrierNetworkActive()) {
             count -= 1;
         }
-        if (count > accessPoints.size()) {
-            count = accessPoints.size();
+        final int wifiTotalCount = accessPoints.size();
+        if (count > wifiTotalCount) {
+            count = wifiTotalCount;
+        } else if (count < wifiTotalCount) {
+            hasMoreEntry = true;
         }
 
         WifiEntry connectedEntry = null;
@@ -908,9 +912,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mConnectedEntry = connectedEntry;
         mWifiEntriesCount = wifiEntries.size();
 
-        if (mCallback != null) {
-            mCallback.onAccessPointsChanged(wifiEntries, mConnectedEntry);
-        }
+        mCallback.onAccessPointsChanged(wifiEntries, mConnectedEntry, hasMoreEntry);
     }
 
     @Override
@@ -1060,7 +1062,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         void dismissDialog();
 
         void onAccessPointsChanged(@Nullable List<WifiEntry> wifiEntries,
-                @Nullable WifiEntry connectedEntry);
+                @Nullable WifiEntry connectedEntry, boolean hasMoreEntry);
     }
 
     void makeOverlayToast(int stringId) {

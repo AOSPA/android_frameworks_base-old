@@ -273,6 +273,9 @@ public final class AccessibilityManager {
     private final ArrayMap<AccessibilityServicesStateChangeListener, Executor>
             mServicesStateChangeListeners = new ArrayMap<>();
 
+    private final ArrayMap<AudioDescriptionRequestedChangeListener, Executor>
+            mAudioDescriptionRequestedChangeListeners = new ArrayMap<>();
+
     /**
      * Map from a view's accessibility id to the list of request preparers set for that view
      */
@@ -350,6 +353,21 @@ public final class AccessibilityManager {
          * @param enabled Whether high text contrast is enabled.
          */
         void onHighTextContrastStateChanged(boolean enabled);
+    }
+
+    /**
+     * Listener for the audio description by default state. To listen for
+     * changes to the audio description by default state on the device,
+     * implement this interface and register it with the system by calling
+     * {@link #addAudioDescriptionRequestedChangeListener}.
+     */
+    public interface AudioDescriptionRequestedChangeListener {
+        /**
+         * Called when the audio description enabled state changes.
+         *
+         * @param enabled Whether audio description by default is enabled.
+         */
+        void onAudioDescriptionRequestedChanged(boolean enabled);
     }
 
     /**
@@ -1159,6 +1177,35 @@ public final class AccessibilityManager {
     }
 
     /**
+     * Registers a {@link AudioDescriptionRequestedChangeListener}
+     * for changes in the audio description by default state of the system.
+     * The value could be read via {@link #isAudioDescriptionRequested}.
+     *
+     * @param executor The executor on which the listener should be called back.
+     * @param listener The listener.
+     */
+    public void addAudioDescriptionRequestedChangeListener(
+            @NonNull Executor executor,
+            @NonNull AudioDescriptionRequestedChangeListener listener) {
+        synchronized (mLock) {
+            mAudioDescriptionRequestedChangeListeners.put(listener, executor);
+        }
+    }
+
+    /**
+     * Unregisters a {@link AudioDescriptionRequestedChangeListener}.
+     *
+     * @param listener The listener.
+     * @return True if listener was previously registered.
+     */
+    public boolean removeAudioDescriptionRequestedChangeListener(
+            @NonNull AudioDescriptionRequestedChangeListener listener) {
+        synchronized (mLock) {
+            return (mAudioDescriptionRequestedChangeListeners.remove(listener) != null);
+        }
+    }
+
+    /**
      * Sets the {@link AccessibilityPolicy} controlling this manager.
      *
      * @param policy The policy.
@@ -1303,7 +1350,7 @@ public final class AccessibilityManager {
         final boolean wasEnabled = isEnabled();
         final boolean wasTouchExplorationEnabled = mIsTouchExplorationEnabled;
         final boolean wasHighTextContrastEnabled = mIsHighTextContrastEnabled;
-
+        final boolean wasAudioDescriptionByDefaultRequested = mIsAudioDescriptionByDefaultRequested;
 
         // Ensure listeners get current state from isZzzEnabled() calls.
         mIsEnabled = enabled;
@@ -1321,6 +1368,11 @@ public final class AccessibilityManager {
 
         if (wasHighTextContrastEnabled != highTextContrastEnabled) {
             notifyHighTextContrastStateChanged();
+        }
+
+        if (wasAudioDescriptionByDefaultRequested
+                != audioDescriptionEnabled) {
+            notifyAudioDescriptionbyDefaultStateChanged();
         }
 
         updateAccessibilityTracingState(stateFlags);
@@ -1688,15 +1740,20 @@ public final class AccessibilityManager {
 
     /**
      * Determines if users want to select sound track with audio description by default.
-     *
+     * <p>
      * Audio description, also referred to as a video description, described video, or
      * more precisely called a visual description, is a form of narration used to provide
      * information surrounding key visual elements in a media work for the benefit of
      * blind and visually impaired consumers.
-     *
+     * </p>
+     * <p>
      * The method provides the preference value to content provider apps to select the
      * default sound track during playing a video or movie.
-     *
+     * </p>
+     * <p>
+     * Add listener to detect the state change via
+     * {@link #addAudioDescriptionRequestedChangeListener}
+     * </p>
      * @return {@code true} if the audio description is enabled, {@code false} otherwise.
      */
     public boolean isAudioDescriptionRequested() {
@@ -1800,6 +1857,29 @@ public final class AccessibilityManager {
             final HighTextContrastChangeListener listener = listeners.keyAt(i);
             listeners.valueAt(i).post(() ->
                     listener.onHighTextContrastStateChanged(isHighTextContrastEnabled));
+        }
+    }
+
+    /**
+     * Notifies the registered {@link AudioDescriptionStateChangeListener}s.
+     */
+    private void notifyAudioDescriptionbyDefaultStateChanged() {
+        final boolean isAudioDescriptionByDefaultRequested;
+        final ArrayMap<AudioDescriptionRequestedChangeListener, Executor> listeners;
+        synchronized (mLock) {
+            if (mAudioDescriptionRequestedChangeListeners.isEmpty()) {
+                return;
+            }
+            isAudioDescriptionByDefaultRequested = mIsAudioDescriptionByDefaultRequested;
+            listeners = new ArrayMap<>(mAudioDescriptionRequestedChangeListeners);
+        }
+
+        final int numListeners = listeners.size();
+        for (int i = 0; i < numListeners; i++) {
+            final AudioDescriptionRequestedChangeListener listener = listeners.keyAt(i);
+            listeners.valueAt(i).execute(() ->
+                    listener.onAudioDescriptionRequestedChanged(
+                        isAudioDescriptionByDefaultRequested));
         }
     }
 

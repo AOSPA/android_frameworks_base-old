@@ -67,6 +67,7 @@ import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.IBooleanConsumer;
 import com.android.internal.telephony.ICallForwardingInfoCallback;
+import com.android.internal.telephony.IccLogicalChannelRequest;
 import com.android.internal.telephony.IImsStateCallback;
 import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.INumberVerificationCallback;
@@ -584,64 +585,32 @@ interface ITelephony {
     void setCellInfoListRate(int rateInMillis);
 
     /**
-     * Opens a logical channel to the ICC card using the physical slot index.
-     *
-     * Input parameters equivalent to TS 27.007 AT+CCHO command.
-     *
-     * @param slotIndex The physical slot index of the target ICC card
-     * @param callingPackage the name of the package making the call.
-     * @param AID Application id. See ETSI 102.221 and 101.220.
-     * @param p2 P2 parameter (described in ISO 7816-4).
-     * @return an IccOpenLogicalChannelResponse object.
-     */
-    IccOpenLogicalChannelResponse iccOpenLogicalChannelBySlot(
-            int slotIndex, String callingPackage, String AID, int p2);
-
-    /**
      * Opens a logical channel to the ICC card.
      *
      * Input parameters equivalent to TS 27.007 AT+CCHO command.
      *
-     * @param subId The subscription to use.
-     * @param callingPackage the name of the package making the call.
-     * @param AID Application id. See ETSI 102.221 and 101.220.
-     * @param p2 P2 parameter (described in ISO 7816-4).
+     * @param request the parcelable used to indicate how to open the logical channel.
      * @return an IccOpenLogicalChannelResponse object.
      */
-    IccOpenLogicalChannelResponse iccOpenLogicalChannel(
-            int subId, String callingPackage, String AID, int p2);
-
-    /**
-     * Closes a previously opened logical channel to the ICC card using the physical slot index.
-     *
-     * Input parameters equivalent to TS 27.007 AT+CCHC command.
-     *
-     * @param slotIndex The physical slot index of the target ICC card
-     * @param channel is the channel id to be closed as returned by a
-     *            successful iccOpenLogicalChannel.
-     * @return true if the channel was closed successfully.
-     */
-    boolean iccCloseLogicalChannelBySlot(int slotIndex, int channel);
+    IccOpenLogicalChannelResponse iccOpenLogicalChannel(in IccLogicalChannelRequest request);
 
     /**
      * Closes a previously opened logical channel to the ICC card.
      *
      * Input parameters equivalent to TS 27.007 AT+CCHC command.
      *
-     * @param subId The subscription to use.
-     * @param channel is the channel id to be closed as returned by a
-     *            successful iccOpenLogicalChannel.
+     * @param request the parcelable used to indicate how to close the logical channel.
      * @return true if the channel was closed successfully.
      */
-    @UnsupportedAppUsage(trackingBug = 171933273)
-    boolean iccCloseLogicalChannel(int subId, int channel);
+    boolean iccCloseLogicalChannel(in IccLogicalChannelRequest request);
 
     /**
-     * Transmit an APDU to the ICC card over a logical channel using the physical slot index.
+     * Transmit an APDU to the ICC card over a logical channel using the physical slot index and port index.
      *
      * Input parameters equivalent to TS 27.007 AT+CGLA command.
      *
      * @param slotIndex The physical slot index of the target ICC card
+     * @param portIndex The unique index referring to a port belonging to the SIM slot
      * @param channel is the channel id to be closed as returned by a
      *            successful iccOpenLogicalChannel.
      * @param cla Class of the APDU command.
@@ -654,7 +623,7 @@ interface ITelephony {
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
      */
-    String iccTransmitApduLogicalChannelBySlot(int slotIndex, int channel, int cla, int instruction,
+    String iccTransmitApduLogicalChannelByPort(int slotIndex, int portIndex, int channel, int cla, int instruction,
             int p1, int p2, int p3, String data);
 
     /**
@@ -680,11 +649,12 @@ interface ITelephony {
             int p1, int p2, int p3, String data);
 
     /**
-     * Transmit an APDU to the ICC card over the basic channel using the physical slot index.
+     * Transmit an APDU to the ICC card over the basic channel using the physical slot index and port index.
      *
      * Input parameters equivalent to TS 27.007 AT+CSIM command.
      *
      * @param slotIndex The physical slot index of the target ICC card
+     * @param portIndex The unique index referring to a port belonging to the SIM slot
      * @param callingPackage the name of the package making the call.
      * @param cla Class of the APDU command.
      * @param instruction Instruction of the APDU command.
@@ -696,7 +666,7 @@ interface ITelephony {
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
      */
-    String iccTransmitApduBasicChannelBySlot(int slotIndex, String callingPackage, int cla,
+    String iccTransmitApduBasicChannelByPort(int slotIndex, int portIndex, String callingPackage, int cla,
             int instruction, int p1, int p2, int p3, String data);
 
     /**
@@ -901,6 +871,8 @@ interface ITelephony {
      * Perform a radio network scan and return the id of this scan.
      *
      * @param subId the id of the subscription.
+     * @param renounceFineLocationAccess Set this to true if the caller would not like to
+     * receive fine location related information
      * @param request Defines all the configs for network scan.
      * @param messenger Callback messages will be sent using this messenger.
      * @param binder the binder object instantiated in TelephonyManager.
@@ -908,8 +880,9 @@ interface ITelephony {
      * @param callingFeatureId The feature in the package
      * @return An id for this scan.
      */
-    int requestNetworkScan(int subId, in NetworkScanRequest request, in Messenger messenger,
-            in IBinder binder, in String callingPackage, String callingFeatureId);
+    int requestNetworkScan(int subId, in boolean renounceFineLocationAccess,
+            in NetworkScanRequest request, in Messenger messenger, in IBinder binder,
+	    in String callingPackage, String callingFeatureId);
 
     /**
      * Stop an existing radio network scan.
@@ -1383,12 +1356,17 @@ interface ITelephony {
     /**
      * Get the service state on specified subscription
      * @param subId Subscription id
+     * @param renounceFineLocationAccess Set this to true if the caller would not like to
+     * receive fine location related information
+     * @param renounceCoarseLocationAccess Set this to true if the caller would not like to
+     * receive coarse location related information
      * @param callingPackage The package making the call
      * @param callingFeatureId The feature in the package
      * @return Service state on specified subscription.
      */
-    ServiceState getServiceStateForSubscriber(int subId, String callingPackage,
-            String callingFeatureId);
+    ServiceState getServiceStateForSubscriber(int subId, boolean renounceFineLocationAccess,
+            boolean renounceCoarseLocationAccess,
+            String callingPackage, String callingFeatureId);
 
     /**
      * Returns the URI for the per-account voicemail ringtone set in Phone settings.
@@ -2523,4 +2501,16 @@ interface ITelephony {
      * Unregister an IMS connection state callback
      */
     void unregisterImsStateCallback(in IImsStateCallback cb);
+
+    /**
+     * return last known cell identity
+     * @param subId user preferred subId.
+     * @param callingPackage the name of the package making the call.
+     * @param callingFeatureId The feature in the package.
+     */
+    CellIdentity getLastKnownCellIdentity(int subId, String callingPackage,
+            String callingFeatureId);
+
+    /** Check if telephony new data stack is enabled. */
+    boolean isUsingNewDataStack();
 }

@@ -2060,6 +2060,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     mHandler.removeMessages(MESSAGE_RESTART_BLUETOOTH_SERVICE);
                     mEnable = true;
 
+                    if (isBle == 0) {
+                        persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
+                    }
+
                     mQuietEnable = (quietEnable == 1);
                     // Use service interface to get the exact state
                     try {
@@ -2078,10 +2082,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                                         mBluetooth.updateQuietModeStatus(mQuietEnable,
                                                 mContext.getAttributionSource());
                                         mBluetooth.onLeServiceUp(mContext.getAttributionSource());
+                                        persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
 
                                         // waive WRITE_SECURE_SETTINGS permission check
                                         long callingIdentity = Binder.clearCallingIdentity();
-                                        persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
                                         Binder.restoreCallingIdentity(callingIdentity);
                                     } else {
                                         Slog.w(TAG, "BLE_ON State:Queued enable from ble app," +

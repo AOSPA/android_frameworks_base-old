@@ -80,6 +80,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
@@ -1922,6 +1923,35 @@ public class Resources {
                     return stack;
                 }
             }
+        }
+
+        @Override
+        public int hashCode() {
+            return getKey().hashCode();
+        }
+
+        @Override
+        public boolean equals(@Nullable Object o) {
+            if (this == o) {
+                return true;
+            }
+
+            if (o == null || getClass() != o.getClass() || hashCode() != o.hashCode()) {
+                return false;
+            }
+
+            final Theme other = (Theme) o;
+            return getKey().equals(other.getKey());
+        }
+
+        @Override
+        public String toString() {
+            final StringBuilder sb = new StringBuilder();
+            sb.append('{');
+            sb.append("id=0x").append(Integer.toHexString(getAppliedStyleResId())).append(", ");
+            sb.append("themes=").append(Arrays.deepToString(getTheme()));
+            sb.append('}');
+            return sb.toString();
         }
     }
 

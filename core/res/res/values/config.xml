@@ -2113,6 +2113,8 @@
     <string name="config_systemWifiCoexManager" translatable="false"></string>
     <!-- The name of the package that will hold the wellbeing role. -->
     <string name="config_systemWellbeing" translatable="false"></string>
+    <!-- The name of the package that will hold the game service role. -->
+    <string name="config_systemGameService" translatable="false"></string>
     <!-- The name of the package that will hold the television notification handler role -->
     <string name="config_systemTelevisionNotificationHandler" translatable="false"></string>
     <!-- The name of the package that will hold the system activity recognizer role. -->
@@ -2124,6 +2126,8 @@
     <string name="config_systemTelevisionRemoteService" translatable="false">@string/config_tvRemoteServicePackage</string>
     <!-- The name of the package that will hold the device management role -->
     <string name="config_deviceManager" translatable="false"></string>
+    <!-- The name of the package that will hold the app protection service role. -->
+    <string name="config_systemAppProtectionService" translatable="false"></string>
 
     <!-- The name of the package that will be allowed to change its components' label/icon. -->
     <string name="config_overrideComponentUiPackage" translatable="false">com.android.stk</string>
@@ -2382,7 +2386,7 @@
     <!-- If supported and enabled, are dreams activated when asleep and charging? (by default) -->
     <bool name="config_dreamsActivatedOnSleepByDefault">false</bool>
     <!-- ComponentName of the default dream (Settings.Secure.DEFAULT_SCREENSAVER_COMPONENT) -->
-    <string name="config_dreamsDefaultComponent" translatable="false">com.google.android.deskclock/com.android.deskclock.Screensaver</string>
+    <string name="config_dreamsDefaultComponent" translatable="false">com.android.deskclock/com.android.deskclock.Screensaver</string>
 
     <!-- Are we allowed to dream while not plugged in? -->
     <bool name="config_dreamsEnabledOnBattery">false</bool>
@@ -5535,4 +5539,6 @@
         <!-- Add configurations here, example: -->
         <!-- <item>SUPL_HOST=supl.google.com</item> -->
     </string-array>
+
+    <integer name="config_chooser_max_targets_per_row">4</integer>
 </resources>

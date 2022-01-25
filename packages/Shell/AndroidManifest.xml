@@ -200,6 +200,7 @@
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
     <uses-permission android:name="android.permission.CREATE_USERS" />
+    <uses-permission android:name="android.permission.QUERY_USERS" />
     <uses-permission android:name="android.permission.CREATE_VIRTUAL_DEVICE" />
     <uses-permission android:name="android.permission.MANAGE_CREDENTIAL_MANAGEMENT_APP" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS" />
@@ -256,6 +257,7 @@
     <uses-permission android:name="android.permission.OBSERVE_ROLE_HOLDERS" />
     <uses-permission android:name="android.permission.STATUS_BAR_SERVICE" />
     <uses-permission android:name="android.permission.STATUS_BAR" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Permission needed to rename bugreport notifications (so they're not shown as Shell) -->
     <uses-permission android:name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
     <uses-permission android:name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
@@ -570,6 +572,9 @@
     <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_ROUTING" />
 
+    <!-- Permission required for CTS test - CallAudioInterceptionTest -->
+    <uses-permission android:name="android.permission.CALL_AUDIO_INTERCEPTION" />
+
     <!-- Permission required for CTS test - CtsRotationResolverServiceDeviceTestCases -->
     <uses-permission android:name="android.permission.MANAGE_ROTATION_RESOLVER" />
 
@@ -598,6 +603,13 @@
 
     <!-- Permission required for ATS test - CarDevicePolicyManagerTest -->
     <uses-permission android:name="android.permission.LOCK_DEVICE" />
+
+    <!-- Permission required for CTS test - CtsSafetyCenterTestCases -->
+    <uses-permission android:name="android.permission.SEND_SAFETY_CENTER_UPDATE" />
+
+    <!-- Permission required for CTS test - CommunalManagerTest -->
+    <uses-permission android:name="android.permission.WRITE_COMMUNAL_STATE" />
+    <uses-permission android:name="android.permission.READ_COMMUNAL_STATE" />
 
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"

@@ -42,6 +42,7 @@ package android {
     field public static final String TEST_BIOMETRIC = "android.permission.TEST_BIOMETRIC";
     field public static final String TEST_MANAGE_ROLLBACKS = "android.permission.TEST_MANAGE_ROLLBACKS";
     field public static final String UPGRADE_RUNTIME_PERMISSIONS = "android.permission.UPGRADE_RUNTIME_PERMISSIONS";
+    field public static final String WRITE_COMMUNAL_STATE = "android.permission.WRITE_COMMUNAL_STATE";
     field public static final String WRITE_DEVICE_CONFIG = "android.permission.WRITE_DEVICE_CONFIG";
     field @Deprecated public static final String WRITE_MEDIA_STORAGE = "android.permission.WRITE_MEDIA_STORAGE";
     field public static final String WRITE_OBB = "android.permission.WRITE_OBB";
@@ -437,7 +438,6 @@ package android.app {
 package android.app.admin {
 
   public class DevicePolicyManager {
-    method public int checkProvisioningPreCondition(@Nullable String, @NonNull String);
     method @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS) public void clearOrganizationId();
     method @RequiresPermission(android.Manifest.permission.CLEAR_FREEZE_PERIOD) public void clearSystemUpdatePolicyFreezePeriodRecord();
     method @Nullable public android.os.UserHandle createAndProvisionManagedProfile(@NonNull android.app.admin.ManagedProfileProvisioningParams) throws android.app.admin.ProvisioningException;
@@ -465,22 +465,7 @@ package android.app.admin {
     method @RequiresPermission(android.Manifest.permission.MANAGE_DEVICE_ADMINS) public void setNextOperationSafety(int, int);
     field public static final String ACTION_DATA_SHARING_RESTRICTION_APPLIED = "android.app.action.DATA_SHARING_RESTRICTION_APPLIED";
     field public static final String ACTION_DEVICE_POLICY_CONSTANTS_CHANGED = "android.app.action.DEVICE_POLICY_CONSTANTS_CHANGED";
-    field public static final int CODE_ACCOUNTS_NOT_EMPTY = 6; // 0x6
-    field public static final int CODE_CANNOT_ADD_MANAGED_PROFILE = 11; // 0xb
-    field public static final int CODE_DEVICE_ADMIN_NOT_SUPPORTED = 13; // 0xd
-    field public static final int CODE_HAS_DEVICE_OWNER = 1; // 0x1
-    field public static final int CODE_HAS_PAIRED = 8; // 0x8
-    field public static final int CODE_MANAGED_USERS_NOT_SUPPORTED = 9; // 0x9
-    field public static final int CODE_NONSYSTEM_USER_EXISTS = 5; // 0x5
-    field public static final int CODE_NOT_SYSTEM_USER = 7; // 0x7
-    field @Deprecated public static final int CODE_NOT_SYSTEM_USER_SPLIT = 12; // 0xc
-    field public static final int CODE_OK = 0; // 0x0
-    field public static final int CODE_PROVISIONING_NOT_ALLOWED_FOR_NON_DEVELOPER_USERS = 15; // 0xf
     field @Deprecated public static final int CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER = 14; // 0xe
-    field public static final int CODE_SYSTEM_USER = 10; // 0xa
-    field public static final int CODE_USER_HAS_PROFILE_OWNER = 2; // 0x2
-    field public static final int CODE_USER_NOT_RUNNING = 3; // 0x3
-    field public static final int CODE_USER_SETUP_COMPLETED = 4; // 0x4
     field public static final int OPERATION_CLEAR_APPLICATION_USER_DATA = 23; // 0x17
     field public static final int OPERATION_CREATE_AND_MANAGE_USER = 5; // 0x5
     field public static final int OPERATION_INSTALL_CA_CERT = 24; // 0x18
@@ -624,6 +609,14 @@ package android.app.blob {
 
 }
 
+package android.app.communal {
+
+  public final class CommunalManager {
+    method @RequiresPermission(android.Manifest.permission.WRITE_COMMUNAL_STATE) public void setCommunalViewShowing(boolean);
+  }
+
+}
+
 package android.app.contentsuggestions {
 
   public final class ContentSuggestionsManager {
@@ -688,6 +681,14 @@ package android.bluetooth {
 
   public final class BluetoothClass implements android.os.Parcelable {
     method public int getClassOfDevice();
+  }
+
+}
+
+package android.companion {
+
+  public abstract class CompanionDeviceService extends android.app.Service {
+    method public void onBindCompanionDeviceService(@NonNull android.content.Intent);
   }
 
 }
@@ -825,7 +826,8 @@ package android.content.pm {
     method @Nullable public String getDefaultTextClassifierPackageName();
     method @RequiresPermission(android.Manifest.permission.INJECT_EVENTS) public android.os.IBinder getHoldLockToken();
     method public abstract int getInstallReason(@NonNull String, @NonNull android.os.UserHandle);
-    method @NonNull public abstract java.util.List<android.content.pm.ApplicationInfo> getInstalledApplicationsAsUser(int, int);
+    method @Deprecated @NonNull public abstract java.util.List<android.content.pm.ApplicationInfo> getInstalledApplicationsAsUser(int, int);
+    method @NonNull public java.util.List<android.content.pm.ApplicationInfo> getInstalledApplicationsAsUser(@NonNull android.content.pm.PackageManager.ApplicationInfoFlags, int);
     method @Nullable public abstract String[] getNamesForUids(int[]);
     method @NonNull public String getPermissionControllerPackageName();
     method @NonNull public abstract String getServicesSystemSharedLibraryPackageName();
@@ -835,6 +837,7 @@ package android.content.pm {
     method public void holdLock(android.os.IBinder, int);
     method @RequiresPermission(android.Manifest.permission.KEEP_UNINSTALLED_PACKAGES) public void setKeepUninstalledPackages(@NonNull java.util.List<java.lang.String>);
     field public static final String FEATURE_ADOPTABLE_STORAGE = "android.software.adoptable_storage";
+    field public static final String FEATURE_COMMUNAL_MODE = "android.software.communal_mode";
     field public static final String FEATURE_FILE_BASED_ENCRYPTION = "android.software.file_based_encryption";
     field public static final String FEATURE_HDMI_CEC = "android.hardware.hdmi.cec";
     field public static final int FLAG_PERMISSION_REVOKE_WHEN_REQUESTED = 128; // 0x80
@@ -1067,13 +1070,13 @@ package android.hardware {
 
   public final class SensorPrivacyManager {
     method @RequiresPermission(android.Manifest.permission.MANAGE_SENSOR_PRIVACY) public void setSensorPrivacy(int, int, boolean);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_SENSOR_PRIVACY) public void setSensorPrivacyForProfileGroup(int, int, boolean);
   }
 
   public static class SensorPrivacyManager.Sources {
     field public static final int DIALOG = 3; // 0x3
     field public static final int OTHER = 5; // 0x5
     field public static final int QS_TILE = 1; // 0x1
+    field public static final int SAFETY_HUB = 6; // 0x6
     field public static final int SETTINGS = 2; // 0x2
     field public static final int SHELL = 4; // 0x4
   }
@@ -1445,6 +1448,8 @@ package android.media {
 
   public class AudioManager {
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int abandonAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String);
+    method @NonNull @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION) public android.media.AudioRecord getCallDownlinkExtractionAudioRecord(@NonNull android.media.AudioFormat);
+    method @NonNull @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION) public android.media.AudioTrack getCallUplinkInjectionAudioTrack(@NonNull android.media.AudioFormat);
     method @Nullable public static android.media.AudioDeviceInfo getDeviceInfoFromType(int);
     method @IntRange(from=0) @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public long getFadeOutDurationOnFocusLossMillis(@NonNull android.media.AudioAttributes);
     method public static final int[] getPublicStreamTypes();
@@ -1453,8 +1458,10 @@ package android.media {
     method @NonNull public java.util.Map<java.lang.Integer,java.lang.Boolean> getSurroundFormats();
     method public boolean hasRegisteredDynamicPolicy();
     method @RequiresPermission(anyOf={android.Manifest.permission.MODIFY_AUDIO_ROUTING, android.Manifest.permission.QUERY_AUDIO_STATE}) public boolean isFullVolumeDevice();
+    method @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION) public boolean isPstnCallAudioInterceptable();
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int requestAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String, int, int);
     method public void setRampingRingerEnabled(boolean);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void setTestDeviceConnectionState(@NonNull android.media.AudioDeviceAttributes, boolean);
   }
 
   public static final class AudioRecord.MetricsConstants {
@@ -1819,7 +1826,7 @@ package android.os {
     method @Nullable @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public android.content.pm.UserInfo createRestrictedProfile(@Nullable String);
     method @Nullable @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public android.content.pm.UserInfo createUser(@Nullable String, @NonNull String, int);
     method @Nullable @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public java.util.Set<java.lang.String> getPreInstallableSystemPackages(@NonNull String);
-    method @NonNull @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public String getUserType();
+    method @NonNull @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS, android.Manifest.permission.QUERY_USERS}) public String getUserType();
     method @NonNull @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public java.util.List<android.content.pm.UserInfo> getUsers(boolean, boolean, boolean);
     method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public boolean hasBaseUserRestriction(@NonNull String, @NonNull android.os.UserHandle);
     method public static boolean isGuestUserEphemeral();

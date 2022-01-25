@@ -23,6 +23,7 @@ android_test {
     ],
 
     aidl: {
+        generate_get_transaction_name: true,
         local_include_dirs: ["aidl"],
     },
 
@@ -46,6 +47,7 @@ android_test {
         "androidx.test.ext.junit",
         "androidx.test.runner",
         "androidx.test.rules",
+        "kotlin-test",
         "mockito-target-minus-junit4",
         "ub-uiautomator",
         "platform-test-annotations",

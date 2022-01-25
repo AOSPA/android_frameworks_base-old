@@ -437,7 +437,10 @@ public class UiTranslationController {
                     if (view.getViewTranslationResponse() != null
                             && view.getViewTranslationResponse().equals(response)) {
                         if (callback instanceof TextViewTranslationCallback) {
-                            if (((TextViewTranslationCallback) callback).isShowingTranslation()) {
+                            TextViewTranslationCallback textViewCallback =
+                                    (TextViewTranslationCallback) callback;
+                            if (textViewCallback.isShowingTranslation()
+                                    || textViewCallback.isAnimationRunning()) {
                                 if (DEBUG) {
                                     Log.d(TAG, "Duplicate ViewTranslationResponse for " + autofillId
                                             + ". Ignoring.");
@@ -623,7 +626,7 @@ public class UiTranslationController {
 
     private void addViewIfNeeded(IntArray sourceViewIds, View view) {
         final AutofillId autofillId = view.getAutofillId();
-        if ((sourceViewIds.indexOf(autofillId.getViewId()) >= 0)
+        if (autofillId != null && (sourceViewIds.indexOf(autofillId.getViewId()) >= 0)
                 && !mViews.containsKey(autofillId)) {
             mViews.put(autofillId, new WeakReference<>(view));
         }

@@ -35,6 +35,7 @@ import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SuppressLint;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -92,6 +93,7 @@ import android.media.IAudioServerStateDispatcher;
 import android.media.IAudioService;
 import android.media.ICapturePresetDevicesRoleDispatcher;
 import android.media.ICommunicationDeviceDispatcher;
+import android.media.IMuteAwaitConnectionCallback;
 import android.media.IPlaybackConfigDispatcher;
 import android.media.IRecordingConfigDispatcher;
 import android.media.IRingtonePlayer;
@@ -1033,7 +1035,8 @@ public class AudioService extends IAudioService.Stub
         readUserRestrictions();
 
         mPlaybackMonitor =
-                new PlaybackActivityMonitor(context, MAX_STREAM_VOLUME[AudioSystem.STREAM_ALARM]);
+                new PlaybackActivityMonitor(context, MAX_STREAM_VOLUME[AudioSystem.STREAM_ALARM],
+                        device -> onMuteAwaitConnectionTimeout(device));
         mPlaybackMonitor.registerPlaybackCallback(mVoicePlaybackActivityMonitor, true);
 
         mMediaFocusControl = new MediaFocusControl(mContext, mPlaybackMonitor);
@@ -1053,6 +1056,9 @@ public class AudioService extends IAudioService.Stub
         mMonitorRotation = SystemProperties.getBoolean("ro.audio.monitorRotation", false);
 
         mHasSpatializerEffect = SystemProperties.getBoolean("ro.audio.spatializer_enabled", false);
+
+        // monitor routing updates coming from native
+        mAudioSystem.setRoutingListener(this);
 
         // done with service initialization, continue additional work in our Handler thread
         queueMsgUnderWakeLock(mAudioHandler, MSG_INIT_STREAMS_VOLUMES,
@@ -1256,25 +1262,31 @@ public class AudioService extends IAudioService.Stub
         initMinStreamVolumeWithoutModifyAudioSettings();
 
         updateVibratorInfos();
+
+        synchronized (mSupportedSystemUsagesLock) {
+            AudioSystem.setSupportedSystemUsages(mSupportedSystemUsages);
+        }
     }
 
     //-----------------------------------------------------------------
     // routing monitoring from AudioSystemAdapter
     @Override
     public void onRoutingUpdatedFromNative() {
-        if (!mHasSpatializerEffect) {
-            return;
-        }
         sendMsg(mAudioHandler,
                 MSG_ROUTING_UPDATED,
                 SENDMSG_REPLACE, 0, 0, null,
                 /*delay*/ 0);
     }
 
-    void monitorRoutingChanges(boolean enabled) {
-        mAudioSystem.setRoutingListener(enabled ? this : null);
+    /**
+     * called when handling MSG_ROUTING_UPDATED
+     */
+    void onRoutingUpdatedFromAudioThread() {
+        if (mHasSpatializerEffect) {
+            mSpatializerHelper.onRoutingUpdated();
+        }
+        checkMuteAwaitConnection();
     }
-
 
     //-----------------------------------------------------------------
     RoleObserver mRoleObserver;
@@ -1483,7 +1495,6 @@ public class AudioService extends IAudioService.Stub
 
         if (mHasSpatializerEffect) {
             mSpatializerHelper.reset(/* featureEnabled */ isSpatialAudioEnabled());
-            monitorRoutingChanges(true);
         }
 
         onIndicateSystemReady();
@@ -3264,6 +3275,15 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    private void enforceCallAudioInterceptionPermission() {
+        if (mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.CALL_AUDIO_INTERCEPTION)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Missing CALL_AUDIO_INTERCEPTION permission");
+        }
+    }
+
+
     /** @see AudioManager#setVolumeIndexForAttributes(attr, int, int) */
     public void setVolumeIndexForAttributes(@NonNull AudioAttributes attr, int index, int flags,
             String callingPackage, String attributionTag) {
@@ -4984,6 +5004,26 @@ public class AudioService extends IAudioService.Stub
         mModeDispatchers.unregister(dispatcher);
     }
 
+    /** @see AudioManager#isPstnCallAudioInterceptable() */
+    public boolean isPstnCallAudioInterceptable() {
+        enforceCallAudioInterceptionPermission();
+
+        boolean uplinkDeviceFound = false;
+        boolean downlinkDeviceFound = false;
+        AudioDeviceInfo[] devices = AudioManager.getDevicesStatic(AudioManager.GET_DEVICES_ALL);
+        for (AudioDeviceInfo device : devices) {
+            if (device.getInternalType() == AudioSystem.DEVICE_OUT_TELEPHONY_TX) {
+                uplinkDeviceFound = true;
+            } else if (device.getInternalType() == AudioSystem.DEVICE_IN_TELEPHONY_RX) {
+                downlinkDeviceFound = true;
+            }
+            if (uplinkDeviceFound && downlinkDeviceFound) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** @see AudioManager#setRttEnabled() */
     @Override
     public void setRttEnabled(boolean rttEnabled) {
@@ -6382,6 +6422,20 @@ public class AudioService extends IAudioService.Stub
         mDeviceBroker.setWiredDeviceConnectionState(type, state, address, name, caller);
     }
 
+    /** @see AudioManager#setTestDeviceConnectionState(AudioDeviceAttributes, boolean) */
+    public void setTestDeviceConnectionState(@NonNull AudioDeviceAttributes device,
+            boolean connected) {
+        Objects.requireNonNull(device);
+        enforceModifyAudioRoutingPermission();
+        mDeviceBroker.setTestDeviceConnectionState(device,
+                connected ? CONNECTION_STATE_CONNECTED : CONNECTION_STATE_DISCONNECTED);
+        // simulate a routing update from native
+        sendMsg(mAudioHandler,
+                MSG_ROUTING_UPDATED,
+                SENDMSG_REPLACE, 0, 0, null,
+                /*delay*/ 0);
+    }
+
     /**
      * @hide
      * The states that can be used with AudioService.setBluetoothHearingAidDeviceConnectionState()
@@ -7698,7 +7752,6 @@ public class AudioService extends IAudioService.Stub
                     mSpatializerHelper.init(/*effectExpected*/ mHasSpatializerEffect);
                     if (mHasSpatializerEffect) {
                         mSpatializerHelper.setFeatureEnabled(isSpatialAudioEnabled());
-                        monitorRoutingChanges(true);
                     }
                     mAudioEventWakeLock.release();
                     break;
@@ -7837,7 +7890,7 @@ public class AudioService extends IAudioService.Stub
                     break;
 
                 case MSG_ROUTING_UPDATED:
-                    mSpatializerHelper.onRoutingUpdated();
+                    onRoutingUpdatedFromAudioThread();
                     break;
 
                 case MSG_PERSIST_SPATIAL_AUDIO_ENABLED:
@@ -8247,7 +8300,10 @@ public class AudioService extends IAudioService.Stub
     private void validateAudioAttributesUsage(@NonNull AudioAttributes audioAttributes) {
         @AudioAttributes.AttributeUsage int usage = audioAttributes.getSystemUsage();
         if (AudioAttributes.isSystemUsage(usage)) {
-            if (callerHasPermission(Manifest.permission.MODIFY_AUDIO_ROUTING)) {
+            if ((usage == AudioAttributes.USAGE_CALL_ASSISTANT
+                    && (audioAttributes.getAllFlags() & AudioAttributes.FLAG_CALL_REDIRECTION) != 0
+                    && callerHasPermission(Manifest.permission.CALL_AUDIO_INTERCEPTION))
+                    || callerHasPermission(Manifest.permission.MODIFY_AUDIO_ROUTING)) {
                 if (!isSupportedSystemUsage(usage)) {
                     throw new IllegalArgumentException(
                             "Unsupported usage " + AudioAttributes.usageToString(usage));
@@ -8261,8 +8317,12 @@ public class AudioService extends IAudioService.Stub
     private boolean isValidAudioAttributesUsage(@NonNull AudioAttributes audioAttributes) {
         @AudioAttributes.AttributeUsage int usage = audioAttributes.getSystemUsage();
         if (AudioAttributes.isSystemUsage(usage)) {
-            return callerHasPermission(Manifest.permission.MODIFY_AUDIO_ROUTING)
-                    && isSupportedSystemUsage(usage);
+            return isSupportedSystemUsage(usage)
+                    && ((usage == AudioAttributes.USAGE_CALL_ASSISTANT
+                        && (audioAttributes.getAllFlags()
+                            & AudioAttributes.FLAG_CALL_REDIRECTION) != 0
+                        && callerHasPermission(Manifest.permission.CALL_AUDIO_INTERCEPTION))
+                        || callerHasPermission(Manifest.permission.MODIFY_AUDIO_ROUTING));
         }
         return true;
     }
@@ -8270,6 +8330,9 @@ public class AudioService extends IAudioService.Stub
     public int requestAudioFocus(AudioAttributes aa, int durationHint, IBinder cb,
             IAudioFocusDispatcher fd, String clientId, String callingPackageName,
             String attributionTag, int flags, IAudioPolicyCallback pcb, int sdk) {
+        if ((flags & AudioManager.AUDIOFOCUS_FLAG_TEST) != 0) {
+            throw new IllegalArgumentException("Invalid test flag");
+        }
         final int uid = Binder.getCallingUid();
         MediaMetrics.Item mmi = new MediaMetrics.Item(mMetricsId + "focus")
                 .setUid(uid)
@@ -8328,7 +8391,7 @@ public class AudioService extends IAudioService.Stub
     /** see {@link AudioManager#requestAudioFocusForTest(AudioFocusRequest, String, int, int)} */
     public int requestAudioFocusForTest(AudioAttributes aa, int durationHint, IBinder cb,
             IAudioFocusDispatcher fd, String clientId, String callingPackageName,
-            int fakeUid, int sdk) {
+            int flags, int fakeUid, int sdk) {
         if (!enforceQueryAudioStateForTest("focus request")) {
             return AudioManager.AUDIOFOCUS_REQUEST_FAILED;
         }
@@ -8338,7 +8401,7 @@ public class AudioService extends IAudioService.Stub
             return AudioManager.AUDIOFOCUS_REQUEST_FAILED;
         }
         return mMediaFocusControl.requestAudioFocus(aa, durationHint, cb, fd,
-                clientId, callingPackageName, null, AudioManager.AUDIOFOCUS_FLAG_TEST,
+                clientId, callingPackageName, null, flags,
                 sdk, false /*forceDuck*/, fakeUid);
     }
 
@@ -8648,6 +8711,171 @@ public class AudioService extends IAudioService.Stub
                 mContext.getResources().getBoolean(
                         com.android.internal.R.bool.config_camera_sound_forced);
     }
+
+    //==========================================================================================
+    private final Object mMuteAwaitConnectionLock = new Object();
+
+    /**
+     * The device that is expected to be connected soon, and causes players to be muted until
+     * its connection, or it times out.
+     * Null when no active muting command, or it has timed out.
+     */
+    @GuardedBy("mMuteAwaitConnectionLock")
+    private AudioDeviceAttributes mMutingExpectedDevice;
+    @GuardedBy("mMuteAwaitConnectionLock")
+    private @Nullable int[] mMutedUsagesAwaitingConnection;
+
+    /** @see AudioManager#muteAwaitConnection */
+    @SuppressLint("EmptyCatch") // callback exception caught inside dispatchMuteAwaitConnection
+    public void muteAwaitConnection(@NonNull int[] usages,
+            @NonNull AudioDeviceAttributes device, long timeOutMs) {
+        Objects.requireNonNull(usages);
+        Objects.requireNonNull(device);
+        enforceModifyAudioRoutingPermission();
+        if (timeOutMs <= 0 || usages.length == 0) {
+            throw new IllegalArgumentException("Invalid timeOutMs/usagesToMute");
+        }
+
+        if (mDeviceBroker.isDeviceConnected(device)) {
+            // not throwing an exception as there could be a race between a connection (server-side,
+            // notification of connection in flight) and a mute operation (client-side)
+            Log.i(TAG, "muteAwaitConnection ignored, device (" + device + ") already connected");
+            return;
+        }
+        synchronized (mMuteAwaitConnectionLock) {
+            if (mMutingExpectedDevice != null) {
+                Log.e(TAG, "muteAwaitConnection ignored, another in progress for device:"
+                        + mMutingExpectedDevice);
+                throw new IllegalStateException("muteAwaitConnection already in progress");
+            }
+            mMutingExpectedDevice = device;
+            mMutedUsagesAwaitingConnection = usages;
+            mPlaybackMonitor.muteAwaitConnection(usages, device, timeOutMs);
+        }
+        dispatchMuteAwaitConnection(cb -> { try {
+            cb.dispatchOnMutedUntilConnection(device, usages); } catch (RemoteException e) { } });
+    }
+
+    /** @see AudioManager#getMutingExpectedDevice */
+    public @Nullable AudioDeviceAttributes getMutingExpectedDevice() {
+        enforceModifyAudioRoutingPermission();
+        synchronized (mMuteAwaitConnectionLock) {
+            return mMutingExpectedDevice;
+        }
+    }
+
+    /** @see AudioManager#cancelMuteAwaitConnection */
+    @SuppressLint("EmptyCatch") // callback exception caught inside dispatchMuteAwaitConnection
+    public void cancelMuteAwaitConnection(@NonNull AudioDeviceAttributes device) {
+        Objects.requireNonNull(device);
+        enforceModifyAudioRoutingPermission();
+        Log.i(TAG, "cancelMuteAwaitConnection for device:" + device);
+        final int[] mutedUsages;
+        synchronized (mMuteAwaitConnectionLock) {
+            if (mMutingExpectedDevice == null) {
+                // not throwing an exception as there could be a race between a timeout
+                // (server-side) and a cancel operation (client-side)
+                Log.i(TAG, "cancelMuteAwaitConnection ignored, no expected device");
+                return;
+            }
+            if (!device.equals(mMutingExpectedDevice)) {
+                Log.e(TAG, "cancelMuteAwaitConnection ignored, got " + device
+                        + "] but expected device is" + mMutingExpectedDevice);
+                throw new IllegalStateException("cancelMuteAwaitConnection for wrong device");
+            }
+            mutedUsages = mMutedUsagesAwaitingConnection;
+            mMutingExpectedDevice = null;
+            mMutedUsagesAwaitingConnection = null;
+            mPlaybackMonitor.cancelMuteAwaitConnection();
+        }
+        dispatchMuteAwaitConnection(cb -> { try { cb.dispatchOnUnmutedEvent(
+                    AudioManager.MuteAwaitConnectionCallback.EVENT_CANCEL, device, mutedUsages);
+            } catch (RemoteException e) { } });
+    }
+
+    final RemoteCallbackList<IMuteAwaitConnectionCallback> mMuteAwaitConnectionDispatchers =
+            new RemoteCallbackList<IMuteAwaitConnectionCallback>();
+
+    /** @see AudioManager#registerMuteAwaitConnectionCallback */
+    public void registerMuteAwaitConnectionDispatcher(@NonNull IMuteAwaitConnectionCallback cb,
+            boolean register) {
+        enforceModifyAudioRoutingPermission();
+        if (register) {
+            mMuteAwaitConnectionDispatchers.register(cb);
+        } else {
+            mMuteAwaitConnectionDispatchers.unregister(cb);
+        }
+    }
+
+    @SuppressLint("EmptyCatch") // callback exception caught inside dispatchMuteAwaitConnection
+    void checkMuteAwaitConnection() {
+        final AudioDeviceAttributes device;
+        final int[] mutedUsages;
+        synchronized (mMuteAwaitConnectionLock) {
+            if (mMutingExpectedDevice == null) {
+                return;
+            }
+            device = mMutingExpectedDevice;
+            mutedUsages = mMutedUsagesAwaitingConnection;
+            if (!mDeviceBroker.isDeviceConnected(device)) {
+                return;
+            }
+            mMutingExpectedDevice = null;
+            mMutedUsagesAwaitingConnection = null;
+            Log.i(TAG, "muteAwaitConnection device " + device + " connected, unmuting");
+            mPlaybackMonitor.cancelMuteAwaitConnection();
+        }
+        dispatchMuteAwaitConnection(cb -> { try { cb.dispatchOnUnmutedEvent(
+                AudioManager.MuteAwaitConnectionCallback.EVENT_CONNECTION, device, mutedUsages);
+            } catch (RemoteException e) { } });
+    }
+
+    /**
+     * Called by PlaybackActivityMonitor when the timeout hit for the mute on device connection
+     */
+    @SuppressLint("EmptyCatch") // callback exception caught inside dispatchMuteAwaitConnection
+    void onMuteAwaitConnectionTimeout(@NonNull AudioDeviceAttributes timedOutDevice) {
+        final int[] mutedUsages;
+        synchronized (mMuteAwaitConnectionLock) {
+            if (!timedOutDevice.equals(mMutingExpectedDevice)) {
+                return;
+            }
+            Log.i(TAG, "muteAwaitConnection timeout, clearing expected device "
+                    + mMutingExpectedDevice);
+            mutedUsages = mMutedUsagesAwaitingConnection;
+            mMutingExpectedDevice = null;
+            mMutedUsagesAwaitingConnection = null;
+        }
+        dispatchMuteAwaitConnection(cb -> { try {
+                cb.dispatchOnUnmutedEvent(
+                        AudioManager.MuteAwaitConnectionCallback.EVENT_TIMEOUT,
+                        timedOutDevice, mutedUsages);
+            } catch (RemoteException e) { } });
+    }
+
+    private void dispatchMuteAwaitConnection(
+            java.util.function.Consumer<IMuteAwaitConnectionCallback> callback) {
+        final int nbDispatchers = mMuteAwaitConnectionDispatchers.beginBroadcast();
+        // lazy initialization as errors unlikely
+        ArrayList<IMuteAwaitConnectionCallback> errorList = null;
+        for (int i = 0; i < nbDispatchers; i++) {
+            try {
+                callback.accept(mMuteAwaitConnectionDispatchers.getBroadcastItem(i));
+            } catch (Exception e) {
+                if (errorList == null) {
+                    errorList = new ArrayList<>(1);
+                }
+                errorList.add(mMuteAwaitConnectionDispatchers.getBroadcastItem(i));
+            }
+        }
+        if (errorList != null) {
+            for (IMuteAwaitConnectionCallback errorItem : errorList) {
+                mMuteAwaitConnectionDispatchers.unregister(errorItem);
+            }
+        }
+        mMuteAwaitConnectionDispatchers.finishBroadcast();
+    }
+
 
     //==========================================================================================
     // Device orientation
@@ -9657,6 +9885,7 @@ public class AudioService extends IAudioService.Stub
         boolean requireValidProjection = false;
         boolean requireCaptureAudioOrMediaOutputPerm = false;
         boolean requireModifyRouting = false;
+        boolean requireCallAudioInterception = false;
         ArrayList<AudioMix> voiceCommunicationCaptureMixes = null;
 
 
@@ -9697,7 +9926,10 @@ public class AudioService extends IAudioService.Stub
             // otherwise MODIFY_AUDIO_ROUTING permission is required
             if (mix.getRouteFlags() == mix.ROUTE_FLAG_LOOP_BACK_RENDER && projection != null) {
                 requireValidProjection |= true;
-            } else {
+            } else if (mix.isForCallRedirection()) {
+                requireCallAudioInterception |= true;
+            } else if (mix.containsMatchAttributeRuleForUsage(
+                            AudioAttributes.USAGE_VOICE_COMMUNICATION)) {
                 requireModifyRouting |= true;
             }
         }
@@ -9731,6 +9963,12 @@ public class AudioService extends IAudioService.Stub
         if (requireModifyRouting
                 && !callerHasPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)) {
             Log.e(TAG, "Can not capture audio without MODIFY_AUDIO_ROUTING");
+            return false;
+        }
+
+        if (requireCallAudioInterception
+                && !callerHasPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION)) {
+            Log.e(TAG, "Can not capture audio without CALL_AUDIO_INTERCEPTION");
             return false;
         }
 

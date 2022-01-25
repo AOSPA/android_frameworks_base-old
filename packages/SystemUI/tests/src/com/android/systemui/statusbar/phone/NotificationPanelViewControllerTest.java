@@ -100,6 +100,7 @@ import com.android.systemui.controls.dagger.ControlsComponent;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.idle.IdleHostViewController;
@@ -199,7 +200,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock
     private DozeParameters mDozeParameters;
     @Mock
-    private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
+    private ScreenOffAnimationController mScreenOffAnimationController;
     @Mock
     private NotificationPanelView mView;
     @Mock
@@ -385,7 +386,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         mConfiguration.orientation = ORIENTATION_PORTRAIT;
         when(mResources.getDisplayMetrics()).thenReturn(mDisplayMetrics);
         mDisplayMetrics.density = 100;
-        when(mResources.getBoolean(R.bool.config_enableNotificationShadeDrag)).thenReturn(true);
+        when(mFeatureFlags.isEnabled(Flags.NOTIFICATION_SHADE_DRAG)).thenReturn(true);
         when(mResources.getDimensionPixelSize(R.dimen.notifications_top_padding_split_shade))
                 .thenReturn(NOTIFICATION_SCRIM_TOP_PADDING_IN_SPLIT_SHADE);
         when(mResources.getDimensionPixelSize(R.dimen.qs_panel_width)).thenReturn(400);
@@ -427,6 +428,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 .thenReturn(mKeyguardUserSwitcherComponent);
         when(mKeyguardUserSwitcherComponent.getKeyguardUserSwitcherController())
                 .thenReturn(mKeyguardUserSwitcherController);
+        when(mScreenOffAnimationController.shouldAnimateClockChange()).thenReturn(true);
 
         doAnswer((Answer<Void>) invocation -> {
             mTouchHandler = invocation.getArgument(0);
@@ -440,7 +442,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                                 mInteractionJankMonitor),
                         mKeyguardBypassController,
                         mDozeParameters,
-                        mUnlockedScreenOffAnimationController);
+                        mScreenOffAnimationController);
         mConfigurationController = new ConfigurationControllerImpl(mContext);
         PulseExpansionHandler expansionHandler = new PulseExpansionHandler(
                 mContext,
@@ -530,7 +532,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mExecutor,
                 mSecureSettings,
                 mSplitShadeHeaderController,
-                mUnlockedScreenOffAnimationController,
+                mScreenOffAnimationController,
                 mLockscreenGestureLogger,
                 new PanelExpansionStateManager(),
                 mNotificationRemoteInputManager,
@@ -883,11 +885,11 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(0);
         triggerPositionClockAndNotifications();
-        verify(mKeyguardStatusViewController).displayClock(LARGE);
+        verify(mKeyguardStatusViewController).displayClock(LARGE, /* animate */ true);
 
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
         mNotificationPanelViewController.closeQs();
-        verify(mKeyguardStatusViewController).displayClock(SMALL);
+        verify(mKeyguardStatusViewController).displayClock(SMALL, /* animate */ true);
     }
 
     @Test
@@ -897,12 +899,14 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(0);
         triggerPositionClockAndNotifications();
-        verify(mKeyguardStatusViewController).displayClock(LARGE);
+        verify(mKeyguardStatusViewController).displayClock(LARGE, /* animate */ true);
 
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
         triggerPositionClockAndNotifications();
-        verify(mKeyguardStatusViewController, times(2)).displayClock(LARGE);
-        verify(mKeyguardStatusViewController, never()).displayClock(SMALL);
+        verify(mKeyguardStatusViewController, times(2))
+                .displayClock(LARGE, /* animate */ true);
+        verify(mKeyguardStatusViewController, never())
+                .displayClock(SMALL, /* animate */ true);
     }
 
     @Test
@@ -914,7 +918,20 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
         mNotificationPanelViewController.setDozing(true, false, null);
 
-        verify(mKeyguardStatusViewController).displayClock(LARGE);
+        verify(mKeyguardStatusViewController).displayClock(LARGE, /* animate */ true);
+    }
+
+    @Test
+    public void testSwitchesToBigClockInSplitShadeOnAodAnimateDisabled() {
+        when(mScreenOffAnimationController.shouldAnimateClockChange()).thenReturn(false);
+        mStatusBarStateController.setState(KEYGUARD);
+        enableSplitShade(/* enabled= */ true);
+        when(mMediaDataManager.hasActiveMedia()).thenReturn(true);
+        when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(2);
+
+        mNotificationPanelViewController.setDozing(true, false, null);
+
+        verify(mKeyguardStatusViewController).displayClock(LARGE, /* animate */ false);
     }
 
     @Test
@@ -926,13 +943,13 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         // one notification + media player visible
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
         triggerPositionClockAndNotifications();
-        verify(mKeyguardStatusViewController).displayClock(SMALL);
+        verify(mKeyguardStatusViewController).displayClock(SMALL, /* animate */ true);
 
         // only media player visible
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(0);
         triggerPositionClockAndNotifications();
-        verify(mKeyguardStatusViewController, times(2)).displayClock(SMALL);
-        verify(mKeyguardStatusViewController, never()).displayClock(LARGE);
+        verify(mKeyguardStatusViewController, times(2)).displayClock(SMALL, true);
+        verify(mKeyguardStatusViewController, never()).displayClock(LARGE, /* animate */ true);
     }
 
     @Test

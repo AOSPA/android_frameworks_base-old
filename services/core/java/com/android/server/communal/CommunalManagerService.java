@@ -30,6 +30,7 @@ import android.annotation.RequiresPermission;
 import android.app.KeyguardManager;
 import android.app.PendingIntent;
 import android.app.communal.ICommunalManager;
+import android.app.communal.ICommunalModeListener;
 import android.app.compat.CompatChanges;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -42,6 +43,8 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.RemoteCallbackList;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.dreams.DreamManagerInternal;
@@ -77,6 +80,8 @@ public final class CommunalManagerService extends SystemService {
     private final PackageReceiver mPackageReceiver;
     private final PackageManager mPackageManager;
     private final DreamManagerInternal mDreamManagerInternal;
+    private final RemoteCallbackList<ICommunalModeListener> mListeners =
+            new RemoteCallbackList<>();
 
     private final ActivityInterceptorCallback mActivityInterceptorCallback =
             new ActivityInterceptorCallback() {
@@ -84,6 +89,10 @@ public final class CommunalManagerService extends SystemService {
                 @Override
                 public Intent intercept(ActivityInterceptorInfo info) {
                     if (!shouldIntercept(info.aInfo)) {
+                        if (DEBUG) {
+                            Slog.d(TAG, "Activity allowed, not intercepting: "
+                                    + info.aInfo.getComponentName());
+                        }
                         return null;
                     }
 
@@ -125,7 +134,7 @@ public final class CommunalManagerService extends SystemService {
 
     @Override
     public void onStart() {
-        publishBinderService(Context.COMMUNAL_MANAGER_SERVICE, mBinderService);
+        publishBinderService(Context.COMMUNAL_SERVICE, mBinderService);
     }
 
     @Override
@@ -188,8 +197,17 @@ public final class CommunalManagerService extends SystemService {
             return true;
         }
 
-        return isChangeEnabled(ALLOW_COMMUNAL_MODE_WITH_USER_CONSENT, appInfo)
-                && getUserEnabledApps().contains(appInfo.packageName);
+        if (!isChangeEnabled(ALLOW_COMMUNAL_MODE_WITH_USER_CONSENT, appInfo)) {
+            if (DEBUG) Slog.d(TAG, "App is not allowlisted: " + appInfo.packageName);
+            return false;
+        }
+
+        if (!getUserEnabledApps().contains(appInfo.packageName)) {
+            if (DEBUG) Slog.d(TAG, "App does not have user consent: " + appInfo.packageName);
+            return false;
+        }
+
+        return true;
     }
 
     private boolean isActiveDream(ApplicationInfo appInfo) {
@@ -219,10 +237,35 @@ public final class CommunalManagerService extends SystemService {
         final boolean showWhenLocked =
                 (activityInfo.flags & ActivityInfo.FLAG_SHOW_WHEN_LOCKED) != 0;
         if (!showWhenLocked) {
+            if (DEBUG) {
+                Slog.d(TAG, "Activity does not contain showWhenLocked attribute: "
+                        + activityInfo.getComponentName());
+            }
             return true;
         }
 
         return !isAppAllowed(appInfo);
+    }
+
+    private void dispatchCommunalMode(boolean isShowing) {
+        synchronized (mListeners) {
+            int i = mListeners.beginBroadcast();
+            while (i > 0) {
+                i--;
+                try {
+                    mListeners.getBroadcastItem(i).onCommunalModeChanged(isShowing);
+                } catch (RemoteException e) {
+                    // Handled by the RemoteCallbackList.
+                }
+            }
+            mListeners.finishBroadcast();
+        }
+    }
+
+    private void enforceReadPermission() {
+        mContext.enforceCallingPermission(Manifest.permission.READ_COMMUNAL_STATE,
+                Manifest.permission.READ_COMMUNAL_STATE
+                        + "permission required to read communal state.");
     }
 
     private final class BinderService extends ICommunalManager.Stub {
@@ -235,7 +278,43 @@ public final class CommunalManagerService extends SystemService {
             mContext.enforceCallingPermission(Manifest.permission.WRITE_COMMUNAL_STATE,
                     Manifest.permission.WRITE_COMMUNAL_STATE
                             + "permission required to modify communal state.");
+            if (mCommunalViewIsShowing.get() == isShowing) {
+                return;
+            }
             mCommunalViewIsShowing.set(isShowing);
+            dispatchCommunalMode(isShowing);
+        }
+
+        /**
+         * Checks whether or not we are in communal mode.
+         */
+        @RequiresPermission(Manifest.permission.READ_COMMUNAL_STATE)
+        @Override
+        public boolean isCommunalMode() {
+            enforceReadPermission();
+            return mCommunalViewIsShowing.get();
+        }
+
+        /**
+         * Adds a callback to execute when communal state changes.
+         */
+        @RequiresPermission(Manifest.permission.READ_COMMUNAL_STATE)
+        public void addCommunalModeListener(ICommunalModeListener listener) {
+            enforceReadPermission();
+            synchronized (mListeners) {
+                mListeners.register(listener);
+            }
+        }
+
+        /**
+         * Removes an added callback that execute when communal state changes.
+         */
+        @RequiresPermission(Manifest.permission.READ_COMMUNAL_STATE)
+        public void removeCommunalModeListener(ICommunalModeListener listener) {
+            enforceReadPermission();
+            synchronized (mListeners) {
+                mListeners.unregister(listener);
+            }
         }
     }
 

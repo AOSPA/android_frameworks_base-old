@@ -25,6 +25,7 @@ import static android.provider.Settings.Config.SYNC_DISABLED_MODE_UNTIL_REBOOT;
 import static android.provider.Settings.SET_ALL_RESULT_DISABLED;
 import static android.provider.Settings.SET_ALL_RESULT_FAILURE;
 import static android.provider.Settings.SET_ALL_RESULT_SUCCESS;
+import static android.provider.Settings.Secure.ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU;
 import static android.provider.Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_MAGNIFICATION_CONTROLLER;
 import static android.provider.Settings.Secure.NOTIFICATION_BUBBLES;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_2BUTTON_OVERLAY;
@@ -1346,6 +1347,13 @@ public class SettingsProvider extends ContentProvider {
             // Anyone can get the global settings, so no security checks.
             for (int i = 0; i < nameCount; i++) {
                 String name = names.get(i);
+                try {
+                    enforceSettingReadable(name, SETTINGS_TYPE_GLOBAL,
+                            UserHandle.getCallingUserId());
+                } catch (SecurityException e) {
+                    // Caller doesn't have permission to read this setting
+                    continue;
+                }
                 Setting setting = settingsState.getSettingLocked(name);
                 appendSettingToCursor(result, setting);
             }
@@ -1520,6 +1528,13 @@ public class SettingsProvider extends ContentProvider {
                 if (!isSecureSettingAccessible(name)) {
                     // This caller is not permitted to access this setting. Pretend the setting
                     // doesn't exist.
+                    continue;
+                }
+
+                try {
+                    enforceSettingReadable(name, SETTINGS_TYPE_SECURE, callingUserId);
+                } catch (SecurityException e) {
+                    // Caller doesn't have permission to read this setting
                     continue;
                 }
 
@@ -1785,7 +1800,12 @@ public class SettingsProvider extends ContentProvider {
 
             for (int i = 0; i < nameCount; i++) {
                 String name = names.get(i);
-
+                try {
+                    enforceSettingReadable(name, SETTINGS_TYPE_SYSTEM, callingUserId);
+                } catch (SecurityException e) {
+                    // Caller doesn't have permission to read this setting
+                    continue;
+                }
                 // Determine the owning user as some profile settings are cloned from the parent.
                 final int owningUserId = resolveOwningUserIdForSystemSettingLocked(callingUserId,
                         name);
@@ -3604,7 +3624,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 207;
+            private static final int SETTINGS_VERSION = 208;
 
             private final int mUserId;
 
@@ -5252,11 +5272,6 @@ public class SettingsProvider extends ContentProvider {
                     initGlobalSettingsDefaultValForWearLocked(
                             Global.Wearable.ALT_BYPASS_WIFI_REQUIREMENT_TIME_MILLIS, 0L);
                     initGlobalSettingsDefaultValForWearLocked(
-                            Global.Wearable.UPDOWN_GESTURES_ENABLED,
-                            getContext()
-                                    .getResources()
-                                    .getBoolean(R.bool.def_wearable_upDownGesturesEnabled));
-                    initGlobalSettingsDefaultValForWearLocked(
                             Global.Wearable.SETUP_SKIPPED, Global.Wearable.SETUP_SKIPPED_UNKNOWN);
                     initGlobalSettingsDefaultValForWearLocked(
                             Global.Wearable.LAST_CALL_FORWARD_ACTION,
@@ -5466,6 +5481,30 @@ public class SettingsProvider extends ContentProvider {
                         }
                     }
                     currentVersion = 207;
+                }
+
+                if (currentVersion == 207) {
+                    // Version 207: Reset the
+                    // Secure#ACCESSIBILITY_FLOATING_MENU_MIGRATION_TOOLTIP_PROMPT as enabled
+                    // status for showing the tooltips.
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    final Setting accessibilityButtonMode = secureSettings.getSettingLocked(
+                            Secure.ACCESSIBILITY_BUTTON_MODE);
+                    if (!accessibilityButtonMode.isNull()
+                            && accessibilityButtonMode.getValue().equals(
+                            String.valueOf(ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU))) {
+                        if (isGestureNavigateEnabled()
+                                && hasValueInA11yButtonTargets(secureSettings)) {
+                            secureSettings.insertSettingLocked(
+                                    Secure.ACCESSIBILITY_FLOATING_MENU_MIGRATION_TOOLTIP_PROMPT,
+                                    /* enabled */ "1",
+                                    /* tag= */ null,
+                                    /* makeDefault= */ false,
+                                    SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+                    }
+
+                    currentVersion = 208;
                 }
 
                 // vXXX: Add new settings above this point.

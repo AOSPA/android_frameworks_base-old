@@ -965,6 +965,22 @@ public final class Settings {
     public static final String ACTION_LOCKSCREEN_SETTINGS = "android.settings.LOCK_SCREEN_SETTINGS";
 
     /**
+     * Activity Action: Show settings to allow pairing bluetooth devices.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_BLUETOOTH_PAIRING_SETTINGS =
+            "android.settings.BLUETOOTH_PAIRING_SETTINGS";
+
+    /**
      * Activity Action: Show settings to configure input methods, in particular
      * allowing the user to enable input methods.
      * <p>
@@ -9322,6 +9338,16 @@ public final class Settings {
                 "emergency_gesture_sound_enabled";
 
         /**
+         * The power button "cooldown" period in milliseconds after the Emergency gesture is
+         * triggered, during which single-key actions on the power button are suppressed. Cooldown
+         * period is disabled if set to zero.
+         *
+         * @hide
+         */
+        public static final String EMERGENCY_GESTURE_POWER_BUTTON_COOLDOWN_PERIOD_MS =
+                "emergency_gesture_power_button_cooldown_period_ms";
+
+        /**
          * Whether the camera launch gesture to double tap the power button when the screen is off
          * should be disabled.
          *
@@ -16701,12 +16727,6 @@ public final class Settings {
                     "alt_bypass_wifi_requirement_time_millis";
 
             /**
-             * Whether or not Up/Down Gestures are enabled.
-             * @hide
-             */
-            public static final String UPDOWN_GESTURES_ENABLED = "updown_gestures_enabled";
-
-            /**
              * Whether the setup was skipped.
              * @hide
              */
@@ -17007,6 +17027,14 @@ public final class Settings {
              */
             public static final String WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS =
                     "wear_activity_auto_resume_timeout_ms";
+
+            /**
+             * If the current {@code WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS} value is set by user.
+             * 1 for true, 0 for false.
+             * @hide
+             */
+            public static final String WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER =
+                    "wear_activity_auto_resume_timeout_set_by_user";
 
             /**
              * If burn in protection is enabled.

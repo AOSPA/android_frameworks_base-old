@@ -51,6 +51,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
+import android.hardware.SensorPrivacyManager;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricSourceType;
 import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
@@ -333,6 +334,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mLockIconPressed;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private final Executor mBackgroundExecutor;
+    private SensorPrivacyManager mSensorPrivacyManager;
+    private int mFaceAuthUserId;
 
     /**
      * Short delay before restarting fingerprint authentication after a successful try. This should
@@ -994,6 +997,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         // Error is always the end of authentication lifecycle
         mFaceCancelSignal = null;
+        boolean cameraPrivacyEnabled = false;
+        if (mSensorPrivacyManager != null) {
+            cameraPrivacyEnabled = mSensorPrivacyManager
+                    .isSensorPrivacyEnabled(SensorPrivacyManager.Sensors.CAMERA,
+                    mFaceAuthUserId);
+        }
 
         if (msgId == FaceManager.FACE_ERROR_CANCELED
                 && mFaceRunningState == BIOMETRIC_STATE_CANCELLING_RESTARTING) {
@@ -1003,7 +1012,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             setFaceRunningState(BIOMETRIC_STATE_STOPPED);
         }
 
-        if (msgId == FaceManager.FACE_ERROR_HW_UNAVAILABLE
+        final boolean isHwUnavailable = msgId == FaceManager.FACE_ERROR_HW_UNAVAILABLE;
+
+        if (isHwUnavailable
                 || msgId == FaceManager.FACE_ERROR_UNABLE_TO_PROCESS) {
             if (mHardwareFaceUnavailableRetryCount < HAL_ERROR_RETRY_MAX) {
                 mHardwareFaceUnavailableRetryCount++;
@@ -1017,6 +1028,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             lockedOutStateChanged = !mFaceLockedOutPermanent;
             mFaceLockedOutPermanent = true;
             requireStrongAuthIfAllLockedOut();
+        }
+
+        if (isHwUnavailable && cameraPrivacyEnabled) {
+            errString = mContext.getString(R.string.kg_face_sensor_privacy_enabled);
         }
 
         for (int i = 0; i < mCallbacks.size(); i++) {
@@ -1795,6 +1810,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mLockPatternUtils = lockPatternUtils;
         mAuthController = authController;
         dumpManager.registerDumpable(getClass().getName(), this);
+        mSensorPrivacyManager = context.getSystemService(SensorPrivacyManager.class);
 
         mHandler = new Handler(mainLooper) {
             @Override
@@ -2496,6 +2512,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             // This would need to be updated for multi-sensor devices
             final boolean supportsFaceDetection = !mFaceSensorProperties.isEmpty()
                     && mFaceSensorProperties.get(0).supportsFaceDetection;
+            mFaceAuthUserId = userId;
             if (isEncryptedOrLockdown(userId) && supportsFaceDetection) {
                 mFaceManager.detectFace(mFaceCancelSignal, mFaceDetectionCallback, userId);
             } else {
