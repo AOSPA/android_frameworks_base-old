@@ -52,6 +52,24 @@
       "parentUuid": "d45fc6b6_619f596c",
       "revId": "dcd7e9a8946daa05846be0426d530083d2b18bab",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2ee231c4_0817e3d7",
+        "filename": "packages/SystemUI/AndroidManifest.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 275,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2022-01-25T13:16:22Z",
+      "side": 1,
+      "message": "Well, you\u0027re right, but will this affect who uses it?",
+      "parentUuid": "8b5d9cfa_902f6188",
+      "revId": "dcd7e9a8946daa05846be0426d530083d2b18bab",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
