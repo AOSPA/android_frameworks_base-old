@@ -34,7 +34,6 @@ import android.os.IRemoteCallback;
 import android.os.ParcelFileDescriptor;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
-import android.view.IApplicationToken;
 import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.ICrossWindowBlurEnabledListener;
 import android.view.IDisplayWindowInsetsController;
@@ -61,6 +60,7 @@ import android.view.InputChannel;
 import android.view.InputDevice;
 import android.view.IInputFilter;
 import android.view.AppTransitionAnimationSpec;
+import android.view.TaskTransitionSpec;
 import android.view.WindowContentFrameStats;
 import android.view.WindowManager;
 import android.view.SurfaceControl;
@@ -347,6 +347,14 @@ interface IWindowManager
     Bitmap screenshotWallpaper();
 
     /**
+     * Mirrors the wallpaper for the given display.
+     *
+     * @param displayId ID of the display for the wallpaper.
+     * @return A SurfaceControl for the parent of the mirrored wallpaper.
+     */
+    SurfaceControl mirrorWallpaperSurface(int displayId);
+
+    /**
      * Registers a wallpaper visibility listener.
      * @return Current visibility.
      */
@@ -546,16 +554,6 @@ interface IWindowManager
      * Returns true if window trace is enabled.
      */
     boolean isWindowTraceEnabled();
-
-    /**
-     * Notify WindowManager that it should not override the info in DisplayManager for the specified
-     * display. This can disable letter- or pillar-boxing applied in DisplayManager when the metrics
-     * of the logical display reported from WindowManager do not correspond to the metrics of the
-     * physical display it is based on.
-     *
-     * @param displayId The id of the display.
-     */
-    void dontOverrideDisplayInfo(int displayId);
 
     /**
      * Gets the windowing mode of the display.
@@ -894,4 +892,17 @@ interface IWindowManager
      * @hide
      */
     void setTaskSnapshotEnabled(boolean enabled);
+
+    /**
+     * Customized the task transition animation with a task transition spec.
+     *
+     * @param spec the spec that will be used to customize the task animations
+     */
+    void setTaskTransitionSpec(in TaskTransitionSpec spec);
+
+    /**
+     * Clears any task transition spec that has been previously set and
+     * reverts to using the default task transition with no spec changes.
+     */
+    void clearTaskTransitionSpec();
 }

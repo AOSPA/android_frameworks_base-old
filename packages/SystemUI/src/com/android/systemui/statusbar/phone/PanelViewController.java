@@ -59,16 +59,16 @@ import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger.LockscreenUiEvent;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import android.util.BoostFramework;
 import com.android.wm.shell.animation.FlingAnimationUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 
 public abstract class PanelViewController {
-    public static final boolean DEBUG = PanelBar.DEBUG;
+    public static final boolean DEBUG = PanelView.DEBUG;
     public static final String TAG = PanelView.class.getSimpleName();
     private static final int NO_FIXED_DURATION = -1;
     private static final long SHADE_OPEN_SPRING_OUT_DURATION = 350L;
@@ -87,7 +87,6 @@ public abstract class PanelViewController {
     private boolean mVibrateOnOpening;
     protected boolean mIsLaunchAnimationRunning;
     private int mFixedDuration = NO_FIXED_DURATION;
-    protected ArrayList<PanelExpansionListener> mExpansionListeners = new ArrayList<>();
     protected float mOverExpansion;
 
     /**
@@ -160,8 +159,6 @@ public abstract class PanelViewController {
     private boolean mAnimateAfterExpanding;
     private boolean mIsFlinging;
 
-    PanelBar mBar;
-
     private String mViewName;
     private float mInitialTouchY;
     private float mInitialTouchX;
@@ -191,10 +188,10 @@ public abstract class PanelViewController {
     protected final SysuiStatusBarStateController mStatusBarStateController;
     protected final AmbientState mAmbientState;
     protected final LockscreenGestureLogger mLockscreenGestureLogger;
+    private final PanelExpansionStateManager mPanelExpansionStateManager;
+    private final TouchHandler mTouchHandler;
 
-    protected void onExpandingFinished() {
-        mBar.onExpandingFinished();
-    }
+    protected abstract void onExpandingFinished();
 
     protected void onExpandingStarted() {
     }
@@ -218,20 +215,26 @@ public abstract class PanelViewController {
         return mAmbientState;
     }
 
-    public PanelViewController(PanelView view,
-            FalsingManager falsingManager, DozeLog dozeLog,
+    public PanelViewController(
+            PanelView view,
+            FalsingManager falsingManager,
+            DozeLog dozeLog,
             KeyguardStateController keyguardStateController,
-            SysuiStatusBarStateController statusBarStateController, VibratorHelper vibratorHelper,
+            SysuiStatusBarStateController statusBarStateController,
+            VibratorHelper vibratorHelper,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             LatencyTracker latencyTracker,
             FlingAnimationUtils.Builder flingAnimationUtilsBuilder,
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
             LockscreenGestureLogger lockscreenGestureLogger,
+            PanelExpansionStateManager panelExpansionStateManager,
             AmbientState ambientState) {
         mAmbientState = ambientState;
         mView = view;
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mLockscreenGestureLogger = lockscreenGestureLogger;
+        mPanelExpansionStateManager = panelExpansionStateManager;
+        mTouchHandler = createTouchHandler();
         mView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {
@@ -244,7 +247,7 @@ public abstract class PanelViewController {
         });
 
         mView.addOnLayoutChangeListener(createLayoutChangeListener());
-        mView.setOnTouchListener(createTouchHandler());
+        mView.setOnTouchListener(mTouchHandler);
         mView.setOnConfigurationChangedListener(createOnConfigurationChangedListener());
 
         mResources = mView.getResources();
@@ -351,13 +354,6 @@ public abstract class PanelViewController {
     protected abstract float getOpeningHeight();
 
     /**
-     * Minimum fraction from where expansion should start. This is set when pulling down on a
-     * heads-up notification.
-     * @param minFraction Fraction from 0 to 1.
-     */
-    public abstract void setMinFraction(float minFraction);
-
-    /**
      * @return whether the swiping direction is upwards and above a 45 degree angle compared to the
      * horizontal direction
      */
@@ -400,11 +396,22 @@ public abstract class PanelViewController {
 
             final boolean expand;
             if (event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel) {
-                // If we get a cancel, put the shade back to the state it was in when the gesture
-                // started
-                if (onKeyguard) {
+                // If the keyguard is fading away, don't expand it again. This can happen if you're
+                // swiping to unlock, the app below the keyguard is in landscape, and the screen
+                // rotates while your finger is still down after the swipe to unlock.
+                if (mKeyguardStateController.isKeyguardFadingAway()) {
+                    expand = false;
+                } else if (onKeyguard) {
                     expand = true;
+                } else if (mKeyguardStateController.isKeyguardFadingAway()) {
+                    // If we're in the middle of dismissing the keyguard, don't expand due to the
+                    // cancelled gesture. Gesture cancellation during an unlock is expected in some
+                    // situations, such keeping your finger down while swiping to unlock to an app
+                    // that is locked in landscape (the rotation will cancel the touch event).
+                    expand = false;
                 } else {
+                    // If we get a cancel, put the shade back to the state it was in when the
+                    // gesture started
                     expand = !mPanelClosedOnDown;
                 }
             } else {
@@ -457,14 +464,14 @@ public abstract class PanelViewController {
 
     protected void onTrackingStopped(boolean expand) {
         mTracking = false;
-        mBar.onTrackingStopped(expand);
+        mStatusBar.onTrackingStopped(expand);
         updatePanelExpansionAndVisibility();
     }
 
     protected void onTrackingStarted() {
         endClosing();
         mTracking = true;
-        mBar.onTrackingStarted();
+        mStatusBar.onTrackingStarted();
         notifyExpandingStarted();
         updatePanelExpansionAndVisibility();
     }
@@ -851,10 +858,6 @@ public abstract class PanelViewController {
         return mTracking;
     }
 
-    public void setBar(PanelBar panelBar) {
-        mBar = panelBar;
-    }
-
     public void collapse(boolean delayed, float speedUpFactor) {
         if (DEBUG) logf("collapse: " + this);
         if (canPanelBeCollapsed()) {
@@ -947,10 +950,7 @@ public abstract class PanelViewController {
         mView.removeCallbacks(mFlingCollapseRunnable);
     }
 
-    protected void onClosingFinished() {
-        mBar.onClosingFinished();
-    }
-
+    protected abstract void onClosingFinished();
 
     protected void startUnlockHintAnimation() {
 
@@ -1095,13 +1095,9 @@ public abstract class PanelViewController {
      *   {@link #updateVisibility()}? That would allow us to make this method private.
      */
     public void updatePanelExpansionAndVisibility() {
-        if (mBar != null) {
-            mBar.panelExpansionChanged(mExpandedFraction, isExpanded());
-        }
+        mPanelExpansionStateManager.onPanelExpansionChanged(
+                mExpandedFraction, isExpanded(), mTracking);
         updateVisibility();
-        for (int i = 0; i < mExpansionListeners.size(); i++) {
-            mExpansionListeners.get(i).onPanelExpansionChanged(mExpandedFraction, mTracking);
-        }
     }
 
     public boolean isExpanded() {
@@ -1111,10 +1107,6 @@ public abstract class PanelViewController {
                 || mTracking
                 || mHeightAnimator != null
                 && !mIsSpringBackAnimation;
-    }
-
-    public void addExpansionListener(PanelExpansionListener panelExpansionListener) {
-        mExpansionListeners.add(panelExpansionListener);
     }
 
     protected abstract boolean isPanelVisibleBecauseOfHeadsUp();
@@ -1173,28 +1165,18 @@ public abstract class PanelViewController {
         return mView;
     }
 
-    public boolean isEnabled() {
-        return mView.isEnabled();
-    }
-
     public OnLayoutChangeListener createLayoutChangeListener() {
         return new OnLayoutChangeListener();
     }
 
-    protected TouchHandler createTouchHandler() {
-        return new TouchHandler();
-    }
+    protected abstract TouchHandler createTouchHandler();
 
     protected OnConfigurationChangedListener createOnConfigurationChangedListener() {
         return new OnConfigurationChangedListener();
     }
 
-    /**
-     * Set that the panel is currently opening and not fully opened or closed.
-     */
-    public abstract void setIsShadeOpening(boolean opening);
-
     public class TouchHandler implements View.OnTouchListener {
+
         public boolean onInterceptTouchEvent(MotionEvent event) {
             if (mInstantExpanding || !mNotificationsDragEnabled || mTouchDisabled || (mMotionAborted
                     && event.getActionMasked() != MotionEvent.ACTION_DOWN)) {
@@ -1459,5 +1441,13 @@ public abstract class PanelViewController {
 
     private void cancelJankMonitoring(int cuj) {
         InteractionJankMonitor.getInstance().cancel(cuj);
+    }
+
+    protected float getExpansionFraction() {
+        return mExpandedFraction;
+    }
+
+    protected PanelExpansionStateManager getPanelExpansionStateManager() {
+        return mPanelExpansionStateManager;
     }
 }

@@ -31,6 +31,7 @@ android_test_helper_app {
     ],
     test_suites: ["general-tests"],
     java_resources: [
+        ":apex.apexd_test_classpath",
         ":com.android.apex.apkrollback.test_v2",
         ":StagedInstallTestApexV2",
         ":StagedInstallTestApexV2_WrongSha",
@@ -54,11 +55,13 @@ java_test_host {
         "cts-install-lib-host",
     ],
     data: [
+        ":apex.apexd_test",
         ":com.android.apex.apkrollback.test_v1",
         ":StagedInstallTestApexV2",
         ":StagedInstallTestApexV2_WrongSha",
         ":TestAppAv1",
         ":test.rebootless_apex_v1",
+        ":test.rebootless_apex_v2",
     ],
     test_suites: ["general-tests"],
     test_config: "StagedInstallInternalTest.xml",

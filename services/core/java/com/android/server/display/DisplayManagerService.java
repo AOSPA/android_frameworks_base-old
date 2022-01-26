@@ -1643,13 +1643,13 @@ public final class DisplayManagerService extends SystemService {
             mDisplayModeDirector.getAppRequestObserver().setAppRequest(
                     displayId, requestedModeId, requestedMinRefreshRate, requestedMaxRefreshRate);
 
-            if (display.getDisplayInfoLocked().minimalPostProcessingSupported) {
-                boolean mppRequest = mMinimalPostProcessingAllowed && preferMinimalPostProcessing;
+            // TODO(b/202378408) set minimal post-processing only if it's supported once we have a
+            // separate API for disabling on-device processing.
+            boolean mppRequest = mMinimalPostProcessingAllowed && preferMinimalPostProcessing;
 
-                if (display.getRequestedMinimalPostProcessingLocked() != mppRequest) {
-                    display.setRequestedMinimalPostProcessingLocked(mppRequest);
-                    shouldScheduleTraversal = true;
-                }
+            if (display.getRequestedMinimalPostProcessingLocked() != mppRequest) {
+                display.setRequestedMinimalPostProcessingLocked(mppRequest);
+                shouldScheduleTraversal = true;
             }
 
             if (shouldScheduleTraversal) {
@@ -2136,9 +2136,6 @@ public final class DisplayManagerService extends SystemService {
             pw.println();
             mLogicalDisplayMapper.dumpLocked(pw);
 
-            pw.println();
-            mDisplayModeDirector.dump(pw);
-
             final int callbackCount = mCallbacks.size();
             pw.println();
             pw.println("Callbacks: size=" + callbackCount);
@@ -2161,6 +2158,8 @@ public final class DisplayManagerService extends SystemService {
             pw.println();
             mPersistentDataStore.dump(pw);
         }
+        pw.println();
+        mDisplayModeDirector.dump(pw);
         synchronized (mSyncDump) {
             mDumpInProgress = false;
         }
@@ -2945,14 +2944,31 @@ public final class DisplayManagerService extends SystemService {
         @Override // Binder call
         public void setBrightnessConfigurationForUser(
                 BrightnessConfiguration c, @UserIdInt int userId, String packageName) {
-            mLogicalDisplayMapper.forEachLocked(logicalDisplay -> {
-                if (logicalDisplay.getDisplayInfoLocked().type != Display.TYPE_INTERNAL) {
-                    return;
+            mContext.enforceCallingOrSelfPermission(
+                    Manifest.permission.CONFIGURE_DISPLAY_BRIGHTNESS,
+                    "Permission required to change the display's brightness configuration");
+            if (userId != UserHandle.getCallingUserId()) {
+                mContext.enforceCallingOrSelfPermission(
+                        Manifest.permission.INTERACT_ACROSS_USERS,
+                        "Permission required to change the display brightness"
+                                + " configuration of another user");
+            }
+            final long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mSyncRoot) {
+                    mLogicalDisplayMapper.forEachLocked(logicalDisplay -> {
+                        if (logicalDisplay.getDisplayInfoLocked().type != Display.TYPE_INTERNAL) {
+                            return;
+                        }
+                        final DisplayDevice displayDevice =
+                                logicalDisplay.getPrimaryDisplayDeviceLocked();
+                        setBrightnessConfigurationForDisplayInternal(c, displayDevice.getUniqueId(),
+                                userId, packageName);
+                    });
                 }
-                final DisplayDevice displayDevice = logicalDisplay.getPrimaryDisplayDeviceLocked();
-                setBrightnessConfigurationForDisplay(c, displayDevice.getUniqueId(), userId,
-                        packageName);
-            });
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         @Override // Binder call
@@ -3173,7 +3189,7 @@ public final class DisplayManagerService extends SystemService {
         @Override // Binder call
         public void setUserPreferredDisplayMode(Display.Mode mode) {
             mContext.enforceCallingOrSelfPermission(
-                    Manifest.permission.WRITE_SECURE_SETTINGS,
+                    Manifest.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE,
                     "Permission required to set the user preferred display mode.");
             final long token = Binder.clearCallingIdentity();
             try {

@@ -699,6 +699,20 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     private DevicePolicyConstants mConstants;
 
+    /**
+     * User to be switched to on {@code logoutUser()}.
+     *
+     * <p>Only used on devices with headless system user mode
+     */
+    @GuardedBy("getLockObject()")
+    private @UserIdInt int mLogoutUserId = UserHandle.USER_NULL;
+
+    /**
+     * User the network logging notification was sent to.
+     */
+    // Guarded by mHandler
+    private @UserIdInt int mNetworkLoggingNotificationUserId = UserHandle.USER_NULL;
+
     private static final boolean ENABLE_LOCK_GUARD = true;
 
     /**
@@ -3831,9 +3845,17 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
+    private boolean notSupportedOnAutomotive(String method) {
+        if (mIsAutomotive) {
+            Slogf.i(LOG_TAG, "%s is not supported on automotive builds", method);
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public void setPasswordQuality(ComponentName who, int quality, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || notSupportedOnAutomotive("setPasswordQuality")) {
             return;
         }
         Objects.requireNonNull(who, "ComponentName is null");
@@ -4068,7 +4090,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordMinimumLength(ComponentName who, int length, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || notSupportedOnAutomotive("setPasswordMinimumLength")) {
             return;
         }
         Objects.requireNonNull(who, "ComponentName is null");
@@ -4350,7 +4372,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordMinimumUpperCase(ComponentName who, int length, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || notSupportedOnAutomotive("setPasswordMinimumUpperCase")) {
             return;
         }
         Objects.requireNonNull(who, "ComponentName is null");
@@ -4383,6 +4405,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordMinimumLowerCase(ComponentName who, int length, boolean parent) {
+        if (notSupportedOnAutomotive("setPasswordMinimumLowerCase")) {
+            return;
+        }
         Objects.requireNonNull(who, "ComponentName is null");
         final int userId = mInjector.userHandleGetCallingUserId();
         synchronized (getLockObject()) {
@@ -4413,7 +4438,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordMinimumLetters(ComponentName who, int length, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || notSupportedOnAutomotive("setPasswordMinimumLetters")) {
             return;
         }
         Objects.requireNonNull(who, "ComponentName is null");
@@ -4445,7 +4470,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordMinimumNumeric(ComponentName who, int length, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || notSupportedOnAutomotive("setPasswordMinimumNumeric")) {
             return;
         }
         Objects.requireNonNull(who, "ComponentName is null");
@@ -4477,7 +4502,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordMinimumSymbols(ComponentName who, int length, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || notSupportedOnAutomotive("setPasswordMinimumSymbols")) {
             return;
         }
         Objects.requireNonNull(who, "ComponentName is null");
@@ -4509,7 +4534,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public void setPasswordMinimumNonLetter(ComponentName who, int length, boolean parent) {
-        if (!mHasFeature) {
+        if (!mHasFeature || notSupportedOnAutomotive("setPasswordMinimumNonLetter")) {
             return;
         }
         Objects.requireNonNull(who, "ComponentName is null");
@@ -9553,7 +9578,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     private @UserIdInt int getCurrentForegroundUserId() {
         try {
-            return mInjector.getIActivityManager().getCurrentUser().id;
+            UserInfo currentUser = mInjector.getIActivityManager().getCurrentUser();
+            if (currentUser == null) {
+                // TODO(b/206107460): should not happen on production, but it's happening on unit
+                // tests that are not properly setting the expectation (because they don't need it)
+                Slogf.wtf(LOG_TAG, "getCurrentForegroundUserId(): mInjector.getIActivityManager()"
+                        + ".getCurrentUser() returned null, please ignore when running unit tests");
+                return ActivityManager.getCurrentUser();
+            }
+            return currentUser.id;
         } catch (RemoteException e) {
             Slogf.wtf(LOG_TAG, "cannot get current user");
         }
@@ -9670,6 +9703,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 mStatLogger.dump(pw);
                 pw.println();
                 pw.println("Encryption Status: " + getEncryptionStatusName(getEncryptionStatus()));
+                pw.println("Logout user: " + getLogoutUserIdUnchecked());
                 pw.println();
 
                 if (mPendingUserCreatedCallbackTokens.isEmpty()) {
@@ -9686,7 +9720,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 mStateCache.dump(pw);
                 pw.println();
             }
+            mHandler.post(() -> handleDump(pw));
             dumpResources(pw);
+        }
+    }
+
+    // Dump state that is guarded by the handler
+    private void handleDump(IndentingPrintWriter pw) {
+        if (mNetworkLoggingNotificationUserId != UserHandle.USER_NULL) {
+            pw.println("mNetworkLoggingNotificationUserId:  " + mNetworkLoggingNotificationUserId);
         }
     }
 
@@ -10683,7 +10725,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         }
 
-        if (!mOwners.hasDeviceOwner() || !user.isFull() || user.isManagedProfile()) return;
+        if (!mOwners.hasDeviceOwner() || !user.isFull() || user.isManagedProfile()
+                || user.isGuest()) {
+            return;
+        }
 
         if (mInjector.userManagerIsHeadlessSystemUserMode()) {
             ComponentName admin = mOwners.getDeviceOwnerComponent();
@@ -10698,7 +10743,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     @Override
-    public void resetNewUserDisclaimer() {
+    public void acknowledgeNewUserDisclaimer() {
         CallerIdentity callerIdentity = getCallerIdentity();
         canManageUsers(callerIdentity);
 
@@ -10777,6 +10822,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         Preconditions.checkCallAuthorization(isDeviceOwner(caller));
         checkCanExecuteOrThrowUnsafe(DevicePolicyManager.OPERATION_SWITCH_USER);
 
+        boolean switched = false;
+        // Save previous logout user id in case of failure
+        int logoutUserId = getLogoutUserIdUnchecked();
         synchronized (getLockObject()) {
             long id = mInjector.binderClearCallingIdentity();
             try {
@@ -10784,14 +10832,69 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 if (userHandle != null) {
                     userId = userHandle.getIdentifier();
                 }
-                return mInjector.getIActivityManager().switchUser(userId);
+                Slogf.i(LOG_TAG, "Switching to user %d (logout user is %d)", userId, logoutUserId);
+                setLogoutUserIdLocked(UserHandle.USER_CURRENT);
+                switched = mInjector.getIActivityManager().switchUser(userId);
+                if (!switched) {
+                    Slogf.w(LOG_TAG, "Failed to switch to user %d", userId);
+                }
+                return switched;
             } catch (RemoteException e) {
                 Slogf.e(LOG_TAG, "Couldn't switch user", e);
                 return false;
             } finally {
                 mInjector.binderRestoreCallingIdentity(id);
+                if (!switched) {
+                    setLogoutUserIdLocked(logoutUserId);
+                }
             }
         }
+    }
+
+    @Override
+    public int getLogoutUserId() {
+        Preconditions.checkCallAuthorization(canManageUsers(getCallerIdentity()));
+
+        return getLogoutUserIdUnchecked();
+    }
+
+    private @UserIdInt int getLogoutUserIdUnchecked() {
+        if (!mInjector.userManagerIsHeadlessSystemUserMode()) {
+            // mLogoutUserId is USER_SYSTEM as well, but there's no need to acquire the lock
+            return UserHandle.USER_SYSTEM;
+        }
+        synchronized (getLockObject()) {
+            return mLogoutUserId;
+        }
+    }
+
+    @Override
+    public void clearLogoutUser() {
+        CallerIdentity caller = getCallerIdentity();
+        Preconditions.checkCallAuthorization(canManageUsers(caller));
+
+        Slogf.i(LOG_TAG, "Clearing logout user as requested by %s", caller);
+        clearLogoutUserUnchecked();
+    }
+
+    private void clearLogoutUserUnchecked() {
+        if (!mInjector.userManagerIsHeadlessSystemUserMode()) return; // ignore
+
+        synchronized (getLockObject()) {
+            setLogoutUserIdLocked(UserHandle.USER_NULL);
+        }
+    }
+
+    @GuardedBy("getLockObject()")
+    private void setLogoutUserIdLocked(@UserIdInt int userId) {
+        if (!mInjector.userManagerIsHeadlessSystemUserMode()) return; // ignore
+
+        if (userId == UserHandle.USER_CURRENT) {
+            userId = getCurrentForegroundUserId();
+        }
+
+        Slogf.d(LOG_TAG, "setLogoutUserId(): %d -> %d", mLogoutUserId, userId);
+        mLogoutUserId = userId;
     }
 
     @Override
@@ -10815,10 +10918,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 return UserManager.USER_OPERATION_ERROR_MAX_RUNNING_USERS;
             }
 
+            Slogf.i(LOG_TAG, "Starting user %d in background", userId);
             if (mInjector.getIActivityManager().startUserInBackground(userId)) {
-                Slogf.i(LOG_TAG, "Started used %d in background", userId);
                 return UserManager.USER_OPERATION_SUCCESS;
             } else {
+                Slogf.w(LOG_TAG, "failed to start user %d in background", userId);
                 return UserManager.USER_OPERATION_ERROR_UNKNOWN;
             }
         } catch (RemoteException e) {
@@ -10866,13 +10970,30 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             return UserManager.USER_OPERATION_ERROR_MANAGED_PROFILE;
         }
 
+        // TODO(b/204585343): remove the headless system user check?
+        if (mInjector.userManagerIsHeadlessSystemUserMode() && callingUserId != mInjector
+                .binderWithCleanCallingIdentity(() -> getCurrentForegroundUserId())) {
+            Slogf.d(LOG_TAG, "logoutUser(): user %d is in background, just stopping, not switching",
+                    callingUserId);
+            return stopUserUnchecked(callingUserId);
+        }
+
+        int logoutUserId = getLogoutUserIdUnchecked();
+        if (logoutUserId == UserHandle.USER_NULL) {
+            // Could happen on devices using headless system user mode when called before calling
+            // switchUser() or startUserInBackground() first
+            Slogf.w(LOG_TAG, "logoutUser(): could not determine which user to switch to");
+            return UserManager.USER_OPERATION_ERROR_UNKNOWN;
+        }
         final long id = mInjector.binderClearCallingIdentity();
         try {
-            if (!mInjector.getIActivityManager().switchUser(UserHandle.USER_SYSTEM)) {
-                Slogf.w(LOG_TAG, "Failed to switch to primary user");
-                // This should never happen as target user is UserHandle.USER_SYSTEM
+            Slogf.i(LOG_TAG, "logoutUser(): switching to user %d", logoutUserId);
+            if (!mInjector.getIActivityManager().switchUser(logoutUserId)) {
+                Slogf.w(LOG_TAG, "Failed to switch to user %d", logoutUserId);
+                // This should never happen as target user is determined by getPreviousUserId()
                 return UserManager.USER_OPERATION_ERROR_UNKNOWN;
             }
+            clearLogoutUserUnchecked();
         } catch (RemoteException e) {
             // Same process, should not happen.
             return UserManager.USER_OPERATION_ERROR_UNKNOWN;
@@ -10883,7 +11004,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         return stopUserUnchecked(callingUserId);
     }
 
-    private int stopUserUnchecked(int userId) {
+    private int stopUserUnchecked(@UserIdInt int userId) {
+        Slogf.i(LOG_TAG, "Stopping user %d", userId);
         final long id = mInjector.binderClearCallingIdentity();
         try {
             switch (mInjector.getIActivityManager().stopUser(userId, true /*force*/, null)) {
@@ -12660,6 +12782,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     mWidgetProviderListeners.add(listener);
                 }
             }
+        }
+
+        @Override
+        public @Nullable ComponentName getProfileOwnerOrDeviceOwnerSupervisionComponent(
+                @NonNull UserHandle userHandle) {
+            return DevicePolicyManagerService.this.getProfileOwnerOrDeviceOwnerSupervisionComponent(
+                    userHandle);
         }
 
         @Override
@@ -15087,11 +15216,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
             if (active) {
                 if (shouldSendNotification) {
-                    mHandler.post(() -> sendNetworkLoggingNotification());
+                    mHandler.post(() -> handleSendNetworkLoggingNotification());
                 }
             } else {
-                mHandler.post(() -> mInjector.getNotificationManager().cancel(
-                        SystemMessage.NOTE_NETWORK_LOGGING));
+                mHandler.post(() -> handleCancelNetworkLoggingNotification());
             }
         });
     }
@@ -15282,10 +15410,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         return true;
     }
 
-    private void sendNetworkLoggingNotification() {
+    private void handleSendNetworkLoggingNotification() {
         final PackageManagerInternal pm = mInjector.getPackageManagerInternal();
         final Intent intent = new Intent(DevicePolicyManager.ACTION_SHOW_DEVICE_MONITORING_DIALOG);
         intent.setPackage(pm.getSystemUiServiceComponent().getPackageName());
+        mNetworkLoggingNotificationUserId = getCurrentForegroundUserId();
         // Simple notification clicks are immutable
         final PendingIntent pendingIntent = PendingIntent.getBroadcastAsUser(mContext, 0, intent,
                 PendingIntent.FLAG_IMMUTABLE, UserHandle.CURRENT);
@@ -15300,7 +15429,26 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 .setStyle(new Notification.BigTextStyle()
                         .bigText(mContext.getString(R.string.network_logging_notification_text)))
                 .build();
-        mInjector.getNotificationManager().notify(SystemMessage.NOTE_NETWORK_LOGGING, notification);
+        Slogf.i(LOG_TAG, "Sending network logging notification to user %d",
+                mNetworkLoggingNotificationUserId);
+        mInjector.getNotificationManager().notifyAsUser(/* tag= */ null,
+                SystemMessage.NOTE_NETWORK_LOGGING, notification,
+                UserHandle.of(mNetworkLoggingNotificationUserId));
+    }
+
+    private void handleCancelNetworkLoggingNotification() {
+        if (mNetworkLoggingNotificationUserId == UserHandle.USER_NULL) {
+            // Happens when setNetworkLoggingActive(false) is called before called with true
+            Slogf.d(LOG_TAG, "Not cancelling network logging notification for USER_NULL");
+            return;
+        }
+
+        Slogf.i(LOG_TAG, "Cancelling network logging notification for user %d",
+                mNetworkLoggingNotificationUserId);
+        mInjector.getNotificationManager().cancelAsUser(/* tag= */ null,
+                SystemMessage.NOTE_NETWORK_LOGGING,
+                UserHandle.of(mNetworkLoggingNotificationUserId));
+        mNetworkLoggingNotificationUserId = UserHandle.USER_NULL;
     }
 
     /**

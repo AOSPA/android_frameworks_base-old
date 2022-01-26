@@ -19,6 +19,7 @@ package com.android.server.wm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.ActivityManager;
 import android.app.AppProtoEnums;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
@@ -37,6 +38,7 @@ import android.util.IntArray;
 import android.util.proto.ProtoOutputStream;
 import android.window.TaskSnapshot;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.server.am.PendingIntentRecord;
 import com.android.server.am.UserState;
@@ -264,7 +266,7 @@ public abstract class ActivityTaskManagerInternal {
 
     /**
      * Set focus on an activity.
-     * @param token The IApplicationToken for the activity
+     * @param token The activity token.
      */
     public abstract void setFocusedActivity(IBinder token);
 
@@ -340,8 +342,8 @@ public abstract class ActivityTaskManagerInternal {
     public abstract void onProcessMapped(int pid, WindowProcessController proc);
     public abstract void onProcessUnMapped(int pid);
 
-    public abstract void onPackageDataCleared(String name);
-    public abstract void onPackageUninstalled(String name);
+    public abstract void onPackageDataCleared(String name, int userId);
+    public abstract void onPackageUninstalled(String name, int userId);
     public abstract void onPackageAdded(String name, boolean replacing);
     public abstract void onPackageReplaced(ApplicationInfo aInfo);
 
@@ -631,7 +633,8 @@ public abstract class ActivityTaskManagerInternal {
         @Nullable
         public final LocaleList mLocales;
 
-        PackageConfig(Integer nightMode, LocaleList locales) {
+        @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+        public PackageConfig(Integer nightMode, LocaleList locales) {
             mNightMode = nightMode;
             mLocales = locales;
         }
@@ -661,13 +664,23 @@ public abstract class ActivityTaskManagerInternal {
          * This setting is persisted and will overlay on top of the system locales for
          * the said application.
          * @return the current {@link PackageConfigurationUpdater} updated with the provided locale.
+         *
+         * <p>NOTE: This method should not be called by clients directly to set app locales,
+         * instead use the {@link LocaleManagerService#setApplicationLocales}
          */
         PackageConfigurationUpdater setLocales(LocaleList locales);
 
         /**
          * Commit changes.
+         * @return true if the configuration changes were persisted,
+         * false if there were no changes, or if erroneous inputs were provided, such as:
+         * <ui>
+         *     <li>Invalid packageName</li>
+         *     <li>Invalid userId</li>
+         *     <li>no WindowProcessController found for the package</li>
+         * </ui>
          */
-        void commit();
+        boolean commit();
     }
 
     /**
@@ -678,4 +691,15 @@ public abstract class ActivityTaskManagerInternal {
 
     /** Called when the device is waking up */
     public abstract void notifyWakingUp();
+
+    /**
+     * Registers a callback which can intercept activity starts.
+     * @throws IllegalArgumentException if duplicate ids are provided
+     */
+    public abstract void registerActivityStartInterceptor(
+            @ActivityInterceptorCallback.OrderedId int id,
+            ActivityInterceptorCallback callback);
+
+    /** Get the most recent task excluding the first running task (the one on the front most). */
+    public abstract ActivityManager.RecentTaskInfo getMostRecentTaskFromBackground();
 }

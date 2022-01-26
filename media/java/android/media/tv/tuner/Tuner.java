@@ -25,6 +25,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.hardware.tv.tuner.Constant;
 import android.hardware.tv.tuner.Constant64Bit;
 import android.hardware.tv.tuner.FrontendScanType;
@@ -37,6 +38,8 @@ import android.media.tv.tuner.filter.Filter;
 import android.media.tv.tuner.filter.Filter.Subtype;
 import android.media.tv.tuner.filter.Filter.Type;
 import android.media.tv.tuner.filter.FilterCallback;
+import android.media.tv.tuner.filter.SharedFilter;
+import android.media.tv.tuner.filter.SharedFilterCallback;
 import android.media.tv.tuner.filter.TimeFilter;
 import android.media.tv.tuner.frontend.Atsc3PlpInfo;
 import android.media.tv.tuner.frontend.FrontendInfo;
@@ -445,8 +448,47 @@ public class Tuner implements AutoCloseable  {
      *                 and the API would only process nice value setting in that case.
      * @param niceValue the nice value.
      */
+    @RequiresPermission(android.Manifest.permission.TUNER_RESOURCE_ACCESS)
     public void updateResourcePriority(int priority, int niceValue) {
         mTunerResourceManager.updateClientPriority(mClientId, priority, niceValue);
+    }
+
+    /**
+     * Checks if there is an unused frontend resource available.
+     *
+     * @param frontendType {@link android.media.tv.tuner.frontend.FrontendSettings.Type} for the
+     * query to be done for.
+     */
+    @RequiresPermission(android.Manifest.permission.TUNER_RESOURCE_ACCESS)
+    public boolean hasUnusedFrontend(int frontendType) {
+        return mTunerResourceManager.hasUnusedFrontend(frontendType);
+    }
+
+    /**
+     * Checks if the calling Tuner object has the lowest priority as a client to
+     * {@link TunerResourceManager}
+     *
+     * <p>The priority comparison is done against the current holders of the frontend resource.
+     *
+     * <p>The behavior of this function is independent of the availability of unused resources.
+     *
+     * <p>The function returns {@code true} in any of the following sceanrios:
+     * <ul>
+     * <li>The caller has the priority <= other clients</li>
+     * <li>No one is holding the frontend resource of the specified type</li>
+     * <li>The caller is the only one who is holding the resource</li>
+     * <li>The frontend resource of the specified type does not exist</li>
+     *
+     * </ul>
+     * @param frontendType {@link android.media.tv.tuner.frontend.FrontendSettings.Type} for the
+     * query to be done for.
+     *
+     * @return {@code false} only if someone else with strictly lower priority is holding the
+     *         resourece.
+     *         {@code true} otherwise.
+     */
+    public boolean isLowestPriority(int frontendType) {
+        return mTunerResourceManager.isLowestPriority(mClientId, frontendType);
     }
 
     private long mNativeContext; // used by native jMediaTuner
@@ -468,10 +510,10 @@ public class Tuner implements AutoCloseable  {
                     if (res != Tuner.RESULT_SUCCESS) {
                         TunerUtils.throwExceptionForResult(res, "failed to close frontend");
                     }
+                    mTunerResourceManager.releaseFrontend(mFrontendHandle, mClientId);
                 }
                 mIsSharedFrontend = false;
             }
-            mTunerResourceManager.releaseFrontend(mFrontendHandle, mClientId);
             FrameworkStatsLog
                     .write(FrameworkStatsLog.TV_TUNER_STATE_CHANGED, mUserId,
                     FrameworkStatsLog.TV_TUNER_STATE_CHANGED__STATE__UNKNOWN);
@@ -583,6 +625,7 @@ public class Tuner implements AutoCloseable  {
     private native int nativeCloseFrontend(int handle);
     private native int nativeClose();
 
+    private static native SharedFilter nativeOpenSharedFilter(String token);
 
     /**
      * Listener for resource lost.
@@ -706,6 +749,12 @@ public class Tuner implements AutoCloseable  {
      * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
      * TunerVersionChecker#getTunerVersion()} to get the version information.
      *
+     * <p>Tuning with {@link
+     * android.media.tv.tuner.frontend.IsdbtFrontendSettings.PartialReceptionFlag} or {@link
+     * android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings} is only supported
+     * in Tuner 2.0 or higher version. Unsupported version will cause no-op. Use {@link
+     * TunerVersionChecker#getTunerVersion()} to get the version information.
+     *
      * @param settings Signal delivery information the frontend uses to
      *                 search and lock the signal.
      * @return result status of tune operation.
@@ -714,8 +763,13 @@ public class Tuner implements AutoCloseable  {
      */
     @Result
     public int tune(@NonNull FrontendSettings settings) {
-        Log.d(TAG, "Tune to " + settings.getFrequency());
-        mFrontendType = settings.getType();
+        final int type = settings.getType();
+        if (mFrontendHandle != null && type != mFrontendType) {
+            Log.e(TAG, "Frontend was opened with type " + mFrontendType + ", new type is " + type);
+            return RESULT_INVALID_STATE;
+        }
+        Log.d(TAG, "Tune to " + settings.getFrequencyLong());
+        mFrontendType = type;
         if (mFrontendType == FrontendSettings.TYPE_DTMB) {
             if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
                     TunerVersionChecker.TUNER_VERSION_1_1, "Tuner with DTMB Frontend")) {
@@ -753,6 +807,12 @@ public class Tuner implements AutoCloseable  {
      *
      * <p>Scanning with {@link android.media.tv.tuner.frontend.DtmbFrontendSettings} is only
      * supported in Tuner 1.1 or higher version. Unsupported version will cause no-op. Use {@link
+     * TunerVersionChecker#getTunerVersion()} to get the version information.
+     *
+     * * <p>Scanning with {@link
+     * android.media.tv.tuner.frontend.IsdbtFrontendSettings.PartialReceptionFlag} or {@link
+     * android.media.tv.tuner.frontend.IsdbtFrontendSettings.IsdbtLayerSettings} is only supported
+     * in Tuner 2.0 or higher version. Unsupported version will cause no-op. Use {@link
      * TunerVersionChecker#getTunerVersion()} to get the version information.
      *
      * @param settings A {@link FrontendSettings} to configure the frontend.
@@ -1528,6 +1588,37 @@ public class Tuner implements AutoCloseable  {
         return dvr;
     }
 
+    /**
+     * Open a shared filter instance.
+     *
+     * @param context the context of the caller.
+     * @param sharedFilterToken the token of the shared filter being opened.
+     * @param executor the executor on which callback will be invoked.
+     * @param cb the listener to receive notifications from shared filter.
+     * @return the opened shared filter object. {@code null} if the operation failed.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_SHARED_FILTER)
+    @Nullable
+    static public SharedFilter openSharedFilter(@NonNull Context context,
+            @NonNull String sharedFilterToken, @CallbackExecutor @NonNull Executor executor,
+            @NonNull SharedFilterCallback cb) {
+        Objects.requireNonNull(sharedFilterToken, "sharedFilterToken must not be null");
+        Objects.requireNonNull(executor, "executor must not be null");
+        Objects.requireNonNull(cb, "SharedFilterCallback must not be null");
+
+        if (context.checkCallingOrSelfPermission(
+                    android.Manifest.permission.ACCESS_TV_SHARED_FILTER)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Caller must have ACCESS_TV_SHAREDFILTER permission.");
+        }
+
+        SharedFilter filter = nativeOpenSharedFilter(sharedFilterToken);
+        if (filter != null) {
+            filter.setCallback(cb, executor);
+        }
+        return filter;
+    }
+
     private boolean requestDemux() {
         int[] demuxHandle = new int[1];
         TunerDemuxRequest request = new TunerDemuxRequest();
@@ -1614,5 +1705,10 @@ public class Tuner implements AutoCloseable  {
             mLnbHandle = null;
         }
         mLnb = null;
+    }
+
+    /** @hide */
+    public int getClientId() {
+        return mClientId;
     }
 }

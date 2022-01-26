@@ -69,6 +69,7 @@ message RootWindowContainerProto {
     // know what activity types to check for when invoking splitscreen multi-window.
     optional bool is_home_recents_component = 6;
     repeated IdentifierProto pending_activities = 7 [deprecated=true];
+    optional int32 default_min_size_resizable_task = 8;
 }
 
 message BarControllerProto {
@@ -111,8 +112,9 @@ message KeyguardControllerProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
     optional bool keyguard_showing = 1;
-    repeated KeyguardOccludedProto keyguard_occluded_states = 2;
+    repeated KeyguardOccludedProto keyguard_occluded_states = 2 [deprecated=true];
     optional bool aod_showing = 3;
+    repeated KeyguardPerDisplayProto keyguard_per_display = 4;
 }
 
 message KeyguardOccludedProto {
@@ -120,6 +122,15 @@ message KeyguardOccludedProto {
 
     optional int32 display_id = 1;
     optional bool keyguard_occluded = 2;
+}
+
+message KeyguardPerDisplayProto {
+    option (.android.msg_privacy).dest = DEST_AUTOMATIC;
+
+    optional int32 display_id = 1;
+    optional bool keyguard_showing = 2;
+    optional bool aod_showing = 3;
+    optional bool keyguard_occluded = 4;
 }
 
 /* represents PhoneWindowManager */
@@ -201,7 +212,6 @@ message DisplayContentProto {
     optional .com.android.server.wm.IdentifierProto resumed_activity = 24;
     repeated TaskProto tasks = 25 [deprecated=true];
     optional bool display_ready = 26;
-
     optional WindowStateProto input_method_target = 27;
     optional WindowStateProto input_method_input_target = 28;
     optional WindowStateProto input_method_control_target = 29;
@@ -213,6 +223,9 @@ message DisplayContentProto {
     optional int32 ime_policy = 34;
 
     repeated InsetsSourceProviderProto insets_source_providers = 35;
+    optional bool is_sleeping = 36;
+    repeated string sleep_tokens = 37;
+
 }
 
 /* represents DisplayArea object */
@@ -259,6 +272,7 @@ message DisplayRotationProto {
     optional int32 user_rotation = 3 [(.android.typedef) = "android.view.Surface.Rotation"];
     optional int32 fixed_to_user_rotation_mode = 4;
     optional int32 last_orientation = 5 [(.android.typedef) = "android.content.pm.ActivityInfo.ScreenOrientation"];
+    optional bool is_fixed_to_user_rotation = 6;
 }
 
 /* represents DockedTaskDividerController */
@@ -365,6 +379,7 @@ message ActivityRecordProto {
     optional bool translucent = 30;
     optional bool pip_auto_enter_enabled = 31;
     optional bool in_size_compat_mode = 32;
+    optional float min_aspect_ratio = 33;
 }
 
 /* represents WindowToken */
@@ -525,7 +540,7 @@ message ConfigurationContainerProto {
 message WindowFramesProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
-    optional .android.graphics.RectProto containing_frame = 1;
+    optional .android.graphics.RectProto containing_frame = 1 [deprecated=true];
     optional .android.graphics.RectProto content_frame = 2 [deprecated=true];
     optional .android.graphics.RectProto decor_frame = 3 [deprecated=true];
     optional .android.graphics.RectProto display_frame = 4;

@@ -33,26 +33,13 @@ public final class BLASTBufferQueue {
     private static native Surface nativeGetSurface(long ptr, boolean includeSurfaceControlHandle);
     private static native void nativeSetUndequeuedBufferCount(long ptr, int count);
     private static native int nativeGetUndequeuedBufferCount(long ptr);
-    private static native void nativeSetNextTransaction(long ptr, long transactionPtr);
+    private static native void nativeSetSyncTransaction(long ptr, long transactionPtr);
     private static native void nativeUpdate(long ptr, long surfaceControl, long width, long height,
             int format, long transactionPtr);
     private static native void nativeMergeWithNextTransaction(long ptr, long transactionPtr,
                                                               long frameNumber);
-    private static native void nativeSetTransactionCompleteCallback(long ptr, long frameNumber,
-            TransactionCompleteCallback callback);
     private static native long nativeGetLastAcquiredFrameNum(long ptr);
     private static native void nativeApplyPendingTransactions(long ptr, long frameNumber);
-
-    /**
-     * Callback sent to {@link #setTransactionCompleteCallback(long, TransactionCompleteCallback)}
-     */
-    public interface TransactionCompleteCallback {
-        /**
-         * Invoked when the transaction has completed.
-         * @param frameNumber The frame number of the buffer that was in that transaction
-         */
-        void onTransactionComplete(long frameNumber);
-    }
 
     /** Create a new connection with the surface flinger. */
     public BLASTBufferQueue(String name, SurfaceControl sc, int width, int height,
@@ -99,8 +86,8 @@ public final class BLASTBufferQueue {
      * This gives the caller a chance to apply the transaction when it's ready.
      * @param t The transaction to add the frame to. This can be null to clear the transaction.
      */
-    public void setNextTransaction(@Nullable SurfaceControl.Transaction t) {
-        nativeSetNextTransaction(mNativeObject, t == null ? 0 : t.mNativeObject);
+    public void setSyncTransaction(@Nullable SurfaceControl.Transaction t) {
+        nativeSetSyncTransaction(mNativeObject, t == null ? 0 : t.mNativeObject);
     }
 
     /**
@@ -118,16 +105,6 @@ public final class BLASTBufferQueue {
 
     public void update(SurfaceControl sc, int width, int height, @PixelFormat.Format int format) {
         nativeUpdate(mNativeObject, sc.mNativeObject, width, height, format, 0);
-    }
-
-    /**
-     * Set a callback when the transaction with the frame number has been completed.
-     * @param frameNumber The frame number to get the transaction complete callback for
-     * @param completeCallback The callback that should be invoked.
-     */
-    public void setTransactionCompleteCallback(long frameNumber,
-            @Nullable TransactionCompleteCallback completeCallback) {
-        nativeSetTransactionCompleteCallback(mNativeObject, frameNumber, completeCallback);
     }
 
     @Override

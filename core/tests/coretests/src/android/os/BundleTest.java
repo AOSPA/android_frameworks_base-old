@@ -47,6 +47,7 @@ public class BundleTest {
 
     @After
     public void tearDown() throws Exception {
+        BaseBundle.setShouldDefuse(false);
         if (mWtfHandler != null) {
             Log.setWtfHandler(mWtfHandler);
         }
@@ -272,16 +273,21 @@ public class BundleTest {
         Parcelable p1 = new CustomParcelable(13, "Tiramisu");
         Parcelable p2 = new CustomParcelable(13, "Tiramisu");
         Bundle a = new Bundle();
-        a.putParcelable("key", p1);
+        a.putParcelable("key1", p1);
         a.readFromParcel(getParcelledBundle(a));
         a.setClassLoader(getClass().getClassLoader());
         Bundle b = new Bundle();
-        b.putParcelable("key", p2);
+        // Adding extra element so that the position of the elements of interest in their respective
+        // source parcels are different so we can cover that case of Parcel.compareData(). We'll
+        // remove the element later so the map is equal.
+        b.putString("key0", "string");
+        b.putParcelable("key1", p2);
         b.readFromParcel(getParcelledBundle(b));
         b.setClassLoader(getClass().getClassLoader());
-        // 2 lazy values with identical parcels inside
         a.isEmpty();
         b.isEmpty();
+        b.remove("key0");
+        // 2 lazy values with identical parcels inside
 
         assertTrue(Bundle.kindofEquals(a, b));
     }
@@ -354,6 +360,81 @@ public class BundleTest {
         RuntimeException e = assertThrows(RuntimeException.class, () -> bundle.getParcelable("p"));
         assertThat(e.getCause()).isInstanceOf(Log.TerribleFailure.class);
     }
+
+    @Test
+    public void getParcelable_whenThrowingAndNotDefusing_throws() throws Exception {
+        Bundle.setShouldDefuse(false);
+        Bundle bundle = new Bundle();
+        bundle.putParcelable("key", new CustomParcelable(13, "Tiramisu"));
+        bundle.readFromParcel(getParcelledBundle(bundle));
+
+        // Default class-loader is the bootpath class-loader, which doesn't contain
+        // CustomParcelable, so trying to read it will throw BadParcelableException.
+        assertThrows(BadParcelableException.class, () -> bundle.getParcelable("key"));
+    }
+
+    @Test
+    public void getParcelable_whenThrowingAndDefusing_returnsNull() throws Exception {
+        Bundle.setShouldDefuse(true);
+        Bundle bundle = new Bundle();
+        bundle.putParcelable("key", new CustomParcelable(13, "Tiramisu"));
+        bundle.putString("string", "value");
+        bundle.readFromParcel(getParcelledBundle(bundle));
+
+        // Default class-loader is the bootpath class-loader, which doesn't contain
+        // CustomParcelable, so trying to read it will throw BadParcelableException.
+        assertThat(bundle.<Parcelable>getParcelable("key")).isNull();
+        // Doesn't affect other items
+        assertThat(bundle.getString("string")).isEqualTo("value");
+    }
+
+    @Test
+    public void getParcelable_whenThrowingAndDefusing_leavesElement() throws Exception {
+        Bundle.setShouldDefuse(true);
+        Bundle bundle = new Bundle();
+        Parcelable parcelable = new CustomParcelable(13, "Tiramisu");
+        bundle.putParcelable("key", parcelable);
+        bundle.putString("string", "value");
+        bundle.readFromParcel(getParcelledBundle(bundle));
+        assertThat(bundle.<Parcelable>getParcelable("key")).isNull();
+
+        // Now, we simulate reserializing and assign the proper class loader to not throw anymore
+        bundle.readFromParcel(getParcelledBundle(bundle));
+        bundle.setClassLoader(getClass().getClassLoader());
+
+        // We're able to retrieve it even though we failed before
+        assertThat(bundle.<Parcelable>getParcelable("key")).isEqualTo(parcelable);
+    }
+
+    @Test
+    public void partialDeserialization_whenNotDefusing_throws() throws Exception {
+        Bundle.setShouldDefuse(false);
+        Bundle bundle = getMalformedBundle();
+        assertThrows(BadParcelableException.class, bundle::isEmpty);
+    }
+
+    @Test
+    public void partialDeserialization_whenDefusing_emptiesMap() throws Exception {
+        Bundle.setShouldDefuse(true);
+        Bundle bundle = getMalformedBundle();
+        bundle.isEmpty();
+        // Nothing thrown
+        assertThat(bundle.size()).isEqualTo(0);
+    }
+
+    private Bundle getMalformedBundle() {
+        Parcel p = Parcel.obtain();
+        p.writeInt(BaseBundle.BUNDLE_MAGIC);
+        int start = p.dataPosition();
+        p.writeInt(1); // Number of items
+        p.writeString("key");
+        p.writeInt(131313); // Invalid type
+        p.writeInt(0); // Anything, really
+        int end = p.dataPosition();
+        p.setDataPosition(0);
+        return new Bundle(p, end - start);
+    }
+
 
     private static class CustomParcelable implements Parcelable {
         public final int integer;

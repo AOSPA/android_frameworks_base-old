@@ -88,6 +88,7 @@ import android.app.IApplicationThread;
 import android.app.PendingIntent;
 import android.app.ProfilerInfo;
 import android.app.WaitResult;
+import android.app.WindowConfiguration;
 import android.app.compat.CompatChanges;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
@@ -1331,26 +1332,23 @@ class ActivityStarter {
                 : (realCallingAppId == Process.SYSTEM_UID)
                         || realCallingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
 
-        // If caller a legacy app, we won't check if caller has BAL permission.
-        final boolean isPiBalOptionEnabled = CompatChanges.isChangeEnabled(
-                ENABLE_PENDING_INTENT_BAL_OPTION, callingUid);
-
         // Legacy behavior allows to use caller foreground state to bypass BAL restriction.
         final boolean balAllowedByPiSender =
                 PendingIntentRecord.isPendingIntentBalAllowedByCaller(checkedOptions);
 
         if (balAllowedByPiSender && realCallingUid != callingUid) {
-            if (isPiBalOptionEnabled) {
-                if (ActivityManager.checkComponentPermission(
-                        android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND,
-                        realCallingUid, -1, true)
-                        == PackageManager.PERMISSION_GRANTED) {
-                    if (DEBUG_ACTIVITY_STARTS) {
-                        Slog.d(TAG, "Activity start allowed: realCallingUid (" + realCallingUid
-                                + ") has BAL permission.");
-                    }
-                    return false;
+            // If the caller is a legacy app, we won't check if the caller has BAL permission.
+            final boolean isPiBalOptionEnabled = CompatChanges.isChangeEnabled(
+                    ENABLE_PENDING_INTENT_BAL_OPTION, realCallingUid);
+            if (isPiBalOptionEnabled && ActivityManager.checkComponentPermission(
+                    android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND,
+                    realCallingUid, -1, true)
+                    == PackageManager.PERMISSION_GRANTED) {
+                if (DEBUG_ACTIVITY_STARTS) {
+                    Slog.d(TAG, "Activity start allowed: realCallingUid (" + realCallingUid
+                            + ") has BAL permission.");
                 }
+                return false;
             }
 
             // don't abort if the realCallingUid has a visible window
@@ -1603,7 +1601,7 @@ class ActivityStarter {
         // transition based on a sub-action.
         // Only do the create here (and defer requestStart) since startActivityInner might abort.
         final TransitionController transitionController = r.mTransitionController;
-        final Transition newTransition = (!transitionController.isCollecting()
+        Transition newTransition = (!transitionController.isCollecting()
                 && transitionController.getTransitionPlayer() != null)
                 ? transitionController.createTransition(TRANSIT_OPEN) : null;
         RemoteTransition remoteTransition = r.takeRemoteTransition();
@@ -1658,6 +1656,10 @@ class ActivityStarter {
                     // The activity is started new rather than just brought forward, so record
                     // it as an existence change.
                     transitionController.collectExistenceChange(r);
+                } else if (result == START_DELIVERED_TO_TOP && newTransition != null) {
+                    // We just delivered to top, so there isn't an actual transition here
+                    newTransition.abort();
+                    newTransition = null;
                 }
                 if (isTransient) {
                     // `r` isn't guaranteed to be the actual relevant activity, so we must wait
@@ -1745,6 +1747,16 @@ class ActivityStarter {
 
         mIntent.setFlags(mLaunchFlags);
 
+        boolean dreamStopping = false;
+
+        for (ActivityRecord stoppingActivity : mSupervisor.mStoppingActivities) {
+            if (stoppingActivity.getActivityType()
+                    == WindowConfiguration.ACTIVITY_TYPE_DREAM) {
+                dreamStopping = true;
+                break;
+            }
+        }
+
         // Get top task at beginning because the order may be changed when reusing existing task.
         final Task prevTopTask = mPreferredTaskDisplayArea.getFocusedRootTask();
         final Task reusedTask = getReusableTask();
@@ -1811,7 +1823,8 @@ class ActivityStarter {
 
         if (!mAvoidMoveToFront && mDoResume) {
             mTargetRootTask.getRootTask().moveToFront("reuseOrNewTask", targetTask);
-            if (!mTargetRootTask.isTopRootTaskInDisplayArea() && mService.mInternal.isDreaming()) {
+            if (!mTargetRootTask.isTopRootTaskInDisplayArea() && mService.mInternal.isDreaming()
+                    && !dreamStopping) {
                 // Launching underneath dream activity (fullscreen, always-on-top). Run the launch-
                 // -behind transition so the Activity gets created and starts in visible state.
                 mLaunchTaskBehind = true;
@@ -2023,7 +2036,7 @@ class ActivityStarter {
 
         // Allowing the embedding if the task is owned by system.
         final int hostUid = hostTask.effectiveUid;
-        if (hostUid == Process.SYSTEM_UID) {
+        if (UserHandle.getAppId(hostUid) == Process.SYSTEM_UID) {
             return true;
         }
 
@@ -2781,9 +2794,11 @@ class ActivityStarter {
         // If it exist, we need to reparent target root task from TDA to launch root task.
         final TaskDisplayArea tda = mTargetRootTask.getDisplayArea();
         final Task launchRootTask = tda.getLaunchRootTask(mTargetRootTask.getWindowingMode(),
-                mTargetRootTask.getActivityType(), null /** options */, null /** sourceTask */,
-                0 /** launchFlags */);
-        if (launchRootTask != null && launchRootTask != mTargetRootTask) {
+                mTargetRootTask.getActivityType(), null /** options */,
+                mSourceRootTask, 0 /** launchFlags */);
+        // If target root task is created by organizer, let organizer handle reparent itself.
+        if (!mTargetRootTask.mCreatedByOrganizer && launchRootTask != null
+                && launchRootTask != mTargetRootTask) {
             mTargetRootTask.reparent(launchRootTask, POSITION_TOP);
             mTargetRootTask = launchRootTask;
         }

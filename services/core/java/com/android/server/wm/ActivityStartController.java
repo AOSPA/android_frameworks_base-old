@@ -470,7 +470,7 @@ public class ActivityStartController {
                         if (started != null && started.getUid() == filterCallingUid) {
                             // Only the started activity which has the same uid as the source caller
                             // can be the caller of next activity.
-                            resultTo = started.appToken;
+                            resultTo = started.token;
                         } else {
                             resultTo = sourceResultTo;
                             // Different apps not adjacent to the caller are forced to be new task.
@@ -501,6 +501,8 @@ public class ActivityStartController {
     int startActivityInTaskFragment(@NonNull TaskFragment taskFragment,
             @NonNull Intent activityIntent, @Nullable Bundle activityOptions,
             @Nullable IBinder resultTo) {
+        final ActivityRecord caller =
+                resultTo != null ? ActivityRecord.forTokenLocked(resultTo) : null;
         return obtainStarter(activityIntent, "startActivityInTaskFragment")
                 .setActivityOptions(activityOptions)
                 .setInTaskFragment(taskFragment)
@@ -508,6 +510,7 @@ public class ActivityStartController {
                 .setRequestCode(-1)
                 .setCallingUid(Binder.getCallingUid())
                 .setCallingPid(Binder.getCallingPid())
+                .setUserId(caller != null ? caller.mUserId : mService.getCurrentUserId())
                 .execute();
     }
 

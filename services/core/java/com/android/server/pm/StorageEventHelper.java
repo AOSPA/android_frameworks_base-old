@@ -41,12 +41,14 @@ import android.os.storage.StorageManager;
 import android.os.storage.StorageManagerInternal;
 import android.os.storage.VolumeInfo;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
 import android.os.storage.DiskInfo;
 
 import com.android.internal.policy.AttributeCache;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageStateInternal;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -130,13 +132,14 @@ public final class StorageEventHelper extends StorageEventListener {
             return;
         }
 
+        final AppDataHelper appDataHelper = new AppDataHelper(mPm);
         final ArrayList<PackageFreezer> freezers = new ArrayList<>();
         final ArrayList<AndroidPackage> loaded = new ArrayList<>();
-        final int parseFlags = mPm.mDefParseFlags | ParsingPackageUtils.PARSE_EXTERNAL_STORAGE;
+        final int parseFlags = mPm.getDefParseFlags() | ParsingPackageUtils.PARSE_EXTERNAL_STORAGE;
 
         final Settings.VersionInfo ver;
         final List<PackageSetting> packages;
-        final ScanPackageHelper scanPackageHelper = new ScanPackageHelper(mPm);
+        final InstallPackageHelper installPackageHelper = new InstallPackageHelper(mPm);
         synchronized (mPm.mLock) {
             ver = mPm.mSettings.findOrCreateVersion(volumeUuid);
             packages = mPm.mSettings.getVolumePackagesLPr(volumeUuid);
@@ -147,7 +150,7 @@ public final class StorageEventHelper extends StorageEventListener {
             synchronized (mPm.mInstallLock) {
                 final AndroidPackage pkg;
                 try {
-                    pkg = scanPackageHelper.scanPackageTracedLI(
+                    pkg = installPackageHelper.scanSystemPackageTracedLI(
                             ps.getPath(), parseFlags, SCAN_INITIAL, 0, null);
                     loaded.add(pkg);
 
@@ -156,7 +159,7 @@ public final class StorageEventHelper extends StorageEventListener {
                 }
 
                 if (!Build.FINGERPRINT.equals(ver.fingerprint)) {
-                    mPm.clearAppDataLIF(
+                    appDataHelper.clearAppDataLIF(
                             ps.getPkg(), UserHandle.USER_ALL, FLAG_STORAGE_DE | FLAG_STORAGE_CE
                             | FLAG_STORAGE_EXTERNAL | Installer.FLAG_CLEAR_CODE_CACHE_ONLY
                             | Installer.FLAG_CLEAR_APP_DATA_KEEP_ART_PROFILES);
@@ -186,7 +189,8 @@ public final class StorageEventHelper extends StorageEventListener {
             try {
                 sm.prepareUserStorage(volumeUuid, user.id, user.serialNumber, pflags);
                 synchronized (mPm.mInstallLock) {
-                    mPm.reconcileAppsDataLI(volumeUuid, user.id, flags, true /* migrateAppData */);
+                    appDataHelper.reconcileAppsDataLI(volumeUuid, user.id, flags,
+                            true /* migrateAppData */);
                 }
             } catch (IllegalStateException e) {
                 // Device was probably ejected, and we'll process that event momentarily
@@ -346,14 +350,14 @@ public final class StorageEventHelper extends StorageEventListener {
     }
 
     private List<String> collectAbsoluteCodePaths() {
-        synchronized (mPm.mLock) {
-            List<String> codePaths = new ArrayList<>();
-            final int packageCount = mPm.mSettings.getPackagesLocked().size();
-            for (int i = 0; i < packageCount; i++) {
-                final PackageSetting ps = mPm.mSettings.getPackagesLocked().valueAt(i);
-                codePaths.add(ps.getPath().getAbsolutePath());
-            }
-            return codePaths;
+        List<String> codePaths = new ArrayList<>();
+        final ArrayMap<String, ? extends PackageStateInternal> packageStates =
+                mPm.getPackageStates();
+        final int packageCount = packageStates.size();
+        for (int i = 0; i < packageCount; i++) {
+            final PackageStateInternal ps = packageStates.valueAt(i);
+            codePaths.add(ps.getPath().getAbsolutePath());
         }
+        return codePaths;
     }
 }

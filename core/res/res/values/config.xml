@@ -1051,6 +1051,39 @@
     -->
     <integer name="config_shortPressOnSleepBehavior">0</integer>
 
+    <!-- Control the behavior when the user long presses the stem primary button.
+         Stem primary button is only used on watch form factor. If a device is not
+         a watch, setting this config is no-op.
+            0 - Nothing
+            1 - Launch voice assistant
+    -->
+    <integer name="config_longPressOnStemPrimaryBehavior">0</integer>
+
+    <!-- Control the behavior when the user double presses the stem primary button.
+         Stem primary button is only used on watch form factor. If a device is not
+         a watch, setting this config is no-op.
+            0 - Nothing
+            1 - Switch to the recent app
+    -->
+    <integer name="config_doublePressOnStemPrimaryBehavior">0</integer>
+
+    <!-- Control the behavior when the user triple presses the stem primary button.
+         Stem primary button is only used on watch form factor. If a device is not
+         a watch, setting this config is no-op.
+            0 - Nothing
+            1 - Toggle accessibility
+    -->
+    <integer name="config_triplePressOnStemPrimaryBehavior">0</integer>
+
+    <!-- Control the behavior when the user short presses the stem primary button.
+        Stem primary button is only used on watch form factor. If a device is not
+        a watch, setting this config is no-op.
+           0 - Nothing
+           1 - Go to launch all apps
+    -->
+    <integer name="config_shortPressOnStemPrimaryBehavior">0</integer>
+
+
     <!-- Time to wait while a button is pressed before triggering a very long press. -->
     <integer name="config_veryLongPressTimeout">3500</integer>
 
@@ -1926,8 +1959,9 @@
          STREAM_MUSIC as if it's on TV platform. -->
     <bool name="config_single_volume">false</bool>
 
-    <!-- Flag indicating whether the volume panel should show remote sessions. -->
-    <bool name="config_volumeShowRemoteSessions">true</bool>
+    <!-- Flag indicating whether platform level volume adjustments are enabled for remote sessions
+         on grouped devices. -->
+    <bool name="config_volumeAdjustmentForRemoteGroupSessions">true</bool>
 
     <!-- Flag indicating that an outbound call must have a call capable phone account
          that has declared it can process the call's handle. -->
@@ -2020,6 +2054,8 @@
     <!-- The name of the package that will hold the television remote service role.
         TODO(b/189347385) make this a @SystemAPI -->
     <string name="config_systemTelevisionRemoteService" translatable="false">@string/config_tvRemoteServicePackage</string>
+    <!-- The name of the package that will hold the device management role -->
+    <string name="config_deviceManager" translatable="false"></string>
 
     <!-- The name of the package that will be allowed to change its components' label/icon. -->
     <string name="config_overrideComponentUiPackage" translatable="false">com.android.stk</string>
@@ -2322,10 +2358,6 @@
     <!-- Type of the ambient tap sensor per device posture (defined by WM Jetpack posture).
          Unspecified values use config_dozeTapSensor -->
     <string-array name="config_dozeTapSensorPostureMapping" translatable="false">
-        <item></item> <!-- UNKNOWN -->
-        <item></item> <!-- CLOSED -->
-        <item></item> <!-- HALF_OPENED -->
-        <item></item> <!-- OPENED -->
     </string-array>
 
     <!-- Type of the long press sensor. Empty if long press is not supported. -->
@@ -2697,7 +2729,7 @@
     <!-- Name of the activity that will handle requests to the system to choose an activity for
          the purposes of resolving an intent. -->
     <string name="config_chooserActivity" translatable="false"
-            >com.android.systemui/com.android.systemui.chooser.ChooserActivity</string>
+            >com.android.intentresolver/.ChooserActivity</string>
     <!-- Component name of a custom ResolverActivity (Intent resolver) to be used instead of
          the default framework version. If left empty, then the framework version will be used.
          Example: com.google.android.myapp/.resolver.MyResolverActivity  -->
@@ -2792,6 +2824,9 @@
     <string-array name="config_disabledUntilUsedPreinstalledImes" translatable="false">
         <item>com.android.inputmethod.latin</item>
     </string-array>
+
+    <!-- Make the IME killable by the lowmemorykiller by raising its oom_score_adj. -->
+    <bool name="config_killableInputMethods">false</bool>
 
     <!-- The list of classes that should be added to the notification ranking pipeline.
      See {@link com.android.server.notification.NotificationSignalExtractor}
@@ -4072,7 +4107,7 @@
     <string translatable="false" name="config_inCallNotificationSound">/product/media/audio/ui/InCallNotification.ogg</string>
 
     <!-- URI for default ringtone sound file to be used for silent ringer vibration -->
-    <string translatable="false" name="config_defaultRingtoneVibrationSound">/product/media/audio/ui/AttentionalHaptics.ogg</string>
+    <string translatable="false" name="config_defaultRingtoneVibrationSound"></string>
 
     <!-- Default number of notifications from the same app before they are automatically grouped by the OS -->
     <integer translatable="false" name="config_autoGroupAtCount">4</integer>
@@ -4688,6 +4723,9 @@
     only. The component must be part of a system app. -->
     <string name="config_defaultSupervisionProfileOwnerComponent" translatable="false"></string>
 
+    <!-- The package name of the default supervision package. -->
+    <string name="config_systemSupervision" translatable="false"></string>
+
     <!-- Trigger a warning for notifications with RemoteView objects that are larger in bytes than
     this value (default 1MB)-->
     <integer name="config_notificationWarnRemoteViewSizeBytes">2000000</integer>
@@ -4946,7 +4984,7 @@
             but isn't supported on the device or both dark scrim alpha and blur radius aren't
             provided.
      -->
-    <color name="config_letterboxBackgroundColor">@android:color/system_neutral2_500</color>
+    <color name="config_letterboxBackgroundColor">@android:color/system_neutral2_900</color>
 
     <!-- Horizonal position of a center of the letterboxed app window.
         0 corresponds to the left side of the screen and 1 to the right side. If given value < 0
@@ -5124,6 +5162,97 @@
     <bool name="config_cecRcProfileSourceMediaContextSensitiveMenuNotHandled_allowed">true</bool>
     <bool name="config_cecRcProfileSourceMediaContextSensitiveMenuNotHandled_default">true</bool>
 
+    <!-- Which Short Audio Descriptors a TV should query via CEC -->
+    <bool name="config_cecQuerySadLpcm_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadLpcmEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadLpcmEnabled_default">true</bool>
+    <bool name="config_cecQuerySadLpcmDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadLpcmDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadDd_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadDdEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDdEnabled_default">true</bool>
+    <bool name="config_cecQuerySadDdDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDdDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadMpeg1_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadMpeg1Enabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMpeg1Enabled_default">true</bool>
+    <bool name="config_cecQuerySadMpeg1Disabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMpeg1Disabled_default">false</bool>
+
+    <bool name="config_cecQuerySadMp3_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadMp3Enabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMp3Enabled_default">true</bool>
+    <bool name="config_cecQuerySadMp3Disabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMp3Disabled_default">false</bool>
+
+    <bool name="config_cecQuerySadMpeg2_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadMpeg2Enabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMpeg2Enabled_default">true</bool>
+    <bool name="config_cecQuerySadMpeg2Disabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMpeg2Disabled_default">false</bool>
+
+    <bool name="config_cecQuerySadAac_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadAacEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadAacEnabled_default">true</bool>
+    <bool name="config_cecQuerySadAacDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadAacDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadDts_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadDtsEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDtsEnabled_default">true</bool>
+    <bool name="config_cecQuerySadDtsDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDtsDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadAtrac_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadAtracEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadAtracEnabled_default">true</bool>
+    <bool name="config_cecQuerySadAtracDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadAtracDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadOnebitaudio_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadOnebitaudioEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadOnebitaudioEnabled_default">true</bool>
+    <bool name="config_cecQuerySadOnebitaudioDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadOnebitaudioDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadDdp_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadDdpEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDdpEnabled_default">true</bool>
+    <bool name="config_cecQuerySadDdpDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDdpDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadDtshd_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadDtshdEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDtshdEnabled_default">true</bool>
+    <bool name="config_cecQuerySadDtshdDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDtshdDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadTruehd_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadTruehdEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadTruehdEnabled_default">true</bool>
+    <bool name="config_cecQuerySadTruehdDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadTruehdDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadDst_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadDstEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDstEnabled_default">true</bool>
+    <bool name="config_cecQuerySadDstDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadDstDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadWmapro_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadWmaproEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadWmaproEnabled_default">true</bool>
+    <bool name="config_cecQuerySadWmaproDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadWmaproDisabled_default">false</bool>
+
+    <bool name="config_cecQuerySadMax_userConfigurable">true</bool>
+    <bool name="config_cecQuerySadMaxEnabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMaxEnabled_default">true</bool>
+    <bool name="config_cecQuerySadMaxDisabled_allowed">true</bool>
+    <bool name="config_cecQuerySadMaxDisabled_default">false</bool>
+
     <!-- Whether app hibernation deletes OAT artifact files as part of global hibernation. -->
     <bool name="config_hibernationDeletesOatArtifactsEnabled">true</bool>
 
@@ -5179,6 +5308,11 @@
     <!-- The default number of times per second that the seconds hand on AnalogClock ticks. If set
          to 0, the seconds hand will be disabled. -->
     <integer name="config_defaultAnalogClockSecondsHandFps">1</integer>
+
+    <!-- List of shared library packages that should be loaded by the classloader after the
+         code and resources provided by applications. This value will be set by the manufacturer  -->
+    <string-array name="config_sharedLibrariesLoadedAfterApp" translatable="false">
+    </string-array>
 
     <!-- the number of the max cached processes in the system. -->
     <integer name="config_customizedMaxCachedProcesses">32</integer>

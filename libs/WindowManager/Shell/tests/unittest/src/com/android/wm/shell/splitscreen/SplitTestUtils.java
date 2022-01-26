@@ -18,7 +18,6 @@ package com.android.wm.shell.splitscreen;
 
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.window.DisplayAreaOrganizer.FEATURE_DEFAULT_TASK_CONTAINER;
-
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
@@ -37,7 +36,12 @@ import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.split.SplitLayout;
+import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.transition.Transitions;
+
+import java.util.Optional;
+
+import javax.inject.Provider;
 
 public class SplitTestUtils {
 
@@ -68,10 +72,12 @@ public class SplitTestUtils {
                 MainStage mainStage, SideStage sideStage, DisplayImeController imeController,
                 DisplayInsetsController insetsController, SplitLayout splitLayout,
                 Transitions transitions, TransactionPool transactionPool,
-                SplitscreenEventLogger logger) {
+                SplitscreenEventLogger logger,
+                Optional<RecentTasksController> recentTasks,
+                Provider<Optional<StageTaskUnfoldController>> unfoldController) {
             super(context, displayId, syncQueue, rootTDAOrganizer, taskOrganizer, mainStage,
                     sideStage, imeController, insetsController, splitLayout, transitions,
-                    transactionPool, logger);
+                    transactionPool, logger, recentTasks, unfoldController);
 
             // Prepare default TaskDisplayArea for testing.
             mDisplayAreaInfo = new DisplayAreaInfo(

@@ -90,6 +90,7 @@ import android.app.AppOpsManager;
 import android.app.ForegroundServiceDidNotStartInTimeException;
 import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.IApplicationThread;
+import android.app.IForegroundServiceObserver;
 import android.app.IServiceConnection;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -128,6 +129,7 @@ import android.os.PowerExemptionManager;
 import android.os.PowerExemptionManager.ReasonCode;
 import android.os.Process;
 import android.os.RemoteCallback;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -277,6 +279,12 @@ public final class ActiveServices {
      * Uptime at which a given uid becomes eliglible again for FGS notification deferral
      */
     final SparseLongArray mFgsDeferralEligible = new SparseLongArray();
+
+    /**
+     * Foreground service observers: track what apps have FGSes
+     */
+    final RemoteCallbackList<IForegroundServiceObserver> mFgsObservers =
+            new RemoteCallbackList<>();
 
     /**
      * Map of services that are asked to be brought up (start/binding) but not ready to.
@@ -1417,6 +1425,10 @@ public final class ActiveServices {
         return false;
     }
 
+    /**
+     * Put the named service into the foreground mode
+     */
+    @GuardedBy("mAm")
     public void setServiceForegroundLocked(ComponentName className, IBinder token,
             int id, Notification notification, int flags, int foregroundServiceType) {
         final int userId = UserHandle.getCallingUserId();
@@ -1781,6 +1793,7 @@ public final class ActiveServices {
     /**
      * @param id Notification ID.  Zero === exit foreground state for the given service.
      */
+    @GuardedBy("mAm")
     private void setServiceForegroundInnerLocked(final ServiceRecord r, int id,
             Notification notification, int flags, int foregroundServiceType) {
         if (id != 0) {
@@ -2016,6 +2029,7 @@ public final class ActiveServices {
                     }
                     // Even if the service is already a FGS, we need to update the notification,
                     // so we need to call it again.
+                    signalForegroundServiceObserversLocked(r);
                     r.postNotification();
                     if (r.app != null) {
                         updateServiceForegroundLocked(psr, true);
@@ -2095,6 +2109,7 @@ public final class ActiveServices {
                         r.mFgsExitTime > r.mFgsEnterTime
                                 ? (int)(r.mFgsExitTime - r.mFgsEnterTime) : 0);
                 r.mFgsNotificationWasDeferred = false;
+                signalForegroundServiceObserversLocked(r);
                 resetFgsRestrictionLocked(r);
                 mAm.updateForegroundServiceUsageStats(r.name, r.userId, false);
                 if (r.app != null) {
@@ -4728,7 +4743,8 @@ public final class ActiveServices {
         }
 
         cancelForegroundNotificationLocked(r);
-        if (r.isForeground) {
+        final boolean exitingFg = r.isForeground;
+        if (exitingFg) {
             decActiveForegroundAppLocked(smap, r);
             synchronized (mAm.mProcessStats.mLock) {
                 ServiceState stracker = r.getTracker();
@@ -4754,6 +4770,11 @@ public final class ActiveServices {
         r.foregroundId = 0;
         r.foregroundNoti = null;
         resetFgsRestrictionLocked(r);
+        // Signal FGS observers *after* changing the isForeground state, and
+        // only if this was an actual state change.
+        if (exitingFg) {
+            signalForegroundServiceObserversLocked(r);
+        }
 
         // Clear start entries.
         r.clearDeliveredStartsLocked();
@@ -5176,12 +5197,15 @@ public final class ActiveServices {
                 // Since we kicked off all its pending restarts, there could be some open slots
                 // in the pending restarts list, schedule a check on it. We are posting to the same
                 // handler, so by the time of the check, those immediate restarts should be done.
-                mAm.mHandler.post(() ->
+                mAm.mHandler.post(() -> {
+                    final long now = SystemClock.uptimeMillis();
+                    synchronized (mAm) {
                         rescheduleServiceRestartIfPossibleLocked(
                                 getExtraRestartTimeInBetweenLocked(),
                                 mAm.mConstants.SERVICE_MIN_RESTART_TIME_BETWEEN,
-                                "other", SystemClock.uptimeMillis())
-                );
+                                "other", now);
+                    }
+                });
             }
         }
         return didSomething;
@@ -5281,6 +5305,77 @@ public final class ActiveServices {
         }
 
         return didSomething;
+    }
+
+    void makeServicesNonForegroundLocked(final String pkg, final @UserIdInt int userId) {
+        final ServiceMap smap = mServiceMap.get(userId);
+        if (smap != null) {
+            ArrayList<ServiceRecord> fgsList = new ArrayList<>();
+            for (int i = 0; i < smap.mServicesByInstanceName.size(); i++) {
+                final ServiceRecord sr = smap.mServicesByInstanceName.valueAt(i);
+                if (sr.appInfo.packageName.equals(pkg) && sr.isForeground) {
+                    fgsList.add(sr);
+                }
+            }
+
+            final int numServices = fgsList.size();
+            if (DEBUG_FOREGROUND_SERVICE) {
+                Slog.i(TAG_SERVICE, "Forcing " + numServices + " services out of foreground in u"
+                        + userId + "/" + pkg);
+            }
+            for (int i = 0; i < numServices; i++) {
+                final ServiceRecord sr = fgsList.get(i);
+                setServiceForegroundInnerLocked(sr, 0, null, Service.STOP_FOREGROUND_REMOVE, 0);
+            }
+        }
+    }
+
+    @GuardedBy("mAm")
+    private void signalForegroundServiceObserversLocked(ServiceRecord r) {
+        final int num = mFgsObservers.beginBroadcast();
+        for (int i = 0; i < num; i++) {
+            try {
+                mFgsObservers.getBroadcastItem(i).onForegroundStateChanged(r,
+                        r.appInfo.packageName, r.userId, r.isForeground);
+            } catch (RemoteException e) {
+                // Will be unregistered automatically by RemoteCallbackList's dead-object
+                // tracking, so nothing we need to do here.
+            }
+        }
+        mFgsObservers.finishBroadcast();
+    }
+
+    @GuardedBy("mAm")
+    boolean registerForegroundServiceObserverLocked(final int callingUid,
+            IForegroundServiceObserver callback) {
+        // We always tell the newly-registered observer about any current FGSes.  The
+        // most common case for this is a SysUI crash & relaunch; it needs to
+        // reconstruct its tracking of stoppable-FGS-hosting apps.
+        try {
+            final int mapSize = mServiceMap.size();
+            for (int mapIndex = 0; mapIndex < mapSize; mapIndex++) {
+                final ServiceMap smap = mServiceMap.valueAt(mapIndex);
+                if (smap != null) {
+                    final int numServices = smap.mServicesByInstanceName.size();
+                    for (int i = 0; i < numServices; i++) {
+                        final ServiceRecord sr = smap.mServicesByInstanceName.valueAt(i);
+                        if (sr.isForeground && callingUid == sr.appInfo.uid) {
+                            callback.onForegroundStateChanged(sr, sr.appInfo.packageName,
+                                    sr.userId, true);
+                        }
+                    }
+                }
+            }
+            // Callback is fine, go ahead and record it
+            mFgsObservers.register(callback);
+        } catch (RemoteException e) {
+            // Whoops, something wrong with the callback.  Don't register it, and
+            // report error back to the caller.
+            Slog.e(TAG_SERVICE, "Bad FGS observer from uid " + callingUid);
+            return false;
+        }
+
+        return true;
     }
 
     void forceStopPackageLocked(String packageName, int userId) {

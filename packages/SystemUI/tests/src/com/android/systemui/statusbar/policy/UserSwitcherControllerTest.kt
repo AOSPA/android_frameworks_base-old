@@ -34,6 +34,7 @@ import android.testing.TestableLooper
 import androidx.test.filters.SmallTest
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.testing.UiEventLoggerFake
+import com.android.internal.util.LatencyTracker
 import com.android.internal.util.UserIcons
 import com.android.systemui.GuestResumeSessionReceiver
 import com.android.systemui.R
@@ -83,6 +84,7 @@ class UserSwitcherControllerTest : SysuiTestCase() {
     @Mock private lateinit var falsingManager: FalsingManager
     @Mock private lateinit var dumpManager: DumpManager
     @Mock private lateinit var interactionJankMonitor: InteractionJankMonitor
+    @Mock private lateinit var latencyTracker: LatencyTracker
     private lateinit var testableLooper: TestableLooper
     private lateinit var uiBgExecutor: FakeExecutor
     private lateinit var uiEventLogger: UiEventLoggerFake
@@ -132,6 +134,7 @@ class UserSwitcherControllerTest : SysuiTestCase() {
                 secureSettings,
                 uiBgExecutor,
                 interactionJankMonitor,
+                latencyTracker,
                 dumpManager)
         userSwitcherController.mPauseRefreshUsers = true
 
@@ -156,6 +159,7 @@ class UserSwitcherControllerTest : SysuiTestCase() {
         userSwitcherController.onUserListItemClicked(emptyGuestUserRecord)
         testableLooper.processAllMessages()
         verify(interactionJankMonitor).begin(any())
+        verify(latencyTracker).onActionStart(LatencyTracker.ACTION_USER_SWITCH)
         verify(activityManager).switchUser(guestInfo.id)
         assertEquals(1, uiEventLogger.numLogs())
         assertEquals(QSUserSwitcherEvent.QS_USER_GUEST_ADD.id, uiEventLogger.eventId(0))
@@ -271,5 +275,23 @@ class UserSwitcherControllerTest : SysuiTestCase() {
         testableLooper.processAllMessages()
         assertEquals(1, uiEventLogger.numLogs())
         assertEquals(QSUserSwitcherEvent.QS_USER_GUEST_CONTINUE.id, uiEventLogger.eventId(0))
+    }
+
+    @Test
+    fun test_getCurrentUserName_shouldReturnNameOfTheCurrentUser() {
+        fun addUser(id: Int, name: String, isCurrent: Boolean) {
+            userSwitcherController.users.add(UserSwitcherController.UserRecord(
+                    UserInfo(id, name, 0),
+                    null, false, isCurrent, false,
+                    false, false
+            ))
+        }
+        val bgUserName = "background_user"
+        val fgUserName = "foreground_user"
+
+        addUser(1, bgUserName, false)
+        addUser(2, fgUserName, true)
+
+        assertEquals(fgUserName, userSwitcherController.currentUserName)
     }
 }

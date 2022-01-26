@@ -43,20 +43,23 @@ import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
+import com.android.systemui.statusbar.RemoteInputNotificationRebuilder;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.commandline.CommandRegistry;
+import com.android.systemui.statusbar.gesture.SwipeStatusBarAwayGestureHandler;
 import com.android.systemui.statusbar.notification.AssistantFeedbackController;
 import com.android.systemui.statusbar.notification.DynamicChildBindController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
-import com.android.systemui.statusbar.notification.collection.inflation.LowPriorityInflationHelper;
+import com.android.systemui.statusbar.notification.collection.legacy.LowPriorityInflationHelper;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
+import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.stack.ForegroundServiceSectionController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
@@ -69,6 +72,7 @@ import com.android.systemui.statusbar.phone.SystemUIHostDialogProvider;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallLogger;
 import com.android.systemui.statusbar.policy.RemoteInputUriController;
+import com.android.systemui.statusbar.window.StatusBarWindowController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.time.SystemClock;
@@ -94,9 +98,12 @@ public interface StatusBarDependenciesModule {
     @Provides
     static NotificationRemoteInputManager provideNotificationRemoteInputManager(
             Context context,
+            FeatureFlags featureFlags,
             NotificationLockscreenUserManager lockscreenUserManager,
             SmartReplyController smartReplyController,
+            NotificationVisibilityProvider visibilityProvider,
             NotificationEntryManager notificationEntryManager,
+            RemoteInputNotificationRebuilder rebuilder,
             Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             StatusBarStateController statusBarStateController,
             Handler mainHandler,
@@ -106,9 +113,12 @@ public interface StatusBarDependenciesModule {
             DumpManager dumpManager) {
         return new NotificationRemoteInputManager(
                 context,
+                featureFlags,
                 lockscreenUserManager,
                 smartReplyController,
+                visibilityProvider,
                 notificationEntryManager,
+                rebuilder,
                 statusBarOptionalLazy,
                 statusBarStateController,
                 mainHandler,
@@ -125,6 +135,7 @@ public interface StatusBarDependenciesModule {
             Context context,
             Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             Lazy<NotificationShadeWindowController> notificationShadeWindowController,
+            NotificationVisibilityProvider visibilityProvider,
             NotificationEntryManager notificationEntryManager,
             MediaArtworkProcessor mediaArtworkProcessor,
             KeyguardBypassController keyguardBypassController,
@@ -138,6 +149,7 @@ public interface StatusBarDependenciesModule {
                 context,
                 statusBarOptionalLazy,
                 notificationShadeWindowController,
+                visibilityProvider,
                 notificationEntryManager,
                 mediaArtworkProcessor,
                 keyguardBypassController,
@@ -164,10 +176,15 @@ public interface StatusBarDependenciesModule {
     @SysUISingleton
     @Provides
     static SmartReplyController provideSmartReplyController(
-            NotificationEntryManager entryManager,
+            DumpManager dumpManager,
+            NotificationVisibilityProvider visibilityProvider,
             IStatusBarService statusBarService,
             NotificationClickNotifier clickNotifier) {
-        return new SmartReplyController(entryManager, statusBarService, clickNotifier);
+        return new SmartReplyController(
+                dumpManager,
+                visibilityProvider,
+                statusBarService,
+                clickNotifier);
     }
 
 
@@ -182,6 +199,7 @@ public interface StatusBarDependenciesModule {
     static NotificationViewHierarchyManager provideNotificationViewHierarchyManager(
             Context context,
             @Main Handler mainHandler,
+            FeatureFlags featureFlags,
             NotificationLockscreenUserManager notificationLockscreenUserManager,
             NotificationGroupManagerLegacy groupManager,
             VisualStabilityManager visualStabilityManager,
@@ -197,6 +215,7 @@ public interface StatusBarDependenciesModule {
         return new NotificationViewHierarchyManager(
                 context,
                 mainHandler,
+                featureFlags,
                 notificationLockscreenUserManager,
                 groupManager,
                 visualStabilityManager,
@@ -253,11 +272,31 @@ public interface StatusBarDependenciesModule {
             @Main Executor mainExecutor,
             IActivityManager iActivityManager,
             OngoingCallLogger logger,
-            DumpManager dumpManager) {
+            DumpManager dumpManager,
+            StatusBarWindowController statusBarWindowController,
+            SwipeStatusBarAwayGestureHandler swipeStatusBarAwayGestureHandler,
+            StatusBarStateController statusBarStateController) {
+        Optional<StatusBarWindowController> windowController =
+                featureFlags.isOngoingCallInImmersiveEnabled()
+                        ? Optional.of(statusBarWindowController)
+                        : Optional.empty();
+        Optional<SwipeStatusBarAwayGestureHandler> gestureHandler =
+                featureFlags.isOngoingCallInImmersiveEnabled()
+                        ? Optional.of(swipeStatusBarAwayGestureHandler)
+                        : Optional.empty();
         OngoingCallController ongoingCallController =
                 new OngoingCallController(
-                        notifCollection, featureFlags, systemClock, activityStarter, mainExecutor,
-                        iActivityManager, logger, dumpManager);
+                        notifCollection,
+                        featureFlags,
+                        systemClock,
+                        activityStarter,
+                        mainExecutor,
+                        iActivityManager,
+                        logger,
+                        dumpManager,
+                        windowController,
+                        gestureHandler,
+                        statusBarStateController);
         ongoingCallController.init();
         return ongoingCallController;
     }

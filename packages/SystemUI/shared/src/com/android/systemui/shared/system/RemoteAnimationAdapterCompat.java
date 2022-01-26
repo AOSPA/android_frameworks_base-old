@@ -26,6 +26,7 @@ import static android.view.WindowManager.TransitionOldType;
 import static android.window.TransitionInfo.FLAG_IS_WALLPAPER;
 
 import android.annotation.SuppressLint;
+import android.app.IApplicationThread;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.ArrayMap;
@@ -40,7 +41,7 @@ import android.window.IRemoteTransitionFinishedCallback;
 import android.window.RemoteTransition;
 import android.window.TransitionInfo;
 
-import java.util.ArrayList;
+import com.android.wm.shell.util.CounterRotator;
 
 /**
  * @see RemoteAnimationAdapter
@@ -51,10 +52,10 @@ public class RemoteAnimationAdapterCompat {
     private final RemoteTransitionCompat mRemoteTransition;
 
     public RemoteAnimationAdapterCompat(RemoteAnimationRunnerCompat runner, long duration,
-            long statusBarTransitionDelay) {
+            long statusBarTransitionDelay, IApplicationThread appThread) {
         mWrapped = new RemoteAnimationAdapter(wrapRemoteAnimationRunner(runner), duration,
                 statusBarTransitionDelay);
-        mRemoteTransition = buildRemoteTransition(runner);
+        mRemoteTransition = buildRemoteTransition(runner, appThread);
     }
 
     RemoteAnimationAdapter getWrapped() {
@@ -62,9 +63,10 @@ public class RemoteAnimationAdapterCompat {
     }
 
     /** Helper to just build a remote transition. Use this if the legacy adapter isn't needed. */
-    public static RemoteTransitionCompat buildRemoteTransition(RemoteAnimationRunnerCompat runner) {
+    public static RemoteTransitionCompat buildRemoteTransition(RemoteAnimationRunnerCompat runner,
+            IApplicationThread appThread) {
         return new RemoteTransitionCompat(
-                new RemoteTransition(wrapRemoteTransition(runner)));
+                new RemoteTransition(wrapRemoteTransition(runner), appThread));
     }
 
     public RemoteTransitionCompat getRemoteTransition() {
@@ -107,52 +109,6 @@ public class RemoteAnimationAdapterCompat {
                 remoteAnimationAdapter.onAnimationCancelled();
             }
         };
-    }
-
-    private static class CounterRotator {
-        SurfaceControl mSurface = null;
-        ArrayList<SurfaceControl> mRotateChildren = null;
-
-        void setup(SurfaceControl.Transaction t, SurfaceControl parent, int rotateDelta,
-                float displayW, float displayH) {
-            if (rotateDelta == 0) return;
-            mRotateChildren = new ArrayList<>();
-            // We want to counter-rotate, so subtract from 4
-            rotateDelta = 4 - (rotateDelta + 4) % 4;
-            mSurface = new SurfaceControl.Builder()
-                    .setName("Transition Unrotate")
-                    .setContainerLayer()
-                    .setParent(parent)
-                    .build();
-            // column-major
-            if (rotateDelta == 1) {
-                t.setMatrix(mSurface, 0, 1, -1, 0);
-                t.setPosition(mSurface, displayW, 0);
-            } else if (rotateDelta == 2) {
-                t.setMatrix(mSurface, -1, 0, 0, -1);
-                t.setPosition(mSurface, displayW, displayH);
-            } else if (rotateDelta == 3) {
-                t.setMatrix(mSurface, 0, -1, 1, 0);
-                t.setPosition(mSurface, 0, displayH);
-            }
-            t.show(mSurface);
-        }
-
-        void addChild(SurfaceControl.Transaction t, SurfaceControl child) {
-            if (mSurface == null) return;
-            t.reparent(child, mSurface);
-            mRotateChildren.add(child);
-        }
-
-        void cleanUp(SurfaceControl rootLeash) {
-            if (mSurface == null) return;
-            SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-            for (int i = mRotateChildren.size() - 1; i >= 0; --i) {
-                t.reparent(mRotateChildren.get(i), rootLeash);
-            }
-            t.remove(mSurface);
-            t.apply();
-        }
     }
 
     private static IRemoteTransition.Stub wrapRemoteTransition(
@@ -204,14 +160,14 @@ public class RemoteAnimationAdapterCompat {
                 if (launcherTask != null && rotateDelta != 0 && launcherTask.getParent() != null) {
                     counterLauncher.setup(t, info.getChange(launcherTask.getParent()).getLeash(),
                             rotateDelta, displayW, displayH);
-                    if (counterLauncher.mSurface != null) {
-                        t.setLayer(counterLauncher.mSurface, launcherLayer);
+                    if (counterLauncher.getSurface() != null) {
+                        t.setLayer(counterLauncher.getSurface(), launcherLayer);
                     }
                 }
 
                 if (isReturnToHome) {
-                    if (counterLauncher.mSurface != null) {
-                        t.setLayer(counterLauncher.mSurface, info.getChanges().size() * 3);
+                    if (counterLauncher.getSurface() != null) {
+                        t.setLayer(counterLauncher.getSurface(), info.getChanges().size() * 3);
                     }
                     // Need to "boost" the closing things since that's what launcher expects.
                     for (int i = info.getChanges().size() - 1; i >= 0; --i) {
@@ -237,8 +193,8 @@ public class RemoteAnimationAdapterCompat {
                     if (wallpaper != null && rotateDelta != 0 && wallpaper.getParent() != null) {
                         counterWallpaper.setup(t, info.getChange(wallpaper.getParent()).getLeash(),
                                 rotateDelta, displayW, displayH);
-                        if (counterWallpaper.mSurface != null) {
-                            t.setLayer(counterWallpaper.mSurface, -1);
+                        if (counterWallpaper.getSurface() != null) {
+                            t.setLayer(counterWallpaper.getSurface(), -1);
                             counterWallpaper.addChild(t, leashMap.get(wallpaper.getLeash()));
                         }
                     }

@@ -20,8 +20,7 @@
     xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
     android:id="@+id/internet_connectivity_dialog"
     android:layout_width="@dimen/large_dialog_width"
-    android:layout_height="@dimen/internet_dialog_list_max_height"
-    android:background="@drawable/internet_dialog_rounded_top_corner_background"
+    android:layout_height="wrap_content"
     android:orientation="vertical">
 
     <LinearLayout
@@ -321,6 +320,47 @@
                         android:textAppearance="@style/TextAppearance.InternetDialog"
                         android:textSize="14sp"/>
                 </FrameLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/wifi_scan_notify_layout"
+                style="@style/InternetDialog.Network"
+                android:orientation="vertical"
+                android:layout_height="wrap_content"
+                android:paddingBottom="4dp"
+                android:clickable="false"
+                android:focusable="false"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="56dp"
+                    android:gravity="start|top"
+                    android:orientation="horizontal"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="16dp"
+                    android:paddingBottom="4dp">
+                    <ImageView
+                        android:src="@drawable/ic_info_outline"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:tint="?android:attr/textColorTertiary"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <TextView
+                        android:id="@+id/wifi_scan_notify_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="16dp"
+                        android:paddingBottom="8dp"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:clickable="true"/>
+                </LinearLayout>
             </LinearLayout>
 
             <FrameLayout

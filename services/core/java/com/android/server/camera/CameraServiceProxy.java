@@ -15,6 +15,7 @@
  */
 package com.android.server.camera;
 
+import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.os.Build.VERSION_CODES.M;
 
 import android.annotation.IntDef;
@@ -39,7 +40,9 @@ import android.hardware.CameraSessionStats;
 import android.hardware.CameraStreamStats;
 import android.hardware.ICameraService;
 import android.hardware.ICameraServiceProxy;
+import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureRequest;
 import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.devicestate.DeviceStateManager.FoldStateListener;
 import android.hardware.display.DisplayManager;
@@ -105,8 +108,9 @@ public class CameraServiceProxy extends SystemService
 
     /**
      * When enabled this change id forces the packages it is applied to override the default
-     * camera rotate & crop behavior. The default behavior along with all possible override
-     * combinations is discussed in the table below.
+     * camera rotate & crop behavior and always return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE .
+     * The default behavior along with all possible override combinations is discussed in the table
+     * below.
      */
     @ChangeId
     @Overridable
@@ -118,9 +122,7 @@ public class CameraServiceProxy extends SystemService
      * When enabled this change id forces the packages it is applied to ignore the current value of
      * 'android:resizeableActivity' as well as target SDK equal to or below M and consider the
      * activity as non-resizeable. In this case, the value of camera rotate & crop will only depend
-     * on potential mismatches between the orientation of the camera and the fixed orientation of
-     * the activity. You can check the table below for further details on the possible override
-     * combinations.
+     * on the needed compensation considering the current display rotation.
      */
     @ChangeId
     @Overridable
@@ -129,67 +131,30 @@ public class CameraServiceProxy extends SystemService
     public static final long OVERRIDE_CAMERA_RESIZABLE_AND_SDK_CHECK = 191513214L; // buganizer id
 
     /**
-     * This change id forces the packages it is applied to override the default camera rotate & crop
-     * behavior. Enabling it will set the crop & rotate parameter to
-     * {@link android.hardware.camera2.CaptureRequest#SCALER_ROTATE_AND_CROP_90} and disabling it
-     * will reset the parameter to
-     * {@link android.hardware.camera2.CaptureRequest#SCALER_ROTATE_AND_CROP_NONE} as long as camera
-     * clients include {@link android.hardware.camera2.CaptureRequest#SCALER_ROTATE_AND_CROP_AUTO}
-     * in their capture requests.
-     *
-     * This treatment only takes effect if OVERRIDE_CAMERA_ROTATE_AND_CROP_DEFAULTS is also enabled.
-     * The table below includes further information about the possible override combinations.
-     */
-    @ChangeId
-    @Overridable
-    @Disabled
-    @TestApi
-    public static final long OVERRIDE_CAMERA_ROTATE_AND_CROP = 190069291L; //buganizer id
-
-    /**
      * Possible override combinations
      *
-     *            |OVERRIDE     |          |OVERRIDE_
-     *            |CAMERA_      |OVERRIDE  |CAMERA_
-     *            |ROTATE_      |CAMERA_   |RESIZEABLE_
-     *            |AND_CROP_    |ROTATE_   |AND_SDK_
-     *            |DEFAULTS     |AND_CROP  |CHECK
-     * ______________________________________________
-     * Default    |             |          |
-     * Behavior   | D           |D         |D
-     * ______________________________________________
-     * Ignore     |             |          |
-     * SDK&Resize | D           |D         |E
-     * ______________________________________________
-     * Default    |             |          |
-     * Behavior   | D           |E         |D
-     * ______________________________________________
-     * Ignore     |             |          |
-     * SDK&Resize | D           |E         |E
-     * ______________________________________________
-     * Rotate&Crop|             |          |
-     * disabled   | E           |D         |D
-     * ______________________________________________
-     * Rotate&Crop|             |          |
-     * disabled   | E           |D         |E
-     * ______________________________________________
-     * Rotate&Crop|             |          |
-     * enabled    | E           |E         |D
-     * ______________________________________________
-     * Rotate&Crop|             |          |
-     * enabled    | E           |E         |E
-     * ______________________________________________
+     *                             |OVERRIDE     |OVERRIDE_
+     *                             |CAMERA_      |CAMERA_
+     *                             |ROTATE_      |RESIZEABLE_
+     *                             |AND_CROP_    |AND_SDK_
+     *                             |DEFAULTS     |CHECK
+     * _________________________________________________
+     * Default Behavior            | D           |D
+     * _________________________________________________
+     * Ignore SDK&Resize           | D           |E
+     * _________________________________________________
+     * SCALER_ROTATE_AND_CROP_NONE | E           |D, E
+     * _________________________________________________
      * Where:
-     * E -> Override enabled
-     * D -> Override disabled
-     * Default behavior ->  Rotate&crop will be enabled only in cases
-     *                      where the fixed app orientation mismatches
-     *                      with the orientation of the camera.
-     *                      Additionally the app must either target M (or below)
-     *                      or is declared as non-resizeable.
-     * Ignore SDK&Resize -> Rotate&crop will be enabled only in cases
-     *                      where the fixed app orientation mismatches
-     *                      with the orientation of the camera.
+     * E                            -> Override enabled
+     * D                            -> Override disabled
+     * Default behavior             -> Rotate&crop will be calculated depending on the required
+     *                                 compensation necessary for the current display rotation.
+     *                                 Additionally the app must either target M (or below)
+     *                                 or is declared as non-resizeable.
+     * Ignore SDK&Resize            -> The Rotate&crop value will depend on the required
+     *                                 compensation for the current display rotation.
+     * SCALER_ROTATE_AND_CROP_NONE  -> Always return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE
      */
 
     // Flags arguments to NFC adapter to enable/disable NFC
@@ -346,13 +311,13 @@ public class CameraServiceProxy extends SystemService
 
     private final TaskStateHandler mTaskStackListener = new TaskStateHandler();
 
-    private final class TaskInfo {
-        private int frontTaskId;
-        private boolean isResizeable;
-        private boolean isFixedOrientationLandscape;
-        private boolean isFixedOrientationPortrait;
-        private int displayId;
-        private int userId;
+    public static final class TaskInfo {
+        public int frontTaskId;
+        public boolean isResizeable;
+        public boolean isFixedOrientationLandscape;
+        public boolean isFixedOrientationPortrait;
+        public int displayId;
+        public int userId;
     }
 
     private final class TaskStateHandler extends TaskStackListener {
@@ -367,7 +332,8 @@ public class CameraServiceProxy extends SystemService
             synchronized (mMapLock) {
                 TaskInfo info = new TaskInfo();
                 info.frontTaskId = taskInfo.taskId;
-                info.isResizeable = taskInfo.isResizeable;
+                info.isResizeable =
+                        (taskInfo.topActivityInfo.resizeMode != RESIZE_MODE_UNRESIZEABLE);
                 info.displayId = taskInfo.displayId;
                 info.userId = taskInfo.userId;
                 info.isFixedOrientationLandscape = ActivityInfo.isFixedOrientationLandscape(
@@ -427,97 +393,108 @@ public class CameraServiceProxy extends SystemService
         }
     };
 
-    private final ICameraServiceProxy.Stub mCameraServiceProxy = new ICameraServiceProxy.Stub() {
-        private boolean isMOrBelow(Context ctx, String packageName) {
-            try {
-                return ctx.getPackageManager().getPackageInfo(
-                        packageName, 0).applicationInfo.targetSdkVersion <= M;
-            } catch (PackageManager.NameNotFoundException e) {
-                Slog.e(TAG,"Package name not found!");
-            }
-            return false;
+    private static boolean isMOrBelow(Context ctx, String packageName) {
+        try {
+            return ctx.getPackageManager().getPackageInfo(
+                    packageName, 0).applicationInfo.targetSdkVersion <= M;
+        } catch (PackageManager.NameNotFoundException e) {
+            Slog.e(TAG,"Package name not found!");
+        }
+        return false;
+    }
+
+    /**
+     * Estimate the app crop-rotate-scale compensation value.
+     */
+    public static int getCropRotateScale(@NonNull Context ctx, @NonNull String packageName,
+            @Nullable TaskInfo taskInfo, int displayRotation, int lensFacing,
+            boolean ignoreResizableAndSdkCheck) {
+        if (taskInfo == null) {
+            return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
         }
 
-        /**
-         * Gets whether crop-rotate-scale is needed.
-         */
-        private boolean getNeedCropRotateScale(@NonNull Context ctx, @NonNull String packageName,
-                @Nullable TaskInfo taskInfo, int sensorOrientation, int lensFacing,
-                boolean ignoreResizableAndSdkCheck) {
-            if (taskInfo == null) {
-                return false;
-            }
+        // External cameras do not need crop-rotate-scale.
+        if (lensFacing != CameraMetadata.LENS_FACING_FRONT
+                && lensFacing != CameraMetadata.LENS_FACING_BACK) {
+            Log.v(TAG, "lensFacing=" + lensFacing + ". Crop-rotate-scale is disabled.");
+            return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
+        }
 
-            // External cameras do not need crop-rotate-scale.
-            if (lensFacing != CameraMetadata.LENS_FACING_FRONT
-                    && lensFacing != CameraMetadata.LENS_FACING_BACK) {
-                Log.v(TAG, "lensFacing=" + lensFacing + ". Crop-rotate-scale is disabled.");
-                return false;
-            }
-
-            // In case the activity behavior is not explicitly overridden, enable the
-            // crop-rotate-scale workaround if the app targets M (or below) or is not
-            // resizeable.
-            if (!ignoreResizableAndSdkCheck && !isMOrBelow(ctx, packageName) &&
-                    taskInfo.isResizeable) {
-                Slog.v(TAG,
-                        "The activity is N or above and claims to support resizeable-activity. "
-                                + "Crop-rotate-scale is disabled.");
-                return false;
-            }
-
-            DisplayManager displayManager = ctx.getSystemService(DisplayManager.class);
-            int rotationDegree = 0;
-            if (displayManager != null) {
-                Display display = displayManager.getDisplay(taskInfo.displayId);
-                if (display == null) {
-                    Slog.e(TAG, "Invalid display id: " + taskInfo.displayId);
-                    return false;
-                }
-
-                int rotation = display.getRotation();
-                switch (rotation) {
-                    case Surface.ROTATION_0:
-                        rotationDegree = 0;
-                        break;
-                    case Surface.ROTATION_90:
-                        rotationDegree = 90;
-                        break;
-                    case Surface.ROTATION_180:
-                        rotationDegree = 180;
-                        break;
-                    case Surface.ROTATION_270:
-                        rotationDegree = 270;
-                        break;
-                }
-            } else {
-                Slog.e(TAG, "Failed to query display manager!");
-                return false;
-            }
-
-            // Here we only need to know whether the camera is landscape or portrait. Therefore we
-            // don't need to consider whether it is a front or back camera. The formula works for
-            // both.
-            boolean landscapeCamera = ((rotationDegree + sensorOrientation) % 180 == 0);
+        // In case the activity behavior is not explicitly overridden, enable the
+        // crop-rotate-scale workaround if the app targets M (or below) or is not
+        // resizeable.
+        if (!ignoreResizableAndSdkCheck && !isMOrBelow(ctx, packageName) &&
+                taskInfo.isResizeable) {
             Slog.v(TAG,
-                    "Display.getRotation()=" + rotationDegree
-                            + " CameraCharacteristics.SENSOR_ORIENTATION=" + sensorOrientation
-                            + " isFixedOrientationPortrait=" + taskInfo.isFixedOrientationPortrait
-                            + " isFixedOrientationLandscape=" +
-                            taskInfo.isFixedOrientationLandscape);
-            // We need to do crop-rotate-scale when camera is landscape and activity is portrait or
-            // vice versa.
-            return (taskInfo.isFixedOrientationPortrait && landscapeCamera)
-                    || (taskInfo.isFixedOrientationLandscape && !landscapeCamera);
+                    "The activity is N or above and claims to support resizeable-activity. "
+                            + "Crop-rotate-scale is disabled.");
+            return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
         }
 
+        if (!taskInfo.isFixedOrientationPortrait && !taskInfo.isFixedOrientationLandscape) {
+            Log.v(TAG, "Non-fixed orientation activity. Crop-rotate-scale is disabled.");
+            return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
+        }
+
+        int rotationDegree;
+        switch (displayRotation) {
+            case Surface.ROTATION_0:
+                rotationDegree = 0;
+                break;
+            case Surface.ROTATION_90:
+                rotationDegree = 90;
+                break;
+            case Surface.ROTATION_180:
+                rotationDegree = 180;
+                break;
+            case Surface.ROTATION_270:
+                rotationDegree = 270;
+                break;
+            default:
+                Log.e(TAG, "Unsupported display rotation: " + displayRotation);
+                return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
+        }
+
+        Slog.v(TAG,
+                "Display.getRotation()=" + rotationDegree
+                        + " isFixedOrientationPortrait=" + taskInfo.isFixedOrientationPortrait
+                        + " isFixedOrientationLandscape=" +
+                        taskInfo.isFixedOrientationLandscape);
+        // We are trying to estimate the necessary rotation compensation for clients that
+        // don't handle various display orientations.
+        // The logic that is missing on client side is similar to the reference code
+        // in {@link android.hardware.Camera#setDisplayOrientation} where "info.orientation"
+        // is already applied in "CameraUtils::getRotationTransform".
+        // Care should be taken to reverse the rotation direction depending on the camera
+        // lens facing.
+        if (rotationDegree == 0) {
+            return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
+        }
+        if (lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+            // Switch direction for front facing cameras
+            rotationDegree = 360 - rotationDegree;
+        }
+
+        switch (rotationDegree) {
+            case 90:
+                return CaptureRequest.SCALER_ROTATE_AND_CROP_90;
+            case 270:
+                return CaptureRequest.SCALER_ROTATE_AND_CROP_270;
+            case 180:
+                return CaptureRequest.SCALER_ROTATE_AND_CROP_180;
+            case 0:
+            default:
+                return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
+        }
+    }
+
+    private final ICameraServiceProxy.Stub mCameraServiceProxy = new ICameraServiceProxy.Stub() {
         @Override
-        public boolean isRotateAndCropOverrideNeeded(String packageName, int sensorOrientation,
-                int lensFacing) {
+        public int getRotateAndCropOverride(String packageName, int lensFacing) {
             if (Binder.getCallingUid() != Process.CAMERASERVER_UID) {
                 Slog.e(TAG, "Calling UID: " + Binder.getCallingUid() + " doesn't match expected " +
                         " camera service UID!");
-                return false;
+                return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
             }
 
             // TODO: Modify the sensor orientation in camera characteristics along with any 3A
@@ -528,14 +505,8 @@ public class CameraServiceProxy extends SystemService
             if ((taskInfo != null) && (CompatChanges.isChangeEnabled(
                         OVERRIDE_CAMERA_ROTATE_AND_CROP_DEFAULTS, packageName,
                         UserHandle.getUserHandleForUid(taskInfo.userId)))) {
-                if (CompatChanges.isChangeEnabled(OVERRIDE_CAMERA_ROTATE_AND_CROP, packageName,
-                        UserHandle.getUserHandleForUid(taskInfo.userId))) {
-                    Slog.v(TAG, "OVERRIDE_CAMERA_ROTATE_AND_CROP enabled!");
-                    return true;
-                } else {
-                    Slog.v(TAG, "OVERRIDE_CAMERA_ROTATE_AND_CROP disabled!");
-                    return false;
-                }
+                    Slog.v(TAG, "OVERRIDE_CAMERA_ROTATE_AND_CROP_DEFAULTS enabled!");
+                    return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
             }
             boolean ignoreResizableAndSdkCheck = false;
             if ((taskInfo != null) && (CompatChanges.isChangeEnabled(
@@ -544,7 +515,23 @@ public class CameraServiceProxy extends SystemService
                 Slog.v(TAG, "OVERRIDE_CAMERA_RESIZABLE_AND_SDK_CHECK enabled!");
                 ignoreResizableAndSdkCheck = true;
             }
-            return getNeedCropRotateScale(mContext, packageName, taskInfo, sensorOrientation,
+
+            DisplayManager displayManager = mContext.getSystemService(DisplayManager.class);
+            int displayRotation;
+            if (displayManager != null) {
+                Display display = displayManager.getDisplay(taskInfo.displayId);
+                if (display == null) {
+                    Slog.e(TAG, "Invalid display id: " + taskInfo.displayId);
+                    return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
+                }
+
+                displayRotation = display.getRotation();
+            } else {
+                Slog.e(TAG, "Failed to query display manager!");
+                return CaptureRequest.SCALER_ROTATE_AND_CROP_NONE;
+            }
+
+            return getCropRotateScale(mContext, packageName, taskInfo, displayRotation,
                     lensFacing, ignoreResizableAndSdkCheck);
         }
 

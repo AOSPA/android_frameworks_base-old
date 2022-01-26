@@ -16,6 +16,8 @@
 
 package android.app;
 
+import static android.app.ActivityManager.StopUserOnSwitch;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -518,6 +520,11 @@ public abstract class ActivityManagerInternal {
             Notification notification, int id, String pkg, @UserIdInt int userId);
 
     /**
+     * Un-foreground all foreground services in the given app.
+     */
+    public abstract void makeServicesNonForeground(String pkg, @UserIdInt int userId);
+
+    /**
      * If the given app has any FGSs whose notifications are in the given channel,
      * stop them.
      */
@@ -682,6 +689,12 @@ public abstract class ActivityManagerInternal {
      */
     public abstract void setVoiceInteractionManagerProvider(
             @Nullable VoiceInteractionManagerProvider provider);
+
+    /**
+     * Sets whether the current foreground user (and its profiles) should be stopped after switched
+     * out.
+     */
+    public abstract void setStopUserOnSwitch(@StopUserOnSwitch int value);
 
     /**
      * Provides the interface to communicate between voice interaction manager service and

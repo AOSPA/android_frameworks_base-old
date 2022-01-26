@@ -23,12 +23,12 @@ import android.graphics.RectF;
 import com.android.systemui.Dumpable;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionListener;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.util.ViewController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.Optional;
 
 /**
  * Handles:
@@ -43,19 +43,19 @@ import java.util.Optional;
 abstract class UdfpsAnimationViewController<T extends UdfpsAnimationView>
         extends ViewController<T> implements Dumpable {
     @NonNull final StatusBarStateController mStatusBarStateController;
-    @NonNull final Optional<StatusBar> mStatusBarOptional;
+    @NonNull final PanelExpansionStateManager mPanelExpansionStateManager;
     @NonNull final DumpManager mDumpManger;
 
-    boolean mNotificationShadeExpanded;
+    boolean mNotificationShadeVisible;
 
     protected UdfpsAnimationViewController(
             T view,
             @NonNull StatusBarStateController statusBarStateController,
-            @NonNull Optional<StatusBar> statusBarOptional,
+            @NonNull PanelExpansionStateManager panelExpansionStateManager,
             @NonNull DumpManager dumpManager) {
         super(view);
         mStatusBarStateController = statusBarStateController;
-        mStatusBarOptional = statusBarOptional;
+        mPanelExpansionStateManager = panelExpansionStateManager;
         mDumpManger = dumpManager;
     }
 
@@ -63,17 +63,13 @@ abstract class UdfpsAnimationViewController<T extends UdfpsAnimationView>
 
     @Override
     protected void onViewAttached() {
-        mStatusBarOptional.ifPresent(
-                statusBar -> statusBar.addExpansionChangedListener(
-                        mStatusBarExpansionChangedListener));
+        mPanelExpansionStateManager.addExpansionListener(mPanelExpansionListener);
         mDumpManger.registerDumpable(getDumpTag(), this);
     }
 
     @Override
     protected void onViewDetached() {
-        mStatusBarOptional.ifPresent(
-                statusBar -> statusBar.removeExpansionChangedListener(
-                        mStatusBarExpansionChangedListener));
+        mPanelExpansionStateManager.removeExpansionListener(mPanelExpansionListener);
         mDumpManger.unregisterDumpable(getDumpTag());
     }
 
@@ -89,7 +85,7 @@ abstract class UdfpsAnimationViewController<T extends UdfpsAnimationView>
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("mNotificationShadeExpanded=" + mNotificationShadeExpanded);
+        pw.println("mNotificationShadeVisible=" + mNotificationShadeVisible);
         pw.println("shouldPauseAuth()=" + shouldPauseAuth());
         pw.println("isPauseAuth=" + mView.isPauseAuth());
     }
@@ -99,7 +95,7 @@ abstract class UdfpsAnimationViewController<T extends UdfpsAnimationView>
      * authentication.
      */
     boolean shouldPauseAuth() {
-        return mNotificationShadeExpanded;
+        return mNotificationShadeVisible;
     }
 
     /**
@@ -182,13 +178,15 @@ abstract class UdfpsAnimationViewController<T extends UdfpsAnimationView>
      */
     void onTouchOutsideView() { }
 
-    private final StatusBar.ExpansionChangedListener mStatusBarExpansionChangedListener =
-            new StatusBar.ExpansionChangedListener() {
-                @Override
-                public void onExpansionChanged(float expansion, boolean expanded) {
-                    mNotificationShadeExpanded = expanded;
-                    mView.onExpansionChanged(expansion, expanded);
-                    updatePauseAuth();
-                }
-            };
+    private final PanelExpansionListener mPanelExpansionListener = new PanelExpansionListener() {
+        @Override
+        public void onPanelExpansionChanged(
+                float fraction, boolean expanded, boolean tracking) {
+            // Notification shade can be expanded but not visible (fraction: 0.0), for example
+            // when a heads-up notification (HUN) is showing.
+            mNotificationShadeVisible = expanded && fraction > 0f;
+            mView.onExpansionChanged(fraction);
+            updatePauseAuth();
+        }
+    };
 }

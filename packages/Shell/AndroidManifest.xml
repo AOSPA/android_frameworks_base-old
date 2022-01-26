@@ -162,6 +162,7 @@
     <uses-permission android:name="android.permission.SET_ORIENTATION" />
     <uses-permission android:name="android.permission.INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.INSTALL_PACKAGE_UPDATES" />
+    <uses-permission android:name="android.permission.INSTALL_DPC_PACKAGES" />
     <uses-permission android:name="com.android.permission.USE_INSTALLER_V2" />
     <uses-permission android:name="android.permission.INSTALL_TEST_ONLY_PACKAGE" />
     <uses-permission android:name="com.android.permission.USE_SYSTEM_DATA_LOADERS" />
@@ -200,6 +201,7 @@
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
     <uses-permission android:name="android.permission.CREATE_USERS" />
+    <uses-permission android:name="android.permission.CREATE_VIRTUAL_DEVICE" />
     <uses-permission android:name="android.permission.MANAGE_CREDENTIAL_MANAGEMENT_APP" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS" />
     <uses-permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS" />
@@ -424,6 +426,7 @@
 
     <!-- Permissions required for CTS test - TunerTest -->
     <uses-permission android:name="android.permission.ACCESS_TV_DESCRAMBLER" />
+    <uses-permission android:name="android.permission.ACCESS_TV_SHARED_FILTER" />
     <uses-permission android:name="android.permission.ACCESS_TV_TUNER" />
     <uses-permission android:name="android.permission.TUNER_RESOURCE_ACCESS" />
 
@@ -460,9 +463,15 @@
     <!-- Permission needed for CTS test - MatchContentFrameRateTest -->
     <uses-permission android:name="android.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE" />
 
+    <!-- Permission needed for CTS test - DefaultDisplayModeTest -->
+    <uses-permission android:name="android.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE" />
+
     <!-- Permissions needed for CTS test - TimeManagerTest -->
     <uses-permission android:name="android.permission.MANAGE_TIME_AND_ZONE_DETECTION" />
     <uses-permission android:name="android.permission.SUGGEST_EXTERNAL_TIME" />
+
+    <!-- Permissions needed for CTS test - CtsLocaleManagerTestCases -->
+    <uses-permission android:name="android.permission.READ_APP_SPECIFIC_LOCALES" />
 
     <!-- Permission required for CTS test - android.server.biometrics -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
@@ -475,6 +484,7 @@
 
     <!-- Permissions required for CTS test - CtsContactsProviderTestCases -->
     <uses-permission android:name="android.contacts.permission.MANAGE_SIM_ACCOUNTS" />
+    <uses-permission android:name="android.permission.SET_DEFAULT_ACCOUNT_FOR_CONTACTS" />
 
     <!-- Permissions required for CTS test - CarrierMessagingServiceWrapprTest -->
     <uses-permission android:name="android.permission.BIND_CARRIER_SERVICES" />
@@ -576,6 +586,9 @@
     <uses-permission android:name="android.permission.MANAGE_VIRTUAL_MACHINE" />
     <uses-permission android:name="android.permission.DEBUG_VIRTUAL_MACHINE" />
 
+    <!-- Permission required to run GtsAssistantTestCases -->
+    <uses-permission android:name="android.permission.MANAGE_VOICE_KEYPHRASES" />
+
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"
                 android:defaultToDeviceProtectedStorage="true"
@@ -639,6 +652,15 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="com.android.internal.intent.action.HEAP_DUMP_FINISHED" />
                 <action android:name="com.android.shell.action.DELETE_HEAP_DUMP" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".ProfcollectUploadReceiver"
+            android:exported="true"
+            android:permission="android.permission.TRIGGER_SHELL_PROFCOLLECT_UPLOAD" >
+            <intent-filter>
+                <action android:name="com.android.shell.action.PROFCOLLECT_UPLOAD" />
             </intent-filter>
         </receiver>
 

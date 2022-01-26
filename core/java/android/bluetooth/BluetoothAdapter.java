@@ -2049,6 +2049,7 @@ public final class BluetoothAdapter {
      *                {@link BluetoothProfile#HEADSET},
      *                {@link BluetoothProfile#A2DP},
      *                {@link BluetoothProfile#HEARING_AID}
+     *                {@link BluetoothProfile#LE_AUDIO}
      * @return A list of active bluetooth devices
      * @throws IllegalArgumentException If profile is not one of {@link ActiveDeviceProfile}
      * @hide
@@ -2061,12 +2062,14 @@ public final class BluetoothAdapter {
     public @NonNull List<BluetoothDevice> getActiveDevices(@ActiveDeviceProfile int profile) {
         if (profile != BluetoothProfile.HEADSET
                 && profile != BluetoothProfile.A2DP
-                && profile != BluetoothProfile.HEARING_AID) {
+                && profile != BluetoothProfile.HEARING_AID
+                && profile != BluetoothProfile.LE_AUDIO) {
             Log.e(TAG, "Invalid profile param value in getActiveDevices");
             throw new IllegalArgumentException("Profiles must be one of "
                     + "BluetoothProfile.A2DP, "
                     + "BluetoothProfile.HEARING_AID, or"
-                    + "BluetoothProfile.HEARING_AID");
+                    + "BluetoothProfile.HEARING_AID"
+                    + "BluetoothProfile.LE_AUDIO");
         }
         try {
             mServiceLock.readLock().lock();
@@ -2126,7 +2129,7 @@ public final class BluetoothAdapter {
         try {
             return mManagerService.isBleScanAlwaysAvailable();
         } catch (RemoteException e) {
-            Log.e(TAG, "remote expection when calling isBleScanAlwaysAvailable", e);
+            Log.e(TAG, "remote exception when calling isBleScanAlwaysAvailable", e);
             return false;
         }
     }
@@ -2299,6 +2302,66 @@ public final class BluetoothAdapter {
         return false;
     }
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.ERROR_UNKNOWN,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
+            BluetoothStatusCodes.ERROR_FEATURE_NOT_SUPPORTED,
+    })
+    public @interface LeFeatureReturnValues {}
+
+    /**
+     * Returns {@link BluetoothStatusCodes#SUCCESS} if LE Connected Isochronous Stream Central
+     * feature is supported, returns {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if
+     * the feature is not supported or an error code.
+     *
+     * @return whether the chipset supports the LE Connected Isochronous Stream Central feature
+     */
+    @RequiresNoPermission
+    public @LeFeatureReturnValues int isCisCentralSupported() {
+        if (!getLeAccess()) {
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        }
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.isCisCentralSupported();
+            }
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return BluetoothStatusCodes.ERROR_UNKNOWN;
+    }
+
+    /**
+     * Returns {@link BluetoothStatusCodes#SUCCESS} if LE Periodic Advertising Sync Transfer Sender
+     * feature is supported, returns {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if the
+     * feature is not supported or an error code
+     *
+     * @return whether the chipset supports the LE Periodic Advertising Sync Transfer Sender feature
+     */
+    @RequiresNoPermission
+    public @LeFeatureReturnValues int isLePeriodicAdvertisingSyncTransferSenderSupported() {
+        if (!getLeAccess()) {
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        }
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.isLePeriodicAdvertisingSyncTransferSenderSupported();
+            }
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return BluetoothStatusCodes.ERROR_UNKNOWN;
+    }
+
     /**
      * Return the maximum LE advertising data length in bytes,
      * if LE Extended Advertising feature is supported, 0 otherwise.
@@ -2341,7 +2404,7 @@ public final class BluetoothAdapter {
         try {
             return mManagerService.isHearingAidProfileSupported();
         } catch (RemoteException e) {
-            Log.e(TAG, "remote expection when calling isHearingAidProfileSupported", e);
+            Log.e(TAG, "remote exception when calling isHearingAidProfileSupported", e);
             return false;
         }
     }

@@ -261,8 +261,10 @@ interface IDevicePolicyManager {
     int startUserInBackground(in ComponentName who, in UserHandle userHandle);
     int stopUser(in ComponentName who, in UserHandle userHandle);
     int logoutUser(in ComponentName who);
+    int getLogoutUserId();
+    void clearLogoutUser();
     List<UserHandle> getSecondaryUsers(in ComponentName who);
-    void resetNewUserDisclaimer();
+    void acknowledgeNewUserDisclaimer();
 
     void enableSystemApp(in ComponentName admin, in String callerPackage, in String packageName);
     int enableSystemAppWithIntent(in ComponentName admin, in String callerPackage, in Intent intent);

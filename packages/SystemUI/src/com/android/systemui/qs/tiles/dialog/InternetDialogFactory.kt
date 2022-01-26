@@ -18,9 +18,13 @@ package com.android.systemui.qs.tiles.dialog
 import android.content.Context
 import android.os.Handler
 import android.util.Log
+import android.view.View
 import com.android.internal.logging.UiEventLogger
+import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
+import java.util.concurrent.Executor
 import javax.inject.Inject
 
 private const val TAG = "InternetDialogFactory"
@@ -32,16 +36,23 @@ private val DEBUG = Log.isLoggable(TAG, Log.DEBUG)
 @SysUISingleton
 class InternetDialogFactory @Inject constructor(
     @Main private val handler: Handler,
+    @Background private val executor: Executor,
     private val internetDialogController: InternetDialogController,
     private val context: Context,
-    private val uiEventLogger: UiEventLogger
+    private val uiEventLogger: UiEventLogger,
+    private val dialogLaunchAnimator: DialogLaunchAnimator
 ) {
     companion object {
         var internetDialog: InternetDialog? = null
     }
 
-    /** Creates a [InternetDialog]. */
-    fun create(aboveStatusBar: Boolean, canConfigMobileData: Boolean, canConfigWifi: Boolean) {
+    /** Creates a [InternetDialog]. The dialog will be animated from [view] if it is not null. */
+    fun create(
+        aboveStatusBar: Boolean,
+        canConfigMobileData: Boolean,
+        canConfigWifi: Boolean,
+        view: View?
+    ) {
         if (internetDialog != null) {
             if (DEBUG) {
                 Log.d(TAG, "InternetDialog is showing, do not create it twice.")
@@ -49,8 +60,14 @@ class InternetDialogFactory @Inject constructor(
             return
         } else {
             internetDialog = InternetDialog(context, this, internetDialogController,
-                    canConfigMobileData, canConfigWifi, aboveStatusBar, uiEventLogger, handler)
-            internetDialog?.show()
+                    canConfigMobileData, canConfigWifi, aboveStatusBar, uiEventLogger, handler,
+                    executor)
+            if (view != null) {
+                dialogLaunchAnimator.showFromView(internetDialog!!, view,
+                    animateBackgroundBoundsChange = true)
+            } else {
+                internetDialog?.show()
+            }
         }
     }
 

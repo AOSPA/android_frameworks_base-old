@@ -21,12 +21,14 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressAutoDoc;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
+import android.net.NetworkCapabilities;
 import android.net.ipsec.ike.SaProposal;
 import android.os.Build;
 import android.os.PersistableBundle;
@@ -227,6 +229,19 @@ public class CarrierConfigManager {
       */
     public static final String KEY_CALL_FORWARDING_WHEN_BUSY_SUPPORTED_BOOL =
             "call_forwarding_when_busy_supported_bool";
+
+    /**
+     * Boolean indicating if carrier supports call forwarding option "When not logged in".
+     *
+     * {@code true}: Call forwarding option "When not logged in" is supported.
+     * {@code false}: Call forwarding option "When not logged in" is not supported. Option will be
+     * removed in the UI.
+     *
+     * By default this value is true.
+     * @hide
+     */
+    public static final String KEY_CALL_FORWARDING_WHEN_NOT_LOGGED_IN_SUPPORTED_BOOL =
+            "call_forwarding_when_not_logged_in_supported_bool";
 
     /**
      * Boolean indicating if the "Caller ID" item is visible in the Additional Settings menu.
@@ -996,6 +1011,21 @@ public class CarrierConfigManager {
             = "carrier_use_ims_first_for_emergency_bool";
 
     /**
+     * When {@code true}, the determination of whether to place a call as an emergency call will be
+     * based on the known {@link android.telephony.emergency.EmergencyNumber}s for the SIM on which
+     * the call is being placed.  In a dual SIM scenario, if Sim A has the emergency numbers
+     * 123, 456 and Sim B has the emergency numbers 789, and the user places a call on SIM A to 789,
+     * it will not be treated as an emergency call in this case.
+     * When {@code false}, the determination is based on the emergency numbers from all device SIMs,
+     * regardless of which SIM the call is being placed on.  If Sim A has the emergency numbers
+     * 123, 456 and Sim B has the emergency numbers 789, and the user places a call on SIM A to 789,
+     * the call will be dialed as an emergency number, but with an unspecified routing.
+     * @hide
+     */
+    public static final String KEY_USE_ONLY_DIALED_SIM_ECC_LIST_BOOL =
+            "use_only_dialed_sim_ecc_list_bool";
+
+    /**
      * When IMS instant lettering is available for a carrier (see
      * {@link #KEY_CARRIER_INSTANT_LETTERING_AVAILABLE_BOOL}), determines the list of characters
      * which may not be contained in messages.  Should be specified as a regular expression suitable
@@ -1345,9 +1375,14 @@ public class CarrierConfigManager {
     /**
      * Determines whether a maximum size limit for IMS conference calls is enforced on the device.
      * When {@code true}, IMS conference calls will be limited to at most
-     * {@link #KEY_IMS_CONFERENCE_SIZE_LIMIT_INT} participants.  When {@code false}, no attempt is made
-     * to limit the number of participants in a conference (the carrier will raise an error when an
-     * attempt is made to merge too many participants into a conference).
+     * {@link #KEY_IMS_CONFERENCE_SIZE_LIMIT_INT} participants.  When {@code false}, no attempt is
+     * made to limit the number of participants in a conference (the carrier will raise an error
+     * when an attempt is made to merge too many participants into a conference).
+     * <p>
+     * Note: The maximum size of a conference can ONLY be supported where
+     * {@link #KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_BOOL} is {@code true} since the platform
+     * needs conference event package data to accurately know the number of participants in the
+     * conference.
      */
     public static final String KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL =
             "is_ims_conference_size_enforced_bool";
@@ -1916,6 +1951,20 @@ public class CarrierConfigManager {
             "lte_plus_threshold_bandwidth_khz_int";
 
     /**
+     * The combined channel bandwidth threshold (non-inclusive) in KHz required to display the
+     * NR advanced (i.e. 5G+) data icon. It is 0 by default, meaning minimum bandwidth check is
+     * not enabled. Other factors like bands or frequency can also determine whether the NR
+     * advanced data icon is shown or not.
+     *
+     * @see #KEY_ADDITIONAL_NR_ADVANCED_BANDS_INT_ARRAY
+     * @see #KEY_NR_ADVANCED_CAPABLE_PCO_ID_INT
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ADVANCED_THRESHOLD_BANDWIDTH_KHZ_INT =
+            "nr_advanced_threshold_bandwidth_khz_int";
+
+    /**
      * The string is used to filter redundant string from PLMN Network Name that's supplied by
      * specific carrier.
      *
@@ -2431,6 +2480,13 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ALLOW_HOLD_VIDEO_CALL_BOOL =
             "allow_hold_video_call_bool";
+
+    /**
+     * When true, indicates that concurrent call is allowed when there is an ongoing video call.
+     * @hide
+     */
+    public static final String KEY_ALLOW_CONCURRENT_CALL_DURING_VIDEO_CALL_BOOL =
+            "allow_concurrent_call_during_video_call";
 
     /**
      * When true, indicates that the HD audio icon in the in-call screen should not be shown for
@@ -3587,6 +3643,17 @@ public class CarrierConfigManager {
             "nr_advanced_capable_pco_id_int";
 
     /**
+     * Enabled NR advanced (i.e. 5G+) icon while roaming. The default value is {@code true}, meaming
+     * the same NR advanced logic used for home network will be used for roaming network as well.
+     * Set this to {@code false} will disable NR advanced icon while the device is roaming,
+     * regardless meeting NR advanced criteria or not.
+     *
+     * @hide
+     */
+    public static final String KEY_ENABLE_NR_ADVANCED_WHILE_ROAMING_BOOL =
+            "enable_nr_advanced_for_roaming_bool";
+
+    /**
      * This configuration allows the framework to use user data communication to detect Idle state,
      * and this is used on the 5G icon.
      *
@@ -3691,6 +3758,49 @@ public class CarrierConfigManager {
      */
     public static final String KEY_SHOW_WIFI_CALLING_ICON_IN_STATUS_BAR_BOOL =
             "show_wifi_calling_icon_in_status_bar_bool";
+
+    /**
+     * Configuration to indicate that the carrier supports opportunistic data
+     * auto provisioning. Based on this flag, the device downloads and activates
+     * corresponding opportunistic profile.
+     */
+    public static final String KEY_CARRIER_SUPPORTS_OPP_DATA_AUTO_PROVISIONING_BOOL =
+            "carrier_supports_opp_data_auto_provisioning_bool";
+
+    /**
+     * SMDP+ server address for downloading opportunistic eSIM profile.
+     * FQDN (Fully Qualified Domain Name) of the SM-DP+ (e.g., smdp.gsma.com) restricted to the
+     * Alphanumeric mode character set defined in table 5 of ISO/IEC 18004 [15] excluding '$'.
+     */
+    public static final String KEY_SMDP_SERVER_ADDRESS_STRING =
+            "smdp_server_address_string";
+
+    /**
+     * This timer value is used in the eSIM Exponential Backoff download retry algorithm.
+     * Value should be in seconds.
+     * <OL>
+     *     <LI>When the first download failure occurs, retry download after BACKOFF_TIMER_VALUE
+     * seconds.</LI>
+     *
+     * <LI>If download fails again then, retry after either BACKOFF_TIMER_VALUE,
+     * 2xBACKOFF_TIMER_VALUE, or 3xBACKOFF_TIMER_VALUE seconds.</LI>
+     *
+     * <LI>In general after the cth failed attempt, retry after k * BACKOFF_TIMER_VALUE
+     * seconds, where k is a random integer between 1 and 2^c − 1. Max c value is
+     * {@link #KEY_ESIM_MAX_DOWNLOAD_RETRY_ATTEMPTS_INT}</LI>
+     * </OL>
+     */
+    public static final String KEY_ESIM_DOWNLOAD_RETRY_BACKOFF_TIMER_SEC_INT =
+            "esim_download_retry_backoff_timer_sec_int";
+
+    /**
+     * If eSIM profile download fails then, the number of retry attempts by UE
+     * will be based on this configuration. If download still fails even after the
+     * MAX attempts configured by this item then the retry is postponed until next
+     * device bootup.
+     */
+    public static final String KEY_ESIM_MAX_DOWNLOAD_RETRY_ATTEMPTS_INT =
+            "esim_max_download_retry_attempts_int";
 
     /**
      * Controls RSRP threshold at which OpportunisticNetworkService will decide whether
@@ -3901,6 +4011,30 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ENABLE_4G_OPPORTUNISTIC_NETWORK_SCAN_BOOL =
             "enabled_4g_opportunistic_network_scan_bool";
+
+  /**
+   * Only relevant when the device supports opportunistic networks but does not support
+   * simultaneuous 5G+5G. Controls how long, in milliseconds, to wait before opportunistic network
+   * goes out of service before switching the 5G capability back to primary stack. The idea of
+   * waiting a few seconds is to minimize the calling of the expensive capability switching
+   * operation in the case where CBRS goes back into service shortly after going out of it.
+   *
+   * @hide
+   */
+  public static final String KEY_TIME_TO_SWITCH_BACK_TO_PRIMARY_IF_OPPORTUNISTIC_OOS_LONG =
+            "time_to_switch_back_to_primary_if_opportunistic_oos_long";
+
+  /**
+   * Only relevant when the device supports opportunistic networks but does not support
+   * simultaneuous 5G+5G. Controls how long, in milliseconds, after 5G capability has switched back
+   * to primary stack due to opportunistic network being OOS. The idea is to minimizing the
+   * 'ping-ponging' effect where device is constantly witching capability back and forth between
+   * primary and opportunistic stack.
+   *
+   * @hide
+   */
+  public static final String KEY_OPPORTUNISTIC_TIME_TO_SCAN_AFTER_CAPABILITY_SWITCH_TO_PRIMARY_LONG
+          = "opportunistic_time_to_scan_after_capability_switch_to_primary_long";
 
     /**
      * Indicates zero or more emergency number prefix(es), because some carrier requires
@@ -5045,6 +5179,50 @@ public class CarrierConfigManager {
     public static final String KEY_APN_PRIORITY_STRING_ARRAY = "apn_priority_string_array";
 
     /**
+     * Network capability priority for determine the satisfy order in telephony. This is used when
+     * the network only allows single PDN. The priority is from the lowest 0 to the highest 100.
+     * The long-lived network request usually has the lowest priority. This allows other short-lived
+     * requests like MMS requests to be established. Emergency request always has the highest
+     * priority.
+     *
+     * // TODO: Remove KEY_APN_PRIORITY_STRING_ARRAY
+     * @hide
+     */
+    public static final String KEY_TELEPHONY_NETWORK_CAPABILITY_PRIORITIES_STRING_ARRAY =
+            "telephony_network_capability_priorities_string_array";
+
+    /**
+     * Defines the rules for data retry.
+     *
+     * The syntax of the retry rule:
+     * 1. Retry based on {@link NetworkCapabilities}
+     * "capabilities=[netCaps1|netCaps2|...], [retry_interval=x], [backoff=[true|false]],
+     *     [maximum_retries=y]"
+     *
+     * 2. Retry based on {@link DataFailCause}
+     * "fail_causes=[cause1|cause2|cause3|...], [retry_interval=x], [backoff=[true|false]],
+     *     [maximum_retries=y]"
+     *
+     * 3. Retry based on {@link NetworkCapabilities} and {@link DataFailCause}
+     * "capabilities=[netCaps1|netCaps2|...], fail_causes=[cause1|cause2|cause3|...],
+     *     [retry_interval=x], [backoff=[true|false]], [maximum_retries=y]"
+     *
+     * For example,
+     * "capabilities=eims, retry_interval=1000, maximum_retries=20" means if the attached
+     * network request is emergency, then retry data network setup every 1 second for up to 20
+     * times.
+     *
+     * "fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|2253|2254
+     * , maximum_retries=0" means for those fail causes, never retry with timers. Note that
+     * when environment changes, retry can still happens.
+     *
+     * // TODO: remove KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS
+     * @hide
+     */
+    public static final String KEY_TELEPHONY_DATA_RETRY_RULES_STRING_ARRAY =
+            "telephony_data_retry_rules_string_array";
+
+    /**
      * The patterns of missed incoming call sms. This is the regular expression used for
      * matching the missed incoming call's date, time, and caller id. The pattern should match
      * fields for at least month, day, hour, and minute. Year is optional although it is encouraged.
@@ -5220,6 +5398,16 @@ public class CarrierConfigManager {
     public static final String KEY_VONR_SETTING_VISIBILITY_BOOL = "vonr_setting_visibility_bool";
 
     /**
+     * Flag specifying whether VoNR should be enabled for carrier.
+     * If true, VoNr will be enabled. If false, hard disabled.
+     *
+     * Disabled by default.
+     *
+     * @hide
+     */
+    public static final String KEY_VONR_ENABLED_BOOL = "vonr_enabled_bool";
+
+    /**
      * Determine whether unthrottle data retry when tracking area code (TAC/LAC) from cell changes
      *
      * @hide
@@ -5321,6 +5509,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_IMS_GBA_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_INSTANT_LETTERING_AVAILABLE_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_USE_IMS_FIRST_FOR_EMERGENCY_BOOL, true);
+        sDefaults.putBoolean(KEY_USE_ONLY_DIALED_SIM_ECC_LIST_BOOL, false);
         sDefaults.putString(KEY_CARRIER_NETWORK_SERVICE_WWAN_PACKAGE_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_NETWORK_SERVICE_WLAN_PACKAGE_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_QUALIFIED_NETWORKS_SERVICE_PACKAGE_OVERRIDE_STRING, "");
@@ -5351,6 +5540,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_UNREACHABLE_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_UNANSWERED_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_BUSY_SUPPORTED_BOOL, true);
+        sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_NOT_LOGGED_IN_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALLER_ID_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALL_WAITING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_DISABLE_SUPPLEMENTARY_SERVICES_IN_AIRPLANE_MODE_BOOL, false);
@@ -5597,6 +5787,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_ALLOW_MERGE_WIFI_CALLS_WHEN_VOWIFI_OFF_BOOL, true);
         sDefaults.putBoolean(KEY_ALLOW_ADD_CALL_DURING_VIDEO_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_ALLOW_HOLD_VIDEO_CALL_BOOL, true);
+        sDefaults.putBoolean(KEY_ALLOW_CONCURRENT_CALL_DURING_VIDEO_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_WIFI_CALLS_CAN_BE_HD_AUDIO, true);
         sDefaults.putBoolean(KEY_VIDEO_CALLS_CAN_BE_HD_AUDIO, true);
         sDefaults.putBoolean(KEY_GSM_CDMA_CALLS_CAN_BE_HD_AUDIO, false);
@@ -5659,6 +5850,7 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_SHOW_CARRIER_DATA_ICON_PATTERN_STRING, "");
         sDefaults.putBoolean(KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL, true);
         sDefaults.putInt(KEY_LTE_PLUS_THRESHOLD_BANDWIDTH_KHZ_INT, 20000);
+        sDefaults.putInt(KEY_NR_ADVANCED_THRESHOLD_BANDWIDTH_KHZ_INT, 0);
         sDefaults.putIntArray(KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY,
                 new int[]{CARRIER_NR_AVAILABILITY_NSA, CARRIER_NR_AVAILABILITY_SA});
         sDefaults.putBoolean(KEY_LTE_ENABLED_BOOL, true);
@@ -5754,6 +5946,7 @@ public class CarrierConfigManager {
         sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);
         sDefaults.putIntArray(KEY_ADDITIONAL_NR_ADVANCED_BANDS_INT_ARRAY, new int[0]);
         sDefaults.putInt(KEY_NR_ADVANCED_CAPABLE_PCO_ID_INT, 0);
+        sDefaults.putBoolean(KEY_ENABLE_NR_ADVANCED_WHILE_ROAMING_BOOL, true);
         sDefaults.putBoolean(KEY_LTE_ENDC_USING_USER_DATA_FOR_RRC_DETECTION_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_MMWAVE_BOOL, false);
@@ -5764,6 +5957,10 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_UNMETERED_NR_SA_SUB6_BOOL, false);
         sDefaults.putBoolean(KEY_ASCII_7_BIT_SUPPORT_FOR_LONG_MESSAGE_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_WIFI_CALLING_ICON_IN_STATUS_BAR_BOOL, false);
+        sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_OPP_DATA_AUTO_PROVISIONING_BOOL, false);
+        sDefaults.putString(KEY_SMDP_SERVER_ADDRESS_STRING, "");
+        sDefaults.putInt(KEY_ESIM_MAX_DOWNLOAD_RETRY_ATTEMPTS_INT, 5);
+        sDefaults.putInt(KEY_ESIM_DOWNLOAD_RETRY_BACKOFF_TIMER_SEC_INT, 60);
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_GOOD */
         sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSRP_INT, -108);
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_MODERATE */
@@ -5807,6 +6004,10 @@ public class CarrierConfigManager {
         /* Default value is 2 seconds. */
         sDefaults.putLong(KEY_OPPORTUNISTIC_NETWORK_5G_DATA_SWITCH_EXIT_HYSTERESIS_TIME_LONG, 2000);
         sDefaults.putBoolean(KEY_ENABLE_4G_OPPORTUNISTIC_NETWORK_SCAN_BOOL, true);
+        sDefaults.putInt(KEY_TIME_TO_SWITCH_BACK_TO_PRIMARY_IF_OPPORTUNISTIC_OOS_LONG, 60000);
+        sDefaults.putInt(
+                KEY_OPPORTUNISTIC_TIME_TO_SCAN_AFTER_CAPABILITY_SWITCH_TO_PRIMARY_LONG,
+                120000);
         sDefaults.putAll(Gps.getDefaults());
         sDefaults.putIntArray(KEY_CDMA_ENHANCED_ROAMING_INDICATOR_FOR_HOME_NETWORK_INT_ARRAY,
                 new int[] {
@@ -5859,6 +6060,20 @@ public class CarrierConfigManager {
                 "enterprise:0", "default:1", "mms:2", "supl:2", "dun:2", "hipri:3", "fota:2",
                 "ims:2", "cbs:2", "ia:2", "emergency:2", "mcx:3", "xcap:3"
         });
+        sDefaults.putStringArray(
+                KEY_TELEPHONY_NETWORK_CAPABILITY_PRIORITIES_STRING_ARRAY, new String[] {
+                        "eims:90", "supl:80", "mms:70", "xcap:70", "cbs:50", "mcx:50", "fota:50",
+                        "ims:40", "dun:30", "enterprise:20", "internet:20"
+                });
+        sDefaults.putStringArray(
+                KEY_TELEPHONY_DATA_RETRY_RULES_STRING_ARRAY, new String[] {
+                        "capabilities=eims, retry_interval=1000, maximum_retries=20",
+                        "fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|2253|"
+                                + "2254, maximum_retries=0", // No retry for those causes
+                        "capabilities=internet|enterprise|dun|ims|fota, retry_interval=2000, "
+                                + "backoff=true, maximum_retries=13",
+                        "capabilities=mms|supl|cbs, retry_interval=2000"
+                });
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_DISABLE_DUN_APN_WHILE_ROAMING_WITH_PRESET_APN_BOOL, false);
         sDefaults.putString(KEY_DEFAULT_PREFERRED_APN_NAME_STRING, "");
@@ -5900,6 +6115,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_REQUIRE_APN_FILTERING_WITH_RADIO_CAPABILITY, false);
         sDefaults.putBoolean(KEY_USE_SMS_CALLBACK_MODE_BOOL, false);
         sDefaults.putBoolean(KEY_VONR_SETTING_VISIBILITY_BOOL, false);
+        sDefaults.putBoolean(KEY_VONR_ENABLED_BOOL, false);
     }
 
     /**
@@ -5968,12 +6184,15 @@ public class CarrierConfigManager {
      * any carrier specific configuration has been applied.
      *
      * <p>Requires Permission:
-     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges()}).
      *
      * @param subId the subscription ID, normally obtained from {@link SubscriptionManager}.
      * @return A {@link PersistableBundle} containing the config for the given subId, or default
      *         values for an invalid subId.
      */
+    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     @Nullable
     public PersistableBundle getConfigForSubId(int subId) {
         try {
@@ -6062,10 +6281,13 @@ public class CarrierConfigManager {
      * called to confirm whether any carrier specific configuration has been applied.
      *
      * <p>Requires Permission:
-     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges()}).
      *
      * @see #getConfigForSubId
      */
+    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     @Nullable
     public PersistableBundle getConfig() {
         return getConfigForSubId(SubscriptionManager.getDefaultSubscriptionId());
@@ -6074,8 +6296,8 @@ public class CarrierConfigManager {
     /**
      * Determines whether a configuration {@link PersistableBundle} obtained from
      * {@link #getConfig()} or {@link #getConfigForSubId(int)} corresponds to an identified carrier.
-     * <p>
-     * When an app receives the {@link CarrierConfigManager#ACTION_CARRIER_CONFIG_CHANGED}
+     *
+     * <p>When an app receives the {@link CarrierConfigManager#ACTION_CARRIER_CONFIG_CHANGED}
      * broadcast which informs it that the carrier configuration has changed, it is possible
      * that another reload of the carrier configuration has begun since the intent was sent.
      * In this case, the carrier configuration the app fetches (e.g. via {@link #getConfig()})
@@ -6084,14 +6306,12 @@ public class CarrierConfigManager {
      * return true because it may belong to another previous identified carrier. Users should
      * always call {@link #getConfig()} or {@link #getConfigForSubId(int)} after receiving the
      * broadcast {@link #ACTION_CARRIER_CONFIG_CHANGED}.
-     * </p>
-     * <p>
-     * After using {@link #getConfig()} or {@link #getConfigForSubId(int)} an app should always
+     *
+     * <p>After using {@link #getConfig()} or {@link #getConfigForSubId(int)} an app should always
      * use this method to confirm whether any carrier specific configuration has been applied.
      * Especially when an app misses the broadcast {@link #ACTION_CARRIER_CONFIG_CHANGED} but it
      * still needs to get the current configuration, it must use this method to verify whether the
      * configuration is default or carrier overridden.
-     * </p>
      *
      * @param bundle the configuration bundle to be checked.
      * @return boolean true if any carrier specific configuration bundle has been applied, false
@@ -6103,19 +6323,20 @@ public class CarrierConfigManager {
 
     /**
      * Calling this method triggers telephony services to fetch the current carrier configuration.
-     * <p>
-     * Normally this does not need to be called because the platform reloads config on its own.
+     *
+     * <p>Normally this does not need to be called because the platform reloads config on its own.
      * This should be called by a carrier service app if it wants to update config at an arbitrary
      * moment.
-     * </p>
-     * <p>Requires that the calling app has carrier privileges.
-     * <p>
-     * This method returns before the reload has completed, and
-     * {@link android.service.carrier.CarrierService#onLoadConfig} will be called from an
-     * arbitrary thread.
-     * </p>
-     * @see TelephonyManager#hasCarrierPrivileges
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}, or the calling app
+     * has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges()}).
+     *
+     * <p>This method returns before the reload has completed, and {@link
+     * android.service.carrier.CarrierService#onLoadConfig} will be called from an arbitrary thread.
      */
+    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void notifyConfigChangedForSubId(int subId) {
         try {
             ICarrierConfigLoader loader = getICarrierConfigLoader();
@@ -6131,11 +6352,10 @@ public class CarrierConfigManager {
     }
 
     /**
-     * Request the carrier config loader to update the cofig for phoneId.
-     * <p>
-     * Depending on simState, the config may be cleared or loaded from config app. This is only used
-     * by SubscriptionInfoUpdater.
-     * </p>
+     * Request the carrier config loader to update the config for phoneId.
+     *
+     * <p>Depending on simState, the config may be cleared or loaded from config app. This is only
+     * used by SubscriptionInfoUpdater.
      *
      * @hide
      */
@@ -6206,13 +6426,16 @@ public class CarrierConfigManager {
      * Gets the configuration values for a component using its prefix.
      *
      * <p>Requires Permission:
-     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges()}).
      *
      * @param prefix prefix of the component.
      * @param subId the subscription ID, normally obtained from {@link SubscriptionManager}.
      *
      * @see #getConfigForSubId
      */
+    @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     @Nullable
     public PersistableBundle getConfigByComponentForSubId(@NonNull String prefix, int subId) {
         PersistableBundle configs = getConfigForSubId(subId);

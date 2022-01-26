@@ -16,14 +16,10 @@
 
 package com.android.systemui.media.dialog;
 
-import static android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
-
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
-import android.text.SpannableString;
 import android.text.TextUtils;
-import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -99,23 +95,6 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
         return mController.getMediaDevices().size();
     }
 
-    @Override
-    CharSequence getItemTitle(MediaDevice device) {
-        if (device.getDeviceType() == MediaDevice.MediaDeviceType.TYPE_BLUETOOTH_DEVICE
-                && !device.isConnected()) {
-            final CharSequence deviceName = device.getName();
-            // Append status to title only for the disconnected Bluetooth device.
-            final SpannableString spannableTitle = new SpannableString(
-                    mContext.getString(R.string.media_output_dialog_disconnected, deviceName));
-            spannableTitle.setSpan(new ForegroundColorSpan(
-                    Utils.getColorAttrDefaultColor(mContext, android.R.attr.textColorSecondary)),
-                    deviceName.length(),
-                    spannableTitle.length(), SPAN_EXCLUSIVE_EXCLUSIVE);
-            return spannableTitle;
-        }
-        return super.getItemTitle(device);
-    }
-
     class MediaDeviceViewHolder extends MediaDeviceBaseViewHolder {
 
         MediaDeviceViewHolder(View view) {
@@ -135,14 +114,11 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
             if (currentlyConnected && mController.isActiveRemoteDevice(device)
                     && mController.getSelectableMediaDevice().size() > 0) {
                 // Init active device layout
-                mDivider.setVisibility(View.VISIBLE);
-                mDivider.setTransitionAlpha(1);
                 mAddIcon.setVisibility(View.VISIBLE);
                 mAddIcon.setTransitionAlpha(1);
                 mAddIcon.setOnClickListener(this::onEndItemClick);
             } else {
                 // Init non-active device layout
-                mDivider.setVisibility(View.GONE);
                 mAddIcon.setVisibility(View.GONE);
             }
             if (mCurrentActivePosition == position) {
@@ -169,6 +145,14 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                             false /* showProgressBar */, false /* showSubtitle */);
                     initSeekbar(device);
                     mCurrentActivePosition = position;
+                } else if (
+                        device.getDeviceType() == MediaDevice.MediaDeviceType.TYPE_BLUETOOTH_DEVICE
+                                && !device.isConnected()) {
+                    setTwoLineLayout(device, false /* bFocused */,
+                            false /* showSeekBar */, false /* showProgressBar */,
+                            true /* showSubtitle */);
+                    mSubTitleText.setText(R.string.media_output_dialog_disconnected);
+                    mContainerLayout.setOnClickListener(v -> onItemClick(v, device));
                 } else {
                     setSingleLineLayout(getItemTitle(device), false /* bFocused */);
                     mContainerLayout.setOnClickListener(v -> onItemClick(v, device));
@@ -178,10 +162,8 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
 
         @Override
         void onBind(int customizedItem, boolean topMargin, boolean bottomMargin) {
-            super.onBind(customizedItem, topMargin, bottomMargin);
             if (customizedItem == CUSTOMIZED_ITEM_PAIR_NEW) {
                 mCheckBox.setVisibility(View.GONE);
-                mDivider.setVisibility(View.GONE);
                 mAddIcon.setVisibility(View.GONE);
                 mBottomDivider.setVisibility(View.GONE);
                 setSingleLineLayout(mContext.getText(R.string.media_output_dialog_pairing_new),
@@ -196,13 +178,10 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                 mBottomDivider.setVisibility(View.GONE);
                 mCheckBox.setVisibility(View.GONE);
                 if (mController.getSelectableMediaDevice().size() > 0) {
-                    mDivider.setVisibility(View.VISIBLE);
-                    mDivider.setTransitionAlpha(1);
                     mAddIcon.setVisibility(View.VISIBLE);
                     mAddIcon.setTransitionAlpha(1);
                     mAddIcon.setOnClickListener(this::onEndItemClick);
                 } else {
-                    mDivider.setVisibility(View.GONE);
                     mAddIcon.setVisibility(View.GONE);
                 }
                 mTitleIcon.setImageDrawable(getSpeakerDrawable());

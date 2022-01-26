@@ -911,18 +911,21 @@ public class LocationProviderManager extends
                 @Override
                 public void onPreExecute() {
                     mUseWakeLock = false;
-                    final int size = locationResult.size();
-                    for (int i = 0; i < size; ++i) {
-                        if (!locationResult.get(i).isMock()) {
-                            mUseWakeLock = true;
-                            break;
+
+                    // don't acquire a wakelock for passive requests or for mock locations
+                    if (getRequest().getIntervalMillis() != LocationRequest.PASSIVE_INTERVAL) {
+                        final int size = locationResult.size();
+                        for (int i = 0; i < size; ++i) {
+                            if (!locationResult.get(i).isMock()) {
+                                mUseWakeLock = true;
+                                break;
+                            }
                         }
                     }
 
                     // update last delivered location
                     setLastDeliveredLocation(locationResult.getLastLocation());
 
-                    // don't acquire a wakelock for mock locations to prevent abuse
                     if (mUseWakeLock) {
                         mWakeLock.acquire(WAKELOCK_TIMEOUT_MS);
                     }
@@ -1994,6 +1997,11 @@ public class LocationProviderManager extends
             if (D) {
                 Log.d(TAG, mName + " provider delaying request update " + newRequest + " by "
                         + TimeUtils.formatDuration(delayMs));
+            }
+
+            if (mDelayedRegister != null) {
+                mAlarmHelper.cancel(mDelayedRegister);
+                mDelayedRegister = null;
             }
 
             mDelayedRegister = new OnAlarmListener() {

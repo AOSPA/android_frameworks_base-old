@@ -165,13 +165,13 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     private boolean mNavBarAttachedToApp = false;
     private int mRecentsDisplayId = INVALID_DISPLAY;
 
-    Transition(@TransitionType int type, @TransitionFlags int flags,
+    Transition(@TransitionType int type, @TransitionFlags int flags, long timeoutMs,
             TransitionController controller, BLASTSyncEngine syncEngine) {
         mType = type;
         mFlags = flags;
         mController = controller;
         mSyncEngine = syncEngine;
-        mSyncId = mSyncEngine.startSyncSet(this);
+        mSyncId = mSyncEngine.startSyncSet(this, timeoutMs);
     }
 
     void addFlag(int flag) {
@@ -338,6 +338,11 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         applyReady();
     }
 
+    @VisibleForTesting
+    boolean allReady() {
+        return mReadyTracker.allReady();
+    }
+
     /**
      * Build a transaction that "resets" all the re-parenting and layer changes. This is
      * intended to be applied at the end of the transition but before the finish callback. This
@@ -415,7 +420,16 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                     if (commitVisibility) {
                         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
                                 "  Commit activity becoming invisible: %s", ar);
-                        ar.commitVisibility(false /* visible */, false /* performLayout */);
+                        final Task task = ar.getTask();
+                        if (task != null && !task.isVisibleRequested()
+                                && mTransientLaunches != null) {
+                            // If transition is transient, then snapshots are taken at end of
+                            // transition.
+                            mController.mTaskSnapshotController.recordTaskSnapshot(
+                                    task, false /* allowSnapshotHome */);
+                        }
+                        ar.commitVisibility(false /* visible */, false /* performLayout */,
+                                true /* fromTransition */);
                         activitiesWentInvisible = true;
                     }
                 }
@@ -460,6 +474,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (mState != STATE_COLLECTING) {
             throw new IllegalStateException("Too late to abort.");
         }
+        ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Aborting Transition: %d", mSyncId);
         mController.dispatchLegacyAppTransitionCancelled();
         mState = STATE_ABORT;
         // Syncengine abort will call through to onTransactionReady()
@@ -498,7 +513,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         mState = STATE_PLAYING;
         mController.moveToPlaying(this);
 
-        if (mController.mAtm.mTaskSupervisor.getKeyguardController().isKeyguardLocked()) {
+        if (mController.mAtm.mTaskSupervisor.getKeyguardController().isKeyguardLocked(displayId)) {
             mFlags |= TRANSIT_FLAG_KEYGUARD_LOCKED;
         }
 
@@ -556,6 +571,19 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             final WindowContainer wc = mParticipants.valueAt(i);
             if (wc.asWindowToken() == null || !wc.isVisibleRequested()) continue;
             mVisibleAtTransitionEndTokens.add(wc.asWindowToken());
+        }
+
+        // Take task snapshots before the animation so that we can capture IME before it gets
+        // transferred. If transition is transient, IME won't be moved during the transition and
+        // the tasks are still live, so we take the snapshot at the end of the transition instead.
+        if (mTransientLaunches == null) {
+            for (int i = mParticipants.size() - 1; i >= 0; --i) {
+                final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
+                if (ar == null || ar.isVisibleRequested() || ar.getTask() == null
+                        || ar.getTask().isVisibleRequested()) continue;
+                mController.mTaskSnapshotController.recordTaskSnapshot(
+                        ar.getTask(), false /* allowSnapshotHome */);
+            }
         }
 
         mStartTransaction = transaction;
@@ -767,7 +795,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             }
         }
         if ((flags & TRANSIT_FLAG_KEYGUARD_LOCKED) != 0) {
-            mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange();
+            mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange(
+                    true /* keyguardOccludingStarted */);
         }
     }
 

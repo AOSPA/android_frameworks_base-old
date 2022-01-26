@@ -108,6 +108,7 @@ import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.media.MediaHierarchyManager;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.qrcodescanner.controller.QRCodeScannerController;
 import com.android.systemui.qs.QSDetailDisplayer;
 import com.android.systemui.screenrecord.RecordingController;
 import com.android.systemui.statusbar.CommandQueue;
@@ -132,11 +133,13 @@ import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.NotificationRoundnessManager;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardQsUserSwitchController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcherController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcherView;
+import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.util.time.FakeSystemClock;
@@ -153,6 +156,7 @@ import org.mockito.stubbing.Answer;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
+import java.util.Optional;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -186,8 +190,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private ViewStub mUserSwitcherStubView;
     @Mock
     private HeadsUpTouchHelper.Callback mHeadsUpCallback;
-    @Mock
-    private PanelBar mPanelBar;
     @Mock
     private KeyguardUpdateMonitor mUpdateMonitor;
     @Mock
@@ -337,6 +339,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock
     private QuickAccessWalletController mQuickAccessWalletController;
     @Mock
+    private QRCodeScannerController mQrCodeScannerController;
+    @Mock
     private EmergencyButtonController.Factory mEmergencyButtonControllerFactory;
     @Mock
     private NotificationRemoteInputManager mNotificationRemoteInputManager;
@@ -348,7 +352,9 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private LockscreenGestureLogger mLockscreenGestureLogger;
     @Mock
     private DumpManager mDumpManager;
-
+    @Mock
+    private NotificationsQSContainerController mNotificationsQSContainerController;
+    private Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
     private View.AccessibilityDelegate mAccessibiltyDelegate;
@@ -385,8 +391,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         when(mView.findViewById(R.id.notification_stack_scroller))
                 .thenReturn(mNotificationStackScrollLayout);
         when(mView.findViewById(R.id.communal_host)).thenReturn(mCommunalHostView);
-        when(mNotificationStackScrollLayout.getController())
-                .thenReturn(mNotificationStackScrollLayoutController);
         when(mNotificationStackScrollLayoutController.getHeight()).thenReturn(1000);
         when(mNotificationStackScrollLayoutController.getHeadsUpCallback())
                 .thenReturn(mHeadsUpCallback);
@@ -482,6 +486,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 () -> flingAnimationUtilsBuilder, mStatusBarTouchableRegionManager,
                 mConversationNotificationManager, mMediaHiearchyManager,
                 mStatusBarKeyguardViewManager,
+                mNotificationsQSContainerController,
                 mNotificationStackScrollLayoutController,
                 mKeyguardStatusViewComponentFactory,
                 mKeyguardQsUserSwitchComponentFactory,
@@ -507,20 +512,23 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mFragmentService,
                 mContentResolver,
                 mQuickAccessWalletController,
+                mQrCodeScannerController,
                 mRecordingController,
                 new FakeExecutor(new FakeSystemClock()),
                 mSecureSettings,
                 mSplitShadeHeaderController,
                 mUnlockedScreenOffAnimationController,
                 mLockscreenGestureLogger,
+                new PanelExpansionStateManager(),
                 mNotificationRemoteInputManager,
+                mSysUIUnfoldComponent,
                 mControlsComponent,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
                 mStatusBar,
+                () -> {},
                 mNotificationShelfController);
         mNotificationPanelViewController.setHeadsUpManager(mHeadsUpManager);
-        mNotificationPanelViewController.setBar(mPanelBar);
         mNotificationPanelViewController.setKeyguardIndicationController(
                 mKeyguardIndicationController);
         ArgumentCaptor<View.OnAttachStateChangeListener> onAttachStateChangeListenerArgumentCaptor =
@@ -540,8 +548,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetMinFraction() {
-        mNotificationPanelViewController.setMinFraction(0.5f);
+    public void testSetPanelScrimMinFraction() {
+        mNotificationPanelViewController.setPanelScrimMinFraction(0.5f);
         verify(mNotificationShadeDepthController).setPanelPullDownMinFraction(eq(0.5f));
     }
 
@@ -583,6 +591,55 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 0L /* eventTime */, MotionEvent.ACTION_UP, 0f /* x */, 300f /* y */,
                 0 /* metaState */));
         assertThat(mNotificationPanelViewController.isTrackingBlocked()).isFalse();
+    }
+
+    @Test
+    public void handleTouchEventFromStatusBar_panelsNotEnabled_returnsFalseAndNoViewEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(false);
+
+        boolean returnVal = mNotificationPanelViewController
+                .getStatusBarTouchEventHandler()
+                .handleTouchEvent(
+                        MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0));
+
+        assertThat(returnVal).isFalse();
+        verify(mView, never()).dispatchTouchEvent(any());
+    }
+
+    @Test
+    public void handleTouchEventFromStatusBar_viewNotEnabled_returnsTrueAndNoViewEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(true);
+        when(mView.isEnabled()).thenReturn(false);
+
+        boolean returnVal = mNotificationPanelViewController
+                .getStatusBarTouchEventHandler()
+                .handleTouchEvent(
+                        MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0));
+
+        assertThat(returnVal).isTrue();
+        verify(mView, never()).dispatchTouchEvent(any());
+    }
+
+    @Test
+    public void handleTouchEventFromStatusBar_viewNotEnabledButIsMoveEvent_viewReceivesEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(true);
+        when(mView.isEnabled()).thenReturn(false);
+        MotionEvent event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_MOVE, 0f, 0f, 0);
+
+        mNotificationPanelViewController.getStatusBarTouchEventHandler().handleTouchEvent(event);
+
+        verify(mView).dispatchTouchEvent(event);
+    }
+
+    @Test
+    public void handleTouchEventFromStatusBar_panelAndViewEnabled_viewReceivesEvent() {
+        when(mCommandQueue.panelsEnabled()).thenReturn(true);
+        when(mView.isEnabled()).thenReturn(true);
+        MotionEvent event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0);
+
+        mNotificationPanelViewController.getStatusBarTouchEventHandler().handleTouchEvent(event);
+
+        verify(mView).dispatchTouchEvent(event);
     }
 
     @Test
@@ -723,18 +780,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
         assertThat(getConstraintSetLayout(R.id.qs_frame).mWidth).isEqualTo(0);
         assertThat(getConstraintSetLayout(R.id.notification_stack_scroller).mWidth).isEqualTo(0);
-    }
-
-    @Test
-    public void testOnDragDownEvent_horizontalTranslationIsZeroForSplitShade() {
-        when(mNotificationStackScrollLayoutController.getWidth()).thenReturn(350f);
-        when(mView.getWidth()).thenReturn(800);
-        enableSplitShade(/* enabled= */ true);
-
-        onTouchEvent(MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN,
-                200f /* x position */, 0f, 0));
-
-        verify(mQsFrame).setTranslationX(0);
     }
 
     @Test

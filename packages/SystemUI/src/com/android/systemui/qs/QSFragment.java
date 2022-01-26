@@ -15,6 +15,7 @@
 package com.android.systemui.qs;
 
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
+import static com.android.systemui.statusbar.DisableFlagsLogger.DisableState;
 
 import static com.android.systemui.media.dagger.MediaModule.QS_PANEL;
 import static com.android.systemui.media.dagger.MediaModule.QUICK_QS_PANEL;
@@ -37,13 +38,14 @@ import android.widget.ImageView;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
+import com.android.systemui.animation.ShadeInterpolation;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.media.MediaHost;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.QS;
+import com.android.systemui.plugins.qs.QSContainerController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.customize.QSCustomizerController;
 import com.android.systemui.qs.dagger.QSFragmentComponent;
@@ -51,10 +53,8 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
-import com.android.systemui.statusbar.phone.NotificationsQuickSettingsContainer;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
-import com.android.systemui.util.InjectionInflationController;
 import com.android.systemui.util.LifecycleFragment;
 import com.android.systemui.util.Utils;
 
@@ -82,6 +82,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
     private QSAnimator mQSAnimator;
     private HeightListener mPanelView;
+    private QSSquishinessController mQSSquishinessController;
     protected QuickStatusBarHeader mHeader;
     protected NonInterceptingScrollView mQSPanelScrollView;
     private QSDetail mQSDetail;
@@ -90,16 +91,18 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private int mLayoutDirection;
     private QSFooter mFooter;
     private float mLastQSExpansion = -1;
+    private float mLastPanelFraction;
+    private float mSquishinessFraction = 1;
     private boolean mQsDisabled;
     private ImageView mQsDragHandler;
 
     private final RemoteInputQuickSettingsDisabler mRemoteInputQuickSettingsDisabler;
-    private final InjectionInflationController mInjectionInflater;
     private final CommandQueue mCommandQueue;
     private final QSDetailDisplayer mQsDetailDisplayer;
     private final MediaHost mQsMediaHost;
     private final MediaHost mQqsMediaHost;
     private final QSFragmentComponent.Factory mQsComponentFactory;
+    private final QSFragmentDisableFlagsLogger mQsFragmentDisableFlagsLogger;
     private final QSTileHost mHost;
     private boolean mShowCollapsedOnKeyguard;
     private boolean mLastKeyguardAndExpanded;
@@ -121,7 +124,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
      * When true, QS will translate from outside the screen. It will be clipped with parallax
      * otherwise.
      */
-    private boolean mTranslateWhileExpanding;
+    private boolean mInSplitShade;
     private boolean mPulseExpanding;
 
     /**
@@ -136,22 +139,29 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
     private DumpManager mDumpManager;
 
+    /**
+     * Progress of pull down from the center of the lock screen.
+     * @see com.android.systemui.statusbar.LockscreenShadeTransitionController
+     */
+    private float mFullShadeProgress;
+
     @Inject
     public QSFragment(RemoteInputQuickSettingsDisabler remoteInputQsDisabler,
-            InjectionInflationController injectionInflater, QSTileHost qsTileHost,
+            QSTileHost qsTileHost,
             StatusBarStateController statusBarStateController, CommandQueue commandQueue,
             QSDetailDisplayer qsDetailDisplayer, @Named(QS_PANEL) MediaHost qsMediaHost,
             @Named(QUICK_QS_PANEL) MediaHost qqsMediaHost,
             KeyguardBypassController keyguardBypassController,
             QSFragmentComponent.Factory qsComponentFactory,
+            QSFragmentDisableFlagsLogger qsFragmentDisableFlagsLogger,
             FalsingManager falsingManager, DumpManager dumpManager) {
         mRemoteInputQuickSettingsDisabler = remoteInputQsDisabler;
-        mInjectionInflater = injectionInflater;
         mCommandQueue = commandQueue;
         mQsDetailDisplayer = qsDetailDisplayer;
         mQsMediaHost = qsMediaHost;
         mQqsMediaHost = qqsMediaHost;
         mQsComponentFactory = qsComponentFactory;
+        mQsFragmentDisableFlagsLogger = qsFragmentDisableFlagsLogger;
         commandQueue.observe(getLifecycle(), this);
         mHost = qsTileHost;
         mFalsingManager = falsingManager;
@@ -163,9 +173,8 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     @Override
     public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container,
             Bundle savedInstanceState) {
-        inflater = mInjectionInflater.injectable(
-                inflater.cloneInContext(new ContextThemeWrapper(getContext(),
-                        R.style.Theme_SystemUI_QuickSettings)));
+        inflater = inflater.cloneInContext(new ContextThemeWrapper(getContext(),
+                R.style.Theme_SystemUI_QuickSettings));
         return inflater.inflate(R.layout.qs_panel, container, false);
     }
 
@@ -207,6 +216,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
         mQSDetail.setQsPanel(mQSPanelController, mHeader, mFooter, mFalsingManager);
         mQSAnimator = qsFragmentComponent.getQSAnimator();
+        mQSSquishinessController = qsFragmentComponent.getQSSquishinessController();
 
         mQSCustomizerController = qsFragmentComponent.getQSCustomizerController();
         mQSCustomizerController.init();
@@ -227,7 +237,8 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
                 (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
                     boolean sizeChanged = (oldTop - oldBottom) != (top - bottom);
                     if (sizeChanged) {
-                        setQsExpansion(mLastQSExpansion, mLastHeaderTranslation);
+                        setQsExpansion(mLastQSExpansion, mLastPanelFraction,
+                                mLastHeaderTranslation, mSquishinessFraction);
                     }
                 });
         mQSPanelController.setUsingHorizontalLayoutChangeListener(
@@ -337,11 +348,9 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     }
 
     @Override
-    public void setContainer(ViewGroup container) {
-        if (container instanceof NotificationsQuickSettingsContainer) {
-            mQSCustomizerController.setContainer((NotificationsQuickSettingsContainer) container);
-            mQSDetail.setContainer((NotificationsQuickSettingsContainer) container);
-        }
+    public void setContainerController(QSContainerController controller) {
+        mQSCustomizerController.setContainerController(controller);
+        mQSDetail.setContainerController(controller);
     }
 
     @Override
@@ -358,7 +367,13 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         if (displayId != getContext().getDisplayId()) {
             return;
         }
+        int state2BeforeAdjustment = state2;
         state2 = mRemoteInputQuickSettingsDisabler.adjustDisableFlags(state2);
+
+        mQsFragmentDisableFlagsLogger.logDisableFlagChange(
+                /* new= */ new DisableState(state1, state2BeforeAdjustment),
+                /* newAfterLocalModification= */ new DisableState(state1, state2)
+        );
 
         final boolean disabled = (state2 & DISABLE2_QUICK_SETTINGS) != 0;
         if (disabled == mQsDisabled) return;
@@ -411,7 +426,8 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
                 mQSAnimator.setShowCollapsedOnKeyguard(showCollapsed);
             }
             if (!showCollapsed && isKeyguardState()) {
-                setQsExpansion(mLastQSExpansion, 0);
+                setQsExpansion(mLastQSExpansion, mLastPanelFraction, 0,
+                        mSquishinessFraction);
             }
         }
     }
@@ -479,33 +495,31 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     }
 
     @Override
-    public void setTranslateWhileExpanding(boolean shouldTranslate) {
-        mTranslateWhileExpanding = shouldTranslate;
-        mQSAnimator.setTranslateWhileExpanding(shouldTranslate);
+    public void setInSplitShade(boolean inSplitShade) {
+        mInSplitShade = inSplitShade;
+        mQSAnimator.setTranslateWhileExpanding(inSplitShade);
     }
 
     @Override
-    public void setTransitionToFullShadeAmount(float pxAmount, boolean animated) {
+    public void setTransitionToFullShadeAmount(float pxAmount, float progress) {
         boolean isTransitioningToFullShade = pxAmount > 0;
         if (isTransitioningToFullShade != mTransitioningToFullShade) {
             mTransitioningToFullShade = isTransitioningToFullShade;
             updateShowCollapsedOnKeyguard();
-            setQsExpansion(mLastQSExpansion, mLastHeaderTranslation);
         }
+        mFullShadeProgress = progress;
+        setQsExpansion(mLastQSExpansion, mLastPanelFraction, mLastHeaderTranslation,
+                isTransitioningToFullShade ? progress : mSquishinessFraction);
     }
 
     @Override
-    public void setQsExpansion(float expansion, float proposedTranslation) {
-        if (DEBUG) Log.d(TAG, "setQSExpansion " + expansion + " " + proposedTranslation);
+    public void setQsExpansion(float expansion, float panelExpansionFraction,
+            float proposedTranslation, float squishinessFraction) {
         float headerTranslation = mTransitioningToFullShade ? 0 : proposedTranslation;
-        if (mQSAnimator != null) {
-            final boolean showQSOnLockscreen = expansion > 0;
-            final boolean showQSUnlocked = headerTranslation == 0 || !mTranslateWhileExpanding;
-            mQSAnimator.startAlphaAnimation(showQSOnLockscreen || showQSUnlocked
-                    || mTransitioningToFullShade);
-        }
+        float progress = mTransitioningToFullShade ? mFullShadeProgress : panelExpansionFraction;
+        setAlphaAnimationProgress(mInSplitShade ? progress : 1);
         mContainer.setExpansion(expansion);
-        final float translationScaleY = (mTranslateWhileExpanding
+        final float translationScaleY = (mInSplitShade
                 ? 1 : QSAnimator.SHORT_PARALLAX_AMOUNT) * (expansion - 1);
         boolean onKeyguardAndExpanded = isKeyguardState() && !mShowCollapsedOnKeyguard;
         if (!mHeaderAnimating && !headerWillBeAnimating()) {
@@ -518,10 +532,13 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         if (expansion == mLastQSExpansion
                 && mLastKeyguardAndExpanded == onKeyguardAndExpanded
                 && mLastViewHeight == currentHeight
-                && mLastHeaderTranslation == headerTranslation) {
+                && mLastHeaderTranslation == headerTranslation
+                && mSquishinessFraction == squishinessFraction) {
             return;
         }
         mLastHeaderTranslation = headerTranslation;
+        mLastPanelFraction = panelExpansionFraction;
+        mSquishinessFraction = squishinessFraction;
         mLastQSExpansion = expansion;
         mLastKeyguardAndExpanded = onKeyguardAndExpanded;
         mLastViewHeight = currentHeight;
@@ -557,10 +574,24 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         }
         updateQsBounds();
 
+        if (mQSSquishinessController != null) {
+            mQSSquishinessController.setSquishiness(mSquishinessFraction);
+        }
         if (mQSAnimator != null) {
             mQSAnimator.setPosition(expansion);
         }
         updateMediaPositions();
+    }
+
+    private void setAlphaAnimationProgress(float progress) {
+        final View view = getView();
+        if (progress == 0 && view.getVisibility() != View.INVISIBLE) {
+            view.setVisibility(View.INVISIBLE);
+        } else if (progress > 0 && view.getVisibility() != View.VISIBLE) {
+            view.setVisibility((View.VISIBLE));
+        }
+        float alpha = ShadeInterpolation.getContentAlpha(progress);
+        view.setAlpha(alpha);
     }
 
     private void updateQsBounds() {

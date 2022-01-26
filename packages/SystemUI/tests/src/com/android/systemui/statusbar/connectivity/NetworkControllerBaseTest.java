@@ -72,9 +72,6 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
-import com.android.systemui.statusbar.connectivity.NetworkController.IconState;
-import com.android.systemui.statusbar.connectivity.NetworkController.MobileDataIndicators;
-import com.android.systemui.statusbar.connectivity.NetworkController.SignalCallback;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -216,7 +213,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
         mCallbackHandler = mock(CallbackHandler.class);
 
         mMockProvisionController = mock(DeviceProvisionedController.class);
-        when(mMockProvisionController.isUserSetup(anyInt())).thenReturn(true);
+        when(mMockProvisionController.isCurrentUserSetup()).thenReturn(true);
         doAnswer(invocation -> {
             mUserCallback = (DeviceProvisionedListener) invocation.getArguments()[0];
             mUserCallback.onUserSetupChanged();

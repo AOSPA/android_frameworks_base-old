@@ -49,6 +49,7 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.InputEvent;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -1174,7 +1175,9 @@ public final class UiAutomation {
      * @see android.view.WindowAnimationFrameStats
      * @see #getWindowAnimationFrameStats()
      * @see android.R.styleable#WindowAnimation
+     * @deprecated animation-frames are no-longer used.
      */
+    @Deprecated
     public void clearWindowAnimationFrameStats() {
         try {
             if (DEBUG) {
@@ -1213,7 +1216,9 @@ public final class UiAutomation {
      * @see android.view.WindowAnimationFrameStats
      * @see #clearWindowAnimationFrameStats()
      * @see android.R.styleable#WindowAnimation
+     * @deprecated animation-frames are no-longer used.
      */
+    @Deprecated
     public WindowAnimationFrameStats getWindowAnimationFrameStats() {
         try {
             if (DEBUG) {
@@ -1536,6 +1541,15 @@ public final class UiAutomation {
                 public boolean onGesture(AccessibilityGestureEvent gestureEvent) {
                     /* do nothing */
                     return false;
+                }
+
+                public void onMotionEvent(MotionEvent event) {
+                    /* do nothing */
+                }
+
+                @Override
+                public void onTouchStateChanged(int displayId, int state) {
+                    /* do nothing */
                 }
 
                 @Override

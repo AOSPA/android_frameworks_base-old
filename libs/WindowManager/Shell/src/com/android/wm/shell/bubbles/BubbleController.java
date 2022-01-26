@@ -111,8 +111,7 @@ public class BubbleController {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubbleController" : TAG_BUBBLES;
 
-    // TODO(b/173386799) keep in sync with Launcher3 and also don't do a broadcast
-    public static final String TASKBAR_CHANGED_BROADCAST = "taskbarChanged";
+    // TODO(b/173386799) keep in sync with Launcher3, not hooked up to anything
     public static final String EXTRA_TASKBAR_CREATED = "taskbarCreated";
     public static final String EXTRA_BUBBLE_OVERFLOW_OPENED = "bubbleOverflowOpened";
     public static final String EXTRA_TASKBAR_VISIBLE = "taskbarVisible";
@@ -939,7 +938,7 @@ public class BubbleController {
     public void updateBubble(BubbleEntry notif, boolean suppressFlyout, boolean showInShade) {
         // If this is an interruptive notif, mark that it's interrupted
         mSysuiProxy.setNotificationInterruption(notif.getKey());
-        if (!notif.getRanking().visuallyInterruptive()
+        if (!notif.getRanking().isTextChanged()
                 && (notif.getBubbleMetadata() != null
                     && !notif.getBubbleMetadata().getAutoExpandBubble())
                 && mBubbleData.hasOverflowBubbleWithKey(notif.getKey())) {
@@ -1028,15 +1027,17 @@ public class BubbleController {
                 // If this entry is no longer allowed to bubble, dismiss with the BLOCKED reason.
                 // This means that the app or channel's ability to bubble has been revoked.
                 mBubbleData.dismissBubbleWithKey(key, DISMISS_BLOCKED);
-            } else if (isActiveBubble && !shouldBubbleUp) {
-                // If this entry is allowed to bubble, but cannot currently bubble up, dismiss it.
-                // This happens when DND is enabled and configured to hide bubbles. Dismissing with
-                // the reason DISMISS_NO_BUBBLE_UP will retain the underlying notification, so that
-                // the bubble will be re-created if shouldBubbleUp returns true.
+            } else if (isActiveBubble && (!shouldBubbleUp || entry.getRanking().isSuspended())) {
+                // If this entry is allowed to bubble, but cannot currently bubble up or is
+                // suspended, dismiss it. This happens when DND is enabled and configured to hide
+                // bubbles, or focus mode is enabled and the app is designated as distracting.
+                // Dismissing with the reason DISMISS_NO_BUBBLE_UP will retain the underlying
+                // notification, so that the bubble will be re-created if shouldBubbleUp returns
+                // true.
                 mBubbleData.dismissBubbleWithKey(key, DISMISS_NO_BUBBLE_UP);
             } else if (entry != null && mTmpRanking.isBubble() && !isActiveBubble) {
                 entry.setFlagBubble(true);
-                onEntryUpdated(entry, true /* shouldBubbleUp */);
+                onEntryUpdated(entry, shouldBubbleUp && !entry.getRanking().isSuspended());
             }
         }
     }
@@ -1134,7 +1135,8 @@ public class BubbleController {
                 if (reason == DISMISS_USER_CHANGED || reason == DISMISS_NO_BUBBLE_UP) {
                     continue;
                 }
-                if (reason == DISMISS_NOTIF_CANCEL) {
+                if (reason == DISMISS_NOTIF_CANCEL
+                        || reason == DISMISS_SHORTCUT_REMOVED) {
                     bubblesToBeRemovedFromRepository.add(bubble);
                 }
                 if (!mBubbleData.hasBubbleInStackWithKey(bubble.getKey())) {

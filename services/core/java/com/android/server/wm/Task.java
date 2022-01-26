@@ -158,6 +158,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -182,9 +183,11 @@ import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
+import android.view.InsetsState;
 import android.view.RemoteAnimationAdapter;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.view.TaskTransitionSpec;
 import android.view.WindowManager;
 import android.view.WindowManager.TransitionOldType;
 import android.window.ITaskOrganizer;
@@ -200,7 +203,6 @@ import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.pooled.PooledConsumer;
-import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.Watchdog;
@@ -220,7 +222,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -482,12 +483,6 @@ class Task extends TaskFragment {
     // to layout without loading all the task snapshots
     final PersistedTaskSnapshotData mLastTaskSnapshotData;
 
-    // If set to true, the task will report that it is not in the floating
-    // state regardless of it's root task affiliation. As the floating state drives
-    // production of content insets this can be used to preserve them across
-    // root task moves and we in fact do so when moving from full screen to pinned.
-    private boolean mPreserveNonFloatingState = false;
-
     private Dimmer mDimmer = new Dimmer(this);
     private final Rect mTmpDimBoundsRect = new Rect();
 
@@ -495,9 +490,6 @@ class Task extends TaskFragment {
     private boolean mCanAffectSystemUiFlags = true;
 
     private static Exception sTmpException;
-
-    /** ActivityRecords that are exiting, but still on screen for animations. */
-    final ArrayList<ActivityRecord> mExitingActivities = new ArrayList<>();
 
     private boolean mForceShowForAllUsers;
 
@@ -551,26 +543,23 @@ class Task extends TaskFragment {
     private static final ResetTargetTaskHelper sResetTargetTaskHelper = new ResetTargetTaskHelper();
 
     private final FindRootHelper mFindRootHelper = new FindRootHelper();
-    private class FindRootHelper {
+    private class FindRootHelper implements Predicate<ActivityRecord> {
         private ActivityRecord mRoot;
-
-        private void clear() {
-            mRoot = null;
-        }
+        private boolean mIgnoreRelinquishIdentity;
+        private boolean mSetToBottomIfNone;
 
         ActivityRecord findRoot(boolean ignoreRelinquishIdentity, boolean setToBottomIfNone) {
-            final PooledFunction f = PooledLambda.obtainFunction(FindRootHelper::processActivity,
-                    this, PooledLambda.__(ActivityRecord.class), ignoreRelinquishIdentity,
-                    setToBottomIfNone);
-            clear();
-            forAllActivities(f, false /*traverseTopToBottom*/);
-            f.recycle();
-            return mRoot;
+            mIgnoreRelinquishIdentity = ignoreRelinquishIdentity;
+            mSetToBottomIfNone = setToBottomIfNone;
+            forAllActivities(this, false /* traverseTopToBottom */);
+            final ActivityRecord root = mRoot;
+            mRoot = null;
+            return root;
         }
 
-        private boolean processActivity(ActivityRecord r,
-                boolean ignoreRelinquishIdentity, boolean setToBottomIfNone) {
-            if (mRoot == null && setToBottomIfNone) {
+        @Override
+        public boolean test(ActivityRecord r) {
+            if (mRoot == null && mSetToBottomIfNone) {
                 // This is the first activity we are process. Set it as the candidate root in case
                 // we don't find a better one.
                 mRoot = r;
@@ -582,7 +571,7 @@ class Task extends TaskFragment {
             mRoot = r;
 
             // Only end search if we are ignore relinquishing identity or we are not relinquishing.
-            return ignoreRelinquishIdentity
+            return mIgnoreRelinquishIdentity
                     || mNeverRelinquishIdentity
                     || (r.info.flags & FLAG_RELINQUISH_TASK_IDENTITY) == 0;
         }
@@ -892,7 +881,7 @@ class Task extends TaskFragment {
             // entrance of the new window to be properly animated.
             // Note here we always set the replacing window first, as the flags might be needed
             // during the relaunch. If we end up not doing any relaunch, we clear the flags later.
-            windowManager.setWillReplaceWindow(topActivity.appToken, animate);
+            windowManager.setWillReplaceWindow(topActivity.token, animate);
         }
 
         mAtmService.deferWindowLayout();
@@ -949,7 +938,7 @@ class Task extends TaskFragment {
             // If we didn't actual do a relaunch (indicated by kept==true meaning we kept the old
             // window), we need to clear the replace window settings. Otherwise, we schedule a
             // timeout to remove the old window if the replacing window is not coming in time.
-            windowManager.scheduleClearWillReplaceWindows(topActivity.appToken, !kept);
+            windowManager.scheduleClearWillReplaceWindows(topActivity.token, !kept);
         }
 
         if (!deferResume) {
@@ -1014,7 +1003,6 @@ class Task extends TaskFragment {
             mCallingPackage = r.launchedFromPackage;
             mCallingFeatureId = r.launchedFromFeatureId;
             setIntent(intent != null ? intent : r.intent, info != null ? info : r.info);
-            return;
         }
         setLockTaskAuth(r);
     }
@@ -1137,7 +1125,11 @@ class Task extends TaskFragment {
         if (inMultiWindowMode() || !hasChild()) return false;
         if (intent != null) {
             final int returnHomeFlags = FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_TASK_ON_HOME;
-            return intent != null && (intent.getFlags() & returnHomeFlags) == returnHomeFlags;
+            final Task task = getDisplayArea() != null ? getDisplayArea().getRootHomeTask() : null;
+            final boolean isLockTaskModeViolation = task != null
+                    && mAtmService.getLockTaskController().isLockTaskModeViolation(task);
+            return (intent.getFlags() & returnHomeFlags) == returnHomeFlags
+                    && !isLockTaskModeViolation;
         }
         final Task bottomTask = getBottomMostTask();
         return bottomTask != this && bottomTask.returnsToHomeRootTask();
@@ -1245,6 +1237,9 @@ class Task extends TaskFragment {
         adjustBoundsForDisplayChangeIfNeeded(getDisplayContent());
 
         mRootWindowContainer.updateUIDsPresentOnDisplay();
+
+        // Ensure all animations are finished at same time in split-screen mode.
+        forAllActivities(ActivityRecord::updateAnimatingActivityRegistry);
     }
 
     @Override
@@ -1654,7 +1649,7 @@ class Task extends TaskFragment {
         final ActivityRecord r = findActivityInHistory(newR.mActivityComponent);
         if (r == null) return null;
 
-        final PooledFunction f = PooledLambda.obtainFunction(Task::finishActivityAbove,
+        final PooledPredicate f = PooledLambda.obtainPredicate(Task::finishActivityAbove,
                 PooledLambda.__(ActivityRecord.class), r);
         forAllActivities(f);
         f.recycle();
@@ -1804,7 +1799,7 @@ class Task extends TaskFragment {
         if (root == null) return;
 
         final TaskDescription taskDescription = new TaskDescription();
-        final PooledFunction f = PooledLambda.obtainFunction(
+        final PooledPredicate f = PooledLambda.obtainPredicate(
                 Task::setTaskDescriptionFromActivityAboveRoot,
                 PooledLambda.__(ActivityRecord.class), root, taskDescription);
         forAllActivities(f);
@@ -1939,6 +1934,7 @@ class Task extends TaskFragment {
             final ActivityRecord r = topRunningActivity();
             if (r != null && mDisplayContent.isFixedRotationLaunchingApp(r)) {
                 getSyncTransaction().setWindowCrop(mSurfaceControl, null)
+                        .setCornerRadius(mSurfaceControl, 0f)
                         .setMatrix(mSurfaceControl, Matrix.IDENTITY_MATRIX, new float[9]);
             }
         }
@@ -2387,6 +2383,16 @@ class Task extends TaskFragment {
         return true;
     }
 
+    /** Return the top-most leaf-task under this one, or this task if it is a leaf. */
+    public Task getTopLeafTask() {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final Task child = mChildren.get(i).asTask();
+            if (child == null) continue;
+            return child.getTopLeafTask();
+        }
+        return this;
+    }
+
     int getDescendantTaskCount() {
         final int[] currentCount = {0};
         final PooledConsumer c = PooledLambda.obtainConsumer((t, count) -> { count[0]++; },
@@ -2602,11 +2608,6 @@ class Task extends TaskFragment {
         reparent(rootTask, position);
 
         rootTask.positionChildAt(position, this, moveParents);
-
-        // If we are moving from the fullscreen root task to the root pinned task then we want to
-        // preserve our insets so that there will not be a jump in the area covered by system
-        // decorations. We rely on the pinned animation to later unset this value.
-        mPreserveNonFloatingState = rootTask.inPinnedWindowingMode();
     }
 
     public int setBounds(Rect bounds, boolean forceResize) {
@@ -2832,6 +2833,30 @@ class Task extends TaskFragment {
         return;
     }
 
+    /**
+     * Account for specified insets to crop the animation bounds by to avoid the animation
+     * occurring over "out of bounds" regions
+     *
+     * For example this is used to make sure the tasks are cropped to be fully above the
+     * taskbar when animating.
+     *
+     * @param animationBounds The animations bounds to adjust to account for the custom spec insets.
+     */
+    void adjustAnimationBoundsForTransition(Rect animationBounds) {
+        TaskTransitionSpec spec = mWmService.mTaskTransitionSpec;
+        if (spec != null) {
+            for (@InsetsState.InternalInsetsType int insetType : spec.animationBoundInsets) {
+                InsetsSourceProvider insetProvider = getDisplayContent()
+                        .getInsetsStateController()
+                        .getSourceProvider(insetType);
+
+                Insets insets = insetProvider.getSource().calculateVisibleInsets(
+                        animationBounds);
+                animationBounds.inset(insets);
+            }
+        }
+    }
+
     void setDragResizing(boolean dragResizing, int dragResizeMode) {
         if (mDragResizing != dragResizing) {
             // No need to check if the mode is allowed if it's leaving dragResize
@@ -2919,16 +2944,6 @@ class Task extends TaskFragment {
         mForceShowForAllUsers = forceShowForAllUsers;
     }
 
-    /**
-     * When we are in a floating root task (Freeform, Pinned, ...) we calculate
-     * insets differently. However if we are animating to the fullscreen root task
-     * we need to begin calculating insets as if we were fullscreen, otherwise
-     * we will have a jump at the end.
-     */
-    boolean isFloating() {
-        return getWindowConfiguration().tasksAreFloating() && !mPreserveNonFloatingState;
-    }
-
     /** Returns the top-most activity that occludes the given one, or {@code null} if none. */
     @Nullable
     ActivityRecord getOccludingActivityAbove(ActivityRecord activity) {
@@ -2983,11 +2998,6 @@ class Task extends TaskFragment {
     @Override
     public SurfaceControl.Builder makeAnimationLeash() {
         return super.makeAnimationLeash().setMetadata(METADATA_TASK_ID, mTaskId);
-    }
-
-    @Override
-    void resetSurfacePositionForAnimationLeash(SurfaceControl.Transaction t) {
-        super.resetSurfacePositionForAnimationLeash(t);
     }
 
     boolean shouldAnimate() {
@@ -3054,7 +3064,7 @@ class Task extends TaskFragment {
     }
 
     private static boolean isTopRunning(ActivityRecord r, int taskId, IBinder notTop) {
-        return r.getTask().mTaskId != taskId && r.appToken != notTop && r.canBeTopRunning();
+        return r.getTask().mTaskId != taskId && r.token != notTop && r.canBeTopRunning();
     }
 
     ActivityRecord getTopFullscreenActivity() {
@@ -3166,13 +3176,13 @@ class Task extends TaskFragment {
     }
 
     @Override
-    boolean forAllTasks(Function<Task, Boolean> callback) {
+    boolean forAllTasks(Predicate<Task> callback) {
         if (super.forAllTasks(callback)) return true;
-        return callback.apply(this);
+        return callback.test(this);
     }
 
     @Override
-    boolean forAllLeafTasks(Function<Task, Boolean> callback) {
+    boolean forAllLeafTasks(Predicate<Task> callback) {
         boolean isLeafTask = true;
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final Task child = mChildren.get(i).asTask();
@@ -3184,7 +3194,7 @@ class Task extends TaskFragment {
             }
         }
         if (isLeafTask) {
-            return callback.apply(this);
+            return callback.test(this);
         }
         return false;
     }
@@ -3225,8 +3235,8 @@ class Task extends TaskFragment {
     }
 
     @Override
-    boolean forAllRootTasks(Function<Task, Boolean> callback, boolean traverseTopToBottom) {
-        return isRootTask() ? callback.apply(this) : false;
+    boolean forAllRootTasks(Predicate<Task> callback, boolean traverseTopToBottom) {
+        return isRootTask() ? callback.test(this) : false;
     }
 
     @Override
@@ -3240,12 +3250,6 @@ class Task extends TaskFragment {
     @Override
     Task getRootTask(Predicate<Task> callback, boolean traverseTopToBottom) {
         return isRootTask() && callback.test(this) ? this : null;
-    }
-
-    @Nullable
-    @Override
-    <R> R getItemFromRootTasks(Function<Task, R> callback, boolean traverseTopToBottom) {
-        return isRootTask() ? callback.apply(this) : null;
     }
 
     /**
@@ -3269,10 +3273,6 @@ class Task extends TaskFragment {
 
     String getName() {
         return "Task=" + mTaskId;
-    }
-
-    void clearPreserveNonFloatingState() {
-        mPreserveNonFloatingState = false;
     }
 
     @Override
@@ -3343,20 +3343,6 @@ class Task extends TaskFragment {
     @Override
     void dump(PrintWriter pw, String prefix, boolean dumpAll) {
         super.dump(pw, prefix, dumpAll);
-
-        if (!mExitingActivities.isEmpty()) {
-            final String doublePrefix = prefix + "  ";
-            pw.println();
-            pw.println(prefix + "Exiting application tokens:");
-            for (int i = mExitingActivities.size() - 1; i >= 0; i--) {
-                WindowToken token = mExitingActivities.get(i);
-                pw.print(doublePrefix + "Exiting App #" + i);
-                pw.print(' '); pw.print(token);
-                pw.println(':');
-                token.dump(pw, doublePrefix, dumpAll);
-            }
-            pw.println();
-        }
         mAnimatingActivityRegistry.dump(pw, "AnimatingApps:", prefix);
     }
 
@@ -3807,7 +3793,7 @@ class Task extends TaskFragment {
         }
 
         sTmpException = null;
-        final PooledFunction f = PooledLambda.obtainFunction(Task::saveActivityToXml,
+        final PooledPredicate f = PooledLambda.obtainPredicate(Task::saveActivityToXml,
                 PooledLambda.__(ActivityRecord.class), getBottomMostActivity(), out);
         forAllActivities(f);
         f.recycle();
@@ -4283,7 +4269,7 @@ class Task extends TaskFragment {
     /**
      * @return true if the task is currently focused.
      */
-    boolean isFocused() {
+    private boolean isFocused() {
         if (mDisplayContent == null || mDisplayContent.mFocusedApp == null) {
             return false;
         }
@@ -4341,14 +4327,10 @@ class Task extends TaskFragment {
     }
 
     /**
-     * Called on the task of a window which gained or lost focus.
+     * Called on the task when it gained or lost focus.
      * @param hasFocus
      */
     void onAppFocusChanged(boolean hasFocus) {
-        final ActivityRecord topAct = getTopVisibleActivity();
-        if (topAct != null && (topAct.mStartingData instanceof SnapshotStartingData)) {
-            topAct.removeStartingWindowIfNeeded();
-        }
         updateShadowsRadius(hasFocus, getSyncTransaction());
         dispatchTaskInfoChangedIfNeeded(false /* force */);
     }
@@ -4882,7 +4864,7 @@ class Task extends TaskFragment {
                             prev.shortComponentName, "userLeaving=" + userLeaving, reason);
 
                     mAtmService.getLifecycleManager().scheduleTransaction(prev.app.getThread(),
-                            prev.appToken, PauseActivityItem.obtain(prev.finishing, userLeaving,
+                            prev.token, PauseActivityItem.obtain(prev.finishing, userLeaving,
                                     prev.configChangeFlags, pauseImmediately));
                 } catch (Exception e) {
                     // Ignore exception, if process died other code will cleanup.
@@ -5050,11 +5032,11 @@ class Task extends TaskFragment {
             mHandler.removeMessages(TRANSLUCENT_TIMEOUT_MSG);
 
             if (waitingActivity != null) {
-                mWmService.setWindowOpaqueLocked(waitingActivity.appToken, false);
+                mWmService.setWindowOpaqueLocked(waitingActivity.token, false);
                 if (waitingActivity.attachedToProcess()) {
                     try {
                         waitingActivity.app.getThread().scheduleTranslucentConversionComplete(
-                                waitingActivity.appToken, r != null);
+                                waitingActivity.token, r != null);
                     } catch (RemoteException e) {
                     }
                 }
@@ -5450,7 +5432,7 @@ class Task extends TaskFragment {
             });
         } else {
             // Check if any of the activities are using voice
-            final PooledFunction f = PooledLambda.obtainFunction(
+            final PooledPredicate f = PooledLambda.obtainPredicate(
                     Task::finishIfVoiceActivity, PooledLambda.__(ActivityRecord.class),
                     binder);
             tr.forAllActivities(f);
@@ -5463,7 +5445,7 @@ class Task extends TaskFragment {
         // Inform of cancellation
         r.clearVoiceSessionLocked();
         try {
-            r.app.getThread().scheduleLocalVoiceInteractionStarted(r.appToken, null);
+            r.app.getThread().scheduleLocalVoiceInteractionStarted(r.token, null);
         } catch (RemoteException re) {
             // Ok Boomer...
         }
@@ -5559,7 +5541,7 @@ class Task extends TaskFragment {
         // We should consolidate.
         IActivityController controller = mAtmService.mController;
         if (controller != null) {
-            ActivityRecord next = topRunningActivity(srec.appToken, INVALID_TASK_ID);
+            ActivityRecord next = topRunningActivity(srec.token, INVALID_TASK_ID);
             if (next != null) {
                 // ask watcher if this is allowed
                 boolean resumeOK = true;
@@ -5616,7 +5598,7 @@ class Task extends TaskFragment {
                             .obtainStarter(destIntent, "navigateUpTo")
                             .setCaller(srec.app.getThread())
                             .setActivityInfo(aInfo)
-                            .setResultTo(parent.appToken)
+                            .setResultTo(parent.token)
                             .setCallingPid(-1)
                             .setCallingUid(callingUid)
                             .setCallingPackage(srec.packageName)
@@ -6293,11 +6275,13 @@ class Task extends TaskFragment {
 
     boolean shouldSleepActivities() {
         final DisplayContent display = mDisplayContent;
+        final boolean isKeyguardGoingAway = (mDisplayContent != null)
+                ? mDisplayContent.isKeyguardGoingAway()
+                : mRootWindowContainer.getDefaultDisplay().isKeyguardGoingAway();
 
         // Do not sleep activities in this root task if we're marked as focused and the keyguard
         // is in the process of going away.
-        if (mTaskSupervisor.getKeyguardController().isKeyguardGoingAway()
-                && isFocusedRootTaskOnDisplay()
+        if (isKeyguardGoingAway && isFocusedRootTaskOnDisplay()
                 // Avoid resuming activities on secondary displays since we don't want bubble
                 // activities to be resumed while bubble is still collapsed.
                 // TODO(b/113840485): Having keyguard going away state for secondary displays.

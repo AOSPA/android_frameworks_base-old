@@ -16,12 +16,14 @@
 
 package com.android.wm.shell.flicker.bubble
 
+import android.platform.test.annotations.Postsubmit
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.runner.RunWith
+import org.junit.Test
 import org.junit.runners.Parameterized
 
 /**
@@ -39,10 +41,19 @@ import org.junit.runners.Parameterized
 @Group4
 class LaunchBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
-    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
-        get() = buildTransition() {
+    override val transition: FlickerBuilder.() -> Unit
+        get() = buildTransition {
             transitions {
-                addBubbleBtn?.run { addBubbleBtn.click() } ?: error("Bubble widget not found")
+                val addBubbleBtn = waitAndGetAddBubbleBtn()
+                addBubbleBtn?.click() ?: error("Bubble widget not found")
             }
         }
+
+    @Postsubmit
+    @Test
+    fun testAppIsAlwaysVisible() {
+        testSpec.assertLayers {
+            this.isVisible(testApp.component)
+        }
+    }
 }

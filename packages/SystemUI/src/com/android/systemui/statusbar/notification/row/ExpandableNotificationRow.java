@@ -17,17 +17,20 @@
 package com.android.systemui.statusbar.notification.row;
 
 import static android.app.Notification.Action.SEMANTIC_ACTION_MARK_CONVERSATION_AS_PRIORITY;
+import static android.os.UserHandle.USER_SYSTEM;
 import static android.service.notification.NotificationListenerService.REASON_CANCEL;
 
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_HEADSUP;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_PUBLIC;
 
+import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.Context;
@@ -45,6 +48,10 @@ import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.RemoteException;
+import android.os.ServiceManager;
+import android.permission.PermissionManager;
+import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.util.ArraySet;
 import android.util.AttributeSet;
@@ -107,6 +114,8 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.InflatedSmartReplyState;
+import com.android.systemui.statusbar.policy.dagger.RemoteInputViewSubcomponent;
+import com.android.systemui.util.DumpUtilsKt;
 import com.android.systemui.wmshell.BubblesManager;
 
 import java.io.FileDescriptor;
@@ -362,23 +371,35 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * <b>Note</b>, this should be run in the background thread if possible as it makes multiple IPC
      * calls.
      */
-    private static Boolean isSystemNotification(
-            Context context, StatusBarNotification statusBarNotification) {
-        PackageManager packageManager = StatusBar.getPackageManagerForUser(
-                context, statusBarNotification.getUser().getIdentifier());
-        Boolean isSystemNotification = null;
+    private static Boolean isSystemNotification(Context context, StatusBarNotification sbn) {
+        // TODO (b/194833441): clean up before launch
+        if (Settings.Secure.getIntForUser(context.getContentResolver(),
+                Settings.Secure.NOTIFICATION_PERMISSION_ENABLED, 0, USER_SYSTEM) == 1) {
+            INotificationManager iNm = INotificationManager.Stub.asInterface(
+                    ServiceManager.getService(Context.NOTIFICATION_SERVICE));
+            try {
+                return iNm.isPermissionFixed(sbn.getPackageName(), sbn.getUserId());
+            } catch (RemoteException e) {
+                Log.e(TAG, "cannot reach NMS");
+            }
+            return false;
+        } else {
+            PackageManager packageManager = StatusBar.getPackageManagerForUser(
+                    context, sbn.getUser().getIdentifier());
+            Boolean isSystemNotification = null;
 
-        try {
-            PackageInfo packageInfo = packageManager.getPackageInfo(
-                    statusBarNotification.getPackageName(), PackageManager.GET_SIGNATURES);
+            try {
+                PackageInfo packageInfo = packageManager.getPackageInfo(
+                        sbn.getPackageName(), PackageManager.GET_SIGNATURES);
 
-            isSystemNotification =
-                    com.android.settingslib.Utils.isSystemPackage(
-                            context.getResources(), packageManager, packageInfo);
-        } catch (PackageManager.NameNotFoundException e) {
-            Log.e(TAG, "cacheIsSystemNotification: Could not find package info");
+                isSystemNotification =
+                        com.android.settingslib.Utils.isSystemPackage(
+                                context.getResources(), packageManager, packageInfo);
+            } catch (PackageManager.NameNotFoundException e) {
+                Log.e(TAG, "cacheIsSystemNotification: Could not find package info");
+            }
+            return isSystemNotification;
         }
-        return isSystemNotification;
     }
 
     public NotificationContentView[] getLayouts() {
@@ -532,6 +553,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             mEntry.mIsSystemNotification = isSystemNotification(mContext, mEntry.getSbn());
         }
 
+        // TODO (b/194833441): remove when we've migrated to permission
         boolean isNonblockable = mEntry.getChannel().isImportanceLockedByOEM()
                 || mEntry.getChannel().isImportanceLockedByCriticalDeviceFunction();
 
@@ -1249,6 +1271,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
         if (mMenuRow != null && mMenuRow.getMenuView() != null) {
             mMenuRow.onConfigurationChanged();
         }
@@ -1546,6 +1569,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      */
     public void initialize(
             NotificationEntry entry,
+            RemoteInputViewSubcomponent.Factory rivSubcomponentFactory,
             String appName,
             String notificationKey,
             ExpansionLogger logger,
@@ -1590,6 +1614,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mPeopleNotificationIdentifier = peopleNotificationIdentifier;
         for (NotificationContentView l : mLayouts) {
             l.setPeopleNotificationIdentifier(mPeopleNotificationIdentifier);
+            l.setRemoteInputViewSubcomponentFactory(rivSubcomponentFactory);
         }
         mOnUserInteractionCallback = onUserInteractionCallback;
         mBubblesManagerOptional = bubblesManagerOptional;
@@ -1758,7 +1783,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * Called when a notification is dropped on proper target window.
      */
     public void dragAndDropSuccess() {
-        mOnDragSuccessListener.onDragSuccess(getEntry());
+        if (mOnDragSuccessListener != null) {
+            mOnDragSuccessListener.onDragSuccess(getEntry());
+        }
     }
 
     private void doLongClickCallback() {
@@ -3304,40 +3331,45 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        super.dump(fd, pw, args);
-        pw.println("  Notification: " + mEntry.getKey());
-        pw.print("    visibility: " + getVisibility());
-        pw.print(", alpha: " + getAlpha());
-        pw.print(", translation: " + getTranslation());
-        pw.print(", removed: " + isRemoved());
-        pw.print(", expandAnimationRunning: " + mExpandAnimationRunning);
-        NotificationContentView showingLayout = getShowingLayout();
-        pw.print(", privateShowing: " + (showingLayout == mPrivateLayout));
-        pw.println();
-        showingLayout.dump(fd, pw, args);
-        pw.print("    ");
-        if (getViewState() != null) {
-            getViewState().dump(fd, pw, args);
-        } else {
-            pw.print("no viewState!!!");
-        }
-        pw.println();
-        pw.println();
-        if (mIsSummaryWithChildren) {
-            pw.print("  ChildrenContainer");
-            pw.print(" visibility: " + mChildrenContainer.getVisibility());
-            pw.print(", alpha: " + mChildrenContainer.getAlpha());
-            pw.print(", translationY: " + mChildrenContainer.getTranslationY());
-            pw.println();
-            List<ExpandableNotificationRow> notificationChildren = getAttachedChildren();
-            pw.println("  Children: " + notificationChildren.size());
-            pw.println("  {");
-            for(ExpandableNotificationRow child : notificationChildren) {
-                child.dump(fd, pw, args);
+        // Skip super call; dump viewState ourselves
+        pw.println("Notification: " + mEntry.getKey());
+        DumpUtilsKt.withIndenting(pw, ipw -> {
+            ipw.print("visibility: " + getVisibility());
+            ipw.print(", alpha: " + getAlpha());
+            ipw.print(", translation: " + getTranslation());
+            ipw.print(", removed: " + isRemoved());
+            ipw.print(", expandAnimationRunning: " + mExpandAnimationRunning);
+            NotificationContentView showingLayout = getShowingLayout();
+            ipw.print(", privateShowing: " + (showingLayout == mPrivateLayout));
+            ipw.println();
+            showingLayout.dump(fd, ipw, args);
+
+            if (getViewState() != null) {
+                getViewState().dump(fd, ipw, args);
+                ipw.println();
+            } else {
+                ipw.println("no viewState!!!");
             }
-            pw.println("  }");
-            pw.println();
-        }
+
+            if (mIsSummaryWithChildren) {
+                ipw.println();
+                ipw.print("ChildrenContainer");
+                ipw.print(" visibility: " + mChildrenContainer.getVisibility());
+                ipw.print(", alpha: " + mChildrenContainer.getAlpha());
+                ipw.print(", translationY: " + mChildrenContainer.getTranslationY());
+                ipw.println();
+                List<ExpandableNotificationRow> notificationChildren = getAttachedChildren();
+                ipw.println("Children: " + notificationChildren.size());
+                ipw.print("{");
+                ipw.increaseIndent();
+                for (ExpandableNotificationRow child : notificationChildren) {
+                    ipw.println();
+                    child.dump(fd, ipw, args);
+                }
+                ipw.decreaseIndent();
+                ipw.println("}");
+            }
+        });
     }
 
     /**

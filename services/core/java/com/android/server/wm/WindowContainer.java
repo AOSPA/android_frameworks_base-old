@@ -32,10 +32,6 @@ import static android.os.UserHandle.USER_NULL;
 import static android.view.SurfaceControl.Transaction;
 import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
 import static android.view.WindowManager.TRANSIT_CHANGE;
-import static android.view.WindowManager.TRANSIT_OLD_TASK_CLOSE;
-import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
-import static android.view.WindowManager.TRANSIT_OLD_TASK_TO_BACK;
-import static android.view.WindowManager.TRANSIT_OLD_TASK_TO_FRONT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
@@ -43,6 +39,7 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_SYNC_ENGINE;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.AppTransition.MAX_APP_TRANSITION_DURATION;
+import static com.android.server.wm.AppTransition.isTaskTransitOld;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
@@ -70,8 +67,6 @@ import android.annotation.ColorInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.ActivityThread;
-import android.app.WindowConfiguration;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -92,6 +87,7 @@ import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Builder;
 import android.view.SurfaceSession;
+import android.view.TaskTransitionSpec;
 import android.view.WindowManager;
 import android.view.WindowManager.TransitionOldType;
 import android.view.animation.Animation;
@@ -112,6 +108,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -127,26 +125,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         implements Comparable<WindowContainer>, Animatable, SurfaceFreezer.Freezable {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "WindowContainer" : TAG_WM;
-
-    /** Animation layer that happens above all animating {@link Task}s. */
-    static final int ANIMATION_LAYER_STANDARD = 0;
-
-    /** Animation layer that happens above all {@link Task}s. */
-    static final int ANIMATION_LAYER_BOOSTED = 1;
-
-    /**
-     * Animation layer that is reserved for {@link WindowConfiguration#ACTIVITY_TYPE_HOME}
-     * activities and all activities that are being controlled by the recents animation. This
-     * layer is generally below all {@link Task}s.
-     */
-    static final int ANIMATION_LAYER_HOME = 2;
-
-    @IntDef(prefix = { "ANIMATION_LAYER_" }, value = {
-            ANIMATION_LAYER_STANDARD,
-            ANIMATION_LAYER_BOOSTED,
-            ANIMATION_LAYER_HOME,
-    })
-    @interface AnimationLayer {}
 
     static final int POSITION_TOP = Integer.MAX_VALUE;
     static final int POSITION_BOTTOM = Integer.MIN_VALUE;
@@ -198,6 +176,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * Applied as part of the animation pass in "prepareSurfaces".
      */
     protected final SurfaceAnimator mSurfaceAnimator;
+
+    /** The parent leash added for animation. */
+    @Nullable
+    private SurfaceControl mAnimationLeash;
 
     final SurfaceFreezer mSurfaceFreezer;
     protected final WindowManagerService mWmService;
@@ -632,7 +614,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         final DisplayContent dc = getDisplayContent();
         if (dc != null) {
             mSurfaceFreezer.unfreeze(getSyncTransaction());
-            dc.mChangingContainers.remove(this);
         }
         while (!mChildren.isEmpty()) {
             final E child = mChildren.peekLast();
@@ -922,7 +903,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * container.
      */
     boolean canCustomizeAppTransition() {
-        return !WindowManagerService.sDisableCustomTaskAnimationProperty;
+        return false;
     }
 
     /**
@@ -953,21 +934,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     final boolean isAnimating(int flags, int typesToCheck) {
         return getAnimatingContainer(flags, typesToCheck) != null;
-    }
-
-    /**
-     * Similar to {@link #isAnimating(int, int)} except provide a bitmask of
-     * {@link AnimationType} to exclude, rather than include
-     * @param flags The combination of bitmask flags to specify targets and condition for
-     *              checking animating status.
-     * @param typesToExclude The combination of bitmask {@link AnimationType} to exclude when
-     *                     checking if animating.
-     *
-     * @deprecated Use {@link #isAnimating(int, int)}
-     */
-    @Deprecated
-    final boolean isAnimatingExcluding(int flags, int typesToExclude) {
-        return isAnimating(flags, ANIMATION_TYPE_ALL & ~typesToExclude);
     }
 
     /**
@@ -1085,9 +1051,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // part of a change transition.
         if (!visible) {
             mSurfaceFreezer.unfreeze(getSyncTransaction());
-            if (mDisplayContent != null) {
-                mDisplayContent.mChangingContainers.remove(this);
-            }
         }
         WindowContainer parent = getParent();
         if (parent != null) {
@@ -1440,12 +1403,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         wrapper.release();
     }
 
-    boolean forAllActivities(Function<ActivityRecord, Boolean> callback) {
+    boolean forAllActivities(Predicate<ActivityRecord> callback) {
         return forAllActivities(callback, true /*traverseTopToBottom*/);
     }
 
-    boolean forAllActivities(
-            Function<ActivityRecord, Boolean> callback, boolean traverseTopToBottom) {
+    boolean forAllActivities(Predicate<ActivityRecord> callback, boolean traverseTopToBottom) {
         if (traverseTopToBottom) {
             for (int i = mChildren.size() - 1; i >= 0; --i) {
                 if (mChildren.get(i).forAllActivities(callback, traverseTopToBottom)) return true;
@@ -1487,13 +1449,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param traverseTopToBottom direction to traverse the tree.
      * @return {@code true} if we ended the search before reaching the end of the tree.
      */
-    final boolean forAllActivities(Function<ActivityRecord, Boolean> callback,
+    final boolean forAllActivities(Predicate<ActivityRecord> callback,
             WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom) {
         return forAllActivities(
                 callback, boundary, includeBoundary, traverseTopToBottom, new boolean[1]);
     }
 
-    private boolean forAllActivities(Function<ActivityRecord, Boolean> callback,
+    private boolean forAllActivities(Predicate<ActivityRecord> callback,
             WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
             boolean[] boundaryFound) {
         if (traverseTopToBottom) {
@@ -1516,7 +1478,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return false;
     }
 
-    private boolean processForAllActivitiesWithBoundary(Function<ActivityRecord, Boolean> callback,
+    private boolean processForAllActivitiesWithBoundary(Predicate<ActivityRecord> callback,
             WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
             boolean[] boundaryFound, WindowContainer wc) {
         if (wc == boundary) {
@@ -1681,7 +1643,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param callback Calls the {@link ToBooleanFunction#apply} method for each task found and
      *                 stops the search if {@link ToBooleanFunction#apply} returns {@code true}.
      */
-    boolean forAllTasks(Function<Task, Boolean> callback) {
+    boolean forAllTasks(Predicate<Task> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             if (mChildren.get(i).forAllTasks(callback)) {
                 return true;
@@ -1690,7 +1652,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return false;
     }
 
-    boolean forAllLeafTasks(Function<Task, Boolean> callback) {
+    boolean forAllLeafTasks(Predicate<Task> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             if (mChildren.get(i).forAllLeafTasks(callback)) {
                 return true;
@@ -1699,7 +1661,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return false;
     }
 
-    boolean forAllLeafTaskFragments(Function<TaskFragment, Boolean> callback) {
+    boolean forAllLeafTaskFragments(Predicate<TaskFragment> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             if (mChildren.get(i).forAllLeafTaskFragments(callback)) {
                 return true;
@@ -1714,11 +1676,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param callback Calls the {@link ToBooleanFunction#apply} method for each root task found and
      *                 stops the search if {@link ToBooleanFunction#apply} returns {@code true}.
      */
-    boolean forAllRootTasks(Function<Task, Boolean> callback) {
+    boolean forAllRootTasks(Predicate<Task> callback) {
         return forAllRootTasks(callback, true /* traverseTopToBottom */);
     }
 
-    boolean forAllRootTasks(Function<Task, Boolean> callback, boolean traverseTopToBottom) {
+    boolean forAllRootTasks(Predicate<Task> callback, boolean traverseTopToBottom) {
         int count = mChildren.size();
         if (traverseTopToBottom) {
             for (int i = count - 1; i >= 0; --i) {
@@ -2000,7 +1962,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @return {@code true} if the search ended before we reached the end of the hierarchy due to
      *         callback returning {@code true}.
      */
-    boolean forAllTaskDisplayAreas(Function<TaskDisplayArea, Boolean> callback,
+    boolean forAllTaskDisplayAreas(Predicate<TaskDisplayArea> callback,
             boolean traverseTopToBottom) {
         int childCount = mChildren.size();
         int i = traverseTopToBottom ? childCount - 1 : 0;
@@ -2021,7 +1983,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @return {@code true} if the search ended before we reached the end of the hierarchy due to
      *         callback returning {@code true}.
      */
-    boolean forAllTaskDisplayAreas(Function<TaskDisplayArea, Boolean> callback) {
+    boolean forAllTaskDisplayAreas(Predicate<TaskDisplayArea> callback) {
         return forAllTaskDisplayAreas(callback, true /* traverseTopToBottom */);
     }
 
@@ -2148,47 +2110,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Nullable
     <R> R getItemFromTaskDisplayAreas(Function<TaskDisplayArea, R> callback) {
         return getItemFromTaskDisplayAreas(callback, true /* traverseTopToBottom */);
-    }
-
-    /**
-     * Finds the first non {@code null} return value from calling the callback on all root
-     * {@link Task} at or below this container.
-     * @param callback Applies on each root {@link Task} found and stops the search if it
-     *                 returns non {@code null}.
-     * @param traverseTopToBottom If {@code true}, traverses the hierarchy from top-to-bottom in
-     *                            terms of z-order, else from bottom-to-top.
-     * @return the first returned object that is not {@code null}. Returns {@code null} if not
-     *         found.
-     */
-    @Nullable
-    <R> R getItemFromRootTasks(Function<Task, R> callback, boolean traverseTopToBottom) {
-        int count = mChildren.size();
-        if (traverseTopToBottom) {
-            for (int i = count - 1; i >= 0; --i) {
-                R result = (R) mChildren.get(i).getItemFromRootTasks(callback, traverseTopToBottom);
-                if (result != null) {
-                    return result;
-                }
-            }
-        } else {
-            for (int i = 0; i < count; i++) {
-                R result = (R) mChildren.get(i).getItemFromRootTasks(callback, traverseTopToBottom);
-                if (result != null) {
-                    return result;
-                }
-                // Root tasks may be removed from this display. Ensure each task will be processed
-                // and the loop will end.
-                int newCount = mChildren.size();
-                i -= count - newCount;
-                count = newCount;
-            }
-        }
-        return null;
-    }
-
-    @Nullable
-    <R> R getItemFromRootTasks(Function<Task, R> callback) {
-        return getItemFromRootTasks(callback, true /* traverseTopToBottom */);
     }
 
     /**
@@ -2582,11 +2503,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param animationFinishedCallback The callback being triggered when the animation finishes.
      * @param animationCancelledCallback The callback is triggered after the SurfaceAnimator sends a
      *                                   cancel call to the underlying AnimationAdapter.
+     * @param snapshotAnim  The animation to run for the snapshot. {@code null} if there is no
+     *                      snapshot.
      */
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
             @AnimationType int type,
             @Nullable OnAnimationFinishedCallback animationFinishedCallback,
-            @Nullable Runnable animationCancelledCallback) {
+            @Nullable Runnable animationCancelledCallback,
+            @Nullable AnimationAdapter snapshotAnim) {
         if (DEBUG_ANIM) {
             Slog.v(TAG, "Starting animation on " + this + ": type=" + type + ", anim=" + anim);
         }
@@ -2594,14 +2518,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // TODO: This should use isVisible() but because isVisible has a really weird meaning at
         // the moment this doesn't work for all animatable window containers.
         mSurfaceAnimator.startAnimation(t, anim, hidden, type, animationFinishedCallback,
-                animationCancelledCallback, mSurfaceFreezer);
+                animationCancelledCallback, snapshotAnim, mSurfaceFreezer);
     }
 
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
             @AnimationType int type,
             @Nullable OnAnimationFinishedCallback animationFinishedCallback) {
         startAnimation(t, anim, hidden, type, animationFinishedCallback,
-                null /* adapterAnimationCancelledCallback */);
+                null /* adapterAnimationCancelledCallback */, null /* snapshotAnim */);
     }
 
     void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
@@ -2663,6 +2587,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     @Override
+    public void onUnfrozen() {
+        if (mDisplayContent != null) {
+            mDisplayContent.mChangingContainers.remove(this);
+        }
+    }
+
+    @Override
     public Builder makeAnimationLeash() {
         return makeSurface().setContainerLayer();
     }
@@ -2670,17 +2601,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public SurfaceControl getAnimationLeashParent() {
         return getParentSurfaceControl();
-    }
-
-    /**
-     * @return The layer on which all app animations are happening.
-     */
-    SurfaceControl getAppAnimationLayer(@AnimationLayer int animationLayer) {
-        final WindowContainer parent = getParent();
-        if (parent != null) {
-            return parent.getAppAnimationLayer(animationLayer);
-        }
-        return null;
     }
 
     // TODO: Remove this and use #getBounds() instead once we set an app transition animation
@@ -2758,6 +2678,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Separate position and size for use in animators.
         final Rect screenBounds = getAnimationBounds(appRootTaskClipMode);
         mTmpRect.set(screenBounds);
+        if (this.asTask() != null && isTaskTransitOld(transit)) {
+            this.asTask().adjustAnimationBoundsForTransition(mTmpRect);
+        }
         getAnimationPosition(mTmpPoint);
         mTmpRect.offsetTo(0, 0);
 
@@ -2849,40 +2772,37 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 mSurfaceAnimationSources.addAll(sources);
             }
 
-            TaskDisplayArea taskDisplayArea = getTaskDisplayArea();
-            boolean isSettingBackgroundColor = taskDisplayArea != null
-                    && isTransitionWithBackgroundColor(transit);
+            AnimationRunnerBuilder animationRunnerBuilder = new AnimationRunnerBuilder();
 
-            if (isSettingBackgroundColor) {
-                Context uiContext = ActivityThread.currentActivityThread().getSystemUiContext();
-                @ColorInt int backgroundColor = uiContext.getColor(R.color.overview_background);
-
-                taskDisplayArea.setBackgroundColor(backgroundColor);
+            if (isTaskTransitOld(transit)) {
+                animationRunnerBuilder.setTaskBackgroundColor(getTaskAnimationBackgroundColor());
+                // TODO: Remove when we migrate to shell (b/202383002)
+                if (mWmService.mTaskTransitionSpec != null) {
+                    animationRunnerBuilder.hideInsetSourceViewOverflows(
+                            mWmService.mTaskTransitionSpec.animationBoundInsets);
+                }
             }
 
-            final Runnable cleanUpCallback = isSettingBackgroundColor
-                    ? taskDisplayArea::clearBackgroundColor : () -> {};
-
-            startAnimation(getPendingTransaction(), adapter, !isVisible(),
-                    ANIMATION_TYPE_APP_TRANSITION,
-                    (type, anim) -> cleanUpCallback.run(),
-                    cleanUpCallback);
+            animationRunnerBuilder.build()
+                    .startAnimation(getPendingTransaction(), adapter, !isVisible(),
+                            ANIMATION_TYPE_APP_TRANSITION, thumbnailAdapter);
 
             if (adapter.getShowWallpaper()) {
                 getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
             }
-            if (thumbnailAdapter != null) {
-                mSurfaceFreezer.mSnapshot.startAnimation(getPendingTransaction(),
-                        thumbnailAdapter, ANIMATION_TYPE_APP_TRANSITION, (type, anim) -> { });
-            }
         }
     }
 
-    private boolean isTransitionWithBackgroundColor(@TransitionOldType int transit) {
-        return transit == TRANSIT_OLD_TASK_OPEN
-                || transit == TRANSIT_OLD_TASK_CLOSE
-                || transit == TRANSIT_OLD_TASK_TO_FRONT
-                || transit == TRANSIT_OLD_TASK_TO_BACK;
+    private @ColorInt int getTaskAnimationBackgroundColor() {
+        Context uiContext = mDisplayContent.getDisplayPolicy().getSystemUiContext();
+        TaskTransitionSpec customSpec = mWmService.mTaskTransitionSpec;
+        @ColorInt int defaultFallbackColor = uiContext.getColor(R.color.overview_background);
+
+        if (customSpec != null && customSpec.backgroundColor != 0) {
+            return customSpec.backgroundColor;
+        }
+
+        return defaultFallbackColor;
     }
 
     final SurfaceAnimationRunner getSurfaceAnimationRunner() {
@@ -3004,6 +2924,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
         mLastLayer = -1;
+        mAnimationLeash = leash;
         reassignLayer(t);
 
         // Leash is now responsible for position, so set our position to 0.
@@ -3013,9 +2934,14 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public void onAnimationLeashLost(Transaction t) {
         mLastLayer = -1;
-        mSurfaceFreezer.unfreeze(t);
+        mAnimationLeash = null;
         reassignLayer(t);
         updateSurfacePosition(t);
+    }
+
+    @Override
+    public SurfaceControl getAnimationLeash() {
+        return mAnimationLeash;
     }
 
     private void doAnimationFinished(@AnimationType int type, AnimationAdapter anim) {
@@ -3563,5 +3489,74 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
         getPendingTransaction().setSecure(mSurfaceControl, !canScreenshot);
         return true;
+    }
+
+    private class AnimationRunnerBuilder {
+        /**
+         * Runs when the surface stops animating
+         */
+        private final List<Runnable> mOnAnimationFinished = new LinkedList<>();
+        /**
+         * Runs when the animation is cancelled but the surface is still animating
+         */
+        private final List<Runnable> mOnAnimationCancelled = new LinkedList<>();
+
+        private void setTaskBackgroundColor(@ColorInt int backgroundColor) {
+            TaskDisplayArea taskDisplayArea = getTaskDisplayArea();
+
+            if (taskDisplayArea != null) {
+                taskDisplayArea.setBackgroundColor(backgroundColor);
+
+                // Atomic counter to make sure the clearColor callback is only called one.
+                // It will be called twice in the case we cancel the animation without restart
+                // (in that case it will run as the cancel and finished callbacks).
+                final AtomicInteger callbackCounter = new AtomicInteger(0);
+                final Runnable clearBackgroundColorHandler = () -> {
+                    if (callbackCounter.getAndIncrement() == 0) {
+                        taskDisplayArea.clearBackgroundColor();
+                    }
+                };
+
+                // We want to make sure this is called both when the surface stops animating and
+                // also when an animation is cancelled (i.e. animation is replaced by another
+                // animation but and so the surface is still animating)
+                mOnAnimationFinished.add(clearBackgroundColorHandler);
+                mOnAnimationCancelled.add(clearBackgroundColorHandler);
+            }
+        }
+
+        private void hideInsetSourceViewOverflows(Set<Integer> insetTypes) {
+            final ArrayList<SurfaceControl> surfaceControls =
+                    new ArrayList<>(insetTypes.size());
+
+            for (int insetType : insetTypes) {
+                InsetsSourceProvider insetProvider = getDisplayContent().getInsetsStateController()
+                        .getSourceProvider(insetType);
+
+                // Will apply it immediately to current leash and to all future inset animations
+                // until we disable it.
+                insetProvider.setCropToProvidingInsetsBounds(getPendingTransaction());
+
+                // Only clear the size restriction of the inset once the surface animation is over
+                // and not if it's canceled to be replace by another animation.
+                mOnAnimationFinished.add(() -> {
+                    insetProvider.removeCropToProvidingInsetsBounds(getPendingTransaction());
+                });
+            }
+        }
+
+        private IAnimationStarter build() {
+            return (Transaction t, AnimationAdapter adapter, boolean hidden,
+                    @AnimationType int type, @Nullable AnimationAdapter snapshotAnim) -> {
+                startAnimation(getPendingTransaction(), adapter, !isVisible(), type,
+                        (animType, anim) -> mOnAnimationFinished.forEach(Runnable::run),
+                        () -> mOnAnimationCancelled.forEach(Runnable::run), snapshotAnim);
+            };
+        }
+    }
+
+    private interface IAnimationStarter {
+        void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
+                @AnimationType int type, @Nullable AnimationAdapter snapshotAnim);
     }
 }

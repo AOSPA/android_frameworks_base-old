@@ -16,18 +16,14 @@
 
 package com.android.server.wm;
 
-import static android.view.ViewRootImpl.INSETS_LAYOUT_GENERALIZATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_MOVEMENT;
-import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
-import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowContainerChildProto.WINDOW_TOKEN;
@@ -49,7 +45,6 @@ import android.os.Debug;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Slog;
-import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayAdjustments.FixedRotationAdjustments;
 import android.view.DisplayInfo;
@@ -102,9 +97,6 @@ class WindowToken extends WindowContainer<WindowState> {
     // Is key dispatching paused for this token?
     boolean paused = false;
 
-    // Temporary for finding which tokens no longer have visible windows.
-    boolean hasVisible;
-
     // Set to true when this token is in a pending transaction where it
     // will be shown.
     boolean waitingToShow;
@@ -138,7 +130,6 @@ class WindowToken extends WindowContainer<WindowState> {
          */
         final ArrayList<WindowToken> mAssociatedTokens = new ArrayList<>(3);
         final ArrayList<WindowContainer<?>> mRotatedContainers = new ArrayList<>(3);
-        final SparseArray<Rect> mBarContentFrames = new SparseArray<>();
         boolean mIsTransforming = true;
 
         FixedRotationTransformState(DisplayInfo rotatedDisplayInfo,
@@ -240,6 +231,7 @@ class WindowToken extends WindowContainer<WindowState> {
         }
     }
 
+    /** Starts exit animation or hides windows if needed. It is only used for non-activity token. */
     void setExiting(boolean animateExit) {
         if (isEmpty()) {
             super.removeImmediately();
@@ -255,26 +247,14 @@ class WindowToken extends WindowContainer<WindowState> {
 
         final int count = mChildren.size();
         boolean changed = false;
-        final boolean delayed = isAnimating(TRANSITION | PARENTS)
-                || (isAnimating(CHILDREN, ANIMATION_TYPE_WINDOW_ANIMATION) && animateExit);
-
         for (int i = 0; i < count; i++) {
             final WindowState win = mChildren.get(i);
             changed |= win.onSetAppExiting(animateExit);
         }
 
-        final ActivityRecord app = asActivityRecord();
-        if (app != null) {
-            app.setVisible(false);
-        }
-
         if (changed) {
             mWmService.mWindowPlacerLocked.performSurfacePlacement();
             mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false /*updateInputWindows*/);
-        }
-
-        if (delayed) {
-            mDisplayContent.mExitingTokens.add(this);
         }
     }
 
@@ -381,11 +361,6 @@ class WindowToken extends WindowContainer<WindowState> {
     }
 
     @Override
-    public void onConfigurationChanged(Configuration newParentConfig) {
-        super.onConfigurationChanged(newParentConfig);
-    }
-
-    @Override
     void assignLayer(SurfaceControl.Transaction t, int layer) {
         if (windowType == TYPE_DOCK_DIVIDER) {
             // See {@link DisplayContent#mSplitScreenDividerAnchor}
@@ -459,27 +434,6 @@ class WindowToken extends WindowContainer<WindowState> {
                 : null;
     }
 
-    Rect getFixedRotationBarContentFrame(int windowType) {
-        if (!isFixedRotationTransforming()) {
-            return null;
-        }
-        if (!INSETS_LAYOUT_GENERALIZATION) {
-            return mFixedRotationTransformState.mBarContentFrames.get(windowType);
-        }
-        final DisplayFrames displayFrames = mFixedRotationTransformState.mDisplayFrames;
-        final Rect tmpRect = new Rect();
-        if (windowType == TYPE_NAVIGATION_BAR) {
-            tmpRect.set(displayFrames.mInsetsState.getSource(InsetsState.ITYPE_NAVIGATION_BAR)
-                    .getFrame());
-        }
-        if (windowType == TYPE_STATUS_BAR) {
-            tmpRect.set(displayFrames.mInsetsState.getSource(InsetsState.ITYPE_STATUS_BAR)
-                    .getFrame());
-        }
-        tmpRect.intersect(displayFrames.mDisplayCutoutSafe);
-        return tmpRect;
-    }
-
     InsetsState getFixedRotationTransformInsetsState() {
         return isFixedRotationTransforming()
                 ? mFixedRotationTransformState.mDisplayFrames.mInsetsState
@@ -495,8 +449,7 @@ class WindowToken extends WindowContainer<WindowState> {
         mFixedRotationTransformState = new FixedRotationTransformState(info, displayFrames,
                 new Configuration(config), mDisplayContent.getRotation());
         mFixedRotationTransformState.mAssociatedTokens.add(this);
-        mDisplayContent.getDisplayPolicy().simulateLayoutDisplay(displayFrames,
-                mFixedRotationTransformState.mBarContentFrames);
+        mDisplayContent.getDisplayPolicy().simulateLayoutDisplay(displayFrames);
         onFixedRotationStatePrepared();
     }
 
@@ -723,7 +676,6 @@ class WindowToken extends WindowContainer<WindowState> {
         super.dump(pw, prefix, dumpAll);
         pw.print(prefix); pw.print("windows="); pw.println(mChildren);
         pw.print(prefix); pw.print("windowType="); pw.print(windowType);
-                pw.print(" hasVisible="); pw.print(hasVisible);
         if (waitingToShow) {
             pw.print(" waitingToShow=true");
         }

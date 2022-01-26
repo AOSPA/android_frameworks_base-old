@@ -48,6 +48,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
+import android.os.RemoteException;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
@@ -152,6 +153,7 @@ public class CommandQueue extends IStatusBar.Stub implements
     private static final int MSG_SET_NAVIGATION_BAR_LUMA_SAMPLING_ENABLED = 59 << MSG_SHIFT;
     private static final int MSG_SET_UDFPS_HBM_LISTENER = 60 << MSG_SHIFT;
     private static final int MSG_TILE_SERVICE_REQUEST_ADD = 61 << MSG_SHIFT;
+    private static final int MSG_TILE_SERVICE_REQUEST_CANCEL = 62 << MSG_SHIFT;
 
     public static final int FLAG_EXCLUDE_NONE = 0;
     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
@@ -416,6 +418,11 @@ public class CommandQueue extends IStatusBar.Stub implements
                 @NonNull CharSequence label,
                 @NonNull Icon icon,
                 @NonNull IAddTileResultCallback callback) {}
+
+        /**
+         * @see IStatusBar#cancelRequestAddTile
+         */
+        default void cancelRequestAddTile(@NonNull String packageName) {}
     }
 
     public CommandQueue(Context context) {
@@ -589,7 +596,7 @@ public class CommandQueue extends IStatusBar.Stub implements
 
     @Override
     public void setImeWindowStatus(int displayId, IBinder token, int vis, int backDisposition,
-            boolean showImeSwitcher, boolean isMultiClientImeEnabled) {
+            boolean showImeSwitcher) {
         synchronized (mLock) {
             mHandler.removeMessages(MSG_SHOW_IME_BUTTON);
             SomeArgs args = SomeArgs.obtain();
@@ -597,7 +604,6 @@ public class CommandQueue extends IStatusBar.Stub implements
             args.argi2 = vis;
             args.argi3 = backDisposition;
             args.argi4 = showImeSwitcher ? 1 : 0;
-            args.argi5 = isMultiClientImeEnabled ? 1 : 0;
             args.arg1 = token;
             Message m = mHandler.obtainMessage(MSG_SHOW_IME_BUTTON, args);
             m.sendToTarget();
@@ -870,8 +876,8 @@ public class CommandQueue extends IStatusBar.Stub implements
             args.arg5 = requireConfirmation;
             args.argi1 = userId;
             args.arg6 = opPackageName;
-            args.arg7 = operationId;
-            args.arg8 = requestId;
+            args.argl1 = operationId;
+            args.argl2 = requestId;
             args.argi2 = multiSensorConfig;
             mHandler.obtainMessage(MSG_BIOMETRIC_SHOW, args)
                     .sendToTarget();
@@ -986,10 +992,10 @@ public class CommandQueue extends IStatusBar.Stub implements
     }
 
     private void handleShowImeButton(int displayId, IBinder token, int vis, int backDisposition,
-            boolean showImeSwitcher, boolean isMultiClientImeEnabled) {
+            boolean showImeSwitcher) {
         if (displayId == INVALID_DISPLAY) return;
 
-        if (!isMultiClientImeEnabled && mLastUpdatedImeDisplayId != displayId
+        if (mLastUpdatedImeDisplayId != displayId
                 && mLastUpdatedImeDisplayId != INVALID_DISPLAY) {
             // Set previous NavBar's IME window status as invisible when IME
             // window switched to another display for single-session IME case.
@@ -1138,6 +1144,11 @@ public class CommandQueue extends IStatusBar.Stub implements
         mHandler.obtainMessage(MSG_TILE_SERVICE_REQUEST_ADD, args).sendToTarget();
     }
 
+    @Override
+    public void cancelRequestAddTile(@NonNull String s) throws RemoteException {
+        mHandler.obtainMessage(MSG_TILE_SERVICE_REQUEST_CANCEL, s).sendToTarget();
+    }
+
     private final class H extends Handler {
         private H(Looper l) {
             super(l);
@@ -1194,8 +1205,7 @@ public class CommandQueue extends IStatusBar.Stub implements
                     args = (SomeArgs) msg.obj;
                     handleShowImeButton(args.argi1 /* displayId */, (IBinder) args.arg1 /* token */,
                             args.argi2 /* vis */, args.argi3 /* backDisposition */,
-                            args.argi4 != 0 /* showImeSwitcher */,
-                            args.argi5 != 0 /* isMultiClientImeEnabled */);
+                            args.argi4 != 0 /* showImeSwitcher */);
                     break;
                 case MSG_SHOW_RECENT_APPS:
                     for (int i = 0; i < mCallbacks.size(); i++) {
@@ -1347,9 +1357,9 @@ public class CommandQueue extends IStatusBar.Stub implements
                                 (boolean) someArgs.arg4 /* credentialAllowed */,
                                 (boolean) someArgs.arg5 /* requireConfirmation */,
                                 someArgs.argi1 /* userId */,
-                                (long) someArgs.arg7 /* operationId */,
+                                someArgs.argl1 /* operationId */,
                                 (String) someArgs.arg6 /* opPackageName */,
-                                (long) someArgs.arg8 /* requestId */,
+                                someArgs.argl2 /* requestId */,
                                 someArgs.argi2 /* multiSensorConfig */);
                     }
                     someArgs.recycle();
@@ -1524,6 +1534,11 @@ public class CommandQueue extends IStatusBar.Stub implements
                     }
                     args.recycle();
                     break;
+                case MSG_TILE_SERVICE_REQUEST_CANCEL:
+                    String packageName = (String) msg.obj;
+                    for (int i = 0; i < mCallbacks.size(); i++) {
+                        mCallbacks.get(i).cancelRequestAddTile(packageName);
+                    }
             }
         }
     }

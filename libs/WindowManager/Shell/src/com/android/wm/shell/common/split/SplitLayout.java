@@ -40,8 +40,10 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.view.Display;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
+import android.view.RoundedCorner;
 import android.view.SurfaceControl;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -53,6 +55,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.DividerSnapAlgorithm;
 import com.android.internal.policy.DockedDividerUtils;
+import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.animation.Interpolators;
 import com.android.wm.shell.common.DisplayImeController;
@@ -103,7 +106,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
     private final SplitWindowManager mSplitWindowManager;
     private final DisplayImeController mDisplayImeController;
     private final ImePositionProcessor mImePositionProcessor;
-    private final DismissingParallaxPolicy mDismissingParallaxPolicy;
+    private final DismissingEffectPolicy mDismissingEffectPolicy;
     private final ShellTaskOrganizer mTaskOrganizer;
     private final InsetsState mInsetsState = new InsetsState();
 
@@ -119,7 +122,8 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
     public SplitLayout(String windowName, Context context, Configuration configuration,
             SplitLayoutHandler splitLayoutHandler,
             SplitWindowManager.ParentContainerCallbacks parentContainerCallbacks,
-            DisplayImeController displayImeController, ShellTaskOrganizer taskOrganizer) {
+            DisplayImeController displayImeController, ShellTaskOrganizer taskOrganizer,
+            boolean applyDismissingParallax) {
         mContext = context.createConfigurationContext(configuration);
         mOrientation = configuration.orientation;
         mRotation = configuration.windowConfiguration.getRotation();
@@ -129,18 +133,33 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
                 parentContainerCallbacks);
         mTaskOrganizer = taskOrganizer;
         mImePositionProcessor = new ImePositionProcessor(mContext.getDisplayId());
-        mDismissingParallaxPolicy = new DismissingParallaxPolicy();
+        mDismissingEffectPolicy = new DismissingEffectPolicy(applyDismissingParallax);
 
         final Resources resources = context.getResources();
-        mDividerWindowWidth = resources.getDimensionPixelSize(
-                com.android.internal.R.dimen.docked_stack_divider_thickness);
-        mDividerInsets = resources.getDimensionPixelSize(
-                com.android.internal.R.dimen.docked_stack_divider_insets);
-        mDividerSize = mDividerWindowWidth - mDividerInsets * 2;
+        mDividerSize = resources.getDimensionPixelSize(R.dimen.split_divider_bar_width);
+        mDividerInsets = getDividerInsets(resources, context.getDisplay());
+        mDividerWindowWidth = mDividerSize + 2 * mDividerInsets;
 
         mRootBounds.set(configuration.windowConfiguration.getBounds());
         mDividerSnapAlgorithm = getSnapAlgorithm(mContext, mRootBounds);
         resetDividerPosition();
+    }
+
+    private int getDividerInsets(Resources resources, Display display) {
+        final int dividerInset = resources.getDimensionPixelSize(
+                com.android.internal.R.dimen.docked_stack_divider_insets);
+
+        int radius = 0;
+        RoundedCorner corner = display.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT);
+        radius = corner != null ? Math.max(radius, corner.getRadius()) : radius;
+        corner = display.getRoundedCorner(RoundedCorner.POSITION_TOP_RIGHT);
+        radius = corner != null ? Math.max(radius, corner.getRadius()) : radius;
+        corner = display.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_RIGHT);
+        radius = corner != null ? Math.max(radius, corner.getRadius()) : radius;
+        corner = display.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_LEFT);
+        radius = corner != null ? Math.max(radius, corner.getRadius()) : radius;
+
+        return Math.max(dividerInset, radius);
     }
 
     /** Gets bounds of the primary split. */
@@ -247,7 +266,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         }
         DockedDividerUtils.sanitizeStackBounds(mBounds1, true /** topLeft */);
         DockedDividerUtils.sanitizeStackBounds(mBounds2, false /** topLeft */);
-        mDismissingParallaxPolicy.applyDividerPosition(position, isLandscape);
+        mDismissingEffectPolicy.applyDividerPosition(position, isLandscape);
     }
 
     /** Inflates {@link DividerView} on the root surface. */
@@ -290,21 +309,18 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
      */
     void updateDivideBounds(int position) {
         updateBounds(position);
-        mSplitWindowManager.setResizingSplits(true);
-        mSplitLayoutHandler.onLayoutChanging(this);
+        mSplitLayoutHandler.onLayoutSizeChanging(this);
     }
 
     void setDividePosition(int position) {
         mDividePosition = position;
         updateBounds(mDividePosition);
-        mSplitLayoutHandler.onLayoutChanged(this);
-        mSplitWindowManager.setResizingSplits(false);
+        mSplitLayoutHandler.onLayoutSizeChanged(this);
     }
 
     /** Resets divider position. */
     public void resetDividerPosition() {
         mDividePosition = mDividerSnapAlgorithm.getMiddleTarget().position;
-        mSplitWindowManager.setResizingSplits(false);
         updateBounds(mDividePosition);
         mWinToken1 = null;
         mWinToken2 = null;
@@ -360,8 +376,8 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
     @VisibleForTesting
     void flingDividePosition(int from, int to, @Nullable Runnable flingFinishedCallback) {
         if (from == to) {
-            // No animation run, it should stop resizing here.
-            mSplitWindowManager.setResizingSplits(false);
+            // No animation run, still callback to stop resizing.
+            mSplitLayoutHandler.onLayoutSizeChanged(this);
             return;
         }
         ValueAnimator animator = ValueAnimator
@@ -425,7 +441,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
             return;
         }
 
-        mDismissingParallaxPolicy.adjustDismissingSurface(t, leash1, leash2, dimLayer1, dimLayer2);
+        mDismissingEffectPolicy.adjustDismissingSurface(t, leash1, leash2, dimLayer1, dimLayer2);
     }
 
     /** Apply recorded task layout to the {@link WindowContainerTransaction}. */
@@ -451,7 +467,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
      * Shift configuration bounds to prevent client apps get configuration changed or relaunch. And
      * restore shifted configuration bounds if it's no longer shifted.
      */
-    public void applyLayoutShifted(WindowContainerTransaction wct, int offsetX, int offsetY,
+    public void applyLayoutOffsetTarget(WindowContainerTransaction wct, int offsetX, int offsetY,
             ActivityManager.RunningTaskInfo taskInfo1, ActivityManager.RunningTaskInfo taskInfo2) {
         if (offsetX == 0 && offsetY == 0) {
             wct.setBounds(taskInfo1.token, mBounds1);
@@ -492,19 +508,43 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         /** Calls when dismissing split. */
         void onSnappedToDismiss(boolean snappedToEnd);
 
-        /** Calls when the bounds is changing due to animation or dragging divider bar. */
-        void onLayoutChanging(SplitLayout layout);
-
-        /** Calls when the target bounds changed. */
-        void onLayoutChanged(SplitLayout layout);
+        /**
+         * Calls when resizing the split bounds.
+         *
+         * @see #applySurfaceChanges(SurfaceControl.Transaction, SurfaceControl, SurfaceControl,
+         * SurfaceControl, SurfaceControl)
+         */
+        void onLayoutSizeChanging(SplitLayout layout);
 
         /**
-         * Notifies when the layout shifted. So the layout handler can shift configuration
-         * bounds correspondingly to make sure client apps won't get configuration changed or
-         * relaunch. If the layout is no longer shifted, layout handler should restore shifted
-         * configuration bounds.
+         * Calls when finish resizing the split bounds.
+         *
+         * @see #applyTaskChanges(WindowContainerTransaction, ActivityManager.RunningTaskInfo,
+         * ActivityManager.RunningTaskInfo)
+         * @see #applySurfaceChanges(SurfaceControl.Transaction, SurfaceControl, SurfaceControl,
+         * SurfaceControl, SurfaceControl)
          */
-        void onLayoutShifted(int offsetX, int offsetY, SplitLayout layout);
+        void onLayoutSizeChanged(SplitLayout layout);
+
+        /**
+         * Calls when re-positioning the split bounds. Like moving split bounds while showing IME
+         * panel.
+         *
+         * @see #applySurfaceChanges(SurfaceControl.Transaction, SurfaceControl, SurfaceControl,
+         * SurfaceControl, SurfaceControl)
+         */
+        void onLayoutPositionChanging(SplitLayout layout);
+
+        /**
+         * Notifies the target offset for shifting layout. So layout handler can shift configuration
+         * bounds correspondingly to make sure client apps won't get configuration changed or
+         * relaunched. If the layout is no longer shifted, layout handler should restore shifted
+         * configuration bounds.
+         *
+         * @see #applyLayoutOffsetTarget(WindowContainerTransaction, int, int,
+         * ActivityManager.RunningTaskInfo, ActivityManager.RunningTaskInfo)
+         */
+        void setLayoutOffsetTarget(int offsetX, int offsetY, SplitLayout layout);
 
         /** Calls when user double tapped on the divider bar. */
         default void onDoubleTappedDivider() {
@@ -519,7 +559,10 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
      * Calculates and applies proper dismissing parallax offset and dimming value to hint users
      * dismissing gesture.
      */
-    private class DismissingParallaxPolicy {
+    private class DismissingEffectPolicy {
+        /** Indicates whether to offset splitting bounds to hint dismissing progress or not. */
+        private final boolean mApplyParallax;
+
         // The current dismissing side.
         int mDismissingSide = DOCKED_INVALID;
 
@@ -528,6 +571,10 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
 
         // The dimming value to hint the dismissing side and progress.
         float mDismissingDimValue = 0.0f;
+
+        DismissingEffectPolicy(boolean applyDismissingParallax) {
+            mApplyParallax = applyDismissingParallax;
+        }
 
         /**
          * Applies a parallax to the task to hint dismissing progress.
@@ -541,11 +588,11 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
             mDismissingDimValue = 0;
 
             int totalDismissingDistance = 0;
-            if (position <= mDividerSnapAlgorithm.getFirstSplitTarget().position) {
+            if (position < mDividerSnapAlgorithm.getFirstSplitTarget().position) {
                 mDismissingSide = isLandscape ? DOCKED_LEFT : DOCKED_TOP;
                 totalDismissingDistance = mDividerSnapAlgorithm.getDismissStartTarget().position
                         - mDividerSnapAlgorithm.getFirstSplitTarget().position;
-            } else if (position >= mDividerSnapAlgorithm.getLastSplitTarget().position) {
+            } else if (position > mDividerSnapAlgorithm.getLastSplitTarget().position) {
                 mDismissingSide = isLandscape ? DOCKED_RIGHT : DOCKED_BOTTOM;
                 totalDismissingDistance = mDividerSnapAlgorithm.getLastSplitTarget().position
                         - mDividerSnapAlgorithm.getDismissEndTarget().position;
@@ -603,12 +650,14 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
                     return false;
             }
 
-            t.setPosition(targetLeash,
-                    mTempRect.left + mDismissingParallaxOffset.x,
-                    mTempRect.top + mDismissingParallaxOffset.y);
-            // Transform the screen-based split bounds to surface-based crop bounds.
-            mTempRect.offsetTo(-mDismissingParallaxOffset.x, -mDismissingParallaxOffset.y);
-            t.setWindowCrop(targetLeash, mTempRect);
+            if (mApplyParallax) {
+                t.setPosition(targetLeash,
+                        mTempRect.left + mDismissingParallaxOffset.x,
+                        mTempRect.top + mDismissingParallaxOffset.y);
+                // Transform the screen-based split bounds to surface-based crop bounds.
+                mTempRect.offsetTo(-mDismissingParallaxOffset.x, -mDismissingParallaxOffset.y);
+                t.setWindowCrop(targetLeash, mTempRect);
+            }
             t.setAlpha(targetDimLayer, mDismissingDimValue)
                     .setVisibility(targetDimLayer, mDismissingDimValue > 0.001f);
             return true;
@@ -674,9 +723,9 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
                 // changed or relaunch. This is required to make sure client apps will calculate
                 // insets properly after layout shifted.
                 if (mTargetYOffset == 0) {
-                    mSplitLayoutHandler.onLayoutShifted(0, 0, SplitLayout.this);
+                    mSplitLayoutHandler.setLayoutOffsetTarget(0, 0, SplitLayout.this);
                 } else {
-                    mSplitLayoutHandler.onLayoutShifted(0, mTargetYOffset - mLastYOffset,
+                    mSplitLayoutHandler.setLayoutOffsetTarget(0, mTargetYOffset - mLastYOffset,
                             SplitLayout.this);
                 }
             }
@@ -695,7 +744,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         public void onImePositionChanged(int displayId, int imeTop, SurfaceControl.Transaction t) {
             if (displayId != mDisplayId) return;
             onProgress(getProgress(imeTop));
-            mSplitLayoutHandler.onLayoutChanging(SplitLayout.this);
+            mSplitLayoutHandler.onLayoutPositionChanging(SplitLayout.this);
         }
 
         @Override
@@ -703,7 +752,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
                 SurfaceControl.Transaction t) {
             if (displayId != mDisplayId || cancel) return;
             onProgress(1.0f);
-            mSplitLayoutHandler.onLayoutChanging(SplitLayout.this);
+            mSplitLayoutHandler.onLayoutPositionChanging(SplitLayout.this);
         }
 
         @Override
@@ -713,7 +762,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
             if (!controlling && mImeShown) {
                 reset();
                 mSplitWindowManager.setInteractive(true);
-                mSplitLayoutHandler.onLayoutChanging(SplitLayout.this);
+                mSplitLayoutHandler.onLayoutPositionChanging(SplitLayout.this);
             }
         }
 

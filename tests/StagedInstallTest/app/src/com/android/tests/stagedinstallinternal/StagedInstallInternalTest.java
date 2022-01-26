@@ -74,6 +74,11 @@ public class StagedInstallInternalTest {
             "ApexV2", SHIM_APEX_PACKAGE_NAME, 2, /* isApex= */ true,
             "com.android.apex.cts.shim.v2.apex");
 
+    private static final String TEST_APEX_PACKAGE_NAME = "com.android.apex.test_package";
+    private static final TestApp TEST_APEX_CLASSPATH = new TestApp("TestApex",
+            TEST_APEX_PACKAGE_NAME, 1, /*isApex=*/true,
+            "apex.apexd_test_classpath.apex");
+
     private File mTestStateFile = new File(
             InstrumentationRegistry.getInstrumentation().getContext().getFilesDir(),
             "stagedinstall_state");
@@ -439,11 +444,13 @@ public class StagedInstallInternalTest {
         StagedApexInfo result = getPackageManagerNative().getStagedApexInfo("not found");
         assertThat(result).isNull();
         // Stage an apex
-        int sessionId = Install.single(APEX_V2).setStaged().commit();
+        int sessionId = Install.single(TEST_APEX_CLASSPATH).setStaged().commit();
         waitForSessionReady(sessionId);
         // Query proper module name
-        result = getPackageManagerNative().getStagedApexInfo(SHIM_APEX_PACKAGE_NAME);
-        assertThat(result.moduleName).isEqualTo(SHIM_APEX_PACKAGE_NAME);
+        result = getPackageManagerNative().getStagedApexInfo(TEST_APEX_PACKAGE_NAME);
+        assertThat(result.moduleName).isEqualTo(TEST_APEX_PACKAGE_NAME);
+        assertThat(result.hasBootClassPathJars).isTrue();
+        assertThat(result.hasSystemServerClassPathJars).isTrue();
         InstallUtils.openPackageInstallerSession(sessionId).abandon();
     }
 
@@ -474,6 +481,18 @@ public class StagedInstallInternalTest {
         InstallUtils.openPackageInstallerSession(sessionId).abandon();
         verify(observer, timeout(5000)).onApexStaged(captor.capture());
         assertThat(captor.getValue().stagedApexModuleNames).hasLength(0);
+    }
+
+    @Test
+    public void testRebootlessDowngrade() throws Exception {
+        final String packageName = "test.apex.rebootless";
+        assertThat(InstallUtils.getInstalledVersion(packageName)).isEqualTo(2);
+        TestApp apex1 = new TestApp("TestRebootlessApexV1", packageName, 1,
+                /* isApex= */ true, "test.rebootless_apex_v1.apex");
+        InstallUtils.commitExpectingFailure(AssertionError.class,
+                "INSTALL_FAILED_VERSION_DOWNGRADE", Install.single(apex1));
+        Install.single(apex1).setRequestDowngrade().commit();
+        assertThat(InstallUtils.getInstalledVersion(packageName)).isEqualTo(1);
     }
 
     private IPackageManagerNative getPackageManagerNative() {

@@ -19,12 +19,13 @@ package com.android.server.pm
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.ArrayMap
 import android.util.SparseArray
+import com.android.server.pm.pkg.PackageStateInternal
 import com.android.server.testutils.any
 import com.android.server.testutils.eq
 import com.android.server.testutils.nullable
 import com.android.server.testutils.whenever
-import com.android.server.utils.WatchedArrayMap
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Rule
@@ -34,6 +35,7 @@ import org.junit.runners.JUnit4
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Captor
+import org.mockito.Mockito.argThat
 import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
@@ -49,8 +51,8 @@ class SuspendPackagesBroadcastTest {
     }
 
     lateinit var pms: PackageManagerService
-    lateinit var packageSetting1: PackageSetting
-    lateinit var packageSetting2: PackageSetting
+    lateinit var packageSetting1: PackageStateInternal
+    lateinit var packageSetting2: PackageStateInternal
     lateinit var packagesToSuspend: Array<String>
     lateinit var uidsToSuspend: IntArray
 
@@ -67,8 +69,8 @@ class SuspendPackagesBroadcastTest {
         MockitoAnnotations.initMocks(this)
         rule.system().stageNominalSystemState()
         pms = spy(createPackageManagerService(TEST_PACKAGE_1, TEST_PACKAGE_2))
-        packageSetting1 = pms.getPackageSetting(TEST_PACKAGE_1)!!
-        packageSetting2 = pms.getPackageSetting(TEST_PACKAGE_2)!!
+        packageSetting1 = pms.getPackageStateInternal(TEST_PACKAGE_1)!!
+        packageSetting2 = pms.getPackageStateInternal(TEST_PACKAGE_2)!!
         packagesToSuspend = arrayOf(TEST_PACKAGE_1, TEST_PACKAGE_2)
         uidsToSuspend = intArrayOf(packageSetting1.appId, packageSetting2.appId)
     }
@@ -153,10 +155,12 @@ class SuspendPackagesBroadcastTest {
         this.put(TEST_USER_ID, uids)
     }
 
-    private fun mockAllowList(pkgSetting: PackageSetting, list: SparseArray<IntArray>?) {
-        whenever(rule.mocks().injector.appsFilter.getVisibilityAllowList(eq(pkgSetting),
-                any(IntArray::class.java), any() as WatchedArrayMap<String, PackageSetting>))
-                .thenReturn(list)
+    private fun mockAllowList(pkgSetting: PackageStateInternal, list: SparseArray<IntArray>?) {
+        whenever(rule.mocks().appsFilter.getVisibilityAllowList(
+            argThat { it?.packageName == pkgSetting.packageName }, any(IntArray::class.java),
+            any() as ArrayMap<String, out PackageStateInternal>
+        ))
+            .thenReturn(list)
     }
 
     private fun createPackageManagerService(vararg stageExistingPackages: String):
@@ -172,7 +176,8 @@ class SuspendPackagesBroadcastTest {
                 false /*isEngBuild*/,
                 false /*isUserDebugBuild*/,
                 Build.VERSION_CODES.CUR_DEVELOPMENT,
-                Build.VERSION.INCREMENTAL)
+                Build.VERSION.INCREMENTAL,
+                false /*snapshotEnabled*/)
         rule.system().validateFinalState()
         return pms
     }

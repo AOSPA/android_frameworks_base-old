@@ -55,7 +55,7 @@ interface IStatusBarService
     @UnsupportedAppUsage
     void removeIcon(String slot);
     void setImeWindowStatus(int displayId, in IBinder token, int vis, int backDisposition,
-            boolean showImeSwitcher, boolean isMultiClientImeEnabled);
+            boolean showImeSwitcher);
     void expandSettingsPanel(String subPanel);
 
     // ---- Methods below are for use by the status bar policy services ----
@@ -160,5 +160,6 @@ interface IStatusBarService
      */
     void suppressAmbientDisplay(boolean suppress);
 
-    int requestAddTile(in ComponentName componentName, in CharSequence label, in Icon icon, int userId, in IAddTileResultCallback callback);
+    void requestAddTile(in ComponentName componentName, in CharSequence label, in Icon icon, int userId, in IAddTileResultCallback callback);
+    void cancelRequestAddTile(in String packageName);
 }

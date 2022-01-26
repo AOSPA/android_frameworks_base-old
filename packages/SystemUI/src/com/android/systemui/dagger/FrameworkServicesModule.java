@@ -374,6 +374,12 @@ public class FrameworkServicesModule {
 
     @Provides
     @Singleton
+    static Optional<TelecomManager> provideOptionalTelecomManager(Context context) {
+        return Optional.ofNullable(context.getSystemService(TelecomManager.class));
+    }
+
+    @Provides
+    @Singleton
     static TelephonyManager provideTelephonyManager(Context context) {
         return context.getSystemService(TelephonyManager.class);
     }
@@ -436,7 +442,11 @@ public class FrameworkServicesModule {
     @Provides
     @Singleton
     static PermissionManager providePermissionManager(Context context) {
-        return context.getSystemService(PermissionManager.class);
+        PermissionManager pm = context.getSystemService(PermissionManager.class);
+        if (pm != null) {
+            pm.initializeUsageHelper();
+        }
+        return pm;
     }
 
     @Provides

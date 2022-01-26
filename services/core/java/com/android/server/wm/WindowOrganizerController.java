@@ -45,6 +45,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
+import android.app.IApplicationThread;
 import android.app.WindowConfiguration;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -66,6 +67,7 @@ import android.window.IDisplayAreaOrganizerController;
 import android.window.ITaskFragmentOrganizer;
 import android.window.ITaskFragmentOrganizerController;
 import android.window.ITaskOrganizerController;
+import android.window.ITransitionMetricsReporter;
 import android.window.ITransitionPlayer;
 import android.window.IWindowContainerTransactionCallback;
 import android.window.IWindowOrganizerController;
@@ -83,7 +85,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * Server side implementation for the interface for organizing windows
@@ -117,7 +118,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     final DisplayAreaOrganizerController mDisplayAreaOrganizerController;
     final TaskFragmentOrganizerController mTaskFragmentOrganizerController;
 
-    final TransitionController mTransitionController;
+    TransitionController mTransitionController;
     /**
      * A Map which manages the relationship between
      * {@link TaskFragmentCreationParams#getFragmentToken()} and {@link TaskFragment}
@@ -131,7 +132,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         mTaskOrganizerController = new TaskOrganizerController(mService);
         mDisplayAreaOrganizerController = new DisplayAreaOrganizerController(mService);
         mTaskFragmentOrganizerController = new TaskFragmentOrganizerController(atm);
-        mTransitionController = new TransitionController(atm);
+    }
+
+    void setWindowManager(WindowManagerService wms) {
+        mTransitionController = new TransitionController(mService, wms.mTaskSnapshotController);
     }
 
     TransitionController getTransitionController() {
@@ -562,129 +566,32 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             case HIERARCHY_OP_TYPE_SET_LAUNCH_ADJACENT_FLAG_ROOT: {
                 final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
                 final Task task = wc != null ? wc.asTask() : null;
+                final boolean clearRoot = hop.getToTop();
                 if (task == null) {
                     throw new IllegalArgumentException("Cannot set non-task as launch root: " + wc);
                 } else if (!task.mCreatedByOrganizer) {
                     throw new UnsupportedOperationException(
                             "Cannot set non-organized task as adjacent flag root: " + wc);
-                } else if (task.getAdjacentTaskFragment() == null) {
+                } else if (task.getAdjacentTaskFragment() == null && !clearRoot) {
                     throw new UnsupportedOperationException(
                             "Cannot set non-adjacent task as adjacent flag root: " + wc);
                 }
 
-                final boolean clearRoot = hop.getToTop();
                 task.getDisplayArea().setLaunchAdjacentFlagRootTask(clearRoot ? null : task);
                 break;
             }
-            case HIERARCHY_OP_TYPE_SET_ADJACENT_ROOTS:
+            case HIERARCHY_OP_TYPE_SET_ADJACENT_ROOTS: {
                 effects |= setAdjacentRootsHierarchyOp(hop);
                 break;
-        }
-        // The following operations may change task order so they are skipped while in lock task
-        // mode. The above operations are still allowed because they don't move tasks. And it may
-        // be necessary such as clearing launch root after entering lock task mode.
-        if (isInLockTaskMode) {
-            Slog.w(TAG, "Skip applying hierarchy operation " + hop + " while in lock task mode");
-            return effects;
-        }
-
-        final WindowContainer wc;
-        final IBinder fragmentToken;
-        switch (type) {
-            case HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT:
-                effects |= reparentChildrenTasksHierarchyOp(hop, transition, syncId);
-                break;
-            case HIERARCHY_OP_TYPE_REORDER:
-            case HIERARCHY_OP_TYPE_REPARENT:
-                wc = WindowContainer.fromBinder(hop.getContainer());
-                if (wc == null || !wc.isAttached()) {
-                    Slog.e(TAG, "Attempt to operate on detached container: " + wc);
-                    break;
-                }
-                if (syncId >= 0) {
-                    addToSyncSet(syncId, wc);
-                }
-                if (transition != null) {
-                    transition.collect(wc);
-                    if (hop.isReparent()) {
-                        if (wc.getParent() != null) {
-                            // Collect the current parent. It's visibility may change as
-                            // a result of this reparenting.
-                            transition.collect(wc.getParent());
-                        }
-                        if (hop.getNewParent() != null) {
-                            final WindowContainer parentWc =
-                                    WindowContainer.fromBinder(hop.getNewParent());
-                            if (parentWc == null) {
-                                Slog.e(TAG, "Can't resolve parent window from token");
-                                break;
-                            }
-                            transition.collect(parentWc);
-                        }
-                    }
-                }
-                effects |= sanitizeAndApplyHierarchyOp(wc, hop);
-                break;
-            case HIERARCHY_OP_TYPE_LAUNCH_TASK:
-                mService.mAmInternal.enforceCallingPermission(START_TASKS_FROM_RECENTS,
-                        "launchTask HierarchyOp");
-                final Bundle launchOpts = hop.getLaunchOptions();
-                final int taskId = launchOpts.getInt(
-                        WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
-                launchOpts.remove(WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
-                final SafeActivityOptions safeOptions =
-                        SafeActivityOptions.fromBundle(launchOpts, caller.mPid, caller.mUid);
-                final Integer[] starterResult = { null };
-                // startActivityFromRecents should not be called in lock.
-                mService.mH.post(() -> {
-                    try {
-                        starterResult[0] = mService.mTaskSupervisor.startActivityFromRecents(
-                                caller.mPid, caller.mUid, taskId, safeOptions);
-                    } catch (Throwable t) {
-                        starterResult[0] = ActivityManager.START_CANCELED;
-                        Slog.w(TAG, t);
-                    }
-                    synchronized (mGlobalLock) {
-                        mGlobalLock.notifyAll();
-                    }
-                });
-                while (starterResult[0] == null) {
-                    try {
-                        mGlobalLock.wait();
-                    } catch (InterruptedException ignored) {
-                    }
-                }
-                break;
-            case HIERARCHY_OP_TYPE_PENDING_INTENT:
-                String resolvedType = hop.getActivityIntent() != null
-                        ? hop.getActivityIntent().resolveTypeIfNeeded(
-                                mService.mContext.getContentResolver())
-                        : null;
-
-                Bundle options = null;
-                if (hop.getPendingIntent().isActivity()) {
-                    // Set the context display id as preferred for this activity launches, so that
-                    // it can land on caller's display. Or just brought the task to front at the
-                    // display where it was on since it has higher preference.
-                    ActivityOptions activityOptions = hop.getLaunchOptions() != null
-                            ? new ActivityOptions(hop.getLaunchOptions())
-                            : ActivityOptions.makeBasic();
-                    activityOptions.setCallerDisplayId(DEFAULT_DISPLAY);
-                    options = activityOptions.toBundle();
-                }
-
-                mService.mAmInternal.sendIntentSender(hop.getPendingIntent().getTarget(),
-                        hop.getPendingIntent().getWhitelistToken(), 0 /* code */,
-                        hop.getActivityIntent(), resolvedType, null /* finishReceiver */,
-                        null /* requiredPermission */, options);
-                break;
-            case HIERARCHY_OP_TYPE_CREATE_TASK_FRAGMENT:
+            }
+            case HIERARCHY_OP_TYPE_CREATE_TASK_FRAGMENT: {
                 final TaskFragmentCreationParams taskFragmentCreationOptions =
                         hop.getTaskFragmentCreationOptions();
                 createTaskFragment(taskFragmentCreationOptions, errorCallbackToken);
                 break;
-            case HIERARCHY_OP_TYPE_DELETE_TASK_FRAGMENT:
-                wc = WindowContainer.fromBinder(hop.getContainer());
+            }
+            case HIERARCHY_OP_TYPE_DELETE_TASK_FRAGMENT: {
+                final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
                 if (wc == null || !wc.isAttached()) {
                     Slog.e(TAG, "Attempt to operate on unknown or detached container: " + wc);
                     break;
@@ -694,10 +601,24 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     throw new IllegalArgumentException(
                             "Can only delete organized TaskFragment, but not Task.");
                 }
+                if (isInLockTaskMode) {
+                    final ActivityRecord bottomActivity = taskFragment.getActivity(
+                            a -> !a.finishing, false /* traverseTopToBottom */);
+                    if (bottomActivity != null
+                            && mService.getLockTaskController().activityBlockedFromFinish(
+                                    bottomActivity)) {
+                        Slog.w(TAG, "Skip removing TaskFragment due in lock task mode.");
+                        sendTaskFragmentOperationFailure(organizer, errorCallbackToken,
+                                new IllegalStateException(
+                                        "Not allow to delete task fragment in lock task mode."));
+                        break;
+                    }
+                }
                 effects |= deleteTaskFragment(taskFragment, errorCallbackToken);
                 break;
-            case HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT:
-                fragmentToken = hop.getContainer();
+            }
+            case HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT: {
+                final IBinder fragmentToken = hop.getContainer();
                 if (!mLaunchTaskFragments.containsKey(fragmentToken)) {
                     final Throwable exception = new IllegalArgumentException(
                             "Not allowed to operate with invalid fragment token");
@@ -716,8 +637,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                             convertStartFailureToThrowable(result, activityIntent));
                 }
                 break;
-            case HIERARCHY_OP_TYPE_REPARENT_ACTIVITY_TO_TASK_FRAGMENT:
-                fragmentToken = hop.getNewParent();
+            }
+            case HIERARCHY_OP_TYPE_REPARENT_ACTIVITY_TO_TASK_FRAGMENT: {
+                final IBinder fragmentToken = hop.getNewParent();
                 final ActivityRecord activity = ActivityRecord.forTokenLocked(hop.getContainer());
                 if (!mLaunchTaskFragments.containsKey(fragmentToken) || activity == null) {
                     final Throwable exception = new IllegalArgumentException(
@@ -728,21 +650,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 activity.reparent(mLaunchTaskFragments.get(fragmentToken), POSITION_TOP);
                 effects |= TRANSACT_EFFECTS_LIFECYCLE;
                 break;
-            case HIERARCHY_OP_TYPE_REPARENT_CHILDREN:
-                final WindowContainer oldParent = WindowContainer.fromBinder(hop.getContainer());
-                final WindowContainer newParent = hop.getNewParent() != null
-                        ? WindowContainer.fromBinder(hop.getNewParent())
-                        : null;
-                if (oldParent == null || !oldParent.isAttached()) {
-                    Slog.e(TAG, "Attempt to operate on unknown or detached container: "
-                            + oldParent);
-                    break;
-                }
-                reparentTaskFragment(oldParent, newParent, errorCallbackToken);
-                effects |= TRANSACT_EFFECTS_LIFECYCLE;
-                break;
-            case HIERARCHY_OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS:
-                fragmentToken = hop.getContainer();
+            }
+            case HIERARCHY_OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS: {
+                final IBinder fragmentToken = hop.getContainer();
                 final IBinder adjacentFragmentToken = hop.getAdjacentRoot();
                 final TaskFragment tf1 = mLaunchTaskFragments.get(fragmentToken);
                 final TaskFragment tf2 = adjacentFragmentToken != null
@@ -772,6 +682,126 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                             adjacentParams.shouldDelaySecondaryLastActivityRemoval());
                 }
                 break;
+            }
+            default: {
+                // The other operations may change task order so they are skipped while in lock
+                // task mode. The above operations are still allowed because they don't move
+                // tasks. And it may be necessary such as clearing launch root after entering
+                // lock task mode.
+                if (isInLockTaskMode) {
+                    Slog.w(TAG, "Skip applying hierarchy operation " + hop
+                            + " while in lock task mode");
+                    return effects;
+                }
+            }
+        }
+
+        switch (type) {
+            case HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT: {
+                effects |= reparentChildrenTasksHierarchyOp(hop, transition, syncId);
+                break;
+            }
+            case HIERARCHY_OP_TYPE_REORDER:
+            case HIERARCHY_OP_TYPE_REPARENT: {
+                final WindowContainer wc = WindowContainer.fromBinder(hop.getContainer());
+                if (wc == null || !wc.isAttached()) {
+                    Slog.e(TAG, "Attempt to operate on detached container: " + wc);
+                    break;
+                }
+                if (syncId >= 0) {
+                    addToSyncSet(syncId, wc);
+                }
+                if (transition != null) {
+                    transition.collect(wc);
+                    if (hop.isReparent()) {
+                        if (wc.getParent() != null) {
+                            // Collect the current parent. It's visibility may change as
+                            // a result of this reparenting.
+                            transition.collect(wc.getParent());
+                        }
+                        if (hop.getNewParent() != null) {
+                            final WindowContainer parentWc =
+                                    WindowContainer.fromBinder(hop.getNewParent());
+                            if (parentWc == null) {
+                                Slog.e(TAG, "Can't resolve parent window from token");
+                                break;
+                            }
+                            transition.collect(parentWc);
+                        }
+                    }
+                }
+                effects |= sanitizeAndApplyHierarchyOp(wc, hop);
+                break;
+            }
+            case HIERARCHY_OP_TYPE_LAUNCH_TASK: {
+                mService.mAmInternal.enforceCallingPermission(START_TASKS_FROM_RECENTS,
+                        "launchTask HierarchyOp");
+                final Bundle launchOpts = hop.getLaunchOptions();
+                final int taskId = launchOpts.getInt(
+                        WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
+                launchOpts.remove(WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
+                final SafeActivityOptions safeOptions =
+                        SafeActivityOptions.fromBundle(launchOpts, caller.mPid, caller.mUid);
+                final Integer[] starterResult = {null};
+                // startActivityFromRecents should not be called in lock.
+                mService.mH.post(() -> {
+                    try {
+                        starterResult[0] = mService.mTaskSupervisor.startActivityFromRecents(
+                                caller.mPid, caller.mUid, taskId, safeOptions);
+                    } catch (Throwable t) {
+                        starterResult[0] = ActivityManager.START_CANCELED;
+                        Slog.w(TAG, t);
+                    }
+                    synchronized (mGlobalLock) {
+                        mGlobalLock.notifyAll();
+                    }
+                });
+                while (starterResult[0] == null) {
+                    try {
+                        mGlobalLock.wait();
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+                break;
+            }
+            case HIERARCHY_OP_TYPE_PENDING_INTENT: {
+                String resolvedType = hop.getActivityIntent() != null
+                        ? hop.getActivityIntent().resolveTypeIfNeeded(
+                        mService.mContext.getContentResolver())
+                        : null;
+
+                Bundle options = null;
+                if (hop.getPendingIntent().isActivity()) {
+                    // Set the context display id as preferred for this activity launches, so that
+                    // it can land on caller's display. Or just brought the task to front at the
+                    // display where it was on since it has higher preference.
+                    ActivityOptions activityOptions = hop.getLaunchOptions() != null
+                            ? new ActivityOptions(hop.getLaunchOptions())
+                            : ActivityOptions.makeBasic();
+                    activityOptions.setCallerDisplayId(DEFAULT_DISPLAY);
+                    options = activityOptions.toBundle();
+                }
+
+                mService.mAmInternal.sendIntentSender(hop.getPendingIntent().getTarget(),
+                        hop.getPendingIntent().getWhitelistToken(), 0 /* code */,
+                        hop.getActivityIntent(), resolvedType, null /* finishReceiver */,
+                        null /* requiredPermission */, options);
+                break;
+            }
+            case HIERARCHY_OP_TYPE_REPARENT_CHILDREN: {
+                final WindowContainer oldParent = WindowContainer.fromBinder(hop.getContainer());
+                final WindowContainer newParent = hop.getNewParent() != null
+                        ? WindowContainer.fromBinder(hop.getNewParent())
+                        : null;
+                if (oldParent == null || !oldParent.isAttached()) {
+                    Slog.e(TAG, "Attempt to operate on unknown or detached container: "
+                            + oldParent);
+                    break;
+                }
+                reparentTaskFragment(oldParent, newParent, errorCallbackToken);
+                effects |= TRANSACT_EFFECTS_LIFECYCLE;
+                break;
+            }
         }
         return effects;
     }
@@ -847,7 +877,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
 
     private int reparentChildrenTasksHierarchyOp(WindowContainerTransaction.HierarchyOp hop,
             @Nullable Transition transition, int syncId) {
-        WindowContainer currentParent = hop.getContainer() != null
+        WindowContainer<?> currentParent = hop.getContainer() != null
                 ? WindowContainer.fromBinder(hop.getContainer()) : null;
         WindowContainer newParent = hop.getNewParent() != null
                 ? WindowContainer.fromBinder(hop.getNewParent()) : null;
@@ -890,24 +920,31 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         // We want to collect the tasks first before re-parenting to avoid array shifting on us.
         final ArrayList<Task> tasksToReparent = new ArrayList<>();
 
-        currentParent.forAllTasks((Consumer<Task>) (task) -> {
+        currentParent.forAllTasks(task -> {
             Slog.i(TAG, " Processing task=" + task);
-            if (task.mCreatedByOrganizer
-                    || task.getParent() != finalCurrentParent) {
+            final boolean reparent;
+            if (task.mCreatedByOrganizer || task.getParent() != finalCurrentParent) {
                 // We only care about non-organized task that are direct children of the thing we
                 // are reparenting from.
-                return;
+                return false;
             }
             if (newParentInMultiWindow && !task.supportsMultiWindowInDisplayArea(newParentTda)) {
                 Slog.e(TAG, "reparentChildrenTasksHierarchyOp non-resizeable task to multi window,"
                         + " task=" + task);
-                return;
+                return false;
             }
-            if (!ArrayUtils.contains(hop.getActivityTypes(), task.getActivityType())) return;
-            if (!ArrayUtils.contains(hop.getWindowingModes(), task.getWindowingMode())) return;
+            if (!ArrayUtils.contains(hop.getActivityTypes(), task.getActivityType())
+                    || !ArrayUtils.contains(hop.getWindowingModes(), task.getWindowingMode())) {
+                return false;
+            }
 
-            tasksToReparent.add(task);
-        }, !hop.getToTop());
+            if (hop.getToTop()) {
+                tasksToReparent.add(0, task);
+            } else {
+                tasksToReparent.add(task);
+            }
+            return hop.getReparentTopOnly() && tasksToReparent.size() == 1;
+        });
 
         final int count = tasksToReparent.size();
         for (int i = 0; i < count; ++i) {
@@ -1020,14 +1057,27 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     @Override
     public void registerTransitionPlayer(ITransitionPlayer player) {
         enforceTaskPermission("registerTransitionPlayer()");
+        final int callerPid = Binder.getCallingPid();
+        final int callerUid = Binder.getCallingUid();
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                mTransitionController.registerTransitionPlayer(player);
+                final WindowProcessController wpc =
+                        mService.getProcessController(callerPid, callerUid);
+                IApplicationThread appThread = null;
+                if (wpc != null) {
+                    appThread = wpc.getThread();
+                }
+                mTransitionController.registerTransitionPlayer(player, appThread);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
+    }
+
+    @Override
+    public ITransitionMetricsReporter getTransitionMetricsReporter() {
+        return mTransitionController.mTransitionMetricsReporter;
     }
 
     /** Whether the configuration changes are important to report back to an organizer. */
@@ -1161,6 +1211,12 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
             return;
         }
+        if (!ownerActivity.isResizeable()) {
+            final IllegalArgumentException exception = new IllegalArgumentException("Not allowed"
+                    + " to operate with non-resizable owner Activity");
+            sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
+            return;
+        }
         // The ownerActivity has to belong to the same app as the root Activity of the target Task.
         final ActivityRecord rootActivity = ownerActivity.getTask().getRootActivity();
         if (rootActivity.getUid() != ownerActivity.getUid()) {
@@ -1174,8 +1230,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 creationParams.getFragmentToken(), true /* createdByOrganizer */);
         // Set task fragment organizer immediately, since it might have to be notified about further
         // actions.
-        taskFragment.setTaskFragmentOrganizer(
-                creationParams.getOrganizer(), ownerActivity.getPid());
+        taskFragment.setTaskFragmentOrganizer(creationParams.getOrganizer(),
+                ownerActivity.getUid(), ownerActivity.info.processName);
         ownerActivity.getTask().addChild(taskFragment, POSITION_TOP);
         taskFragment.setWindowingMode(creationParams.getWindowingMode());
         taskFragment.setBounds(creationParams.getInitialBounds());

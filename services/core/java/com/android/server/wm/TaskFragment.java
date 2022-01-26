@@ -31,6 +31,7 @@ import static android.content.pm.ActivityInfo.FLAG_RESUME_WHILE_PAUSING;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
+import static android.os.Process.INVALID_UID;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.TRANSIT_CLOSE;
@@ -81,6 +82,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -92,8 +94,8 @@ import android.window.TaskFragmentInfo;
 import android.window.TaskFragmentOrganizerToken;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.ActivityTrigger;
 import com.android.internal.protolog.common.ProtoLog;
-import com.android.internal.util.function.pooled.PooledFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 
@@ -102,7 +104,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A basic container that can be used to contain activities or other {@link TaskFragment}, which
@@ -147,6 +149,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     final ActivityTaskSupervisor mTaskSupervisor;
     final RootWindowContainer mRootWindowContainer;
     private final TaskFragmentOrganizerController mTaskFragmentOrganizerController;
+
+    public BoostFramework mPerf = null;
+    //ActivityTrigger
+    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
     /**
      * Minimal width of this task fragment when it's resizeable. {@link #INVALID_MIN_SIZE} means it
@@ -221,6 +227,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     /** Organizer that organizing this TaskFragment. */
     @Nullable
     private ITaskFragmentOrganizer mTaskFragmentOrganizer;
+    private int mTaskFragmentOrganizerUid = INVALID_UID;
+    private @Nullable String mTaskFragmentOrganizerProcessName;
 
     /** Client assigned unique token for this TaskFragment if this is created by an organizer. */
     @Nullable
@@ -232,13 +240,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * opportunity to perform other actions or animations.
      */
     private boolean mDelayLastActivityRemoval;
-
-    /**
-     * The PID of the organizer that created this TaskFragment. It should be the same as the PID
-     * of {@link android.window.TaskFragmentCreationParams#getOwnerToken()}.
-     * {@link ActivityRecord#INVALID_PID} if this is not an organizer-created TaskFragment.
-     */
-    private int mTaskFragmentOrganizerPid = ActivityRecord.INVALID_PID;
 
     final Point mLastSurfaceSize = new Point();
 
@@ -252,7 +253,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             new EnsureActivitiesVisibleHelper(this);
     private final EnsureVisibleActivitiesConfigHelper mEnsureVisibleActivitiesConfigHelper =
             new EnsureVisibleActivitiesConfigHelper();
-    private class EnsureVisibleActivitiesConfigHelper {
+    private class EnsureVisibleActivitiesConfigHelper implements Predicate<ActivityRecord> {
         private boolean mUpdateConfig;
         private boolean mPreserveWindow;
         private boolean mBehindFullscreen;
@@ -268,12 +269,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 return;
             }
             reset(preserveWindow);
-
-            final PooledFunction f = PooledLambda.obtainFunction(
-                    EnsureVisibleActivitiesConfigHelper::processActivity, this,
-                    PooledLambda.__(ActivityRecord.class));
-            forAllActivities(f, start, true /*includeBoundary*/, true /*traverseTopToBottom*/);
-            f.recycle();
+            forAllActivities(this, start, true /* includeBoundary */,
+                    true /* traverseTopToBottom */);
 
             if (mUpdateConfig) {
                 // Ensure the resumed state of the focus activity if we updated the configuration of
@@ -282,7 +279,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             }
         }
 
-        boolean processActivity(ActivityRecord r) {
+        @Override
+        public boolean test(ActivityRecord r) {
             mUpdateConfig |= r.ensureActivityConfiguration(0 /*globalChanges*/, mPreserveWindow);
             mBehindFullscreen |= r.occludesParent();
             return mBehindFullscreen;
@@ -338,9 +336,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mDelayLastActivityRemoval = false;
     }
 
-    void setTaskFragmentOrganizer(TaskFragmentOrganizerToken organizer, int pid) {
+    void setTaskFragmentOrganizer(@NonNull TaskFragmentOrganizerToken organizer, int uid,
+            @NonNull String processName) {
         mTaskFragmentOrganizer = ITaskFragmentOrganizer.Stub.asInterface(organizer.asBinder());
-        mTaskFragmentOrganizerPid = pid;
+        mTaskFragmentOrganizerUid = uid;
+        mTaskFragmentOrganizerProcessName = processName;
     }
 
     /** Whether this TaskFragment is organized by the given {@code organizer}. */
@@ -778,6 +778,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         boolean gotOpaqueSplitScreenPrimary = false;
         boolean gotOpaqueSplitScreenSecondary = false;
         boolean gotTranslucentFullscreen = false;
+        boolean gotTranslucentAdjacent = false;
         boolean gotTranslucentSplitScreenPrimary = false;
         boolean gotTranslucentSplitScreenSecondary = false;
         boolean shouldBeVisible = true;
@@ -806,6 +807,18 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             final boolean hasRunningActivities = hasRunningActivity(other);
             if (other == this) {
+                if (!adjacentTaskFragments.isEmpty() && !gotTranslucentAdjacent) {
+                    // The z-order of this TaskFragment is in middle of two adjacent TaskFragments
+                    // and it cannot be visible if the TaskFragment on top is not translucent and
+                    // is fully occluding this one.
+                    for (int j = adjacentTaskFragments.size() - 1; j >= 0; --j) {
+                        final TaskFragment taskFragment = adjacentTaskFragments.get(j);
+                        if (!taskFragment.isTranslucent(starting)
+                                && taskFragment.getBounds().contains(this.getBounds())) {
+                            return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
+                        }
+                    }
+                }
                 // Should be visible if there is no other fragment occluding it, unless it doesn't
                 // have any running activities, not starting one and not home stack.
                 shouldBeVisible = hasRunningActivities
@@ -875,6 +888,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                             || otherTaskFrag.mAdjacentTaskFragment.isTranslucent(starting)) {
                         // Can be visible behind a translucent adjacent TaskFragments.
                         gotTranslucentFullscreen = true;
+                        gotTranslucentAdjacent = true;
                         continue;
                     }
                     // Can not be visible behind adjacent TaskFragments.
@@ -1019,6 +1033,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
+        //Trigger Activity Resume
+        if (mActivityTrigger != null) {
+            mActivityTrigger.activityResumeTrigger(next.intent, next.info,
+                                                   next.info.applicationInfo,
+                                                   next.occludesParent());
+        }
+
         mTaskSupervisor.setLaunchSource(next.info.applicationInfo.uid);
 
         ActivityRecord lastResumed = null;
@@ -1120,6 +1141,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         // to ignore it when computing the desired screen orientation.
         boolean anim = true;
         final DisplayContent dc = taskDisplayArea.mDisplayContent;
+
+        if (mPerf == null) {
+            mPerf = new BoostFramework();
+        }
+
         if (prev != null) {
             if (prev.finishing) {
                 if (DEBUG_TRANSITION) {
@@ -1129,6 +1155,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     anim = false;
                     dc.prepareAppTransition(TRANSIT_NONE);
                 } else {
+                    if(prev.getTask() != next.getTask() && mPerf != null) {
+                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST,
+                           next.packageName);
+                    }
                     dc.prepareAppTransition(TRANSIT_CLOSE);
                 }
                 prev.setVisibility(false);
@@ -1140,6 +1170,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     anim = false;
                     dc.prepareAppTransition(TRANSIT_NONE);
                 } else {
+                    if(prev.getTask() != next.getTask() && mPerf != null) {
+                       mPerf.perfHint(BoostFramework.VENDOR_HINT_ANIM_BOOST,
+                           next.packageName);
+                    }
                     dc.prepareAppTransition(TRANSIT_OPEN,
                             next.mLaunchTaskBehind ? TRANSIT_FLAG_OPEN_BEHIND : 0);
                 }
@@ -1238,7 +1272,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             try {
                 final ClientTransaction transaction =
-                        ClientTransaction.obtain(next.app.getThread(), next.appToken);
+                        ClientTransaction.obtain(next.app.getThread(), next.token);
                 // Deliver all pending results.
                 ArrayList<ResultInfo> a = next.results;
                 if (a != null) {
@@ -1428,23 +1462,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                         + "directly: %s", prev);
 
                 didAutoPip = mAtmService.enterPictureInPictureMode(prev, prev.pictureInPictureArgs);
-                mPausingActivity = null;
             } else {
-                ProtoLog.v(WM_DEBUG_STATES, "Enqueueing pending pause: %s", prev);
-                try {
-                    EventLogTags.writeWmPauseActivity(prev.mUserId, System.identityHashCode(prev),
-                            prev.shortComponentName, "userLeaving=" + userLeaving, reason);
-
-                    mAtmService.getLifecycleManager().scheduleTransaction(prev.app.getThread(),
-                            prev.appToken, PauseActivityItem.obtain(prev.finishing, userLeaving,
-                                    prev.configChangeFlags, pauseImmediately));
-                } catch (Exception e) {
-                    // Ignore exception, if process died other code will cleanup.
-                    Slog.w(TAG, "Exception thrown during pause", e);
-                    mPausingActivity = null;
-                    mLastPausedActivity = null;
-                    mTaskSupervisor.mNoHistoryActivities.remove(prev);
-                }
+                schedulePauseActivity(prev, userLeaving, pauseImmediately, reason);
             }
         } else {
             mPausingActivity = null;
@@ -1459,7 +1478,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
 
         // If already entered PIP mode, no need to keep pausing.
-        if (mPausingActivity != null && !didAutoPip) {
+        if (mPausingActivity != null) {
             // Have the window manager pause its key dispatching until the new
             // activity has started.  If we're pausing the activity just because
             // the screen is being turned off and the UI is sleeping, don't interrupt
@@ -1491,6 +1510,25 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 mRootWindowContainer.resumeFocusedTasksTopActivities();
             }
             return false;
+        }
+    }
+
+    void schedulePauseActivity(ActivityRecord prev, boolean userLeaving,
+            boolean pauseImmediately, String reason) {
+        ProtoLog.v(WM_DEBUG_STATES, "Enqueueing pending pause: %s", prev);
+        try {
+            EventLogTags.writeWmPauseActivity(prev.mUserId, System.identityHashCode(prev),
+                    prev.shortComponentName, "userLeaving=" + userLeaving, reason);
+
+            mAtmService.getLifecycleManager().scheduleTransaction(prev.app.getThread(),
+                    prev.token, PauseActivityItem.obtain(prev.finishing, userLeaving,
+                            prev.configChangeFlags, pauseImmediately));
+        } catch (Exception e) {
+            // Ignore exception, if process died other code will cleanup.
+            Slog.w(TAG, "Exception thrown during pause", e);
+            mPausingActivity = null;
+            mLastPausedActivity = null;
+            mTaskSupervisor.mNoHistoryActivities.remove(prev);
         }
     }
 
@@ -1615,7 +1653,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     @Override
-    boolean forAllLeafTaskFragments(Function<TaskFragment, Boolean> callback) {
+    boolean forAllLeafTaskFragments(Predicate<TaskFragment> callback) {
         boolean isLeafTaskFrag = true;
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final TaskFragment child = mChildren.get(i).asTaskFragment();
@@ -1627,7 +1665,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             }
         }
         if (isLeafTaskFrag) {
-            return callback.apply(this);
+            return callback.test(this);
         }
         return false;
     }
@@ -1754,7 +1792,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return false;
         }
 
-        return tda.supportsActivityMinWidthHeightMultiWindow(mMinWidth, mMinHeight);
+        final ActivityRecord rootActivity = getTask().getRootActivity();
+        return tda.supportsActivityMinWidthHeightMultiWindow(mMinWidth, mMinHeight,
+                rootActivity != null ? rootActivity.info : null);
     }
 
     private int getTaskId() {
@@ -1982,8 +2022,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mTmpBounds.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
 
         final DisplayPolicy policy = rootTask.mDisplayContent.getDisplayPolicy();
-        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.logicalWidth,
-                displayInfo.logicalHeight, displayInfo.displayCutout, mTmpInsets);
+        policy.getNonDecorInsetsLw(displayInfo.rotation,
+                displayInfo.displayCutout, mTmpInsets);
         intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, mTmpInsets);
 
         policy.convertNonDecorInsetsToStableInsets(mTmpInsets, displayInfo.rotation);
@@ -2160,11 +2200,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         List<IBinder> childActivities = new ArrayList<>();
         for (int i = 0; i < getChildCount(); i++) {
             WindowContainer wc = getChildAt(i);
-            if (mTaskFragmentOrganizerPid != ActivityRecord.INVALID_PID
+            if (mTaskFragmentOrganizerUid != INVALID_UID
                     && wc.asActivityRecord() != null
-                    && wc.asActivityRecord().getPid() == mTaskFragmentOrganizerPid) {
+                    && wc.asActivityRecord().info.processName.equals(
+                            mTaskFragmentOrganizerProcessName)
+                    && wc.asActivityRecord().getUid() == mTaskFragmentOrganizerUid) {
                 // Only includes Activities that belong to the organizer process for security.
-                childActivities.add(wc.asActivityRecord().appToken);
+                childActivities.add(wc.asActivityRecord().token);
             }
         }
         final Point positionInParent = new Point();

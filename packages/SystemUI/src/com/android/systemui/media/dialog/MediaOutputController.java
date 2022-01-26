@@ -73,11 +73,13 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
     private final String mPackageName;
     private final Context mContext;
     private final MediaSessionManager mMediaSessionManager;
+    private final LocalBluetoothManager mLocalBluetoothManager;
     private final ShadeController mShadeController;
     private final ActivityStarter mActivityStarter;
     private final DialogLaunchAnimator mDialogLaunchAnimator;
     private final List<MediaDevice> mGroupMediaDevices = new CopyOnWriteArrayList<>();
     private final boolean mAboveStatusbar;
+    private final boolean mVolumeAdjustmentForRemoteGroupSessions;
     private final NotificationEntryManager mNotificationEntryManager;
     @VisibleForTesting
     final List<MediaDevice> mMediaDevices = new CopyOnWriteArrayList<>();
@@ -85,7 +87,6 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
     private MediaController mMediaController;
     @VisibleForTesting
     Callback mCallback;
-    Callback mPreviousCallback;
     @VisibleForTesting
     LocalMediaManager mLocalMediaManager;
 
@@ -101,6 +102,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
         mContext = context;
         mPackageName = packageName;
         mMediaSessionManager = mediaSessionManager;
+        mLocalBluetoothManager = lbm;
         mShadeController = shadeController;
         mActivityStarter = starter;
         mAboveStatusbar = aboveStatusbar;
@@ -110,6 +112,8 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
         mMetricLogger = new MediaOutputMetricLogger(mContext, mPackageName);
         mUiEventLogger = uiEventLogger;
         mDialogLaunchAnimator = dialogLaunchAnimator;
+        mVolumeAdjustmentForRemoteGroupSessions = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_volumeAdjustmentForRemoteGroupSessions);
     }
 
     void start(@NonNull Callback cb) {
@@ -135,19 +139,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
             }
             return;
         }
-
-        if (mPreviousCallback != null) {
-            Log.w(TAG,
-                    "Callback started when mPreviousCallback is not null, which is unexpected");
-            mPreviousCallback.dismissDialog();
-        }
-
-        // If we start the output group dialog when the output dialog is shown, we need to keep a
-        // reference to the output dialog to set it back as the callback once we dismiss the output
-        // group dialog.
-        mPreviousCallback = mCallback;
         mCallback = cb;
-
         mLocalMediaManager.unregisterCallback(this);
         mLocalMediaManager.stopScan();
         mLocalMediaManager.registerCallback(this);
@@ -163,15 +155,6 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
             mLocalMediaManager.stopScan();
         }
         mMediaDevices.clear();
-
-        // If there was a previous callback, i.e. we just dismissed the output group dialog and are
-        // now back on the output dialog, then we reset the callback to its previous value.
-        mCallback = null;
-        Callback previous = mPreviousCallback;
-        mPreviousCallback = null;
-        if (previous != null) {
-            start(previous);
-        }
     }
 
     @Override
@@ -480,7 +463,11 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
 
     void launchMediaOutputGroupDialog(View mediaOutputDialog) {
         // We show the output group dialog from the output dialog.
-        MediaOutputGroupDialog dialog = new MediaOutputGroupDialog(mContext, mAboveStatusbar, this);
+        MediaOutputController controller = new MediaOutputController(mContext, mPackageName,
+                mAboveStatusbar, mMediaSessionManager, mLocalBluetoothManager, mShadeController,
+                mActivityStarter, mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator);
+        MediaOutputGroupDialog dialog = new MediaOutputGroupDialog(mContext, mAboveStatusbar,
+                controller);
         mDialogLaunchAnimator.showFromView(dialog, mediaOutputDialog);
     }
 
@@ -493,7 +480,9 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback {
     }
 
     boolean isVolumeControlEnabled(@NonNull MediaDevice device) {
-        return !isActiveRemoteDevice(device);
+        // TODO(b/202500642): Also enable volume control for remote non-group sessions.
+        return !isActiveRemoteDevice(device)
+            || mVolumeAdjustmentForRemoteGroupSessions;
     }
 
     private final MediaController.Callback mCb = new MediaController.Callback() {

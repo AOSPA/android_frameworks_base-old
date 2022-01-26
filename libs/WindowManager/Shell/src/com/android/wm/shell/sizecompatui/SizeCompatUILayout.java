@@ -25,6 +25,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -54,6 +55,11 @@ class SizeCompatUILayout {
     private final int mTaskId;
     private ShellTaskOrganizer.TaskListener mTaskListener;
     private DisplayLayout mDisplayLayout;
+    private final Rect mStableBounds;
+    private final int mButtonWidth;
+    private final int mButtonHeight;
+    private final int mPopupOffsetX;
+    private final int mPopupOffsetY;
 
     @VisibleForTesting
     final SizeCompatUIWindowManager mButtonWindowManager;
@@ -66,9 +72,7 @@ class SizeCompatUILayout {
     @VisibleForTesting
     @Nullable
     SizeCompatHintPopup mHint;
-    final int mButtonSize;
-    final int mPopupOffsetX;
-    final int mPopupOffsetY;
+    @VisibleForTesting
     boolean mShouldShowHint;
 
     SizeCompatUILayout(SyncTransactionQueue syncQueue,
@@ -86,10 +90,16 @@ class SizeCompatUILayout {
         mShouldShowHint = !hasShownHint;
         mButtonWindowManager = new SizeCompatUIWindowManager(mContext, taskConfig, this);
 
-        mButtonSize =
-                mContext.getResources().getDimensionPixelSize(R.dimen.size_compat_button_size);
-        mPopupOffsetX = mButtonSize / 4;
-        mPopupOffsetY = mButtonSize;
+        mStableBounds = new Rect();
+        mDisplayLayout.getStableBounds(mStableBounds);
+
+        final Resources resources = mContext.getResources();
+        mButtonWidth = resources.getDimensionPixelSize(R.dimen.size_compat_button_width);
+        mButtonHeight = resources.getDimensionPixelSize(R.dimen.size_compat_button_height);
+        mPopupOffsetX = (mButtonWidth / 2) - resources.getDimensionPixelSize(
+                R.dimen.size_compat_hint_corner_radius) - (resources.getDimensionPixelSize(
+                R.dimen.size_compat_hint_point_width) / 2);
+        mPopupOffsetY = mButtonHeight;
     }
 
     /** Creates the activity restart button window. */
@@ -167,8 +177,7 @@ class SizeCompatUILayout {
         if (!taskConfig.windowConfiguration.getBounds()
                 .equals(prevTaskConfig.windowConfiguration.getBounds())) {
             // Reposition the UI surfaces.
-            updateButtonSurfacePosition();
-            updateHintSurfacePosition();
+            updateAllSurfacePositions();
         }
 
         if (taskConfig.getLayoutDirection() != prevTaskConfig.getLayoutDirection()) {
@@ -184,19 +193,14 @@ class SizeCompatUILayout {
 
     /** Called when display layout changed. */
     void updateDisplayLayout(DisplayLayout displayLayout) {
-        if (displayLayout == mDisplayLayout) {
-            return;
-        }
-
-        final Rect prevStableBounds = new Rect();
+        final Rect prevStableBounds = mStableBounds;
         final Rect curStableBounds = new Rect();
-        mDisplayLayout.getStableBounds(prevStableBounds);
         displayLayout.getStableBounds(curStableBounds);
         mDisplayLayout = displayLayout;
         if (!prevStableBounds.equals(curStableBounds)) {
             // Stable bounds changed, update UI surface positions.
-            updateButtonSurfacePosition();
-            updateHintSurfacePosition();
+            updateAllSurfacePositions();
+            mStableBounds.set(curStableBounds);
         }
     }
 
@@ -222,7 +226,7 @@ class SizeCompatUILayout {
     WindowManager.LayoutParams getButtonWindowLayoutParams() {
         final WindowManager.LayoutParams winParams = new WindowManager.LayoutParams(
                 // Cannot be wrap_content as this determines the actual window size
-                mButtonSize, mButtonSize,
+                mButtonWidth, mButtonHeight,
                 TYPE_APPLICATION_OVERLAY,
                 FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
@@ -262,6 +266,11 @@ class SizeCompatUILayout {
         createSizeCompatHint();
     }
 
+    private void updateAllSurfacePositions() {
+        updateButtonSurfacePosition();
+        updateHintSurfacePosition();
+    }
+
     @VisibleForTesting
     void updateButtonSurfacePosition() {
         if (mButton == null || mButtonWindowManager.getSurfaceControl() == null) {
@@ -278,12 +287,13 @@ class SizeCompatUILayout {
         // Position of the button in the container coordinate.
         final int positionX = getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
                 ? stableBounds.left - taskBounds.left
-                : stableBounds.right - taskBounds.left - mButtonSize;
-        final int positionY = stableBounds.bottom - taskBounds.top - mButtonSize;
+                : stableBounds.right - taskBounds.left - mButtonWidth;
+        final int positionY = stableBounds.bottom - taskBounds.top - mButtonHeight;
 
         updateSurfacePosition(leash, positionX, positionY);
     }
 
+    @VisibleForTesting
     void updateHintSurfacePosition() {
         if (mHint == null || mHintWindowManager == null
                 || mHintWindowManager.getSurfaceControl() == null) {

@@ -19,6 +19,7 @@ package com.android.server.accessibility.magnification;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.notNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -67,7 +68,7 @@ import org.mockito.invocation.InvocationOnMock;
 public class WindowMagnificationManagerTest {
 
     private static final int TEST_DISPLAY = Display.DEFAULT_DISPLAY;
-    private static final int CURRENT_USER_ID = UserHandle.USER_CURRENT;
+    private static final int CURRENT_USER_ID = UserHandle.USER_SYSTEM;
 
     private MockWindowMagnificationConnection mMockConnection;
     @Mock
@@ -91,7 +92,7 @@ public class WindowMagnificationManagerTest {
         mResolver = new MockContentResolver();
         mMockConnection = new MockWindowMagnificationConnection();
         mWindowMagnificationManager = new WindowMagnificationManager(mContext, CURRENT_USER_ID,
-                mMockCallback, mMockTrace);
+                mMockCallback, mMockTrace, new MagnificationScaleProvider(mContext));
 
         when(mContext.getContentResolver()).thenReturn(mResolver);
         doAnswer((InvocationOnMock invocation) -> {
@@ -169,13 +170,14 @@ public class WindowMagnificationManagerTest {
     }
 
     @Test
-    public void enable_hasConnection_enableWindowMagnification() throws RemoteException {
+    public void enableWithAnimation_hasConnection_enableWindowMagnification()
+            throws RemoteException {
         mWindowMagnificationManager.setConnection(mMockConnection.getConnection());
 
         mWindowMagnificationManager.enableWindowMagnification(TEST_DISPLAY, 2f, 200f, 300f);
 
-        verify(mMockConnection.getConnection()).enableWindowMagnification(TEST_DISPLAY, 2f,
-                200f, 300f, null);
+        verify(mMockConnection.getConnection()).enableWindowMagnification(eq(TEST_DISPLAY), eq(2f),
+                eq(200f), eq(300f), notNull());
     }
 
     @Test
@@ -199,7 +201,8 @@ public class WindowMagnificationManagerTest {
 
         mWindowMagnificationManager.disableWindowMagnification(TEST_DISPLAY, false);
 
-        verify(mMockConnection.getConnection()).disableWindowMagnification(TEST_DISPLAY, null);
+        verify(mMockConnection.getConnection()).disableWindowMagnification(eq(TEST_DISPLAY),
+                notNull());
     }
 
     @Test
@@ -230,7 +233,7 @@ public class WindowMagnificationManagerTest {
     public void getPersistedScale() {
         mWindowMagnificationManager.setConnection(mMockConnection.getConnection());
 
-        assertEquals(mWindowMagnificationManager.getPersistedScale(), 2.5f);
+        assertEquals(mWindowMagnificationManager.getPersistedScale(TEST_DISPLAY), 2.5f);
     }
 
     @Test
@@ -264,7 +267,7 @@ public class WindowMagnificationManagerTest {
         mWindowMagnificationManager.setScale(TEST_DISPLAY, 10.0f);
 
         assertEquals(mWindowMagnificationManager.getScale(TEST_DISPLAY),
-                WindowMagnificationManager.MAX_SCALE);
+                MagnificationScaleProvider.MAX_SCALE);
     }
 
     @Test

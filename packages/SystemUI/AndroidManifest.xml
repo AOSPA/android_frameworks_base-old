@@ -150,6 +150,9 @@
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.GET_RUNTIME_PERMISSIONS" />
 
+    <!-- Communal mode -->
+    <uses-permission android:name="android.permission.WRITE_COMMUNAL_STATE" />
+
     <!-- Needed for WallpaperManager.clear in ImageWallpaper.updateWallpaperLocked -->
     <uses-permission android:name="android.permission.SET_WALLPAPER"/>
 
@@ -184,6 +187,9 @@
     <permission android:name="com.android.systemui.permission.PLUGIN"
             android:protectionLevel="signature" />
 
+    <permission android:name="com.android.systemui.permission.FLAGS"
+                android:protectionLevel="signature" />
+
     <!-- Adding Quick Settings tiles -->
     <uses-permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE" />
 
@@ -210,8 +216,10 @@
     <!-- TV picture-in-picture -->
     <uses-permission android:name="android.permission.RECEIVE_MEDIA_RESOURCE_USAGE" />
 
-    <!-- DND access -->
+    <!-- notifications & DND access -->
     <uses-permission android:name="android.permission.MANAGE_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REVOKE_RUNTIME_PERMISSIONS" />
+    <uses-permission android:name="android.permission.GET_RUNTIME_PERMISSIONS" />
 
     <!-- It's like, reality, but, you know, virtual -->
     <uses-permission android:name="android.permission.ACCESS_VR_MANAGER" />
@@ -290,6 +298,8 @@
 
     <uses-permission android:name="android.permission.READ_PEOPLE_DATA" />
 
+    <uses-permission android:name="android.permission.BIND_APPWIDGET" />
+
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settings.flashlight.action.FLASHLIGHT_CHANGED" />
@@ -357,10 +367,6 @@
                   android:exported="false"
                   android:finishOnTaskLaunch="true" />
 
-        <activity android:name=".screenrecord.ScreenRecordDialog"
-            android:theme="@style/ScreenRecord"
-            android:showForAllUsers="true"
-            android:excludeFromRecents="true" />
         <service android:name=".screenrecord.RecordingService" />
 
         <receiver android:name=".SysuiRestartReceiver"
@@ -607,21 +613,6 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".egg.MLandActivity"
-                  android:theme="@android:style/Theme.Material.NoActionBar"
-                  android:exported="true"
-                  android:icon="@drawable/icon"
-                  android:label="@string/mland"
-                  android:launchMode="singleInstance"
-                  android:screenOrientation="locked"
-                  android:process=":sweetsweetdesserts"
-                  android:excludeFromRecents="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
         <!-- People Space UI Screen -->
         <activity android:name=".people.PeopleSpaceActivity"
             android:label="@string/people_tile_title"
@@ -682,6 +673,11 @@
 
         <service
             android:name=".keyguard.KeyguardService"
+            android:exported="true" />
+
+        <service
+            android:name=".dreams.DreamOverlayService"
+            android:enabled="@bool/config_dreamOverlayServiceEnabled"
             android:exported="true" />
 
         <activity android:name=".keyguard.WorkLockActivity"

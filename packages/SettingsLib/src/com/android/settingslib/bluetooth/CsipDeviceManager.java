@@ -68,7 +68,7 @@ public class CsipDeviceManager {
             }
 
             for (Map.Entry<Integer, ParcelUuid> entry: groupIdMap.entrySet()) {
-                if (entry.getValue().equals(BluetoothUuid.BASE_UUID)) {
+                if (entry.getValue().equals(BluetoothUuid.CAP)) {
                     return entry.getKey();
                 }
             }
@@ -240,22 +240,15 @@ public class CsipDeviceManager {
     }
 
     /**
-     * Called when we found a set member of a group. The function will check bond state, and
-     * the {@code groupId} if it exists, and then create the bond.
+     * Check if the {@code groupId} is existed.
      *
-     * @param device The found device
-     * @param groupId The group id of the found device
+     * @param groupId The group id
      *
-     * @return {@code true}, if the we create bond with the device. Otherwise, return
-     * {@code false}.
+     * @return {@code true}, if we could find a device with this {@code groupId}; Otherwise,
+     * return {@code false}.
      */
-    public boolean onSetMemberAppear(BluetoothDevice device, int groupId) {
-        if (device.getBondState() != BluetoothDevice.BOND_NONE) {
-            return false;
-        }
-
+    public boolean isExistedGroupId(int groupId) {
         if (getCachedDevice(groupId) != null) {
-            device.createBond(BluetoothDevice.TRANSPORT_LE);
             return true;
         }
 

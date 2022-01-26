@@ -595,6 +595,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
+    "-1478175541": {
+      "message": "No longer animating wallpaper targets!",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperController.java"
+    },
     "-1474602871": {
       "message": "Launch on display check: disallow launch on virtual display for not-embedded activity.",
       "level": "DEBUG",
@@ -1135,6 +1141,12 @@
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-863438038": {
+      "message": "Aborting Transition: %d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
+    },
     "-861859917": {
       "message": "Attempted to add window to a display that does not exist: %d. Aborting.",
       "level": "WARN",
@@ -1549,6 +1561,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayRotation.java"
     },
+    "-436553282": {
+      "message": "Remove sleep token: tag=%s, displayId=%d",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/RootWindowContainer.java"
+    },
     "-417514857": {
       "message": "Key dispatch not paused for screen off",
       "level": "VERBOSE",
@@ -1627,6 +1645,12 @@
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
     },
+    "-360208282": {
+      "message": "Animating wallpapers: old: %s hidden=%b new: %s hidden=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperController.java"
+    },
     "-354571697": {
       "message": "Existence Changed in transition %d: %s",
       "level": "VERBOSE",
@@ -1657,6 +1681,12 @@
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/WindowState.java"
     },
+    "-317761482": {
+      "message": "Create sleep token: tag=%s, displayId=%d",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/RootWindowContainer.java"
+    },
     "-317194205": {
       "message": "clearLockedTasks: %s",
       "level": "INFO",
@@ -1681,6 +1711,12 @@
       "group": "WM_DEBUG_LAYER_MIRRORING",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
+    "-304728471": {
+      "message": "New wallpaper: target=%s prev=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperController.java"
+    },
     "-302468788": {
       "message": "Expected target rootTask=%s to be top most but found rootTask=%s",
       "level": "WARN",
@@ -1704,6 +1740,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/Task.java"
+    },
+    "-275077723": {
+      "message": "New animation: %s old animation: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperController.java"
     },
     "-262984451": {
       "message": "Relaunch failed %s",
@@ -1757,6 +1799,12 @@
       "message": "Unable to retrieve window container to update layer mirroring for display %d",
       "level": "VERBOSE",
       "group": "WM_DEBUG_LAYER_MIRRORING",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
+    },
+    "-182877285": {
+      "message": "Wallpaper layer changed: assigning layers + relayout",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
     "-177040661": {
@@ -1939,12 +1987,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "44438983": {
-      "message": "performLayout: Activity exiting now removed %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ADD_REMOVE",
-      "at": "com\/android\/server\/wm\/DisplayContent.java"
-    },
     "45285419": {
       "message": "startingWindow was set but startingSurface==null, couldn't remove",
       "level": "VERBOSE",
@@ -2016,6 +2058,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
+    "114070759": {
+      "message": "New wallpaper target: %s prevTarget: %s caller=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperController.java"
     },
     "115358443": {
       "message": "Focus changing: %s -> %s",
@@ -2359,6 +2407,12 @@
       "group": "WM_DEBUG_RESIZE",
       "at": "com\/android\/server\/wm\/WindowState.java"
     },
+    "422634333": {
+      "message": "First draw done in potential wallpaper target %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
+    },
     "424524729": {
       "message": "Attempted to add wallpaper window with unknown token %s.  Aborting.",
       "level": "WARN",
@@ -2382,12 +2436,6 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "457951957": {
-      "message": "\tNot visible=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/WallpaperAnimationAdapter.java"
     },
     "463993897": {
       "message": "Aborted waiting for drawn: %s",
@@ -2436,6 +2484,12 @@
       "level": "INFO",
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowContainerThumbnail.java"
+    },
+    "535103992": {
+      "message": "Wallpaper may change!  Adjusting",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/RootWindowContainer.java"
     },
     "539077569": {
       "message": "Clear freezing of %s force=%b",
@@ -2664,6 +2718,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
+    "733466617": {
+      "message": "Wallpaper token %s visible=%b",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperWindowToken.java"
     },
     "736692676": {
       "message": "Config is relaunching %s",
@@ -3006,6 +3066,12 @@
       "level": "WARN",
       "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
+    },
+    "1178653181": {
+      "message": "Old wallpaper still the target.",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperController.java"
     },
     "1186730970": {
       "message": "          no common mode yet, so set it",
@@ -3697,6 +3763,12 @@
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowAnimator.java"
     },
+    "1984843251": {
+      "message": "Hiding wallpaper %s from %s target=%s prev=%s callers=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_WALLPAPER",
+      "at": "com\/android\/server\/wm\/WallpaperController.java"
+    },
     "1995093920": {
       "message": "Checking to restart %s: changed=0x%s, handles=0x%s, mLastReportedConfiguration=%s",
       "level": "VERBOSE",
@@ -3727,6 +3799,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "2024493888": {
+      "message": "\tWallpaper of display=%s is not visible",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/WallpaperAnimationAdapter.java"
+    },
     "2028163120": {
       "message": "applyAnimation: anim=%s nextAppTransition=ANIM_SCALE_UP transit=%s isEntrance=%s Callers=%s",
       "level": "VERBOSE",
@@ -3750,12 +3828,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/AppTransitionController.java"
-    },
-    "2057434754": {
-      "message": "\tvisible=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/WallpaperAnimationAdapter.java"
     },
     "2060978050": {
       "message": "moveWindowTokenToDisplay: Attempted to move token: %s to non-exiting displayId=%d",
@@ -3895,6 +3967,9 @@
       "tag": "WindowManager"
     },
     "WM_DEBUG_TASKS": {
+      "tag": "WindowManager"
+    },
+    "WM_DEBUG_WALLPAPER": {
       "tag": "WindowManager"
     },
     "WM_DEBUG_WINDOW_INSETS": {

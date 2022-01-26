@@ -46,7 +46,7 @@ oneway interface IStatusBar
     void showWirelessChargingAnimation(int batteryLevel);
 
     void setImeWindowStatus(int displayId, in IBinder token, int vis, int backDisposition,
-            boolean showImeSwitcher, boolean isMultiClientImeEnabled);
+            boolean showImeSwitcher);
     void setWindowState(int display, int window, int state);
 
     void showRecentApps(boolean triggeredFromAltTab);
@@ -290,4 +290,5 @@ oneway interface IStatusBar
     void runGcForTest();
 
     void requestAddTile(in ComponentName componentName, in CharSequence appName, in CharSequence label, in Icon icon, in IAddTileResultCallback callback);
+    void cancelRequestAddTile(in String packageName);
 }

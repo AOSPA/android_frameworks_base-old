@@ -37,6 +37,7 @@ import android.media.tv.tunerresourcemanager.TunerResourceManager;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Slog;
 
@@ -44,6 +45,8 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.SystemService;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -68,6 +71,8 @@ public class TunerResourceManagerService extends SystemService implements IBinde
 
     // Map of the current available frontend resources
     private Map<Integer, FrontendResource> mFrontendResources = new HashMap<>();
+    // Backup Map of the current available frontend resources
+    private Map<Integer, FrontendResource> mFrontendResourcesBackup = new HashMap<>();
     // Map of the current available lnb resources
     private Map<Integer, LnbResource> mLnbResources = new HashMap<>();
     // Map of the current available Cas resources
@@ -170,6 +175,27 @@ public class TunerResourceManagerService extends SystemService implements IBinde
             enforceTrmAccessPermission("updateClientPriority");
             synchronized (mLock) {
                 return updateClientPriorityInternal(clientId, priority, niceValue);
+            }
+        }
+
+        @Override
+        public boolean hasUnusedFrontend(int frontendType) {
+            enforceTrmAccessPermission("hasUnusedFrontend");
+            synchronized (mLock) {
+                return hasUnusedFrontendInternal(frontendType);
+            }
+        }
+
+        @Override
+        public boolean isLowestPriority(int clientId, int frontendType)
+                throws RemoteException {
+            enforceTrmAccessPermission("isLowestPriority");
+            synchronized (mLock) {
+                if (!checkClientExists(clientId)) {
+                    throw new RemoteException("isLowestPriority called from unregistered client: "
+                            + clientId);
+                }
+                return isLowestPriorityInternal(clientId, frontendType);
             }
         }
 
@@ -431,17 +457,18 @@ public class TunerResourceManagerService extends SystemService implements IBinde
             if (!validateResourceHandle(TunerResourceManager.TUNER_RESOURCE_TYPE_LNB, lnbHandle)) {
                 throw new RemoteException("lnbHandle can't be invalid");
             }
-            if (!checkClientExists(clientId)) {
-                throw new RemoteException("Release lnb from unregistered client:" + clientId);
-            }
-            LnbResource lnb = getLnbResource(lnbHandle);
-            if (lnb == null) {
-                throw new RemoteException("Releasing lnb does not exist.");
-            }
-            if (lnb.getOwnerClientId() != clientId) {
-                throw new RemoteException("Client is not the current owner of the releasing lnb.");
-            }
             synchronized (mLock) {
+                if (!checkClientExists(clientId)) {
+                    throw new RemoteException("Release lnb from unregistered client:" + clientId);
+                }
+                LnbResource lnb = getLnbResource(lnbHandle);
+                if (lnb == null) {
+                    throw new RemoteException("Releasing lnb does not exist.");
+                }
+                if (lnb.getOwnerClientId() != clientId) {
+                    throw new RemoteException("Client is not the current owner "
+                            + "of the releasing lnb.");
+                }
                 releaseLnbInternal(lnb);
             }
         }
@@ -458,6 +485,104 @@ public class TunerResourceManagerService extends SystemService implements IBinde
                 return isHigherPriorityInternal(challengerProfile, holderProfile);
             }
         }
+
+        @Override
+        public void storeResourceMap(int resourceType) {
+            enforceTrmAccessPermission("storeResourceMap");
+            synchronized (mLock) {
+                storeResourceMapInternal(resourceType);
+            }
+        }
+
+        @Override
+        public void clearResourceMap(int resourceType) {
+            enforceTrmAccessPermission("clearResourceMap");
+            synchronized (mLock) {
+                clearResourceMapInternal(resourceType);
+            }
+        }
+
+        @Override
+        public void restoreResourceMap(int resourceType) {
+            enforceTrmAccessPermission("restoreResourceMap");
+            synchronized (mLock) {
+                restoreResourceMapInternal(resourceType);
+            }
+        }
+
+        @Override
+        protected void dump(FileDescriptor fd, final PrintWriter writer, String[] args) {
+            final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
+
+            synchronized (mLock) {
+                if (mClientProfiles != null) {
+                    pw.println("ClientProfiles:");
+                    pw.increaseIndent();
+                    for (Map.Entry<Integer, ClientProfile> entry : mClientProfiles.entrySet()) {
+                        pw.println(entry.getKey() + " : " + entry.getValue());
+                    }
+                    pw.decreaseIndent();
+                }
+
+                if (mFrontendResources != null) {
+                    pw.println("FrontendResources:");
+                    pw.increaseIndent();
+                    for (Map.Entry<Integer, FrontendResource> entry
+                            : mFrontendResources.entrySet()) {
+                        pw.println(entry.getKey() + " : " + entry.getValue());
+                    }
+                    pw.decreaseIndent();
+                }
+
+                if (mFrontendResourcesBackup != null) {
+                    pw.println("FrontendResourcesBackUp:");
+                    pw.increaseIndent();
+                    for (Map.Entry<Integer, FrontendResource> entry
+                            : mFrontendResourcesBackup.entrySet()) {
+                        pw.println(entry.getKey() + " : " + entry.getValue());
+                    }
+                    pw.decreaseIndent();
+                }
+
+                if (mLnbResources != null) {
+                    pw.println("LnbResources:");
+                    pw.increaseIndent();
+                    for (Map.Entry<Integer, LnbResource> entry : mLnbResources.entrySet()) {
+                        pw.println(entry.getKey() + " : " + entry.getValue());
+                    }
+                    pw.decreaseIndent();
+                }
+
+                if (mCasResources != null) {
+                    pw.println("CasResources:");
+                    pw.increaseIndent();
+                    for (Map.Entry<Integer, CasResource> entry : mCasResources.entrySet()) {
+                        pw.println(entry.getKey() + " : " + entry.getValue());
+                    }
+                    pw.decreaseIndent();
+                }
+
+                if (mCiCamResources != null) {
+                    pw.println("CiCamResources:");
+                    pw.increaseIndent();
+                    for (Map.Entry<Integer, CiCamResource> entry : mCiCamResources.entrySet()) {
+                        pw.println(entry.getKey() + " : " + entry.getValue());
+                    }
+                    pw.decreaseIndent();
+                }
+
+                if (mListeners != null) {
+                    pw.println("Listners:");
+                    pw.increaseIndent();
+                    for (Map.Entry<Integer, ResourcesReclaimListenerRecord> entry
+                            : mListeners.entrySet()) {
+                        pw.println(entry.getKey() + " : " + entry.getValue());
+                    }
+                    pw.decreaseIndent();
+                }
+            }
+        }
+
     }
 
     /**
@@ -550,6 +675,83 @@ public class TunerResourceManagerService extends SystemService implements IBinde
         profile.setNiceValue(niceValue);
 
         return true;
+    }
+
+
+    protected boolean hasUnusedFrontendInternal(int frontendType) {
+        for (FrontendResource fr : getFrontendResources().values()) {
+            if (fr.getType() == frontendType && !fr.isInUse()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    protected boolean isLowestPriorityInternal(int clientId, int frontendType)
+            throws RemoteException {
+        // Update the client priority
+        ClientProfile requestClient = getClientProfile(clientId);
+        if (requestClient == null) {
+            return true;
+        }
+        clientPriorityUpdateOnRequest(requestClient);
+        int clientPriority = requestClient.getPriority();
+
+        // Check if there is another holder with lower priority
+        for (FrontendResource fr : getFrontendResources().values()) {
+            if (fr.getType() == frontendType && fr.isInUse()) {
+                int priority = updateAndGetOwnerClientPriority(fr.getOwnerClientId());
+                // Returns false only when the clientPriority is strictly greater
+                // because false means that there is another reclaimable resource
+                if (clientPriority > priority) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    protected void storeResourceMapInternal(int resourceType) {
+        switch (resourceType) {
+            case TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND:
+                if (mFrontendResources != null && mFrontendResources.size() > 0) {
+                    mFrontendResourcesBackup.putAll(mFrontendResources);
+                    mFrontendResources.clear();
+                }
+                break;
+                // TODO: implement for other resource type when needed
+            default:
+                break;
+        }
+    }
+
+    protected void clearResourceMapInternal(int resourceType) {
+        switch (resourceType) {
+            case TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND:
+                if (mFrontendResources != null) {
+                    mFrontendResources.clear();
+                }
+                break;
+                // TODO: implement for other resource type when needed
+            default:
+                break;
+        }
+    }
+
+    protected void restoreResourceMapInternal(int resourceType) {
+        switch (resourceType) {
+            case TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND:
+                if (mFrontendResourcesBackup != null
+                        && mFrontendResourcesBackup.size() > 0) {
+                    mFrontendResources.clear();
+                    mFrontendResources.putAll(mFrontendResourcesBackup);
+                    mFrontendResourcesBackup.clear();
+                }
+                break;
+                // TODO: implement for other resource type when needed
+            default:
+                break;
+        }
     }
 
     @VisibleForTesting
@@ -668,6 +870,7 @@ public class TunerResourceManagerService extends SystemService implements IBinde
 
         frontendHandle[0] = TunerResourceManager.INVALID_RESOURCE_HANDLE;
         ClientProfile requestClient = getClientProfile(request.clientId);
+        // TODO: check if this is really needed
         if (requestClient == null) {
             return false;
         }
@@ -692,7 +895,7 @@ public class TunerResourceManagerService extends SystemService implements IBinde
                 } else if (grantingFrontendHandle == TunerResourceManager.INVALID_RESOURCE_HANDLE) {
                     // Record the frontend id with the lowest client priority among all the
                     // in use frontends when no available frontend has been found.
-                    int priority = updateAndGetOwnerClientPriority(fr.getOwnerClientId());
+                    int priority = getFrontendHighestClientPriority(fr.getOwnerClientId());
                     if (currentLowestPriority > priority) {
                         inUseLowestPriorityFrHandle = fr.getHandle();
                         currentLowestPriority = priority;
@@ -1004,7 +1207,9 @@ public class TunerResourceManagerService extends SystemService implements IBinde
         @Override
         public void binderDied() {
             synchronized (mLock) {
-                removeClientProfile(mClientId);
+                if (checkClientExists(mClientId)) {
+                    removeClientProfile(mClientId);
+                }
             }
         }
 
@@ -1045,6 +1250,7 @@ public class TunerResourceManagerService extends SystemService implements IBinde
         // Reclaim all the resources of the share owners of the frontend that is used by the current
         // resource reclaimed client.
         ClientProfile profile = getClientProfile(reclaimingClientId);
+        // TODO: check if this check is really needed.
         if (profile == null) {
             return true;
         }
@@ -1166,6 +1372,33 @@ public class TunerResourceManagerService extends SystemService implements IBinde
         ClientProfile profile = getClientProfile(clientId);
         clientPriorityUpdateOnRequest(profile);
         return profile.getPriority();
+    }
+
+    /**
+     * Update the owner and sharee clients' priority and get the highest priority
+     * for frontend resource
+     *
+     * @param clientId the owner client id.
+     * @return the highest priority among all the clients holding the same frontend resource.
+     */
+    private int getFrontendHighestClientPriority(int clientId) {
+        // Check if the owner profile exists
+        ClientProfile ownerClient = getClientProfile(clientId);
+        if (ownerClient == null) {
+            return 0;
+        }
+
+        // Update and get the priority of the owner client
+        int highestPriority = updateAndGetOwnerClientPriority(clientId);
+
+        // Update and get all the client IDs of frontend resource holders
+        for (int shareeId : ownerClient.getShareFeClientIds()) {
+            int priority = updateAndGetOwnerClientPriority(shareeId);
+            if (priority > highestPriority) {
+                highestPriority = priority;
+            }
+        }
+        return highestPriority;
     }
 
     @VisibleForTesting
@@ -1325,6 +1558,7 @@ public class TunerResourceManagerService extends SystemService implements IBinde
     }
 
     private void clearFrontendAndClientMapping(ClientProfile profile) {
+        // TODO: check if this check is really needed
         if (profile == null) {
             return;
         }
@@ -1345,6 +1579,10 @@ public class TunerResourceManagerService extends SystemService implements IBinde
     }
 
     private void clearAllResourcesAndClientMapping(ClientProfile profile) {
+        // TODO: check if this check is really needed. Maybe needed for reclaimResource path.
+        if (profile == null) {
+            return;
+        }
         // Clear Lnb
         for (Integer lnbHandle : profile.getInUseLnbHandles()) {
             getLnbResource(lnbHandle).removeOwner();

@@ -23,6 +23,7 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
 import android.app.ITransientNotificationCallback;
@@ -97,6 +98,7 @@ import com.android.server.wm.ActivityTaskManagerInternal;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A note on locking:  We rely on the fact that calls onto mBar are oneway or
@@ -141,6 +143,10 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     private final SparseArray<UiState> mDisplayUiState = new SparseArray<>();
     @GuardedBy("mLock")
     private IUdfpsHbmListener mUdfpsHbmListener;
+
+    @GuardedBy("mCurrentRequestAddTilePackages")
+    private final ArrayMap<String, Long> mCurrentRequestAddTilePackages = new ArrayMap<>();
+    private static final long REQUEST_TIME_OUT = TimeUnit.MINUTES.toNanos(5);
 
     private class DeathRecipient implements IBinder.DeathRecipient {
         public void binderDied() {
@@ -1060,8 +1066,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
 
     @Override
     public void setImeWindowStatus(int displayId, final IBinder token, final int vis,
-            final int backDisposition, final boolean showImeSwitcher,
-            boolean isMultiClientImeEnabled) {
+            final int backDisposition, final boolean showImeSwitcher) {
         enforceStatusBar();
 
         if (SPEW) {
@@ -1078,8 +1083,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 if (mBar == null) return;
                 try {
                     mBar.setImeWindowStatus(
-                            displayId, token, vis, backDisposition, showImeSwitcher,
-                            isMultiClientImeEnabled);
+                            displayId, token, vis, backDisposition, showImeSwitcher);
                 } catch (RemoteException ex) { }
             });
         }
@@ -1690,7 +1694,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     }
 
     @Override
-    public int requestAddTile(
+    public void requestAddTile(
             @NonNull ComponentName componentName,
             @NonNull CharSequence label,
             @NonNull Icon icon,
@@ -1711,22 +1715,70 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
 
         // Check current user
         if (userId != currentUser) {
-            return StatusBarManager.TILE_ADD_REQUEST_ANSWER_FAILED_NOT_CURRENT_USER;
+            try {
+                callback.onTileRequest(StatusBarManager.TILE_ADD_REQUEST_ERROR_NOT_CURRENT_USER);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "requestAddTile", e);
+            }
+            return;
         }
 
         // We've checked that the package, component name and uid all match.
         ResolveInfo r = isComponentValidTileService(componentName, userId);
-        if (r == null) {
-            return StatusBarManager.TILE_ADD_REQUEST_ANSWER_FAILED_BAD_COMPONENT;
+        if (r == null || !r.serviceInfo.exported) {
+            try {
+                callback.onTileRequest(StatusBarManager.TILE_ADD_REQUEST_ERROR_BAD_COMPONENT);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "requestAddTile", e);
+            }
+            return;
+        }
+
+        final int procState = mActivityManagerInternal.getUidProcessState(callingUid);
+        if (ActivityManager.RunningAppProcessInfo.procStateToImportance(procState)
+                != ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
+            try {
+                callback.onTileRequest(
+                        StatusBarManager.TILE_ADD_REQUEST_ERROR_APP_NOT_IN_FOREGROUND);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "requestAddTile", e);
+            }
+            return;
+        }
+
+        synchronized (mCurrentRequestAddTilePackages) {
+            Long lastTime = mCurrentRequestAddTilePackages.get(packageName);
+            final long currentTime = System.nanoTime();
+            if (lastTime != null && currentTime - lastTime < REQUEST_TIME_OUT) {
+                try {
+                    callback.onTileRequest(
+                            StatusBarManager.TILE_ADD_REQUEST_ERROR_REQUEST_IN_PROGRESS);
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "requestAddTile", e);
+                }
+                return;
+            } else {
+                if (lastTime != null) {
+                    cancelRequestAddTileInternal(packageName);
+                }
+            }
+
+            mCurrentRequestAddTilePackages.put(packageName, currentTime);
         }
 
         IAddTileResultCallback proxyCallback = new IAddTileResultCallback.Stub() {
             @Override
-            public void onTileRequest(int i) throws RemoteException {
+            public void onTileRequest(int i) {
                 if (i == StatusBarManager.TILE_ADD_REQUEST_RESULT_DIALOG_DISMISSED) {
                     i = StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED;
                 }
-                callback.onTileRequest(i);
+                if (clearTileAddRequest(packageName)) {
+                    try {
+                        callback.onTileRequest(i);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "requestAddTile - callback", e);
+                    }
+                }
             }
         };
 
@@ -1735,12 +1787,40 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         if (mBar != null) {
             try {
                 mBar.requestAddTile(componentName, appName, label, icon, proxyCallback);
-                return StatusBarManager.TILE_ADD_REQUEST_ANSWER_SUCCESS;
+                return;
             } catch (RemoteException e) {
                 Slog.e(TAG, "requestAddTile", e);
             }
         }
-        return StatusBarManager.TILE_ADD_REQUEST_ANSWER_FAILED_UNKNOWN_REASON;
+        clearTileAddRequest(packageName);
+        try {
+            callback.onTileRequest(StatusBarManager.TILE_ADD_REQUEST_ERROR_NO_STATUS_BAR_SERVICE);
+        } catch (RemoteException e) {
+            Slog.e(TAG, "requestAddTile", e);
+        }
+    }
+
+    @Override
+    public void cancelRequestAddTile(@NonNull String packageName) {
+        enforceStatusBar();
+        cancelRequestAddTileInternal(packageName);
+    }
+
+    private void cancelRequestAddTileInternal(String packageName) {
+        clearTileAddRequest(packageName);
+        if (mBar != null) {
+            try {
+                mBar.cancelRequestAddTile(packageName);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "requestAddTile", e);
+            }
+        }
+    }
+
+    private boolean clearTileAddRequest(String packageName) {
+        synchronized (mCurrentRequestAddTilePackages) {
+            return mCurrentRequestAddTilePackages.remove(packageName) != null;
+        }
     }
 
     public String[] getStatusBarIcons() {
@@ -1872,6 +1952,16 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 }
                 pw.println();
             }
+            ArrayList<String> requests;
+            synchronized (mCurrentRequestAddTilePackages) {
+                requests = new ArrayList<>(mCurrentRequestAddTilePackages.keySet());
+            }
+            pw.println("  mCurrentRequestAddTilePackages=[");
+            final int reqN = requests.size();
+            for (int i = 0; i < reqN; i++) {
+                pw.println("    " + requests.get(i) + ",");
+            }
+            pw.println("  ]");
         }
     }
 

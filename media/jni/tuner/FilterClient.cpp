@@ -177,11 +177,14 @@ Result FilterClient::setDataSource(sp<FilterClient> filterClient){
 }
 
 Result FilterClient::close() {
-    if (mFilterMQEventFlag) {
+    if (mFilterMQEventFlag != nullptr) {
         EventFlag::deleteEventFlag(&mFilterMQEventFlag);
+        mFilterMQEventFlag = nullptr;
     }
-    mFilterMQEventFlag = nullptr;
-    mFilterMQ = nullptr;
+    if (mFilterMQ != nullptr) {
+        delete mFilterMQ;
+        mFilterMQ = nullptr;
+    }
 
     if (mTunerFilter != nullptr) {
         Status s = mTunerFilter->close();
@@ -193,8 +196,27 @@ Result FilterClient::close() {
     return Result::INVALID_STATE;
 }
 
-/////////////// TunerFilterCallback ///////////////////////
+string FilterClient::createSharedFilter() {
+    if (mTunerFilter != nullptr) {
+        string filterToken;
+        if (mTunerFilter->createSharedFilter(&filterToken).isOk()) {
+            return filterToken;
+        }
+    }
 
+    return "";
+}
+
+Result FilterClient::releaseSharedFilter(const string& filterToken) {
+    if (mTunerFilter != nullptr) {
+        Status s = mTunerFilter->releaseSharedFilter(filterToken);
+        return ClientHelper::getServiceSpecificErrorCode(s);
+    }
+
+    return Result::INVALID_STATE;
+}
+
+/////////////// TunerFilterCallback ///////////////////////
 TunerFilterCallback::TunerFilterCallback(sp<FilterClientCallback> filterClientCallback)
         : mFilterClientCallback(filterClientCallback) {}
 
@@ -215,14 +237,14 @@ Status TunerFilterCallback::onFilterEvent(const vector<DemuxFilterEvent>& filter
 }
 
 Result FilterClient::getFilterMq() {
-    if (mFilterMQ != NULL) {
+    if (mFilterMQ != nullptr) {
         return Result::SUCCESS;
     }
 
     AidlMQDesc aidlMqDesc;
     Result res = Result::UNAVAILABLE;
 
-    if (mTunerFilter != NULL) {
+    if (mTunerFilter != nullptr) {
         Status s = mTunerFilter->getQueueDesc(&aidlMqDesc);
         if (s.isOk()) {
             mFilterMQ = new (nothrow) AidlMQ(aidlMqDesc, false/*resetPointer*/);

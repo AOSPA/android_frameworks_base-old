@@ -332,10 +332,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"ביצוע וניהול של שיחות טלפון"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"חיישנים גופניים"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"גישה אל נתוני חיישנים של הסימנים החיוניים שלך"</string>
-    <!-- no translation found for permgrouplab_notifications (5472972361980668884) -->
-    <skip />
-    <!-- no translation found for permgroupdesc_notifications (4608679556801506580) -->
-    <skip />
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"התראות"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"הצגת התראות"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"אחזור תוכן של חלון"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"בדיקת התוכן של חלון שאיתו מתבצעת אינטראקציה."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"הפעלה של \'גילוי באמצעות מגע\'"</string>
@@ -551,6 +549,8 @@
     <string name="permdesc_bluetooth_advertise" product="default" msgid="6085174451034210183">"‏האפליקציה תוכל לפרסם במכשירי Bluetooth בקרבת מקום"</string>
     <string name="permlab_uwb_ranging" msgid="8141915781475770665">"זיהוי מיקום יחסי בין מכשירי \'תחום רחב סרט\' קרובים"</string>
     <string name="permdesc_uwb_ranging" msgid="2519723069604307055">"האפליקציה תזהה את המיקום היחסי בין מכשירים קרובים שמשדרים בטכנולוגיה \'תחום רחב סרט\'"</string>
+    <string name="permlab_nearby_wifi_devices" msgid="392774237063608500">"‏אינטראקציה עם מכשירי Wi-Fi בקרבת מקום"</string>
+    <string name="permdesc_nearby_wifi_devices" msgid="3054307728646332906">"‏האפליקציה תוכל לפרסם במכשירי Wi-Fi בקרבת מקום, להתחבר אליהם ולהעריך את המיקום היחסי שלהם"</string>
     <string name="permlab_preferredPaymentInfo" msgid="5274423844767445054">"‏פרטים על שירות תשלום מועדף ב-NFC"</string>
     <string name="permdesc_preferredPaymentInfo" msgid="8583552469807294967">"‏מאפשרת לאפליקציה לקבל פרטים על שירות תשלום מועדף ב-NFC, כמו עזרים רשומים ויעד של נתיב."</string>
     <string name="permlab_nfc" msgid="1904455246837674977">"שליטה בתקשורת מטווח קצר"</string>
@@ -559,10 +559,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"מאפשרת לאפליקציה להשבית את נעילת המקשים וכל אמצעי אבטחה משויך המבוסס על סיסמה. לדוגמה, הטלפון ישבית את נעילת המקשים במהלך שיחת טלפון נכנסת, ויפעיל מחדש את נעילת המקשים עם סיום השיחה."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"בקשת מידע לגבי מידת המורכבות של נעילת המסך"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"מאפשרת לאפליקציה ללמוד את רמת המורכבות של נעילת המסך (גבוהה, בינונית, נמוכה או לא מורכבת). הרמה הזו מציינת את הטווח האפשרי של אורך וסוג נעילת המסך. האפליקציה יכולה גם להציע למשתמשים לעדכן את נעילת המסך לרמה מסוימת, אבל המשתמשים יכולים להתעלם מההצעה ולנווט לפריט אחר. לתשומת ליבך, נעילת המסך לא מאוחסנת כטקסט פשוט, ולכן האפליקציה לא יודעת מה הסיסמה המדויקת."</string>
-    <!-- no translation found for permlab_postNotification (4875401198597803658) -->
-    <skip />
-    <!-- no translation found for permdesc_postNotification (5974977162462877075) -->
-    <skip />
+    <string name="permlab_postNotification" msgid="4875401198597803658">"הצגת התראות"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"מאפשרת לאפליקציה להציג התראות"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"שימוש בחומרה ביומטרית"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"מאפשרת לאפליקציה להשתמש בחומרה ביומטרית לצורך אימות"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"ניהול חומרה של טביעות אצבעות"</string>
@@ -736,6 +734,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"מאפשרת לאפליקציה לקרוא ולכתוב את התצורה של התכונה \'נא לא להפריע\'."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"התחלת צפייה בהרשאות השימוש"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"מאפשרת לבעלים להפעיל את השימוש בהרשאות עבור אפליקציה מסוימת. הרשאה זו אף פעם לא נדרשת עבור אפליקציות רגילות."</string>
+    <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"התחלת צפייה בהרשאות של אפליקציות"</string>
+    <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"בעלי ההרשאה יוכלו להתחיל לצפות בפרטי התכונות של אפליקציות."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"גישה לנתוני חיישנים בתדירות דגימה גבוהה"</string>
     <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"האפליקציה תוכל לדגום נתוני חיישנים בתדירות של מעל 200 הרץ"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"הגדרת כללי סיסמה"</string>

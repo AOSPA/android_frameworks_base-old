@@ -49,6 +49,7 @@ import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
@@ -71,6 +72,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @hide
@@ -145,6 +147,8 @@ public class ContextHubService extends IContextHubService.Stub {
 
     private final SensorPrivacyManagerInternal mSensorPrivacyManagerInternal;
 
+    private final Map<Integer, AtomicLong> mLastRestartTimestampMap = new HashMap<>();
+
     /**
      * Class extending the callback to register with a Context Hub.
      */
@@ -184,6 +188,7 @@ public class ContextHubService extends IContextHubService.Stub {
     }
 
     public ContextHubService(Context context) {
+        long startTimeNs = SystemClock.elapsedRealtimeNanos();
         mContext = context;
 
         mContextHubWrapper = getContextHubWrapper();
@@ -205,6 +210,9 @@ public class ContextHubService extends IContextHubService.Stub {
             Log.e(TAG, "RemoteException while getting Context Hub info", e);
             hubInfo = new Pair(Collections.emptyList(), Collections.emptyList());
         }
+        long bootTimeNs = SystemClock.elapsedRealtimeNanos() - startTimeNs;
+        int numContextHubs = hubInfo.first.size();
+        ContextHubStatsLog.write(ContextHubStatsLog.CONTEXT_HUB_BOOTED, bootTimeNs, numContextHubs);
 
         mContextHubIdToInfoMap = Collections.unmodifiableMap(
                 ContextHubServiceUtil.createContextHubInfoMap(hubInfo.first));
@@ -218,6 +226,9 @@ public class ContextHubService extends IContextHubService.Stub {
 
         HashMap<Integer, IContextHubClient> defaultClientMap = new HashMap<>();
         for (int contextHubId : mContextHubIdToInfoMap.keySet()) {
+            mLastRestartTimestampMap.put(contextHubId,
+                    new AtomicLong(SystemClock.elapsedRealtimeNanos()));
+
             ContextHubInfo contextHubInfo = mContextHubIdToInfoMap.get(contextHubId);
             IContextHubClient client = mClientManager.registerClient(
                     contextHubInfo, createDefaultClientCallback(contextHubId),
@@ -695,6 +706,12 @@ public class ContextHubService extends IContextHubService.Stub {
      */
     private void handleHubEventCallback(int contextHubId, int eventType) {
         if (eventType == CONTEXT_HUB_EVENT_RESTARTED) {
+            long now = SystemClock.elapsedRealtimeNanos();
+            long lastRestartTimeNs = mLastRestartTimestampMap.get(contextHubId).getAndSet(now);
+            ContextHubStatsLog.write(
+                    ContextHubStatsLog.CONTEXT_HUB_RESTARTED, now - lastRestartTimeNs,
+                    contextHubId);
+
             sendLocationSettingUpdate();
             sendWifiSettingUpdate(true /* forceUpdate */);
             sendAirplaneModeSettingUpdate();

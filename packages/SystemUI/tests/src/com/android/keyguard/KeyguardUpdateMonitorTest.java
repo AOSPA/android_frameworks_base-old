@@ -64,7 +64,6 @@ import android.os.Handler;
 import android.os.IRemoteCallback;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.os.Vibrator;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
@@ -80,6 +79,7 @@ import androidx.lifecycle.Observer;
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.telephony.TelephonyIntents;
+import com.android.internal.util.LatencyTracker;
 import com.android.internal.widget.ILockSettings;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor.BiometricAuthenticated;
@@ -87,7 +87,6 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -170,15 +169,14 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Mock
     private TelephonyListenerManager mTelephonyListenerManager;
     @Mock
-    private FeatureFlags mFeatureFlags;
-    @Mock
     private InteractionJankMonitor mInteractionJankMonitor;
     @Mock
-    private Vibrator mVibrator;
+    private LatencyTracker mLatencyTracker;
     @Captor
     private ArgumentCaptor<StatusBarStateController.StateListener> mStatusBarStateListenerCaptor;
     // Direct executor
     private Executor mBackgroundExecutor = Runnable::run;
+    private Executor mMainExecutor = Runnable::run;
     private TestableLooper mTestableLooper;
     private TestableKeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private TestableContext mSpiedContext;
@@ -241,8 +239,6 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mSpiedContext.addMockSystemService(TelephonyManager.class, mTelephonyManager);
 
         when(mRingerModeTracker.getRingerMode()).thenReturn(mRingerModeLiveData);
-
-        when(mFeatureFlags.isKeyguardLayoutEnabled()).thenReturn(false);
 
         mMockitoSession = ExtendedMockito.mockitoSession()
                 .spyStatic(SubscriptionManager.class).startMocking();
@@ -476,7 +472,8 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mKeyguardUpdateMonitor.dispatchStartedGoingToSleep(0 /* why */);
         mTestableLooper.processAllMessages();
 
-        verify(mFingerprintManager).authenticate(any(), any(), any(), any(), anyInt(), anyInt());
+        verify(mFingerprintManager).authenticate(any(), any(), any(), any(), anyInt(), anyInt(),
+                        anyInt());
         verify(mFingerprintManager, never()).detectFingerprint(any(), any(), anyInt());
     }
 
@@ -746,7 +743,8 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
             public void sendResult(Bundle data) {} // do nothing
         };
         mKeyguardUpdateMonitor.handleUserSwitchComplete(10 /* user */);
-        verify(mInteractionJankMonitor).end(eq(InteractionJankMonitor.CUJ_USER_SWITCH));
+        verify(mInteractionJankMonitor).end(InteractionJankMonitor.CUJ_USER_SWITCH);
+        verify(mLatencyTracker).onActionEnd(LatencyTracker.ACTION_USER_SWITCH);
     }
 
     @Test
@@ -859,6 +857,25 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         orderVerify.verify(callback).onRingerModeChanged(AudioManager.RINGER_MODE_SILENT);
         orderVerify.verify(callback).onRingerModeChanged(AudioManager.RINGER_MODE_VIBRATE);
     }
+
+    @Test
+    public void testRegisterAuthControllerCallback() {
+        assertThat(mKeyguardUpdateMonitor.isUdfpsEnrolled()).isFalse();
+
+        // verify AuthController.Callback is added:
+        ArgumentCaptor<AuthController.Callback> captor = ArgumentCaptor.forClass(
+                AuthController.Callback.class);
+        verify(mAuthController).addCallback(captor.capture());
+        AuthController.Callback callback = captor.getValue();
+
+        // WHEN udfps is now enrolled
+        when(mAuthController.isUdfpsEnrolled(anyInt())).thenReturn(true);
+        callback.onEnrollmentsChanged();
+
+        // THEN isUdfspEnrolled is TRUE
+        assertThat(mKeyguardUpdateMonitor.isUdfpsEnrolled()).isTrue();
+    }
+
 
     @Test
     public void testStartUdfpsServiceBeginsOnKeyguard() {
@@ -1039,10 +1056,10 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
             super(context,
                     TestableLooper.get(KeyguardUpdateMonitorTest.this).getLooper(),
                     mBroadcastDispatcher, mDumpManager,
-                    mRingerModeTracker, mBackgroundExecutor,
+                    mRingerModeTracker, mBackgroundExecutor, mMainExecutor,
                     mStatusBarStateController, mLockPatternUtils,
-                    mAuthController, mTelephonyListenerManager, mFeatureFlags,
-                    mInteractionJankMonitor, mVibrator);
+                    mAuthController, mTelephonyListenerManager,
+                    mInteractionJankMonitor, mLatencyTracker);
             setStrongAuthTracker(KeyguardUpdateMonitorTest.this.mStrongAuthTracker);
         }
 

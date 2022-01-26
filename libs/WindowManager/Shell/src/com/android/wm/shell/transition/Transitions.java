@@ -44,6 +44,7 @@ import android.window.ITransitionPlayer;
 import android.window.RemoteTransition;
 import android.window.TransitionFilter;
 import android.window.TransitionInfo;
+import android.window.TransitionMetrics;
 import android.window.TransitionRequestInfo;
 import android.window.WindowContainerTransaction;
 import android.window.WindowContainerTransactionCallback;
@@ -170,28 +171,12 @@ public class Transitions implements RemoteCallable<Transitions> {
         }
     }
 
-    /** Create an empty/non-registering transitions object for system-ui tests. */
-    @VisibleForTesting
-    public static ShellTransitions createEmptyForTesting() {
-        return new ShellTransitions() {
-            @Override
-            public void registerRemote(@androidx.annotation.NonNull TransitionFilter filter,
-                    @androidx.annotation.NonNull RemoteTransition remoteTransition) {
-                // Do nothing
-            }
-
-            @Override
-            public void unregisterRemote(
-                    @androidx.annotation.NonNull RemoteTransition remoteTransition) {
-                // Do nothing
-            }
-        };
-    }
-
     /** Register this transition handler with Core */
     public void register(ShellTaskOrganizer taskOrganizer) {
         if (mPlayerImpl == null) return;
         taskOrganizer.registerTransitionPlayer(mPlayerImpl);
+        // Pre-load the instance.
+        TransitionMetrics.getInstance();
     }
 
     /**

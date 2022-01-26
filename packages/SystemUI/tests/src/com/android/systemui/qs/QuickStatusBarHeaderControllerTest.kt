@@ -34,6 +34,7 @@ import com.android.systemui.privacy.PrivacyItemController
 import com.android.systemui.privacy.logging.PrivacyLogger
 import com.android.systemui.qs.carrier.QSCarrierGroup
 import com.android.systemui.qs.carrier.QSCarrierGroupController
+import com.android.systemui.statusbar.phone.StatusBarContentInsetsProvider
 import com.android.systemui.statusbar.phone.StatusBarIconController
 import com.android.systemui.statusbar.phone.StatusIconContainer
 import com.android.systemui.statusbar.policy.Clock
@@ -50,6 +51,7 @@ import org.junit.runner.RunWith
 import org.mockito.Answers
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mock
+import org.mockito.Mockito.anyBoolean
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
@@ -105,6 +107,8 @@ class QuickStatusBarHeaderControllerTest : SysuiTestCase() {
     private lateinit var context: Context
     @Mock
     private lateinit var featureFlags: FeatureFlags
+    @Mock
+    private lateinit var insetsProvider: StatusBarContentInsetsProvider
 
     private val qsExpansionPathInterpolator = QSExpansionPathInterpolator()
 
@@ -148,7 +152,8 @@ class QuickStatusBarHeaderControllerTest : SysuiTestCase() {
                 qsExpansionPathInterpolator,
                 featureFlags,
                 variableDateViewControllerFactory,
-                batteryMeterViewController
+                batteryMeterViewController,
+                insetsProvider
         )
     }
 
@@ -247,7 +252,7 @@ class QuickStatusBarHeaderControllerTest : SysuiTestCase() {
         controller.init()
 
         val captor = argumentCaptor<List<String>>()
-        verify(view).onAttach(any(), any(), capture(captor))
+        verify(view).onAttach(any(), any(), capture(captor), any(), anyBoolean())
 
         assertThat(captor.value).containsExactly(
             mContext.getString(com.android.internal.R.string.status_bar_mobile)
@@ -260,7 +265,7 @@ class QuickStatusBarHeaderControllerTest : SysuiTestCase() {
         controller.init()
 
         val captor = argumentCaptor<List<String>>()
-        verify(view).onAttach(any(), any(), capture(captor))
+        verify(view).onAttach(any(), any(), capture(captor), any(), anyBoolean())
 
         assertThat(captor.value).containsExactly(
             mContext.getString(com.android.internal.R.string.status_bar_no_calling),

@@ -24,8 +24,11 @@ import android.util.MathUtils;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.VisibleForTesting;
+
+import com.android.internal.policy.SystemBarUtils;
 import com.android.systemui.R;
-import com.android.systemui.animation.Interpolators;
+import com.android.systemui.animation.ShadeInterpolation;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
@@ -54,8 +57,7 @@ public class StackScrollAlgorithm {
     private StackScrollAlgorithmState mTempAlgorithmState = new StackScrollAlgorithmState();
     private boolean mIsExpanded;
     private boolean mClipNotificationScrollToTop;
-    private int mStatusBarHeight;
-    private float mHeadsUpInset;
+    @VisibleForTesting float mHeadsUpInset;
     private int mPinnedZTranslationExtra;
     private float mNotificationScrimPadding;
 
@@ -75,9 +77,9 @@ public class StackScrollAlgorithm {
         mPaddingBetweenElements = res.getDimensionPixelSize(
                 R.dimen.notification_divider_height);
         mCollapsedSize = res.getDimensionPixelSize(R.dimen.notification_min_height);
-        mStatusBarHeight = res.getDimensionPixelSize(R.dimen.status_bar_height);
         mClipNotificationScrollToTop = res.getBoolean(R.bool.config_clipNotificationScrollToTop);
-        mHeadsUpInset = mStatusBarHeight + res.getDimensionPixelSize(
+        int statusBarHeight = SystemBarUtils.getStatusBarHeight(context);
+        mHeadsUpInset = statusBarHeight + res.getDimensionPixelSize(
                 R.dimen.heads_up_status_bar_padding);
         mPinnedZTranslationExtra = res.getDimensionPixelSize(
                 R.dimen.heads_up_pinned_elevation);
@@ -106,6 +108,15 @@ public class StackScrollAlgorithm {
         updateSpeedBumpState(algorithmState, speedBumpIndex);
         updateShelfState(algorithmState, ambientState);
         getNotificationChildrenStates(algorithmState, ambientState);
+    }
+
+    /**
+     * How expanded or collapsed notifications are when pulling down the shade.
+     * @param ambientState Current ambient state.
+     * @return 0 when fully collapsed, 1 when expanded.
+     */
+    public float getNotificationSquishinessFraction(AmbientState ambientState) {
+        return getExpansionFractionWithoutShelf(mTempAlgorithmState, ambientState);
     }
 
     private void resetChildViewStates() {
@@ -362,7 +373,6 @@ public class StackScrollAlgorithm {
 
         final float stackHeight = ambientState.getStackHeight()  - shelfHeight - scrimPadding;
         final float stackEndHeight = ambientState.getStackEndHeight() - shelfHeight - scrimPadding;
-
         return stackHeight / stackEndHeight;
     }
 
@@ -407,8 +417,8 @@ public class StackScrollAlgorithm {
             viewState.alpha = 1f - ambientState.getHideAmount();
         } else if (ambientState.isExpansionChanging()) {
             // Adjust alpha for shade open & close.
-            viewState.alpha = Interpolators.getNotificationScrimAlpha(
-                    ambientState.getExpansionFraction(), true /* notification */);
+            float expansion = ambientState.getExpansionFraction();
+            viewState.alpha = ShadeInterpolation.getContentAlpha(expansion);
         }
 
         if (ambientState.isShadeExpanded() && view.mustStayOnScreen()
@@ -562,13 +572,14 @@ public class StackScrollAlgorithm {
 
         // Move the tracked heads up into position during the appear animation, by interpolating
         // between the HUN inset (where it will appear as a HUN) and the end position in the shade
+        float headsUpTranslation = mHeadsUpInset - ambientState.getStackTopMargin();
         ExpandableNotificationRow trackedHeadsUpRow = ambientState.getTrackedHeadsUpRow();
         if (trackedHeadsUpRow != null) {
             ExpandableViewState childState = trackedHeadsUpRow.getViewState();
             if (childState != null) {
                 float endPosition = childState.yTranslation - ambientState.getStackTranslation();
                 childState.yTranslation = MathUtils.lerp(
-                        mHeadsUpInset, endPosition, ambientState.getAppearFraction());
+                        headsUpTranslation, endPosition, ambientState.getAppearFraction());
             }
         }
 
@@ -602,7 +613,7 @@ public class StackScrollAlgorithm {
                 }
             }
             if (row.isPinned()) {
-                childState.yTranslation = Math.max(childState.yTranslation, mHeadsUpInset);
+                childState.yTranslation = Math.max(childState.yTranslation, headsUpTranslation);
                 childState.height = Math.max(row.getIntrinsicHeight(), childState.height);
                 childState.hidden = false;
                 ExpandableViewState topState =

@@ -143,5 +143,17 @@ interface ISystemUiProxy {
     /** Notifies when taskbar status updated */
     oneway void notifyTaskbarStatus(boolean visible, boolean stashed) = 47;
 
-    // Next id = 48
+    /**
+     * Notifies sysui when taskbar requests autoHide to stop auto-hiding
+     * If called to suspend, caller is also responsible for calling this method to un-suspend
+     * @param suspend should be true to stop auto-hide, false to resume normal behavior
+     */
+    oneway void notifyTaskbarAutohideSuspend(boolean suspend) = 48;
+
+    /**
+     * Notifies SystemUI to invoke IME Switcher.
+     */
+    void onImeSwitcherPressed() = 49;
+
+    // Next id = 50
 }

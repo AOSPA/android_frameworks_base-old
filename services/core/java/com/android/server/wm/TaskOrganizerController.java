@@ -22,13 +22,13 @@ import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_STARTING_REVEAL;
 import static com.android.server.wm.WindowOrganizerController.configurationsAreEqualForOrganizer;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.WindowConfiguration;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
-import android.graphics.Rect;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
@@ -40,6 +40,7 @@ import android.window.ITaskOrganizer;
 import android.window.ITaskOrganizerController;
 import android.window.SplashScreenView;
 import android.window.StartingWindowInfo;
+import android.window.StartingWindowRemovalInfo;
 import android.window.TaskAppearedInfo;
 import android.window.TaskSnapshot;
 import android.window.WindowContainerToken;
@@ -422,8 +423,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
     }
 
     // Capture the animation surface control for activity's main window
-    private static class StartingWindowAnimationAdaptor implements AnimationAdapter {
-        private SurfaceControl mAnimationLeash;
+    static class StartingWindowAnimationAdaptor implements AnimationAdapter {
+        SurfaceControl mAnimationLeash;
         @Override
         public boolean getShowWallpaper() {
             return false;
@@ -431,7 +432,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
 
         @Override
         public void startAnimation(SurfaceControl animationLeash, SurfaceControl.Transaction t,
-                int type, SurfaceAnimator.OnAnimationFinishedCallback finishCallback) {
+                int type, @NonNull SurfaceAnimator.OnAnimationFinishedCallback finishCallback) {
             mAnimationLeash = animationLeash;
         }
 
@@ -462,6 +463,13 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         @Override
         public void dumpDebug(ProtoOutputStream proto) {
         }
+    }
+
+    static SurfaceControl applyStartingWindowAnimation(WindowContainer window) {
+        final StartingWindowAnimationAdaptor adaptor = new StartingWindowAnimationAdaptor();
+        window.startAnimation(window.getPendingTransaction(), adaptor, false,
+                ANIMATION_TYPE_STARTING_REVEAL);
+        return adaptor.mAnimationLeash;
     }
 
     boolean addStartingWindow(Task task, ActivityRecord activity, int launchTheme,
@@ -498,29 +506,28 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         if (lastOrganizer == null) {
             return;
         }
-        SurfaceControl windowAnimationLeash = null;
-        Rect mainFrame = null;
+        final StartingWindowRemovalInfo removalInfo = new StartingWindowRemovalInfo();
+        removalInfo.taskId = task.mTaskId;
+        removalInfo.playRevealAnimation = prepareAnimation;
         final boolean playShiftUpAnimation = !task.inMultiWindowMode();
-        if (prepareAnimation && playShiftUpAnimation) {
-            final ActivityRecord topActivity = task.topActivityContainsStartingWindow();
-            if (topActivity != null) {
+        final ActivityRecord topActivity = task.topActivityContainsStartingWindow();
+        if (topActivity != null) {
+            removalInfo.deferRemoveForIme = topActivity.mDisplayContent
+                    .mayImeShowOnLaunchingActivity(topActivity);
+            if (prepareAnimation && playShiftUpAnimation) {
                 final WindowState mainWindow =
                         topActivity.findMainWindow(false/* includeStartingApp */);
                 if (mainWindow != null) {
-                    final StartingWindowAnimationAdaptor adaptor =
-                            new StartingWindowAnimationAdaptor();
                     final SurfaceControl.Transaction t = mainWindow.getPendingTransaction();
-                    mainWindow.startAnimation(t, adaptor, false,
-                            ANIMATION_TYPE_STARTING_REVEAL);
-                    windowAnimationLeash = adaptor.mAnimationLeash;
-                    mainFrame = mainWindow.getRelativeFrame();
-                    t.setPosition(windowAnimationLeash, mainFrame.left, mainFrame.top);
+                    removalInfo.windowAnimationLeash = applyStartingWindowAnimation(mainWindow);
+                    removalInfo.mainFrame = mainWindow.getRelativeFrame();
+                    t.setPosition(removalInfo.windowAnimationLeash,
+                            removalInfo.mainFrame.left, removalInfo.mainFrame.top);
                 }
             }
         }
         try {
-            lastOrganizer.removeStartingWindow(task.mTaskId, windowAnimationLeash,
-                    mainFrame, prepareAnimation);
+            lastOrganizer.removeStartingWindow(removalInfo);
         } catch (RemoteException e) {
             Slog.e(TAG, "Exception sending onStartTaskFinished callback", e);
         }

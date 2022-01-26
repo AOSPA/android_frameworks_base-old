@@ -19,7 +19,6 @@ package android.window;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.app.TaskInfo;
 import android.content.pm.ActivityInfo;
@@ -34,7 +33,6 @@ import android.view.WindowManager;
  * start in the system.
  * @hide
  */
-@TestApi
 public final class StartingWindowInfo implements Parcelable {
     /**
      * Prefer nothing or not care the type of starting window.
@@ -137,6 +135,11 @@ public final class StartingWindowInfo implements Parcelable {
     public static final int TYPE_PARAMETER_ACTIVITY_CREATED = 0x00000010;
     /** @hide */
     public static final int TYPE_PARAMETER_USE_EMPTY_SPLASH_SCREEN = 0x00000020;
+    /**
+     * The parameter which indicates if the activity has finished drawing.
+     * @hide
+     */
+    public static final int TYPE_PARAMETER_ACTIVITY_DRAWN = 0x00000040;
     /**
      * Application is allowed to use the legacy splash screen
      * @hide

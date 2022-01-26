@@ -230,8 +230,6 @@ public final class SurfaceControl implements Parcelable {
             float frameRate, int compatibility, int changeFrameRateStrategy);
     private static native long nativeGetHandle(long nativeObject);
 
-    private static native long nativeAcquireFrameRateFlexibilityToken();
-    private static native void nativeReleaseFrameRateFlexibilityToken(long token);
     private static native void nativeSetFixedTransformHint(long transactionObj, long nativeObject,
             int transformHint);
     private static native void nativeSetFocusedWindow(long transactionObj, IBinder toToken,
@@ -243,11 +241,82 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeRemoveJankDataListener(long nativeListener);
     private static native long nativeCreateJankDataListenerWrapper(OnJankDataListener listener);
     private static native int nativeGetGPUContextPriority();
-    private static native void nativeSetTransformHint(long nativeObject, int transformHint);
+    private static native void nativeSetTransformHint(long nativeObject,
+            @SurfaceControl.BufferTransform int transformHint);
     private static native int nativeGetTransformHint(long nativeObject);
     private static native int nativeGetLayerId(long nativeObject);
     private static native void nativeAddTransactionCommittedListener(long nativeObject,
             TransactionCommittedListener listener);
+
+    /**
+     * Transforms that can be applied to buffers as they are displayed to a window.
+     *
+     * Supported transforms are any combination of horizontal mirror, vertical mirror, and
+     * clock-wise 90 degree rotation, in that order. Rotations of 180 and 270 degrees are made up
+     * of those basic transforms.
+     * Mirrors {@code ANativeWindowTransform} definitions.
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"BUFFER_TRANSFORM_"},
+            value = {BUFFER_TRANSFORM_IDENTITY, BUFFER_TRANSFORM_MIRROR_HORIZONTAL,
+                    BUFFER_TRANSFORM_MIRROR_VERTICAL, BUFFER_TRANSFORM_ROTATE_90,
+                    BUFFER_TRANSFORM_ROTATE_180, BUFFER_TRANSFORM_ROTATE_270,
+                    BUFFER_TRANSFORM_MIRROR_HORIZONTAL | BUFFER_TRANSFORM_ROTATE_90,
+                    BUFFER_TRANSFORM_MIRROR_VERTICAL | BUFFER_TRANSFORM_ROTATE_90})
+    public @interface BufferTransform {
+    }
+
+    /**
+     * Identity transform.
+     *
+     * These transforms that can be applied to buffers as they are displayed to a window.
+     * @see HardwareBuffer
+     *
+     * Supported transforms are any combination of horizontal mirror, vertical mirror, and
+     * clock-wise 90 degree rotation, in that order. Rotations of 180 and 270 degrees are
+     * made up of those basic transforms.
+     */
+    public static final int BUFFER_TRANSFORM_IDENTITY = 0x00;
+    /**
+     * Mirror horizontally. Can be combined with {@link #BUFFER_TRANSFORM_MIRROR_VERTICAL}
+     * and {@link #BUFFER_TRANSFORM_ROTATE_90}.
+     */
+    public static final int BUFFER_TRANSFORM_MIRROR_HORIZONTAL = 0x01;
+    /**
+     * Mirror vertically. Can be combined with {@link #BUFFER_TRANSFORM_MIRROR_HORIZONTAL}
+     * and {@link #BUFFER_TRANSFORM_ROTATE_90}.
+     */
+    public static final int BUFFER_TRANSFORM_MIRROR_VERTICAL = 0x02;
+    /**
+     * Rotate 90 degrees clock-wise. Can be combined with {@link
+     * #BUFFER_TRANSFORM_MIRROR_HORIZONTAL} and {@link #BUFFER_TRANSFORM_MIRROR_VERTICAL}.
+     */
+    public static final int BUFFER_TRANSFORM_ROTATE_90 = 0x04;
+    /**
+     * Rotate 180 degrees clock-wise. Cannot be combined with other transforms.
+     */
+    public static final int BUFFER_TRANSFORM_ROTATE_180 =
+            BUFFER_TRANSFORM_MIRROR_HORIZONTAL | BUFFER_TRANSFORM_MIRROR_VERTICAL;
+    /**
+     * Rotate 270 degrees clock-wise. Cannot be combined with other transforms.
+     */
+    public static final int BUFFER_TRANSFORM_ROTATE_270 =
+            BUFFER_TRANSFORM_ROTATE_180 | BUFFER_TRANSFORM_ROTATE_90;
+
+    /**
+     * @hide
+     */
+    public static @BufferTransform int rotationToBufferTransform(@Surface.Rotation int rotation) {
+        switch (rotation) {
+            case Surface.ROTATION_0: return BUFFER_TRANSFORM_IDENTITY;
+            case Surface.ROTATION_90: return BUFFER_TRANSFORM_ROTATE_90;
+            case Surface.ROTATION_180: return BUFFER_TRANSFORM_ROTATE_180;
+            case Surface.ROTATION_270: return BUFFER_TRANSFORM_ROTATE_270;
+        }
+        Log.e(TAG, "Trying to convert unknown rotation=" + rotation);
+        return BUFFER_TRANSFORM_IDENTITY;
+    }
 
     @Nullable
     @GuardedBy("mLock")
@@ -3641,27 +3710,6 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * Acquire a frame rate flexibility token, which allows surface flinger to freely switch display
-     * frame rates. This is used by CTS tests to put the device in a consistent state. See
-     * ISurfaceComposer::acquireFrameRateFlexibilityToken(). The caller must have the
-     * ACCESS_SURFACE_FLINGER permission, or else the call will fail, returning 0.
-     * @hide
-     */
-    @TestApi
-    public static long acquireFrameRateFlexibilityToken() {
-        return nativeAcquireFrameRateFlexibilityToken();
-    }
-
-    /**
-     * Release a frame rate flexibility token.
-     * @hide
-     */
-    @TestApi
-    public static void releaseFrameRateFlexibilityToken(long token) {
-        nativeReleaseFrameRateFlexibilityToken(token);
-    }
-
-    /**
      * This is a refactoring utility function to enable lower levels of code to be refactored
      * from using the global transaction (and instead use a passed in Transaction) without
      * having to refactor the higher levels at the same time.
@@ -3686,7 +3734,7 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
-    public int getTransformHint() {
+    public @SurfaceControl.BufferTransform int getTransformHint() {
         checkNotReleased();
         return nativeGetTransformHint(mNativeObject);
     }
@@ -3700,7 +3748,7 @@ public final class SurfaceControl implements Parcelable {
      * with the same size.
      * @hide
      */
-    public void setTransformHint(@Surface.Rotation int transformHint) {
+    public void setTransformHint(@SurfaceControl.BufferTransform int transformHint) {
         nativeSetTransformHint(mNativeObject, transformHint);
     }
 

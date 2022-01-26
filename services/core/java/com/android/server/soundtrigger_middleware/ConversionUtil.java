@@ -310,6 +310,7 @@ class ConversionUtil {
         for (int i = 0; i < aidlEvent.data.length; ++i) {
             aidlEvent.data[i] = hidlEvent.data.get(i);
         }
+        aidlEvent.recognitionStillActive = aidlEvent.status == RecognitionStatus.FORCED;
         return aidlEvent;
     }
 
@@ -441,15 +442,7 @@ class ConversionUtil {
     private static @NonNull
     HidlMemory parcelFileDescriptorToHidlMemory(@Nullable ParcelFileDescriptor data, int dataSize) {
         if (dataSize > 0) {
-            // Extract a dup of the underlying FileDescriptor out of data.
-            FileDescriptor fd = new FileDescriptor();
-            try {
-                ParcelFileDescriptor dup = data.dup();
-                fd.setInt$(dup.detachFd());
-                return HidlMemoryUtil.fileDescriptorToHidlMemory(fd, dataSize);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            return HidlMemoryUtil.fileDescriptorToHidlMemory(data.getFileDescriptor(), dataSize);
         } else {
             return HidlMemoryUtil.fileDescriptorToHidlMemory(null, 0);
         }

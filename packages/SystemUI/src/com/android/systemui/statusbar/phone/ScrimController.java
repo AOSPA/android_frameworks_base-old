@@ -34,6 +34,7 @@ import android.view.ViewTreeObserver;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 
+import androidx.annotation.FloatRange;
 import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -46,12 +47,13 @@ import com.android.settingslib.Utils;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
-import com.android.systemui.animation.Interpolators;
+import com.android.systemui.animation.ShadeInterpolation;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.scrim.ScrimView;
 import com.android.systemui.statusbar.notification.stack.ViewState;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.AlarmTimeout;
@@ -183,8 +185,10 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private float mScrimBehindAlphaKeyguard = KEYGUARD_SCRIM_ALPHA;
     private final float mDefaultScrimAlpha;
 
-    // Assuming the shade is expanded during initialization
-    private float mPanelExpansion = 1f;
+    private float mRawPanelExpansionFraction;
+    private float mPanelScrimMinFraction;
+    // Calculated based on mRawPanelExpansionFraction and mPanelScrimMinFraction
+    private float mPanelExpansionFraction = 1f; // Assume shade is expanded during initialization
     private float mQsExpansion;
     private boolean mQsBottomVisible;
 
@@ -230,7 +234,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             DelayedWakeLock.Builder delayedWakeLockBuilder, Handler handler,
             KeyguardUpdateMonitor keyguardUpdateMonitor, DockManager dockManager,
             ConfigurationController configurationController, @Main Executor mainExecutor,
-            UnlockedScreenOffAnimationController unlockedScreenOffAnimationController) {
+            UnlockedScreenOffAnimationController unlockedScreenOffAnimationController,
+            PanelExpansionStateManager panelExpansionStateManager) {
         mScrimStateListener = lightBarController::setScrimState;
         mDefaultScrimAlpha = BUSY_SCRIM_ALPHA;
 
@@ -262,15 +267,13 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             }
 
             @Override
-            public void onOverlayChanged() {
-                ScrimController.this.onThemeChanged();
-            }
-
-            @Override
             public void onUiModeChanged() {
                 ScrimController.this.onThemeChanged();
             }
         });
+        panelExpansionStateManager.addExpansionListener(
+                (fraction, expanded, tracking) -> setRawPanelExpansionFraction(fraction)
+        );
 
         mColors = new GradientColors();
     }
@@ -483,14 +486,40 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
      *
      * The expansion fraction is tied to the scrim opacity.
      *
-     * @param fraction From 0 to 1 where 0 means collapsed and 1 expanded.
+     * See {@link PanelExpansionListener#onPanelExpansionChanged}.
+     *
+     * @param rawPanelExpansionFraction From 0 to 1 where 0 means collapsed and 1 expanded.
      */
-    public void setPanelExpansion(float fraction) {
-        if (isNaN(fraction)) {
-            throw new IllegalArgumentException("Fraction should not be NaN");
+     @VisibleForTesting
+     void setRawPanelExpansionFraction(
+            @FloatRange(from = 0.0, to = 1.0) float rawPanelExpansionFraction) {
+        if (isNaN(rawPanelExpansionFraction)) {
+            throw new IllegalArgumentException("rawPanelExpansionFraction should not be NaN");
         }
-        if (mPanelExpansion != fraction) {
-            mPanelExpansion = fraction;
+        mRawPanelExpansionFraction = rawPanelExpansionFraction;
+        calculateAndUpdatePanelExpansion();
+    }
+
+    /** See {@link NotificationPanelViewController#setPanelScrimMinFraction(float)}. */
+    public void setPanelScrimMinFraction(float minFraction) {
+        if (isNaN(minFraction)) {
+            throw new IllegalArgumentException("minFraction should not be NaN");
+        }
+        mPanelScrimMinFraction = minFraction;
+        calculateAndUpdatePanelExpansion();
+    }
+
+    private void calculateAndUpdatePanelExpansion() {
+        float panelExpansionFraction = mRawPanelExpansionFraction;
+        if (mPanelScrimMinFraction < 1.0f) {
+            panelExpansionFraction = Math.max(
+                    (mRawPanelExpansionFraction - mPanelScrimMinFraction)
+                            / (1.0f - mPanelScrimMinFraction),
+                    0);
+        }
+
+        if (mPanelExpansionFraction != panelExpansionFraction) {
+            mPanelExpansionFraction = panelExpansionFraction;
 
             boolean relevantState = (mState == ScrimState.UNLOCKED
                     || mState == ScrimState.KEYGUARD
@@ -556,8 +585,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         if (isNaN(expansionFraction)) {
             return;
         }
-        expansionFraction = Interpolators
-                .getNotificationScrimAlpha(expansionFraction, false /* notification */);
+        expansionFraction = ShadeInterpolation.getNotificationScrimAlpha(expansionFraction);
         boolean qsBottomVisible = qsPanelBottomY > 0;
         if (mQsExpansion != expansionFraction || mQsBottomVisible != qsBottomVisible) {
             mQsExpansion = expansionFraction;
@@ -652,6 +680,12 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                 }
                 mInFrontAlpha = 0;
             }
+        } else if (mState == ScrimState.AUTH_SCRIMMED_SHADE) {
+            float behindFraction = getInterpolatedFraction();
+            behindFraction = (float) Math.pow(behindFraction, 0.8f);
+
+            mBehindAlpha = behindFraction * mDefaultScrimAlpha;
+            mNotificationsAlpha = mBehindAlpha;
         } else if (mState == ScrimState.KEYGUARD || mState == ScrimState.SHADE_LOCKED
                 || mState == ScrimState.PULSING) {
             Pair<Integer, Float> result = calculateBackStateForState(mState);
@@ -892,7 +926,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     }
 
     private float getInterpolatedFraction() {
-        return Interpolators.getNotificationScrimAlpha(mPanelExpansion, false /* notification */);
+        return ShadeInterpolation.getNotificationScrimAlpha(mPanelExpansionFraction);
     }
 
     private void setScrimAlpha(ScrimView scrim, float alpha) {
@@ -1228,8 +1262,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         pw.println(mTracking);
         pw.print("  mDefaultScrimAlpha=");
         pw.println(mDefaultScrimAlpha);
-        pw.print("  mExpansionFraction=");
-        pw.println(mPanelExpansion);
+        pw.print("  mPanelExpansionFraction=");
+        pw.println(mPanelExpansionFraction);
         pw.print("  mExpansionAffectsAlpha=");
         pw.println(mExpansionAffectsAlpha);
 

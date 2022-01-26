@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_IS_RECENTS;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
@@ -26,14 +27,16 @@ import static android.view.WindowManager.TRANSIT_OPEN;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.IApplicationThread;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.util.ArrayMap;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.WindowManager;
-import android.window.IRemoteTransition;
+import android.window.ITransitionMetricsReporter;
 import android.window.ITransitionPlayer;
 import android.window.RemoteTransition;
 import android.window.TransitionInfo;
@@ -45,6 +48,7 @@ import com.android.server.LocalServices;
 import com.android.server.statusbar.StatusBarManagerInternal;
 
 import java.util.ArrayList;
+import java.util.function.LongConsumer;
 
 /**
  * Handles all the aspects of recording and synchronizing transitions.
@@ -52,13 +56,22 @@ import java.util.ArrayList;
 class TransitionController {
     private static final String TAG = "TransitionController";
 
+    /** The same as legacy APP_TRANSITION_TIMEOUT_MS. */
+    private static final int DEFAULT_TIMEOUT_MS = 5000;
+    /** Less duration for CHANGE type because it does not involve app startup. */
+    private static final int CHANGE_TIMEOUT_MS = 2000;
+
     // State constants to line-up with legacy app-transition proto expectations.
     private static final int LEGACY_STATE_IDLE = 0;
     private static final int LEGACY_STATE_READY = 1;
     private static final int LEGACY_STATE_RUNNING = 2;
 
     private ITransitionPlayer mTransitionPlayer;
+    final TransitionMetricsReporter mTransitionMetricsReporter = new TransitionMetricsReporter();
+
+    private IApplicationThread mTransitionPlayerThread;
     final ActivityTaskManagerService mAtm;
+    final TaskSnapshotController mTaskSnapshotController;
 
     private final ArrayList<WindowManagerInternal.AppTransitionListener> mLegacyListeners =
             new ArrayList<>();
@@ -79,9 +92,11 @@ class TransitionController {
     // TODO(b/188595497): remove when not needed.
     final StatusBarManagerInternal mStatusBar;
 
-    TransitionController(ActivityTaskManagerService atm) {
+    TransitionController(ActivityTaskManagerService atm,
+            TaskSnapshotController taskSnapshotController) {
         mAtm = atm;
         mStatusBar = LocalServices.getService(StatusBarManagerInternal.class);
+        mTaskSnapshotController = taskSnapshotController;
         mTransitionPlayerDeath = () -> {
             synchronized (mAtm.mGlobalLock) {
                 // Clean-up/finish any playing transitions.
@@ -113,14 +128,18 @@ class TransitionController {
         if (mCollectingTransition != null) {
             throw new IllegalStateException("Simultaneous transitions not supported yet.");
         }
-        mCollectingTransition = new Transition(type, flags, this, mAtm.mWindowManager.mSyncEngine);
+        // Distinguish change type because the response time is usually expected to be not too long.
+        final long timeoutMs = type == TRANSIT_CHANGE ? CHANGE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+        mCollectingTransition = new Transition(type, flags, timeoutMs, this,
+                mAtm.mWindowManager.mSyncEngine);
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Creating Transition: %s",
                 mCollectingTransition);
         dispatchLegacyAppTransitionPending();
         return mCollectingTransition;
     }
 
-    void registerTransitionPlayer(@Nullable ITransitionPlayer player) {
+    void registerTransitionPlayer(@Nullable ITransitionPlayer player,
+            @Nullable IApplicationThread appThread) {
         try {
             // Note: asBinder() can be null if player is same process (likely in a test).
             if (mTransitionPlayer != null) {
@@ -133,6 +152,7 @@ class TransitionController {
                 player.asBinder().linkToDeath(mTransitionPlayerDeath, 0);
             }
             mTransitionPlayer = player;
+            mTransitionPlayerThread = appThread;
         } catch (RemoteException e) {
             throw new RuntimeException("Unable to set transition player");
         }
@@ -209,7 +229,7 @@ class TransitionController {
     }
 
     /**
-     * @see #requestTransitionIfNeeded(int, int, WindowContainer, IRemoteTransition)
+     * @see #requestTransitionIfNeeded(int, int, WindowContainer, WindowContainer, RemoteTransition)
      */
     @Nullable
     Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
@@ -218,7 +238,7 @@ class TransitionController {
     }
 
     /**
-     * @see #requestTransitionIfNeeded(int, int, WindowContainer, IRemoteTransition)
+     * @see #requestTransitionIfNeeded(int, int, WindowContainer, WindowContainer, RemoteTransition)
      */
     @Nullable
     Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
@@ -289,6 +309,22 @@ class TransitionController {
         return transition;
     }
 
+    /** Requests transition for a window container which will be removed or invisible. */
+    void requestCloseTransitionIfNeeded(@NonNull WindowContainer<?> wc) {
+        if (mTransitionPlayer == null) return;
+        if (wc.isVisibleRequested()) {
+            if (!isCollecting()) {
+                requestStartTransition(createTransition(TRANSIT_CLOSE, 0 /* flags */),
+                        wc.asTask(), null /* remoteTransition */);
+            }
+            collectExistenceChange(wc);
+        } else {
+            // Removing a non-visible window doesn't require a transition, but if there is one
+            // collecting, this should be a member just in case.
+            collect(wc);
+        }
+    }
+
     /** @see Transition#collect */
     void collect(@NonNull WindowContainer wc) {
         if (mCollectingTransition == null) return;
@@ -321,6 +357,8 @@ class TransitionController {
 
     /** @see Transition#finishTransition */
     void finishTransition(@NonNull IBinder token) {
+        // It is usually a no-op but make sure that the metric consumer is removed.
+        mTransitionMetricsReporter.reportAnimationStart(token, 0 /* startTime */);
         final Transition record = Transition.fromBinder(token);
         if (record == null || !mPlayingTransitions.contains(record)) {
             Slog.e(TAG, "Trying to finish a non-playing transition " + token);
@@ -328,6 +366,9 @@ class TransitionController {
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Finish Transition: %s", record);
         mPlayingTransitions.remove(record);
+        if (mPlayingTransitions.isEmpty()) {
+            setAnimationRunning(false /* running */);
+        }
         record.finishTransition();
         mRunningLock.doNotifyLocked();
     }
@@ -337,7 +378,20 @@ class TransitionController {
             throw new IllegalStateException("Trying to move non-collecting transition to playing");
         }
         mCollectingTransition = null;
+        if (mPlayingTransitions.isEmpty()) {
+            setAnimationRunning(true /* running */);
+        }
         mPlayingTransitions.add(transition);
+    }
+
+    private void setAnimationRunning(boolean running) {
+        if (mTransitionPlayerThread == null) return;
+        final WindowProcessController wpc = mAtm.getProcessController(mTransitionPlayerThread);
+        if (wpc == null) {
+            Slog.w(TAG, "Unable to find process for player thread=" + mTransitionPlayerThread);
+            return;
+        }
+        wpc.setRunningRemoteAnimation(running);
     }
 
     void abort(Transition transition) {
@@ -385,9 +439,10 @@ class TransitionController {
     void dispatchLegacyAppTransitionStarting(TransitionInfo info) {
         final boolean keyguardGoingAway = info.isKeyguardGoingAway();
         for (int i = 0; i < mLegacyListeners.size(); ++i) {
+            // TODO(shell-transitions): handle (un)occlude transition.
             mLegacyListeners.get(i).onAppTransitionStartingLocked(keyguardGoingAway,
-                    0 /* durationHint */, SystemClock.uptimeMillis(),
-                    AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
+                    false /* keyguardOcclude */, 0 /* durationHint */,
+                    SystemClock.uptimeMillis(), AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
         }
     }
 
@@ -414,6 +469,28 @@ class TransitionController {
         }
         proto.write(AppTransitionProto.APP_TRANSITION_STATE, state);
         proto.end(token);
+    }
+
+    static class TransitionMetricsReporter extends ITransitionMetricsReporter.Stub {
+        private final ArrayMap<IBinder, LongConsumer> mMetricConsumers = new ArrayMap<>();
+
+        void associate(IBinder transitionToken, LongConsumer consumer) {
+            synchronized (mMetricConsumers) {
+                mMetricConsumers.put(transitionToken, consumer);
+            }
+        }
+
+        @Override
+        public void reportAnimationStart(IBinder transitionToken, long startTime) {
+            final LongConsumer c;
+            synchronized (mMetricConsumers) {
+                if (mMetricConsumers.isEmpty()) return;
+                c = mMetricConsumers.remove(transitionToken);
+            }
+            if (c != null) {
+                c.accept(startTime);
+            }
+        }
     }
 
     class Lock {

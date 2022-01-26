@@ -17,6 +17,7 @@
 package com.android.server.timezonedetector.location;
 
 import android.annotation.DurationMillisLong;
+import android.annotation.ElapsedRealtimeLong;
 import android.annotation.NonNull;
 import android.os.Handler;
 
@@ -130,10 +131,22 @@ abstract class LocationTimeZoneProviderController implements Dumpable {
         abstract Duration getProviderInitializationTimeoutFuzz();
 
         /**
+         * Returns the value passed to LocationTimeZoneProviders to control rate limiting of
+         * equivalent events.
+         */
+        abstract Duration getProviderEventFilteringAgeThreshold();
+
+        /**
          * Returns the delay allowed after receiving uncertainty from a provider before it should be
          * passed on.
          */
         abstract Duration getUncertaintyDelay();
+
+        /**
+         * Returns the elapsed realtime as millis, the same as {@link
+         * android.os.SystemClock#elapsedRealtime()}.
+         */
+        abstract @ElapsedRealtimeLong long elapsedRealtimeMillis();
     }
 
     /**

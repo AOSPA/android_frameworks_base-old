@@ -24,11 +24,13 @@ import static android.app.usage.NetworkStatsManager.FLAG_POLL_ON_OPEN;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkCapabilities.TRANSPORT_ETHERNET;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 import static android.net.NetworkIdentity.OEM_PAID;
 import static android.net.NetworkIdentity.OEM_PRIVATE;
 import static android.net.NetworkStats.DEFAULT_NETWORK_ALL;
 import static android.net.NetworkStats.METERED_ALL;
+import static android.net.NetworkStats.METERED_YES;
 import static android.net.NetworkStats.ROAMING_ALL;
 import static android.net.NetworkTemplate.MATCH_ETHERNET;
 import static android.net.NetworkTemplate.MATCH_MOBILE_WILDCARD;
@@ -93,7 +95,6 @@ import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
-import android.hardware.health.V2_0.IHealth;
 import android.net.ConnectivityManager;
 import android.net.INetworkStatsService;
 import android.net.INetworkStatsSession;
@@ -157,6 +158,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.StatsEvent;
@@ -191,13 +193,13 @@ import com.android.internal.os.SystemServerCpuThreadReader.SystemServiceCpuThrea
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.role.RoleManagerLocal;
-import com.android.server.BatteryService;
 import com.android.server.BinderCallsStatsService;
 import com.android.server.LocalManagerRegistry;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
 import com.android.server.am.MemoryStatUtil.MemoryStat;
+import com.android.server.health.HealthServiceWrapper;
 import com.android.server.notification.NotificationManagerService;
 import com.android.server.stats.pull.IonMemoryUtil.IonAllocations;
 import com.android.server.stats.pull.ProcfsMemoryUtil.MemorySnapshot;
@@ -227,6 +229,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.MissingResourceException;
+import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -355,7 +358,7 @@ public class StatsPullAtomService extends SystemService {
     private File mBaseDir;
 
     @GuardedBy("mHealthHalLock")
-    private BatteryService.HealthServiceWrapper mHealthService;
+    private HealthServiceWrapper mHealthService;
 
     @Nullable
     @GuardedBy("mCpuTimePerThreadFreqLock")
@@ -804,10 +807,9 @@ public class StatsPullAtomService extends SystemService {
                 KernelCpuThreadReaderSettingsObserver.getSettingsModifiedReader(mContext);
 
         // Initialize HealthService
-        mHealthService = new BatteryService.HealthServiceWrapper();
         try {
-            mHealthService.init();
-        } catch (RemoteException e) {
+            mHealthService = HealthServiceWrapper.create(null);
+        } catch (RemoteException | NoSuchElementException e) {
             Slog.e(TAG, "failed to initialize healthHalWrapper");
         }
 
@@ -1315,25 +1317,30 @@ public class StatsPullAtomService extends SystemService {
     }
 
     @NonNull private List<NetworkStatsExt> getDataUsageBytesTransferSnapshotForOemManaged() {
-        final int[] transports = new int[] {MATCH_ETHERNET, MATCH_MOBILE_WILDCARD,
-                MATCH_WIFI_WILDCARD};
+        final List<Pair<Integer, Integer>> matchRulesAndTransports = List.of(
+                new Pair(MATCH_ETHERNET, TRANSPORT_ETHERNET),
+                new Pair(MATCH_MOBILE_WILDCARD, TRANSPORT_CELLULAR),
+                new Pair(MATCH_WIFI_WILDCARD, TRANSPORT_WIFI)
+        );
         final int[] oemManagedTypes = new int[] {OEM_PAID | OEM_PRIVATE, OEM_PAID, OEM_PRIVATE};
 
         final List<NetworkStatsExt> ret = new ArrayList<>();
 
-        for (final int transport : transports) {
+        for (Pair<Integer, Integer> ruleAndTransport : matchRulesAndTransports) {
+            final Integer matchRule = ruleAndTransport.first;
             for (final int oemManaged : oemManagedTypes) {
                 /* A null subscriberId will set wildcard=true, since we aren't trying to select a
                    specific ssid or subscriber. */
-                final NetworkTemplate template = new NetworkTemplate(transport,
+                final NetworkTemplate template = new NetworkTemplate(matchRule,
                         /*subscriberId=*/null, /*matchSubscriberIds=*/null, /*networkId=*/null,
                         METERED_ALL, ROAMING_ALL, DEFAULT_NETWORK_ALL, NETWORK_TYPE_ALL,
                         oemManaged);
-                final NetworkStats stats = getUidNetworkStatsSnapshotForTemplate(template, true);
+                final NetworkStats stats = getUidNetworkStatsSnapshotForTemplate(template, false);
+                final Integer transport = ruleAndTransport.second;
                 if (stats != null) {
-                    ret.add(new NetworkStatsExt(sliceNetworkStatsByUidTagAndMetered(stats),
-                            new int[] {transport}, /*slicedByFgbg=*/true, /*slicedByTag=*/true,
-                            /*slicedByMetered=*/true, TelephonyManager.NETWORK_TYPE_UNKNOWN,
+                    ret.add(new NetworkStatsExt(sliceNetworkStatsByUidAndFgbg(stats),
+                            new int[] {transport}, /*slicedByFgbg=*/true, /*slicedByTag=*/false,
+                            /*slicedByMetered=*/false, TelephonyManager.NETWORK_TYPE_UNKNOWN,
                             /*subInfo=*/null, oemManaged));
                 }
             }
@@ -1348,7 +1355,7 @@ public class StatsPullAtomService extends SystemService {
     @Nullable private NetworkStats getUidNetworkStatsSnapshotForTransport(int transport) {
         final NetworkTemplate template = (transport == TRANSPORT_CELLULAR)
                 ? NetworkTemplate.buildTemplateMobileWithRatType(
-                /*subscriptionId=*/null, NETWORK_TYPE_ALL)
+                /*subscriptionId=*/null, NETWORK_TYPE_ALL, METERED_YES)
                 : NetworkTemplate.buildTemplateWifiWildcard();
         return getUidNetworkStatsSnapshotForTemplate(template, /*includeTags=*/false);
     }
@@ -1388,7 +1395,8 @@ public class StatsPullAtomService extends SystemService {
         final List<NetworkStatsExt> ret = new ArrayList<>();
         for (final int ratType : getAllCollapsedRatTypes()) {
             final NetworkTemplate template =
-                    buildTemplateMobileWithRatType(subInfo.subscriberId, ratType);
+                    buildTemplateMobileWithRatType(subInfo.subscriberId, ratType,
+                    METERED_YES);
             final NetworkStats stats =
                     getUidNetworkStatsSnapshotForTemplate(template, /*includeTags=*/false);
             if (stats != null) {
@@ -1609,7 +1617,7 @@ public class StatsPullAtomService extends SystemService {
 
     int pullBluetoothBytesTransferLocked(int atomTag, List<StatsEvent> pulledData) {
         BluetoothActivityEnergyInfo info = fetchBluetoothData();
-        if (info == null || info.getUidTraffic() == null) {
+        if (info == null) {
             return StatsManager.PULL_SKIP;
         }
         for (UidTraffic traffic : info.getUidTraffic()) {
@@ -2067,7 +2075,7 @@ public class StatsPullAtomService extends SystemService {
         if (info == null) {
             return StatsManager.PULL_SKIP;
         }
-        pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, info.getTimeStamp(),
+        pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, info.getTimestampMillis(),
                 info.getBluetoothStackState(), info.getControllerTxTimeMillis(),
                 info.getControllerRxTimeMillis(), info.getControllerIdleTimeMillis(),
                 info.getControllerEnergyUsed()));
@@ -3981,38 +3989,40 @@ public class StatsPullAtomService extends SystemService {
     }
 
     int pullHealthHalLocked(int atomTag, List<StatsEvent> pulledData) {
-        IHealth healthService = mHealthService.getLastService();
-        if (healthService == null) {
+        if (mHealthService == null) {
             return StatsManager.PULL_SKIP;
         }
+        android.hardware.health.HealthInfo healthInfo;
         try {
-            healthService.getHealthInfo((result, value) -> {
-                int pulledValue;
-                switch(atomTag) {
-                    case FrameworkStatsLog.BATTERY_LEVEL:
-                        pulledValue = value.legacy.batteryLevel;
-                        break;
-                    case FrameworkStatsLog.REMAINING_BATTERY_CAPACITY:
-                        pulledValue = value.legacy.batteryChargeCounter;
-                        break;
-                    case FrameworkStatsLog.FULL_BATTERY_CAPACITY:
-                        pulledValue = value.legacy.batteryFullCharge;
-                        break;
-                    case FrameworkStatsLog.BATTERY_VOLTAGE:
-                        pulledValue = value.legacy.batteryVoltage;
-                        break;
-                    case FrameworkStatsLog.BATTERY_CYCLE_COUNT:
-                        pulledValue = value.legacy.batteryCycleCount;
-                        break;
-                    default:
-                        throw new IllegalStateException("Invalid atomTag in healthHal puller: "
-                                + atomTag);
-                }
-                pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, pulledValue));
-            });
+            healthInfo = mHealthService.getHealthInfo();
         } catch (RemoteException | IllegalStateException e) {
             return StatsManager.PULL_SKIP;
         }
+        if (healthInfo == null) {
+            return StatsManager.PULL_SKIP;
+        }
+
+        int pulledValue;
+        switch (atomTag) {
+            case FrameworkStatsLog.BATTERY_LEVEL:
+                pulledValue = healthInfo.batteryLevel;
+                break;
+            case FrameworkStatsLog.REMAINING_BATTERY_CAPACITY:
+                pulledValue = healthInfo.batteryChargeCounterUah;
+                break;
+            case FrameworkStatsLog.FULL_BATTERY_CAPACITY:
+                pulledValue = healthInfo.batteryFullChargeUah;
+                break;
+            case FrameworkStatsLog.BATTERY_VOLTAGE:
+                pulledValue = healthInfo.batteryVoltageMillivolts;
+                break;
+            case FrameworkStatsLog.BATTERY_CYCLE_COUNT:
+                pulledValue = healthInfo.batteryCycleCount;
+                break;
+            default:
+                return StatsManager.PULL_SKIP;
+        }
+        pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, pulledValue));
         return StatsManager.PULL_SUCCESS;
     }
 

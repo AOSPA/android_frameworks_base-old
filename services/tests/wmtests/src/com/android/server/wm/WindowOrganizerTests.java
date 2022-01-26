@@ -80,6 +80,7 @@ import android.view.SurfaceControl;
 import android.window.ITaskOrganizer;
 import android.window.IWindowContainerTransactionCallback;
 import android.window.StartingWindowInfo;
+import android.window.StartingWindowRemovalInfo;
 import android.window.TaskAppearedInfo;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
@@ -542,6 +543,36 @@ public class WindowOrganizerTests extends WindowTestsBase {
     }
 
     @Test
+    public void testSetAdjacentLaunchRoot() {
+        DisplayContent dc = mWm.mRoot.getDisplayContent(Display.DEFAULT_DISPLAY);
+
+        final Task task1 = mWm.mAtmService.mTaskOrganizerController.createRootTask(
+                dc, WINDOWING_MODE_MULTI_WINDOW, null);
+        final RunningTaskInfo info1 = task1.getTaskInfo();
+        final Task task2 = mWm.mAtmService.mTaskOrganizerController.createRootTask(
+                dc, WINDOWING_MODE_MULTI_WINDOW, null);
+        final RunningTaskInfo info2 = task2.getTaskInfo();
+
+        WindowContainerTransaction wct = new WindowContainerTransaction();
+        wct.setAdjacentRoots(info1.token, info2.token);
+        mWm.mAtmService.mWindowOrganizerController.applyTransaction(wct);
+        assertEquals(task1.getAdjacentTaskFragment(), task2);
+        assertEquals(task2.getAdjacentTaskFragment(), task1);
+
+        wct = new WindowContainerTransaction();
+        wct.setLaunchAdjacentFlagRoot(info1.token);
+        mWm.mAtmService.mWindowOrganizerController.applyTransaction(wct);
+        assertEquals(dc.getDefaultTaskDisplayArea().mLaunchAdjacentFlagRootTask, task1);
+
+        task1.setAdjacentTaskFragment(null);
+        task2.setAdjacentTaskFragment(null);
+        wct = new WindowContainerTransaction();
+        wct.clearLaunchAdjacentFlagRoot(info1.token);
+        mWm.mAtmService.mWindowOrganizerController.applyTransaction(wct);
+        assertEquals(dc.getDefaultTaskDisplayArea().mLaunchAdjacentFlagRootTask, null);
+    }
+
+    @Test
     public void testTileAddRemoveChild() {
         final StubOrganizer listener = new StubOrganizer();
         mWm.mAtmService.mTaskOrganizerController.registerTaskOrganizer(listener);
@@ -779,8 +810,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         @Override
         public void addStartingWindow(StartingWindowInfo info, IBinder appToken) { }
         @Override
-        public void removeStartingWindow(int taskId, SurfaceControl leash, Rect frame,
-                boolean playRevealAnimation) { }
+        public void removeStartingWindow(StartingWindowRemovalInfo removalInfo) { }
         @Override
         public void copySplashScreenView(int taskId) { }
         @Override

@@ -170,6 +170,13 @@ class RecentsAnimation implements RecentsAnimationCallbacks, OnRootTaskOrderChan
         ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS, "startRecentsActivity(): intent=%s", mTargetIntent);
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "RecentsAnimation#startRecentsActivity");
 
+        // Cancel any existing recents animation running synchronously (do not hold the
+        // WM lock) before starting the newly requested recents animation as they can not coexist
+        if (mWindowManager.getRecentsAnimationController() != null) {
+            mWindowManager.getRecentsAnimationController().forceCancelAnimation(
+                    REORDER_MOVE_TO_ORIGINAL_POSITION, "startRecentsActivity");
+        }
+
         // If the activity is associated with the root recents task, then try and get that first
         Task targetRootTask = mDefaultTaskDisplayArea.getRootTask(WINDOWING_MODE_UNDEFINED,
                 mTargetActivityType);
@@ -243,12 +250,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks, OnRootTaskOrderChan
             targetActivity.intent.replaceExtras(mTargetIntent);
 
             // Fetch all the surface controls and pass them to the client to get the animation
-            // started. Cancel any existing recents animation running synchronously (do not hold the
-            // WM lock)
-            if (mWindowManager.getRecentsAnimationController() != null) {
-                mWindowManager.getRecentsAnimationController().forceCancelAnimation(
-                        REORDER_MOVE_TO_ORIGINAL_POSITION, "startRecentsActivity");
-            }
+            // started
             mWindowManager.initializeRecentsAnimation(mTargetActivityType, recentsAnimationRunner,
                     this, mDefaultTaskDisplayArea.getDisplayId(),
                     mTaskSupervisor.mRecentTasks.getRecentTaskIds(), targetActivity);
@@ -471,7 +473,8 @@ class RecentsAnimation implements RecentsAnimationCallbacks, OnRootTaskOrderChan
      */
     static void notifyAnimationCancelBeforeStart(IRecentsAnimationRunner recentsAnimationRunner) {
         try {
-            recentsAnimationRunner.onAnimationCanceled(null /* taskSnapshot */);
+            recentsAnimationRunner.onAnimationCanceled(null /* taskIds */,
+                    null /* taskSnapshots */);
         } catch (RemoteException e) {
             Slog.e(TAG, "Failed to cancel recents animation before start", e);
         }

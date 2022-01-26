@@ -371,6 +371,10 @@ public class UiTranslationController {
                     Log.v(TAG, "onVirtualViewTranslationCompleted: received response for "
                             + "AutofillId " + autofillId);
                 }
+                view.onVirtualViewTranslationResponses(virtualChildResponse);
+                if (mCurrentState == STATE_UI_TRANSLATION_PAUSED) {
+                    return;
+                }
                 mActivity.runOnUiThread(() -> {
                     if (view.getViewTranslationCallback() == null) {
                         if (DEBUG) {
@@ -379,7 +383,6 @@ public class UiTranslationController {
                         }
                         return;
                     }
-                    view.onVirtualViewTranslationResponses(virtualChildResponse);
                     if (view.getViewTranslationCallback() != null) {
                         view.getViewTranslationCallback().onShowTranslation(view);
                     }
@@ -427,16 +430,22 @@ public class UiTranslationController {
                             + " may be gone.");
                     continue;
                 }
+                int currentState;
+                currentState = mCurrentState;
                 mActivity.runOnUiThread(() -> {
+                    ViewTranslationCallback callback = view.getViewTranslationCallback();
                     if (view.getViewTranslationResponse() != null
                             && view.getViewTranslationResponse().equals(response)) {
-                        if (DEBUG) {
-                            Log.d(TAG, "Duplicate ViewTranslationResponse for " + autofillId
-                                    + ". Ignoring.");
+                        if (callback instanceof TextViewTranslationCallback) {
+                            if (((TextViewTranslationCallback) callback).isShowingTranslation()) {
+                                if (DEBUG) {
+                                    Log.d(TAG, "Duplicate ViewTranslationResponse for " + autofillId
+                                            + ". Ignoring.");
+                                }
+                                return;
+                            }
                         }
-                        return;
                     }
-                    ViewTranslationCallback callback = view.getViewTranslationCallback();
                     if (callback == null) {
                         if (view instanceof TextView) {
                             // developer doesn't provide their override, we set the default TextView
@@ -456,6 +465,9 @@ public class UiTranslationController {
                         callback.enableContentPadding();
                     }
                     view.onViewTranslationResponse(response);
+                    if (currentState == STATE_UI_TRANSLATION_PAUSED) {
+                        return;
+                    }
                     callback.onShowTranslation(view);
                 });
             }

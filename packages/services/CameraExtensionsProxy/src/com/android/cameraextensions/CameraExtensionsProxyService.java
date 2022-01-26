@@ -21,12 +21,14 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.GraphicBuffer;
 import android.graphics.Rect;
+import android.hardware.HardwareBuffer;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraExtensionCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
+import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.extension.CameraOutputConfig;
 import android.hardware.camera2.extension.CameraSessionConfig;
 import android.hardware.camera2.extension.CaptureBundle;
@@ -36,14 +38,14 @@ import android.hardware.camera2.extension.IAdvancedExtenderImpl;
 import android.hardware.camera2.extension.ICameraExtensionsProxyService;
 import android.hardware.camera2.extension.ICaptureCallback;
 import android.hardware.camera2.extension.ICaptureProcessorImpl;
+import android.hardware.camera2.extension.IImageCaptureExtenderImpl;
+import android.hardware.camera2.extension.IImageProcessorImpl;
+import android.hardware.camera2.extension.IInitializeSessionCallback;
 import android.hardware.camera2.extension.IPreviewExtenderImpl;
 import android.hardware.camera2.extension.IPreviewImageProcessorImpl;
 import android.hardware.camera2.extension.IRequestCallback;
 import android.hardware.camera2.extension.IRequestProcessorImpl;
 import android.hardware.camera2.extension.IRequestUpdateProcessorImpl;
-import android.hardware.camera2.extension.IImageCaptureExtenderImpl;
-import android.hardware.camera2.extension.IImageProcessorImpl;
-import android.hardware.camera2.extension.IInitializeSessionCallback;
 import android.hardware.camera2.extension.ISessionProcessorImpl;
 import android.hardware.camera2.extension.LatencyRange;
 import android.hardware.camera2.extension.OutputConfigId;
@@ -54,8 +56,6 @@ import android.hardware.camera2.extension.ParcelTotalCaptureResult;
 import android.hardware.camera2.extension.Request;
 import android.hardware.camera2.extension.SizeList;
 import android.hardware.camera2.impl.CameraMetadataNative;
-import android.hardware.camera2.TotalCaptureResult;
-import android.hardware.HardwareBuffer;
 import android.hardware.camera2.impl.PhysicalCaptureResultInfo;
 import android.media.Image;
 import android.media.ImageReader;
@@ -110,11 +110,11 @@ import androidx.camera.extensions.impl.advanced.SurfaceOutputConfigImpl;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.List;
 
 public class CameraExtensionsProxyService extends Service {
     private static final String TAG = "CameraExtensionsProxyService";
@@ -135,6 +135,7 @@ public class CameraExtensionsProxyService extends Service {
 
     private HashMap<String, CameraCharacteristics> mCharacteristicsHashMap = new HashMap<>();
     private HashMap<String, Long> mMetadataVendorIdMap = new HashMap<>();
+    private CameraManager mCameraManager;
 
     private static boolean checkForAdvancedAPI() {
         if (EXTENSIONS_PRESENT && EXTENSIONS_VERSION.startsWith(ADVANCED_VERSION_PREFIX)) {
@@ -418,7 +419,7 @@ public class CameraExtensionsProxyService extends Service {
             case CameraExtensionCharacteristics.EXTENSION_AUTOMATIC:
                 return new Pair<>(new AutoPreviewExtenderImpl(),
                         new AutoImageCaptureExtenderImpl());
-            case CameraExtensionCharacteristics.EXTENSION_BEAUTY:
+            case CameraExtensionCharacteristics.EXTENSION_FACE_RETOUCH:
                 return new Pair<>(new BeautyPreviewExtenderImpl(),
                         new BeautyImageCaptureExtenderImpl());
             case CameraExtensionCharacteristics.EXTENSION_BOKEH:
@@ -441,7 +442,7 @@ public class CameraExtensionsProxyService extends Service {
         switch (extensionType) {
             case CameraExtensionCharacteristics.EXTENSION_AUTOMATIC:
                 return new AutoAdvancedExtenderImpl();
-            case CameraExtensionCharacteristics.EXTENSION_BEAUTY:
+            case CameraExtensionCharacteristics.EXTENSION_FACE_RETOUCH:
                 return new BeautyAdvancedExtenderImpl();
             case CameraExtensionCharacteristics.EXTENSION_BOKEH:
                 return new BokehAdvancedExtenderImpl();
@@ -460,12 +461,12 @@ public class CameraExtensionsProxyService extends Service {
         // This will setup the camera vendor tag descriptor in the service process
         // along with all camera characteristics.
         try {
-            CameraManager manager = getSystemService(CameraManager.class);
+            mCameraManager = getSystemService(CameraManager.class);
 
-            String [] cameraIds = manager.getCameraIdListNoLazy();
+            String [] cameraIds = mCameraManager.getCameraIdListNoLazy();
             if (cameraIds != null) {
                 for (String cameraId : cameraIds) {
-                    CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
+                    CameraCharacteristics chars = mCameraManager.getCameraCharacteristics(cameraId);
                     mCharacteristicsHashMap.put(cameraId, chars);
                     Object thisClass = CameraCharacteristics.Key.class;
                     Class<CameraCharacteristics.Key<?>> keyClass =
@@ -1174,8 +1175,9 @@ public class CameraExtensionsProxyService extends Service {
         @Override
         public void onInit(String cameraId, CameraMetadataNative cameraCharacteristics) {
             mCameraId = cameraId;
-            mPreviewExtender.onInit(cameraId, new CameraCharacteristics(cameraCharacteristics),
-                    CameraExtensionsProxyService.this);
+            CameraCharacteristics chars = new CameraCharacteristics(cameraCharacteristics);
+            mCameraManager.registerDeviceStateListener(chars);
+            mPreviewExtender.onInit(cameraId, chars, CameraExtensionsProxyService.this);
         }
 
         @Override
@@ -1200,13 +1202,16 @@ public class CameraExtensionsProxyService extends Service {
 
         @Override
         public void init(String cameraId, CameraMetadataNative chars) {
-            mPreviewExtender.init(cameraId, new CameraCharacteristics(chars));
+            CameraCharacteristics c = new CameraCharacteristics(chars);
+            mCameraManager.registerDeviceStateListener(c);
+            mPreviewExtender.init(cameraId, c);
         }
 
         @Override
         public boolean isExtensionAvailable(String cameraId, CameraMetadataNative chars) {
-            return mPreviewExtender.isExtensionAvailable(cameraId,
-                    new CameraCharacteristics(chars));
+            CameraCharacteristics c = new CameraCharacteristics(chars);
+            mCameraManager.registerDeviceStateListener(c);
+            return mPreviewExtender.isExtensionAvailable(cameraId, c);
         }
 
         @Override
@@ -1283,8 +1288,9 @@ public class CameraExtensionsProxyService extends Service {
 
         @Override
         public void onInit(String cameraId, CameraMetadataNative cameraCharacteristics) {
-            mImageExtender.onInit(cameraId, new CameraCharacteristics(cameraCharacteristics),
-                    CameraExtensionsProxyService.this);
+            CameraCharacteristics chars = new CameraCharacteristics(cameraCharacteristics);
+            mCameraManager.registerDeviceStateListener(chars);
+            mImageExtender.onInit(cameraId, chars, CameraExtensionsProxyService.this);
             mCameraId = cameraId;
         }
 
@@ -1310,13 +1316,16 @@ public class CameraExtensionsProxyService extends Service {
 
         @Override
         public void init(String cameraId, CameraMetadataNative chars) {
-            mImageExtender.init(cameraId, new CameraCharacteristics(chars));
+            CameraCharacteristics c = new CameraCharacteristics(chars);
+            mCameraManager.registerDeviceStateListener(c);
+            mImageExtender.init(cameraId, c);
         }
 
         @Override
         public boolean isExtensionAvailable(String cameraId, CameraMetadataNative chars) {
-            return mImageExtender.isExtensionAvailable(cameraId,
-                    new CameraCharacteristics(chars));
+            CameraCharacteristics c = new CameraCharacteristics(chars);
+            mCameraManager.registerDeviceStateListener(c);
+            return mImageExtender.isExtensionAvailable(cameraId, c);
         }
 
         @Override

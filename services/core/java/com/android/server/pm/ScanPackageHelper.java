@@ -23,7 +23,6 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_PACKAGE_CHANGED;
 import static android.content.pm.PackageManager.INSTALL_FAILED_PROCESS_NOT_DEFINED;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NO_CERTIFICATES;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
-import static android.os.incremental.IncrementalManager.isIncrementalPath;
 
 import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.PackageManagerService.DEBUG_ABI_SELECTION;
@@ -65,6 +64,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.SigningDetails;
 import android.content.pm.parsing.ParsingPackageUtils;
+import android.content.pm.parsing.component.ComponentMutateUtils;
 import android.content.pm.parsing.component.ParsedActivity;
 import android.content.pm.parsing.component.ParsedMainComponent;
 import android.content.pm.parsing.component.ParsedProcess;
@@ -91,7 +91,6 @@ import com.android.internal.security.VerityUtils;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.SystemConfig;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.parsing.library.PackageBackwardCompatibility;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
@@ -105,7 +104,6 @@ import java.io.IOException;
 import java.security.DigestException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -115,58 +113,19 @@ import java.util.UUID;
 /**
  * Helper class that handles package scanning logic
  */
-public final class ScanPackageHelper {
+final class ScanPackageHelper {
     final PackageManagerService mPm;
+    final PackageManagerServiceInjector mInjector;
 
     // TODO(b/198166813): remove PMS dependency
     public ScanPackageHelper(PackageManagerService pm) {
         mPm = pm;
+        mInjector = pm.mInjector;
     }
 
-    /**
-     * Prepares the system to commit a {@link ScanResult} in a way that will not fail by registering
-     * the app ID required for reconcile.
-     * @return {@code true} if a new app ID was registered and will need to be cleaned up on
-     *         failure.
-     */
-    public boolean optimisticallyRegisterAppId(@NonNull ScanResult result)
-            throws PackageManagerException {
-        if (!result.mExistingSettingCopied || result.needsNewAppId()) {
-            synchronized (mPm.mLock) {
-                // THROWS: when we can't allocate a user id. add call to check if there's
-                // enough space to ensure we won't throw; otherwise, don't modify state
-                return mPm.mSettings.registerAppIdLPw(result.mPkgSetting, result.needsNewAppId());
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Reverts any app ID creation that were made by
-     * {@link #optimisticallyRegisterAppId(ScanResult)}. Note: this is only necessary if the
-     * referenced method returned true.
-     */
-    public void cleanUpAppIdCreation(@NonNull ScanResult result) {
-        // iff we've acquired an app ID for a new package setting, remove it so that it can be
-        // acquired by another request.
-        if (result.mPkgSetting.getAppId() > 0) {
-            mPm.mSettings.removeAppIdLPw(result.mPkgSetting.getAppId());
-        }
-    }
-
-    /**
-     *  Traces a package scan.
-     *  @see #scanPackageLI(File, int, int, long, UserHandle)
-     */
-    @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
-    public AndroidPackage scanPackageTracedLI(File scanFile, final int parseFlags,
-            int scanFlags, long currentTime, UserHandle user) throws PackageManagerException {
-        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "scanPackage [" + scanFile.toString() + "]");
-        try {
-            return scanPackageLI(scanFile, parseFlags, scanFlags, currentTime, user);
-        } finally {
-            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-        }
+    ScanPackageHelper(PackageManagerService pm, PackageManagerServiceInjector injector) {
+        mPm = pm;
+        mInjector = injector;
     }
 
     /**
@@ -184,32 +143,6 @@ public final class ScanPackageHelper {
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
-    }
-
-    /**
-     *  Scans a package and returns the newly parsed package.
-     *  Returns {@code null} in case of errors and the error code is stored in mLastScanError
-     */
-    @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
-    private AndroidPackage scanPackageLI(File scanFile, int parseFlags, int scanFlags,
-            long currentTime, UserHandle user) throws PackageManagerException {
-        if (DEBUG_INSTALL) Slog.d(TAG, "Parsing: " + scanFile);
-
-        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "parsePackage");
-        final ParsedPackage parsedPackage;
-        try (PackageParser2 pp = mPm.mInjector.getScanningPackageParser()) {
-            parsedPackage = pp.parsePackage(scanFile, parseFlags, false);
-        } finally {
-            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-        }
-
-        // Static shared libraries have synthetic package names
-        if (parsedPackage.isStaticSharedLibrary()) {
-            PackageManagerService.renameStaticSharedLibraryPackage(parsedPackage);
-        }
-
-        return addForInitLI(parsedPackage, parseFlags, scanFlags, currentTime, user,
-                mPm.mPlatformPackage, mPm.mIsUpgrade, mPm.mIsPreNMR1Upgrade);
     }
 
     // TODO(b/199937291): scanPackageNewLI() and scanPackageOnlyLI() should be merged.
@@ -248,7 +181,7 @@ public final class ScanPackageHelper {
             } else {
                 isUpdatedSystemApp = disabledPkgSetting != null;
             }
-            applyPolicy(parsedPackage, scanFlags, mPm.mPlatformPackage, isUpdatedSystemApp);
+            applyPolicy(parsedPackage, scanFlags, mPm.getPlatformPackage(), isUpdatedSystemApp);
             assertPackageIsValid(parsedPackage, parseFlags, scanFlags);
 
             SharedUserSetting sharedUserSetting = null;
@@ -264,14 +197,14 @@ public final class ScanPackageHelper {
                     }
                 }
             }
-            String platformPackageName = mPm.mPlatformPackage == null
-                    ? null : mPm.mPlatformPackage.getPackageName();
+            String platformPackageName = mPm.getPlatformPackage() == null
+                    ? null : mPm.getPlatformPackage().getPackageName();
             final ScanRequest request = new ScanRequest(parsedPackage, sharedUserSetting,
                     pkgSetting == null ? null : pkgSetting.getPkg(), pkgSetting, disabledPkgSetting,
                     originalPkgSetting, realPkgName, parseFlags, scanFlags,
                     Objects.equals(parsedPackage.getPackageName(), platformPackageName), user,
                     cpuAbiOverride);
-            return scanPackageOnlyLI(request, mPm.mInjector, mPm.mFactoryTest, currentTime);
+            return scanPackageOnlyLI(request, mInjector, mPm.mFactoryTest, currentTime);
         }
     }
 
@@ -601,10 +534,10 @@ public final class ScanPackageHelper {
         }
         pkgSetting.setLastModifiedTime(scanFileTime);
         // TODO(b/135203078): Remove, move to constructor
-        pkgSetting.setPkg(parsedPackage);
-        pkgSetting.pkgFlags = PackageInfoUtils.appInfoFlags(parsedPackage, pkgSetting);
-        pkgSetting.pkgPrivateFlags =
-                PackageInfoUtils.appInfoPrivateFlags(parsedPackage, pkgSetting);
+        pkgSetting.setPkg(parsedPackage)
+                .setFlags(PackageInfoUtils.appInfoFlags(parsedPackage, pkgSetting))
+                .setPrivateFlags(
+                        PackageInfoUtils.appInfoPrivateFlags(parsedPackage, pkgSetting));
         if (parsedPackage.getLongVersionCode() != pkgSetting.getVersionCode()) {
             pkgSetting.setLongVersionCode(parsedPackage.getLongVersionCode());
         }
@@ -670,27 +603,27 @@ public final class ScanPackageHelper {
         if (systemPkgSetting != null)  {
             // updated system application, must at least have SCAN_AS_SYSTEM
             scanFlags |= SCAN_AS_SYSTEM;
-            if ((systemPkgSetting.pkgPrivateFlags
+            if ((systemPkgSetting.getPrivateFlags()
                     & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0) {
                 scanFlags |= SCAN_AS_PRIVILEGED;
             }
-            if ((systemPkgSetting.pkgPrivateFlags
+            if ((systemPkgSetting.getPrivateFlags()
                     & ApplicationInfo.PRIVATE_FLAG_OEM) != 0) {
                 scanFlags |= SCAN_AS_OEM;
             }
-            if ((systemPkgSetting.pkgPrivateFlags
+            if ((systemPkgSetting.getPrivateFlags()
                     & ApplicationInfo.PRIVATE_FLAG_VENDOR) != 0) {
                 scanFlags |= SCAN_AS_VENDOR;
             }
-            if ((systemPkgSetting.pkgPrivateFlags
+            if ((systemPkgSetting.getPrivateFlags()
                     & ApplicationInfo.PRIVATE_FLAG_PRODUCT) != 0) {
                 scanFlags |= SCAN_AS_PRODUCT;
             }
-            if ((systemPkgSetting.pkgPrivateFlags
+            if ((systemPkgSetting.getPrivateFlags()
                     & ApplicationInfo.PRIVATE_FLAG_SYSTEM_EXT) != 0) {
                 scanFlags |= SCAN_AS_SYSTEM_EXT;
             }
-            if ((systemPkgSetting.pkgPrivateFlags
+            if ((systemPkgSetting.getPrivateFlags()
                     & ApplicationInfo.PRIVATE_FLAG_ODM) != 0) {
                 scanFlags |= SCAN_AS_ODM;
             }
@@ -738,26 +671,10 @@ public final class ScanPackageHelper {
         return scanFlags;
     }
 
-
-    /**
-     * Adds a new package to the internal data structures during platform initialization.
-     * <p>After adding, the package is known to the system and available for querying.
-     * <p>For packages located on the device ROM [eg. packages located in /system, /vendor,
-     * etc...], additional checks are performed. Basic verification [such as ensuring
-     * matching signatures, checking version codes, etc...] occurs if the package is
-     * identical to a previously known package. If the package fails a signature check,
-     * the version installed on /data will be removed. If the version of the new package
-     * is less than or equal than the version on /data, it will be ignored.
-     * <p>Regardless of the package location, the results are applied to the internal
-     * structures and the package is made available to the rest of the system.
-     * <p>NOTE: The return value should be removed. It's the passed in package object.
-     */
-    @GuardedBy({"mPm.mLock", "mPm.mInstallLock"})
-    public AndroidPackage addForInitLI(ParsedPackage parsedPackage,
+    public Pair<ScanResult, Boolean> scanSystemPackageLI(ParsedPackage parsedPackage,
             @ParsingPackageUtils.ParseFlags int parseFlags,
             @PackageManagerService.ScanFlags int scanFlags, long currentTime,
-            @Nullable UserHandle user, AndroidPackage platformPackage, boolean isUpgrade,
-            boolean isPreNMR1Upgrade) throws PackageManagerException {
+            @Nullable UserHandle user) throws PackageManagerException {
         final boolean scanSystemPartition =
                 (parseFlags & ParsingPackageUtils.PARSE_IS_SYSTEM_DIR) != 0;
         final String renamedPkgName;
@@ -765,8 +682,11 @@ public final class ScanPackageHelper {
         final boolean isSystemPkgUpdated;
         final boolean pkgAlreadyExists;
         PackageSetting pkgSetting;
+        AndroidPackage platformPackage;
+        final boolean isUpgrade = mPm.isDeviceUpgrading();
 
         synchronized (mPm.mLock) {
+            platformPackage = mPm.getPlatformPackage();
             renamedPkgName = mPm.mSettings.getRenamedPackageLPr(
                     AndroidPackageUtils.getRealPackageOrNull(parsedPackage));
             final String realPkgName = getRealPackageName(parsedPackage,
@@ -815,7 +735,7 @@ public final class ScanPackageHelper {
                 if (isSystemPkgUpdated) {
                     // we're updating the disabled package, so, scan it as the package setting
                     boolean isPlatformPackage = platformPackage != null
-                            && Objects.equals(platformPackage.getPackageName(),
+                            && platformPackage.getPackageName().equals(
                             parsedPackage.getPackageName());
                     final ScanRequest request = new ScanRequest(parsedPackage, sharedUserSetting,
                             null, disabledPkgSetting /* pkgSetting */,
@@ -824,7 +744,7 @@ public final class ScanPackageHelper {
                     applyPolicy(parsedPackage, scanFlags,
                             platformPackage, true);
                     final ScanResult scanResult =
-                            scanPackageOnlyLI(request, mPm.mInjector,
+                            scanPackageOnlyLI(request, mInjector,
                                     mPm.mFactoryTest, -1L);
                     if (scanResult.mExistingSettingCopied
                             && scanResult.mRequest.mPkgSetting != null) {
@@ -858,9 +778,9 @@ public final class ScanPackageHelper {
                             + "; " + pkgSetting.getPathString()
                             + " --> " + parsedPackage.getPath());
 
-            final InstallArgs args = mPm.createInstallArgsForExisting(
+            final InstallArgs args = new FileInstallArgs(
                     pkgSetting.getPathString(), getAppDexInstructionSets(
-                            pkgSetting.getPrimaryCpuAbi(), pkgSetting.getSecondaryCpuAbi()));
+                    pkgSetting.getPrimaryCpuAbi(), pkgSetting.getSecondaryCpuAbi()), mPm);
             args.cleanUpResourcesLI();
             synchronized (mPm.mLock) {
                 mPm.mSettings.enableSystemPackageLPw(pkgSetting.getPackageName());
@@ -900,8 +820,7 @@ public final class ScanPackageHelper {
         // TODO(b/136132412): skip for Incremental installation
         final boolean skipVerify = scanSystemPartition
                 || (forceCollect && canSkipForcedPackageVerification(parsedPackage));
-        collectCertificatesLI(pkgSetting, parsedPackage, forceCollect, skipVerify,
-                isPreNMR1Upgrade);
+        collectCertificatesLI(pkgSetting, parsedPackage, forceCollect, skipVerify);
 
         // Reset profile if the application version is changed
         maybeClearProfilesForUpgradesLI(pkgSetting, parsedPackage);
@@ -944,9 +863,10 @@ public final class ScanPackageHelper {
                                 + parsedPackage.getLongVersionCode()
                                 + "; " + pkgSetting.getPathString() + " --> "
                                 + parsedPackage.getPath());
-                InstallArgs args = mPm.createInstallArgsForExisting(
+                InstallArgs args = new FileInstallArgs(
                         pkgSetting.getPathString(), getAppDexInstructionSets(
-                                pkgSetting.getPrimaryCpuAbi(), pkgSetting.getSecondaryCpuAbi()));
+                        pkgSetting.getPrimaryCpuAbi(), pkgSetting.getSecondaryCpuAbi()),
+                        mPm);
                 synchronized (mPm.mInstallLock) {
                     args.cleanUpResourcesLI();
                 }
@@ -965,55 +885,9 @@ public final class ScanPackageHelper {
             }
         }
 
-        final ScanResult scanResult = scanPackageNewLI(parsedPackage, parseFlags, scanFlags
-                | SCAN_UPDATE_SIGNATURE, currentTime, user, null);
-        if (scanResult.mSuccess) {
-            synchronized (mPm.mLock) {
-                boolean appIdCreated = false;
-                try {
-                    final String pkgName = scanResult.mPkgSetting.getPackageName();
-                    final Map<String, ReconciledPackage> reconcileResult =
-                            mPm.reconcilePackagesLocked(
-                                    new ReconcileRequest(
-                                            Collections.singletonMap(pkgName, scanResult),
-                                            mPm.mSharedLibraries,
-                                            mPm.mPackages,
-                                            Collections.singletonMap(
-                                                    pkgName,
-                                                    mPm.getSettingsVersionForPackage(
-                                                            parsedPackage)),
-                                            Collections.singletonMap(pkgName,
-                                                    mPm.getSharedLibLatestVersionSetting(
-                                                            scanResult))),
-                                    mPm.mSettings.getKeySetManagerService(), mPm.mInjector);
-                    appIdCreated = optimisticallyRegisterAppId(scanResult);
-                    mPm.commitReconciledScanResultLocked(
-                            reconcileResult.get(pkgName), mPm.mUserManager.getUserIds());
-                } catch (PackageManagerException e) {
-                    if (appIdCreated) {
-                        cleanUpAppIdCreation(scanResult);
-                    }
-                    throw e;
-                }
-            }
-        }
-
-        if (shouldHideSystemApp) {
-            synchronized (mPm.mLock) {
-                mPm.mSettings.disableSystemPackageLPw(parsedPackage.getPackageName(), true);
-            }
-        }
-        if (mPm.mIncrementalManager != null && isIncrementalPath(parsedPackage.getPath())) {
-            if (pkgSetting != null && pkgSetting.isPackageLoading()) {
-                // Continue monitoring loading progress of active incremental packages
-                final IncrementalStatesCallback incrementalStatesCallback =
-                        new IncrementalStatesCallback(parsedPackage.getPackageName(), mPm);
-                pkgSetting.setIncrementalStatesCallback(incrementalStatesCallback);
-                mPm.mIncrementalManager.registerLoadingProgressCallback(parsedPackage.getPath(),
-                        new IncrementalProgressListener(parsedPackage.getPackageName(), mPm));
-            }
-        }
-        return scanResult.mPkgSetting.getPkg();
+        final ScanResult scanResult = scanPackageNewLI(parsedPackage, parseFlags,
+                scanFlags | SCAN_UPDATE_SIGNATURE, currentTime, user, null);
+        return new Pair<>(scanResult, shouldHideSystemApp);
     }
 
     /**
@@ -1063,11 +937,10 @@ public final class ScanPackageHelper {
     }
 
     private void collectCertificatesLI(PackageSetting ps, ParsedPackage parsedPackage,
-            boolean forceCollect, boolean skipVerify, boolean mIsPreNMR1Upgrade)
-            throws PackageManagerException {
+            boolean forceCollect, boolean skipVerify) throws PackageManagerException {
         // When upgrading from pre-N MR1, verify the package time stamp using the package
         // directory and not the APK file.
-        final long lastModifiedTime = mIsPreNMR1Upgrade
+        final long lastModifiedTime = mPm.isPreNMR1Upgrade()
                 ? new File(parsedPackage.getPath()).lastModified()
                 : getLastModifiedTime(parsedPackage);
         final Settings.VersionInfo settingsVersionForPackage =
@@ -1075,8 +948,8 @@ public final class ScanPackageHelper {
         if (ps != null && !forceCollect
                 && ps.getPathString().equals(parsedPackage.getPath())
                 && ps.getLastModifiedTime() == lastModifiedTime
-                && !PackageManagerService.isCompatSignatureUpdateNeeded(settingsVersionForPackage)
-                && !PackageManagerService.isRecoverSignatureUpdateNeeded(
+                && !InstallPackageHelper.isCompatSignatureUpdateNeeded(settingsVersionForPackage)
+                && !InstallPackageHelper.isRecoverSignatureUpdateNeeded(
                 settingsVersionForPackage)) {
             if (ps.getSigningDetails().getSignatures() != null
                     && ps.getSigningDetails().getSignatures().length != 0
@@ -1125,7 +998,8 @@ public final class ScanPackageHelper {
             return;
         }
 
-        mPm.clearAppProfilesLIF(pkg);
+        final AppDataHelper appDataHelper = new AppDataHelper(mPm);
+        appDataHelper.clearAppProfilesLIF(pkg);
         if (DEBUG_INSTALL) {
             Slog.d(TAG, originalPkgSetting.getPackageName()
                     + " clear profile due to version change "
@@ -1182,7 +1056,7 @@ public final class ScanPackageHelper {
 
     @GuardedBy("mPm.mLock")
     private boolean verifyPackageUpdateLPr(PackageSetting oldPkg, AndroidPackage newPkg) {
-        if ((oldPkg.pkgFlags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+        if ((oldPkg.getFlags() & ApplicationInfo.FLAG_SYSTEM) == 0) {
             Slog.w(TAG, "Unable to update from " + oldPkg.getPackageName()
                     + " to " + newPkg.getPackageName()
                     + ": old package not in system partition");
@@ -1237,7 +1111,7 @@ public final class ScanPackageHelper {
         synchronized (mPm.mLock) {
             // The special "android" package can only be defined once
             if (pkg.getPackageName().equals("android")) {
-                if (mPm.mAndroidApplication != null) {
+                if (mPm.getCoreAndroidApplication() != null) {
                     Slog.w(TAG, "*************************************************");
                     Slog.w(TAG, "Core android package being redefined.  Skipping.");
                     Slog.w(TAG, " codePath=" + pkg.getPath());
@@ -1388,7 +1262,7 @@ public final class ScanPackageHelper {
             // to the user-installed location. If we don't allow this change, any newer,
             // user-installed version of the application will be ignored.
             if ((scanFlags & SCAN_REQUIRE_KNOWN) != 0) {
-                if (mPm.mExpectingBetter.containsKey(pkg.getPackageName())) {
+                if (mPm.isExpectingBetter(pkg.getPackageName())) {
                     Slog.w(TAG, "Relax SCAN_REQUIRE_KNOWN requirement for package "
                             + pkg.getPackageName());
                 } else {
@@ -1469,9 +1343,7 @@ public final class ScanPackageHelper {
                     if ((parseFlags & ParsingPackageUtils.PARSE_IS_SYSTEM_DIR) == 0) {
                         // This must be an update to a system overlay. Immutable overlays cannot be
                         // upgraded.
-                        Objects.requireNonNull(mPm.mOverlayConfig,
-                                "Parsing non-system dir before overlay configs are initialized");
-                        if (!mPm.mOverlayConfig.isMutable(pkg.getPackageName())) {
+                        if (!mPm.isOverlayMutable(pkg.getPackageName())) {
                             throw new PackageManagerException("Overlay "
                                     + pkg.getPackageName()
                                     + " is static and cannot be upgraded.");
@@ -1785,7 +1657,7 @@ public final class ScanPackageHelper {
             final ParsedActivity component = pkg.getActivities().get(i);
             final Boolean enabled = componentsEnabledStates.get(component.getName());
             if (enabled != null) {
-                component.setEnabled(enabled);
+                ComponentMutateUtils.setEnabled(component, enabled);
             }
         }
 
@@ -1793,7 +1665,7 @@ public final class ScanPackageHelper {
             final ParsedActivity component = pkg.getReceivers().get(i);
             final Boolean enabled = componentsEnabledStates.get(component.getName());
             if (enabled != null) {
-                component.setEnabled(enabled);
+                ComponentMutateUtils.setEnabled(component, enabled);
             }
         }
 
@@ -1801,7 +1673,7 @@ public final class ScanPackageHelper {
             final ParsedProvider component = pkg.getProviders().get(i);
             final Boolean enabled = componentsEnabledStates.get(component.getName());
             if (enabled != null) {
-                component.setEnabled(enabled);
+                ComponentMutateUtils.setEnabled(component, enabled);
             }
         }
 
@@ -1809,7 +1681,7 @@ public final class ScanPackageHelper {
             final ParsedService component = pkg.getServices().get(i);
             final Boolean enabled = componentsEnabledStates.get(component.getName());
             if (enabled != null) {
-                component.setEnabled(enabled);
+                ComponentMutateUtils.setEnabled(component, enabled);
             }
         }
     }

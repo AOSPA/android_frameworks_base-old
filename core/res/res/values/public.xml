@@ -3222,7 +3222,7 @@
   <eat-comment />
 
   <staging-public-group type="attr" first-id="0x01ff0000">
-    <public name="shouldUseDefaultDisplayStateChangeTransition" />
+    <public name="shouldUseDefaultUnfoldTransition" />
   </staging-public-group>
 
   <staging-public-group type="id" first-id="0x01fe0000">
@@ -3303,15 +3303,24 @@
     <public name="sharedUserMaxSdkVersion" />
     <public name="requiredSplitTypes" />
     <public name="splitTypes" />
+    <public name="canDisplayOnRemoteDevices" />
   </staging-public-group>
 
   <staging-public-group type="id" first-id="0x01de0000">
+    <public name="accessibilityActionSwipeLeft" />
+    <public name="accessibilityActionSwipeRight" />
+    <public name="accessibilityActionSwipeUp" />
+    <public name="accessibilityActionSwipeDown" />
   </staging-public-group>
 
-  <staging-public-group type="style" first-id="0x0dfd0000">
+  <staging-public-group type="style" first-id="0x01dd0000">
   </staging-public-group>
 
-  <staging-public-group type="string" first-id="0x0dfc0000">
+  <staging-public-group type="string" first-id="0x01dc0000">
+    <!-- @hide @SystemApi -->
+    <public name="config_systemSupervision" />
+    <!-- @hide @SystemApi -->
+    <public name="config_deviceManager" />
   </staging-public-group>
 
   <staging-public-group type="dimen" first-id="0x01db0000">

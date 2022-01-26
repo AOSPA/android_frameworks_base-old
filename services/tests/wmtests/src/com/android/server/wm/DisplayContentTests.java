@@ -73,7 +73,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.same;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.server.wm.ActivityTaskSupervisor.ON_TOP;
 import static com.android.server.wm.DisplayContent.IME_TARGET_INPUT;
@@ -175,25 +174,31 @@ public class DisplayContentTests extends WindowTestsBase {
         final WindowState exitingAppWindow = createWindow(null, TYPE_BASE_APPLICATION,
                 mDisplayContent, "exiting app");
         final ActivityRecord exitingApp = exitingAppWindow.mActivityRecord;
-        // Wait until everything in animation handler get executed to prevent the exiting window
-        // from being removed during WindowSurfacePlacer Traversal.
-        waitUntilHandlersIdle();
-
+        exitingApp.startAnimation(exitingApp.getPendingTransaction(), mock(AnimationAdapter.class),
+                false /* hidden */, SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION);
         exitingApp.mIsExiting = true;
-        exitingApp.getTask().getRootTask().mExitingActivities.add(exitingApp);
+        // If the activity is animating, its window should not be removed.
+        mDisplayContent.handleCompleteDeferredRemoval();
 
-        assertForAllWindowsOrder(Arrays.asList(
+        final ArrayList<WindowState> windows = new ArrayList<>(Arrays.asList(
                 mWallpaperWindow,
-                exitingAppWindow,
                 mChildAppWindowBelow,
                 mAppWindow,
                 mChildAppWindowAbove,
+                exitingAppWindow,
                 mDockedDividerWindow,
                 mImeWindow,
                 mImeDialogWindow,
                 mStatusBarWindow,
                 mNotificationShadeWindow,
                 mNavBarWindow));
+        assertForAllWindowsOrder(windows);
+
+        exitingApp.cancelAnimation();
+        // The exiting window will be removed because its parent is no longer animating.
+        mDisplayContent.handleCompleteDeferredRemoval();
+        windows.remove(exitingAppWindow);
+        assertForAllWindowsOrder(windows);
     }
 
     @UseTestDisplay(addAllCommonWindows = true)
@@ -286,11 +291,11 @@ public class DisplayContentTests extends WindowTestsBase {
                 mAppWindow,
                 mChildAppWindowAbove,
                 mDockedDividerWindow,
-                voiceInteractionWindow,
                 mImeWindow,
                 mImeDialogWindow,
                 mStatusBarWindow,
                 mNotificationShadeWindow,
+                voiceInteractionWindow, // It can show above lock screen.
                 mNavBarWindow));
     }
 
@@ -822,12 +827,12 @@ public class DisplayContentTests extends WindowTestsBase {
                 SCREEN_ORIENTATION_LANDSCAPE, dc.getOrientation());
 
         keyguard.mAttrs.screenOrientation = SCREEN_ORIENTATION_PORTRAIT;
-        mAtm.mKeyguardController.setKeyguardShown(true /* keyguardShowing */,
+        mAtm.mKeyguardController.setKeyguardShown(window.getDisplayId(), true /* keyguardShowing */,
                 false /* aodShowing */);
         assertEquals("Visible keyguard must influence device orientation",
                 SCREEN_ORIENTATION_PORTRAIT, dc.getOrientation());
 
-        mAtm.mKeyguardController.keyguardGoingAway(0 /* flags */);
+        mAtm.mKeyguardController.keyguardGoingAway(window.getDisplayId(), 0 /* flags */);
         assertEquals("Keyguard that is going away must not influence device orientation",
                 SCREEN_ORIENTATION_LANDSCAPE, dc.getOrientation());
     }
@@ -868,18 +873,6 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(
                 "Screen orientation must be defined by the window even on close-to-square display.",
                 window.mAttrs.screenOrientation, dc.getOrientation());
-    }
-
-    @Test
-    public void testDisableDisplayInfoOverrideFromWindowManager() {
-        final DisplayContent dc = createNewDisplay();
-
-        assertTrue(dc.mShouldOverrideDisplayConfiguration);
-        mWm.dontOverrideDisplayInfo(dc.getDisplayId());
-
-        assertFalse(dc.mShouldOverrideDisplayConfiguration);
-        verify(mWm.mDisplayManagerInternal, times(1))
-                .setDisplayInfoOverrideFromWindowManager(dc.getDisplayId(), null);
     }
 
     @Test
@@ -1674,11 +1667,7 @@ public class DisplayContentTests extends WindowTestsBase {
     public void testShellTransitRotation() {
         DisplayContent dc = createNewDisplay();
 
-        // Set-up mock shell transitions
-        final TestTransitionPlayer testPlayer = new TestTransitionPlayer(
-                mAtm.getTransitionController(), mAtm.mWindowOrganizerController);
-        mAtm.getTransitionController().registerTransitionPlayer(testPlayer);
-
+        final TestTransitionPlayer testPlayer = registerTestTransitionPlayer();
         final DisplayRotation dr = dc.getDisplayRotation();
         doCallRealMethod().when(dr).updateRotationUnchecked(anyBoolean());
         // Rotate 180 degree so the display doesn't have configuration change. This condition is
@@ -2148,7 +2137,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertTopRunningActivity(activity, display);
 
         // Check to make sure activity not reported when it cannot show on lock and lock is on.
-        doReturn(true).when(keyguard).isKeyguardLocked();
+        doReturn(true).when(keyguard).isKeyguardLocked(anyInt());
         assertEquals(activity, display.topRunningActivity());
         assertNull(display.topRunningActivity(true /* considerKeyguardState */));
 
@@ -2186,11 +2175,11 @@ public class DisplayContentTests extends WindowTestsBase {
         final WindowState appWin = createWindow(null, TYPE_APPLICATION, mDisplayContent, "appWin");
         final ActivityRecord activity = appWin.mActivityRecord;
 
-        mAtm.mKeyguardController.setKeyguardShown(true /* keyguardShowing */,
+        mAtm.mKeyguardController.setKeyguardShown(appWin.getDisplayId(), true /* keyguardShowing */,
                 true /* aodShowing */);
         assertFalse(activity.isVisibleRequested());
 
-        mAtm.mKeyguardController.keyguardGoingAway(0 /* flags */);
+        mAtm.mKeyguardController.keyguardGoingAway(appWin.getDisplayId(), 0 /* flags */);
         assertTrue(activity.isVisibleRequested());
     }
 

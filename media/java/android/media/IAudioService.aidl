@@ -25,6 +25,7 @@ import android.media.AudioFocusInfo;
 import android.media.AudioPlaybackConfiguration;
 import android.media.AudioRecordingConfiguration;
 import android.media.AudioRoutesInfo;
+import android.media.BtProfileConnectionInfo;
 import android.media.IAudioFocusDispatcher;
 import android.media.IAudioModeDispatcher;
 import android.media.IAudioRoutesObserver;
@@ -38,6 +39,7 @@ import android.media.IStrategyPreferredDevicesDispatcher;
 import android.media.ISpatializerCallback;
 import android.media.ISpatializerHeadTrackingModeCallback;
 import android.media.ISpatializerHeadToSoundStagePoseCallback;
+import android.media.ISpatializerOutputCallback;
 import android.media.IVolumeController;
 import android.media.IVolumeController;
 import android.media.PlayerBase;
@@ -157,7 +159,7 @@ interface IAudioService {
 
     int getMode();
 
-    oneway void playSoundEffect(int effectType);
+    oneway void playSoundEffect(int effectType, int userId);
 
     oneway void playSoundEffectVolume(int effectType, float volume);
 
@@ -178,8 +180,6 @@ interface IAudioService {
     boolean setEncodedSurroundMode(int mode);
 
     int getEncodedSurroundMode(int targetSdkVersion);
-
-    oneway void avrcpSupportsAbsoluteVolume(String address, boolean support);
 
     void setSpeakerphoneOn(IBinder cb, boolean on);
 
@@ -216,8 +216,6 @@ interface IAudioService {
 
     void setWiredDeviceConnectionState(int type, int state, String address, String name,
             String caller);
-
-    void handleBluetoothA2dpDeviceConfigChange(in BluetoothDevice device);
 
     void handleBluetoothA2dpActiveDeviceChange(in BluetoothDevice device,
             int state, int profile, boolean suppressNoisyIntent, int a2dpVolume);
@@ -272,8 +270,6 @@ interface IAudioService {
 
     List<AudioPlaybackConfiguration> getActivePlaybackConfigurations();
 
-    void disableRingtoneSync(in int userId);
-
     int getFocusRampTimeMs(in int focusGain, in AudioAttributes attr);
 
     int dispatchFocusChange(in AudioFocusInfo afi, in int focusChange,
@@ -281,16 +277,8 @@ interface IAudioService {
 
     oneway void playerHasOpPlayAudio(in int piid, in boolean hasOpPlayAudio);
 
-    void setBluetoothHearingAidDeviceConnectionState(in BluetoothDevice device,
-            int state, boolean suppressNoisyIntent, int musicDevice);
-
-    void setBluetoothLeAudioOutDeviceConnectionState(in BluetoothDevice device, int state,
-            boolean suppressNoisyIntent);
-
-    void setBluetoothLeAudioInDeviceConnectionState(in BluetoothDevice device, int state);
-
-    void setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(in BluetoothDevice device,
-            int state, int profile, boolean suppressNoisyIntent, int a2dpVolume);
+    void handleBluetoothActiveDeviceChanged(in BluetoothDevice newDevice,
+            in BluetoothDevice previousDevice, in BtProfileConnectionInfo info);
 
     oneway void setFocusRequestResultFromExtPolicy(in AudioFocusInfo afi, int requestResult,
             in IAudioPolicyCallback pcb);
@@ -454,4 +442,12 @@ interface IAudioService {
     void setSpatializerParameter(int key, in byte[] value);
 
     void getSpatializerParameter(int key, inout byte[] value);
+
+    int getSpatializerOutput();
+
+    void registerSpatializerOutputCallback(in ISpatializerOutputCallback cb);
+
+    void unregisterSpatializerOutputCallback(in ISpatializerOutputCallback cb);
+
+    boolean isVolumeFixed();
 }

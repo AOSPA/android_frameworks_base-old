@@ -34,6 +34,7 @@ import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.ActivityThread;
 import android.app.Application;
+import android.app.LoadedApk;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
 import android.appwidget.AppWidgetHostView;
@@ -5475,7 +5476,8 @@ public class RemoteViews implements Parcelable, Filter {
         // user. So build a context that loads resources from that user but
         // still returns the current users userId so settings like data / time formats
         // are loaded without requiring cross user persmissions.
-        final Context contextForResources = getContextForResources(context);
+        final Context contextForResources =
+                getContextForResourcesEnsuringCorrectCachedApkPaths(context);
         if (colorResources != null) {
             colorResources.apply(contextForResources);
         }
@@ -5733,23 +5735,43 @@ public class RemoteViews implements Parcelable, Filter {
         return previousLayoutId == getLayoutId() && mViewId == overrideId;
     }
 
-    // Note: topLevel should be true only for calls on the topLevel RemoteViews, internal calls
-    // should set it to false.
-    private void reapply(Context context, View v, InteractionHandler handler, SizeF size,
-            ColorResources colorResources, boolean topLevel) {
-
+    /**
+     * Returns the RemoteViews that should be used in the reapply operation.
+     *
+     * If the current RemoteViews has multiple layout, this will select the correct one.
+     *
+     * @throws RuntimeException If the current RemoteViews should not be reapplied onto the provided
+     * View.
+     */
+    private RemoteViews getRemoteViewsToReapply(Context context, View v, @Nullable SizeF size) {
         RemoteViews rvToApply = getRemoteViewsToApply(context, size);
 
         // In the case that a view has this RemoteViews applied in one orientation or size, is
         // persisted across change, and has the RemoteViews re-applied in a different situation
         // (orientation or size), we throw an exception, since the layouts may be completely
         // unrelated.
-        if (hasMultipleLayouts()) {
+        // If the ViewID has been changed on the view, or is changed by the RemoteViews, we also
+        // may throw an exception, as the RemoteViews will probably not apply properly.
+        // However, we need to let potentially unrelated RemoteViews apply, as this lack of testing
+        // is already used in production code in some apps.
+        if (hasMultipleLayouts()
+                || rvToApply.mViewId != View.NO_ID
+                || v.getTag(R.id.remote_views_override_id) != null) {
             if (!rvToApply.canRecycleView(v)) {
                 throw new RuntimeException("Attempting to re-apply RemoteViews to a view that" +
                         " that does not share the same root layout id.");
             }
         }
+
+        return rvToApply;
+    }
+
+    // Note: topLevel should be true only for calls on the topLevel RemoteViews, internal calls
+    // should set it to false.
+    private void reapply(Context context, View v, InteractionHandler handler, SizeF size,
+            ColorResources colorResources, boolean topLevel) {
+
+        RemoteViews rvToApply = getRemoteViewsToReapply(context, v, size);
 
         rvToApply.performApply(v, (ViewGroup) v.getParent(), handler, colorResources);
 
@@ -5787,17 +5809,7 @@ public class RemoteViews implements Parcelable, Filter {
     public CancellationSignal reapplyAsync(Context context, View v, Executor executor,
             OnViewAppliedListener listener, InteractionHandler handler, SizeF size,
             ColorResources colorResources) {
-        RemoteViews rvToApply = getRemoteViewsToApply(context, size);
-
-        // In the case that a view has this RemoteViews applied in one orientation, is persisted
-        // across orientation change, and has the RemoteViews re-applied in the new orientation,
-        // we throw an exception, since the layouts may be completely unrelated.
-        if (hasMultipleLayouts()) {
-            if ((Integer) v.getTag(R.id.widget_frame) != rvToApply.getLayoutId()) {
-                throw new RuntimeException("Attempting to re-apply RemoteViews to a view that" +
-                        " that does not share the same root layout id.");
-            }
-        }
+        RemoteViews rvToApply = getRemoteViewsToReapply(context, v, size);
 
         return new AsyncApplyTask(rvToApply, (ViewGroup) v.getParent(),
                 context, listener, handler, colorResources, v, true /* topLevel */)
@@ -5853,13 +5865,14 @@ public class RemoteViews implements Parcelable, Filter {
         }
     }
 
-    private Context getContextForResources(Context context) {
+    private Context getContextForResourcesEnsuringCorrectCachedApkPaths(Context context) {
         if (mApplication != null) {
             if (context.getUserId() == UserHandle.getUserId(mApplication.uid)
                     && context.getPackageName().equals(mApplication.packageName)) {
                 return context;
             }
             try {
+                LoadedApk.checkAndUpdateApkPaths(mApplication);
                 return context.createApplicationContext(mApplication,
                         Context.CONTEXT_RESTRICTED);
             } catch (NameNotFoundException e) {

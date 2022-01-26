@@ -35,7 +35,6 @@ import com.android.systemui.qs.TouchAnimator.Builder;
 import com.android.systemui.qs.TouchAnimator.Listener;
 import com.android.systemui.qs.dagger.QSScope;
 import com.android.systemui.qs.tileimpl.HeightOverrideable;
-import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 import com.android.wm.shell.animation.Interpolators;
@@ -167,19 +166,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         updateQQSVisibility();
         if (mOnKeyguard) {
             clearAnimationState();
-        }
-    }
-
-    void startAlphaAnimation(boolean show) {
-        if (show == mToShowing) {
-            return;
-        }
-        mToShowing = show;
-        if (show) {
-            CrossFadeHelper.fadeIn(mQs.getView(), QQS_FADE_IN_DURATION, 0 /* delay */);
-        } else {
-            CrossFadeHelper.fadeOut(mQs.getView(), QQS_FADE_OUT_DURATION, 0 /* delay */,
-                    null /* endRunnable */);
         }
     }
 
@@ -330,8 +316,8 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
 
                     if (mQQSTileHeightAnimator == null) {
                         mQQSTileHeightAnimator = new HeightExpansionAnimator(this,
-                                quickTileView.getHeight(), tileView.getHeight());
-                        qqsTileHeight = quickTileView.getHeight();
+                                quickTileView.getMeasuredHeight(), tileView.getMeasuredHeight());
+                        qqsTileHeight = quickTileView.getMeasuredHeight();
                     }
 
                     mQQSTileHeightAnimator.addView(quickTileView);
@@ -394,7 +380,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                     if (mOtherTilesExpandAnimator == null) {
                         mOtherTilesExpandAnimator =
                                 new HeightExpansionAnimator(
-                                        this, qqsTileHeight, tileView.getHeight());
+                                        this, qqsTileHeight, tileView.getMeasuredHeight());
                     }
                     mOtherTilesExpandAnimator.addView(tileView);
                     tileView.setClipChildren(true);
@@ -672,7 +658,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         mTranslateWhileExpanding = shouldTranslate;
     }
 
-    static class HeightExpansionAnimator {
+    private static class HeightExpansionAnimator {
         private final List<View> mViews = new ArrayList<>();
         private final ValueAnimator mAnimator;
         private final TouchAnimator.Listener mListener;
@@ -687,9 +673,10 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 int height = (Integer) valueAnimator.getAnimatedValue();
                 for (int i = 0; i < viewCount; i++) {
                     View v = mViews.get(i);
-                    v.setBottom(v.getTop() + height);
                     if (v instanceof HeightOverrideable) {
                         ((HeightOverrideable) v).setHeightOverride(height);
+                    } else {
+                        v.setBottom(v.getTop() + height);
                     }
                 }
                 if (t == 0f) {
@@ -727,9 +714,10 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             final int viewsCount = mViews.size();
             for (int i = 0; i < viewsCount; i++) {
                 View v = mViews.get(i);
-                v.setBottom(v.getTop() + v.getMeasuredHeight());
                 if (v instanceof HeightOverrideable) {
                     ((HeightOverrideable) v).resetOverride();
+                } else {
+                    v.setBottom(v.getTop() + v.getMeasuredHeight());
                 }
             }
         }

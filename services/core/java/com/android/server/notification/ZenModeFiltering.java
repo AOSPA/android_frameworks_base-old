@@ -89,20 +89,34 @@ public class ZenModeFiltering {
     public static boolean matchesCallFilter(Context context, int zen, NotificationManager.Policy
             consolidatedPolicy, UserHandle userHandle, Bundle extras,
             ValidateNotificationPeople validator, int contactsTimeoutMs, float timeoutAffinity) {
-        if (zen == Global.ZEN_MODE_NO_INTERRUPTIONS) return false; // nothing gets through
-        if (zen == Global.ZEN_MODE_ALARMS) return false; // not an alarm
+        if (zen == Global.ZEN_MODE_NO_INTERRUPTIONS) {
+            ZenLog.traceMatchesCallFilter(false, "no interruptions");
+            return false; // nothing gets through
+        }
+        if (zen == Global.ZEN_MODE_ALARMS) {
+            ZenLog.traceMatchesCallFilter(false, "alarms only");
+            return false; // not an alarm
+        }
         if (zen == Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS) {
             if (consolidatedPolicy.allowRepeatCallers()
                     && REPEAT_CALLERS.isRepeat(context, extras)) {
+                ZenLog.traceMatchesCallFilter(true, "repeat caller");
                 return true;
             }
-            if (!consolidatedPolicy.allowCalls()) return false; // no other calls get through
+            if (!consolidatedPolicy.allowCalls()) {
+                ZenLog.traceMatchesCallFilter(false, "calls not allowed");
+                return false; // no other calls get through
+            }
             if (validator != null) {
                 final float contactAffinity = validator.getContactAffinity(userHandle, extras,
                         contactsTimeoutMs, timeoutAffinity);
-                return audienceMatches(consolidatedPolicy.allowCallsFrom(), contactAffinity);
+                boolean match =
+                        audienceMatches(consolidatedPolicy.allowCallsFrom(), contactAffinity);
+                ZenLog.traceMatchesCallFilter(match, "contact affinity " + contactAffinity);
+                return match;
             }
         }
+        ZenLog.traceMatchesCallFilter(true, "no restrictions");
         return true;
     }
 
@@ -311,6 +325,10 @@ public class ZenModeFiltering {
         }
     }
 
+    protected void cleanUpCallersAfter(long timeThreshold) {
+        REPEAT_CALLERS.cleanUpCallsAfter(timeThreshold);
+    }
+
     private static class RepeatCallers {
         // Person : time
         private final ArrayMap<String, Long> mCalls = new ArrayMap<>();
@@ -342,6 +360,17 @@ public class ZenModeFiltering {
                 final long time = mCalls.valueAt(i);
                 if (time > now || (now - time) > mThresholdMinutes * 1000 * 60) {
                     calls.removeAt(i);
+                }
+            }
+        }
+
+        // Clean up all calls that occurred after the given time.
+        // Used only for tests, to clean up after testing.
+        private synchronized void cleanUpCallsAfter(long timeThreshold) {
+            for (int i = mCalls.size() - 1; i >= 0; i--) {
+                final long time = mCalls.valueAt(i);
+                if (time > timeThreshold) {
+                    mCalls.removeAt(i);
                 }
             }
         }

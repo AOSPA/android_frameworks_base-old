@@ -61,6 +61,7 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
     private static final String APEX_WRONG_SHA = "com.android.apex.cts.shim.v2_wrong_sha.apex";
     private static final String APK_A = "TestAppAv1.apk";
     private static final String APK_IN_APEX_TESTAPEX_NAME = "com.android.apex.apkrollback.test";
+    private static final String APEXD_TEST_APEX = "apex.apexd_test.apex";
 
     private static final String TEST_VENDOR_APEX_ALLOW_LIST =
             "/vendor/etc/sysconfig/test-vendor-apex-allow-list.xml";
@@ -91,7 +92,7 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
         deleteFiles("/system/apex/" + APK_IN_APEX_TESTAPEX_NAME + "*.apex",
                 "/data/apex/active/" + APK_IN_APEX_TESTAPEX_NAME + "*.apex",
                 "/data/apex/active/" + SHIM_APEX_PACKAGE_NAME + "*.apex",
-                "/system/apex/test.rebootless_apex_v1.apex",
+                "/system/apex/test.rebootless_apex_v*.apex",
                 "/data/apex/active/test.apex.rebootless*.apex",
                 TEST_VENDOR_APEX_ALLOW_LIST);
     }
@@ -480,17 +481,37 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
 
     @Test
     public void testGetStagedModuleNames() throws Exception {
+        assumeTrue("Device does not support updating APEX",
+                mHostUtils.isApexUpdateSupported());
+
         runPhase("testGetStagedModuleNames");
     }
 
     @Test
+    @LargeTest
     public void testGetStagedApexInfo() throws Exception {
+        assumeTrue("Device does not support updating APEX",
+                mHostUtils.isApexUpdateSupported());
+
+        pushTestApex(APEXD_TEST_APEX);
+        getDevice().reboot();
+
         runPhase("testGetStagedApexInfo");
     }
 
     @Test
     public void testStagedApexObserver() throws Exception {
+        assumeTrue("Device does not support updating APEX",
+                mHostUtils.isApexUpdateSupported());
+
         runPhase("testStagedApexObserver");
+    }
+
+    @Test
+    public void testRebootlessDowngrade() throws Exception {
+        pushTestApex("test.rebootless_apex_v2.apex");
+        getDevice().reboot();
+        runPhase("testRebootlessDowngrade");
     }
 
     private List<String> getStagingDirectories() throws DeviceNotAvailableException {

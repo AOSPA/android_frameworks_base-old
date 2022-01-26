@@ -26,6 +26,8 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.server.wm.ActivityInterceptorCallback.FIRST_ORDERED_ID;
+import static com.android.server.wm.ActivityInterceptorCallback.LAST_ORDERED_ID;
 import static com.android.server.wm.ActivityRecord.State.PAUSED;
 import static com.android.server.wm.ActivityRecord.State.PAUSING;
 import static com.android.server.wm.ActivityRecord.State.RESUMED;
@@ -37,17 +39,20 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
+import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.PictureInPictureParams;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.EnterPipRequestedItem;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
@@ -100,12 +105,12 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
         assertTrue("Activity must be finished", mAtm.mActivityClientController.finishActivity(
-                activity.appToken, 0 /* resultCode */, null /* resultData */,
+                activity.token, 0 /* resultCode */, null /* resultData */,
                 Activity.DONT_FINISH_TASK_WITH_ACTIVITY));
         assertTrue(activity.finishing);
 
         assertTrue("Duplicate activity finish request must also return 'true'",
-                mAtm.mActivityClientController.finishActivity(activity.appToken, 0 /* resultCode */,
+                mAtm.mActivityClientController.finishActivity(activity.token, 0 /* resultCode */,
                         null /* resultData */, Activity.DONT_FINISH_TASK_WITH_ACTIVITY));
     }
 
@@ -242,7 +247,7 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         doReturn(true).when(record)
                 .checkEnterPictureInPictureState("enterPictureInPictureMode", false);
         doReturn(false).when(record).inPinnedWindowingMode();
-        doReturn(false).when(mAtm).isKeyguardLocked();
+        doReturn(false).when(mAtm).isKeyguardLocked(anyInt());
 
         //to simulate NPE
         doReturn(null).when(record).getParent();
@@ -619,7 +624,7 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
                 wpcAfterConfigChange1.getConfiguration().getLocales());
         assertTrue(wpcAfterConfigChange1.getConfiguration().isNightModeActive());
 
-        mAtm.mInternal.onPackageUninstalled(DEFAULT_PACKAGE_NAME);
+        mAtm.mInternal.onPackageUninstalled(DEFAULT_PACKAGE_NAME, DEFAULT_USER_ID);
 
         WindowProcessController wpcAfterConfigChange2 = createWindowProcessController(
                 DEFAULT_PACKAGE_NAME, DEFAULT_USER_ID);
@@ -835,6 +840,30 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
                 wpc.getConfiguration().getLocales());
     }
 
+    @Test
+    public void testPackageConfigUpdate_commitConfig_configSuccessfullyApplied() {
+        Configuration config = mAtm.getGlobalConfiguration();
+        config.setLocales(LocaleList.forLanguageTags("en-XC"));
+        mAtm.updateGlobalConfigurationLocked(config, true, true,
+                DEFAULT_USER_ID);
+        WindowProcessController wpc = createWindowProcessController(
+                DEFAULT_PACKAGE_NAME, DEFAULT_USER_ID);
+        mAtm.mProcessMap.put(Binder.getCallingPid(), wpc);
+        mAtm.mInternal.onProcessAdded(wpc);
+
+        ActivityTaskManagerInternal.PackageConfigurationUpdater packageConfigUpdater =
+                mAtm.mInternal.createPackageConfigurationUpdater(DEFAULT_PACKAGE_NAME,
+                        DEFAULT_USER_ID);
+        // committing new configuration returns true;
+        assertTrue(packageConfigUpdater.setLocales(LocaleList.forLanguageTags("en-XA,ar-XB"))
+                .commit());
+        // applying the same configuration returns false.
+        assertFalse(packageConfigUpdater.setLocales(LocaleList.forLanguageTags("en-XA,ar-XB"))
+                .commit());
+        assertTrue(packageConfigUpdater.setLocales(LocaleList.getEmptyLocaleList())
+                .setNightMode(Configuration.UI_MODE_NIGHT_UNDEFINED).commit());
+    }
+
     private WindowProcessController createWindowProcessController(String packageName,
             int userId) {
         WindowProcessListener mMockListener = Mockito.mock(WindowProcessListener.class);
@@ -846,7 +875,64 @@ public class ActivityTaskManagerServiceTests extends WindowTestsBase {
         return wpc;
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void testRegisterActivityStartInterceptor_IndexTooSmall() {
+        mAtm.mInternal.registerActivityStartInterceptor(FIRST_ORDERED_ID - 1,
+                new ActivityInterceptorCallback() {
+                    @Nullable
+                    @Override
+                    public Intent intercept(ActivityInterceptorInfo info) {
+                        return null;
+                    }
+                });
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testRegisterActivityStartInterceptor_IndexTooLarge() {
+        mAtm.mInternal.registerActivityStartInterceptor(LAST_ORDERED_ID + 1,
+                new ActivityInterceptorCallback() {
+                    @Nullable
+                    @Override
+                    public Intent intercept(ActivityInterceptorInfo info) {
+                        return null;
+                    }
+                });
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testRegisterActivityStartInterceptor_DuplicateId() {
+        mAtm.mInternal.registerActivityStartInterceptor(FIRST_ORDERED_ID,
+                new ActivityInterceptorCallback() {
+                    @Nullable
+                    @Override
+                    public Intent intercept(ActivityInterceptorInfo info) {
+                        return null;
+                    }
+                });
+        mAtm.mInternal.registerActivityStartInterceptor(FIRST_ORDERED_ID,
+                new ActivityInterceptorCallback() {
+                    @Nullable
+                    @Override
+                    public Intent intercept(ActivityInterceptorInfo info) {
+                        return null;
+                    }
+                });
+    }
+
+    @Test
+    public void testRegisterActivityStartInterceptor() {
+        assertEquals(0, mAtm.getActivityInterceptorCallbacks().size());
+
+        mAtm.mInternal.registerActivityStartInterceptor(FIRST_ORDERED_ID,
+                new ActivityInterceptorCallback() {
+                    @Nullable
+                    @Override
+                    public Intent intercept(ActivityInterceptorInfo info) {
+                        return null;
+                    }
+                });
+
+        assertEquals(1, mAtm.getActivityInterceptorCallbacks().size());
+        assertTrue(mAtm.getActivityInterceptorCallbacks().contains(FIRST_ORDERED_ID));
+    }
 }
-
-
-

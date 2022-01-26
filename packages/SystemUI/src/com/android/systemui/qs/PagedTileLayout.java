@@ -112,6 +112,16 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        // Pass configuration change to non-attached pages as well. Some config changes will cause
+        // QS to recreate itself (as determined in FragmentHostManager), but in order to minimize
+        // those, make sure that all get passed to all pages.
+        int numPages = mPages.size();
+        for (int i = 0; i < numPages; i++) {
+            View page = mPages.get(i);
+            if (page.getParent() == null) {
+                page.dispatchConfigurationChanged(newConfig);
+            }
+        }
         if (mLayoutOrientation != newConfig.orientation) {
             mLayoutOrientation = newConfig.orientation;
             mDistributeTiles = true;
@@ -164,6 +174,14 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
         if (mListening == listening) return;
         mListening = listening;
         updateListening();
+    }
+
+    @Override
+    public void setSquishinessFraction(float squishinessFraction) {
+        int nPages = mPages.size();
+        for (int i = 0; i < nPages; i++) {
+            mPages.get(i).setSquishinessFraction(squishinessFraction);
+        }
     }
 
     private void updateListening() {

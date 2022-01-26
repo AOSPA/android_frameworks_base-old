@@ -45,10 +45,14 @@ import com.android.systemui.statusbar.notification.NotificationEntryManagerLogge
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifInflaterImpl;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
+import com.android.systemui.statusbar.notification.collection.coordinator.ShadeEventCoordinator;
 import com.android.systemui.statusbar.notification.collection.coordinator.VisualStabilityCoordinator;
+import com.android.systemui.statusbar.notification.collection.coordinator.dagger.CoordinatorsModule;
 import com.android.systemui.statusbar.notification.collection.inflation.NotifInflater;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.collection.inflation.OnUserInteractionCallbackImpl;
+import com.android.systemui.statusbar.notification.collection.legacy.LegacyNotificationPresenterExtensions;
+import com.android.systemui.statusbar.notification.collection.legacy.LegacyNotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.OnUserInteractionCallbackImplLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
@@ -58,6 +62,10 @@ import com.android.systemui.statusbar.notification.collection.render.GroupExpans
 import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManagerImpl;
 import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManager;
 import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManagerImpl;
+import com.android.systemui.statusbar.notification.collection.render.NotifGutsViewManager;
+import com.android.systemui.statusbar.notification.collection.render.NotifShadeEventSource;
+import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
+import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProviderImpl;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
 import com.android.systemui.statusbar.notification.init.NotificationsControllerImpl;
 import com.android.systemui.statusbar.notification.init.NotificationsControllerStub;
@@ -89,7 +97,10 @@ import dagger.Provides;
 /**
  * Dagger Module for classes found within the com.android.systemui.statusbar.notification package.
  */
-@Module(includes = { NotificationSectionHeadersModule.class })
+@Module(includes = {
+        NotificationSectionHeadersModule.class,
+        CoordinatorsModule.class
+})
 public interface NotificationsModule {
     @Binds
     StackScrollAlgorithm.SectionProvider bindSectionProvider(
@@ -169,6 +180,14 @@ public interface NotificationsModule {
                 dumpManager);
     }
 
+    /** Provides an instance of {@link NotifGutsViewManager} */
+    @SysUISingleton
+    @Provides
+    static NotifGutsViewManager provideNotifGutsViewManager(
+            NotificationGutsManager notificationGutsManager) {
+        return notificationGutsManager;
+    }
+
     /** Provides an instance of {@link VisualStabilityManager} */
     @SysUISingleton
     @Provides
@@ -192,14 +211,20 @@ public interface NotificationsModule {
     static NotificationLogger provideNotificationLogger(
             NotificationListener notificationListener,
             @UiBackground Executor uiBgExecutor,
+            FeatureFlags featureFlags,
+            NotificationVisibilityProvider visibilityProvider,
             NotificationEntryManager entryManager,
+            NotifPipeline notifPipeline,
             StatusBarStateController statusBarStateController,
             NotificationLogger.ExpansionStateLogger expansionStateLogger,
             NotificationPanelLogger notificationPanelLogger) {
         return new NotificationLogger(
                 notificationListener,
                 uiBgExecutor,
+                featureFlags,
+                visibilityProvider,
                 entryManager,
+                notifPipeline,
                 statusBarStateController,
                 expansionStateLogger,
                 notificationPanelLogger);
@@ -262,6 +287,34 @@ public interface NotificationsModule {
     }
 
     /**
+     * Provide the object which can be used to obtain NotificationVisibility objects.
+     */
+    @Provides
+    @SysUISingleton
+    static NotificationVisibilityProvider provideNotificationVisibilityProvider(
+            FeatureFlags featureFlags,
+            Lazy<NotificationVisibilityProviderImpl> newProvider,
+            Lazy<LegacyNotificationVisibilityProvider> legacyProvider) {
+        return featureFlags.isNewNotifPipelineRenderingEnabled()
+                ? newProvider.get()
+                : legacyProvider.get();
+    }
+
+    /**
+     * Provide the active implementation for presenting notifications.
+     */
+    @Provides
+    @SysUISingleton
+    static NotifShadeEventSource provideNotifShadeEventSource(
+            FeatureFlags featureFlags,
+            Lazy<ShadeEventCoordinator> shadeEventCoordinatorLazy,
+            Lazy<LegacyNotificationPresenterExtensions> legacyNotificationPresenterExtensionsLazy) {
+        return featureFlags.isNewNotifPipelineRenderingEnabled()
+                ? shadeEventCoordinatorLazy.get()
+                : legacyNotificationPresenterExtensionsLazy.get();
+    }
+
+    /**
      * Provide a dismissal callback that's triggered when a user manually dismissed a notification
      * from the notification shade or it gets auto-cancelled by click.
      */
@@ -271,15 +324,15 @@ public interface NotificationsModule {
             FeatureFlags featureFlags,
             HeadsUpManager headsUpManager,
             StatusBarStateController statusBarStateController,
-            Lazy<NotifPipeline> pipeline,
             Lazy<NotifCollection> notifCollection,
+            Lazy<NotificationVisibilityProvider> visibilityProvider,
             Lazy<VisualStabilityCoordinator> visualStabilityCoordinator,
             NotificationEntryManager entryManager,
             VisualStabilityManager visualStabilityManager,
             Lazy<GroupMembershipManager> groupMembershipManagerLazy) {
         return featureFlags.isNewNotifPipelineRenderingEnabled()
                 ? new OnUserInteractionCallbackImpl(
-                        pipeline.get(),
+                        visibilityProvider.get(),
                         notifCollection.get(),
                         headsUpManager,
                         statusBarStateController,
@@ -287,6 +340,7 @@ public interface NotificationsModule {
                         groupMembershipManagerLazy.get())
                 : new OnUserInteractionCallbackImplLegacy(
                         entryManager,
+                        visibilityProvider.get(),
                         headsUpManager,
                         statusBarStateController,
                         visualStabilityManager,

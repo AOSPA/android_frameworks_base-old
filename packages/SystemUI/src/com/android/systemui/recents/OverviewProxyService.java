@@ -17,6 +17,7 @@
 package com.android.systemui.recents;
 
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.MotionEvent.ACTION_CANCEL;
 import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_UP;
@@ -24,6 +25,7 @@ import static android.view.WindowManager.ScreenshotSource.SCREENSHOT_OVERVIEW;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
 
 import static com.android.internal.accessibility.common.ShortcutConstants.CHOOSER_PACKAGE_NAME;
+import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_RECENT_TASKS;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SHELL_ONE_HANDED;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SHELL_PIP;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SHELL_SHELL_TRANSITIONS;
@@ -68,6 +70,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.accessibility.AccessibilityManager;
+import android.view.inputmethod.InputMethodManager;
 
 import androidx.annotation.NonNull;
 
@@ -103,6 +106,7 @@ import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipAnimationController;
+import com.android.wm.shell.recents.RecentTasks;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.startingsurface.StartingSurface;
 import com.android.wm.shell.transition.ShellTransitions;
@@ -156,6 +160,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private final ShellTransitions mShellTransitions;
     private final Optional<StartingSurface> mStartingSurface;
     private final SmartspaceTransitionController mSmartspaceTransitionController;
+    private final Optional<RecentTasks> mRecentTasks;
 
     private Region mActiveNavBarRegion;
 
@@ -237,6 +242,15 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
 
         @Override
+        public void onImeSwitcherPressed() throws RemoteException {
+            // TODO(b/204901476) We're intentionally using DEFAULT_DISPLAY for now since
+            // Launcher/Taskbar isn't display aware.
+            mContext.getSystemService(InputMethodManager.class)
+                    .showInputMethodPickerFromSystem(true /* showAuxiliarySubtypes */,
+                            DEFAULT_DISPLAY);
+        }
+
+        @Override
         public void setHomeRotationEnabled(boolean enabled) {
             verifyCallerAndClearCallingIdentityPostMain("setHomeRotationEnabled", () ->
                     mHandler.post(() -> notifyHomeRotationEnabled(enabled)));
@@ -246,6 +260,12 @@ public class OverviewProxyService extends CurrentUserTracker implements
         public void notifyTaskbarStatus(boolean visible, boolean stashed) {
             verifyCallerAndClearCallingIdentityPostMain("notifyTaskbarStatus", () ->
                     onTaskbarStatusUpdated(visible, stashed));
+        }
+
+        @Override
+        public void notifyTaskbarAutohideSuspend(boolean suspend) {
+            verifyCallerAndClearCallingIdentityPostMain("notifyTaskbarAutohideSuspend", () ->
+                    onTaskbarAutohideSuspend(suspend));
         }
 
         private boolean sendEvent(int action, int code) {
@@ -474,6 +494,9 @@ public class OverviewProxyService extends CurrentUserTracker implements
             params.putBinder(
                     KEY_EXTRA_SMARTSPACE_TRANSITION_CONTROLLER,
                     mSmartspaceTransitionController.createExternalInterface().asBinder());
+            mRecentTasks.ifPresent(recentTasks -> params.putBinder(
+                    KEY_EXTRA_RECENT_TASKS,
+                    recentTasks.createExternalInterface().asBinder()));
 
             try {
                 mOverviewProxy.onInitialize(params);
@@ -524,17 +547,18 @@ public class OverviewProxyService extends CurrentUserTracker implements
     @Inject
     public OverviewProxyService(Context context, CommandQueue commandQueue,
             Lazy<NavigationBarController> navBarControllerLazy,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             NavigationModeController navModeController,
             NotificationShadeWindowController statusBarWinController, SysUiState sysUiState,
             Optional<Pip> pipOptional,
             Optional<LegacySplitScreen> legacySplitScreenOptional,
             Optional<SplitScreen> splitScreenOptional,
-            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             Optional<OneHanded> oneHandedOptional,
+            Optional<RecentTasks> recentTasks,
+            Optional<StartingSurface> startingSurface,
             BroadcastDispatcher broadcastDispatcher,
             ShellTransitions shellTransitions,
             ScreenLifecycle screenLifecycle,
-            Optional<StartingSurface> startingSurface,
             SmartspaceTransitionController smartspaceTransitionController,
             DumpManager dumpManager) {
         super(broadcastDispatcher);
@@ -556,6 +580,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
         mSysUiState.addCallback(this::notifySystemUiStateFlags);
         mOneHandedOptional = oneHandedOptional;
         mShellTransitions = shellTransitions;
+        mRecentTasks = recentTasks;
 
         // Assumes device always starts with back button until launcher tells it that it does not
         mNavBarButtonAlpha = 1.0f;
@@ -818,6 +843,12 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
     }
 
+    private void onTaskbarAutohideSuspend(boolean suspend) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onTaskbarAutohideSuspend(suspend);
+        }
+    }
+
     private void notifyConnectionChanged() {
         for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
             mConnectionCallbacks.get(i).onConnectionChanged(mOverviewProxy != null);
@@ -1000,6 +1031,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
         default void onNavBarButtonAlphaChanged(float alpha, boolean animate) {}
         default void onHomeRotationEnabled(boolean enabled) {}
         default void onTaskbarStatusUpdated(boolean visible, boolean stashed) {}
+        default void onTaskbarAutohideSuspend(boolean suspend) {}
         default void onSystemUiStateChanged(int sysuiStateFlags) {}
         default void onAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {}
         default void onAssistantGestureCompletion(float velocity) {}

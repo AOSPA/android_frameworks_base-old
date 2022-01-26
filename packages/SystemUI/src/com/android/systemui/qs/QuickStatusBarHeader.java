@@ -34,15 +34,17 @@ import android.widget.Space;
 
 import androidx.annotation.NonNull;
 
+import com.android.internal.policy.SystemBarUtils;
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
 import com.android.systemui.battery.BatteryMeterView;
 import com.android.systemui.qs.QSDetail.Callback;
+import com.android.systemui.statusbar.phone.StatusBarContentInsetsProvider;
 import com.android.systemui.statusbar.phone.StatusBarIconController.TintedIconManager;
-import com.android.systemui.statusbar.phone.StatusBarWindowView;
 import com.android.systemui.statusbar.phone.StatusIconContainer;
 import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.statusbar.policy.VariableDateView;
+import com.android.systemui.statusbar.window.StatusBarWindowView;
 
 import java.util.List;
 
@@ -85,6 +87,7 @@ public class QuickStatusBarHeader extends FrameLayout {
 
     private TintedIconManager mTintedIconManager;
     private QSExpansionPathInterpolator mQSExpansionPathInterpolator;
+    private StatusBarContentInsetsProvider mInsetsProvider;
 
     private int mRoundedCornerPadding = 0;
     private int mWaterfallTopInset;
@@ -100,6 +103,8 @@ public class QuickStatusBarHeader extends FrameLayout {
 
     private boolean mHasCenterCutout;
     private boolean mConfigShowBatteryEstimate;
+
+    private boolean mUseCombinedQSHeader;
 
     public QuickStatusBarHeader(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -157,9 +162,13 @@ public class QuickStatusBarHeader extends FrameLayout {
 
     void onAttach(TintedIconManager iconManager,
             QSExpansionPathInterpolator qsExpansionPathInterpolator,
-            List<String> rssiIgnoredSlots) {
+            List<String> rssiIgnoredSlots,
+            StatusBarContentInsetsProvider insetsProvider,
+            boolean useCombinedQSHeader) {
+        mUseCombinedQSHeader = useCombinedQSHeader;
         mTintedIconManager = iconManager;
         mRssiIgnoredSlots = rssiIgnoredSlots;
+        mInsetsProvider = insetsProvider;
         int fillColor = Utils.getColorAttrDefaultColor(getContext(),
                 android.R.attr.textColorPrimary);
 
@@ -232,16 +241,18 @@ public class QuickStatusBarHeader extends FrameLayout {
         // status bar is already displayed out of QS in split shade
         boolean shouldUseSplitShade =
                 resources.getBoolean(R.bool.config_use_split_notification_shade);
-        mStatusIconsView.setVisibility(shouldUseSplitShade ? View.GONE : View.VISIBLE);
-        mDatePrivacyView.setVisibility(shouldUseSplitShade ? View.GONE : View.VISIBLE);
+
+        mStatusIconsView.setVisibility(
+                shouldUseSplitShade || mUseCombinedQSHeader ? View.GONE : View.VISIBLE);
+        mDatePrivacyView.setVisibility(
+                shouldUseSplitShade || mUseCombinedQSHeader ? View.GONE : View.VISIBLE);
 
         mConfigShowBatteryEstimate = resources.getBoolean(R.bool.config_showBatteryEstimateQSBH);
 
         mRoundedCornerPadding = resources.getDimensionPixelSize(
                 R.dimen.rounded_corner_content_padding);
 
-        int qsOffsetHeight = resources.getDimensionPixelSize(
-                com.android.internal.R.dimen.quick_qs_offset_height);
+        int qsOffsetHeight = SystemBarUtils.getQuickQsOffsetHeight(mContext);
 
         mDatePrivacyView.getLayoutParams().height =
                 Math.max(qsOffsetHeight, mDatePrivacyView.getMinimumHeight());
@@ -273,8 +284,8 @@ public class QuickStatusBarHeader extends FrameLayout {
         }
 
         MarginLayoutParams qqsLP = (MarginLayoutParams) mHeaderQsPanel.getLayoutParams();
-        qqsLP.topMargin = mContext.getResources()
-                .getDimensionPixelSize(R.dimen.qqs_layout_margin_top);
+        qqsLP.topMargin = shouldUseSplitShade || !mUseCombinedQSHeader ? mContext.getResources()
+                .getDimensionPixelSize(R.dimen.qqs_layout_margin_top) : qsOffsetHeight;
         mHeaderQsPanel.setLayoutParams(qqsLP);
 
         updateBatteryMode();
@@ -302,6 +313,10 @@ public class QuickStatusBarHeader extends FrameLayout {
     }
 
     private void updateAnimators() {
+        if (mUseCombinedQSHeader) {
+            mTranslationAnimator = null;
+            return;
+        }
         updateAlphaAnimator();
         int offset = mTopViewMeasureHeight;
 
@@ -314,6 +329,10 @@ public class QuickStatusBarHeader extends FrameLayout {
     }
 
     private void updateAlphaAnimator() {
+        if (mUseCombinedQSHeader) {
+            mAlphaAnimator = null;
+            return;
+        }
         TouchAnimator.Builder builder = new TouchAnimator.Builder()
                 .addFloat(mSecurityHeaderView, "alpha", 0, 1)
                 // These views appear on expanding down
@@ -421,22 +440,20 @@ public class QuickStatusBarHeader extends FrameLayout {
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
         // Handle padding of the views
         DisplayCutout cutout = insets.getDisplayCutout();
-        Pair<Integer, Integer> cornerCutoutPadding = StatusBarWindowView.cornerCutoutMargins(
-                cutout, getDisplay());
-        Pair<Integer, Integer> padding =
-                StatusBarWindowView.paddingNeededForCutoutAndRoundedCorner(
-                        cutout, cornerCutoutPadding, -1);
-        mDatePrivacyView.setPadding(padding.first, 0, padding.second, 0);
-        mStatusIconsView.setPadding(padding.first, 0, padding.second, 0);
+
+        Pair<Integer, Integer> sbInsets = mInsetsProvider
+                .getStatusBarContentInsetsForCurrentRotation();
+        boolean hasCornerCutout = mInsetsProvider.currentRotationHasCornerCutout();
+
+        mDatePrivacyView.setPadding(sbInsets.first, 0, sbInsets.second, 0);
+        mStatusIconsView.setPadding(sbInsets.first, 0, sbInsets.second, 0);
         LinearLayout.LayoutParams datePrivacySeparatorLayoutParams =
                 (LinearLayout.LayoutParams) mDatePrivacySeparator.getLayoutParams();
         LinearLayout.LayoutParams mClockIconsSeparatorLayoutParams =
                 (LinearLayout.LayoutParams) mClockIconsSeparator.getLayoutParams();
-        boolean cornerCutout = cornerCutoutPadding != null
-                && (cornerCutoutPadding.first == 0 || cornerCutoutPadding.second == 0);
         if (cutout != null) {
             Rect topCutout = cutout.getBoundingRectTop();
-            if (topCutout.isEmpty() || cornerCutout) {
+            if (topCutout.isEmpty() || hasCornerCutout) {
                 datePrivacySeparatorLayoutParams.width = 0;
                 mDatePrivacySeparator.setVisibility(View.GONE);
                 mClockIconsSeparatorLayoutParams.width = 0;
@@ -454,8 +471,8 @@ public class QuickStatusBarHeader extends FrameLayout {
         }
         mDatePrivacySeparator.setLayoutParams(datePrivacySeparatorLayoutParams);
         mClockIconsSeparator.setLayoutParams(mClockIconsSeparatorLayoutParams);
-        mCutOutPaddingLeft = padding.first;
-        mCutOutPaddingRight = padding.second;
+        mCutOutPaddingLeft = sbInsets.first;
+        mCutOutPaddingRight = sbInsets.second;
         mWaterfallTopInset = cutout == null ? 0 : cutout.getWaterfallInsets().top;
 
         updateBatteryMode();

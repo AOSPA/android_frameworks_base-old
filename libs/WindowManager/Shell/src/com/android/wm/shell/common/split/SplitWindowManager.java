@@ -25,16 +25,12 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMA
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 
-import android.app.ActivityTaskManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Binder;
-import android.os.IBinder;
-import android.os.RemoteException;
-import android.util.Slog;
 import android.view.IWindow;
 import android.view.InsetsState;
 import android.view.LayoutInflater;
@@ -44,6 +40,7 @@ import android.view.SurfaceSession;
 import android.view.WindowManager;
 import android.view.WindowlessWindowManager;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.wm.shell.R;
@@ -59,7 +56,6 @@ public final class SplitWindowManager extends WindowlessWindowManager {
     private Context mContext;
     private SurfaceControlViewHost mViewHost;
     private SurfaceControl mLeash;
-    private boolean mResizingSplits;
     private DividerView mDividerView;
 
     public interface ParentContainerCallbacks {
@@ -75,9 +71,10 @@ public final class SplitWindowManager extends WindowlessWindowManager {
         mWindowName = windowName;
     }
 
-    @Override
-    public void setTouchRegion(IBinder window, Region region) {
-        super.setTouchRegion(window, region);
+    void setTouchRegion(@NonNull Rect region) {
+        if (mViewHost != null) {
+            setTouchRegion(mViewHost.getWindowToken().asBinder(), new Region(region));
+        }
     }
 
     @Override
@@ -126,7 +123,7 @@ public final class SplitWindowManager extends WindowlessWindowManager {
         lp.setTitle(mWindowName);
         lp.privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION | PRIVATE_FLAG_TRUSTED_OVERLAY;
         mViewHost.setView(mDividerView, lp);
-        mDividerView.setup(splitLayout, mViewHost, insetsState);
+        mDividerView.setup(splitLayout, this, mViewHost, insetsState);
     }
 
     /**
@@ -152,16 +149,6 @@ public final class SplitWindowManager extends WindowlessWindowManager {
     void setInteractive(boolean interactive) {
         if (mDividerView == null) return;
         mDividerView.setInteractive(interactive);
-    }
-
-    void setResizingSplits(boolean resizing) {
-        if (resizing == mResizingSplits) return;
-        try {
-            ActivityTaskManager.getService().setSplitScreenResizing(resizing);
-            mResizingSplits = resizing;
-        } catch (RemoteException e) {
-            Slog.w(TAG, "Error calling setSplitScreenResizing", e);
-        }
     }
 
     /**

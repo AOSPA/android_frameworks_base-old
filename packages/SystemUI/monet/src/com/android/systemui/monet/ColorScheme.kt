@@ -85,9 +85,10 @@ public class ColorScheme(@ColorInt seed: Int, val darkTheme: Boolean) {
         val camSeed = Cam.fromInt(seedArgb)
         val hue = camSeed.hue
         val chroma = camSeed.chroma.coerceAtLeast(ACCENT1_CHROMA)
+        val tertiaryHue = wrapDegrees((hue + ACCENT3_HUE_SHIFT).toInt())
         accent1 = Shades.of(hue, chroma).toList()
         accent2 = Shades.of(hue, ACCENT2_CHROMA).toList()
-        accent3 = Shades.of(hue + ACCENT3_HUE_SHIFT, ACCENT3_CHROMA).toList()
+        accent3 = Shades.of(tertiaryHue.toFloat(), ACCENT3_CHROMA).toList()
         neutral1 = Shades.of(hue, NEUTRAL1_CHROMA).toList()
         neutral2 = Shades.of(hue, NEUTRAL2_CHROMA).toList()
     }
@@ -249,6 +250,9 @@ public class ColorScheme(@ColorInt seed: Int, val darkTheme: Boolean) {
                 val population = populationByColor[entry.key]!!
                 val cam = camByColor[entry.key]!!
                 val hue = cam.hue.roundToInt() % 360
+                if (cam.chroma <= MIN_CHROMA) {
+                    continue
+                }
                 huePopulation[hue] = huePopulation[hue] + population
             }
 

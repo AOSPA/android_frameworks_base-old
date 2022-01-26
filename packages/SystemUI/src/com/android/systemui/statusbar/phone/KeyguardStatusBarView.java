@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import static com.android.systemui.DejankUtils.whitelistIpcs;
 import static com.android.systemui.ScreenDecorations.DisplayCutoutView.boundsFromDirection;
+import static com.android.systemui.util.Utils.getStatusBarHeaderHeightKeyguard;
 
 import android.annotation.ColorInt;
 import android.content.Context;
@@ -46,6 +47,7 @@ import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.battery.BatteryMeterView;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
+import com.android.systemui.statusbar.window.StatusBarWindowView;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -162,11 +164,8 @@ public class KeyguardStatusBarView extends RelativeLayout {
     }
 
     private void updateKeyguardStatusBarHeight() {
-        final int waterfallTop =
-                mDisplayCutout == null ? 0 : mDisplayCutout.getWaterfallInsets().top;
         MarginLayoutParams lp =  (MarginLayoutParams) getLayoutParams();
-        lp.height =  getResources().getDimensionPixelSize(
-                R.dimen.status_bar_header_height_keyguard) + waterfallTop;
+        lp.height = getStatusBarHeaderHeightKeyguard(mContext);
         setLayoutParams(lp);
     }
 
@@ -240,35 +239,32 @@ public class KeyguardStatusBarView extends RelativeLayout {
         }
     }
 
-    @Override
-    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+    /** Should only be called from {@link KeyguardStatusBarViewController}. */
+    WindowInsets updateWindowInsets(
+            WindowInsets insets,
+            StatusBarContentInsetsProvider insetsProvider) {
         mLayoutState = LAYOUT_NONE;
-        if (updateLayoutConsideringCutout()) {
+        if (updateLayoutConsideringCutout(insetsProvider)) {
             requestLayout();
         }
         return super.onApplyWindowInsets(insets);
     }
 
-    private boolean updateLayoutConsideringCutout() {
+    private boolean updateLayoutConsideringCutout(StatusBarContentInsetsProvider insetsProvider) {
         mDisplayCutout = getRootWindowInsets().getDisplayCutout();
         updateKeyguardStatusBarHeight();
-
-        Pair<Integer, Integer> cornerCutoutMargins =
-                StatusBarWindowView.cornerCutoutMargins(mDisplayCutout, getDisplay());
-        updatePadding(cornerCutoutMargins);
-        if (mDisplayCutout == null || cornerCutoutMargins != null) {
+        updatePadding(insetsProvider);
+        if (mDisplayCutout == null || insetsProvider.currentRotationHasCornerCutout()) {
             return updateLayoutParamsNoCutout();
         } else {
             return updateLayoutParamsForCutout();
         }
     }
 
-    private void updatePadding(Pair<Integer, Integer> cornerCutoutMargins) {
+    private void updatePadding(StatusBarContentInsetsProvider insetsProvider) {
         final int waterfallTop =
                 mDisplayCutout == null ? 0 : mDisplayCutout.getWaterfallInsets().top;
-        mPadding =
-                StatusBarWindowView.paddingNeededForCutoutAndRoundedCorner(
-                        mDisplayCutout, cornerCutoutMargins, mRoundedCornerPadding);
+        mPadding = insetsProvider.getStatusBarContentInsetsForCurrentRotation();
 
         // consider privacy dot space
         final int minLeft = (isLayoutRtl() && mIsPrivacyDotEnabled)

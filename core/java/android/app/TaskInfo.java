@@ -265,6 +265,13 @@ public class TaskInfo {
     }
 
     /**
+     * Whether this task is visible.
+     */
+    public boolean isVisible() {
+        return isVisible;
+    }
+
+    /**
      * @param isLowResolution
      * @return
      * @hide
@@ -361,7 +368,8 @@ public class TaskInfo {
                 && Objects.equals(taskDescription, that.taskDescription)
                 && isFocused == that.isFocused
                 && isVisible == that.isVisible
-                && isSleeping == that.isSleeping;
+                && isSleeping == that.isSleeping
+                && Objects.equals(mTopActivityLocusId, that.mTopActivityLocusId);
     }
 
     /**

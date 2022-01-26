@@ -26,6 +26,8 @@ import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
 import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
+import android.app.communal.CommunalManager;
+import android.app.communal.ICommunalManager;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
 import android.app.job.JobSchedulerFrameworkInitializer;
@@ -52,6 +54,8 @@ import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothManager;
 import android.companion.CompanionDeviceManager;
 import android.companion.ICompanionDeviceManager;
+import android.companion.virtual.IVirtualDeviceManager;
+import android.companion.virtual.VirtualDeviceManager;
 import android.content.ClipboardManager;
 import android.content.ContentCaptureOptions;
 import android.content.Context;
@@ -122,6 +126,8 @@ import android.media.projection.MediaProjectionManager;
 import android.media.soundtrigger.SoundTriggerManager;
 import android.media.tv.ITvInputManager;
 import android.media.tv.TvInputManager;
+import android.media.tv.interactive.ITvIAppManager;
+import android.media.tv.interactive.TvIAppManager;
 import android.media.tv.tunerresourcemanager.ITunerResourceManager;
 import android.media.tv.tunerresourcemanager.TunerResourceManager;
 import android.net.ConnectivityFrameworkInitializer;
@@ -873,6 +879,16 @@ public final class SystemServiceRegistry {
                 return new CompanionDeviceManager(service, ctx.getOuterContext());
             }});
 
+        registerService(Context.VIRTUAL_DEVICE_SERVICE, VirtualDeviceManager.class,
+                new CachedServiceFetcher<VirtualDeviceManager>() {
+            @Override
+            public VirtualDeviceManager createService(ContextImpl ctx)
+                    throws ServiceNotFoundException {
+                IVirtualDeviceManager service = IVirtualDeviceManager.Stub.asInterface(
+                        ServiceManager.getServiceOrThrow(Context.VIRTUAL_DEVICE_SERVICE));
+                return new VirtualDeviceManager(service, ctx.getOuterContext());
+            }});
+
         registerService(Context.CONSUMER_IR_SERVICE, ConsumerIrManager.class,
                 new CachedServiceFetcher<ConsumerIrManager>() {
             @Override
@@ -942,6 +958,15 @@ public final class SystemServiceRegistry {
                         return new BiometricManager(ctx.getOuterContext(), service);
                     }
                 });
+
+        registerService(Context.TV_IAPP_SERVICE, TvIAppManager.class,
+                new CachedServiceFetcher<TvIAppManager>() {
+            @Override
+            public TvIAppManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                IBinder iBinder = ServiceManager.getServiceOrThrow(Context.TV_IAPP_SERVICE);
+                ITvIAppManager service = ITvIAppManager.Stub.asInterface(iBinder);
+                return new TvIAppManager(service, ctx.getUserId());
+            }});
 
         registerService(Context.TV_INPUT_SERVICE, TvInputManager.class,
                 new CachedServiceFetcher<TvInputManager>() {
@@ -1368,6 +1393,14 @@ public final class SystemServiceRegistry {
                     throws ServiceNotFoundException {
                     return new SystemLightsManager(ctx);
                 }});
+        registerService(Context.LOCALE_SERVICE, LocaleManager.class,
+                new CachedServiceFetcher<LocaleManager>() {
+                    @Override
+                    public LocaleManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new LocaleManager(ctx, ILocaleManager.Stub.asInterface(
+                                ServiceManager.getServiceOrThrow(Context.LOCALE_SERVICE)));
+                    }});
         registerService(Context.INCREMENTAL_SERVICE, IncrementalManager.class,
                 new CachedServiceFetcher<IncrementalManager>() {
                     @Override
@@ -1460,7 +1493,23 @@ public final class SystemServiceRegistry {
                     @Override
                     public DisplayHashManager createService(ContextImpl ctx) {
                         return new DisplayHashManager();
-                    }});
+                    }
+                });
+
+        registerService(Context.COMMUNAL_MANAGER_SERVICE, CommunalManager.class,
+                new CachedServiceFetcher<CommunalManager>() {
+                    @Override
+                    public CommunalManager createService(ContextImpl ctx) {
+                        if (!ctx.getPackageManager().hasSystemFeature(
+                                PackageManager.FEATURE_COMMUNAL_MODE)) {
+                            return null;
+                        }
+                        IBinder iBinder =
+                                ServiceManager.getService(Context.COMMUNAL_MANAGER_SERVICE);
+                        return iBinder != null ? new CommunalManager(
+                                ICommunalManager.Stub.asInterface(iBinder)) : null;
+                    }
+                });
 
         sInitializing = true;
         try {
@@ -1905,39 +1954,6 @@ public final class SystemServiceRegistry {
         }
 
         public abstract T createService() throws ServiceNotFoundException;
-    }
-
-    /**
-     * Like StaticServiceFetcher, creates only one instance of the service per application, but when
-     * creating the service for the first time, passes it the application context of the creating
-     * application.
-     *
-     * TODO: Delete this once its only user (ConnectivityManager) is known to work well in the
-     * case where multiple application components each have their own ConnectivityManager object.
-     */
-    static abstract class StaticApplicationContextServiceFetcher<T> implements ServiceFetcher<T> {
-        private T mCachedInstance;
-
-        @Override
-        public final T getService(ContextImpl ctx) {
-            synchronized (StaticApplicationContextServiceFetcher.this) {
-                if (mCachedInstance == null) {
-                    Context appContext = ctx.getApplicationContext();
-                    // If the application context is null, we're either in the system process or
-                    // it's the application context very early in app initialization. In both these
-                    // cases, the passed-in ContextImpl will not be freed, so it's safe to pass it
-                    // to the service. http://b/27532714 .
-                    try {
-                        mCachedInstance = createService(appContext != null ? appContext : ctx);
-                    } catch (ServiceNotFoundException e) {
-                        onServiceNotFound(e);
-                    }
-                }
-                return mCachedInstance;
-            }
-        }
-
-        public abstract T createService(Context applicationContext) throws ServiceNotFoundException;
     }
 
     /** @hide */

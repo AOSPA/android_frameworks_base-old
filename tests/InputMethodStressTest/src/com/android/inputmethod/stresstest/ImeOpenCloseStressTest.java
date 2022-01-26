@@ -16,64 +16,81 @@
 
 package com.android.inputmethod.stresstest;
 
-import static com.android.compatibility.common.util.SystemUtil.eventually;
+import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
-import static com.google.common.truth.Truth.assertThat;
+import static com.android.inputmethod.stresstest.ImeStressTestUtil.waitOnMainUntil;
+import static com.android.inputmethod.stresstest.ImeStressTestUtil.waitOnMainUntilImeIsHidden;
+import static com.android.inputmethod.stresstest.ImeStressTestUtil.waitOnMainUntilImeIsShown;
 
+import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
+import android.os.Bundle;
 import android.platform.test.annotations.RootPermissionTest;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 
+import androidx.annotation.Nullable;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
 @RootPermissionTest
 @RunWith(AndroidJUnit4.class)
-public class ImeOpenCloseStressTest {
+public final class ImeOpenCloseStressTest {
 
-    private static final long TIMEOUT = TimeUnit.SECONDS.toMillis(5);
     private static final int NUM_TEST_ITERATIONS = 100;
-
-    private Instrumentation mInstrumentation;
 
     @Test
     public void test() {
-        mInstrumentation = InstrumentationRegistry.getInstrumentation();
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         Intent intent = new Intent()
                 .setAction(Intent.ACTION_MAIN)
-                .setClass(mInstrumentation.getContext(), TestActivity.class)
+                .setClass(instrumentation.getContext(), TestActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        TestActivity activity = (TestActivity) mInstrumentation.startActivitySync(intent);
-        eventually(() -> assertThat(callOnMainSync(activity::hasWindowFocus)).isTrue(), TIMEOUT);
+        TestActivity activity = (TestActivity) instrumentation.startActivitySync(intent);
+        EditText editText = activity.getEditText();
+        waitOnMainUntil("activity should gain focus", editText::hasWindowFocus);
         for (int i = 0; i < NUM_TEST_ITERATIONS; i++) {
-            mInstrumentation.runOnMainSync(activity::showIme);
-            eventually(() -> assertThat(callOnMainSync(activity::isImeShown)).isTrue(), TIMEOUT);
-            mInstrumentation.runOnMainSync(activity::hideIme);
-            eventually(() -> assertThat(callOnMainSync(activity::isImeShown)).isFalse(), TIMEOUT);
+            instrumentation.runOnMainSync(activity::showIme);
+            waitOnMainUntilImeIsShown(editText);
+            instrumentation.runOnMainSync(activity::hideIme);
+            waitOnMainUntilImeIsHidden(editText);
         }
     }
 
-    private <V> V callOnMainSync(Callable<V> callable) {
-        AtomicReference<V> result = new AtomicReference<>();
-        AtomicReference<Exception> thrownException = new AtomicReference<>();
-        mInstrumentation.runOnMainSync(() -> {
-            try {
-                result.set(callable.call());
-            } catch (Exception e) {
-                thrownException.set(e);
-            }
-        });
-        if (thrownException.get() != null) {
-            throw new RuntimeException("Exception thrown from Main thread", thrownException.get());
+    public static class TestActivity extends Activity {
+
+        private EditText mEditText;
+
+        @Override
+        protected void onCreate(@Nullable Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            LinearLayout rootView = new LinearLayout(this);
+            rootView.setOrientation(LinearLayout.VERTICAL);
+            mEditText = new EditText(this);
+            rootView.addView(mEditText, new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT));
+            setContentView(rootView);
         }
-        return result.get();
+
+        public EditText getEditText() {
+            return mEditText;
+        }
+
+        public void showIme() {
+            mEditText.requestFocus();
+            InputMethodManager imm = getSystemService(InputMethodManager.class);
+            imm.showSoftInput(mEditText, 0);
+        }
+
+        public void hideIme() {
+            InputMethodManager imm = getSystemService(InputMethodManager.class);
+            imm.hideSoftInputFromWindow(mEditText.getWindowToken(), 0);
+        }
     }
 }

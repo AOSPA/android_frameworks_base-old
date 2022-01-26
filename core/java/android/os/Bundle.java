@@ -33,6 +33,9 @@ import java.util.List;
 /**
  * A mapping from String keys to various {@link Parcelable} values.
  *
+ * <p><b>Warning:</b> Note that {@link Bundle} is a lazy container and as such it does NOT implement
+ * {@link #equals(Object)} or {@link #hashCode()}.
+ *
  * @see PersistableBundle
  */
 public final class Bundle extends BaseBundle implements Cloneable, Parcelable {
@@ -99,6 +102,18 @@ public final class Bundle extends BaseBundle implements Cloneable, Parcelable {
     }
 
     /**
+     * Constructs a {@link Bundle} containing a copy of {@code from}.
+     *
+     * @param from The bundle to be copied.
+     * @param deep Whether is a deep or shallow copy.
+     *
+     * @hide
+     */
+    Bundle(Bundle from, boolean deep) {
+        super(from, deep);
+    }
+
+    /**
      * If {@link #mParcelledData} is not null, copy the HAS FDS bit from it because it's fast.
      * Otherwise (if {@link #mParcelledData} is already null), leave {@link #FLAG_HAS_FDS_KNOWN}
      * unset, because scanning a map is slower.  We'll do it lazily in
@@ -161,13 +176,6 @@ public final class Bundle extends BaseBundle implements Cloneable, Parcelable {
     public Bundle(PersistableBundle b) {
         super(b);
         mFlags = FLAG_HAS_FDS_KNOWN | FLAG_ALLOW_FDS;
-    }
-
-    /**
-     * Constructs a Bundle without initializing it.
-     */
-    Bundle(boolean doInit) {
-        super(doInit);
     }
 
     /**
@@ -257,9 +265,7 @@ public final class Bundle extends BaseBundle implements Cloneable, Parcelable {
      * are referenced as-is and not copied in any way.
      */
     public Bundle deepCopy() {
-        Bundle b = new Bundle(false);
-        b.copyInternal(this, true);
-        return b;
+        return new Bundle(this, /* deep */ true);
     }
 
     /**
@@ -321,81 +327,13 @@ public final class Bundle extends BaseBundle implements Cloneable, Parcelable {
      */
     public boolean hasFileDescriptors() {
         if ((mFlags & FLAG_HAS_FDS_KNOWN) == 0) {
-            boolean fdFound = false;    // keep going until we find one or run out of data
-
-            if (mParcelledData != null) {
-                if (mParcelledData.hasFileDescriptors()) {
-                    fdFound = true;
-                }
-            } else {
-                // It's been unparcelled, so we need to walk the map
-                for (int i=mMap.size()-1; i>=0; i--) {
-                    Object obj = mMap.valueAt(i);
-                    if (Parcel.hasFileDescriptors(obj)) {
-                        fdFound = true;
-                        break;
-                    }
-                }
-            }
-
-            if (fdFound) {
-                mFlags |= FLAG_HAS_FDS;
-            } else {
-                mFlags &= ~FLAG_HAS_FDS;
-            }
+            Parcel p = mParcelledData;
+            mFlags = (Parcel.hasFileDescriptors((p != null) ? p : mMap))
+                    ? mFlags | FLAG_HAS_FDS
+                    : mFlags & ~FLAG_HAS_FDS;
             mFlags |= FLAG_HAS_FDS_KNOWN;
         }
         return (mFlags & FLAG_HAS_FDS) != 0;
-    }
-
-    /**
-     * Filter values in Bundle to only basic types.
-     * @hide
-     */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public Bundle filterValues() {
-        unparcel(/* itemwise */ true);
-        Bundle bundle = this;
-        if (mMap != null) {
-            ArrayMap<String, Object> map = mMap;
-            for (int i = map.size() - 1; i >= 0; i--) {
-                Object value = map.valueAt(i);
-                if (PersistableBundle.isValidType(value)) {
-                    continue;
-                }
-                if (value instanceof Bundle) {
-                    Bundle newBundle = ((Bundle)value).filterValues();
-                    if (newBundle != value) {
-                        if (map == mMap) {
-                            // The filter had to generate a new bundle, but we have not yet
-                            // created a new one here.  Do that now.
-                            bundle = new Bundle(this);
-                            // Note the ArrayMap<> constructor is guaranteed to generate
-                            // a new object with items in the same order as the original.
-                            map = bundle.mMap;
-                        }
-                        // Replace this current entry with the new child bundle.
-                        map.setValueAt(i, newBundle);
-                    }
-                    continue;
-                }
-                if (value.getClass().getName().startsWith("android.")) {
-                    continue;
-                }
-                if (map == mMap) {
-                    // This is the first time we have had to remove something, that means we
-                    // need to switch to a new Bundle.
-                    bundle = new Bundle(this);
-                    // Note the ArrayMap<> constructor is guaranteed to generate
-                    // a new object with items in the same order as the original.
-                    map = bundle.mMap;
-                }
-                map.removeAt(i);
-            }
-        }
-        mFlags |= FLAG_HAS_FDS_KNOWN;
-        mFlags &= ~FLAG_HAS_FDS;
-        return bundle;
     }
 
     /** {@hide} */
@@ -1280,6 +1218,10 @@ public final class Bundle extends BaseBundle implements Cloneable, Parcelable {
         maybePrefillHasFds();
     }
 
+    /**
+     * Returns a string representation of the {@link Bundle} that may be suitable for debugging. It
+     * won't print the internal map if its content hasn't been unparcelled.
+     */
     @Override
     public synchronized String toString() {
         if (mParcelledData != null) {

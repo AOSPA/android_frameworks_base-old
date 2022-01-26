@@ -108,7 +108,7 @@ import java.util.concurrent.TimeUnit;
 @SystemService(Context.WALLPAPER_SERVICE)
 public class WallpaperManager {
     private static String TAG = "WallpaperManager";
-    private static boolean DEBUG = false;
+    private static final boolean DEBUG = false;
     private float mWallpaperXStep = -1;
     private float mWallpaperYStep = -1;
     private static final @NonNull RectF LOCAL_COLOR_BOUNDS =
@@ -240,6 +240,14 @@ public class WallpaperManager {
      * @hide
      */
     public static final String EXTRA_NEW_WALLPAPER_ID = "android.service.wallpaper.extra.ID";
+
+    /**
+     * Extra passed on {@link Intent.ACTION_WALLPAPER_CHANGED} indicating if wallpaper was set from
+     * a foreground app.
+     * @hide
+     */
+    public static final String EXTRA_FROM_FOREGROUND_APP =
+            "android.service.wallpaper.extra.FROM_FOREGROUND_APP";
 
     // flags for which kind of wallpaper to act on
 
@@ -587,12 +595,12 @@ public class WallpaperManager {
 
             Rect dimensions = null;
             synchronized (this) {
+                ParcelFileDescriptor pfd = null;
                 try {
                     Bundle params = new Bundle();
+                    pfd = mService.getWallpaperWithFeature(context.getOpPackageName(),
+                            context.getAttributionTag(), this, FLAG_SYSTEM, params, userId);
                     // Let's peek user wallpaper first.
-                    ParcelFileDescriptor pfd = mService.getWallpaperWithFeature(
-                            context.getOpPackageName(), context.getAttributionTag(), this,
-                            FLAG_SYSTEM, params, userId);
                     if (pfd != null) {
                         BitmapFactory.Options options = new BitmapFactory.Options();
                         options.inJustDecodeBounds = true;
@@ -601,6 +609,13 @@ public class WallpaperManager {
                     }
                 } catch (RemoteException ex) {
                     Log.w(TAG, "peek wallpaper dimensions failed", ex);
+                } finally {
+                    if (pfd != null) {
+                        try {
+                            pfd.close();
+                        } catch (IOException ignored) {
+                        }
+                    }
                 }
             }
             // If user wallpaper is unavailable, may be the default one instead.

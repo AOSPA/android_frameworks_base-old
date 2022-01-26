@@ -17,104 +17,124 @@
 package com.android.systemui.statusbar.phone
 
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.view.ViewTreeObserver.OnPreDrawListener
 import android.widget.FrameLayout
 import androidx.test.filters.SmallTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
-import com.android.systemui.statusbar.CommandQueue
+import com.android.systemui.unfold.SysUIUnfoldComponent
+import com.android.systemui.unfold.config.UnfoldTransitionConfig
+import com.android.systemui.unfold.util.ScopedUnfoldTransitionProgressProvider
 import com.android.systemui.util.mockito.any
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
+import org.mockito.ArgumentCaptor
 import org.mockito.Mock
+import org.mockito.Mockito.spy
+import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
+import java.util.Optional
 
 @SmallTest
 class PhoneStatusBarViewControllerTest : SysuiTestCase() {
 
-    private val stateChangeListener = TestStateChangedListener()
+    private val touchEventHandler = TestTouchEventHandler()
 
-    @Mock
-    private lateinit var commandQueue: CommandQueue
     @Mock
     private lateinit var panelViewController: PanelViewController
     @Mock
     private lateinit var panelView: ViewGroup
     @Mock
-    private lateinit var scrimController: ScrimController
-
-    @Mock
     private lateinit var moveFromCenterAnimation: StatusBarMoveFromCenterAnimationController
+    @Mock
+    private lateinit var sysuiUnfoldComponent: SysUIUnfoldComponent
+    @Mock
+    private lateinit var progressProvider: ScopedUnfoldTransitionProgressProvider
 
     private lateinit var view: PhoneStatusBarView
     private lateinit var controller: PhoneStatusBarViewController
+
+    private val unfoldConfig = UnfoldConfig()
 
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
         `when`(panelViewController.view).thenReturn(panelView)
-
+        `when`(sysuiUnfoldComponent.getStatusBarMoveFromCenterAnimationController())
+            .thenReturn(moveFromCenterAnimation)
         // create the view on main thread as it requires main looper
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val parent = FrameLayout(mContext) // add parent to keep layout params
             view = LayoutInflater.from(mContext)
                 .inflate(R.layout.status_bar, parent, false) as PhoneStatusBarView
-            view.setPanel(panelViewController)
-            view.setScrimController(scrimController)
         }
 
-        controller = PhoneStatusBarViewController(
-                view,
-                commandQueue,
-                null,
-                stateChangeListener
-        )
+        controller = createController(view)
     }
 
     @Test
-    fun constructor_setsPanelEnabledProviderOnView() {
-        var providerUsed = false
-        `when`(commandQueue.panelsEnabled()).then {
-            providerUsed = true
-            true
+    fun constructor_setsTouchHandlerOnView() {
+        val interceptEvent = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_MOVE, 10f, 10f, 0)
+        val event = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
+
+        view.onInterceptTouchEvent(interceptEvent)
+        view.onTouchEvent(event)
+
+        assertThat(touchEventHandler.lastInterceptEvent).isEqualTo(interceptEvent)
+        assertThat(touchEventHandler.lastEvent).isEqualTo(event)
+    }
+
+    @Test
+    fun onViewAttachedAndDrawn_moveFromCenterAnimationEnabled_moveFromCenterAnimationInitialized() {
+        val view = createViewMock()
+        val argumentCaptor = ArgumentCaptor.forClass(OnPreDrawListener::class.java)
+        unfoldConfig.isEnabled = true
+        controller = createController(view)
+        controller.init()
+
+        verify(view.viewTreeObserver).addOnPreDrawListener(argumentCaptor.capture())
+        argumentCaptor.value.onPreDraw()
+
+        verify(moveFromCenterAnimation).onViewsReady(any(), any())
+    }
+
+    private fun createViewMock(): PhoneStatusBarView {
+        val view = spy(view)
+        val viewTreeObserver = mock(ViewTreeObserver::class.java)
+        `when`(view.viewTreeObserver).thenReturn(viewTreeObserver)
+        `when`(view.isAttachedToWindow).thenReturn(true)
+        return view
+    }
+
+    private fun createController(view: PhoneStatusBarView): PhoneStatusBarViewController {
+        return PhoneStatusBarViewController.Factory(
+            Optional.of(sysuiUnfoldComponent),
+            Optional.of(progressProvider)
+        ).create(view, touchEventHandler)
+    }
+
+    private class UnfoldConfig : UnfoldTransitionConfig {
+        override var isEnabled: Boolean = false
+        override var isHingeAngleEnabled: Boolean = false
+    }
+
+    private class TestTouchEventHandler : PhoneStatusBarView.TouchEventHandler {
+        var lastEvent: MotionEvent? = null
+        var lastInterceptEvent: MotionEvent? = null
+
+        override fun onInterceptTouchEvent(event: MotionEvent?) {
+            lastInterceptEvent = event
         }
-
-        // If the constructor correctly set a [PanelEnabledProvider], then it should be used
-        // when [PhoneStatusBarView.panelEnabled] is called.
-        view.panelEnabled()
-
-        assertThat(providerUsed).isTrue()
-    }
-
-    @Test
-    fun constructor_moveFromCenterAnimationIsNotNull_moveFromCenterAnimationInitialized() {
-        controller = PhoneStatusBarViewController(
-                view, commandQueue, moveFromCenterAnimation, stateChangeListener
-        )
-
-        verify(moveFromCenterAnimation).init(any(), any())
-    }
-
-    @Test
-    fun constructor_setsExpansionStateChangedListenerOnView() {
-        assertThat(stateChangeListener.stateChangeCalled).isFalse()
-
-        // If the constructor correctly set the listener, then it should be used when
-        // [PhoneStatusBarView.panelExpansionChanged] is called.
-        view.panelExpansionChanged(0f, false)
-
-        assertThat(stateChangeListener.stateChangeCalled).isTrue()
-    }
-
-    private class TestStateChangedListener : PhoneStatusBarView.PanelExpansionStateChangedListener {
-        var stateChangeCalled: Boolean = false
-
-        override fun onPanelExpansionStateChanged() {
-            stateChangeCalled = true
+        override fun handleTouchEvent(event: MotionEvent?): Boolean {
+            lastEvent = event
+            return false
         }
     }
 }

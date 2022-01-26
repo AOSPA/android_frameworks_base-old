@@ -19,22 +19,21 @@ package com.android.server.pm.test.verify.domain
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.parsing.component.ParsedActivity
-import android.content.pm.parsing.component.ParsedIntentInfo
-import android.content.pm.pkg.PackageUserState
-import android.content.pm.pkg.PackageUserStateInternal
+import android.content.pm.parsing.component.ParsedActivityImpl
+import android.content.pm.parsing.component.ParsedIntentInfoImpl
+import com.android.server.pm.pkg.PackageUserStateInternal
 import android.content.pm.verify.domain.DomainVerificationState
 import android.os.Build
 import android.os.Process
 import android.util.ArraySet
-import com.android.server.pm.PackageSetting
+import android.util.SparseArray
 import com.android.server.pm.parsing.pkg.AndroidPackage
-import com.android.server.pm.test.verify.domain.DomainVerificationTestUtils.mockPackageSettings
+import com.android.server.pm.pkg.PackageStateInternal
+import com.android.server.pm.test.verify.domain.DomainVerificationTestUtils.mockPackageStates
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal
 import com.android.server.pm.verify.domain.DomainVerificationService
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxy
 import com.android.server.testutils.mockThrowOnUnmocked
-import com.android.server.testutils.spyThrowOnUnmocked
 import com.android.server.testutils.whenever
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,7 +44,6 @@ import org.mockito.Mockito.anyLong
 import org.mockito.Mockito.anyString
 import org.mockito.Mockito.eq
 import org.mockito.Mockito.verify
-import java.io.File
 import java.util.UUID
 
 @RunWith(Parameterized::class)
@@ -108,7 +106,7 @@ class DomainVerificationSettingsMutationTest {
             fun service(name: String, block: DomainVerificationService.() -> Unit) =
                 Params(makeService, name) { service ->
                     service.proxy = proxy
-                    service.addPackage(mockPkgSetting())
+                    service.addPackage(mockPkgState())
                     service.block()
                 }
 
@@ -196,15 +194,17 @@ class DomainVerificationSettingsMutationTest {
             whenever(isEnabled) { true }
             whenever(activities) {
                 listOf(
-                    ParsedActivity().apply {
+                    ParsedActivityImpl().apply {
                         addIntent(
-                            ParsedIntentInfo().apply {
-                                autoVerify = true
-                                addAction(Intent.ACTION_VIEW)
-                                addCategory(Intent.CATEGORY_BROWSABLE)
-                                addCategory(Intent.CATEGORY_DEFAULT)
-                                addDataScheme("https")
-                                addDataAuthority("example.com", null)
+                            ParsedIntentInfoImpl().apply {
+                                intentFilter.apply {
+                                    autoVerify = true
+                                    addAction(Intent.ACTION_VIEW)
+                                    addCategory(Intent.CATEGORY_BROWSABLE)
+                                    addCategory(Intent.CATEGORY_DEFAULT)
+                                    addDataScheme("https")
+                                    addDataAuthority("example.com", null)
+                                }
                             }
                         )
                     }
@@ -212,32 +212,18 @@ class DomainVerificationSettingsMutationTest {
             }
         }
 
-        // TODO: PackageSetting field encapsulation to move to whenever(name)
-        fun mockPkgSetting() = spyThrowOnUnmocked(
-            PackageSetting(
-                TEST_PKG,
-                TEST_PKG,
-                File("/test"),
-                null,
-                null,
-                null,
-                null,
-                1,
-                0,
-                0,
-                0,
-                null,
-                null,
-                null,
-                TEST_UUID
-            )
-        ) {
+        fun mockPkgState() = mockThrowOnUnmocked<PackageStateInternal> {
             whenever(packageName) { TEST_PKG }
             whenever(pkg) { mockPkg() }
             whenever(domainSetId) { TEST_UUID }
-            whenever(readUserState(0)) { PackageUserStateInternal.DEFAULT }
-            whenever(readUserState(10)) { PackageUserStateInternal.DEFAULT }
-            whenever(getInstantApp(anyInt())) { false }
+            whenever(getUserStateOrDefault(0)) { PackageUserStateInternal.DEFAULT }
+            whenever(getUserStateOrDefault(10)) { PackageUserStateInternal.DEFAULT }
+            whenever(userStates) {
+                SparseArray<PackageUserStateInternal>().apply {
+                    this[0] = PackageUserStateInternal.DEFAULT
+                    this[1] = PackageUserStateInternal.DEFAULT
+                }
+            }
             whenever(isSystem) { false }
         }
     }
@@ -258,9 +244,9 @@ class DomainVerificationSettingsMutationTest {
         mockThrowOnUnmocked {
             whenever(callingUid) { TEST_UID }
             whenever(callingUserId) { TEST_USER_ID }
-            mockPackageSettings {
+            mockPackageStates {
                 when (it) {
-                    TEST_PKG -> mockPkgSetting()
+                    TEST_PKG -> mockPkgState()
                     else -> null
                 }
             }

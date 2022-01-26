@@ -107,9 +107,13 @@ import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.IntPredicate;
 import java.util.function.Supplier;
 
@@ -174,6 +178,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     private final File mSessionsDir;
 
     private final InternalCallback mInternalCallback = new InternalCallback();
+    private final PackageSessionVerifier mSessionVerifier;
 
     /**
      * Used for generating session IDs. Since this is created at boot time,
@@ -257,8 +262,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mSessionsDir.mkdirs();
 
         mApexManager = ApexManager.getInstance();
-        mStagingManager = new StagingManager(context, apexParserSupplier,
-                mInstallThread.getLooper());
+        mStagingManager = new StagingManager(context);
+        mSessionVerifier = new PackageSessionVerifier(context, mPm, mApexManager,
+                apexParserSupplier, mInstallThread.getLooper());
 
         LocalServices.getService(SystemServiceManager.class).startService(
                 new Lifecycle(context, this));
@@ -689,11 +695,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             if (params.isMultiPackage) {
                 throw new IllegalArgumentException("A multi-session can't be set as APEX.");
             }
-            if (!params.isStaged
-                    && (params.installFlags & PackageManager.INSTALL_ENABLE_ROLLBACK) != 0) {
-                throw new IllegalArgumentException(
-                    "Non-staged APEX session doesn't support INSTALL_ENABLE_ROLLBACK");
-            }
             if (isCalledBySystemOrShell(callingUid) || mBypassNextAllowedApexUpdateCheck) {
                 params.installFlags |= PackageManager.INSTALL_DISABLE_ALLOWED_APEX_UPDATE_CHECK;
             } else {
@@ -1121,9 +1122,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
     @Override
     public void installExistingPackage(String packageName, int installFlags, int installReason,
-            IntentSender statusReceiver, int userId, List<String> whiteListedPermissions) {
-        mPm.installExistingPackageAsUser(packageName, userId, installFlags, installReason,
-                whiteListedPermissions, statusReceiver);
+            IntentSender statusReceiver, int userId, List<String> allowListedPermissions) {
+        final InstallPackageHelper installPackageHelper = new InstallPackageHelper(mPm);
+        installPackageHelper.installExistingPackageAsUser(packageName, userId, installFlags,
+                installReason, allowListedPermissions, statusReceiver);
     }
 
     @Override
@@ -1162,6 +1164,11 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         synchronized (mSessions) {
             return mSessions.get(sessionId);
         }
+    }
+
+    @Override
+    public PackageSessionVerifier getSessionVerifier() {
+        return mSessionVerifier;
     }
 
     @Override
@@ -1434,13 +1441,74 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     }
 
-    void dump(IndentingPrintWriter pw) {
-        synchronized (mSessions) {
-            pw.println("Active install sessions:");
+    static class ParentChildSessionMap {
+        private TreeMap<PackageInstallerSession, TreeSet<PackageInstallerSession>> mSessionMap;
+
+        private final Comparator<PackageInstallerSession> mSessionCreationComparator =
+                Comparator.comparingLong((PackageInstallerSession sess) -> sess.createdMillis)
+                          .thenComparingInt(sess -> sess.sessionId);
+
+        ParentChildSessionMap() {
+            mSessionMap = new TreeMap<>(mSessionCreationComparator);
+        }
+
+        boolean containsSession() {
+            return !(mSessionMap.isEmpty());
+        }
+
+        private void addParentSession(PackageInstallerSession session) {
+            if (!mSessionMap.containsKey(session)) {
+                mSessionMap.put(session, new TreeSet<>(mSessionCreationComparator));
+            }
+        }
+
+        private void addChildSession(PackageInstallerSession session,
+                PackageInstallerSession parentSession) {
+            addParentSession(parentSession);
+            mSessionMap.get(parentSession).add(session);
+        }
+
+        void addSession(PackageInstallerSession session,
+                PackageInstallerSession parentSession) {
+            if (session.hasParentSessionId()) {
+                addChildSession(session, parentSession);
+            } else {
+                addParentSession(session);
+            }
+        }
+
+        void dump(String tag, IndentingPrintWriter pw) {
+            pw.println(tag + " install sessions:");
             pw.increaseIndent();
 
-            List<PackageInstallerSession> finalizedSessions = new ArrayList<>();
-            List<PackageInstallerSession> orphanedChildSessions = new ArrayList<>();
+            for (Map.Entry<PackageInstallerSession, TreeSet<PackageInstallerSession>> entry
+                    : mSessionMap.entrySet()) {
+                PackageInstallerSession parentSession = entry.getKey();
+                pw.print(tag + " ");
+                parentSession.dump(pw);
+                pw.println();
+                pw.increaseIndent();
+
+                for (PackageInstallerSession childSession : entry.getValue()) {
+                    pw.print(tag + " Child ");
+                    childSession.dump(pw);
+                    pw.println();
+                }
+
+                pw.decreaseIndent();
+            }
+
+            pw.println();
+            pw.decreaseIndent();
+        }
+    }
+
+    void dump(IndentingPrintWriter pw) {
+        synchronized (mSessions) {
+            ParentChildSessionMap activeSessionMap = new ParentChildSessionMap();
+            ParentChildSessionMap orphanedChildSessionMap = new ParentChildSessionMap();
+            ParentChildSessionMap finalizedSessionMap = new ParentChildSessionMap();
+
             int N = mSessions.size();
             for (int i = 0; i < N; i++) {
                 final PackageInstallerSession session = mSessions.valueAt(i);
@@ -1450,47 +1518,28 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         : session;
                 // Do not print orphaned child sessions as active install sessions
                 if (rootSession == null) {
-                    orphanedChildSessions.add(session);
+                    orphanedChildSessionMap.addSession(session, rootSession);
                     continue;
                 }
 
                 // Do not print finalized staged session as active install sessions
                 if (rootSession.isStagedAndInTerminalState()) {
-                    finalizedSessions.add(session);
+                    finalizedSessionMap.addSession(session, rootSession);
                     continue;
                 }
 
-                session.dump(pw);
-                pw.println();
+                activeSessionMap.addSession(session, rootSession);
             }
-            pw.println();
-            pw.decreaseIndent();
 
-            if (!orphanedChildSessions.isEmpty()) {
+            activeSessionMap.dump("Active", pw);
+
+            if (orphanedChildSessionMap.containsSession()) {
                 // Presence of orphaned sessions indicate leak in cleanup for multi-package and
                 // should be cleaned up.
-                pw.println("Orphaned install sessions:");
-                pw.increaseIndent();
-                N = orphanedChildSessions.size();
-                for (int i = 0; i < N; i++) {
-                    final PackageInstallerSession session = orphanedChildSessions.get(i);
-                    session.dump(pw);
-                    pw.println();
-                }
-                pw.println();
-                pw.decreaseIndent();
+                orphanedChildSessionMap.dump("Orphaned", pw);
             }
 
-            pw.println("Finalized install sessions:");
-            pw.increaseIndent();
-            N = finalizedSessions.size();
-            for (int i = 0; i < N; i++) {
-                final PackageInstallerSession session = finalizedSessions.get(i);
-                session.dump(pw);
-                pw.println();
-            }
-            pw.println();
-            pw.decreaseIndent();
+            finalizedSessionMap.dump("Finalized", pw);
 
             pw.println("Historical install sessions:");
             pw.increaseIndent();

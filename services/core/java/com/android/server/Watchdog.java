@@ -45,9 +45,9 @@ import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.ActivityManagerService;
-import com.android.server.am.CriticalEventLog;
 import com.android.server.am.TraceErrorLogger;
 import com.android.server.am.trace.SmartTraceUtils;
+import com.android.server.criticalevents.CriticalEventLog;
 import com.android.server.wm.SurfaceAnimationThread;
 
 import java.io.BufferedReader;
@@ -675,7 +675,8 @@ public class Watchdog {
                 ArrayList<Integer> nativePids = getInterestingNativePids();
                 // Get critical event log before logging the half watchdog so that it doesn't
                 // occur in the log.
-                String criticalEvents = CriticalEventLog.getInstance().logLinesForAnrFile();
+                String criticalEvents =
+                        CriticalEventLog.getInstance().logLinesForSystemServerTraceFile();
                 CriticalEventLog.getInstance().logHalfWatchdog(subject);
 
                 // We've waited half the deadlock-detection interval.  Pull a stack
@@ -707,7 +708,8 @@ public class Watchdog {
 
             // Get critical event log before logging the watchdog so that it doesn't occur in the
             // log.
-            String criticalEvents = CriticalEventLog.getInstance().logLinesForAnrFile();
+            String criticalEvents =
+                    CriticalEventLog.getInstance().logLinesForSystemServerTraceFile();
             CriticalEventLog.getInstance().logWatchdog(subject, errorId);
 
             long anrTime = SystemClock.uptimeMillis();

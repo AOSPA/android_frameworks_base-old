@@ -246,6 +246,7 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         clearInvocations(plugin)
 
         // WHEN the session is closed
+        controller.stateChangeListener.onViewDetachedFromWindow(smartspaceView as View)
         controller.disconnect()
 
         // THEN the listener receives an empty list of targets
@@ -417,6 +418,7 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         connectSession()
 
         // WHEN we are told to cleanup
+        controller.stateChangeListener.onViewDetachedFromWindow(smartspaceView as View)
         controller.disconnect()
 
         // THEN we disconnect from the session and unregister any listeners
@@ -444,6 +446,20 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         // THEN the existing session is reused and views are registered
         verify(smartspaceManager, never()).createSmartspaceSession(any())
         verify(smartspaceView2).registerDataProvider(plugin)
+    }
+
+    @Test
+    fun testConnectAttemptBeforeInitializationShouldNotCreateSession() {
+        // GIVEN an uninitalized smartspaceView
+        // WHEN the device is provisioned
+        `when`(deviceProvisionedController.isDeviceProvisioned()).thenReturn(true)
+        `when`(deviceProvisionedController.isCurrentUserSetup()).thenReturn(true)
+        deviceProvisionedListener.onDeviceProvisionedChanged()
+
+        // THEN no calls to createSmartspaceSession should occur
+        verify(smartspaceManager, never()).createSmartspaceSession(any())
+        // THEN no listeners should be registered
+        verify(configurationController, never()).addCallback(any())
     }
 
     private fun connectSession() {

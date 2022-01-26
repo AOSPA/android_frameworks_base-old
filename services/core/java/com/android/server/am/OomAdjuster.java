@@ -1148,6 +1148,7 @@ public class OomAdjuster {
                         }
                         if ((numCached - numCachedExtraGroup) > cachedProcessLimit) {
                             app.killLocked("cached #" + numCached,
+                                    "too many cached",
                                     ApplicationExitInfo.REASON_OTHER,
                                     ApplicationExitInfo.SUBREASON_TOO_MANY_CACHED,
                                     true);
@@ -1158,6 +1159,7 @@ public class OomAdjuster {
                                 && app.getLastActivityTime() < oldTime) {
                             app.killLocked("empty for " + ((oldTime + ProcessList.MAX_EMPTY_TIME
                                     - app.getLastActivityTime()) / 1000) + "s",
+                                    "empty for too long",
                                     ApplicationExitInfo.REASON_OTHER,
                                     ApplicationExitInfo.SUBREASON_TRIM_EMPTY,
                                     true);
@@ -1165,6 +1167,7 @@ public class OomAdjuster {
                             numEmpty++;
                             if (numEmpty > emptyProcessLimit) {
                                 app.killLocked("empty #" + numEmpty,
+                                        "too many empty",
                                         ApplicationExitInfo.REASON_OTHER,
                                         ApplicationExitInfo.SUBREASON_TOO_MANY_EMPTY,
                                         true);

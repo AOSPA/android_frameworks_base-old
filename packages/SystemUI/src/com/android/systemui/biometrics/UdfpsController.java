@@ -69,9 +69,9 @@ import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
-import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.concurrency.DelayableExecutor;
@@ -112,7 +112,7 @@ public class UdfpsController implements DozeReceiver {
     @NonNull private final LayoutInflater mInflater;
     private final WindowManager mWindowManager;
     private final DelayableExecutor mFgExecutor;
-    @NonNull private final Optional<StatusBar> mStatusBarOptional;
+    @NonNull private final PanelExpansionStateManager mPanelExpansionStateManager;
     @NonNull private final StatusBarStateController mStatusBarStateController;
     @NonNull private final KeyguardStateController mKeyguardStateController;
     @NonNull private final StatusBarKeyguardViewManager mKeyguardViewManager;
@@ -256,6 +256,13 @@ public class UdfpsController implements DozeReceiver {
         @Override
         public void hideUdfpsOverlay(int sensorId) {
             mFgExecutor.execute(() -> {
+                if (mKeyguardUpdateMonitor.isFingerprintDetectionRunning()) {
+                    // if we get here, we expect keyguardUpdateMonitor's fingerprintRunningState
+                    // to be updated shortly afterwards
+                    Log.d(TAG, "hiding udfps overlay when "
+                            + "mKeyguardUpdateMonitor.isFingerprintDetectionRunning()=true");
+                }
+
                 mServerRequest = null;
                 updateOverlay();
             });
@@ -514,7 +521,7 @@ public class UdfpsController implements DozeReceiver {
             @NonNull WindowManager windowManager,
             @NonNull StatusBarStateController statusBarStateController,
             @Main DelayableExecutor fgExecutor,
-            @NonNull Optional<StatusBar> statusBarOptional,
+            @NonNull PanelExpansionStateManager panelExpansionStateManager,
             @NonNull StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             @NonNull DumpManager dumpManager,
             @NonNull KeyguardUpdateMonitor keyguardUpdateMonitor,
@@ -543,7 +550,7 @@ public class UdfpsController implements DozeReceiver {
         mFingerprintManager = checkNotNull(fingerprintManager);
         mWindowManager = windowManager;
         mFgExecutor = fgExecutor;
-        mStatusBarOptional = statusBarOptional;
+        mPanelExpansionStateManager = panelExpansionStateManager;
         mStatusBarStateController = statusBarStateController;
         mKeyguardStateController = keyguardStateController;
         mKeyguardViewManager = statusBarKeyguardViewManager;
@@ -576,7 +583,7 @@ public class UdfpsController implements DozeReceiver {
 
         mCoreLayoutParams = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG,
-                getCoreLayoutParamFlags(),
+                0 /* flags set in computeLayoutParams() */,
                 PixelFormat.TRANSLUCENT);
         mCoreLayoutParams.setTitle(TAG);
         mCoreLayoutParams.setFitInsetsTypes(0);
@@ -607,13 +614,6 @@ public class UdfpsController implements DozeReceiver {
                     "udfps-onStart",
                     VIBRATION_SONIFICATION_ATTRIBUTES);
         }
-    }
-
-    private int getCoreLayoutParamFlags() {
-        return WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
     }
 
     @Nullable
@@ -678,7 +678,8 @@ public class UdfpsController implements DozeReceiver {
         final int paddingX = animation != null ? animation.getPaddingX() : 0;
         final int paddingY = animation != null ? animation.getPaddingY() : 0;
 
-        mCoreLayoutParams.flags = getCoreLayoutParamFlags();
+        mCoreLayoutParams.flags = Utils.FINGERPRINT_OVERLAY_LAYOUT_PARAM_FLAGS
+                | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
         if (animation != null && animation.listenForTouchesOutsideView()) {
             mCoreLayoutParams.flags |= WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
         }
@@ -760,10 +761,12 @@ public class UdfpsController implements DozeReceiver {
                 mOnFingerDown = false;
                 mView.setSensorProperties(mSensorProps);
                 mView.setHbmProvider(mHbmProvider);
-                UdfpsAnimationViewController animation = inflateUdfpsAnimation(reason);
+                UdfpsAnimationViewController<?> animation = inflateUdfpsAnimation(reason);
                 mAttemptedToDismissKeyguard = false;
-                animation.init();
-                mView.setAnimationViewController(animation);
+                if (animation != null) {
+                    animation.init();
+                    mView.setAnimationViewController(animation);
+                }
                 mOrientationListener.enable();
 
                 // This view overlaps the sensor area, so prevent it from being selectable
@@ -786,7 +789,8 @@ public class UdfpsController implements DozeReceiver {
         }
     }
 
-    private UdfpsAnimationViewController inflateUdfpsAnimation(int reason) {
+    @Nullable
+    private UdfpsAnimationViewController<?> inflateUdfpsAnimation(int reason) {
         switch (reason) {
             case BiometricOverlayConstants.REASON_ENROLL_FIND_SENSOR:
             case BiometricOverlayConstants.REASON_ENROLL_ENROLLING:
@@ -798,7 +802,7 @@ public class UdfpsController implements DozeReceiver {
                         enrollView,
                         mServerRequest.mEnrollHelper,
                         mStatusBarStateController,
-                        mStatusBarOptional,
+                        mPanelExpansionStateManager,
                         mDumpManager
                 );
             case BiometricOverlayConstants.REASON_AUTH_KEYGUARD:
@@ -808,7 +812,7 @@ public class UdfpsController implements DozeReceiver {
                 return new UdfpsKeyguardViewController(
                         keyguardView,
                         mStatusBarStateController,
-                        mStatusBarOptional,
+                        mPanelExpansionStateManager,
                         mKeyguardViewManager,
                         mKeyguardUpdateMonitor,
                         mDumpManager,
@@ -826,21 +830,22 @@ public class UdfpsController implements DozeReceiver {
                 return new UdfpsBpViewController(
                         bpView,
                         mStatusBarStateController,
-                        mStatusBarOptional,
+                        mPanelExpansionStateManager,
                         mDumpManager
                 );
             case BiometricOverlayConstants.REASON_AUTH_OTHER:
+            case BiometricOverlayConstants.REASON_AUTH_SETTINGS:
                 UdfpsFpmOtherView authOtherView = (UdfpsFpmOtherView)
                         mInflater.inflate(R.layout.udfps_fpm_other_view, null);
                 mView.addView(authOtherView);
                 return new UdfpsFpmOtherViewController(
                         authOtherView,
                         mStatusBarStateController,
-                        mStatusBarOptional,
+                        mPanelExpansionStateManager,
                         mDumpManager
                 );
             default:
-                Log.d(TAG, "Animation for reason " + reason + " not supported yet");
+                Log.e(TAG, "Animation for reason " + reason + " not supported yet");
                 return null;
         }
     }
@@ -882,6 +887,7 @@ public class UdfpsController implements DozeReceiver {
         }
 
         if (!mKeyguardUpdateMonitor.isFingerprintDetectionRunning()) {
+            mKeyguardViewManager.showBouncer(true);
             return;
         }
 

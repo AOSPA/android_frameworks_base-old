@@ -1034,6 +1034,12 @@ class ProcessRecord implements WindowProcessListener {
     @GuardedBy("mService")
     void killLocked(String reason, @Reason int reasonCode, @SubReason int subReason,
             boolean noisy) {
+        killLocked(reason, reason, reasonCode, subReason, noisy);
+    }
+
+    @GuardedBy("mService")
+    void killLocked(String reason, String description, @Reason int reasonCode,
+            @SubReason int subReason, boolean noisy) {
         if (!mKilledByAm) {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "kill");
             BoostFramework ux_perf = new BoostFramework();
@@ -1043,7 +1049,7 @@ class ProcessRecord implements WindowProcessListener {
                         + "): " + reason, info.uid);
             }
             if (mPid > 0) {
-                mService.mProcessList.noteAppKill(this, reasonCode, subReason, reason);
+                mService.mProcessList.noteAppKill(this, reasonCode, subReason, description);
                 EventLog.writeEvent(EventLogTags.AM_KILL,
                         userId, mPid, processName, mState.getSetAdj(), reason);
                 Process.killProcessQuiet(mPid);

@@ -20,6 +20,7 @@ import static com.android.server.wm.AnimationAdapterProto.REMOTE;
 import static com.android.server.wm.RemoteAnimationAdapterWrapperProto.TARGET;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
 
+import android.annotation.NonNull;
 import android.graphics.Point;
 import android.os.SystemClock;
 import android.util.proto.ProtoOutputStream;
@@ -64,18 +65,17 @@ class WallpaperAnimationAdapter implements AnimationAdapter {
      *
      * @return RemoteAnimationTarget[] targets for all the visible wallpaper windows
      */
-    public static RemoteAnimationTarget[] startWallpaperAnimations(WindowManagerService service,
+    public static RemoteAnimationTarget[] startWallpaperAnimations(DisplayContent displayContent,
             long durationHint, long statusBarTransitionDelay,
             Consumer<WallpaperAnimationAdapter> animationCanceledRunnable,
             ArrayList<WallpaperAnimationAdapter> adaptersOut) {
+        if (!displayContent.mWallpaperController.isWallpaperVisible()) {
+            ProtoLog.d(WM_DEBUG_REMOTE_ANIMATIONS,
+                    "\tWallpaper of display=%s is not visible", displayContent);
+            return new RemoteAnimationTarget[0];
+        }
         final ArrayList<RemoteAnimationTarget> targets = new ArrayList<>();
-        service.mRoot.forAllWallpaperWindows(wallpaperWindow -> {
-            if (!wallpaperWindow.getDisplayContent().mWallpaperController.isWallpaperVisible()) {
-                ProtoLog.d(WM_DEBUG_REMOTE_ANIMATIONS, "\tNot visible=%s", wallpaperWindow);
-                return;
-            }
-
-            ProtoLog.d(WM_DEBUG_REMOTE_ANIMATIONS, "\tvisible=%s", wallpaperWindow);
+        displayContent.forAllWallpaperWindows(wallpaperWindow -> {
             final WallpaperAnimationAdapter wallpaperAdapter = new WallpaperAnimationAdapter(
                     wallpaperWindow, durationHint, statusBarTransitionDelay,
                     animationCanceledRunnable);
@@ -134,7 +134,8 @@ class WallpaperAnimationAdapter implements AnimationAdapter {
 
     @Override
     public void startAnimation(SurfaceControl animationLeash, SurfaceControl.Transaction t,
-            @AnimationType int type, SurfaceAnimator.OnAnimationFinishedCallback finishCallback) {
+            @AnimationType int type,
+            @NonNull SurfaceAnimator.OnAnimationFinishedCallback finishCallback) {
         ProtoLog.d(WM_DEBUG_REMOTE_ANIMATIONS, "startAnimation");
 
         // Restore z-layering until client has a chance to modify it.

@@ -39,6 +39,7 @@ import java.util.concurrent.Future;
 public class MockBatteryStatsImpl extends BatteryStatsImpl {
     public boolean mForceOnBattery;
     private NetworkStats mNetworkStats;
+    private DummyExternalStatsSync mExternalStatsSync = new DummyExternalStatsSync();
 
     MockBatteryStatsImpl() {
         this(new MockClock());
@@ -52,7 +53,7 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
         super(clock, historyDirectory);
         initTimersAndCounters();
 
-        setExternalStatsSyncLocked(new DummyExternalStatsSync());
+        setExternalStatsSyncLocked(mExternalStatsSync);
         informThatAllExternalStatsAreFlushed();
 
         // A no-op handler.
@@ -64,8 +65,9 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
         final boolean[] supportedStandardBuckets =
                 new boolean[MeasuredEnergyStats.NUMBER_STANDARD_POWER_BUCKETS];
         Arrays.fill(supportedStandardBuckets, true);
-        mGlobalMeasuredEnergyStats =
-                new MeasuredEnergyStats(supportedStandardBuckets, customBucketNames);
+        mMeasuredEnergyStatsConfig = new MeasuredEnergyStats.Config(supportedStandardBuckets,
+                customBucketNames, new int[0], new String[]{""});
+        mGlobalMeasuredEnergyStats = new MeasuredEnergyStats(mMeasuredEnergyStatsConfig);
     }
 
     public TimeBase getOnBatteryTimeBase() {
@@ -185,7 +187,15 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
         return mPendingUids;
     }
 
+    public int getAndClearExternalStatsSyncFlags() {
+        final int flags = mExternalStatsSync.flags;
+        mExternalStatsSync.flags = 0;
+        return flags;
+    }
+
     private class DummyExternalStatsSync implements ExternalStatsSync {
+        public int flags = 0;
+
         @Override
         public Future<?> scheduleSync(String reason, int flags) {
             return null;
@@ -219,8 +229,9 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
         }
 
         @Override
-        public Future<?> scheduleSyncDueToScreenStateChange(
-                int flag, boolean onBattery, boolean onBatteryScreenOff, int screenState) {
+        public Future<?> scheduleSyncDueToScreenStateChange(int flag, boolean onBattery,
+                boolean onBatteryScreenOff, int screenState, int[] perDisplayScreenStates) {
+            flags |= flag;
             return null;
         }
 

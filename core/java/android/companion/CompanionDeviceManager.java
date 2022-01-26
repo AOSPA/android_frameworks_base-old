@@ -109,7 +109,7 @@ public final class CompanionDeviceManager {
     }
 
     private final ICompanionDeviceManager mService;
-    private final Context mContext;
+    private Context mContext;
 
     /** @hide */
     public CompanionDeviceManager(
@@ -281,7 +281,7 @@ public final class CompanionDeviceManager {
      * Wi-Fi MAC address for a given user.
      *
      * <p>This is a system API protected by the
-     * {@link andrioid.Manifest.permission#MANAGE_COMPANION_DEVICES} permission, that’s currently
+     * {@link android.Manifest.permission#MANAGE_COMPANION_DEVICES} permission, that’s currently
      * called by the Android Wi-Fi stack to determine whether user consent is required to connect
      * to a Wi-Fi network. Devices that have been pre-registered as companion devices will not
      * require user consent to connect.</p>
@@ -319,13 +319,13 @@ public final class CompanionDeviceManager {
     }
 
     /**
-     * Gets all package-device {@link Association}s for the current user.
+     * Gets all package-device {@link AssociationInfo}s for the current user.
      *
      * @return the associations list
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
-    public @NonNull List<Association> getAllAssociations() {
+    public @NonNull List<AssociationInfo> getAllAssociations() {
         if (!checkFeaturePresent()) {
             return Collections.emptyList();
         }
@@ -572,6 +572,7 @@ public final class CompanionDeviceManager {
                 mCallback = null;
                 mHandler = null;
                 mRequest = null;
+                mContext = null;
             }
         }
 

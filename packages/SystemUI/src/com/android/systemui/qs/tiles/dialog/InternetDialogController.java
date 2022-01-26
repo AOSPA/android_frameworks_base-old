@@ -71,13 +71,14 @@ import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.SignalStrengthUtil;
 import com.android.settingslib.wifi.WifiUtils;
 import com.android.systemui.R;
+import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
-import com.android.systemui.statusbar.connectivity.NetworkController;
-import com.android.systemui.statusbar.connectivity.NetworkController.AccessPointController;
+import com.android.systemui.statusbar.connectivity.AccessPointController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.toast.SystemUIToast;
 import com.android.systemui.toast.ToastFactory;
 import com.android.systemui.util.CarrierConfigTracker;
@@ -98,11 +99,13 @@ import java.util.stream.Stream;
 import javax.inject.Inject;
 
 public class InternetDialogController implements WifiEntry.DisconnectCallback,
-        NetworkController.AccessPointController.AccessPointCallback {
+        AccessPointController.AccessPointCallback {
 
     private static final String TAG = "InternetDialogController";
     private static final String ACTION_NETWORK_PROVIDER_SETTINGS =
             "android.settings.NETWORK_PROVIDER_SETTINGS";
+    private static final String ACTION_WIFI_SCANNING_SETTINGS =
+            "android.settings.WIFI_SCANNING_SETTINGS";
     private static final String EXTRA_CHOSEN_WIFI_ENTRY_KEY = "key_chosen_wifientry_key";
     public static final Drawable EMPTY_DRAWABLE = new ColorDrawable(Color.TRANSPARENT);
     public static final int NO_CELL_DATA_TYPE_ICON = 0;
@@ -147,6 +150,9 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
     private ConnectivityManager.NetworkCallback mConnectivityManagerNetworkCallback;
     private WindowManager mWindowManager;
     private ToastFactory mToastFactory;
+    private SignalDrawable mSignalDrawable;
+    private LocationController mLocationController;
+    private DialogLaunchAnimator mDialogLaunchAnimator;
 
     @VisibleForTesting
     static final float TOAST_PARAMS_HORIZONTAL_WEIGHT = 1.0f;
@@ -196,7 +202,9 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
             GlobalSettings globalSettings, KeyguardStateController keyguardStateController,
             WindowManager windowManager, ToastFactory toastFactory,
             @Background Handler workerHandler,
-            CarrierConfigTracker carrierConfigTracker) {
+            CarrierConfigTracker carrierConfigTracker,
+            LocationController locationController,
+            DialogLaunchAnimator dialogLaunchAnimator) {
         if (DEBUG) {
             Log.d(TAG, "Init InternetDialogController");
         }
@@ -223,6 +231,9 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
         mConnectivityManagerNetworkCallback = new DataConnectivityListener();
         mWindowManager = windowManager;
         mToastFactory = toastFactory;
+        mSignalDrawable = new SignalDrawable(mContext);
+        mLocationController = locationController;
+        mDialogLaunchAnimator = dialogLaunchAnimator;
     }
 
     void onStart(@NonNull InternetDialogCallback callback, boolean canConfigWifi) {
@@ -429,10 +440,7 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
 
     Drawable getSignalStrengthIcon(Context context, int level, int numLevels,
             int iconType, boolean cutOut) {
-        Log.d(TAG, "getSignalStrengthIcon");
-        final SignalDrawable signalDrawable = new SignalDrawable(context);
-        signalDrawable.setLevel(
-                SignalDrawable.getState(level, numLevels, cutOut));
+        mSignalDrawable.setLevel(SignalDrawable.getState(level, numLevels, cutOut));
 
         // Make the network type drawable
         final Drawable networkDrawable =
@@ -441,7 +449,7 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
                         : context.getResources().getDrawable(iconType, context.getTheme());
 
         // Overlay the two drawables
-        final Drawable[] layers = {networkDrawable, signalDrawable};
+        final Drawable[] layers = {networkDrawable, mSignalDrawable};
         final int iconSize =
                 context.getResources().getDimensionPixelSize(R.dimen.signal_strength_icon_size);
 
@@ -591,16 +599,35 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
     }
 
     void launchNetworkSetting() {
+        // Dismissing a dialog into its touch surface and starting an activity at the same time
+        // looks bad, so let's make sure the dialog just fades out quickly.
+        mDialogLaunchAnimator.disableAllCurrentDialogsExitAnimations();
         mCallback.dismissDialog();
+
         mActivityStarter.postStartActivityDismissingKeyguard(getSettingsIntent(), 0);
     }
 
     void launchWifiNetworkDetailsSetting(String key) {
         Intent intent = getWifiDetailsSettingsIntent(key);
         if (intent != null) {
+            // Dismissing a dialog into its touch surface and starting an activity at the same time
+            // looks bad, so let's make sure the dialog just fades out quickly.
+            mDialogLaunchAnimator.disableAllCurrentDialogsExitAnimations();
             mCallback.dismissDialog();
+
             mActivityStarter.postStartActivityDismissingKeyguard(intent, 0);
         }
+    }
+
+    void launchWifiScanningSetting() {
+        // Dismissing a dialog into its touch surface and starting an activity at the same time
+        // looks bad, so let's make sure the dialog just fades out quickly.
+        mDialogLaunchAnimator.disableAllCurrentDialogsExitAnimations();
+        mCallback.dismissDialog();
+
+        final Intent intent = new Intent(ACTION_WIFI_SCANNING_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        mActivityStarter.postStartActivityDismissingKeyguard(intent, 0);
     }
 
     void connectCarrierNetwork() {
@@ -780,6 +807,14 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
         return false;
     }
 
+    @WorkerThread
+    boolean isWifiScanEnabled() {
+        if (!mLocationController.isLocationEnabled()) {
+            return false;
+        }
+        return mWifiManager.isScanAlwaysAvailable();
+    }
+
     static class WifiEntryConnectCallback implements WifiEntry.ConnectCallback {
         final ActivityStarter mActivityStarter;
         final WifiEntry mWifiEntry;
@@ -883,7 +918,8 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
             TelephonyCallback.DataConnectionStateListener,
             TelephonyCallback.DisplayInfoListener,
             TelephonyCallback.ServiceStateListener,
-            TelephonyCallback.SignalStrengthsListener {
+            TelephonyCallback.SignalStrengthsListener,
+            TelephonyCallback.UserMobileDataStateListener {
 
         @Override
         public void onServiceStateChanged(@NonNull ServiceState serviceState) {
@@ -904,6 +940,11 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
         public void onDisplayInfoChanged(@NonNull TelephonyDisplayInfo telephonyDisplayInfo) {
             mTelephonyDisplayInfo = telephonyDisplayInfo;
             mCallback.onDisplayInfoChanged(telephonyDisplayInfo);
+        }
+
+        @Override
+        public void onUserMobileDataStateChanged(boolean enabled) {
+            mCallback.onUserMobileDataStateChanged(enabled);
         }
     }
 
@@ -1008,6 +1049,8 @@ public class InternetDialogController implements WifiEntry.DisconnectCallback,
         void onDataConnectionStateChanged(int state, int networkType);
 
         void onSignalStrengthsChanged(SignalStrength signalStrength);
+
+        void onUserMobileDataStateChanged(boolean enabled);
 
         void onDisplayInfoChanged(TelephonyDisplayInfo telephonyDisplayInfo);
 

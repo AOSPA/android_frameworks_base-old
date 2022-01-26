@@ -52,12 +52,18 @@ java_library {
 
 filegroup {
     name: "ReleaseJavaFiles",
-    srcs: ["src/com/android/systemui/flags/FeatureFlagManager.java"],
+    srcs: [
+        "src-release/**/*.kt",
+        "src-release/**/*.java",
+    ],
 }
 
 filegroup {
     name: "DebugJavaFiles",
-    srcs: ["src-debug/com/android/systemui/flags/FeatureFlagManager.java"],
+    srcs: [
+        "src-debug/**/*.kt",
+        "src-debug/**/*.java",
+    ],
 }
 
 android_library {
@@ -66,6 +72,7 @@ android_library {
         "src/**/*.kt",
         "src/**/*.java",
         "src/**/I*.aidl",
+        ":ReleaseJavaFiles",
     ],
     product_variables: {
         debuggable: {
@@ -151,6 +158,17 @@ filegroup {
     path: "tests/src",
 }
 
+java_library {
+    name: "SystemUI-tests-concurrency",
+    srcs: [
+        "src/com/android/systemui/util/concurrency/DelayableExecutor.java",
+        "src/com/android/systemui/util/time/SystemClock.java",
+        "tests/src/com/android/systemui/util/concurrency/FakeExecutor.java",
+        "tests/src/com/android/systemui/util/time/FakeSystemClock.java",
+    ],
+    jarjar_rules: ":jarjar-rules-shared",
+}
+
 android_library {
     name: "SystemUI-tests",
     manifest: "tests/AndroidManifest-base.xml",
@@ -171,6 +189,7 @@ android_library {
         "src/**/*.kt",
         "src/**/*.java",
         "src/**/I*.aidl",
+        ":ReleaseJavaFiles",
     ],
     static_libs: [
         "WifiTrackerLib",

@@ -16,7 +16,6 @@
 
 package com.android.server.wm;
 
-import static android.Manifest.permission.DEVICE_POWER;
 import static android.Manifest.permission.HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.Manifest.permission.HIDE_OVERLAY_WINDOWS;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
@@ -107,7 +106,6 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
 
     final boolean mCanCreateSystemApplicationOverlay;
     final boolean mCanHideNonSystemOverlayWindows;
-    final boolean mCanAcquireSleepToken;
     private AlertWindowNotification mAlertWindowNotification;
     private boolean mShowingAlertWindowNotificationAllowed;
     private boolean mClientDead = false;
@@ -134,8 +132,6 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
                         == PERMISSION_GRANTED;
         mCanStartTasksFromRecents = service.mContext.checkCallingOrSelfPermission(
                 START_TASKS_FROM_RECENTS) == PERMISSION_GRANTED;
-        mCanAcquireSleepToken = service.mContext.checkCallingOrSelfPermission(DEVICE_POWER)
-                == PERMISSION_GRANTED;
         mShowingAlertWindowNotificationAllowed = mService.mShowAlertWindowNotifications;
         mDragDropController = mService.mDragDropController;
         StringBuilder sb = new StringBuilder();
@@ -391,7 +387,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
                 final ShortcutServiceInternal shortcutService =
                         LocalServices.getService(ShortcutServiceInternal.class);
                 final Intent[] shortcutIntents = shortcutService.createShortcutIntents(
-                        callingUid, callingPackage, packageName, shortcutId,
+                        UserHandle.getUserId(callingUid), callingPackage, packageName, shortcutId,
                         user.getIdentifier(), callingPid, callingUid);
                 if (shortcutIntents == null || shortcutIntents.length == 0) {
                     throw new IllegalArgumentException("Invalid shortcut id");
@@ -617,11 +613,6 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
-    }
-
-    @Override
-    public void updateDisplayContentLocation(IWindow window, int x, int y, int displayId) {
-        mService.updateDisplayContentLocation(window, x, y, displayId);
     }
 
     @Override

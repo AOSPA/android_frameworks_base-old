@@ -22,6 +22,7 @@ import static com.android.server.job.JobSchedulerService.RESTRICTED_INDEX;
 import static com.android.server.job.JobSchedulerService.WORKING_INDEX;
 import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
 
+import android.annotation.ElapsedRealtimeLong;
 import android.app.AppGlobals;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
@@ -328,8 +329,8 @@ public final class JobStatus {
     public Network network;
     public ServiceInfo serviceInfo;
 
-    /** The evaluated priority of the job when it started running. */
-    public int lastEvaluatedPriority;
+    /** The evaluated bias of the job when it started running. */
+    public int lastEvaluatedBias;
 
     /**
      * Whether or not this particular JobStatus instance was treated as an EJ when it started
@@ -349,6 +350,7 @@ public final class JobStatus {
     public int overrideState = JobStatus.OVERRIDE_NONE;
 
     // When this job was enqueued, for ordering.  (in elapsedRealtimeMillis)
+    @ElapsedRealtimeLong
     public long enqueueTime;
 
     // Metrics about queue latency.  (in uptimeMillis)
@@ -555,7 +557,9 @@ public final class JobStatus {
             requestBuilder.setUids(
                     Collections.singleton(new Range<Integer>(this.sourceUid, this.sourceUid)));
             builder.setRequiredNetwork(requestBuilder.build());
-            job = builder.build();
+            // Don't perform prefetch-deadline check at this point. We've already passed the
+            // initial validation check.
+            job = builder.build(false);
         }
 
         final JobSchedulerInternal jsi = LocalServices.getService(JobSchedulerInternal.class);
@@ -922,8 +926,32 @@ public final class JobStatus {
         return tag;
     }
 
-    public int getPriority() {
-        return job.getPriority();
+    public int getBias() {
+        return job.getBias();
+    }
+
+    /**
+     * Returns the priority of the job, which may be adjusted due to various factors.
+     * @see JobInfo.Builder#setPriority(int)
+     */
+    @JobInfo.Priority
+    public int getEffectivePriority() {
+        final int rawPriority = job.getPriority();
+        if (numFailures < 2) {
+            return rawPriority;
+        }
+        // Slowly decay priority of jobs to prevent starvation of other jobs.
+        if (isRequestedExpeditedJob()) {
+            // EJs can't fall below HIGH priority.
+            return JobInfo.PRIORITY_HIGH;
+        }
+        // Set a maximum priority based on the number of failures.
+        final int dropPower = numFailures / 2;
+        switch (dropPower) {
+            case 1: return Math.min(JobInfo.PRIORITY_DEFAULT, rawPriority);
+            case 2: return Math.min(JobInfo.PRIORITY_LOW, rawPriority);
+            default: return JobInfo.PRIORITY_MIN;
+        }
     }
 
     public int getFlags() {
@@ -1945,10 +1973,18 @@ public final class JobStatus {
             if (job.isPersisted()) {
                 pw.println("PERSISTED");
             }
-            if (job.getPriority() != 0) {
-                pw.print("Priority: ");
-                pw.println(JobInfo.getPriorityString(job.getPriority()));
+            if (job.getBias() != 0) {
+                pw.print("Bias: ");
+                pw.println(JobInfo.getBiasString(job.getBias()));
             }
+            pw.print("Priority: ");
+            pw.print(JobInfo.getPriorityString(job.getPriority()));
+            final int effectivePriority = getEffectivePriority();
+            if (effectivePriority != job.getPriority()) {
+                pw.print(" effective=");
+                pw.print(JobInfo.getPriorityString(effectivePriority));
+            }
+            pw.println();
             if (job.getFlags() != 0) {
                 pw.print("Flags: ");
                 pw.println(Integer.toHexString(job.getFlags()));
@@ -2215,7 +2251,7 @@ public final class JobStatus {
             proto.write(JobStatusDumpProto.JobInfo.PERIOD_FLEX_MS, job.getFlexMillis());
 
             proto.write(JobStatusDumpProto.JobInfo.IS_PERSISTED, job.isPersisted());
-            proto.write(JobStatusDumpProto.JobInfo.PRIORITY, job.getPriority());
+            proto.write(JobStatusDumpProto.JobInfo.PRIORITY, job.getBias());
             proto.write(JobStatusDumpProto.JobInfo.FLAGS, job.getFlags());
             proto.write(JobStatusDumpProto.INTERNAL_FLAGS, getInternalFlags());
             // Foreground exemption can be determined from internal flags value.

@@ -131,7 +131,7 @@ public class BubbleDataTest extends ShellTestCase {
 
         NotificationListenerService.Ranking ranking =
                 mock(NotificationListenerService.Ranking.class);
-        when(ranking.visuallyInterruptive()).thenReturn(true);
+        when(ranking.isTextChanged()).thenReturn(true);
         mEntryInterruptive = createBubbleEntry(1, "interruptive", "package.d", ranking);
         mBubbleInterruptive = new Bubble(mEntryInterruptive, mSuppressionListener, null,
                 mMainExecutor);
@@ -793,7 +793,7 @@ public class BubbleDataTest extends ShellTestCase {
     }
 
     @Test
-    public void test_expanded_removeLastBubble_collapsesStack() {
+    public void test_expanded_removeLastBubble_showsOverflowIfNotEmpty() {
         // Setup
         sendUpdatedEntryAtTime(mEntryA1, 1000);
         changeExpandedStateAtTime(true, 2000);
@@ -802,6 +802,21 @@ public class BubbleDataTest extends ShellTestCase {
         // Test
         mBubbleData.dismissBubbleWithKey(mEntryA1.getKey(), Bubbles.DISMISS_USER_GESTURE);
         verifyUpdateReceived();
+        assertThat(mBubbleData.getOverflowBubbles().size()).isGreaterThan(0);
+        assertSelectionChangedTo(mBubbleData.getOverflow());
+    }
+
+    @Test
+    public void test_expanded_removeLastBubble_collapsesIfOverflowEmpty() {
+        // Setup
+        sendUpdatedEntryAtTime(mEntryA1, 1000);
+        changeExpandedStateAtTime(true, 2000);
+        mBubbleData.setListener(mListener);
+
+        // Test
+        mBubbleData.dismissBubbleWithKey(mEntryA1.getKey(), Bubbles.DISMISS_NO_BUBBLE_UP);
+        verifyUpdateReceived();
+        assertThat(mBubbleData.getOverflowBubbles()).isEmpty();
         assertExpandedChangedTo(false);
     }
 
@@ -999,15 +1014,15 @@ public class BubbleDataTest extends ShellTestCase {
     }
 
     private void sendUpdatedEntryAtTime(BubbleEntry entry, long postTime) {
-        sendUpdatedEntryAtTime(entry, postTime, true /* visuallyInterruptive */);
+        sendUpdatedEntryAtTime(entry, postTime, true /* isTextChanged */);
     }
 
     private void sendUpdatedEntryAtTime(BubbleEntry entry, long postTime,
-            boolean visuallyInterruptive) {
+            boolean textChanged) {
         setPostTime(entry, postTime);
         // BubbleController calls this:
         Bubble b = mBubbleData.getOrCreateBubble(entry, null /* persistedBubble */);
-        b.setVisuallyInterruptiveForTest(visuallyInterruptive);
+        b.setTextChangedForTest(textChanged);
         // And then this
         mBubbleData.notificationEntryUpdated(b, false /* suppressFlyout*/,
                 true /* showInShade */);

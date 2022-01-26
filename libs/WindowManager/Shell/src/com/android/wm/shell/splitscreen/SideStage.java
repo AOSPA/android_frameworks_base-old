@@ -16,20 +16,16 @@
 
 package com.android.wm.shell.splitscreen;
 
-import android.annotation.CallSuper;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.graphics.Rect;
-import android.view.InsetsSourceControl;
-import android.view.InsetsState;
-import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
+import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.ShellTaskOrganizer;
-import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 
 /**
@@ -38,27 +34,24 @@ import com.android.wm.shell.common.SyncTransactionQueue;
  *
  * @see StageCoordinator
  */
-class SideStage extends StageTaskListener implements
-        DisplayInsetsController.OnInsetsChangedListener {
+class SideStage extends StageTaskListener {
     private static final String TAG = SideStage.class.getSimpleName();
-    private final Context mContext;
-    private OutlineManager mOutlineManager;
 
     SideStage(Context context, ShellTaskOrganizer taskOrganizer, int displayId,
             StageListenerCallbacks callbacks, SyncTransactionQueue syncQueue,
-            SurfaceSession surfaceSession) {
-        super(taskOrganizer, displayId, callbacks, syncQueue, surfaceSession);
-        mContext = context;
+            SurfaceSession surfaceSession, IconProvider iconProvider,
+            @Nullable StageTaskUnfoldController stageTaskUnfoldController) {
+        super(context, taskOrganizer, displayId, callbacks, syncQueue, surfaceSession, iconProvider,
+                stageTaskUnfoldController);
     }
 
-    void addTask(ActivityManager.RunningTaskInfo task, Rect rootBounds,
-            WindowContainerTransaction wct) {
+    void moveToTop(Rect rootBounds, WindowContainerTransaction wct) {
         final WindowContainerToken rootToken = mRootTaskInfo.token;
-        wct.setBounds(rootToken, rootBounds)
-                .reparent(task.token, rootToken, true /* onTop*/)
-                // Moving the root task to top after the child tasks were reparented , or the root
-                // task cannot be visible and focused.
-                .reorder(rootToken, true /* onTop */);
+        wct.setBounds(rootToken, rootBounds).reorder(rootToken, true /* onTop */);
+    }
+
+    void addTask(ActivityManager.RunningTaskInfo task, WindowContainerTransaction wct) {
+        wct.reparent(task.token, mRootTaskInfo.token, true /* onTop*/);
     }
 
     boolean removeAllTasks(WindowContainerTransaction wct, boolean toTop) {
@@ -80,63 +73,5 @@ class SideStage extends StageTaskListener implements
         if (task == null) return false;
         wct.reparent(task.token, newParent, false /* onTop */);
         return true;
-    }
-
-    @Nullable
-    public SurfaceControl getOutlineLeash() {
-        return mOutlineManager.getOutlineLeash();
-    }
-
-    @Override
-    @CallSuper
-    public void onTaskAppeared(ActivityManager.RunningTaskInfo taskInfo, SurfaceControl leash) {
-        super.onTaskAppeared(taskInfo, leash);
-        if (isRootTask(taskInfo)) {
-            mOutlineManager = new OutlineManager(mContext, taskInfo.configuration);
-            enableOutline(true);
-        }
-    }
-
-    @Override
-    @CallSuper
-    public void onTaskInfoChanged(ActivityManager.RunningTaskInfo taskInfo) {
-        super.onTaskInfoChanged(taskInfo);
-        if (isRootTask(taskInfo)) {
-            mOutlineManager.setRootBounds(taskInfo.configuration.windowConfiguration.getBounds());
-        }
-    }
-
-    private boolean isRootTask(ActivityManager.RunningTaskInfo taskInfo) {
-        return mRootTaskInfo != null && mRootTaskInfo.taskId == taskInfo.taskId;
-    }
-
-    void enableOutline(boolean enable) {
-        if (mOutlineManager == null) {
-            return;
-        }
-
-        if (enable) {
-            if (mRootTaskInfo != null) {
-                mOutlineManager.inflate(mRootLeash,
-                        mRootTaskInfo.configuration.windowConfiguration.getBounds());
-            }
-        } else {
-            mOutlineManager.release();
-        }
-    }
-
-    void setOutlineVisibility(boolean visible) {
-        mOutlineManager.setVisibility(visible);
-    }
-
-    @Override
-    public void insetsChanged(InsetsState insetsState) {
-        mOutlineManager.onInsetsChanged(insetsState);
-    }
-
-    @Override
-    public void insetsControlChanged(InsetsState insetsState,
-            InsetsSourceControl[] activeControls) {
-        insetsChanged(insetsState);
     }
 }

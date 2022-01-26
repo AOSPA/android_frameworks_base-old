@@ -1148,6 +1148,10 @@ public class Intent implements Parcelable, Cloneable {
      * numbers.  Applications can <strong>dial</strong> emergency numbers using
      * {@link #ACTION_DIAL}, however.
      *
+     * <p>Note: An app filling the {@link android.app.role.RoleManager#ROLE_DIALER} role should use
+     * {@link android.telecom.TelecomManager#placeCall(Uri, Bundle)} to place calls rather than
+     * relying on this intent.
+     *
      * <p>Note: if you app targets {@link android.os.Build.VERSION_CODES#M M}
      * and above and declares as using the {@link android.Manifest.permission#CALL_PHONE}
      * permission which is not granted, then attempting to use this action will
@@ -1857,14 +1861,19 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.MANAGE_APP_PERMISSIONS";
 
     /**
-     * Activity action: Launch UI to manage a specific permissions of an app.
+     * Activity action: Launch UI to manage a specific permission group of an app.
      * <p>
      * Input: {@link #EXTRA_PACKAGE_NAME} specifies the package whose permission
      * will be managed by the launched UI.
      * </p>
      * <p>
      * Input: {@link #EXTRA_PERMISSION_NAME} specifies the (individual) permission
-     * that should be managed by the launched UI.
+     * whose group should be managed by the launched UI.
+     * </p>
+     * <p>
+     * Input: {@link #EXTRA_PERMISSION_GROUP_NAME} specifies the permission group
+     * that should be managed by the launched UI. Do not send both this and EXTRA_PERMISSION_NAME
+     * together.
      * </p>
      * <p>
      * <li> {@link #EXTRA_USER} specifies the {@link UserHandle} of the user that owns the app.
@@ -1875,6 +1884,7 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @see #EXTRA_PACKAGE_NAME
      * @see #EXTRA_PERMISSION_NAME
+     * @see #EXTRA_PERMISSION_GROUP_NAME
      * @see #EXTRA_USER
      *
      * @hide
@@ -2163,14 +2173,15 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Activity action: Launch UI to manage which apps have a given permission.
      * <p>
-     * Input: {@link #EXTRA_PERMISSION_NAME} specifies the permission group
-     * which will be managed by the launched UI.
+     * Input: {@link #EXTRA_PERMISSION_NAME} or {@link #EXTRA_PERMISSION_GROUP_NAME} specifies the
+     * permission group which will be managed by the launched UI.
      * </p>
      * <p>
      * Output: Nothing.
      * </p>
      *
      * @see #EXTRA_PERMISSION_NAME
+     * @see #EXTRA_PERMISSION_GROUP_NAME
      *
      * @hide
      */
@@ -2305,6 +2316,67 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_REVIEW_ACCESSIBILITY_SERVICES =
             "android.intent.action.REVIEW_ACCESSIBILITY_SERVICES";
+
+    /**
+     * Activity action: Launch UI to manage the usage of a given permission group.
+     * This action would be handled by apps that want to show controls about the features
+     * which use the permission group.
+     *
+     * <p>
+     * Input: {@link #EXTRA_PERMISSION_GROUP_NAME} specifies the permission group for
+     * which the launched UI would be targeted.
+     * Input: {@link #EXTRA_ATTRIBUTION_TAGS} specifies the attribution tags for the usage entry.
+     * Input: {@link #EXTRA_START_TIME} specifies the start time of the period (epoch time in
+     * millis). If both start time and end time are present, start time must be <= end time.
+     * Input: {@link #EXTRA_END_TIME} specifies the end time of the period (epoch time in
+     * millis). If the end time is empty, that implies that the permission usage is still in use.
+     * If both start time and end time are present, start time must be <= end time.
+     * Input: {@link #EXTRA_SHOWING_ATTRIBUTION} specifies whether the subattribution was shown
+     * in the UI.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     * <p class="note">
+     * You must protect the activity that handles this action with the
+     * {@link android.Manifest.permission#START_VIEW_PERMISSION_USAGE} permission to ensure that
+     * only the system can launch this activity. The system will not launch activities
+     * that are not properly protected.
+     * </p>
+     *
+     * @see #EXTRA_PERMISSION_GROUP_NAME
+     * @see #EXTRA_ATTRIBUTION_TAGS
+     * @see #EXTRA_START_TIME
+     * @see #EXTRA_END_TIME
+     * @see #EXTRA_SHOWING_ATTRIBUTION
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.START_VIEW_PERMISSION_USAGE)
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_PERMISSION_USAGE =
+            "android.intent.action.MANAGE_PERMISSION_USAGE";
+
+    /**
+     * Activity action: Launch UI to view the app's feature's information.
+     *
+     * <p>
+     * Output: Nothing.
+     * </p>
+     * <p class="note">
+     * You must protect the activity that handles this action with the
+     * {@link android.Manifest.permission#START_VIEW_APP_FEATURES} permission to ensure that
+     * only the system can launch this activity. The system will not launch activities
+     * that are not properly protected.
+     * </p>
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.START_VIEW_APP_FEATURES)
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_VIEW_APP_FEATURES =
+            "android.intent.action.VIEW_APP_FEATURES";
 
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
@@ -8980,16 +9052,6 @@ public class Intent implements Parcelable, Cloneable {
         return (mExtras != null)
                 ? new Bundle(mExtras)
                 : null;
-    }
-
-    /**
-     * Filter extras to only basic types.
-     * @hide
-     */
-    public void removeUnsafeExtras() {
-        if (mExtras != null) {
-            mExtras = mExtras.filterValues();
-        }
     }
 
     /**

@@ -110,6 +110,20 @@ public class BatteryUsageStatsRule implements TestRule {
         return this;
     }
 
+    public BatteryUsageStatsRule setAveragePowerForOrdinal(String group, int ordinal,
+            double value) {
+        when(mPowerProfile.getAveragePowerForOrdinal(group, ordinal)).thenReturn(value);
+        when(mPowerProfile.getAveragePowerForOrdinal(eq(group), eq(ordinal),
+                anyDouble())).thenReturn(value);
+        return this;
+    }
+
+    public BatteryUsageStatsRule setNumDisplays(int value) {
+        when(mPowerProfile.getNumDisplays()).thenReturn(value);
+        mBatteryStats.setDisplayCountLocked(value);
+        return this;
+    }
+
     /** Call only after setting the power profile information. */
     public BatteryUsageStatsRule initMeasuredEnergyStatsLocked() {
         return initMeasuredEnergyStatsLocked(new String[0]);
@@ -183,8 +197,10 @@ public class BatteryUsageStatsRule implements TestRule {
         final String[] customPowerComponentNames = mBatteryStats.getCustomEnergyConsumerNames();
         final boolean includePowerModels = (query.getFlags()
                 & BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_INCLUDE_POWER_MODELS) != 0;
+        final boolean includeProcessStateData = (query.getFlags()
+                & BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_INCLUDE_PROCESS_STATE_DATA) != 0;
         BatteryUsageStats.Builder builder = new BatteryUsageStats.Builder(
-                customPowerComponentNames, includePowerModels);
+                customPowerComponentNames, includePowerModels, includeProcessStateData);
         SparseArray<? extends BatteryStats.Uid> uidStats = mBatteryStats.getUidStats();
         for (int i = 0; i < uidStats.size(); i++) {
             builder.getOrCreateUidBatteryConsumerBuilder(uidStats.valueAt(i));

@@ -197,26 +197,6 @@ public class Interpolators {
         return MathUtils.max(0.0f, (float) (1.0f - Math.exp(-4 * progress)));
     }
 
-    /**
-     * Interpolate alpha for notifications background scrim during shade expansion.
-     * @param fraction Shade expansion fraction
-     * @param forNotification If we want the alpha of the notification shade or the scrim.
-     */
-    public static float getNotificationScrimAlpha(float fraction, boolean forNotification) {
-        if (forNotification) {
-            fraction = MathUtils.constrainedMap(0f, 1f, 0.3f, 1f, fraction);
-        } else {
-            fraction = MathUtils.constrainedMap(0f, 1f, 0f, 0.5f, fraction);
-        }
-        fraction = fraction * 1.2f - 0.2f;
-        if (fraction <= 0) {
-            return 0;
-        } else {
-            final float oneMinusFrac = 1f - fraction;
-            return (float) (1f - 0.5f * (1f - Math.cos(3.14159f * oneMinusFrac * oneMinusFrac)));
-        }
-    }
-
     // Create the default emphasized interpolator
     private static PathInterpolator createEmphasizedInterpolator() {
         Path path = new Path();

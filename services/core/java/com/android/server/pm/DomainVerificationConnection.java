@@ -29,6 +29,7 @@ import android.os.UserHandle;
 import com.android.internal.util.FunctionalUtils;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.verify.domain.DomainVerificationService;
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxyV1;
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxyV2;
@@ -41,21 +42,17 @@ public final class DomainVerificationConnection implements DomainVerificationSer
     final PackageManagerService mPm;
     final PackageManagerInternal mPmInternal;
     final UserManagerInternal mUmInternal;
-    final VerificationHelper mVerificationHelper;
 
     // TODO(b/198166813): remove PMS dependency
     DomainVerificationConnection(PackageManagerService pm) {
         mPm = pm;
         mPmInternal = mPm.mInjector.getLocalService(PackageManagerInternal.class);
         mUmInternal = mPm.mInjector.getLocalService(UserManagerInternal.class);
-        mVerificationHelper = new VerificationHelper(mPm.mContext);
     }
 
     @Override
     public void scheduleWriteSettings() {
-        synchronized (mPm.mLock) {
-            mPm.scheduleWriteSettingsLocked();
-        }
+        mPm.scheduleWriteSettings();
     }
 
     @Override
@@ -79,7 +76,7 @@ public final class DomainVerificationConnection implements DomainVerificationSer
 
     @Override
     public long getPowerSaveTempWhitelistAppDuration() {
-        return mVerificationHelper.getVerificationTimeout();
+        return VerificationUtils.getVerificationTimeout(mPm.mContext);
     }
 
     @Override
@@ -116,20 +113,20 @@ public final class DomainVerificationConnection implements DomainVerificationSer
 
     @Override
     public void withPackageSettingsSnapshot(
-            @NonNull Consumer<Function<String, PackageSetting>> block) {
+            @NonNull Consumer<Function<String, PackageStateInternal>> block) {
         mPmInternal.withPackageSettingsSnapshot(block);
     }
 
     @Override
     public <Output> Output withPackageSettingsSnapshotReturning(
-            @NonNull FunctionalUtils.ThrowingFunction<Function<String, PackageSetting>, Output>
-                    block) {
+            @NonNull FunctionalUtils.ThrowingFunction<Function<String, PackageStateInternal>,
+                    Output> block) {
         return mPmInternal.withPackageSettingsSnapshotReturning(block);
     }
 
     @Override
     public <ExceptionType extends Exception> void withPackageSettingsSnapshotThrowing(
-            @NonNull FunctionalUtils.ThrowingCheckedConsumer<Function<String, PackageSetting>,
+            @NonNull FunctionalUtils.ThrowingCheckedConsumer<Function<String, PackageStateInternal>,
                     ExceptionType> block) throws ExceptionType {
         mPmInternal.withPackageSettingsSnapshotThrowing(block);
     }
@@ -138,7 +135,8 @@ public final class DomainVerificationConnection implements DomainVerificationSer
     public <ExceptionOne extends Exception, ExceptionTwo extends Exception> void
             withPackageSettingsSnapshotThrowing2(
                     @NonNull FunctionalUtils.ThrowingChecked2Consumer<
-                            Function<String, PackageSetting>, ExceptionOne, ExceptionTwo> block)
+                            Function<String, PackageStateInternal>, ExceptionOne,
+                            ExceptionTwo> block)
             throws ExceptionOne, ExceptionTwo {
         mPmInternal.withPackageSettingsSnapshotThrowing2(block);
     }
@@ -147,7 +145,7 @@ public final class DomainVerificationConnection implements DomainVerificationSer
     public <Output, ExceptionType extends Exception> Output
             withPackageSettingsSnapshotReturningThrowing(
             @NonNull FunctionalUtils.ThrowingCheckedFunction<
-                    Function<String, PackageSetting>, Output, ExceptionType> block)
+                    Function<String, PackageStateInternal>, Output, ExceptionType> block)
             throws ExceptionType {
         return mPmInternal.withPackageSettingsSnapshotReturningThrowing(block);
     }

@@ -22,6 +22,7 @@ import static com.android.server.wm.RemoteAnimationAdapterWrapperProto.TARGET;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
+import android.annotation.NonNull;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -207,7 +208,7 @@ class RemoteAnimationController implements DeathRecipient {
                 if (wrappers.mThumbnailAdapter != null
                         && wrappers.mThumbnailAdapter.mCapturedFinishCallback != null) {
                     wrappers.mThumbnailAdapter.mCapturedFinishCallback
-                            .onAnimationFinished(wrappers.mAdapter.mAnimationType,
+                            .onAnimationFinished(wrappers.mThumbnailAdapter.mAnimationType,
                                     wrappers.mThumbnailAdapter);
                 }
                 mPendingAnimations.remove(i);
@@ -218,7 +219,7 @@ class RemoteAnimationController implements DeathRecipient {
 
     private RemoteAnimationTarget[] createWallpaperAnimations() {
         ProtoLog.d(WM_DEBUG_REMOTE_ANIMATIONS, "createWallpaperAnimations()");
-        return WallpaperAnimationAdapter.startWallpaperAnimations(mService,
+        return WallpaperAnimationAdapter.startWallpaperAnimations(mDisplayContent,
                 mRemoteAnimationAdapter.getDuration(),
                 mRemoteAnimationAdapter.getStatusBarTransitionDelay(),
                 adapter -> {
@@ -260,7 +261,7 @@ class RemoteAnimationController implements DeathRecipient {
                     }
                     if (adapters.mThumbnailAdapter != null) {
                         adapters.mThumbnailAdapter.mCapturedFinishCallback
-                                .onAnimationFinished(adapters.mAdapter.mAnimationType,
+                                .onAnimationFinished(adapters.mThumbnailAdapter.mAnimationType,
                                         adapters.mThumbnailAdapter);
                     }
                     mPendingAnimations.remove(i);
@@ -477,7 +478,7 @@ class RemoteAnimationController implements DeathRecipient {
 
         @Override
         public void startAnimation(SurfaceControl animationLeash, Transaction t,
-                @AnimationType int type, OnAnimationFinishedCallback finishCallback) {
+                @AnimationType int type, @NonNull OnAnimationFinishedCallback finishCallback) {
             ProtoLog.d(WM_DEBUG_REMOTE_ANIMATIONS, "startAnimation");
 
             if (mStartBounds.isEmpty()) {

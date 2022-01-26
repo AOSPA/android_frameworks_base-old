@@ -52,6 +52,14 @@ public class LogModule {
         return factory.create("NotifLog", 1000);
     }
 
+    /** Provides a logging buffer for all logs related to the data layer of notifications. */
+    @Provides
+    @SysUISingleton
+    @NotificationHeadsUpLog
+    public static LogBuffer provideNotificationHeadsUpLogBuffer(LogBufferFactory factory) {
+        return factory.create("NotifHeadsUpLog", 1000);
+    }
+
     /** Provides a logging buffer for all logs related to managing notification sections. */
     @Provides
     @SysUISingleton
@@ -111,13 +119,35 @@ public class LogModule {
         return factory.create("CollapsedSbFragmentLog", 20);
     }
 
+    /**
+     * Provides a logging buffer for logs related to {@link com.android.systemui.qs.QSFragment}'s
+     * disable flag adjustments.
+     */
+    @Provides
+    @SysUISingleton
+    @QSFragmentDisableLog
+    public static LogBuffer provideQSFragmentDisableLogBuffer(LogBufferFactory factory) {
+        return factory.create("QSFragmentDisableFlagsLog", 10);
+    }
+
+    /**
+     * Provides a logging buffer for logs related to swiping away the status bar while in immersive
+     * mode. See {@link com.android.systemui.statusbar.gesture.SwipeStatusBarAwayGestureLogger}.
+     */
+    @Provides
+    @SysUISingleton
+    @SwipeStatusBarAwayLog
+    public static LogBuffer provideSwipeAwayGestureLogBuffer(LogBufferFactory factory) {
+        return factory.create("SwipeStatusBarAwayLog", 30);
+    }
+
     /** Allows logging buffers to be tweaked via adb on debug builds but not on prod builds. */
     @Provides
     @SysUISingleton
     public static LogcatEchoTracker provideLogcatEchoTracker(
             ContentResolver contentResolver,
             @Main Looper looper) {
-        if (Build.IS_DEBUGGABLE) {
+        if (Build.isDebuggable()) {
             return LogcatEchoTrackerDebug.create(contentResolver, looper);
         } else {
             return new LogcatEchoTrackerProd();

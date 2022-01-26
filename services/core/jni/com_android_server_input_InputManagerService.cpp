@@ -29,27 +29,10 @@
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android/os/IInputConstants.h>
+#include <android/sysprop/InputProperties.sysprop.h>
+#include <android_os_MessageQueue.h>
 #include <android_runtime/AndroidRuntime.h>
 #include <android_runtime/Log.h>
-#include <limits.h>
-#include <atomic>
-#include <cinttypes>
-
-#include <utils/Log.h>
-#include <utils/Looper.h>
-#include <utils/threads.h>
-#include <utils/Trace.h>
-
-#include <binder/IServiceManager.h>
-
-#include <input/PointerController.h>
-#include <input/SpriteController.h>
-#include <ui/Region.h>
-
-#include <batteryservice/include/batteryservice/BatteryServiceConstants.h>
-#include <inputflinger/InputManager.h>
-
-#include <android_os_MessageQueue.h>
 #include <android_view_InputChannel.h>
 #include <android_view_InputDevice.h>
 #include <android_view_KeyEvent.h>
@@ -57,19 +40,31 @@
 #include <android_view_PointerIcon.h>
 #include <android_view_VerifiedKeyEvent.h>
 #include <android_view_VerifiedMotionEvent.h>
-
+#include <batteryservice/include/batteryservice/BatteryServiceConstants.h>
+#include <binder/IServiceManager.h>
+#include <input/PointerController.h>
+#include <input/SpriteController.h>
+#include <inputflinger/InputManager.h>
+#include <limits.h>
 #include <nativehelper/ScopedLocalFrame.h>
 #include <nativehelper/ScopedLocalRef.h>
 #include <nativehelper/ScopedPrimitiveArray.h>
 #include <nativehelper/ScopedUtfChars.h>
+#include <ui/Region.h>
+#include <utils/Log.h>
+#include <utils/Looper.h>
+#include <utils/Trace.h>
+#include <utils/threads.h>
+
+#include <atomic>
+#include <cinttypes>
+#include <vector>
 
 #include "android_hardware_display_DisplayViewport.h"
 #include "android_hardware_input_InputApplicationHandle.h"
 #include "android_hardware_input_InputWindowHandle.h"
 #include "android_util_Binder.h"
 #include "com_android_server_power_PowerManagerService.h"
-
-#include <vector>
 
 #define INDENT "  "
 
@@ -133,6 +128,7 @@ static struct {
     jmethodID getTouchCalibrationForInputDevice;
     jmethodID getContextForDisplay;
     jmethodID notifyDropWindow;
+    jmethodID getParentSurfaceForPointers;
 } gServiceClassInfo;
 
 static struct {
@@ -394,7 +390,7 @@ private:
     void handleInterceptActions(jint wmActions, nsecs_t when, uint32_t& policyFlags);
     void ensureSpriteControllerLocked();
     int32_t getPointerDisplayId();
-    void updatePointerDisplayLocked();
+    sp<SurfaceControl> getParentSurfaceForPointers(int displayId);
     static bool checkAndClearExceptionFromCallback(JNIEnv* env, const char* methodName);
 
     static inline JNIEnv* jniEnv() {
@@ -673,6 +669,18 @@ int32_t NativeInputManager::getPointerDisplayId() {
     return pointerDisplayId;
 }
 
+sp<SurfaceControl> NativeInputManager::getParentSurfaceForPointers(int displayId) {
+    JNIEnv* env = jniEnv();
+    jlong nativeSurfaceControlPtr =
+            env->CallLongMethod(mServiceObj, gServiceClassInfo.getParentSurfaceForPointers,
+                                displayId);
+    if (checkAndClearExceptionFromCallback(env, "getParentSurfaceForPointers")) {
+        return nullptr;
+    }
+
+    return reinterpret_cast<SurfaceControl*>(nativeSurfaceControlPtr);
+}
+
 void NativeInputManager::ensureSpriteControllerLocked() REQUIRES(mLock) {
     if (mLocked.spriteController == nullptr) {
         JNIEnv* env = jniEnv();
@@ -680,7 +688,9 @@ void NativeInputManager::ensureSpriteControllerLocked() REQUIRES(mLock) {
         if (checkAndClearExceptionFromCallback(env, "getPointerLayer")) {
             layer = -1;
         }
-        mLocked.spriteController = new SpriteController(mLooper, layer);
+        mLocked.spriteController = new SpriteController(mLooper, layer, [this](int displayId) {
+            return getParentSurfaceForPointers(displayId);
+        });
     }
 }
 
@@ -2089,11 +2099,21 @@ static void nativeReloadDeviceAliases(JNIEnv* /* env */,
             InputReaderConfiguration::CHANGE_DEVICE_ALIAS);
 }
 
-static jstring nativeDump(JNIEnv* env, jclass /* clazz */, jlong ptr) {
-    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+static std::string dumpInputProperties() {
+    std::string out = "Input properties:\n";
+    const std::string strategy =
+            sysprop::InputProperties::velocitytracker_strategy().value_or("default");
+    out += "  persist.input.velocitytracker.strategy = " + strategy + "\n";
+    out += "\n";
+    return out;
+}
 
-    std::string dump;
+static jstring nativeDump(JNIEnv* env, jclass /* clazz */, jlong ptr) {
+    std::string dump = dumpInputProperties();
+
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
     im->dump(dump);
+
     return env->NewStringUTF(dump.c_str());
 }
 
@@ -2495,9 +2515,11 @@ int register_android_server_InputManager(JNIEnv* env) {
             "getTouchCalibrationForInputDevice",
             "(Ljava/lang/String;I)Landroid/hardware/input/TouchCalibration;");
 
-    GET_METHOD_ID(gServiceClassInfo.getContextForDisplay, clazz,
-            "getContextForDisplay",
-            "(I)Landroid/content/Context;")
+    GET_METHOD_ID(gServiceClassInfo.getContextForDisplay, clazz, "getContextForDisplay",
+                  "(I)Landroid/content/Context;");
+
+    GET_METHOD_ID(gServiceClassInfo.getParentSurfaceForPointers, clazz,
+                  "getParentSurfaceForPointers", "(I)J");
 
     // InputDevice
 

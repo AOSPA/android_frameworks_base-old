@@ -3316,6 +3316,66 @@ public final class Settings {
         }
     }
 
+    private static float parseFloatSetting(String settingValue, String settingName)
+            throws SettingNotFoundException {
+        if (settingValue == null) {
+            throw new SettingNotFoundException(settingName);
+        }
+        try {
+            return Float.parseFloat(settingValue);
+        } catch (NumberFormatException e) {
+            throw new SettingNotFoundException(settingName);
+        }
+    }
+
+    private static float parseFloatSettingWithDefault(String settingValue, float defaultValue) {
+        try {
+            return settingValue != null ? Float.parseFloat(settingValue) : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static int parseIntSetting(String settingValue, String settingName)
+            throws SettingNotFoundException {
+        if (settingValue == null) {
+            throw new SettingNotFoundException(settingName);
+        }
+        try {
+            return Integer.parseInt(settingValue);
+        } catch (NumberFormatException e) {
+            throw new SettingNotFoundException(settingName);
+        }
+    }
+
+    private static int parseIntSettingWithDefault(String settingValue, int defaultValue) {
+        try {
+            return settingValue != null ? Integer.parseInt(settingValue) : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static long parseLongSetting(String settingValue, String settingName)
+            throws SettingNotFoundException {
+        if (settingValue == null) {
+            throw new SettingNotFoundException(settingName);
+        }
+        try {
+            return Long.parseLong(settingValue);
+        } catch (NumberFormatException e) {
+            throw new SettingNotFoundException(settingName);
+        }
+    }
+
+    private static long parseLongSettingWithDefault(String settingValue, long defaultValue) {
+        try {
+            return settingValue != null ? Long.parseLong(settingValue) : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
     /**
      * System settings, containing miscellaneous system preferences.  This
      * table holds simple name/value pairs.  There are convenience
@@ -3605,11 +3665,7 @@ public final class Settings {
         @UnsupportedAppUsage
         public static int getIntForUser(ContentResolver cr, String name, int def, int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Integer.parseInt(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseIntSettingWithDefault(v, def);
         }
 
         /**
@@ -3640,11 +3696,7 @@ public final class Settings {
         public static int getIntForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return Integer.parseInt(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseIntSetting(v, name);
         }
 
         /**
@@ -3692,14 +3744,8 @@ public final class Settings {
         /** @hide */
         public static long getLongForUser(ContentResolver cr, String name, long def,
                 int userHandle) {
-            String valString = getStringForUser(cr, name, userHandle);
-            long value;
-            try {
-                value = valString != null ? Long.parseLong(valString) : def;
-            } catch (NumberFormatException e) {
-                value = def;
-            }
-            return value;
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSettingWithDefault(v, def);
         }
 
         /**
@@ -3727,12 +3773,8 @@ public final class Settings {
         /** @hide */
         public static long getLongForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
-            String valString = getStringForUser(cr, name, userHandle);
-            try {
-                return Long.parseLong(valString);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSetting(v, name);
         }
 
         /**
@@ -3780,11 +3822,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, float def,
                 int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Float.parseFloat(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseFloatSettingWithDefault(v, def);
         }
 
         /**
@@ -3814,14 +3852,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            if (v == null) {
-                throw new SettingNotFoundException(name);
-            }
-            try {
-                return Float.parseFloat(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseFloatSetting(v, name);
         }
 
         /**
@@ -6081,11 +6112,7 @@ public final class Settings {
         @UnsupportedAppUsage
         public static int getIntForUser(ContentResolver cr, String name, int def, int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Integer.parseInt(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseIntSettingWithDefault(v, def);
         }
 
         /**
@@ -6115,11 +6142,7 @@ public final class Settings {
         public static int getIntForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return Integer.parseInt(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseIntSetting(v, name);
         }
 
         /**
@@ -6168,14 +6191,8 @@ public final class Settings {
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static long getLongForUser(ContentResolver cr, String name, long def,
                 int userHandle) {
-            String valString = getStringForUser(cr, name, userHandle);
-            long value;
-            try {
-                value = valString != null ? Long.parseLong(valString) : def;
-            } catch (NumberFormatException e) {
-                value = def;
-            }
-            return value;
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSettingWithDefault(v, def);
         }
 
         /**
@@ -6203,12 +6220,8 @@ public final class Settings {
         /** @hide */
         public static long getLongForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
-            String valString = getStringForUser(cr, name, userHandle);
-            try {
-                return Long.parseLong(valString);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            String v = getStringForUser(cr, name, userHandle);
+            return parseLongSetting(v, name);
         }
 
         /**
@@ -6257,11 +6270,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, float def,
                 int userHandle) {
             String v = getStringForUser(cr, name, userHandle);
-            try {
-                return v != null ? Float.parseFloat(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseFloatSettingWithDefault(v, def);
         }
 
         /**
@@ -6291,14 +6300,7 @@ public final class Settings {
         public static float getFloatForUser(ContentResolver cr, String name, int userHandle)
                 throws SettingNotFoundException {
             String v = getStringForUser(cr, name, userHandle);
-            if (v == null) {
-                throw new SettingNotFoundException(name);
-            }
-            try {
-                return Float.parseFloat(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseFloatSetting(v, name);
         }
 
         /**
@@ -7165,6 +7167,13 @@ public final class Settings {
          */
         @Readable
         public static final String ACCESSIBILITY_ENABLED = "accessibility_enabled";
+
+        /**
+         * Whether select sound track with audio description by default.
+         * @hide
+         */
+        public static final String ENABLED_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT =
+                "enabled_accessibility_audio_description_by_default";
 
         /**
          * Setting specifying if the accessibility shortcut is enabled.
@@ -9669,6 +9678,23 @@ public final class Settings {
         public static final String INSTANT_APPS_ENABLED = "instant_apps_enabled";
 
         /**
+         * Whether qr code scanner should be accessible from the lockscreen
+         *
+         * @hide
+         */
+        public static final String LOCK_SCREEN_SHOW_QR_CODE_SCANNER =
+                "lock_screen_show_qr_code_scanner";
+
+        /**
+         * Whether or not to enable qr code code scanner setting to enable/disable lockscreen
+         * entry point. Any value apart from null means setting needs to be enabled
+         *
+         * @hide
+         */
+        public static final String SHOW_QR_CODE_SCANNER_SETTING =
+                "show_qr_code_scanner_setting";
+
+        /**
          * Has this pairable device been paired or upgraded from a previously paired system.
          * @hide
          */
@@ -9732,6 +9758,14 @@ public final class Settings {
          */
         @Readable
         public static final String NOTIFICATION_DISMISS_RTL = "notification_dismiss_rtl";
+
+        /**
+         * Whether the app-level notification setting is represented by a manifest permission.
+         *
+         * @hide
+         */
+        public static final String NOTIFICATION_PERMISSION_ENABLED =
+                "notification_permission_enabled";
 
         /**
          * Comma separated list of QS tiles that have been auto-added already.
@@ -10270,6 +10304,15 @@ public final class Settings {
         public static final String COMMUNAL_MODE_PACKAGES = "communal_mode_packages";
 
         /**
+         * An array of SSIDs of Wi-Fi networks that, when connected, are considered safe to enable
+         * the communal mode.
+         *
+         * @hide
+         */
+        public static final String COMMUNAL_MODE_TRUSTED_NETWORKS =
+                "communal_mode_trusted_networks";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
@@ -10414,14 +10457,6 @@ public final class Settings {
         @Readable
         public static final String ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED =
                 "enable_accessibility_global_gesture_enabled";
-
-        /**
-         * Whether select sound track with audio description by default.
-         * @hide
-         */
-        @Readable
-        public static final String ENABLE_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT =
-                "enable_accessibility_audio_description_by_default";
 
         /**
          * Whether Airplane Mode is on.
@@ -11051,117 +11086,6 @@ public final class Settings {
         */
         @Deprecated
         public static final String INSTALL_NON_MARKET_APPS = Secure.INSTALL_NON_MARKET_APPS;
-
-        /**
-        * Whether HDMI control shall be enabled. If disabled, no CEC/MHL command will be
-        * sent or processed. (0 = false, 1 = true)
-        * @hide
-        */
-        @Readable
-        public static final String HDMI_CONTROL_ENABLED = "hdmi_control_enabled";
-
-        /**
-         * Controls whether volume control commands via HDMI CEC are enabled. (0 = false, 1 =
-         * true).
-         *
-         * <p>Effects on different device types:
-         * <table>
-         *     <tr><th>HDMI CEC device type</th><th>0: disabled</th><th>1: enabled</th></tr>
-         *     <tr>
-         *         <td>TV (type: 0)</td>
-         *         <td>Per CEC specification.</td>
-         *         <td>TV changes system volume. TV no longer reacts to incoming volume changes
-         *         via {@code <User Control Pressed>}. TV no longer handles {@code <Report Audio
-         *         Status>}.</td>
-         *     </tr>
-         *     <tr>
-         *         <td>Playback device (type: 4)</td>
-         *         <td>Device sends volume commands to TV/Audio system via {@code <User Control
-         *         Pressed>}</td>
-         *         <td>Device does not send volume commands via {@code <User Control Pressed>}.</td>
-         *     </tr>
-         *     <tr>
-         *         <td>Audio device (type: 5)</td>
-         *         <td>Full "System Audio Control" capabilities.</td>
-         *         <td>Audio device no longer reacts to incoming {@code <User Control Pressed>}
-         *         volume commands. Audio device no longer reports volume changes via {@code
-         *         <Report Audio Status>}.</td>
-         *     </tr>
-         * </table>
-         *
-         * <p> Due to the resulting behavior, usage on TV and Audio devices is discouraged.
-         *
-         * @hide
-         * @see android.hardware.hdmi.HdmiControlManager#setHdmiCecVolumeControlEnabled(boolean)
-         */
-        @Readable
-        public static final String HDMI_CONTROL_VOLUME_CONTROL_ENABLED =
-                "hdmi_control_volume_control_enabled";
-
-        /**
-        * Whether HDMI System Audio Control feature is enabled. If enabled, TV will try to turn on
-        * system audio mode if there's a connected CEC-enabled AV Receiver. Then audio stream will
-        * be played on AVR instead of TV spaeker. If disabled, the system audio mode will never be
-        * activated.
-        * @hide
-        */
-        @Readable
-        public static final String HDMI_SYSTEM_AUDIO_CONTROL_ENABLED =
-                "hdmi_system_audio_control_enabled";
-
-        /**
-         * Whether HDMI Routing Control feature is enabled. If enabled, the switch device will
-         * route to the correct input source on receiving Routing Control related messages. If
-         * disabled, you can only switch the input via controls on this device.
-         * @hide
-         */
-        @Readable
-        public static final String HDMI_CEC_SWITCH_ENABLED =
-                "hdmi_cec_switch_enabled";
-
-        /**
-         * Whether TV will automatically turn on upon reception of the CEC command
-         * &lt;Text View On&gt; or &lt;Image View On&gt;. (0 = false, 1 = true)
-         *
-         * @hide
-         */
-        @Readable
-        public static final String HDMI_CONTROL_AUTO_WAKEUP_ENABLED =
-                "hdmi_control_auto_wakeup_enabled";
-
-        /**
-         * Whether TV will also turn off other CEC devices when it goes to standby mode.
-         * (0 = false, 1 = true)
-         *
-         * @hide
-         */
-        @Readable
-        public static final String HDMI_CONTROL_AUTO_DEVICE_OFF_ENABLED =
-                "hdmi_control_auto_device_off_enabled";
-
-        /**
-         * Property to decide which devices the playback device can send a <Standby> message to
-         * upon going to sleep. It additionally controls whether a playback device attempts to turn
-         * on the connected Audio system when waking up. Supported values are:
-         * <ul>
-         * <li>{@link HdmiControlManager#POWER_CONTROL_MODE_TV} Upon going to sleep, device
-         * sends {@code <Standby>} to TV only. Upon waking up, device does not turn on the Audio
-         * system via {@code <System Audio Mode Request>}.</li>
-         * <li>{@link HdmiControlManager#POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM} Upon going to
-         * sleep, sends {@code <Standby>} to TV and Audio system. Upon waking up, device attempts
-         * to turn on the Audio system via {@code <System Audio Mode Request>}.</li>
-         * <li>{@link HdmiControlManager#POWER_CONTROL_MODE_BROADCAST} Upon going to sleep,
-         * device sends {@code <Standby>} to all devices in the network. Upon waking up, device
-         * attempts to turn on the Audio system via {@code <System Audio Mode Request>}.</li>
-         * <li>{@link HdmiControlManager#POWER_CONTROL_MODE_NONE} Upon going to sleep, device
-         * does not send any {@code <Standby>} message. Upon waking up, device does not turn on the
-         * Audio system via {@code <System Audio Mode Request>}.</li>
-         * </ul>
-         *
-         * @hide
-         */
-        public static final String HDMI_CONTROL_SEND_STANDBY_ON_SLEEP =
-                "hdmi_control_send_standby_on_sleep";
 
         /**
          * Whether or not media is shown automatically when bypassing as a heads up.
@@ -13686,7 +13610,7 @@ public final class Settings {
          * Whether of not to send keycode sleep for ungaze when Home is the foreground activity on
          * watch type devices.
          * Type: int (0 for false, 1 for true)
-         * Default: 0
+         * Default: 1
          * @hide
          */
         @Readable
@@ -15555,29 +15479,7 @@ public final class Settings {
          */
         public static int getInt(ContentResolver cr, String name, int def) {
             String v = getString(cr, name);
-            final boolean isQueryForDeviceProvision = name.equals(DEVICE_PROVISIONED);
-            try {
-                // TODO(b/197879371): remove the extra logging after bug is fixed
-                final int result;
-                if (v != null) {
-                    result = Integer.parseInt(v);
-                    if (isQueryForDeviceProvision) {
-                        Log.w(TAG, "Found settings value for provision. Returning " + result);
-                    }
-                } else {
-                    result = def;
-                    if (isQueryForDeviceProvision) {
-                        Log.w(TAG, "Missing settings value for provision. Returning " + result);
-                    }
-                }
-                return result;
-            } catch (NumberFormatException e) {
-                if (isQueryForDeviceProvision) {
-                    Log.w(TAG, "Wrong settings value for provision. Found: " + v
-                            + ". Returning " + v);
-                }
-                return def;
-            }
+            return parseIntSettingWithDefault(v, def);
         }
 
         /**
@@ -15601,11 +15503,7 @@ public final class Settings {
         public static int getInt(ContentResolver cr, String name)
                 throws SettingNotFoundException {
             String v = getString(cr, name);
-            try {
-                return Integer.parseInt(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseIntSetting(v, name);
         }
 
         /**
@@ -15640,14 +15538,8 @@ public final class Settings {
          * or not a valid {@code long}.
          */
         public static long getLong(ContentResolver cr, String name, long def) {
-            String valString = getString(cr, name);
-            long value;
-            try {
-                value = valString != null ? Long.parseLong(valString) : def;
-            } catch (NumberFormatException e) {
-                value = def;
-            }
-            return value;
+            String v = getString(cr, name);
+            return parseLongSettingWithDefault(v, def);
         }
 
         /**
@@ -15669,12 +15561,8 @@ public final class Settings {
          */
         public static long getLong(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            String valString = getString(cr, name);
-            try {
-                return Long.parseLong(valString);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            String v = getString(cr, name);
+            return parseLongSetting(v, name);
         }
 
         /**
@@ -15710,11 +15598,7 @@ public final class Settings {
          */
         public static float getFloat(ContentResolver cr, String name, float def) {
             String v = getString(cr, name);
-            try {
-                return v != null ? Float.parseFloat(v) : def;
-            } catch (NumberFormatException e) {
-                return def;
-            }
+            return parseFloatSettingWithDefault(v, def);
         }
 
         /**
@@ -15738,14 +15622,7 @@ public final class Settings {
         public static float getFloat(ContentResolver cr, String name)
                 throws SettingNotFoundException {
             String v = getString(cr, name);
-            if (v == null) {
-                throw new SettingNotFoundException(name);
-            }
-            try {
-                return Float.parseFloat(v);
-            } catch (NumberFormatException e) {
-                throw new SettingNotFoundException(name);
-            }
+            return parseFloatSetting(v, name);
         }
 
         /**
@@ -16788,36 +16665,6 @@ public final class Settings {
             public static final String WEAR_PLATFORM_MR_NUMBER = "wear_platform_mr_number";
 
             /**
-             * The bluetooth settings storing duplicate address of companion device.
-             * @hide
-             */
-            public static final String COMPANION_BT_ADDRESS_DUAL = "companion_bt_address_dual";
-
-            /**
-             * The offset of the visible screen from the display bottom (overscan bottom).
-             * @hide
-             */
-            public static final String BOTTOM_OFFSET = "bottom_offset";
-
-            /**
-             * The shape of the display.
-             * @hide
-             */
-            public static final String DISPLAY_SHAPE = "display_shape";
-
-            // Possible display shapes
-            /** @hide */
-            public static final int DISPLAY_SHAPE_SQUARE = 0;
-            /** @hide */
-            public static final int DISPLAY_SHAPE_ROUND = 1;
-
-            /**
-             * The different levels of screen brightness the user can select.
-             * @hide
-             */
-            public static final String SCREEN_BRIGHTNESS_LEVEL = "screen_brightness_level";
-
-            /**
              * The mobile signal detector setting.
              * @hide
              */
@@ -16885,12 +16732,6 @@ public final class Settings {
             public static final String AMBIENT_PLUGGED_TIMEOUT_MIN = "ambient_plugged_timeout_min";
 
             /**
-             * The companion device's bluetooth address.
-             * @hide
-             */
-            public static final String COMPANION_ADDRESS = "companion_address";
-
-            /**
              * What OS does paired device has.
              * @hide
              */
@@ -16935,12 +16776,6 @@ public final class Settings {
             public static final int HFP_CLIENT_ENABLED = 1;
             /** @hide */
             public static final int HFP_CLIENT_DISABLED = 2;
-
-            /**
-             * The current HFP client profile setting.
-             * @hide
-             */
-            public static final String HFP_CLIENT_PROFILE_ENABLED = "hfp_client_profile_enabled";
 
             /**
              * The companion phone's android version.
@@ -17791,40 +17626,42 @@ public final class Settings {
             "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION";
 
     /**
-     * Activity Action: For system or preinstalled apps to show their {@link Activity} in 2-pane
-     * mode in Settings app on large screen devices.
+     * Activity Action: For system or preinstalled apps to show their {@link Activity} embedded
+     * in Settings app on large screen devices.
      * <p>
-     *     Input: {@link #EXTRA_SETTINGS_LARGE_SCREEN_DEEP_LINK_INTENT_URI} must be included to
-     * specify the intent for the activity which will be displayed in 2-pane mode in Settings app.
+     *     Input: {@link #EXTRA_SETTINGS_EMBEDDED_DEEP_LINK_INTENT_URI} must be included to
+     * specify the intent for the activity which will be embedded in Settings app.
      * It's an intent URI string from {@code intent.toUri(Intent.URI_INTENT_SCHEME)}.
      *
-     *     Input: {@link #EXTRA_SETTINGS_LARGE_SCREEN_HIGHLIGHT_MENU_KEY} must be included to
+     *     Input: {@link #EXTRA_SETTINGS_EMBEDDED_DEEP_LINK_HIGHLIGHT_MENU_KEY} must be included to
      * specify a key that indicates the menu item which will be highlighted on settings home menu.
      * <p>
      * Output: Nothing.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_SETTINGS_LARGE_SCREEN_DEEP_LINK =
-            "android.settings.SETTINGS_LARGE_SCREEN_DEEP_LINK";
+    public static final String ACTION_SETTINGS_EMBED_DEEP_LINK_ACTIVITY =
+            "android.settings.SETTINGS_EMBED_DEEP_LINK_ACTIVITY";
 
     /**
-     * Activity Extra: Specify the intent for the {@link Activity} which will be displayed in 2-pane
-     * mode in Settings app. It's an intent URI string from
+     * Activity Extra: Specify the intent for the {@link Activity} which will be embedded in
+     * Settings app. It's an intent URI string from
      * {@code intent.toUri(Intent.URI_INTENT_SCHEME)}.
      * <p>
-     * This must be passed as an extra field to {@link #ACTION_SETTINGS_LARGE_SCREEN_DEEP_LINK}.
+     * This must be passed as an extra field to
+     * {@link #ACTION_SETTINGS_EMBED_DEEP_LINK_ACTIVITY}.
      */
-    public static final String EXTRA_SETTINGS_LARGE_SCREEN_DEEP_LINK_INTENT_URI =
-            "android.provider.extra.SETTINGS_LARGE_SCREEN_DEEP_LINK_INTENT_URI";
+    public static final String EXTRA_SETTINGS_EMBEDDED_DEEP_LINK_INTENT_URI =
+            "android.provider.extra.SETTINGS_EMBEDDED_DEEP_LINK_INTENT_URI";
 
     /**
      * Activity Extra: Specify a key that indicates the menu item which should be highlighted on
      * settings home menu.
      * <p>
-     * This must be passed as an extra field to {@link #ACTION_SETTINGS_LARGE_SCREEN_DEEP_LINK}.
+     * This must be passed as an extra field to
+     * {@link #ACTION_SETTINGS_EMBED_DEEP_LINK_ACTIVITY}.
      */
-    public static final String EXTRA_SETTINGS_LARGE_SCREEN_HIGHLIGHT_MENU_KEY =
-            "android.provider.extra.SETTINGS_LARGE_SCREEN_HIGHLIGHT_MENU_KEY";
+    public static final String EXTRA_SETTINGS_EMBEDDED_DEEP_LINK_HIGHLIGHT_MENU_KEY =
+            "android.provider.extra.SETTINGS_EMBEDDED_DEEP_LINK_HIGHLIGHT_MENU_KEY";
 
     /**
      * Performs a strict and comprehensive check of whether a calling package is allowed to

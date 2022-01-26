@@ -77,11 +77,12 @@ import android.view.IRemoteAnimationRunner;
 import android.view.RemoteAnimationTarget;
 import android.view.SyncRtSurfaceTransactionApplier;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.WindowManagerPolicyConstants;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
+
+import androidx.annotation.Nullable;
 
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.jank.InteractionJankMonitor.Configuration;
@@ -98,9 +99,9 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.KeyguardViewController;
 import com.android.keyguard.ViewMediatorCallback;
+import com.android.systemui.CoreStartable;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
-import com.android.systemui.SystemUI;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollector;
@@ -119,14 +120,19 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
+import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
+import com.android.systemui.unfold.SysUIUnfoldComponent;
+import com.android.systemui.unfold.UnfoldLightRevealOverlayAnimation;
 import com.android.systemui.util.DeviceConfigProxy;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import dagger.Lazy;
 
@@ -171,7 +177,7 @@ import dagger.Lazy;
  * directly to the keyguard UI is posted to a {@link android.os.Handler} to ensure it is taken on the UI
  * thread of the keyguard.
  */
-public class KeyguardViewMediator extends SystemUI implements Dumpable,
+public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         StatusBarStateController.StateListener {
     private static final int KEYGUARD_DISPLAY_TIMEOUT_DELAY_DEFAULT = 30000;
     private static final long KEYGUARD_DONE_PENDING_TIMEOUT_MS = 3000;
@@ -677,13 +683,6 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                 }
             }
         }
-
-        @Override
-        public void onHasLockscreenWallpaperChanged(boolean hasLockscreenWallpaper) {
-            synchronized (KeyguardViewMediator.this) {
-                notifyHasLockscreenWallpaperChanged(hasLockscreenWallpaper);
-            }
-        }
     };
 
     ViewMediatorCallback mViewMediatorCallback = new ViewMediatorCallback() {
@@ -819,6 +818,9 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
     private DeviceConfigProxy mDeviceConfig;
     private DozeParameters mDozeParameters;
 
+    private final Optional<UnfoldLightRevealOverlayAnimation> mUnfoldLightRevealAnimation;
+    private final AtomicInteger mPendingDrawnTasks = new AtomicInteger();
+
     private final KeyguardStateController mKeyguardStateController;
     private final Lazy<KeyguardUnlockAnimationController> mKeyguardUnlockAnimationControllerLazy;
     private boolean mWallpaperSupportsAmbientMode;
@@ -841,6 +843,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
             NavigationModeController navigationModeController,
             KeyguardDisplayManager keyguardDisplayManager,
             DozeParameters dozeParameters,
+            Optional<SysUIUnfoldComponent> unfoldComponent,
             SysuiStatusBarStateController statusBarStateController,
             KeyguardStateController keyguardStateController,
             Lazy<KeyguardUnlockAnimationController> keyguardUnlockAnimationControllerLazy,
@@ -874,6 +877,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                     mInGestureNavigationMode = QuickStepContract.isGesturalMode(mode);
                 }));
         mDozeParameters = dozeParameters;
+        mUnfoldLightRevealAnimation = unfoldComponent.map(
+                c -> c.getUnfoldLightRevealOverlayAnimation());
         mStatusBarStateController = statusBarStateController;
         statusBarStateController.addCallback(this);
 
@@ -1482,7 +1487,9 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
     public void doKeyguardTimeout(Bundle options) {
         mHandler.removeMessages(KEYGUARD_TIMEOUT);
         Message msg = mHandler.obtainMessage(KEYGUARD_TIMEOUT, options);
-        mHandler.sendMessage(msg);
+        // Treat these messages with priority - A call to timeout means the device should lock
+        // as soon as possible and not wait for other messages on the thread to process first.
+        mHandler.sendMessageAtFrontOfQueue(msg);
     }
 
     /**
@@ -1671,12 +1678,15 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
      * @see #handleShow
      */
     private void showLocked(Bundle options) {
-        Trace.beginSection("KeyguardViewMediator#showLocked aqcuiring mShowKeyguardWakeLock");
+        Trace.beginSection("KeyguardViewMediator#showLocked acquiring mShowKeyguardWakeLock");
         if (DEBUG) Log.d(TAG, "showLocked");
         // ensure we stay awake until we are finished displaying the keyguard
         mShowKeyguardWakeLock.acquire();
         Message msg = mHandler.obtainMessage(SHOW, options);
-        mHandler.sendMessage(msg);
+        // Treat these messages with priority - This call can originate from #doKeyguardTimeout,
+        // meaning the device should lock as soon as possible and not wait for other messages on
+        // the thread to process first.
+        mHandler.sendMessageAtFrontOfQueue(msg);
         Trace.endSection();
     }
 
@@ -1862,6 +1872,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                 case KEYGUARD_TIMEOUT:
                     synchronized (KeyguardViewMediator.this) {
                         doKeyguardLocked((Bundle) msg.obj);
+                        notifyDefaultDisplayCallbacks(mShowing);
                     }
                     break;
                 case DISMISS:
@@ -2560,6 +2571,24 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
         Trace.beginSection("KeyguardViewMediator#handleNotifyScreenTurningOn");
         synchronized (KeyguardViewMediator.this) {
             if (DEBUG) Log.d(TAG, "handleNotifyScreenTurningOn");
+
+            if (mUnfoldLightRevealAnimation.isPresent()) {
+                mPendingDrawnTasks.set(2); // unfold overlay and keyguard drawn
+
+                mUnfoldLightRevealAnimation.get()
+                        .onScreenTurningOn(() -> {
+                            if (mPendingDrawnTasks.decrementAndGet() == 0) {
+                                try {
+                                    callback.onDrawn();
+                                } catch (RemoteException e) {
+                                    Slog.w(TAG, "Exception calling onDrawn():", e);
+                                }
+                            }
+                        });
+            } else {
+                mPendingDrawnTasks.set(1); // only keyguard drawn
+            }
+
             mKeyguardViewControllerLazy.get().onScreenTurningOn();
             if (callback != null) {
                 if (mWakeAndUnlocking) {
@@ -2590,10 +2619,12 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
 
     private void notifyDrawn(final IKeyguardDrawnCallback callback) {
         Trace.beginSection("KeyguardViewMediator#notifyDrawn");
-        try {
-            callback.onDrawn();
-        } catch (RemoteException e) {
-            Slog.w(TAG, "Exception calling onDrawn():", e);
+        if (mPendingDrawnTasks.decrementAndGet() == 0) {
+            try {
+                callback.onDrawn();
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Exception calling onDrawn():", e);
+            }
         }
         Trace.endSection();
     }
@@ -2630,7 +2661,6 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
      * Registers the StatusBar to which the Keyguard View is mounted.
      *
      * @param statusBar
-     * @param container
      * @param panelView
      * @param biometricUnlockController
      * @param notificationContainer
@@ -2638,11 +2668,17 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
      * @return the View Controller for the Keyguard View this class is mediating.
      */
     public KeyguardViewController registerStatusBar(StatusBar statusBar,
-            ViewGroup container, NotificationPanelViewController panelView,
+            NotificationPanelViewController panelView,
+            @Nullable PanelExpansionStateManager panelExpansionStateManager,
             BiometricUnlockController biometricUnlockController,
             View notificationContainer, KeyguardBypassController bypassController) {
-        mKeyguardViewControllerLazy.get().registerStatusBar(statusBar, container, panelView,
-                biometricUnlockController, notificationContainer, bypassController);
+        mKeyguardViewControllerLazy.get().registerStatusBar(
+                statusBar,
+                panelView,
+                panelExpansionStateManager,
+                biometricUnlockController,
+                notificationContainer,
+                bypassController);
         return mKeyguardViewControllerLazy.get();
     }
 
@@ -2747,6 +2783,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
         pw.print("  mHideAnimationRun: "); pw.println(mHideAnimationRun);
         pw.print("  mPendingReset: "); pw.println(mPendingReset);
         pw.print("  mPendingLock: "); pw.println(mPendingLock);
+        pw.print("  mPendingDrawnTasks: "); pw.println(mPendingDrawnTasks.get());
         pw.print("  mWakeAndUnlocking: "); pw.println(mWakeAndUnlocking);
         pw.print("  mDrawnCallback: "); pw.println(mDrawnCallback);
     }
@@ -2847,7 +2884,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
             for (int i = size - 1; i >= 0; i--) {
                 IKeyguardStateCallback callback = mKeyguardStateCallbacks.get(i);
                 try {
-                    callback.onShowingStateChanged(showing);
+                    callback.onShowingStateChanged(showing, KeyguardUpdateMonitor.getCurrentUser());
                 } catch (RemoteException e) {
                     Slog.w(TAG, "Failed to call onShowingStateChanged", e);
                     if (e instanceof DeadObjectException) {
@@ -2876,31 +2913,15 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
         }
     }
 
-    private void notifyHasLockscreenWallpaperChanged(boolean hasLockscreenWallpaper) {
-        int size = mKeyguardStateCallbacks.size();
-        for (int i = size - 1; i >= 0; i--) {
-            try {
-                mKeyguardStateCallbacks.get(i).onHasLockscreenWallpaperChanged(
-                        hasLockscreenWallpaper);
-            } catch (RemoteException e) {
-                Slog.w(TAG, "Failed to call onHasLockscreenWallpaperChanged", e);
-                if (e instanceof DeadObjectException) {
-                    mKeyguardStateCallbacks.remove(i);
-                }
-            }
-        }
-    }
-
     public void addStateMonitorCallback(IKeyguardStateCallback callback) {
         synchronized (this) {
             mKeyguardStateCallbacks.add(callback);
             try {
                 callback.onSimSecureStateChanged(mUpdateMonitor.isSimPinSecure());
-                callback.onShowingStateChanged(mShowing);
+                callback.onShowingStateChanged(mShowing, KeyguardUpdateMonitor.getCurrentUser());
                 callback.onInputRestrictedStateChanged(mInputRestricted);
                 callback.onTrustedChanged(mUpdateMonitor.getUserHasTrust(
                         KeyguardUpdateMonitor.getCurrentUser()));
-                callback.onHasLockscreenWallpaperChanged(mUpdateMonitor.hasLockscreenWallpaper());
             } catch (RemoteException e) {
                 Slog.w(TAG, "Failed to call to IKeyguardStateCallback", e);
             }
