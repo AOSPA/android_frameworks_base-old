@@ -35,6 +35,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
+import android.util.ArrayMap;
 import android.util.Printer;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
@@ -1548,6 +1549,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
 
     private int mHiddenApiPolicy = HIDDEN_API_ENFORCEMENT_DEFAULT;
 
+    /**
+     * A map from a process name to an (custom) application class name in this package, derived
+     * from the <processes> tag in the app's manifest. This map may not contain all the process
+     * names. Processses not in this map will use the default app class name,
+     * which is {@link #className}, or the default class {@link android.app.Application}.
+     */
+    @Nullable
+    private ArrayMap<String, String> mAppClassNamesByProcess;
+
     public void dump(Printer pw, String prefix) {
         dump(pw, prefix, DUMP_FLAG_ALL);
     }
@@ -1555,8 +1565,14 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** @hide */
     public void dump(Printer pw, String prefix, int dumpFlags) {
         super.dumpFront(pw, prefix);
-        if ((dumpFlags & DUMP_FLAG_DETAILS) != 0 && className != null) {
-            pw.println(prefix + "className=" + className);
+        if ((dumpFlags & DUMP_FLAG_DETAILS) != 0) {
+            if (className != null) {
+                pw.println(prefix + "className=" + className);
+            }
+            for (int i = 0; i < ArrayUtils.size(mAppClassNamesByProcess); i++) {
+                pw.println(prefix + "  process=" + mAppClassNamesByProcess.keyAt(i)
+                        + " className=" + mAppClassNamesByProcess.valueAt(i));
+            }
         }
         if (permission != null) {
             pw.println(prefix + "permission=" + permission);
@@ -1986,6 +2002,16 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(nativeHeapZeroInitialized);
         sForBoolean.parcel(requestRawExternalStorageAccess, dest, parcelableFlags);
         dest.writeLong(createTimestamp);
+        if (mAppClassNamesByProcess == null) {
+            dest.writeInt(0);
+        } else {
+            final int size = mAppClassNamesByProcess.size();
+            dest.writeInt(size);
+            for (int i = 0; i < size; i++) {
+                dest.writeString(mAppClassNamesByProcess.keyAt(i));
+                dest.writeString(mAppClassNamesByProcess.valueAt(i));
+            }
+        }
     }
 
     public static final @android.annotation.NonNull Parcelable.Creator<ApplicationInfo> CREATOR
@@ -2076,6 +2102,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         nativeHeapZeroInitialized = source.readInt();
         requestRawExternalStorageAccess = sForBoolean.unparcel(source);
         createTimestamp = source.readLong();
+        final int allClassesSize = source.readInt();
+        if (allClassesSize > 0) {
+            mAppClassNamesByProcess = new ArrayMap<>(allClassesSize);
+            for (int i = 0; i < allClassesSize; i++) {
+                mAppClassNamesByProcess.put(source.readString(), source.readString());
+            }
+        }
     }
 
     /**
@@ -2565,6 +2598,19 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
     /** {@hide} */ public void setOverrideRes(int overrideResolution) { overrideRes = overrideResolution; }
 
+    /**
+     * Replaces {@link #mAppClassNamesByProcess}. This takes over the ownership of the passed map.
+     * Do not modify the argument at the callsite.
+     * {@hide}
+     */
+    public void setAppClassNamesByProcess(@Nullable ArrayMap<String, String> value) {
+        if (ArrayUtils.size(value) == 0) {
+            mAppClassNamesByProcess = null;
+        } else {
+            mAppClassNamesByProcess = value;
+        }
+    }
+
     /** {@hide} */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public String getCodePath() { return scanSourceDir; }
@@ -2593,6 +2639,23 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     @NativeHeapZeroInitialized
     public int getNativeHeapZeroInitialized() {
         return nativeHeapZeroInitialized;
+    }
+
+    /**
+     * Return the application class name defined in the manifest. The class name set in the
+     * <processes> tag for this process, then return it. Otherwise it'll return the class
+     * name set in the <application> tag. If neither is set, it'll return null.
+     * @hide
+     */
+    @Nullable
+    public String getCustomApplicationClassNameForProcess(String processName) {
+        if (mAppClassNamesByProcess != null) {
+            String byProcess = mAppClassNamesByProcess.get(processName);
+            if (byProcess != null) {
+                return byProcess;
+            }
+        }
+        return className;
     }
     /** {@hide} */ public int canOverrideRes() { return overrideRes; }
 }

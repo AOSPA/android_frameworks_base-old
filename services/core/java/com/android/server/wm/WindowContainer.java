@@ -3181,6 +3181,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /** Cheap way of doing cast and instanceof. */
+    WindowState asWindowState() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
     ActivityRecord asActivityRecord() {
         return null;
     }
@@ -3349,8 +3354,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             mChildren.get(i).finishSync(outMergedTransaction, cancel);
         }
-        mSyncState = SYNC_STATE_NONE;
         if (cancel && mSyncGroup != null) mSyncGroup.onCancelSync(this);
+        clearSyncState();
+    }
+
+    void clearSyncState() {
+        mSyncState = SYNC_STATE_NONE;
         mSyncGroup = null;
     }
 

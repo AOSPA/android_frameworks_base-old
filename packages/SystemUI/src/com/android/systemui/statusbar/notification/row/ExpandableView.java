@@ -23,8 +23,10 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.util.IndentingPrintWriter;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
@@ -515,6 +517,76 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
 
     public boolean isChangingPosition() {
         return mChangingPosition;
+    }
+
+    /**
+     * Called when removing a view from its transient container, such as at the end of an animation.
+     * Generally, when operating on ExpandableView instances, this should be used rather than
+     * {@link ExpandableView#removeTransientView(View)} to ensure that the
+     * {@link #getTransientContainer() transient container} is correctly reset.
+     */
+    public void removeFromTransientContainer() {
+        final ViewGroup transientContainer = getTransientContainer();
+        if (transientContainer == null) {
+            return;
+        }
+        final ViewParent parent = getParent();
+        if (parent != transientContainer) {
+            Log.w(TAG, "Expandable view " + this
+                    + " has transient container " + transientContainer
+                    + " but different parent " + parent);
+            setTransientContainer(null);
+            return;
+        }
+        transientContainer.removeTransientView(this);
+        setTransientContainer(null);
+    }
+
+    /**
+     * Called before adding this view to a group, which would always throw an exception if this view
+     * has a different parent, so clean up the transient container and throw an exception if the
+     * parent isn't a transient container.  Provide as much detail as possible in the crash.
+     */
+    public void removeFromTransientContainerForAdditionTo(ViewGroup newParent) {
+        final ViewParent parent = getParent();
+        final ViewGroup transientContainer = getTransientContainer();
+        if (parent == null) {
+            // If this view has no parent, the add will succeed, so just make sure the tracked
+            // transient container is in sync with the lack of a parent.
+            if (transientContainer != null) {
+                Log.w(TAG, "Expandable view " + this
+                        + " has transient container " + transientContainer
+                        + " but no parent");
+                setTransientContainer(null);
+            }
+            return;
+        }
+        if (transientContainer == null) {
+            throw new IllegalStateException(
+                    "Can't add view " + this + " to container " + newParent + "; current parent "
+                            + parent + " is not a transient container");
+        }
+        if (transientContainer != parent) {
+            String transientContainerOutOfSyncError = "Expandable view " + this
+                    + " has transient container " + transientContainer
+                    + " but different parent " + parent;
+            if (parent != newParent) {
+                // Crash with details before addView() crashes without any; the view is being added
+                // to a different parent, and the transient container isn't the parent, so we can't
+                // even (safely) clean that up.
+                throw new IllegalStateException(transientContainerOutOfSyncError);
+            } else {
+                Log.w(TAG, transientContainerOutOfSyncError);
+                setTransientContainer(null);
+                return;
+            }
+        }
+        if (parent != newParent) {
+            Log.w(TAG, "Moving view " + this + " from transient container "
+                    + transientContainer + " to parent " + newParent);
+        }
+        transientContainer.removeTransientView(this);
+        setTransientContainer(null);
     }
 
     public void setTransientContainer(ViewGroup transientContainer) {

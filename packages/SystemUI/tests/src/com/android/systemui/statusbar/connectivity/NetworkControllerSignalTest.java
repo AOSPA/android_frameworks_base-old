@@ -68,8 +68,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 Looper.getMainLooper(), mFakeExecutor, mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
-                mDemoModeController, mock(CarrierConfigTracker.class), mFeatureFlags,
-                mStatusBarFlags);
+                mDemoModeController, mock(CarrierConfigTracker.class), mFeatureFlags);
         setupNetworkController();
 
         verifyLastMobileDataIndicators(false, -1, 0);
@@ -89,8 +88,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 Looper.getMainLooper(), mFakeExecutor, mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
-                mDemoModeController, mock(CarrierConfigTracker.class), mFeatureFlags,
-                mStatusBarFlags);
+                mDemoModeController, mock(CarrierConfigTracker.class), mFeatureFlags);
         mNetworkController.registerListeners();
 
         // Wait for the main looper to execute the previous command
@@ -158,8 +156,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 Looper.getMainLooper(), mFakeExecutor, mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
-                mDemoModeController, mock(CarrierConfigTracker.class), mFeatureFlags,
-                mStatusBarFlags);
+                mDemoModeController, mock(CarrierConfigTracker.class), mFeatureFlags);
         setupNetworkController();
 
         // No Subscriptions.

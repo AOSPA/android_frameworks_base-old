@@ -23,8 +23,13 @@ import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.TransitionInfo.FLAG_FIRST_CUSTOM;
 
+import static com.android.wm.shell.splitscreen.SplitScreen.stageTypeToString;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_DRAG_DIVIDER;
+import static com.android.wm.shell.splitscreen.SplitScreenController.exitReasonToString;
+import static com.android.wm.shell.transition.Transitions.TRANSIT_SPLIT_DISMISS;
 import static com.android.wm.shell.transition.Transitions.TRANSIT_SPLIT_DISMISS_SNAP;
-import static com.android.wm.shell.transition.Transitions.isOpeningType;
+import static com.android.wm.shell.transition.Transitions.TRANSIT_SPLIT_SCREEN_OPEN_TO_SIDE;
+import static com.android.wm.shell.transition.Transitions.TRANSIT_SPLIT_SCREEN_PAIR_OPEN;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -40,7 +45,9 @@ import android.window.TransitionInfo;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.common.TransactionPool;
+import com.android.wm.shell.protolog.ShellProtoLogGroup;
 import com.android.wm.shell.transition.OneShotRemoteHandler;
 import com.android.wm.shell.transition.Transitions;
 
@@ -57,7 +64,7 @@ class SplitScreenTransitions {
     private final Transitions mTransitions;
     private final Runnable mOnFinish;
 
-    IBinder mPendingDismiss = null;
+    DismissTransition mPendingDismiss = null;
     IBinder mPendingEnter = null;
 
     private IBinder mAnimatingTransition = null;
@@ -127,12 +134,6 @@ class SplitScreenTransitions {
                 }
                 // TODO(shell-transitions): screenshot here
                 final Rect startBounds = new Rect(change.getStartAbsBounds());
-                if (info.getType() == TRANSIT_SPLIT_DISMISS_SNAP) {
-                    // Dismissing split via snap which means the still-visible task has been
-                    // dragged to its end position at animation start so reflect that here.
-                    startBounds.offsetTo(change.getEndAbsBounds().left,
-                            change.getEndAbsBounds().top);
-                }
                 final Rect endBounds = new Rect(change.getEndAbsBounds());
                 startBounds.offset(-info.getRootOffset().x, -info.getRootOffset().y);
                 endBounds.offset(-info.getRootOffset().x, -info.getRootOffset().y);
@@ -144,10 +145,11 @@ class SplitScreenTransitions {
 
             if (transition == mPendingEnter && (mainRoot.equals(change.getContainer())
                     || sideRoot.equals(change.getContainer()))) {
-                t.setWindowCrop(leash, change.getStartAbsBounds().width(),
-                        change.getStartAbsBounds().height());
+                t.setPosition(leash, change.getEndAbsBounds().left, change.getEndAbsBounds().top);
+                t.setWindowCrop(leash, change.getEndAbsBounds().width(),
+                        change.getEndAbsBounds().height());
             }
-            boolean isOpening = isOpeningType(info.getType());
+            boolean isOpening = isOpeningTransition(info);
             if (isOpening && (mode == TRANSIT_OPEN || mode == TRANSIT_TO_FRONT)) {
                 // fade in
                 startExampleAnimation(leash, true /* show */);
@@ -184,12 +186,20 @@ class SplitScreenTransitions {
         return transition;
     }
 
-    /** Starts a transition for dismissing split after dragging the divider to a screen edge */
-    IBinder startSnapToDismiss(@NonNull WindowContainerTransaction wct,
-            @NonNull Transitions.TransitionHandler handler) {
-        final IBinder transition = mTransitions.startTransition(
-                TRANSIT_SPLIT_DISMISS_SNAP, wct, handler);
-        mPendingDismiss = transition;
+    /** Starts a transition to dismiss split. */
+    IBinder startDismissTransition(@Nullable IBinder transition, WindowContainerTransaction wct,
+            Transitions.TransitionHandler handler, @SplitScreen.StageType int dismissTop,
+            @SplitScreenController.ExitReason int reason) {
+        final int type = reason == EXIT_REASON_DRAG_DIVIDER
+                ? TRANSIT_SPLIT_DISMISS_SNAP : TRANSIT_SPLIT_DISMISS;
+        if (transition == null) {
+            transition = mTransitions.startTransition(type, wct, handler);
+        }
+        mPendingDismiss = new DismissTransition(transition, reason, dismissTop);
+
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  splitTransition "
+                        + " deduced Dismiss due to %s. toTop=%s",
+                exitReasonToString(reason), stageTypeToString(dismissTop));
         return transition;
     }
 
@@ -206,7 +216,7 @@ class SplitScreenTransitions {
         if (mAnimatingTransition == mPendingEnter) {
             mPendingEnter = null;
         }
-        if (mAnimatingTransition == mPendingDismiss) {
+        if (mPendingDismiss != null && mPendingDismiss.mTransition == mAnimatingTransition) {
             mPendingDismiss = null;
         }
         mAnimatingTransition = null;
@@ -294,5 +304,27 @@ class SplitScreenTransitions {
         });
         mAnimations.add(va);
         mTransitions.getAnimExecutor().execute(va::start);
+    }
+
+    private boolean isOpeningTransition(TransitionInfo info) {
+        return Transitions.isOpeningType(info.getType())
+                || info.getType() == TRANSIT_SPLIT_SCREEN_OPEN_TO_SIDE
+                || info.getType() == TRANSIT_SPLIT_SCREEN_PAIR_OPEN;
+    }
+
+    /** Bundled information of dismiss transition. */
+    static class DismissTransition {
+        IBinder mTransition;
+
+        int mReason;
+
+        @SplitScreen.StageType
+        int mDismissTop;
+
+        DismissTransition(IBinder transition, int reason, int dismissTop) {
+            this.mTransition = transition;
+            this.mReason = reason;
+            this.mDismissTop = dismissTop;
+        }
     }
 }

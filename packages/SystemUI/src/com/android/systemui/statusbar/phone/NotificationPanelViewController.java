@@ -16,7 +16,9 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.app.StatusBarManager.WINDOW_STATE_SHOWING;
 import static android.view.View.GONE;
+import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
 import static androidx.constraintlayout.widget.ConstraintSet.END;
 import static androidx.constraintlayout.widget.ConstraintSet.PARENT_ID;
@@ -33,7 +35,6 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_N
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
-import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_FOLD_TO_AOD;
 import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_CLOSED;
@@ -199,6 +200,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcherController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcherView;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
+import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.util.Utils;
 import com.android.systemui.util.settings.SecureSettings;
@@ -471,6 +473,9 @@ public class NotificationPanelViewController extends PanelViewController {
     private boolean mIsFullWidth;
     private boolean mBlockingExpansionForCurrentTouch;
 
+    // TODO (b/204204226): no longer needed once refactor is complete
+    private final boolean mUseCombinedQSHeaders;
+
     /**
      * Following variables maintain state of events when input focus transfer may occur.
      */
@@ -734,7 +739,9 @@ public class NotificationPanelViewController extends PanelViewController {
             NotificationEntryManager notificationEntryManager,
             CommunalStateController communalStateController,
             KeyguardStateController keyguardStateController,
-            StatusBarStateController statusBarStateController, DozeLog dozeLog,
+            StatusBarStateController statusBarStateController,
+            StatusBarWindowStateController statusBarWindowStateController,
+            DozeLog dozeLog,
             DozeParameters dozeParameters, CommandQueue commandQueue, VibratorHelper vibratorHelper,
             LatencyTracker latencyTracker, PowerManager powerManager,
             AccessibilityManager accessibilityManager, @DisplayId int displayId,
@@ -866,6 +873,7 @@ public class NotificationPanelViewController extends PanelViewController {
                 mQs.animateHeaderSlidingOut();
             }
         });
+        statusBarWindowStateController.addListener(this::onStatusBarWindowStateChanged);
         mThemeResId = mView.getContext().getThemeResId();
         mKeyguardBypassController = bypassController;
         mUpdateMonitor = keyguardUpdateMonitor;
@@ -920,6 +928,8 @@ public class NotificationPanelViewController extends PanelViewController {
         mQsFrameTranslateController = qsFrameTranslateController;
         updateUserSwitcherFlags();
         onFinishInflate();
+
+        mUseCombinedQSHeaders = featureFlags.isEnabled(Flags.COMBINED_QS_HEADERS);
     }
 
     private void onFinishInflate() {
@@ -1149,6 +1159,9 @@ public class NotificationPanelViewController extends PanelViewController {
         } else {
             constraintSet.connect(R.id.qs_frame, END, PARENT_ID, END);
             constraintSet.connect(R.id.notification_stack_scroller, START, PARENT_ID, START);
+            if (mUseCombinedQSHeaders) {
+                constraintSet.constrainHeight(R.id.split_shade_status_bar, WRAP_CONTENT);
+            }
         }
         constraintSet.getConstraint(R.id.notification_stack_scroller).layout.mWidth = panelWidth;
         constraintSet.getConstraint(R.id.qs_frame).layout.mWidth = qsWidth;
@@ -1403,7 +1416,6 @@ public class NotificationPanelViewController extends PanelViewController {
             stackScrollerPadding = mClockPositionResult.stackScrollerPaddingExpanded;
         }
 
-        mSplitShadeHeaderController.setShadeExpandedFraction(getExpandedFraction());
         mNotificationStackScrollLayoutController.setIntrinsicPadding(stackScrollerPadding);
         mKeyguardBottomArea.setAntiBurnInOffsetX(mClockPositionResult.clockX);
 
@@ -1444,8 +1456,11 @@ public class NotificationPanelViewController extends PanelViewController {
             mKeyguardStatusViewController.displayClock(LARGE, shouldAnimateClockChange);
         }
         updateKeyguardStatusViewAlignment(true /* animate */);
-        int userIconHeight = mKeyguardQsUserSwitchController != null
+        int userSwitcherHeight = mKeyguardQsUserSwitchController != null
                 ? mKeyguardQsUserSwitchController.getUserIconHeight() : 0;
+        if (mKeyguardUserSwitcherController != null) {
+            userSwitcherHeight = mKeyguardUserSwitcherController.getHeight();
+        }
         float expandedFraction =
                 mScreenOffAnimationController.shouldExpandNotifications()
                         ? 1.0f : getExpandedFraction();
@@ -1465,7 +1480,7 @@ public class NotificationPanelViewController extends PanelViewController {
                 mStatusBarHeaderHeightKeyguard,
                 expandedFraction,
                 mKeyguardStatusViewController.getLockscreenHeight(),
-                userIconHeight,
+                userSwitcherHeight,
                 userSwitcherPreferredY,
                 darkamount, mOverStretchAmount,
                 bypassEnabled, getUnlockedStackScrollerPadding(),
@@ -2412,7 +2427,6 @@ public class NotificationPanelViewController extends PanelViewController {
                 ? 1f : computeQsExpansionFraction();
         mQs.setQsExpansion(adjustedExpansionFraction, getExpandedFraction(), getHeaderTranslation(),
                 squishiness);
-        mSplitShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
         mMediaHierarchyManager.setQsExpansion(qsExpansionFraction);
         int qsPanelBottomY = calculateQsBottomPosition(qsExpansionFraction);
         mScrimController.setQsPosition(qsExpansionFraction, qsPanelBottomY);
@@ -2425,6 +2439,17 @@ public class NotificationPanelViewController extends PanelViewController {
         }
 
         mDepthController.setQsPanelExpansion(qsExpansionFraction);
+
+        // updateQsExpansion will get called whenever mTransitionToFullShadeProgress or
+        // mLockscreenShadeTransitionController.getDragProgress change.
+        // When in lockscreen, getDragProgress indicates the true expanded fraction of QS
+        float shadeExpandedFraction = mTransitioningToFullShadeProgress > 0
+                ? mLockscreenShadeTransitionController.getDragProgress()
+                : getExpandedFraction();
+        mSplitShadeHeaderController.setShadeExpandedFraction(shadeExpandedFraction);
+        mSplitShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
+        mSplitShadeHeaderController.setShadeExpanded(mQsVisible);
+
 
         if (mCommunalViewController != null) {
             mCommunalViewController.updateQsExpansion(qsExpansionFraction);
@@ -3640,11 +3665,15 @@ public class NotificationPanelViewController extends PanelViewController {
         return !isFullWidth() || !mShowIconsWhenExpanded;
     }
 
-    public final QS.ScrollListener mScrollListener = scrollY -> {
-        if (scrollY > 0 && !mQsFullyExpanded) {
-            if (DEBUG) Log.d(TAG, "Scrolling while not expanded. Forcing expand");
-            // If we are scrolling QS, we should be fully expanded.
-            expandWithQs();
+    public final QS.ScrollListener mScrollListener = new QS.ScrollListener() {
+        @Override
+        public void onQsPanelScrollChanged(int scrollY) {
+            mSplitShadeHeaderController.setQsScrollY(scrollY);
+            if (scrollY > 0 && !mQsFullyExpanded) {
+                if (DEBUG) Log.d(TAG, "Scrolling while not expanded. Forcing expand");
+                // If we are scrolling QS, we should be fully expanded.
+                expandWithQs();
+            }
         }
     };
 
@@ -4695,8 +4724,6 @@ public class NotificationPanelViewController extends PanelViewController {
             // would reset
             maybeAnimateBottomAreaAlpha();
             updateQsState();
-            mSplitShadeHeaderController.setShadeExpanded(
-                    mBarState == SHADE || mBarState == SHADE_LOCKED);
         }
 
         @Override
@@ -4726,6 +4753,9 @@ public class NotificationPanelViewController extends PanelViewController {
          * {@link KeyguardStatusBarViewController} and remove this method.
          */
         boolean shouldHeadsUpBeVisible();
+
+        /** Return the fraction of the shade that's expanded, when in lockscreen. */
+        float getLockscreenShadeDragProgress();
     }
 
     private final NotificationPanelViewStateProvider mNotificationPanelViewStateProvider =
@@ -4743,6 +4773,11 @@ public class NotificationPanelViewController extends PanelViewController {
                 @Override
                 public boolean shouldHeadsUpBeVisible() {
                     return mHeadsUpAppearanceController.shouldBeVisible();
+                }
+
+                @Override
+                public float getLockscreenShadeDragProgress() {
+                    return mLockscreenShadeTransitionController.getDragProgress();
                 }
             };
 
@@ -4989,5 +5024,15 @@ public class NotificationPanelViewController extends PanelViewController {
     /** Returns the handler that the status bar should forward touches to. */
     public PhoneStatusBarView.TouchEventHandler getStatusBarTouchEventHandler() {
         return mStatusBarViewTouchEventHandler;
+    }
+
+    private void onStatusBarWindowStateChanged(@StatusBarManager.WindowVisibleState int state) {
+        if (state != WINDOW_STATE_SHOWING
+                && mStatusBarStateController.getState() == StatusBarState.SHADE) {
+            collapsePanel(
+                    false /* animate */,
+                    false /* delayed */,
+                    1.0f /* speedUpFactor */);
+        }
     }
 }

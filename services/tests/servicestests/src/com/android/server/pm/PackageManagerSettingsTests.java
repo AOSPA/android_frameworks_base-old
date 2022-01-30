@@ -48,6 +48,7 @@ import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
+import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.Log;
@@ -108,6 +109,8 @@ public class PackageManagerSettingsTests {
     LegacyPermissionDataProvider mPermissionDataProvider;
     @Mock
     DomainVerificationManagerInternal mDomainVerificationManager;
+
+    final ArrayMap<String, Long> mOrigFirstInstallTimes = new ArrayMap<>();
 
     @Before
     public void initializeMocks() {
@@ -208,14 +211,14 @@ public class PackageManagerSettingsTests {
                 new WatchableTester(settingsUnderTest, "noSuspendingPackage");
         watcher.register();
         settingsUnderTest.mPackages.put(PACKAGE_NAME_1, createPackageSetting(PACKAGE_NAME_1));
-        settingsUnderTest.readPackageRestrictionsLPr(0);
+        settingsUnderTest.readPackageRestrictionsLPr(0, mOrigFirstInstallTimes);
         watcher.verifyChangeReported("put package 1");
         // Collect a snapshot at the midway point (package 2 has not been added)
         final Settings snapshot = settingsUnderTest.snapshot();
         watcher.verifyNoChangeReported("snapshot");
         settingsUnderTest.mPackages.put(PACKAGE_NAME_2, createPackageSetting(PACKAGE_NAME_2));
         watcher.verifyChangeReported("put package 2");
-        settingsUnderTest.readPackageRestrictionsLPr(0);
+        settingsUnderTest.readPackageRestrictionsLPr(0, mOrigFirstInstallTimes);
 
         PackageSetting ps1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1);
         PackageUserStateInternal packageUserState1 = ps1.readUserState(0);
@@ -251,7 +254,7 @@ public class PackageManagerSettingsTests {
         watcher.register();
         settingsUnderTest.mPackages.put(PACKAGE_NAME_1, createPackageSetting(PACKAGE_NAME_1));
         watcher.verifyChangeReported("put package 1");
-        settingsUnderTest.readPackageRestrictionsLPr(0);
+        settingsUnderTest.readPackageRestrictionsLPr(0, mOrigFirstInstallTimes);
         watcher.verifyChangeReported("readPackageRestrictions");
 
         final PackageSetting ps1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1);
@@ -264,17 +267,17 @@ public class PackageManagerSettingsTests {
         final SuspendParams params = packageUserState1.getSuspendParams().valueAt(0);
         watcher.verifyNoChangeReported("fetch user state");
         assertThat(params, is(notNullValue()));
-        assertThat(params.appExtras.size(), is(1));
-        assertThat(params.appExtras.getString("app_extra_string"), is("value"));
-        assertThat(params.launcherExtras.size(), is(1));
-        assertThat(params.launcherExtras.getLong("launcher_extra_long"), is(4L));
-        assertThat(params.dialogInfo, is(notNullValue()));
-        assertThat(params.dialogInfo.getDialogMessage(), is("Dialog Message"));
-        assertThat(params.dialogInfo.getTitleResId(), is(ID_NULL));
-        assertThat(params.dialogInfo.getIconResId(), is(TEST_RESOURCE_ID));
-        assertThat(params.dialogInfo.getNeutralButtonTextResId(), is(ID_NULL));
-        assertThat(params.dialogInfo.getNeutralButtonAction(), is(BUTTON_ACTION_MORE_DETAILS));
-        assertThat(params.dialogInfo.getDialogMessageResId(), is(ID_NULL));
+        assertThat(params.getAppExtras().size(), is(1));
+        assertThat(params.getAppExtras().getString("app_extra_string"), is("value"));
+        assertThat(params.getLauncherExtras().size(), is(1));
+        assertThat(params.getLauncherExtras().getLong("launcher_extra_long"), is(4L));
+        assertThat(params.getDialogInfo(), is(notNullValue()));
+        assertThat(params.getDialogInfo().getDialogMessage(), is("Dialog Message"));
+        assertThat(params.getDialogInfo().getTitleResId(), is(ID_NULL));
+        assertThat(params.getDialogInfo().getIconResId(), is(TEST_RESOURCE_ID));
+        assertThat(params.getDialogInfo().getNeutralButtonTextResId(), is(ID_NULL));
+        assertThat(params.getDialogInfo().getNeutralButtonAction(), is(BUTTON_ACTION_MORE_DETAILS));
+        assertThat(params.getDialogInfo().getDialogMessageResId(), is(ID_NULL));
     }
 
     @Test
@@ -338,7 +341,7 @@ public class PackageManagerSettingsTests {
         settingsUnderTest.mPackages.put(PACKAGE_NAME_3, createPackageSetting(PACKAGE_NAME_3));
         watcher.verifyChangeReported("put package 3");
         // now read and verify
-        settingsUnderTest.readPackageRestrictionsLPr(0);
+        settingsUnderTest.readPackageRestrictionsLPr(0, mOrigFirstInstallTimes);
         watcher.verifyChangeReported("readPackageRestrictions");
         final PackageUserStateInternal readPus1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1)
                 .readUserState(0);
@@ -351,18 +354,18 @@ public class PackageManagerSettingsTests {
         final SuspendParams params11 = readPus1.getSuspendParams().valueAt(0);
         watcher.verifyNoChangeReported("read package param");
         assertThat(params11, is(notNullValue()));
-        assertThat(params11.dialogInfo, is(dialogInfo1));
-        assertThat(BaseBundle.kindofEquals(params11.appExtras, appExtras1), is(true));
-        assertThat(BaseBundle.kindofEquals(params11.launcherExtras, launcherExtras1),
+        assertThat(params11.getDialogInfo(), is(dialogInfo1));
+        assertThat(BaseBundle.kindofEquals(params11.getAppExtras(), appExtras1), is(true));
+        assertThat(BaseBundle.kindofEquals(params11.getLauncherExtras(), launcherExtras1),
                 is(true));
         watcher.verifyNoChangeReported("read package param");
 
         assertThat(readPus1.getSuspendParams().keyAt(1), is("suspendingPackage2"));
         final SuspendParams params12 = readPus1.getSuspendParams().valueAt(1);
         assertThat(params12, is(notNullValue()));
-        assertThat(params12.dialogInfo, is(dialogInfo2));
-        assertThat(BaseBundle.kindofEquals(params12.appExtras, appExtras2), is(true));
-        assertThat(BaseBundle.kindofEquals(params12.launcherExtras, launcherExtras2),
+        assertThat(params12.getDialogInfo(), is(dialogInfo2));
+        assertThat(BaseBundle.kindofEquals(params12.getAppExtras(), appExtras2), is(true));
+        assertThat(BaseBundle.kindofEquals(params12.getLauncherExtras(), launcherExtras2),
                 is(true));
         watcher.verifyNoChangeReported("read package param");
 
@@ -373,9 +376,9 @@ public class PackageManagerSettingsTests {
         assertThat(readPus2.getSuspendParams().keyAt(0), is("suspendingPackage3"));
         final SuspendParams params21 = readPus2.getSuspendParams().valueAt(0);
         assertThat(params21, is(notNullValue()));
-        assertThat(params21.dialogInfo, is(nullValue()));
-        assertThat(BaseBundle.kindofEquals(params21.appExtras, appExtras1), is(true));
-        assertThat(params21.launcherExtras, is(nullValue()));
+        assertThat(params21.getDialogInfo(), is(nullValue()));
+        assertThat(BaseBundle.kindofEquals(params21.getAppExtras(), appExtras1), is(true));
+        assertThat(params21.getLauncherExtras(), is(nullValue()));
         watcher.verifyNoChangeReported("read package param");
 
         final PackageUserStateInternal readPus3 = settingsUnderTest.mPackages.get(PACKAGE_NAME_3)
@@ -388,7 +391,7 @@ public class PackageManagerSettingsTests {
     @Test
     public void testPackageRestrictionsSuspendedDefault() {
         final PackageSetting defaultSetting = createPackageSetting(PACKAGE_NAME_1);
-        assertThat(defaultSetting.getSuspended(0), is(false));
+        assertThat(defaultSetting.getUserStateOrDefault(0).isSuspended(), is(false));
     }
 
     @Test
@@ -418,7 +421,7 @@ public class PackageManagerSettingsTests {
         settingsUnderTest.mPackages.put(PACKAGE_NAME_2, createPackageSetting(PACKAGE_NAME_2));
         settingsUnderTest.mPackages.put(PACKAGE_NAME_3, createPackageSetting(PACKAGE_NAME_3));
         // now read and verify
-        settingsUnderTest.readPackageRestrictionsLPr(0);
+        settingsUnderTest.readPackageRestrictionsLPr(0, mOrigFirstInstallTimes);
         final PackageUserState readPus1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1)
                 .readUserState(0);
         assertThat(readPus1.getDistractionFlags(), is(distractionFlags1));
@@ -1127,7 +1130,6 @@ public class PackageManagerSettingsTests {
         assertSame(origPkgSetting.getCpuAbiOverride(), testPkgSetting.getCpuAbiOverride());
         assertThat(origPkgSetting.getCpuAbiOverride(), is(testPkgSetting.getCpuAbiOverride()));
         assertThat(origPkgSetting.getDomainSetId(), is(testPkgSetting.getDomainSetId()));
-        assertThat(origPkgSetting.getFirstInstallTime(), is(testPkgSetting.getFirstInstallTime()));
         assertSame(origPkgSetting.getInstallSource(), testPkgSetting.getInstallSource());
         assertThat(origPkgSetting.isInstallPermissionsFixed(),
                 is(testPkgSetting.isInstallPermissionsFixed()));

@@ -36,18 +36,24 @@ import android.telephony.Annotation.PreciseDisconnectCauses;
 import android.telephony.Annotation.RadioPowerState;
 import android.telephony.Annotation.SimActivationState;
 import android.telephony.Annotation.SrvccState;
+import android.telephony.TelephonyManager.CarrierPrivilegesListener;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.ims.ImsReasonInfo;
 import android.util.ArraySet;
 import android.util.Log;
 
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.listeners.ListenerExecutor;
+import com.android.internal.telephony.ICarrierPrivilegesListener;
 import com.android.internal.telephony.IOnSubscriptionsChangedListener;
 import com.android.internal.telephony.ITelephonyRegistry;
 
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.Executor;
 
 /**
@@ -285,6 +291,8 @@ public class TelephonyRegistryManager {
      * UI. There is no timeout associated with showing this UX, so a carrier app must be sure to
      * call with active set to false sometime after calling with it set to {@code true}.
      * <p>
+     * This will apply to all subscriptions the carrier app has carrier privileges on.
+     * <p>
      * Requires Permission: calling app has carrier privileges.
      *
      * @param active Whether the carrier network change is or shortly will be
@@ -294,6 +302,31 @@ public class TelephonyRegistryManager {
     public void notifyCarrierNetworkChange(boolean active) {
         try {
             sRegistry.notifyCarrierNetworkChange(active);
+        } catch (RemoteException ex) {
+            // system server crash
+        }
+    }
+
+    /**
+     * Informs the system of an intentional upcoming carrier network change by a carrier app on the
+     * given {@code subscriptionId}. This call only used to allow the system to provide alternative
+     * UI while telephony is performing an action that may result in intentional, temporary network
+     * lack of connectivity.
+     * <p>
+     * Based on the active parameter passed in, this method will either show or hide the
+     * alternative UI. There is no timeout associated with showing this UX, so a carrier app must be
+     * sure to call with active set to false sometime after calling with it set to {@code true}.
+     * <p>
+     * Requires Permission: calling app has carrier privileges.
+     *
+     * @param subscriptionId the subscription of the carrier network.
+     * @param active whether the carrier network change is or shortly will be active. Set this value
+     *              to true to begin showing alternative UI and false to stop.
+     * @see TelephonyManager#hasCarrierPrivileges
+     */
+    public void notifyCarrierNetworkChange(int subscriptionId, boolean active) {
+        try {
+            sRegistry.notifyCarrierNetworkChangeWithSubId(subscriptionId, active);
         } catch (RemoteException ex) {
             // system server crash
         }
@@ -1186,5 +1219,118 @@ public class TelephonyRegistryManager {
             @NonNull TelephonyCallback callback, boolean notifyNow) {
         listenFromCallback(false, false, subId,
                 pkgName, attributionTag, callback, new int[0], notifyNow);
+    }
+
+    private static class CarrierPrivilegesListenerWrapper extends ICarrierPrivilegesListener.Stub
+            implements ListenerExecutor {
+        private final WeakReference<CarrierPrivilegesListener> mListener;
+        private final Executor mExecutor;
+
+        CarrierPrivilegesListenerWrapper(CarrierPrivilegesListener listener, Executor executor) {
+            mListener = new WeakReference<>(listener);
+            mExecutor = executor;
+        }
+
+        @Override
+        public void onCarrierPrivilegesChanged(
+                List<String> privilegedPackageNames, int[] privilegedUids) {
+            Binder.withCleanCallingIdentity(
+                    () ->
+                            executeSafely(
+                                    mExecutor,
+                                    mListener::get,
+                                    cpl ->
+                                            cpl.onCarrierPrivilegesChanged(
+                                                    privilegedPackageNames, privilegedUids)));
+        }
+    }
+
+    @GuardedBy("sCarrierPrivilegeListeners")
+    private static final WeakHashMap<
+                    CarrierPrivilegesListener, WeakReference<CarrierPrivilegesListenerWrapper>>
+            sCarrierPrivilegeListeners = new WeakHashMap<>();
+
+    /**
+     * Registers a {@link CarrierPrivilegesListener} on the given {@code logicalSlotIndex} to
+     * receive callbacks when the set of packages with carrier privileges changes. The callback will
+     * immediately be called with the latest state.
+     *
+     * @param logicalSlotIndex The SIM slot to listen on
+     * @param executor The executor where {@code listener} will be invoked
+     * @param listener The callback to register
+     */
+    public void addCarrierPrivilegesListener(
+            int logicalSlotIndex,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull CarrierPrivilegesListener listener) {
+        if (listener == null || executor == null) {
+            throw new IllegalArgumentException("listener and executor must be non-null");
+        }
+        synchronized (sCarrierPrivilegeListeners) {
+            WeakReference<CarrierPrivilegesListenerWrapper> existing =
+                    sCarrierPrivilegeListeners.get(listener);
+            if (existing != null && existing.get() != null) {
+                Log.d(TAG, "addCarrierPrivilegesListener: listener already registered");
+                return;
+            }
+            CarrierPrivilegesListenerWrapper wrapper =
+                    new CarrierPrivilegesListenerWrapper(listener, executor);
+            sCarrierPrivilegeListeners.put(listener, new WeakReference<>(wrapper));
+            try {
+                sRegistry.addCarrierPrivilegesListener(
+                        logicalSlotIndex,
+                        wrapper,
+                        mContext.getOpPackageName(),
+                        mContext.getAttributionTag());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Unregisters a {@link CarrierPrivilegesListener}.
+     *
+     * @param listener The callback to unregister
+     */
+    public void removeCarrierPrivilegesListener(@NonNull CarrierPrivilegesListener listener) {
+        if (listener == null) {
+            throw new IllegalArgumentException("listener must be non-null");
+        }
+        synchronized (sCarrierPrivilegeListeners) {
+            WeakReference<CarrierPrivilegesListenerWrapper> ref =
+                    sCarrierPrivilegeListeners.remove(listener);
+            if (ref == null) return;
+            CarrierPrivilegesListenerWrapper wrapper = ref.get();
+            if (wrapper == null) return;
+            try {
+                sRegistry.removeCarrierPrivilegesListener(wrapper, mContext.getOpPackageName());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Notify listeners that the set of packages with carrier privileges has changed.
+     *
+     * @param logicalSlotIndex The SIM slot the change occurred on
+     * @param privilegedPackageNames The updated set of packages names with carrier privileges
+     * @param privilegedUids The updated set of UIDs with carrier privileges
+     */
+    public void notifyCarrierPrivilegesChanged(
+            int logicalSlotIndex,
+            @NonNull List<String> privilegedPackageNames,
+            @NonNull int[] privilegedUids) {
+        if (privilegedPackageNames == null || privilegedUids == null) {
+            throw new IllegalArgumentException(
+                    "privilegedPackageNames and privilegedUids must be non-null");
+        }
+        try {
+            sRegistry.notifyCarrierPrivilegesChanged(
+                    logicalSlotIndex, privilegedPackageNames, privilegedUids);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 }

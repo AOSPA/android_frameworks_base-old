@@ -465,4 +465,8 @@ interface IAudioService {
             boolean register);
 
     void setTestDeviceConnectionState(in AudioDeviceAttributes device, boolean connected);
+
+    List<AudioFocusInfo> getFocusStack();
+
+    boolean sendFocusLoss(in AudioFocusInfo focusLoser, in IAudioPolicyCallback apcb);
 }

@@ -492,6 +492,8 @@
   <java-symbol type="string" name="config_deviceSpecificDevicePolicyManagerService" />
   <java-symbol type="string" name="config_deviceSpecificAudioService" />
   <java-symbol type="integer" name="config_num_physical_slots" />
+  <java-symbol type="integer" name="config_default_cellular_usage_setting" />
+  <java-symbol type="array" name="config_supported_cellular_usage_settings" />
   <java-symbol type="integer" name="config_delay_for_ims_dereg_millis" />
   <java-symbol type="array" name="config_integrityRuleProviderPackages" />
   <java-symbol type="bool" name="config_useAssistantVolume" />
@@ -2265,6 +2267,7 @@
   <java-symbol type="bool" name="config_autoResetAirplaneMode" />
   <java-symbol type="string" name="config_notificationAccessConfirmationActivity" />
   <java-symbol type="bool" name="config_killableInputMethods" />
+  <java-symbol type="bool" name="config_preventImeStartupUnlessTextEditor" />
   <java-symbol type="string" name="config_optionalPackageVerifierName" />
 
   <java-symbol type="layout" name="resolver_list" />
@@ -4319,6 +4322,7 @@
   <java-symbol type="dimen" name="config_letterboxHorizontalPositionMultiplier" />
   <java-symbol type="bool" name="config_letterboxIsReachabilityEnabled" />
   <java-symbol type="integer" name="config_letterboxDefaultPositionForReachability" />
+  <java-symbol type="bool" name="config_isCameraCompatControlForStretchedIssuesEnabled" />
 
   <java-symbol type="bool" name="config_hideDisplayCutoutWithDisplayArea" />
 
@@ -4656,4 +4660,8 @@
   <java-symbol type="integer" name="config_mashPressVibrateTimeOnPowerButton" />
 
   <java-symbol type="string" name="config_systemGameService" />
+
+  <java-symbol type="string" name="config_supervisedUserCreationPackage"/>
+
+  <java-symbol type="bool" name="config_enableSafetyCenter" />
 </resources>

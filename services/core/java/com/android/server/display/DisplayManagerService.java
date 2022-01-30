@@ -45,7 +45,10 @@ import android.app.compat.CompatChanges;
 import android.companion.virtual.IVirtualDevice;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
@@ -422,6 +425,32 @@ public final class DisplayManagerService extends SystemService {
     // Receives notifications about changes to Settings.
     private SettingsObserver mSettingsObserver;
 
+    // Keeps note of what state the device is in, used for idle screen brightness mode.
+    private boolean mIsDocked;
+    private boolean mIsDreaming;
+
+    private final BroadcastReceiver mIdleModeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final DisplayManagerInternal dmi =
+                    LocalServices.getService(DisplayManagerInternal.class);
+            if (Intent.ACTION_DOCK_EVENT.equals(intent.getAction())) {
+                int dockState = intent.getIntExtra(Intent.EXTRA_DOCK_STATE,
+                        Intent.EXTRA_DOCK_STATE_UNDOCKED);
+                mIsDocked = dockState == Intent.EXTRA_DOCK_STATE_DESK
+                        || dockState == Intent.EXTRA_DOCK_STATE_LE_DESK
+                        || dockState == Intent.EXTRA_DOCK_STATE_HE_DESK;
+            }
+            if (Intent.ACTION_DREAMING_STARTED.equals(intent.getAction())) {
+                mIsDreaming = true;
+            } else if (Intent.ACTION_DREAMING_STOPPED.equals(intent.getAction())) {
+                mIsDreaming = false;
+            }
+            setDockedAndIdleEnabled(/* enabled= */(mIsDocked && mIsDreaming),
+                    Display.DEFAULT_DISPLAY);
+        }
+    };
+
     private final boolean mAllowNonNativeRefreshRateOverride;
 
     private final BrightnessSynchronizer mBrightnessSynchronizer;
@@ -625,6 +654,13 @@ public final class DisplayManagerService extends SystemService {
         mSettingsObserver = new SettingsObserver();
 
         mBrightnessSynchronizer.startSynchronizing();
+
+        final IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_DREAMING_STARTED);
+        filter.addAction(Intent.ACTION_DREAMING_STOPPED);
+        filter.addAction(Intent.ACTION_DOCK_EVENT);
+
+        mContext.registerReceiver(mIdleModeReceiver, filter);
     }
 
     @VisibleForTesting
@@ -687,7 +723,6 @@ public final class DisplayManagerService extends SystemService {
                         display.getDisplayInfoLocked().shouldConstrainMetricsForLauncher;
                 if (display.setDisplayInfoOverrideFromWindowManagerLocked(info)) {
                     handleLogicalDisplayChangedLocked(display);
-                    scheduleTraversalLocked(false);
                 }
             }
         }
@@ -1083,6 +1118,13 @@ public final class DisplayManagerService extends SystemService {
                         + "setUserDisabledHdrTypesInternal");
                 return;
             }
+
+            // Verify if userDisabledHdrTypes contains expected HDR types
+            if (!isSubsetOf(Display.HdrCapabilities.HDR_TYPES, userDisabledHdrTypes)) {
+                Slog.e(TAG, "userDisabledHdrTypes contains unexpected types");
+                return;
+            }
+
             Arrays.sort(userDisabledHdrTypes);
             if (Arrays.equals(mUserDisabledHdrTypes, userDisabledHdrTypes)) {
                 return;
@@ -1103,6 +1145,15 @@ public final class DisplayManagerService extends SystemService {
                         });
             }
         }
+    }
+
+    private boolean isSubsetOf(int[] sortedSuperset, int[] subset) {
+        for (int i : subset) {
+            if (Arrays.binarySearch(sortedSuperset, i) < 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void setAreUserDisabledHdrTypesAllowedInternal(
@@ -2087,6 +2138,16 @@ public final class DisplayManagerService extends SystemService {
                 }
                 display.getDisplayInfoLocked().shouldConstrainMetricsForLauncher = constrain;
                 setDisplayInfoOverrideFromWindowManagerInternal(i, display.getDisplayInfoLocked());
+            }
+        }
+    }
+
+    void setDockedAndIdleEnabled(boolean enabled, int displayId) {
+        synchronized (mSyncRoot) {
+            final DisplayPowerController displayPowerController = mDisplayPowerControllers.get(
+                    displayId);
+            if (displayPowerController != null) {
+                displayPowerController.setAutomaticScreenBrightnessMode(enabled);
             }
         }
     }

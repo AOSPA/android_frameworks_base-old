@@ -394,6 +394,8 @@ applications that come with the platform
         <!-- Permissions required for Incremental CTS tests -->
         <permission name="com.android.permission.USE_INSTALLER_V2"/>
         <permission name="android.permission.LOADER_USAGE_STATS"/>
+        <!-- Permissions required for Package Verifier tests -->
+        <permission name="android.permission.PACKAGE_VERIFICATION_AGENT" />
         <!-- Permission required to test system only camera devices. -->
         <permission name="android.permission.SYSTEM_CAMERA" />
         <!-- Permission required to test ExplicitHealthCheckServiceImpl. -->
@@ -425,7 +427,6 @@ applications that come with the platform
         <permission name="android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS" />
         <permission name="android.permission.MANAGE_COMPANION_DEVICES" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING" />
-        <permission name="android.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
         <permission name="android.permission.REQUEST_COMPANION_SELF_MANAGED" />
         <!-- Permission required for testing registering pull atom callbacks. -->
@@ -519,6 +520,8 @@ applications that come with the platform
         <permission name="android.permission.LOCK_DEVICE" />
         <!-- Permission required for CTS test - CtsSafetyCenterTestCases -->
         <permission name="android.permission.SEND_SAFETY_CENTER_UPDATE" />
+        <!-- Permission required for CTS test - CtsSafetyCenterTestCases -->
+        <permission name="android.permission.READ_SAFETY_CENTER_STATUS" />
         <!-- Permission required for CTS test - CommunalManagerTest -->
         <permission name="android.permission.WRITE_COMMUNAL_STATE" />
         <permission name="android.permission.READ_COMMUNAL_STATE" />

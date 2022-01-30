@@ -80,7 +80,7 @@ public abstract class InputEventReceiver {
         mReceiverPtr = nativeInit(new WeakReference<InputEventReceiver>(this),
                 inputChannel, mMessageQueue);
 
-        mCloseGuard.open("dispose");
+        mCloseGuard.open("InputEventReceiver.dispose");
     }
 
     @Override

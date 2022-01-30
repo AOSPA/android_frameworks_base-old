@@ -16,9 +16,12 @@
 
 package android.media.tv.interactive;
 
+import android.graphics.Rect;
+import android.media.tv.AdRequest;
 import android.media.tv.BroadcastInfoRequest;
 import android.media.tv.interactive.ITvIAppSession;
-import android.media.tv.BroadcastInfoRequest;
+import android.net.Uri;
+import android.os.Bundle;
 
 /**
  * Helper interface for ITvIAppSession to allow TvIAppService to notify the system service when
@@ -29,5 +32,14 @@ oneway interface ITvIAppSessionCallback {
     void onSessionCreated(in ITvIAppSession session);
     void onLayoutSurface(int left, int top, int right, int bottom);
     void onBroadcastInfoRequest(in BroadcastInfoRequest request);
+    void onRemoveBroadcastInfo(int id);
     void onSessionStateChanged(int state);
+    void onBiInteractiveAppCreated(in Uri biIAppUri, in String biIAppId);
+    void onCommandRequest(in String cmdType, in Bundle parameters);
+    void onSetVideoBounds(in Rect rect);
+    void onRequestCurrentChannelUri();
+    void onRequestCurrentChannelLcn();
+    void onRequestStreamVolume();
+    void onRequestTrackInfoList();
+    void onAdRequest(in AdRequest request);
 }

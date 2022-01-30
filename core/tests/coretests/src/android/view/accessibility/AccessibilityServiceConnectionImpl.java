@@ -16,6 +16,7 @@
 
 package android.view.accessibility;
 
+import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceConnection;
 import android.accessibilityservice.MagnificationConfig;
@@ -144,6 +145,10 @@ public class AccessibilityServiceConnectionImpl extends IAccessibilityServiceCon
         return false;
     }
 
+    public int setInputMethodEnabled(String imeId, boolean enabled) {
+        return AccessibilityService.SoftKeyboardController.ENABLE_IME_FAIL_UNKNOWN;
+    }
+
     public boolean isAccessibilityButtonAvailable() {
         return false;
     }
@@ -167,6 +172,8 @@ public class AccessibilityServiceConnectionImpl extends IAccessibilityServiceCon
     public void takeScreenshot(int displayId, RemoteCallback callback) {}
 
     public void setFocusAppearance(int strokeWidth, int color) {}
+
+    public void setCacheEnabled(boolean enabled) {}
 
     public void logTrace(long timestamp, String where, String callingParams, int processId,
             long threadId, int callingUid, Bundle callingStack) {}

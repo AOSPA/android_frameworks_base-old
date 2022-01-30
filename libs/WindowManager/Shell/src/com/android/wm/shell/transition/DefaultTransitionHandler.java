@@ -18,11 +18,13 @@ package com.android.wm.shell.transition;
 
 import static android.app.ActivityOptions.ANIM_CLIP_REVEAL;
 import static android.app.ActivityOptions.ANIM_CUSTOM;
+import static android.app.ActivityOptions.ANIM_FROM_STYLE;
 import static android.app.ActivityOptions.ANIM_NONE;
 import static android.app.ActivityOptions.ANIM_OPEN_CROSS_PROFILE_APPS;
 import static android.app.ActivityOptions.ANIM_SCALE_UP;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_SCALE_DOWN;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_SCALE_UP;
+import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS;
@@ -313,7 +315,8 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                     final int anim = getRotationAnimation(info);
                     if (!(isSeamless || anim == ROTATION_ANIMATION_JUMPCUT)) {
                         mRotationAnimation = new ScreenRotationAnimation(mContext, mSurfaceSession,
-                                mTransactionPool, startTransaction, change, info.getRootLeash());
+                                mTransactionPool, startTransaction, change, info.getRootLeash(),
+                                anim);
                         mRotationAnimation.startAnimation(animations, onAnimFinish,
                                 mTransitionAnimationScaleSetting, mMainExecutor, mAnimExecutor);
                         continue;
@@ -355,10 +358,16 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                     continue;
                 }
 
+                // There is no default animation for Pip window in rotation transition, and the
+                // PipTransition will update the surface of its own window at start/finish.
+                if (isTask && change.getTaskInfo().configuration.windowConfiguration
+                        .getWindowingMode() == WINDOWING_MODE_PINNED) {
+                    continue;
+                }
                 // No default animation for this, so just update bounds/position.
                 startTransaction.setPosition(change.getLeash(),
-                        change.getEndAbsBounds().left - change.getEndRelOffset().x,
-                        change.getEndAbsBounds().top - change.getEndRelOffset().y);
+                        change.getEndAbsBounds().left - info.getRootOffset().x,
+                        change.getEndAbsBounds().top - info.getRootOffset().y);
                 if (isTask) {
                     // Skip non-tasks since those usually have null bounds.
                     startTransaction.setWindowCrop(change.getLeash(),
@@ -508,60 +517,70 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
         } else if ((changeFlags & FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT) != 0 && isOpeningType) {
             // This received a transferred starting window, so don't animate
             return null;
-        } else if (wallpaperTransit == WALLPAPER_TRANSITION_INTRA_OPEN) {
-            a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                    ? R.styleable.WindowAnimation_wallpaperIntraOpenEnterAnimation
-                    : R.styleable.WindowAnimation_wallpaperIntraOpenExitAnimation);
-        } else if (wallpaperTransit == WALLPAPER_TRANSITION_INTRA_CLOSE) {
-            a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                    ? R.styleable.WindowAnimation_wallpaperIntraCloseEnterAnimation
-                    : R.styleable.WindowAnimation_wallpaperIntraCloseExitAnimation);
-        } else if (wallpaperTransit == WALLPAPER_TRANSITION_OPEN) {
-            a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                    ? R.styleable.WindowAnimation_wallpaperOpenEnterAnimation
-                    : R.styleable.WindowAnimation_wallpaperOpenExitAnimation);
-        } else if (wallpaperTransit == WALLPAPER_TRANSITION_CLOSE) {
-            a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                    ? R.styleable.WindowAnimation_wallpaperCloseEnterAnimation
-                    : R.styleable.WindowAnimation_wallpaperCloseExitAnimation);
-        } else if (type == TRANSIT_OPEN) {
-            if (isTask) {
-                a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                        ? R.styleable.WindowAnimation_taskOpenEnterAnimation
-                        : R.styleable.WindowAnimation_taskOpenExitAnimation);
-            } else {
-                if ((changeFlags & FLAG_TRANSLUCENT) != 0 && enter) {
-                    a = mTransitionAnimation.loadDefaultAnimationRes(
-                            R.anim.activity_translucent_open_enter);
+        } else {
+            int animAttr = 0;
+            boolean translucent = false;
+            if (wallpaperTransit == WALLPAPER_TRANSITION_INTRA_OPEN) {
+                animAttr = enter
+                        ? R.styleable.WindowAnimation_wallpaperIntraOpenEnterAnimation
+                        : R.styleable.WindowAnimation_wallpaperIntraOpenExitAnimation;
+            } else if (wallpaperTransit == WALLPAPER_TRANSITION_INTRA_CLOSE) {
+                animAttr = enter
+                        ? R.styleable.WindowAnimation_wallpaperIntraCloseEnterAnimation
+                        : R.styleable.WindowAnimation_wallpaperIntraCloseExitAnimation;
+            } else if (wallpaperTransit == WALLPAPER_TRANSITION_OPEN) {
+                animAttr = enter
+                        ? R.styleable.WindowAnimation_wallpaperOpenEnterAnimation
+                        : R.styleable.WindowAnimation_wallpaperOpenExitAnimation;
+            } else if (wallpaperTransit == WALLPAPER_TRANSITION_CLOSE) {
+                animAttr = enter
+                        ? R.styleable.WindowAnimation_wallpaperCloseEnterAnimation
+                        : R.styleable.WindowAnimation_wallpaperCloseExitAnimation;
+            } else if (type == TRANSIT_OPEN) {
+                if (isTask) {
+                    animAttr = enter
+                            ? R.styleable.WindowAnimation_taskOpenEnterAnimation
+                            : R.styleable.WindowAnimation_taskOpenExitAnimation;
                 } else {
-                    a = mTransitionAnimation.loadDefaultAnimationAttr(enter
+                    if ((changeFlags & FLAG_TRANSLUCENT) != 0 && enter) {
+                        translucent = true;
+                    }
+                    animAttr = enter
                             ? R.styleable.WindowAnimation_activityOpenEnterAnimation
-                            : R.styleable.WindowAnimation_activityOpenExitAnimation);
+                            : R.styleable.WindowAnimation_activityOpenExitAnimation;
                 }
-            }
-        } else if (type == TRANSIT_TO_FRONT) {
-            a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                    ? R.styleable.WindowAnimation_taskToFrontEnterAnimation
-                    : R.styleable.WindowAnimation_taskToFrontExitAnimation);
-        } else if (type == TRANSIT_CLOSE) {
-            if (isTask) {
-                a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                        ? R.styleable.WindowAnimation_taskCloseEnterAnimation
-                        : R.styleable.WindowAnimation_taskCloseExitAnimation);
-            } else {
-                if ((changeFlags & FLAG_TRANSLUCENT) != 0 && !enter) {
-                    a = mTransitionAnimation.loadDefaultAnimationRes(
-                            R.anim.activity_translucent_close_exit);
+            } else if (type == TRANSIT_TO_FRONT) {
+                animAttr = enter
+                        ? R.styleable.WindowAnimation_taskToFrontEnterAnimation
+                        : R.styleable.WindowAnimation_taskToFrontExitAnimation;
+            } else if (type == TRANSIT_CLOSE) {
+                if (isTask) {
+                    animAttr = enter
+                            ? R.styleable.WindowAnimation_taskCloseEnterAnimation
+                            : R.styleable.WindowAnimation_taskCloseExitAnimation;
                 } else {
-                    a = mTransitionAnimation.loadDefaultAnimationAttr(enter
+                    if ((changeFlags & FLAG_TRANSLUCENT) != 0 && !enter) {
+                        translucent = true;
+                    }
+                    animAttr = enter
                             ? R.styleable.WindowAnimation_activityCloseEnterAnimation
-                            : R.styleable.WindowAnimation_activityCloseExitAnimation);
+                            : R.styleable.WindowAnimation_activityCloseExitAnimation;
+                }
+            } else if (type == TRANSIT_TO_BACK) {
+                animAttr = enter
+                        ? R.styleable.WindowAnimation_taskToBackEnterAnimation
+                        : R.styleable.WindowAnimation_taskToBackExitAnimation;
+            }
+
+            if (animAttr != 0) {
+                if (overrideType == ANIM_FROM_STYLE && canCustomContainer) {
+                    a = mTransitionAnimation
+                            .loadAnimationAttr(options.getPackageName(), options.getAnimations(),
+                                    animAttr, translucent);
+                } else {
+                    a = mTransitionAnimation.loadDefaultAnimationAttr(animAttr);
                 }
             }
-        } else if (type == TRANSIT_TO_BACK) {
-            a = mTransitionAnimation.loadDefaultAnimationAttr(enter
-                    ? R.styleable.WindowAnimation_taskToBackEnterAnimation
-                    : R.styleable.WindowAnimation_taskToBackExitAnimation);
         }
 
         if (a != null) {

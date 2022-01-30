@@ -1546,6 +1546,17 @@ public class UserManager {
     private static final String ACTION_CREATE_USER = "android.os.action.CREATE_USER";
 
     /**
+     * Action to start an activity to create a supervised user.
+     * Only devices with non-empty config_supervisedUserCreationPackage support this.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MANAGE_USERS)
+    public static final String ACTION_CREATE_SUPERVISED_USER =
+            "android.os.action.CREATE_SUPERVISED_USER";
+
+    /**
      * Extra containing a name for the user being created. Optional parameter passed to
      * ACTION_CREATE_USER activity.
      * @hide
@@ -2743,7 +2754,7 @@ public class UserManager {
             new PropertyInvalidatedCache<Integer, Boolean>(
                 32, CACHE_KEY_IS_USER_UNLOCKED_PROPERTY) {
                 @Override
-                protected Boolean recompute(Integer query) {
+                public Boolean recompute(Integer query) {
                     try {
                         return mService.isUserUnlocked(query);
                     } catch (RemoteException re) {
@@ -2751,7 +2762,7 @@ public class UserManager {
                     }
                 }
                 @Override
-                protected boolean bypass(Integer query) {
+                public boolean bypass(Integer query) {
                     return query < 0;
                 }
             };
@@ -2761,7 +2772,7 @@ public class UserManager {
             new PropertyInvalidatedCache<Integer, Boolean>(
                 32, CACHE_KEY_IS_USER_UNLOCKED_PROPERTY) {
                 @Override
-                protected Boolean recompute(Integer query) {
+                public Boolean recompute(Integer query) {
                     try {
                         return mService.isUserUnlockingOrUnlocked(query);
                     } catch (RemoteException re) {
@@ -2769,7 +2780,7 @@ public class UserManager {
                     }
                 }
                 @Override
-                protected boolean bypass(Integer query) {
+                public boolean bypass(Integer query) {
                     return query < 0;
                 }
             };

@@ -134,7 +134,6 @@ public class SettingsBackupTest {
                     Settings.Global.ART_VERIFIER_VERIFY_DEBUGGABLE,
                     Settings.Global.ASSISTED_GPS_ENABLED,
                     Settings.Global.AUDIO_SAFE_VOLUME_STATE,
-                    Settings.Global.AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES,
                     Settings.Global.AUTOFILL_LOGGING_LEVEL,
                     Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE,
                     Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
@@ -257,6 +256,7 @@ public class SettingsBackupTest {
                     Settings.Global.DROPBOX_RESERVE_PERCENT,
                     Settings.Global.DROPBOX_TAG_PREFIX,
                     Settings.Global.EMERGENCY_AFFORDANCE_NEEDED,
+                    Settings.Global.EMERGENCY_GESTURE_POWER_BUTTON_COOLDOWN_PERIOD_MS,
                     Settings.Global.EMULATE_DISPLAY_CUTOUT,
                     Settings.Global.ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED,
                     Settings.Global.ENABLE_CACHE_QUOTA_CALCULATION,
@@ -390,12 +390,12 @@ public class SettingsBackupTest {
                     Settings.Global.NOTIFICATION_SNOOZE_OPTIONS,
                     Settings.Global.NOTIFICATION_FEEDBACK_ENABLED,
                     Settings.Global.NR_NSA_TRACKING_SCREEN_OFF_MODE,
-                    Settings.Global.NSD_ON,
                     Settings.Global.NTP_SERVER,
                     Settings.Global.NTP_TIMEOUT,
                     Settings.Global.OTA_DISABLE_AUTOMATIC_UPDATE,
                     Settings.Global.OVERLAY_DISPLAY_DEVICES,
                     Settings.Global.PAC_CHANGE_DELAY,
+                    Settings.Global.PACKAGE_STREAMING_VERIFIER_TIMEOUT,
                     Settings.Global.PACKAGE_VERIFIER_DEFAULT_RESPONSE,
                     Settings.Global.PACKAGE_VERIFIER_INCLUDE_ADB,
                     Settings.Global.PACKAGE_VERIFIER_SETTING_VISIBLE,
@@ -656,6 +656,7 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.WRIST_ORIENTATION_MODE,
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_PACKAGE,
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_MAIN_ACTIVITY,
+                    Settings.Global.Wearable.CLOCKWORK_LONG_PRESS_TO_ASSISTANT_ENABLED,
                     Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER);
 
     private static final Set<String> BACKUP_DENY_LIST_SECURE_SETTINGS =

@@ -329,6 +329,11 @@ class Task extends TaskFragment {
      */
     boolean mInResumeTopActivity = false;
 
+    /**
+     * Used to identify if the activity that is installed from device's system image.
+     */
+    boolean mIsEffectivelySystemApp;
+
     int mCurrentUser;
 
     String affinity;        // The affinity name for this task, or null; may change identity.
@@ -567,13 +572,24 @@ class Task extends TaskFragment {
 
             if (r.finishing) return false;
 
-            // Set this as the candidate root since it isn't finishing.
-            mRoot = r;
+            if (mRoot == null || mRoot.finishing) {
+                // Set this as the candidate root since it isn't finishing.
+                mRoot = r;
+            }
 
-            // Only end search if we are ignore relinquishing identity or we are not relinquishing.
-            return mIgnoreRelinquishIdentity
-                    || mNeverRelinquishIdentity
-                    || (r.info.flags & FLAG_RELINQUISH_TASK_IDENTITY) == 0;
+            final int uid = mRoot == r ? effectiveUid : r.info.applicationInfo.uid;
+            if (mIgnoreRelinquishIdentity
+                    || (mRoot.info.flags & FLAG_RELINQUISH_TASK_IDENTITY) == 0
+                    || (mRoot.info.applicationInfo.uid != Process.SYSTEM_UID
+                    && !mRoot.info.applicationInfo.isSystemApp()
+                    && mRoot.info.applicationInfo.uid != uid)) {
+                // No need to relinquish identity, end search.
+                return true;
+            }
+
+            // Relinquish to next activity
+            mRoot = r;
+            return false;
         }
     }
 
@@ -998,7 +1014,15 @@ class Task extends TaskFragment {
      * @param info The activity info which could be different from {@code r.info} if set.
      */
     void setIntent(ActivityRecord r, @Nullable Intent intent, @Nullable ActivityInfo info) {
-        if (this.intent == null || !mNeverRelinquishIdentity) {
+        boolean updateIdentity = false;
+        if (this.intent == null) {
+            updateIdentity = true;
+        } else if (!mNeverRelinquishIdentity) {
+            final ActivityInfo activityInfo = info != null ? info : r.info;
+            updateIdentity = (effectiveUid == Process.SYSTEM_UID || mIsEffectivelySystemApp
+                    || effectiveUid == activityInfo.applicationInfo.uid);
+        }
+        if (updateIdentity) {
             mCallingUid = r.launchedFromUid;
             mCallingPackage = r.launchedFromPackage;
             mCallingFeatureId = r.launchedFromFeatureId;
@@ -1011,14 +1035,7 @@ class Task extends TaskFragment {
     private void setIntent(Intent _intent, ActivityInfo info) {
         if (!isLeafTask()) return;
 
-        if (info.applicationInfo.uid == Process.SYSTEM_UID
-                || info.applicationInfo.isSystemApp()) {
-            // Only allow the apps that pre-installed on the system image to apply
-            // relinquishTaskIdentity
-            mNeverRelinquishIdentity = (info.flags & FLAG_RELINQUISH_TASK_IDENTITY) == 0;
-        } else {
-            mNeverRelinquishIdentity = true;
-        }
+        mNeverRelinquishIdentity = (info.flags & FLAG_RELINQUISH_TASK_IDENTITY) == 0;
         affinity = info.taskAffinity;
         if (intent == null) {
             // If this task already has an intent associated with it, don't set the root
@@ -1027,6 +1044,7 @@ class Task extends TaskFragment {
             rootAffinity = affinity;
         }
         effectiveUid = info.applicationInfo.uid;
+        mIsEffectivelySystemApp = info.applicationInfo.isSystemApp();
         stringName = null;
 
         if (info.targetActivity == null) {
@@ -3408,11 +3426,18 @@ class Task extends TaskFragment {
         info.topActivityInfo = mReuseActivitiesReport.top != null
                 ? mReuseActivitiesReport.top.info
                 : null;
+
+        boolean isTopActivityResumed = mReuseActivitiesReport.top != null
+                 && mReuseActivitiesReport.top.getOrganizedTask() == this
+                 && mReuseActivitiesReport.top.isState(RESUMED);
         // Whether the direct top activity is in size compat mode on foreground.
-        info.topActivityInSizeCompat = mReuseActivitiesReport.top != null
-                && mReuseActivitiesReport.top.getOrganizedTask() == this
-                && mReuseActivitiesReport.top.inSizeCompatMode()
-                && mReuseActivitiesReport.top.isState(RESUMED);
+        info.topActivityInSizeCompat = isTopActivityResumed
+                && mReuseActivitiesReport.top.inSizeCompatMode();
+        // Whether the direct top activity requested showing camera compat control.
+        info.cameraCompatControlState = isTopActivityResumed
+                ? mReuseActivitiesReport.top.getCameraCompatControlState()
+                : TaskInfo.CAMERA_COMPAT_CONTROL_HIDDEN;
+
         info.launchCookies.clear();
         info.addLaunchCookie(mLaunchCookie);
         forAllActivities(r -> {
@@ -4756,178 +4781,6 @@ class Task extends TaskFragment {
         return sleepInProgress[0] == 0;
     }
 
-    private boolean containsActivityFromRootTask(List<ActivityRecord> rs) {
-        for (ActivityRecord r : rs) {
-            if (r.getRootTask() == this) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    final boolean startPausingLocked(boolean uiSleeping, ActivityRecord resuming, String reason) {
-        return startPausingLocked(mTaskSupervisor.mUserLeaving, uiSleeping, resuming, reason);
-    }
-
-    /**
-     * Start pausing the currently resumed activity.  It is an error to call this if there
-     * is already an activity being paused or there is no resumed activity.
-     *
-     * @param userLeaving True if this should result in an onUserLeaving to the current activity.
-     * @param uiSleeping True if this is happening with the user interface going to sleep (the
-     * screen turning off).
-     * @param resuming The activity we are currently trying to resume or null if this is not being
-     *                 called as part of resuming the top activity, so we shouldn't try to instigate
-     *                 a resume here if not null.
-     * @param reason The reason of pausing the activity.
-     * @return Returns true if an activity now is in the PAUSING state, and we are waiting for
-     * it to tell us when it is done.
-     */
-    final boolean startPausingLocked(boolean userLeaving, boolean uiSleeping,
-            ActivityRecord resuming, String reason) {
-        if (!isLeafTask()) {
-            final int[] pausing = {0};
-            forAllLeafTasks((t) -> {
-                if (t.startPausingLocked(userLeaving, uiSleeping, resuming, reason)) {
-                    pausing[0]++;
-                }
-            }, true /* traverseTopToBottom */);
-            return pausing[0] > 0;
-        }
-
-        if (getPausingActivity() != null) {
-            Slog.wtf(TAG, "Going to pause when pause is already pending for " + getPausingActivity()
-                    + " state=" + getPausingActivity().getState());
-            if (!shouldSleepActivities()) {
-                // Avoid recursion among check for sleep and complete pause during sleeping.
-                // Because activity will be paused immediately after resume, just let pause
-                // be completed by the order of activity paused from clients.
-            }
-        }
-        ActivityRecord prev = getResumedActivity();
-
-        if (prev == null) {
-            if (resuming == null) {
-                Slog.wtf(TAG, "Trying to pause when nothing is resumed");
-                mRootWindowContainer.resumeFocusedTasksTopActivities();
-            }
-            return false;
-        }
-
-        if (prev == resuming) {
-            Slog.wtf(TAG, "Trying to pause activity that is in process of being resumed");
-            return false;
-        }
-
-        //Trigger Activity Pause
-        if (mActivityTrigger != null) {
-            mActivityTrigger.activityPauseTrigger(prev.intent, prev.info,
-                                                  prev.info.applicationInfo);
-        }
-
-        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
-            mActivityPluginDelegate.activitySuspendNotification
-                (prev.info.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
-        }
-        ProtoLog.v(WM_DEBUG_STATES, "Moving to PAUSING: %s", prev);
-        setPausingActivity(prev);
-        mLastPausedActivity = prev;
-        if (prev.isNoHistory() && !mTaskSupervisor.mNoHistoryActivities.contains(prev)) {
-            mTaskSupervisor.mNoHistoryActivities.add(prev);
-        }
-        prev.setState(PAUSING, "startPausingLocked");
-        prev.getTask().touchActiveTime();
-
-        mAtmService.updateCpuStats();
-
-        boolean pauseImmediately = false;
-        boolean shouldAutoPip = false;
-        if (resuming != null && (resuming.info.flags & FLAG_RESUME_WHILE_PAUSING) != 0) {
-            // If the flag RESUME_WHILE_PAUSING is set, then continue to schedule the previous
-            // activity to be paused, while at the same time resuming the new resume activity
-            // only if the previous activity can't go into Pip since we want to give Pip
-            // activities a chance to enter Pip before resuming the next activity.
-            final boolean lastResumedCanPip = prev != null && prev.checkEnterPictureInPictureState(
-                    "shouldResumeWhilePausing", userLeaving);
-            if (lastResumedCanPip && prev.pictureInPictureArgs.isAutoEnterEnabled()) {
-                shouldAutoPip = true;
-            } else if (!lastResumedCanPip) {
-                pauseImmediately = true;
-            } else {
-                // The previous activity may still enter PIP even though it did not allow auto-PIP.
-            }
-        }
-
-        boolean didAutoPip = false;
-        if (prev.attachedToProcess()) {
-            if (shouldAutoPip) {
-                ProtoLog.d(WM_DEBUG_STATES, "Auto-PIP allowed, entering PIP mode "
-                        + "directly: %s", prev);
-
-                didAutoPip = mAtmService.enterPictureInPictureMode(prev, prev.pictureInPictureArgs);
-                setPausingActivity(null);
-            } else {
-                ProtoLog.v(WM_DEBUG_STATES, "Enqueueing pending pause: %s", prev);
-                try {
-                    EventLogTags.writeWmPauseActivity(prev.mUserId, System.identityHashCode(prev),
-                            prev.shortComponentName, "userLeaving=" + userLeaving, reason);
-
-                    mAtmService.getLifecycleManager().scheduleTransaction(prev.app.getThread(),
-                            prev.token, PauseActivityItem.obtain(prev.finishing, userLeaving,
-                                    prev.configChangeFlags, pauseImmediately));
-                } catch (Exception e) {
-                    // Ignore exception, if process died other code will cleanup.
-                    Slog.w(TAG, "Exception thrown during pause", e);
-                    setPausingActivity(null);
-                    mLastPausedActivity = null;
-                    mTaskSupervisor.mNoHistoryActivities.remove(prev);
-                }
-            }
-        } else {
-            setPausingActivity(null);
-            mLastPausedActivity = null;
-            mTaskSupervisor.mNoHistoryActivities.remove(prev);
-        }
-
-        // If we are not going to sleep, we want to ensure the device is
-        // awake until the next activity is started.
-        if (!uiSleeping && !mAtmService.isSleepingOrShuttingDownLocked()) {
-            mTaskSupervisor.acquireLaunchWakelock();
-        }
-
-        // If already entered PIP mode, no need to keep pausing.
-        if (getPausingActivity() != null && !didAutoPip) {
-            // Have the window manager pause its key dispatching until the new
-            // activity has started.  If we're pausing the activity just because
-            // the screen is being turned off and the UI is sleeping, don't interrupt
-            // key dispatch; the same activity will pick it up again on wakeup.
-            if (!uiSleeping) {
-                prev.pauseKeyDispatchingLocked();
-            } else {
-                ProtoLog.v(WM_DEBUG_STATES, "Key dispatch not paused for screen off");
-            }
-
-            if (pauseImmediately) {
-                // If the caller said they don't want to wait for the pause, then complete
-                // the pause now.
-                return false;
-
-            } else {
-                prev.schedulePauseTimeout();
-                return true;
-            }
-
-        } else {
-            // This activity either failed to schedule the pause or it entered PIP mode,
-            // so just treat it as being paused now.
-            ProtoLog.v(WM_DEBUG_STATES, "Activity not running or entered PiP, resuming next.");
-            if (resuming == null) {
-                mRootWindowContainer.resumeFocusedTasksTopActivities();
-            }
-            return false;
-        }
-    }
-
     boolean isTopRootTaskInDisplayArea() {
         final TaskDisplayArea taskDisplayArea = getDisplayArea();
         return taskDisplayArea != null && taskDisplayArea.isTopRootTask(this);
@@ -5152,8 +5005,7 @@ class Task extends TaskFragment {
             if (topFragment == f) {
                 return;
             }
-            if (!f.isFocusableAndVisible()) {
-                // No need to resume activity in TaskFragment that is not visible.
+            if (!f.canBeResumed(null /* starting */)) {
                 return;
             }
             resumed[0] |= f.resumeTopActivity(prev, options, deferPause);

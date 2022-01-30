@@ -70,6 +70,7 @@ import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.wm.shell.R;
 import com.android.wm.shell.animation.Interpolators;
@@ -822,7 +823,9 @@ public class BubbleStackView extends FrameLayout
         mAnimatingOutSurfaceView = new SurfaceView(getContext());
         mAnimatingOutSurfaceView.setUseAlpha();
         mAnimatingOutSurfaceView.setZOrderOnTop(true);
-        mAnimatingOutSurfaceView.setCornerRadius(mCornerRadius);
+        boolean supportsRoundedCorners = ScreenDecorationsUtils.supportsRoundedCornersOnWindows(
+                mContext.getResources());
+        mAnimatingOutSurfaceView.setCornerRadius(supportsRoundedCorners ? mCornerRadius : 0);
         mAnimatingOutSurfaceView.setLayoutParams(new ViewGroup.LayoutParams(0, 0));
         mAnimatingOutSurfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
@@ -2612,11 +2615,13 @@ public class BubbleStackView extends FrameLayout
 
         // If available, update the manage menu's settings option with the expanded bubble's app
         // name and icon.
-        if (show && mBubbleData.hasBubbleInStackWithKey(mExpandedBubble.getKey())) {
+        if (show) {
             final Bubble bubble = mBubbleData.getBubbleInStackWithKey(mExpandedBubble.getKey());
-            mManageSettingsIcon.setImageBitmap(bubble.getAppBadge());
-            mManageSettingsText.setText(getResources().getString(
-                    R.string.bubbles_app_settings, bubble.getAppName()));
+            if (bubble != null) {
+                mManageSettingsIcon.setImageBitmap(bubble.getRawAppBadge());
+                mManageSettingsText.setText(getResources().getString(
+                        R.string.bubbles_app_settings, bubble.getAppName()));
+            }
         }
 
         if (mExpandedBubble.getExpandedView().getTaskView() != null) {

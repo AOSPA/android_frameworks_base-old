@@ -126,7 +126,6 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected CarrierConfigTracker mCarrierConfigTracker;
     protected FakeExecutor mFakeExecutor = new FakeExecutor(new FakeSystemClock());
     protected FeatureFlags mFeatureFlags;
-    protected StatusBarFlags mStatusBarFlags;
 
     protected int mSubId;
 
@@ -157,10 +156,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     @Before
     public void setUp() throws Exception {
         mFeatureFlags = mock(FeatureFlags.class);
-        mStatusBarFlags = mock(StatusBarFlags.class);
         when(mFeatureFlags.isEnabled(Flags.COMBINED_STATUS_BAR_SIGNAL_ICONS)).thenReturn(false);
-        when(mStatusBarFlags.isProviderModelSettingEnabled()).thenReturn(true);
-
 
         mInstrumentation = InstrumentationRegistry.getInstrumentation();
         Settings.Global.putInt(mContext.getContentResolver(), Global.AIRPLANE_MODE_ON, 0);
@@ -237,8 +233,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 mMockBd,
                 mDemoModeController,
                 mCarrierConfigTracker,
-                mFeatureFlags,
-                mStatusBarFlags
+                mFeatureFlags
         );
         setupNetworkController();
 
@@ -307,7 +302,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                         mock(AccessPointControllerImpl.class),
                         mock(DataUsageController.class), mMockSubDefaults,
                         mock(DeviceProvisionedController.class), mMockBd, mDemoModeController,
-                        mCarrierConfigTracker, mFeatureFlags, mStatusBarFlags);
+                        mCarrierConfigTracker, mFeatureFlags);
 
         setupNetworkController();
 

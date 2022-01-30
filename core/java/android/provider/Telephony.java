@@ -3640,7 +3640,7 @@ public final class Telephony {
          * @hide
          */
         public static final Uri PREFERRED_APN_URI = Uri.parse(
-                "content://telephony/carriers/preferapn/subId/");
+                "content://telephony/carriers/preferapn/subId");
 
         /**
          * The {@code content://} style URL for the perferred APN set id.
@@ -3648,8 +3648,15 @@ public final class Telephony {
          * @hide
          */
         public static final Uri PREFERRED_APN_SET_URI = Uri.parse(
-                "content://telephony/carriers/preferapnset/subId/");
+                "content://telephony/carriers/preferapnset/subId");
 
+        /**
+         * The id of preferred APN.
+         *
+         * @see #PREFERRED_APN_URI
+         * @hide
+         */
+        public static final String APN_ID = "apn_id";
 
         /**
          * The column name for ENFORCE_MANAGED_URI, indicates whether DPC-owned APNs are enforced.
@@ -5368,6 +5375,13 @@ public final class Telephony {
         public static final String COLUMN_PROFILE_CLASS = "profile_class";
 
         /**
+         * TelephonyProvider column name for the port index of the active UICC port.
+         * <P>Type: INTEGER (int)</P>
+         * @hide
+         */
+        public static final String COLUMN_PORT_INDEX = "port_index";
+
+        /**
          * A testing profile can be pre-loaded or downloaded onto
          * the eUICC and provides connectivity to test equipment
          * for the purpose of testing the device and the eUICC. It
@@ -5497,5 +5511,12 @@ public final class Telephony {
          */
         public static final String COLUMN_PHONE_NUMBER_SOURCE_IMS =
                 "phone_number_source_ims";
+
+        /**
+         * TelephonyProvider column name for the device's preferred usage setting.
+         *
+         * @hide
+         */
+        public static final String COLUMN_USAGE_SETTING = "usage_setting";
     }
 }

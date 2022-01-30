@@ -21,6 +21,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
 
 import android.accessibilityservice.GestureDescription.MotionEventGenerator;
 import android.annotation.CallbackExecutor;
+import android.annotation.CheckResult;
 import android.annotation.ColorInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -58,6 +59,7 @@ import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.view.WindowManagerImpl;
+import android.view.accessibility.AccessibilityCache;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityInteractionClient;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -747,7 +749,6 @@ public abstract class AccessibilityService extends Service {
 
     private FingerprintGestureController mFingerprintGestureController;
 
-
     /**
      * Callback for {@link android.view.accessibility.AccessibilityEvent}s.
      *
@@ -1394,6 +1395,12 @@ public abstract class AccessibilityService extends Service {
          * {@link AccessibilityService#onServiceConnected()} has not yet been
          * called) or the service has been disconnected, this method will
          * return a default value of {@code 1.0f}.
+         * </p>
+         * <p>
+         * <strong>Note:</strong> This legacy API gets the scale of full-screen
+         * magnification. To get the scale of the current controlling magnifier,
+         * use {@link #getMagnificationConfig} instead.
+         * </p>
          *
          * @return the current magnification scale
          */
@@ -1422,6 +1429,12 @@ public abstract class AccessibilityService extends Service {
          * {@link AccessibilityService#onServiceConnected()} has not yet been
          * called) or the service has been disconnected, this method will
          * return a default value of {@code 0.0f}.
+         * </p>
+         * <p>
+         * <strong>Note:</strong> This legacy API gets the center position of full-screen
+         * magnification. To get the magnification center of the current controlling magnifier,
+         * use {@link #getMagnificationConfig} instead.
+         * </p>
          *
          * @return the unscaled screen-relative X coordinate of the center of
          *         the magnified region
@@ -1451,6 +1464,12 @@ public abstract class AccessibilityService extends Service {
          * {@link AccessibilityService#onServiceConnected()} has not yet been
          * called) or the service has been disconnected, this method will
          * return a default value of {@code 0.0f}.
+         * </p>
+         * <p>
+         * <strong>Note:</strong> This legacy API gets the center position of full-screen
+         * magnification. To get the magnification center of the current controlling magnifier,
+         * use {@link #getMagnificationConfig} instead.
+         * </p>
          *
          * @return the unscaled screen-relative Y coordinate of the center of
          *         the magnified region
@@ -1571,6 +1590,11 @@ public abstract class AccessibilityService extends Service {
          * {@link AccessibilityService#onServiceConnected()} has not yet been
          * called) or the service has been disconnected, this method will have
          * no effect and return {@code false}.
+         * <p>
+         * <strong>Note:</strong> This legacy API sets the scale of full-screen
+         * magnification. To set the scale of the specified magnifier,
+         * use {@link #setMagnificationConfig} instead.
+         * </p>
          *
          * @param scale the magnification scale to set, must be >= 1 and <= 8
          * @param animate {@code true} to animate from the current scale or
@@ -1602,6 +1626,12 @@ public abstract class AccessibilityService extends Service {
          * {@link AccessibilityService#onServiceConnected()} has not yet been
          * called) or the service has been disconnected, this method will have
          * no effect and return {@code false}.
+         * </p>
+         * <p>
+         * <strong>Note:</strong> This legacy API sets the center of full-screen
+         * magnification. To set the center of the specified magnifier,
+         * use {@link #setMagnificationConfig} instead.
+         * </p>
          *
          * @param centerX the unscaled screen-relative X coordinate on which to
          *                center the viewport
@@ -1703,6 +1733,29 @@ public abstract class AccessibilityService extends Service {
          */
         private ArrayMap<OnShowModeChangedListener, Handler> mListeners;
         private final Object mLock;
+
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef({
+                ENABLE_IME_SUCCESS,
+                ENABLE_IME_FAIL_BY_ADMIN,
+                ENABLE_IME_FAIL_UNKNOWN
+        })
+        public @interface EnableImeResult {}
+        /**
+         * Return value for {@link #setInputMethodEnabled(String, boolean)}. The action succeeded.
+         */
+        public static final int ENABLE_IME_SUCCESS = 0;
+        /**
+         * Return value for {@link #setInputMethodEnabled(String, boolean)}. The action failed
+         * because the InputMethod is not permitted by device policy manager.
+         */
+        public static final int ENABLE_IME_FAIL_BY_ADMIN = 1;
+        /**
+         * Return value for {@link #setInputMethodEnabled(String, boolean)}. The action failed
+         * and the reason is unknown.
+         */
+        public static final int ENABLE_IME_FAIL_UNKNOWN = 2;
 
         SoftKeyboardController(@NonNull AccessibilityService service, @NonNull Object lock) {
             mService = service;
@@ -1932,6 +1985,39 @@ public abstract class AccessibilityService extends Service {
             }
             return false;
         }
+
+        /**
+         * Enable or disable the specified IME for the user for whom the service is activated. The
+         * IME needs to be in the same package as the service and needs to be allowed by device
+         * policy, if there is one. The change will persist until the specified IME is next
+         * explicitly enabled or disabled by whatever means, such as user choice, and may persist
+         * beyond the life cycle of the requesting service.
+         *
+         * @param imeId The ID of the input method to enable or disable. This IME must be installed.
+         * @param enabled {@code true} if the input method associated with {@code imeId} should be
+         *                enabled.
+         * @return status code for the result of enabling/disabling the input method associated
+         *         with {@code imeId}.
+         * @throws SecurityException if the input method is not in the same package as the service.
+         *
+         * @see android.view.inputmethod.InputMethodInfo#getId()
+         */
+        @CheckResult
+        @EnableImeResult
+        public int setInputMethodEnabled(@NonNull String imeId, boolean enabled)
+                throws SecurityException {
+            final IAccessibilityServiceConnection connection =
+                    AccessibilityInteractionClient.getInstance(mService).getConnection(
+                            mService.mConnectionId);
+            if (connection != null) {
+                try {
+                    return connection.setInputMethodEnabled(imeId, enabled);
+                } catch (RemoteException re) {
+                    throw new RuntimeException(re);
+                }
+            }
+            return ENABLE_IME_FAIL_UNKNOWN;
+        }
     }
 
     /**
@@ -1988,6 +2074,85 @@ public abstract class AccessibilityService extends Service {
     private void onAccessibilityButtonAvailabilityChanged(boolean available) {
         getAccessibilityButtonController().dispatchAccessibilityButtonAvailabilityChanged(
                 available);
+    }
+
+    /** Sets the cache status.
+     *
+     * <p>If {@code enabled}, enable the cache and prefetching. Otherwise, disable the cache
+     * and prefetching.
+     * Note: By default the cache is enabled.
+     * @param enabled whether to enable or disable the cache.
+     * @return {@code true} if the cache and connection are not null, so the cache status is set.
+     */
+    public boolean setCacheEnabled(boolean enabled) {
+        AccessibilityCache cache =
+                AccessibilityInteractionClient.getCache(mConnectionId);
+        if (cache == null) {
+            return false;
+        }
+        final IAccessibilityServiceConnection connection =
+                AccessibilityInteractionClient.getConnection(mConnectionId);
+        if (connection == null) {
+            return false;
+        }
+        try {
+            connection.setCacheEnabled(enabled);
+            cache.setEnabled(enabled);
+            return true;
+        } catch (RemoteException re) {
+            Log.w(LOG_TAG, "Error while setting status of cache", re);
+            re.rethrowFromSystemServer();
+        }
+        return false;
+    }
+
+    /** Invalidates {@code node} and its subtree in the cache.
+     * @param node the node to invalidate.
+     * @return {@code true} if the subtree rooted at {@code node} was invalidated.
+     */
+    public boolean clearCachedSubtree(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityCache cache =
+                AccessibilityInteractionClient.getCache(mConnectionId);
+        if (cache == null) {
+            return false;
+        }
+        return cache.clearSubTree(node);
+    }
+
+    /** Clears the cache.
+     * @return {@code true} if the cache was cleared
+     */
+    public boolean clearCache() {
+        AccessibilityCache cache =
+                AccessibilityInteractionClient.getCache(mConnectionId);
+        if (cache == null) {
+            return false;
+        }
+        cache.clear();
+        return true;
+    }
+
+    /** Checks if {@code node} is in the cache.
+     * @param node the node to check.
+     * @return {@code true} if {@code node} is in the cache.
+     */
+    public boolean isNodeInCache(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityCache cache =
+                AccessibilityInteractionClient.getCache(mConnectionId);
+        if (cache == null) {
+            return false;
+        }
+        return cache.isNodeInCache(node);
+    }
+
+    /** Returns {@code true} if the cache is enabled. */
+    public boolean isCacheEnabled() {
+        AccessibilityCache cache =
+                AccessibilityInteractionClient.getCache(mConnectionId);
+        if (cache == null) {
+            return false;
+        }
+        return cache.isEnabled();
     }
 
     /** This is called when the system action list is changed. */
@@ -2527,11 +2692,11 @@ public abstract class AccessibilityService extends Service {
                         mCallback.init(mConnectionId, windowToken);
                         mCallback.onServiceConnected();
                     } else {
+                        AccessibilityInteractionClient.getInstance(mContext)
+                                .clearCache(mConnectionId);
                         AccessibilityInteractionClient.getInstance(mContext).removeConnection(
                                 mConnectionId);
                         mConnectionId = AccessibilityInteractionClient.NO_ID;
-                        AccessibilityInteractionClient.getInstance(mContext)
-                                .clearCache(mConnectionId);
                         mCallback.init(AccessibilityInteractionClient.NO_ID, null);
                     }
                     return;

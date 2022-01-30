@@ -19,10 +19,10 @@ package android.media.tv.tuner.frontend;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.media.tv.tuner.Lnb;
 import android.media.tv.tuner.TunerVersionChecker;
-
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
@@ -53,7 +53,8 @@ public class FrontendStatus {
             FRONTEND_STATUS_TYPE_MODULATIONS_EXT, FRONTEND_STATUS_TYPE_ROLL_OFF,
             FRONTEND_STATUS_TYPE_IS_MISO_ENABLED, FRONTEND_STATUS_TYPE_IS_LINEAR,
             FRONTEND_STATUS_TYPE_IS_SHORT_FRAMES_ENABLED, FRONTEND_STATUS_TYPE_ISDBT_MODE,
-            FRONTEND_STATUS_TYPE_ISDBT_PARTIAL_RECEPTION_FLAG})
+            FRONTEND_STATUS_TYPE_ISDBT_PARTIAL_RECEPTION_FLAG, FRONTEND_STATUS_TYPE_STREAM_IDS,
+            FRONTEND_STATUS_TYPE_DVBT_CELL_IDS})
     @Retention(RetentionPolicy.SOURCE)
     public @interface FrontendStatusType {}
 
@@ -253,6 +254,18 @@ public class FrontendStatus {
      */
     public static final int FRONTEND_STATUS_TYPE_ISDBT_PARTIAL_RECEPTION_FLAG =
             android.hardware.tv.tuner.FrontendStatusType.ISDBT_PARTIAL_RECEPTION_FLAG;
+
+    /**
+     * Stream IDs included in a transponder.
+     */
+    public static final int FRONTEND_STATUS_TYPE_STREAM_IDS =
+            android.hardware.tv.tuner.FrontendStatusType.STREAM_ID_LIST;
+
+    /**
+     * DVB-T Cell IDs.
+     */
+    public static final int FRONTEND_STATUS_TYPE_DVBT_CELL_IDS =
+            android.hardware.tv.tuner.FrontendStatusType.DVBT_CELL_IDS;
 
     /** @hide */
     @IntDef(value = {
@@ -493,6 +506,8 @@ public class FrontendStatus {
     private Boolean mIsShortFrames;
     private Integer mIsdbtMode;
     private Integer mIsdbtPartialReceptionFlag;
+    private int[] mStreamIds;
+    private int[] mDvbtCellIds;
 
     // Constructed and fields set by JNI code.
     private FrontendStatus() {
@@ -638,6 +653,8 @@ public class FrontendStatus {
     }
     /**
      * Gets the current Automatic Gain Control value which is normalized from 0 to 255.
+     *
+     * Larger AGC values indicate it is applying more gain.
      */
     public int getAgc() {
         if (mAgc == null) {
@@ -656,6 +673,10 @@ public class FrontendStatus {
     }
     /**
      * Gets the current Error information by layer.
+     *
+     * The order of the vectors is in ascending order of the required CNR (Contrast-to-noise ratio).
+     * The most robust layer is the first. For example, in ISDB-T, vec[0] is the information of
+     * layer A. vec[1] is the information of layer B.
      */
     @NonNull
     public boolean[] getLayerErrors() {
@@ -729,6 +750,10 @@ public class FrontendStatus {
      *
      * <p>This query is only supported by Tuner HAL 1.1 or higher. Use
      * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     *
+     * The order of the vectors is in ascending order of the required CNR (Contrast-to-noise ratio).
+     * The most robust layer is the first. For example, in ISDB-T, vec[0] is the information of
+     * layer A. vec[1] is the information of layer B.
      */
     @NonNull
     public int[] getBers() {
@@ -745,6 +770,10 @@ public class FrontendStatus {
      *
      * <p>This query is only supported by Tuner HAL 1.1 or higher. Use
      * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     *
+     * The order of the vectors is in ascending order of the required CNR (Contrast-to-noise ratio).
+     * The most robust layer is the first. For example, in ISDB-T, vec[0] is the information of
+     * layer A. vec[1] is the information of layer B.
      */
     @NonNull
     @FrontendSettings.InnerFec
@@ -842,6 +871,10 @@ public class FrontendStatus {
      *
      * <p>This query is only supported by Tuner HAL 1.1 or higher. Use
      * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     *
+     * The order of the vectors is in ascending order of the required CNR (Contrast-to-noise ratio).
+     * The most robust layer is the first. For example, in ISDB-T, vec[0] is the information of
+     * layer A. vec[1] is the information of layer B.
      */
     @NonNull
     @FrontendInterleaveMode
@@ -860,6 +893,10 @@ public class FrontendStatus {
      *
      * <p>This query is only supported by Tuner HAL 1.1 or higher. Use
      * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     *
+     * The order of the vectors is in ascending order of the required CNR (Contrast-to-noise ratio).
+     * The most robust layer is the first. For example, in ISDB-T, vec[0] is the information of
+     * layer A. vec[1] is the information of layer B.
      */
     @NonNull
     @IntRange(from = 0, to = 0xff)
@@ -893,6 +930,10 @@ public class FrontendStatus {
      *
      * <p>This query is only supported by Tuner HAL 1.1 or higher. Use
      * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     *
+     * The order of the vectors is in ascending order of the required CNR (Contrast-to-noise ratio).
+     * The most robust layer is the first. For example, in ISDB-T, vec[0] is the information of
+     * layer A. vec[1] is the information of layer B.
      */
     @NonNull
     @FrontendModulation
@@ -998,6 +1039,42 @@ public class FrontendStatus {
             throw new IllegalStateException("IsdbtPartialReceptionFlag status is empty");
         }
         return mIsdbtPartialReceptionFlag;
+    }
+
+    /**
+     * Gets stream ids included in a transponder.
+     *
+     * <p>This query is only supported by Tuner HAL 2.0 or higher. Unsupported version or if HAL
+     * doesn't return stream ids will throw IllegalStateException. Use
+     * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     */
+    @SuppressLint("ArrayReturn")
+    @NonNull
+    public int[] getStreamIds() {
+        TunerVersionChecker.checkHigherOrEqualVersionTo(
+                TunerVersionChecker.TUNER_VERSION_2_0, "stream ids status");
+        if (mStreamIds == null) {
+            throw new IllegalStateException("stream ids are empty");
+        }
+        return mStreamIds;
+    }
+
+    /**
+     * Gets DVB-T cell ids.
+     *
+     * <p>This query is only supported by Tuner HAL 2.0 or higher. Unsupported version or if HAL
+     * doesn't return cell ids will throw IllegalStateException. Use
+     * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     */
+    @SuppressLint("ArrayReturn")
+    @NonNull
+    public int[] getDvbtCellIds() {
+        TunerVersionChecker.checkHigherOrEqualVersionTo(
+                TunerVersionChecker.TUNER_VERSION_2_0, "dvbt cell ids status");
+        if (mDvbtCellIds == null) {
+            throw new IllegalStateException("dvbt cell ids are empty");
+        }
+        return mDvbtCellIds;
     }
 
     /**

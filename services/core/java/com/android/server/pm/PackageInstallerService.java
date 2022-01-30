@@ -404,7 +404,11 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 if (age >= MAX_SESSION_AGE_ON_LOW_STORAGE_MILLIS) {
                     // Aggressively close old sessions because we are running low on storage
                     // Their staging dirs will be removed too
-                    session.abandon();
+                    PackageInstallerSession root = !session.hasParentSessionId()
+                            ? session : mSessions.get(session.getParentSessionId());
+                    if (!root.isDestroyed()) {
+                        root.abandon();
+                    }
                 } else {
                     // Session is new enough, so it deserves to be kept even on low storage
                     unclaimedStagingDirsOnVolume.remove(session.stageDir);
@@ -917,10 +921,26 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     }
 
+    private boolean checkOpenSessionAccess(final PackageInstallerSession session) {
+        if (session == null) {
+            return false;
+        }
+        if (isCallingUidOwner(session)) {
+            return true;
+        }
+        // Package verifiers have access to openSession for sealed sessions.
+        if (session.isSealed() && mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.PACKAGE_VERIFICATION_AGENT)
+                == PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+        return false;
+    }
+
     private IPackageInstallerSession openSessionInternal(int sessionId) throws IOException {
         synchronized (mSessions) {
             final PackageInstallerSession session = mSessions.get(sessionId);
-            if (session == null || !isCallingUidOwner(session)) {
+            if (!checkOpenSessionAccess(session)) {
                 throw new SecurityException("Caller has no access to session " + sessionId);
             }
             session.open();
@@ -1608,7 +1628,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                     progress);
         }
 
-        public void onStagedSessionChanged(PackageInstallerSession session) {
+        public void onSessionChanged(PackageInstallerSession session) {
             session.markUpdated();
             mSettingsWriteRequest.schedule();
             if (mOkToSendBroadcasts && !session.isDestroyed()) {

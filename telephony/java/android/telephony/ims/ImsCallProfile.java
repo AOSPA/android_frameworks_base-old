@@ -322,6 +322,10 @@ public final class ImsCallProfile implements Parcelable {
      * Payphone presentation for Originating Identity.
      */
     public static final int OIR_PRESENTATION_PAYPHONE = 4;
+    /**
+     * Unavailable presentation for Originating Identity.
+     */
+    public static final int OIR_PRESENTATION_UNAVAILABLE = 5;
 
     //Values for EXTRA_DIALSTRING
     /**
@@ -844,7 +848,7 @@ public final class ImsCallProfile implements Parcelable {
         mServiceType = in.readInt();
         mCallType = in.readInt();
         mCallExtras = in.readBundle();
-        mMediaProfile = in.readParcelable(ImsStreamMediaProfile.class.getClassLoader());
+        mMediaProfile = in.readParcelable(ImsStreamMediaProfile.class.getClassLoader(), android.telephony.ims.ImsStreamMediaProfile.class);
         mEmergencyServiceCategories = in.readInt();
         mEmergencyUrns = in.createStringArrayList();
         mEmergencyCallRouting = in.readInt();
@@ -994,6 +998,8 @@ public final class ImsCallProfile implements Parcelable {
                 return ImsCallProfile.OIR_PRESENTATION_PAYPHONE;
             case PhoneConstants.PRESENTATION_UNKNOWN:
                 return ImsCallProfile.OIR_PRESENTATION_UNKNOWN;
+            case PhoneConstants.PRESENTATION_UNAVAILABLE:
+                return ImsCallProfile.OIR_PRESENTATION_UNAVAILABLE;
             default:
                 return ImsCallProfile.OIR_DEFAULT;
         }
@@ -1022,6 +1028,8 @@ public final class ImsCallProfile implements Parcelable {
                 return PhoneConstants.PRESENTATION_ALLOWED;
             case ImsCallProfile.OIR_PRESENTATION_PAYPHONE:
                 return PhoneConstants.PRESENTATION_PAYPHONE;
+            case ImsCallProfile.OIR_PRESENTATION_UNAVAILABLE:
+                return PhoneConstants.PRESENTATION_UNAVAILABLE;
             case ImsCallProfile.OIR_PRESENTATION_UNKNOWN:
                 return PhoneConstants.PRESENTATION_UNKNOWN;
             default:

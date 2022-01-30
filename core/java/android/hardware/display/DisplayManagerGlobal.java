@@ -128,7 +128,7 @@ public final class DisplayManagerGlobal {
                 8, // size of display cache
                 CACHE_KEY_DISPLAY_INFO_PROPERTY) {
                 @Override
-                protected DisplayInfo recompute(Integer id) {
+                public DisplayInfo recompute(Integer id) {
                     try {
                         return mDm.getDisplayInfo(id);
                     } catch (RemoteException ex) {
@@ -965,7 +965,7 @@ public final class DisplayManagerGlobal {
 
     private static final class DisplayListenerDelegate extends Handler {
         public final DisplayListener mListener;
-        public long mEventsMask;
+        public volatile long mEventsMask;
 
         private final DisplayInfo mDisplayInfo = new DisplayInfo();
 
@@ -985,12 +985,12 @@ public final class DisplayManagerGlobal {
             removeCallbacksAndMessages(null);
         }
 
-        public synchronized void setEventsMask(@EventsMask long newEventsMask) {
+        public void setEventsMask(@EventsMask long newEventsMask) {
             mEventsMask = newEventsMask;
         }
 
         @Override
-        public synchronized void handleMessage(Message msg) {
+        public void handleMessage(Message msg) {
             switch (msg.what) {
                 case EVENT_DISPLAY_ADDED:
                     if ((mEventsMask & DisplayManager.EVENT_FLAG_DISPLAY_ADDED) != 0) {

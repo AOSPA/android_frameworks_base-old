@@ -18,12 +18,12 @@ package com.android.keyguard;
 import android.annotation.NonNull;
 import android.content.Context;
 import android.content.res.Resources;
-import android.view.LayoutInflater;
+import android.graphics.Canvas;
+import android.graphics.drawable.ShapeDrawable;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.ListPopupWindow;
 import android.widget.ListView;
-import android.widget.TextView;
 
 import com.android.systemui.R;
 import com.android.systemui.plugins.FalsingManager;
@@ -34,15 +34,6 @@ import com.android.systemui.plugins.FalsingManager;
 public class KeyguardUserSwitcherPopupMenu extends ListPopupWindow {
     private Context mContext;
     private FalsingManager mFalsingManager;
-    private int mLastHeight = -1;
-    private View.OnLayoutChangeListener mLayoutListener = (v, l, t, r, b, ol, ot, or, ob) -> {
-        int height = -v.getMeasuredHeight() + getAnchorView().getHeight();
-        if (height != mLastHeight) {
-            mLastHeight = height;
-            setVerticalOffset(height);
-            KeyguardUserSwitcherPopupMenu.super.show();
-        }
-    };
 
     public KeyguardUserSwitcherPopupMenu(@NonNull Context context,
             @NonNull FalsingManager falsingManager) {
@@ -51,7 +42,7 @@ public class KeyguardUserSwitcherPopupMenu extends ListPopupWindow {
         mFalsingManager = falsingManager;
         Resources res = mContext.getResources();
         setBackgroundDrawable(
-                res.getDrawable(R.drawable.keyguard_user_switcher_popup_bg, context.getTheme()));
+                res.getDrawable(R.drawable.bouncer_user_switcher_popup_bg, context.getTheme()));
         setModal(true);
         setOverlapAnchor(true);
     }
@@ -65,14 +56,20 @@ public class KeyguardUserSwitcherPopupMenu extends ListPopupWindow {
         super.show();
         ListView listView = getListView();
 
-        // This will force the popupwindow to show upward instead of drop down
-        listView.addOnLayoutChangeListener(mLayoutListener);
+        listView.setVerticalScrollBarEnabled(false);
+        listView.setHorizontalScrollBarEnabled(false);
 
-        TextView header = (TextView) LayoutInflater.from(mContext).inflate(
-                R.layout.keyguard_bouncer_user_switcher_item, listView, false);
-        header.setText(mContext.getResources().getString(
-                R.string.accessibility_multi_user_switch_switcher));
-        listView.addHeaderView(header);
+        // Creates a transparent spacer between items
+        ShapeDrawable shape = new ShapeDrawable();
+        shape.setAlpha(0);
+        listView.setDivider(shape);
+        listView.setDividerHeight(mContext.getResources().getDimensionPixelSize(
+                R.dimen.bouncer_user_switcher_popup_divider_height));
+
+        int height  = mContext.getResources().getDimensionPixelSize(
+                R.dimen.bouncer_user_switcher_popup_header_height);
+        listView.addHeaderView(createSpacer(height), null, false);
+        listView.addFooterView(createSpacer(height), null, false);
 
         listView.setOnTouchListener((v, ev) -> {
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -80,11 +77,19 @@ public class KeyguardUserSwitcherPopupMenu extends ListPopupWindow {
             }
             return false;
         });
+        super.show();
     }
 
-    @Override
-    public void dismiss() {
-        getListView().removeOnLayoutChangeListener(mLayoutListener);
-        super.dismiss();
+    private View createSpacer(int height) {
+        return new View(mContext) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                setMeasuredDimension(1, height);
+            }
+
+            @Override
+            public void draw(Canvas canvas) {
+            }
+        };
     }
 }

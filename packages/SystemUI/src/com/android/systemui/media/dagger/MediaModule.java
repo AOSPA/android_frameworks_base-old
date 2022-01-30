@@ -20,16 +20,21 @@ import android.content.Context;
 import android.view.WindowManager;
 
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.media.MediaHierarchyManager;
 import com.android.systemui.media.MediaHost;
 import com.android.systemui.media.MediaHostStatesManager;
-import com.android.systemui.media.taptotransfer.MediaTttChipController;
 import com.android.systemui.media.taptotransfer.MediaTttCommandLineHelper;
 import com.android.systemui.media.taptotransfer.MediaTttFlags;
+import com.android.systemui.media.taptotransfer.receiver.MediaTttChipControllerReceiver;
+import com.android.systemui.media.taptotransfer.sender.MediaTttChipControllerSender;
 import com.android.systemui.statusbar.commandline.CommandRegistry;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import javax.inject.Named;
 
@@ -76,14 +81,30 @@ public interface MediaModule {
     /** */
     @Provides
     @SysUISingleton
-    static Optional<MediaTttChipController> providesMediaTttChipController(
+    static Optional<MediaTttChipControllerSender> providesMediaTttChipControllerSender(
+            MediaTttFlags mediaTttFlags,
+            Context context,
+            WindowManager windowManager,
+            @Main Executor mainExecutor,
+            @Background Executor backgroundExecutor) {
+        if (!mediaTttFlags.isMediaTttEnabled()) {
+            return Optional.empty();
+        }
+        return Optional.of(new MediaTttChipControllerSender(
+                context, windowManager, mainExecutor, backgroundExecutor));
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
+    static Optional<MediaTttChipControllerReceiver> providesMediaTttChipControllerReceiver(
             MediaTttFlags mediaTttFlags,
             Context context,
             WindowManager windowManager) {
         if (!mediaTttFlags.isMediaTttEnabled()) {
             return Optional.empty();
         }
-        return Optional.of(new MediaTttChipController(context, windowManager));
+        return Optional.of(new MediaTttChipControllerReceiver(context, windowManager));
     }
 
     /** */
@@ -92,10 +113,19 @@ public interface MediaModule {
     static Optional<MediaTttCommandLineHelper> providesMediaTttCommandLineHelper(
             MediaTttFlags mediaTttFlags,
             CommandRegistry commandRegistry,
-            MediaTttChipController mediaTttChipController) {
+            Context context,
+            MediaTttChipControllerSender mediaTttChipControllerSender,
+            MediaTttChipControllerReceiver mediaTttChipControllerReceiver,
+            @Main DelayableExecutor mainExecutor) {
         if (!mediaTttFlags.isMediaTttEnabled()) {
             return Optional.empty();
         }
-        return Optional.of(new MediaTttCommandLineHelper(commandRegistry, mediaTttChipController));
+        return Optional.of(
+                new MediaTttCommandLineHelper(
+                        commandRegistry,
+                        context,
+                        mediaTttChipControllerSender,
+                        mediaTttChipControllerReceiver,
+                        mainExecutor));
     }
 }

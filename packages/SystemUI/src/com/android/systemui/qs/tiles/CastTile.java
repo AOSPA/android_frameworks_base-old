@@ -79,7 +79,6 @@ public class CastTile extends QSTileImpl<BooleanState> {
     private final NetworkController mNetworkController;
     private final DialogLaunchAnimator mDialogLaunchAnimator;
     private final Callback mCallback = new Callback();
-    private Dialog mDialog;
     private boolean mWifiConnected;
     private boolean mHotspotConnected;
     private static final String WFD_ENABLE = "persist.debug.wfd.enable";
@@ -198,24 +197,36 @@ public class CastTile extends QSTileImpl<BooleanState> {
         showDetail(null /* view */);
     }
 
+    private static class DialogHolder {
+        private Dialog mDialog;
+
+        private void init(Dialog dialog) {
+            mDialog = dialog;
+        }
+    }
+
     private void showDetail(@Nullable View view) {
         mUiHandler.post(() -> {
-            mDialog = MediaRouteDialogPresenter.createDialog(mContext, ROUTE_TYPE_REMOTE_DISPLAY,
+            final DialogHolder holder = new DialogHolder();
+            final Dialog dialog = MediaRouteDialogPresenter.createDialog(
+                    mContext,
+                    ROUTE_TYPE_REMOTE_DISPLAY,
                     v -> {
                         mDialogLaunchAnimator.disableAllCurrentDialogsExitAnimations();
-                        mDialog.dismiss();
+                        holder.mDialog.dismiss();
                         mActivityStarter
                                 .postStartActivityDismissingKeyguard(getLongClickIntent(), 0);
                     });
-            SystemUIDialog.setShowForAllUsers(mDialog, true);
-            SystemUIDialog.registerDismissListener(mDialog);
-            SystemUIDialog.setWindowOnTop(mDialog);
+            holder.init(dialog);
+            SystemUIDialog.setShowForAllUsers(dialog, true);
+            SystemUIDialog.registerDismissListener(dialog);
+            SystemUIDialog.setWindowOnTop(dialog);
 
             mUiHandler.post(() -> {
                 if (view != null) {
-                    mDialogLaunchAnimator.showFromView(mDialog, view);
+                    mDialogLaunchAnimator.showFromView(dialog, view);
                 } else {
-                    mDialog.show();
+                    dialog.show();
                 }
             });
         });
@@ -276,15 +287,6 @@ public class CastTile extends QSTileImpl<BooleanState> {
     @Override
     public int getMetricsCategory() {
         return MetricsEvent.QS_CAST;
-    }
-
-    @Override
-    protected String composeChangeAnnouncement() {
-        if (!mState.value) {
-            // We only announce when it's turned off to avoid vocal overflow.
-            return mContext.getString(R.string.accessibility_casting_turned_off);
-        }
-        return null;
     }
 
     private String getDeviceName(CastDevice device) {

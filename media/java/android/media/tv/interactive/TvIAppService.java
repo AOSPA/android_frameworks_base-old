@@ -19,6 +19,7 @@ package android.media.tv.interactive;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.StringDef;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.Service;
@@ -26,10 +27,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.media.tv.AdRequest;
+import android.media.tv.AdResponse;
 import android.media.tv.BroadcastInfoRequest;
 import android.media.tv.BroadcastInfoResponse;
+import android.media.tv.TvTrackInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -52,6 +57,8 @@ import android.widget.FrameLayout;
 
 import com.android.internal.os.SomeArgs;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -81,6 +88,31 @@ public abstract class TvIAppService extends Service {
      * tag.
      */
     public static final String SERVICE_META_DATA = "android.media.tv.interactive.app";
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @StringDef(prefix = "IAPP_SERVICE_COMMAND_TYPE_", value = {
+            IAPP_SERVICE_COMMAND_TYPE_TUNE,
+            IAPP_SERVICE_COMMAND_TYPE_TUNE_NEXT,
+            IAPP_SERVICE_COMMAND_TYPE_TUNE_PREV,
+            IAPP_SERVICE_COMMAND_TYPE_STOP,
+            IAPP_SERVICE_COMMAND_TYPE_SET_STREAM_VOLUME,
+            IAPP_SERVICE_COMMAND_TYPE_SELECT_TRACK
+    })
+    public @interface IAppServiceCommandType {}
+
+    /** @hide */
+    public static final String IAPP_SERVICE_COMMAND_TYPE_TUNE = "tune";
+    /** @hide */
+    public static final String IAPP_SERVICE_COMMAND_TYPE_TUNE_NEXT = "tune_next";
+    /** @hide */
+    public static final String IAPP_SERVICE_COMMAND_TYPE_TUNE_PREV = "tune_previous";
+    /** @hide */
+    public static final String IAPP_SERVICE_COMMAND_TYPE_STOP = "stop";
+    /** @hide */
+    public static final String IAPP_SERVICE_COMMAND_TYPE_SET_STREAM_VOLUME = "set_stream_volume";
+    /** @hide */
+    public static final String IAPP_SERVICE_COMMAND_TYPE_SELECT_TRACK = "select_track";
 
     private final Handler mServiceHandler = new ServiceHandler();
     private final RemoteCallbackList<ITvIAppServiceCallback> mCallbacks =
@@ -123,6 +155,16 @@ public abstract class TvIAppService extends Service {
             public void prepare(int type) {
                 onPrepare(type);
             }
+
+            @Override
+            public void notifyAppLinkInfo(Bundle appLinkInfo) {
+                onAppLinkInfo(appLinkInfo);
+            }
+
+            @Override
+            public void sendAppLinkCommand(Bundle command) {
+                onAppLinkCommand(command);
+            }
         };
         return tvIAppServiceBinder;
     }
@@ -132,6 +174,22 @@ public abstract class TvIAppService extends Service {
      * @hide
      */
     public void onPrepare(int type) {
+        // TODO: make it abstract when unhide
+    }
+
+    /**
+     * Registers App link info.
+     * @hide
+     */
+    public void onAppLinkInfo(Bundle appLinkInfo) {
+        // TODO: make it abstract when unhide
+    }
+
+    /**
+     * Sends App link info.
+     * @hide
+     */
+    public void onAppLinkCommand(Bundle command) {
         // TODO: make it abstract when unhide
     }
 
@@ -192,7 +250,7 @@ public abstract class TvIAppService extends Service {
          *
          * @param context The context of the application
          */
-        public Session(Context context) {
+        public Session(@NonNull Context context) {
             mContext = context;
             mWindowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
             mHandler = new Handler(context.getMainLooper());
@@ -233,6 +291,63 @@ public abstract class TvIAppService extends Service {
          * @hide
          */
         public void onStartIApp() {
+        }
+
+        /**
+         * Stops TvIAppService session.
+         * @hide
+         */
+        public void onStopIApp() {
+        }
+
+        /**
+         * Creates broadcast-independent(BI) interactive application.
+         *
+         * @see #onDestroyBiInteractiveApp(String)
+         * @hide
+         */
+        public void onCreateBiInteractiveApp(@NonNull Uri biIAppUri, @Nullable Bundle params) {
+        }
+
+
+        /**
+         * Destroys broadcast-independent(BI) interactive application.
+         *
+         * @param biIAppId the BI interactive app ID from
+         *        {@link #createBiInteractiveApp(Uri, Bundle)}
+         *
+         * @see #onCreateBiInteractiveApp(Uri, Bundle)
+         * @hide
+         */
+        public void onDestroyBiInteractiveApp(@NonNull String biIAppId) {
+        }
+
+        /**
+         * Receives current channel URI.
+         * @hide
+         */
+        public void onCurrentChannelUri(@Nullable Uri channelUri) {
+        }
+
+        /**
+         * Receives logical channel number (LCN) of current channel.
+         * @hide
+         */
+        public void onCurrentChannelLcn(int lcn) {
+        }
+
+        /**
+         * Receives stream volume.
+         * @hide
+         */
+        public void onStreamVolume(float volume) {
+        }
+
+        /**
+         * Receives track list.
+         * @hide
+         */
+        public void onTrackInfoList(@NonNull List<TvTrackInfo> tracks) {
         }
 
         /**
@@ -280,6 +395,7 @@ public abstract class TvIAppService extends Service {
          *
          * @return a view attached to the media window
          */
+        @Nullable
         public View onCreateMediaView() {
             return null;
         }
@@ -295,14 +411,35 @@ public abstract class TvIAppService extends Service {
          * Called when the corresponding TV input tuned to a channel.
          * @hide
          */
-        public void onTuned(Uri channelUri) {
+        public void onTuned(@NonNull Uri channelUri) {
+        }
+
+        /**
+         * Called when the corresponding TV input selected to a track.
+         * @hide
+         */
+        public void onTrackSelected(int type, String trackId) {
+        }
+
+        /**
+         * Called when the tracks are changed.
+         * @hide
+         */
+        public void onTracksChanged(List<TvTrackInfo> tracks) {
         }
 
         /**
          * Called when a broadcast info response is received.
          * @hide
          */
-        public void onBroadcastInfoResponse(BroadcastInfoResponse response) {
+        public void onBroadcastInfoResponse(@NonNull BroadcastInfoResponse response) {
+        }
+
+        /**
+         * Called when an advertisement response is received.
+         * @hide
+         */
+        public void onAdResponse(AdResponse response) {
         }
 
         /**
@@ -310,7 +447,7 @@ public abstract class TvIAppService extends Service {
          * @hide
          */
         @Override
-        public boolean onKeyDown(int keyCode, KeyEvent event) {
+        public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
             return false;
         }
 
@@ -318,7 +455,7 @@ public abstract class TvIAppService extends Service {
          * @hide
          */
         @Override
-        public boolean onKeyLongPress(int keyCode, KeyEvent event) {
+        public boolean onKeyLongPress(int keyCode, @NonNull KeyEvent event) {
             return false;
         }
 
@@ -326,7 +463,7 @@ public abstract class TvIAppService extends Service {
          * @hide
          */
         @Override
-        public boolean onKeyMultiple(int keyCode, int count, KeyEvent event) {
+        public boolean onKeyMultiple(int keyCode, int count, @NonNull KeyEvent event) {
             return false;
         }
 
@@ -334,28 +471,28 @@ public abstract class TvIAppService extends Service {
          * @hide
          */
         @Override
-        public boolean onKeyUp(int keyCode, KeyEvent event) {
+        public boolean onKeyUp(int keyCode, @NonNull KeyEvent event) {
             return false;
         }
 
         /**
          * @hide
          */
-        public boolean onTouchEvent(MotionEvent event) {
+        public boolean onTouchEvent(@NonNull MotionEvent event) {
             return false;
         }
 
         /**
          * @hide
          */
-        public boolean onTrackballEvent(MotionEvent event) {
+        public boolean onTrackballEvent(@NonNull MotionEvent event) {
             return false;
         }
 
         /**
          * @hide
          */
-        public boolean onGenericMotionEvent(MotionEvent event) {
+        public boolean onGenericMotionEvent(@NonNull MotionEvent event) {
             return false;
         }
 
@@ -416,8 +553,218 @@ public abstract class TvIAppService extends Service {
             });
         }
 
+        /**
+         * Remove broadcast information request from the related TV input.
+         * @param requestId the ID of the request
+         */
+        public void removeBroadcastInfo(final int requestId) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "removeBroadcastInfo (requestId="
+                                    + requestId + ")");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onRemoveBroadcastInfo(requestId);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in removeBroadcastInfo", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * requests a specific command to be processed by the related TV input.
+         * @param cmdType type of the specific command
+         * @param parameters parameters of the specific command
+         */
+        public void requestCommand(@IAppServiceCommandType String cmdType, Bundle parameters) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "requestCommand (cmdType=" + cmdType + ", parameters="
+                                    + parameters.toString() + ")");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onCommandRequest(cmdType, parameters);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in requestCommand", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Sets broadcast video bounds.
+         */
+        public void setVideoBounds(Rect rect) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "setVideoBounds (rect=" + rect + ")");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onSetVideoBounds(rect);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in setVideoBounds", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Requests the URI of the current channel.
+         */
+        public void requestCurrentChannelUri() {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "requestCurrentChannelUri");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onRequestCurrentChannelUri();
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in requestCurrentChannelUri", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Requests the logic channel number (LCN) of the current channel.
+         */
+        public void requestCurrentChannelLcn() {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "requestCurrentChannelLcn");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onRequestCurrentChannelLcn();
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in requestCurrentChannelLcn", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Requests stream volume.
+         */
+        public void requestStreamVolume() {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "requestStreamVolume");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onRequestStreamVolume();
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in requestStreamVolume", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Requests the list of {@link TvTrackInfo}.
+         */
+        public void requestTrackInfoList() {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "requestTrackInfoList");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onRequestTrackInfoList();
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in requestTrackInfoList", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * requests an advertisement request to be processed by the related TV input.
+         * @param request advertisement request
+         */
+        public void requestAd(@NonNull final AdRequest request) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "requestAd (id=" + request.getId() + ")");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onAdRequest(request);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in requestAd", e);
+                    }
+                }
+            });
+        }
+
         void startIApp() {
             onStartIApp();
+        }
+
+        void stopIApp() {
+            onStopIApp();
+        }
+
+        void createBiInteractiveApp(@NonNull Uri biIAppUri, @Nullable Bundle params) {
+            onCreateBiInteractiveApp(biIAppUri, params);
+        }
+
+        void destroyBiInteractiveApp(@NonNull String biIAppId) {
+            onDestroyBiInteractiveApp(biIAppId);
+        }
+
+        void sendCurrentChannelUri(@Nullable Uri channelUri) {
+            onCurrentChannelUri(channelUri);
+        }
+
+        void sendCurrentChannelLcn(int lcn) {
+            onCurrentChannelLcn(lcn);
+        }
+
+        void sendStreamVolume(float volume) {
+            onStreamVolume(volume);
+        }
+
+        void sendTrackInfoList(@NonNull List<TvTrackInfo> tracks) {
+            onTrackInfoList(tracks);
         }
 
         void release() {
@@ -442,6 +789,20 @@ public abstract class TvIAppService extends Service {
             onTuned(channelUri);
         }
 
+        void notifyTrackSelected(int type, String trackId) {
+            if (DEBUG) {
+                Log.d(TAG, "notifyTrackSelected (type=" + type + "trackId=" + trackId + ")");
+            }
+            onTrackSelected(type, trackId);
+        }
+
+        void notifyTracksChanged(List<TvTrackInfo> tracks) {
+            if (DEBUG) {
+                Log.d(TAG, "notifyTracksChanged (tracks=" + tracks + ")");
+            }
+            onTracksChanged(tracks);
+        }
+
 
         /**
          * Calls {@link #onBroadcastInfoResponse}.
@@ -452,6 +813,16 @@ public abstract class TvIAppService extends Service {
                         + response.getRequestId() + ")");
             }
             onBroadcastInfoResponse(response);
+        }
+
+        /**
+         * Calls {@link #onAdResponse}.
+         */
+        void notifyAdResponse(AdResponse response) {
+            if (DEBUG) {
+                Log.d(TAG, "notifyAdResponse (requestId=" + response.getId() + ")");
+            }
+            onAdResponse(response);
         }
 
         /**
@@ -473,6 +844,32 @@ public abstract class TvIAppService extends Service {
                         }
                     } catch (RemoteException e) {
                         Log.w(TAG, "error in notifySessionStateChanged", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Notifies the broadcast-independent(BI) interactive application has been created.
+         * @param biIAppId BI interactive app ID, which can be used to destroy the BI interactive
+         *                 app.
+         * @hide
+         */
+        public final void notifyBiInteractiveAppCreated(Uri biIAppUri, String biIAppId) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG, "notifyBiInteractiveAppCreated (biIAppId="
+                                    + biIAppId + ")");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onBiInteractiveAppCreated(biIAppUri, biIAppId);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in notifyBiInteractiveAppCreated", e);
                     }
                 }
             });
@@ -716,6 +1113,41 @@ public abstract class TvIAppService extends Service {
         }
 
         @Override
+        public void stopIApp() {
+            mSessionImpl.stopIApp();
+        }
+
+        @Override
+        public void createBiInteractiveApp(@NonNull Uri biIAppUri, @Nullable Bundle params) {
+            mSessionImpl.createBiInteractiveApp(biIAppUri, params);
+        }
+
+        @Override
+        public void destroyBiInteractiveApp(@NonNull String biIAppId) {
+            mSessionImpl.destroyBiInteractiveApp(biIAppId);
+        }
+
+        @Override
+        public void sendCurrentChannelUri(@Nullable Uri channelUri) {
+            mSessionImpl.sendCurrentChannelUri(channelUri);
+        }
+
+        @Override
+        public void sendCurrentChannelLcn(int lcn) {
+            mSessionImpl.sendCurrentChannelLcn(lcn);
+        }
+
+        @Override
+        public void sendStreamVolume(float volume) {
+            mSessionImpl.sendStreamVolume(volume);
+        }
+
+        @Override
+        public void sendTrackInfoList(@NonNull List<TvTrackInfo> tracks) {
+            mSessionImpl.sendTrackInfoList(tracks);
+        }
+
+        @Override
         public void release() {
             mSessionImpl.scheduleMediaViewCleanup();
             mSessionImpl.release();
@@ -724,6 +1156,16 @@ public abstract class TvIAppService extends Service {
         @Override
         public void notifyTuned(Uri channelUri) {
             mSessionImpl.notifyTuned(channelUri);
+        }
+
+        @Override
+        public void notifyTrackSelected(int type, final String trackId) {
+            mSessionImpl.notifyTrackSelected(type, trackId);
+        }
+
+        @Override
+        public void notifyTracksChanged(List<TvTrackInfo> tracks) {
+            mSessionImpl.notifyTracksChanged(tracks);
         }
 
         @Override
@@ -739,6 +1181,11 @@ public abstract class TvIAppService extends Service {
         @Override
         public void notifyBroadcastInfoResponse(BroadcastInfoResponse response) {
             mSessionImpl.notifyBroadcastInfoResponse(response);
+        }
+
+        @Override
+        public void notifyAdResponse(AdResponse response) {
+            mSessionImpl.notifyAdResponse(response);
         }
 
         @Override

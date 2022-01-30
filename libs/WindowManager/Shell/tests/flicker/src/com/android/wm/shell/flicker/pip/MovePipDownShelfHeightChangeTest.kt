@@ -16,8 +16,8 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -25,8 +25,8 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
-import com.android.server.wm.flicker.traces.RegionSubject
 import org.junit.Assume.assumeFalse
+import com.android.server.wm.flicker.traces.region.RegionSubject
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -83,7 +83,7 @@ class MovePipDownShelfHeightChangeTest(
     }
 
     /** {@inheritDoc}  */
-    @Presubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     override fun statusBarLayerRotatesScales() {
         // This test doesn't work in shell transitions because of b/206753786

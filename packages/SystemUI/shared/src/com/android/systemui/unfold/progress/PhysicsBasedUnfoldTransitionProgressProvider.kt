@@ -23,7 +23,7 @@ import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import com.android.systemui.unfold.UnfoldTransitionProgressProvider
 import com.android.systemui.unfold.UnfoldTransitionProgressProvider.TransitionProgressListener
-import com.android.systemui.unfold.updates.FOLD_UPDATE_ABORTED
+import com.android.systemui.unfold.updates.FOLD_UPDATE_FINISH_HALF_OPEN
 import com.android.systemui.unfold.updates.FOLD_UPDATE_FINISH_CLOSED
 import com.android.systemui.unfold.updates.FOLD_UPDATE_START_CLOSING
 import com.android.systemui.unfold.updates.FOLD_UPDATE_FINISH_FULL_OPEN
@@ -32,12 +32,7 @@ import com.android.systemui.unfold.updates.FoldStateProvider
 import com.android.systemui.unfold.updates.FoldStateProvider.FoldUpdate
 import com.android.systemui.unfold.updates.FoldStateProvider.FoldUpdatesListener
 
-/**
- * Maps fold updates to unfold transition progress using DynamicAnimation.
- *
- * TODO(b/193793338) Current limitations:
- *  - doesn't handle postures
- */
+/** Maps fold updates to unfold transition progress using DynamicAnimation. */
 internal class PhysicsBasedUnfoldTransitionProgressProvider(
     private val foldStateProvider: FoldStateProvider
 ) :
@@ -89,7 +84,7 @@ internal class PhysicsBasedUnfoldTransitionProgressProvider(
                     cancelTransition(endValue = 1f, animate = true)
                 }
             }
-            FOLD_UPDATE_FINISH_FULL_OPEN, FOLD_UPDATE_ABORTED -> {
+            FOLD_UPDATE_FINISH_FULL_OPEN, FOLD_UPDATE_FINISH_HALF_OPEN -> {
                 // Do not cancel if we haven't started the transition yet.
                 // This could happen when we fully unfolded the device before the screen
                 // became available. In this case we start and immediately cancel the animation

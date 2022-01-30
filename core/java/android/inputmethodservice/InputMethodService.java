@@ -51,7 +51,6 @@ import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowInsets.Type.statusBars;
-import static android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
 
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
@@ -1340,28 +1339,43 @@ public class InputMethodService extends AbstractInputMethodService {
         mInflater = (LayoutInflater)getSystemService(
                 Context.LAYOUT_INFLATER_SERVICE);
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMS.initSoftInputWindow");
-        mWindow = new SoftInputWindow(this, "InputMethod", mTheme, null, null, mDispatcherState,
-                WindowManager.LayoutParams.TYPE_INPUT_METHOD, Gravity.BOTTOM, false);
-        mWindow.getWindow().getAttributes().setFitInsetsTypes(statusBars() | navigationBars());
-        mWindow.getWindow().getAttributes().setFitInsetsSides(Side.all() & ~Side.BOTTOM);
-        mWindow.getWindow().getAttributes().receiveInsetsIgnoringZOrder = true;
+        mWindow = new SoftInputWindow(this, mTheme, mDispatcherState);
 
-        // Automotive devices may request the navigation bar to be hidden when the IME shows up
-        // (controlled via config_automotiveHideNavBarForKeyboard) in order to maximize the visible
-        // screen real estate. When this happens, the IME window should animate from the bottom of
-        // the screen to reduce the jank that happens from the lack of synchronization between the
-        // bottom system window and the IME window.
-        if (mIsAutomotive && mAutomotiveHideNavBarForKeyboard) {
-            mWindow.getWindow().setDecorFitsSystemWindows(false);
+        {
+            final Window window = mWindow.getWindow();
+            {
+                final WindowManager.LayoutParams lp = window.getAttributes();
+                lp.setTitle("InputMethod");
+                lp.type = WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+                lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+                lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+                lp.gravity = Gravity.BOTTOM;
+                lp.setFitInsetsTypes(statusBars() | navigationBars());
+                lp.setFitInsetsSides(Side.all() & ~Side.BOTTOM);
+                lp.receiveInsetsIgnoringZOrder = true;
+                window.setAttributes(lp);
+            }
+
+            // For ColorView in DecorView to work, FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS needs to be set
+            // by default (but IME developers can opt this out later if they want a new behavior).
+            final int windowFlags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
+            final int windowFlagsMask = windowFlags
+                    | WindowManager.LayoutParams.FLAG_DIM_BEHIND;  // to be unset
+            window.setFlags(windowFlags, windowFlagsMask);
+
+            // Automotive devices may request the navigation bar to be hidden when the IME shows up
+            // (controlled via config_automotiveHideNavBarForKeyboard) in order to maximize the
+            // visible screen real estate. When this happens, the IME window should animate from the
+            // bottom of the screen to reduce the jank that happens from the lack of synchronization
+            // between the bottom system window and the IME window.
+            if (mIsAutomotive && mAutomotiveHideNavBarForKeyboard) {
+                window.setDecorFitsSystemWindows(false);
+            }
         }
 
-        // For ColorView in DecorView to work, FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS needs to be set
-        // by default (but IME developers can opt this out later if they want a new behavior).
-        mWindow.getWindow().setFlags(
-                FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS, FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-
         initViews();
-        mWindow.getWindow().setLayout(MATCH_PARENT, WRAP_CONTENT);
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
 
         mInlineSuggestionSessionController = new InlineSuggestionSessionController(

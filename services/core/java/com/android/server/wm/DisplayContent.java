@@ -80,6 +80,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_CHANGE;
+import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.DisplayAreaOrganizer.FEATURE_IME;
@@ -167,7 +168,6 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
-import android.graphics.GraphicBuffer;
 import android.graphics.Insets;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -225,6 +225,7 @@ import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 import android.window.DisplayWindowPolicyController;
 import android.window.IDisplayAreaOrganizer;
+import android.window.TransitionRequestInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
@@ -1423,7 +1424,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (configChanged) {
             mWaitingForConfig = true;
             if (mTransitionController.isShellTransitionsEnabled()) {
-                requestChangeTransitionIfNeeded(changes);
+                requestChangeTransitionIfNeeded(changes, null /* displayChange */);
             } else {
                 mWmService.startFreezingDisplay(0 /* exitAnim */, 0 /* enterAnim */, this);
             }
@@ -1466,7 +1467,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @Override
     boolean onDescendantOrientationChanged(WindowContainer requestingContainer) {
         final Configuration config = updateOrientation(
-                getRequestedOverrideConfiguration(), requestingContainer, false /* forceUpdate */);
+                requestingContainer, false /* forceUpdate */);
         // If display rotation class tells us that it doesn't consider app requested orientation,
         // this display won't rotate just because of an app changes its requested orientation. Thus
         // it indicates that this display chooses not to handle this request.
@@ -1515,14 +1516,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * DisplayContent)} to tell the window manager it can unfreeze the screen. This will typically
      * be done by calling {@link #sendNewConfiguration}.
      *
-     * @param currentConfig The current requested override configuration (it is usually set from
-     *                      the last {@link #sendNewConfiguration}) of the display. It is used to
-     *                      check if the configuration container has the latest state.
      * @param freezeDisplayWindow Freeze the app window if the orientation is changed.
      * @param forceUpdate See {@link DisplayRotation#updateRotationUnchecked(boolean)}
      */
-    Configuration updateOrientation(Configuration currentConfig,
-            WindowContainer freezeDisplayWindow, boolean forceUpdate) {
+    Configuration updateOrientation(WindowContainer<?> freezeDisplayWindow, boolean forceUpdate) {
         if (!mDisplayReady) {
             return null;
         }
@@ -1539,15 +1536,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
             config = new Configuration();
             computeScreenConfiguration(config);
-        } else if (currentConfig != null
+        } else if (!(mTransitionController.isCollecting(this)
                 // If waiting for a remote rotation, don't prematurely update configuration.
-                && !(mDisplayRotation.isWaitingForRemoteRotation()
-                        || mTransitionController.isCollecting(this))) {
+                || mDisplayRotation.isWaitingForRemoteRotation())) {
             // No obvious action we need to take, but if our current state mismatches the
             // activity manager's, update it, disregarding font scale, which should remain set
             // to the value of the previous configuration.
             // Here we're calling Configuration#unset() instead of setToDefaults() because we
             // need to keep override configs clear of non-empty values (e.g. fontSize).
+            final Configuration currentConfig = getRequestedOverrideConfiguration();
             mTmpConfiguration.unset();
             mTmpConfiguration.updateFrom(currentConfig);
             computeScreenConfiguration(mTmpConfiguration);
@@ -1597,6 +1594,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     @Rotation
     int rotationForActivityInDifferentOrientation(@NonNull ActivityRecord r) {
+        if (mTransitionController.isShellTransitionsEnabled()) {
+            return ROTATION_UNDEFINED;
+        }
         if (!WindowManagerService.ENABLE_FIXED_ROTATION_TRANSFORM) {
             return ROTATION_UNDEFINED;
         }
@@ -1843,6 +1843,17 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     }
 
+    /** Returns {@code true} if the decided new rotation has not applied to configuration yet. */
+    private boolean isRotationChanging() {
+        return mDisplayRotation.getRotation() != getWindowConfiguration().getRotation();
+    }
+
+    private void startFadeRotationAnimationIfNeeded() {
+        if (isRotationChanging()) {
+            startFadeRotationAnimation(false /* shouldDebounce */);
+        }
+    }
+
     /**
      * Starts the hide animation for the windows which will be rotated seamlessly.
      *
@@ -1996,23 +2007,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     void configureDisplayPolicy() {
-        final int width = mBaseDisplayWidth;
-        final int height = mBaseDisplayHeight;
-        final int shortSize;
-        final int longSize;
-        if (width > height) {
-            shortSize = height;
-            longSize = width;
-        } else {
-            shortSize = width;
-            longSize = height;
-        }
-
-        final int shortSizeDp = shortSize * DENSITY_DEFAULT / mBaseDisplayDensity;
-        final int longSizeDp = longSize * DENSITY_DEFAULT / mBaseDisplayDensity;
-
         mDisplayPolicy.updateConfigurationAndScreenSizeDependentBehaviors();
-        mDisplayRotation.configure(width, height, shortSizeDp, longSizeDp);
+        mDisplayRotation.configure(mBaseDisplayWidth, mBaseDisplayHeight);
     }
 
     /**
@@ -2795,6 +2791,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     mIsSizeForced ? mBaseDisplayHeight : newHeight,
                     mIsDensityForced ? mBaseDisplayDensity : newDensity);
 
+            configureDisplayPolicy();
+
+            if (physicalDisplayChanged) {
+                // Reapply the rotation window settings, we are doing this after updating
+                // the screen size and configuring display policy as the rotation depends
+                // on the display size
+                mWmService.mDisplayWindowSettings.applyRotationSettingsToDisplayLocked(this);
+            }
+
             // Real display metrics changed, so we should also update initial values.
             mInitialDisplayWidth = newWidth;
             mInitialDisplayHeight = newHeight;
@@ -3202,11 +3207,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         // Hide the windows which are not significant in rotation animation. So that the windows
         // don't need to block the unfreeze time.
-        if (screenRotationAnimation != null && screenRotationAnimation.hasScreenshot()
-                // Do not fade for freezing without rotation change.
-                && mDisplayRotation.getRotation() != getWindowConfiguration().getRotation()
-                && mFadeRotationAnimationController == null) {
-            startFadeRotationAnimation(false /* shouldDebounce */);
+        if (screenRotationAnimation != null && screenRotationAnimation.hasScreenshot()) {
+            startFadeRotationAnimationIfNeeded();
         }
     }
 
@@ -3218,18 +3220,24 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * Requests to start a transition for the display configuration change. The given changes must
      * be non-zero. This method is no-op if the display has been collected.
      */
-    void requestChangeTransitionIfNeeded(@ActivityInfo.Config int changes) {
+    void requestChangeTransitionIfNeeded(@ActivityInfo.Config int changes,
+            @Nullable TransitionRequestInfo.DisplayChange displayChange) {
         final TransitionController controller = mTransitionController;
         if (controller.isCollecting()) {
+            if (displayChange != null) {
+                throw new IllegalArgumentException("Provided displayChange for non-new transition");
+            }
             if (!controller.isCollecting(this)) {
                 controller.collect(this);
+                startFadeRotationAnimationIfNeeded();
             }
             return;
         }
-        final Transition t = controller.requestTransitionIfNeeded(TRANSIT_CHANGE, this);
+        final Transition t = controller.requestTransitionIfNeeded(TRANSIT_CHANGE, 0 /* flags */,
+                this, this, null /* remoteTransition */, displayChange);
         if (t != null) {
             mAtmService.startLaunchPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
-            if (getRotation() != getWindowConfiguration().getRotation()) {
+            if (isRotationChanging()) {
                 mWmService.mLatencyTracker.onActionStart(ACTION_ROTATE_SCREEN);
                 controller.mTransitionMetricsReporter.associate(t,
                         startTime -> mWmService.mLatencyTracker.onActionEnd(ACTION_ROTATE_SCREEN));
@@ -4092,8 +4100,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // Make IME snapshot as trusted overlay
         InputMonitor.setTrustedOverlayInputInfo(imeSurface, t, getDisplayId(),
                 "IME-snapshot-surface");
-        GraphicBuffer graphicBuffer = GraphicBuffer.createFromHardwareBuffer(buffer);
-        t.setBuffer(imeSurface, graphicBuffer);
+        t.setBuffer(imeSurface, buffer);
         t.setColorSpace(mSurfaceControl, ColorSpace.get(ColorSpace.Named.SRGB));
         t.setRelativeLayer(imeSurface, activity.getSurfaceControl(), 1);
         t.setPosition(imeSurface, mInputMethodWindow.getDisplayFrame().left,
@@ -5694,7 +5701,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mWmService.mDisplayNotificationController.dispatchDisplayChanged(
                     this, getConfiguration());
             if (isReady() && mTransitionController.isShellTransitionsEnabled()) {
-                requestChangeTransitionIfNeeded(changes);
+                requestChangeTransitionIfNeeded(changes, null /* displayChange */);
             }
         }
         return changes;
@@ -5904,6 +5911,30 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     void setIsSleeping(boolean asleep) {
         mSleeping = asleep;
+    }
+
+    /**
+     * Notifies that some Keyguard flags have changed and the visibilities of the activities may
+     * need to be reevaluated.
+     */
+    void notifyKeyguardFlagsChanged() {
+        if (!isKeyguardLocked()) {
+            // If keyguard is not locked, the change of flags won't affect activity visibility.
+            return;
+        }
+        // We might change the visibilities here, so prepare an empty app transition which might be
+        // overridden later if we actually change visibilities.
+        final boolean wasTransitionSet = mAppTransition.isTransitionSet();
+        if (!wasTransitionSet) {
+            prepareAppTransition(TRANSIT_NONE);
+        }
+        mRootWindowContainer.ensureActivitiesVisible(null, 0, false /* preserveWindows */);
+
+        // If there was a transition set already we don't want to interfere with it as we might be
+        // starting it too early.
+        if (!wasTransitionSet) {
+            executeAppTransition();
+        }
     }
 
     /**

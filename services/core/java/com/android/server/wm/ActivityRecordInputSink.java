@@ -55,12 +55,12 @@ class ActivityRecordInputSink {
 
     private final ActivityRecord mActivityRecord;
     private final boolean mIsCompatEnabled;
+    private final String mName;
 
     // Hold on to InputEventReceiver to prevent it from getting GCd.
     private InputEventReceiver mInputEventReceiver;
     private InputWindowHandleWrapper mInputWindowHandleWrapper;
-    private final String mName = Integer.toHexString(System.identityHashCode(this))
-            + " ActivityRecordInputSink";
+    private SurfaceControl mSurfaceControl;
     private int mRapidTouchCount = 0;
     private IBinder mToken;
     private boolean mDisabled = false;
@@ -69,14 +69,29 @@ class ActivityRecordInputSink {
         mActivityRecord = activityRecord;
         mIsCompatEnabled = CompatChanges.isChangeEnabled(ENABLE_TOUCH_OPAQUE_ACTIVITIES,
                 mActivityRecord.getUid());
+        mName = Integer.toHexString(System.identityHashCode(this)) + " ActivityRecordInputSink "
+                + mActivityRecord.mActivityComponent.getShortClassName();
     }
 
-    public void applyChangesToSurfaceIfChanged(
-            SurfaceControl.Transaction transaction, SurfaceControl surfaceControl) {
+    public void applyChangesToSurfaceIfChanged(SurfaceControl.Transaction transaction) {
         InputWindowHandleWrapper inputWindowHandleWrapper = getInputWindowHandleWrapper();
-        if (inputWindowHandleWrapper.isChanged()) {
-            inputWindowHandleWrapper.applyChangesToSurface(transaction, surfaceControl);
+        if (mSurfaceControl == null) {
+            mSurfaceControl = createSurface(transaction);
         }
+        if (inputWindowHandleWrapper.isChanged()) {
+            inputWindowHandleWrapper.applyChangesToSurface(transaction, mSurfaceControl);
+        }
+    }
+
+    private SurfaceControl createSurface(SurfaceControl.Transaction t) {
+        SurfaceControl surfaceControl = mActivityRecord.makeChildSurface(null)
+                .setName(mName)
+                .setHidden(false)
+                .setCallsite("ActivityRecordInputSink.createSurface")
+                .build();
+        // Put layer below all siblings (and the parent surface too)
+        t.setLayer(surfaceControl, Integer.MIN_VALUE);
+        return surfaceControl;
     }
 
     private InputWindowHandleWrapper getInputWindowHandleWrapper() {
@@ -90,11 +105,6 @@ class ActivityRecordInputSink {
         if (mDisabled || !mIsCompatEnabled || mActivityRecord.isAnimating(TRANSITION | PARENTS,
                 ANIMATION_TYPE_APP_TRANSITION)) {
             // TODO(b/208662670): Investigate if we can have feature active during animations.
-            mInputWindowHandleWrapper.setToken(null);
-        } else if (mActivityRecord.mStartingData != null) {
-            // TODO(b/208659130): Remove this special case
-            // Don't block touches during splash screen. This is done to not show toasts for
-            // touches passing through splash screens. b/171772640
             mInputWindowHandleWrapper.setToken(null);
         } else {
             mInputWindowHandleWrapper.setToken(mToken);

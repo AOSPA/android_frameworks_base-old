@@ -530,6 +530,8 @@ public interface RILConstants {
     int RIL_REQUEST_GET_SLICING_CONFIG = 224;
     int RIL_REQUEST_ENABLE_VONR = 225;
     int RIL_REQUEST_IS_VONR_ENABLED = 226;
+    int RIL_REQUEST_SET_USAGE_SETTING = 227;
+    int RIL_REQUEST_GET_USAGE_SETTING = 228;
 
     /* RIL Request to get newly supported radio
        capabilities include 5G SA*/
