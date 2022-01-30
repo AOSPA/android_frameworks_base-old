@@ -669,7 +669,7 @@ public abstract class BatteryStats implements Parcelable {
             case BatteryStats.Uid.PROCESS_STATE_FOREGROUND_SERVICE:
                 return BatteryConsumer.PROCESS_STATE_FOREGROUND_SERVICE;
             default:
-                return BatteryConsumer.PROCESS_STATE_ANY;
+                return BatteryConsumer.PROCESS_STATE_UNSPECIFIED;
         }
     }
 
@@ -963,6 +963,13 @@ public abstract class BatteryStats implements Parcelable {
         public abstract long getNetworkActivityPackets(int type, int which);
         @UnsupportedAppUsage
         public abstract long getMobileRadioActiveTime(int which);
+
+        /**
+         * Returns the amount of time (in microseconds) this UID was in the specified processState.
+         */
+        public abstract long getMobileRadioActiveTimeInProcessState(
+                @BatteryConsumer.ProcessState int processState);
+
         public abstract int getMobileRadioActiveCount(int which);
 
         /**
@@ -1059,6 +1066,16 @@ public abstract class BatteryStats implements Parcelable {
          * {@hide}
          */
         public abstract long getMobileRadioMeasuredBatteryConsumptionUC();
+
+        /**
+         * Returns the battery consumption (in microcoulombs) of the uid's radio usage when in the
+         * specified process state.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getMobileRadioMeasuredBatteryConsumptionUC(
+                @BatteryConsumer.ProcessState int processState);
 
         /**
          * Returns the battery consumption (in microcoulombs) of the screen while on and uid active,
@@ -3355,6 +3372,11 @@ public abstract class BatteryStats implements Parcelable {
     public abstract Map<String, ? extends Timer> getWakeupReasonStats();
 
     public abstract Map<String, ? extends Timer> getKernelWakelockStats();
+
+    /**
+     * Returns aggregated wake lock stats.
+     */
+    public abstract WakeLockStats getWakeLockStats();
 
     /**
      * Returns Timers tracking the total time of each Resource Power Manager state and voter.

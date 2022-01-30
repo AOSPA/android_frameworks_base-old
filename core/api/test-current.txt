@@ -59,6 +59,7 @@ package android {
   public static final class R.bool {
     field public static final int config_assistantOnTopOfDream = 17891333; // 0x1110005
     field public static final int config_perDisplayFocusEnabled = 17891332; // 0x1110004
+    field public static final int config_preventImeStartupUnlessTextEditor;
     field public static final int config_remoteInsetsControllerControlsSystemBars = 17891334; // 0x1110006
   }
 
@@ -248,12 +249,15 @@ package android.app {
 
   public class BroadcastOptions {
     ctor public BroadcastOptions(@NonNull android.os.Bundle);
-    method public int getMaxManifestReceiverApiLevel();
+    method @Deprecated public int getMaxManifestReceiverApiLevel();
     method public long getTemporaryAppAllowlistDuration();
     method @Nullable public String getTemporaryAppAllowlistReason();
     method public int getTemporaryAppAllowlistReasonCode();
     method public int getTemporaryAppAllowlistType();
-    method public void setMaxManifestReceiverApiLevel(int);
+    method @Deprecated public void setMaxManifestReceiverApiLevel(int);
+    method public boolean testRequireCompatChange(int);
+    field public static final long CHANGE_ALWAYS_DISABLED = 210856463L; // 0xc916a0fL
+    field public static final long CHANGE_ALWAYS_ENABLED = 209888056L; // 0xc82a338L
   }
 
   public class DownloadManager {
@@ -353,6 +357,10 @@ package android.app {
     method @RequiresPermission(android.Manifest.permission.STATUS_BAR) public void togglePanel();
   }
 
+  public static final class StatusBarManager.DisableInfo {
+    method public boolean isRotationSuggestionDisabled();
+  }
+
   public final class SyncNotedAppOp implements android.os.Parcelable {
     ctor public SyncNotedAppOp(int, @IntRange(from=0L) int, @Nullable String, @NonNull String);
   }
@@ -440,7 +448,6 @@ package android.app.admin {
   public class DevicePolicyManager {
     method @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS) public void clearOrganizationId();
     method @RequiresPermission(android.Manifest.permission.CLEAR_FREEZE_PERIOD) public void clearSystemUpdatePolicyFreezePeriodRecord();
-    method @Nullable public android.os.UserHandle createAndProvisionManagedProfile(@NonNull android.app.admin.ManagedProfileProvisioningParams) throws android.app.admin.ProvisioningException;
     method @RequiresPermission(android.Manifest.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS) public long forceNetworkLogs();
     method @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS) public void forceRemoveActiveAdmin(@NonNull android.content.ComponentName, int);
     method @RequiresPermission(android.Manifest.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS) public long forceSecurityLogs();
@@ -457,7 +464,6 @@ package android.app.admin {
     method @RequiresPermission(anyOf={android.Manifest.permission.MARK_DEVICE_ORGANIZATION_OWNED, android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS}, conditional=true) public void markProfileOwnerOnOrganizationOwnedDevice(@NonNull android.content.ComponentName);
     method @NonNull public static String operationSafetyReasonToString(int);
     method @NonNull public static String operationToString(int);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS) public void provisionFullyManagedDevice(@NonNull android.app.admin.FullyManagedDeviceProvisioningParams) throws android.app.admin.ProvisioningException;
     method @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS) public void resetDefaultCrossProfileIntentFilters(int);
     method @RequiresPermission(allOf={android.Manifest.permission.MANAGE_DEVICE_ADMINS, android.Manifest.permission.INTERACT_ACROSS_USERS_FULL}) public void setActiveAdmin(@NonNull android.content.ComponentName, boolean, int);
     method @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS) public boolean setDeviceOwner(@NonNull android.content.ComponentName, @Nullable String, int);
@@ -507,66 +513,6 @@ package android.app.admin {
     field public static final int OPERATION_SWITCH_USER = 2; // 0x2
     field public static final int OPERATION_UNINSTALL_CA_CERT = 40; // 0x28
     field public static final int OPERATION_WIPE_DATA = 8; // 0x8
-    field public static final int PROVISIONING_RESULT_ADMIN_PACKAGE_INSTALLATION_FAILED = 3; // 0x3
-    field public static final int PROVISIONING_RESULT_PRE_CONDITION_FAILED = 1; // 0x1
-    field public static final int PROVISIONING_RESULT_PROFILE_CREATION_FAILED = 2; // 0x2
-    field public static final int PROVISIONING_RESULT_REMOVE_NON_REQUIRED_APPS_FAILED = 6; // 0x6
-    field public static final int PROVISIONING_RESULT_SETTING_PROFILE_OWNER_FAILED = 4; // 0x4
-    field public static final int PROVISIONING_RESULT_SET_DEVICE_OWNER_FAILED = 7; // 0x7
-    field public static final int PROVISIONING_RESULT_STARTING_PROFILE_FAILED = 5; // 0x5
-  }
-
-  public final class FullyManagedDeviceProvisioningParams implements android.os.Parcelable {
-    method public boolean canDeviceOwnerGrantSensorsPermissions();
-    method public int describeContents();
-    method @NonNull public android.content.ComponentName getDeviceAdminComponentName();
-    method public long getLocalTime();
-    method @Nullable public java.util.Locale getLocale();
-    method @NonNull public String getOwnerName();
-    method @Nullable public String getTimeZone();
-    method public boolean isLeaveAllSystemAppsEnabled();
-    method public void logParams(@NonNull String);
-    method public void writeToParcel(@NonNull android.os.Parcel, @Nullable int);
-    field @NonNull public static final android.os.Parcelable.Creator<android.app.admin.FullyManagedDeviceProvisioningParams> CREATOR;
-  }
-
-  public static final class FullyManagedDeviceProvisioningParams.Builder {
-    ctor public FullyManagedDeviceProvisioningParams.Builder(@NonNull android.content.ComponentName, @NonNull String);
-    method @NonNull public android.app.admin.FullyManagedDeviceProvisioningParams build();
-    method @NonNull public android.app.admin.FullyManagedDeviceProvisioningParams.Builder setDeviceOwnerCanGrantSensorsPermissions(boolean);
-    method @NonNull public android.app.admin.FullyManagedDeviceProvisioningParams.Builder setLeaveAllSystemAppsEnabled(boolean);
-    method @NonNull public android.app.admin.FullyManagedDeviceProvisioningParams.Builder setLocalTime(long);
-    method @NonNull public android.app.admin.FullyManagedDeviceProvisioningParams.Builder setLocale(@Nullable java.util.Locale);
-    method @NonNull public android.app.admin.FullyManagedDeviceProvisioningParams.Builder setTimeZone(@Nullable String);
-  }
-
-  public final class ManagedProfileProvisioningParams implements android.os.Parcelable {
-    method public int describeContents();
-    method @Nullable public android.accounts.Account getAccountToMigrate();
-    method @NonNull public String getOwnerName();
-    method @NonNull public android.content.ComponentName getProfileAdminComponentName();
-    method @Nullable public String getProfileName();
-    method public boolean isKeepAccountMigrated();
-    method public boolean isLeaveAllSystemAppsEnabled();
-    method public boolean isOrganizationOwnedProvisioning();
-    method public void logParams(@NonNull String);
-    method public void writeToParcel(@NonNull android.os.Parcel, @Nullable int);
-    field @NonNull public static final android.os.Parcelable.Creator<android.app.admin.ManagedProfileProvisioningParams> CREATOR;
-  }
-
-  public static final class ManagedProfileProvisioningParams.Builder {
-    ctor public ManagedProfileProvisioningParams.Builder(@NonNull android.content.ComponentName, @NonNull String);
-    method @NonNull public android.app.admin.ManagedProfileProvisioningParams build();
-    method @NonNull public android.app.admin.ManagedProfileProvisioningParams.Builder setAccountToMigrate(@Nullable android.accounts.Account);
-    method @NonNull public android.app.admin.ManagedProfileProvisioningParams.Builder setKeepAccountMigrated(boolean);
-    method @NonNull public android.app.admin.ManagedProfileProvisioningParams.Builder setLeaveAllSystemAppsEnabled(boolean);
-    method @NonNull public android.app.admin.ManagedProfileProvisioningParams.Builder setOrganizationOwnedProvisioning(boolean);
-    method @NonNull public android.app.admin.ManagedProfileProvisioningParams.Builder setProfileName(@Nullable String);
-  }
-
-  public class ProvisioningException extends android.util.AndroidException {
-    ctor public ProvisioningException(@NonNull Exception, int);
-    method public int getProvisioningResult();
   }
 
   public static final class SecurityLog.SecurityEvent implements android.os.Parcelable {
@@ -757,6 +703,7 @@ package android.content {
     field public static final String FONT_SERVICE = "font";
     field public static final String POWER_EXEMPTION_SERVICE = "power_exemption";
     field @Deprecated public static final String POWER_WHITELIST_MANAGER = "power_whitelist";
+    field @Deprecated public static final int RECEIVER_EXPORTED_UNAUDITED = 2; // 0x2
     field public static final String TEST_NETWORK_SERVICE = "test_network";
   }
 
@@ -1486,6 +1433,9 @@ package android.media {
     field public static final int DEVICE_ROLE_DISABLED = 2; // 0x2
     field public static final int DEVICE_ROLE_NONE = 0; // 0x0
     field public static final int DEVICE_ROLE_PREFERRED = 1; // 0x1
+    field public static final int DIRECT_BITSTREAM_SUPPORTED = 4; // 0x4
+    field public static final int DIRECT_OFFLOAD_GAPLESS_SUPPORTED = 3; // 0x3
+    field public static final int DIRECT_OFFLOAD_SUPPORTED = 1; // 0x1
     field public static final int OFFLOAD_GAPLESS_SUPPORTED = 2; // 0x2
     field public static final int OFFLOAD_SUPPORTED = 1; // 0x1
     field public static final int STREAM_DEFAULT = -1; // 0xffffffff
@@ -1727,6 +1677,10 @@ package android.os {
   public final class MessageQueue {
     method public int postSyncBarrier();
     method public void removeSyncBarrier(int);
+  }
+
+  public final class NewUserResponse {
+    ctor public NewUserResponse(@Nullable android.os.UserHandle, int);
   }
 
   public final class PackageTagsList implements android.os.Parcelable {
@@ -1972,6 +1926,7 @@ package android.os.storage {
   }
 
   public class StorageManager {
+    method public long computeStorageCacheBytes(@NonNull java.io.File);
     method @NonNull public static java.util.UUID convert(@NonNull String);
     method @NonNull public static String convert(@NonNull java.util.UUID);
     method public boolean isAppIoBlocked(@NonNull java.util.UUID, int, int, int);
@@ -2136,6 +2091,7 @@ package android.provider {
     field public static final String NAMESPACE_CONSTRAIN_DISPLAY_APIS = "constrain_display_apis";
     field public static final String NAMESPACE_DEVICE_IDLE = "device_idle";
     field public static final String NAMESPACE_JOB_SCHEDULER = "jobscheduler";
+    field public static final String NAMESPACE_SELECTION_TOOLBAR = "selection_toolbar";
   }
 
   public final class Settings {
@@ -2210,8 +2166,8 @@ package android.security {
   }
 
   public class KeyStoreException extends java.lang.Exception {
-    ctor public KeyStoreException(int, String);
     method public int getErrorCode();
+    method public static boolean hasFailureInfoForError(int);
   }
 
 }
@@ -2886,7 +2842,6 @@ package android.view.accessibility {
     method public void addChild(@NonNull android.os.IBinder);
     method public long getSourceNodeId();
     method public void setLeashedParent(@Nullable android.os.IBinder, int);
-    method public static void setNumInstancesInUseCounter(java.util.concurrent.atomic.AtomicInteger);
     method public void writeToParcelNoRecycle(android.os.Parcel, int);
   }
 
@@ -2926,6 +2881,7 @@ package android.view.autofill {
   }
 
   public final class AutofillManager {
+    field public static final String DEVICE_CONFIG_AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES = "compat_mode_allowed_packages";
     field public static final String DEVICE_CONFIG_AUTOFILL_SMART_SUGGESTION_SUPPORTED_MODES = "smart_suggestion_supported_modes";
     field public static final int FLAG_SMART_SUGGESTION_OFF = 0; // 0x0
     field public static final int FLAG_SMART_SUGGESTION_SYSTEM = 1; // 0x1

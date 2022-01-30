@@ -32,6 +32,7 @@ import android.hardware.input.VirtualTouchEvent;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.SparseArray;
 import android.window.DisplayWindowPolicyController;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -50,11 +51,18 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     private final Context mContext;
     private final AssociationInfo mAssociationInfo;
     private final int mOwnerUid;
-    private final GenericWindowPolicyController mGenericWindowPolicyController;
     private final InputController mInputController;
     @VisibleForTesting
     final List<Integer> mVirtualDisplayIds = new ArrayList<>();
     private final OnDeviceCloseListener mListener;
+    private final IBinder mAppToken;
+
+    /**
+     * A mapping from the virtual display ID to its corresponding
+     * {@link GenericWindowPolicyController}.
+     */
+    private final SparseArray<GenericWindowPolicyController> mWindowPolicyControllers =
+            new SparseArray<>();
 
     VirtualDeviceImpl(Context context, AssociationInfo associationInfo,
             IBinder token, int ownerUid, OnDeviceCloseListener listener) {
@@ -66,9 +74,8 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
             int ownerUid, InputController inputController, OnDeviceCloseListener listener) {
         mContext = context;
         mAssociationInfo = associationInfo;
-        mGenericWindowPolicyController = new GenericWindowPolicyController(FLAG_SECURE,
-                SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
         mOwnerUid = ownerUid;
+        mAppToken = token;
         if (inputController == null) {
             mInputController = new InputController(mVirtualDeviceLock);
         } else {
@@ -90,6 +97,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     @Override // Binder call
     public void close() {
         mListener.onClose(mAssociationInfo.getId());
+        mAppToken.unlinkToDeath(this, 0);
         mInputController.close();
     }
 
@@ -257,7 +265,11 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                     "Virtual device already have a virtual display with ID " + displayId);
         }
         mVirtualDisplayIds.add(displayId);
-        return mGenericWindowPolicyController;
+        final GenericWindowPolicyController dwpc =
+                new GenericWindowPolicyController(FLAG_SECURE,
+                        SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
+        mWindowPolicyControllers.put(displayId, dwpc);
+        return dwpc;
     }
 
     void onVirtualDisplayRemovedLocked(int displayId) {
@@ -266,10 +278,25 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                     "Virtual device doesn't have a virtual display with ID " + displayId);
         }
         mVirtualDisplayIds.remove(displayId);
+        mWindowPolicyControllers.remove(displayId);
     }
 
     int getOwnerUid() {
         return mOwnerUid;
+    }
+
+    /**
+     * Returns true if an app with the given {@code uid} is currently running on this virtual
+     * device.
+     */
+    boolean isAppRunningOnVirtualDevice(int uid) {
+        final int size = mWindowPolicyControllers.size();
+        for (int i = 0; i < size; i++) {
+            if (mWindowPolicyControllers.valueAt(i).containsUid(uid)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     interface OnDeviceCloseListener {

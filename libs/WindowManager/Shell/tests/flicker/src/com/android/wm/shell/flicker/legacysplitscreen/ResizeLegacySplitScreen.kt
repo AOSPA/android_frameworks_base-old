@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.legacysplitscreen
 
-import android.graphics.Region
 import android.util.Rational
 import android.view.Surface
 import androidx.test.filters.FlakyTest
@@ -41,6 +40,7 @@ import com.android.server.wm.flicker.navBarWindowIsVisible
 import com.android.server.wm.flicker.statusBarLayerIsVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsVisible
+import com.android.server.wm.traces.common.region.Region
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.wm.shell.flicker.DOCKED_STACK_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.helpers.SimpleAppHelper
@@ -135,6 +135,7 @@ class ResizeLegacySplitScreen(
     @Test
     fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
+    @FlakyTest(bugId = 206753786)
     @Test
     fun statusBarLayerRotatesScales() {
         // This test doesn't work in shell transitions because of b/206753786

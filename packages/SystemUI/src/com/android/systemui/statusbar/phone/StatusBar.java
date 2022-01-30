@@ -70,6 +70,7 @@ import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.PointF;
+import android.hardware.devicestate.DeviceStateManager;
 import android.metrics.LogMaker;
 import android.net.Uri;
 import android.os.Bundle;
@@ -116,6 +117,7 @@ import androidx.lifecycle.LifecycleRegistry;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.colorextraction.ColorExtractor;
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
@@ -232,6 +234,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.statusbar.window.StatusBarWindowController;
+import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.util.DumpUtilsKt;
 import com.android.systemui.util.WallpaperController;
 import com.android.systemui.util.concurrency.DelayableExecutor;
@@ -337,15 +340,9 @@ public class StatusBar extends CoreStartable implements
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
     private StatusBarCommandQueueCallbacks mCommandQueueCallbacks;
 
-    void setWindowState(int state) {
-        mStatusBarWindowState =  state;
-        mStatusBarWindowHidden = state == WINDOW_STATE_HIDDEN;
-        mStatusBarHideIconsForBouncerManager.setStatusBarWindowHidden(mStatusBarWindowHidden);
-        if (mStatusBarView != null) {
-            // Should #updateHideIconsForBouncer always be called, regardless of whether we have a
-            //   status bar view? If so, we can make #updateHideIconsForBouncer private.
-            mStatusBarHideIconsForBouncerManager.updateHideIconsForBouncer(/* animate= */ false);
-        }
+    void onStatusBarWindowStateChanged(@WindowVisibleState int state) {
+        updateBubblesVisibility();
+        mStatusBarWindowState = state;
     }
 
     void acquireGestureWakeLock(long time) {
@@ -434,6 +431,10 @@ public class StatusBar extends CoreStartable implements
         mCommandQueueCallbacks.animateCollapsePanels(flags, force);
     }
 
+    /** */
+    public void togglePanel() {
+        mCommandQueueCallbacks.togglePanel();
+    }
     /**
      * The {@link StatusBarState} of the status bar.
      */
@@ -458,8 +459,9 @@ public class StatusBar extends CoreStartable implements
     protected NotificationShadeWindowView mNotificationShadeWindowView;
     protected PhoneStatusBarView mStatusBarView;
     private PhoneStatusBarViewController mPhoneStatusBarViewController;
+    private PhoneStatusBarTransitions mStatusBarTransitions;
     private AuthRippleController mAuthRippleController;
-    private int mStatusBarWindowState = WINDOW_STATE_SHOWING;
+    @WindowVisibleState private int mStatusBarWindowState = WINDOW_STATE_SHOWING;
     protected NotificationShadeWindowController mNotificationShadeWindowController;
     private final StatusBarWindowController mStatusBarWindowController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
@@ -672,6 +674,8 @@ public class StatusBar extends CoreStartable implements
     private final ColorExtractor.OnColorsChangedListener mOnColorsChangedListener =
             (extractor, which) -> updateTheme();
 
+    private final InteractionJankMonitor mJankMonitor;
+
 
     /**
      * Public constructor for StatusBar.
@@ -687,6 +691,7 @@ public class StatusBar extends CoreStartable implements
             LightBarController lightBarController,
             AutoHideController autoHideController,
             StatusBarWindowController statusBarWindowController,
+            StatusBarWindowStateController statusBarWindowStateController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
             StatusBarSignalPolicy statusBarSignalPolicy,
             PulseExpansionHandler pulseExpansionHandler,
@@ -774,7 +779,9 @@ public class StatusBar extends CoreStartable implements
             WallpaperManager wallpaperManager,
             Optional<StartingSurface> startingSurfaceOptional,
             ActivityLaunchAnimator activityLaunchAnimator,
-            NotifPipelineFlags notifPipelineFlags) {
+            NotifPipelineFlags notifPipelineFlags,
+            InteractionJankMonitor jankMonitor,
+            DeviceStateManager deviceStateManager) {
         super(context);
         mNotificationsController = notificationsController;
         mFragmentService = fragmentService;
@@ -862,11 +869,13 @@ public class StatusBar extends CoreStartable implements
         mMainExecutor = delayableExecutor;
         mMessageRouter = messageRouter;
         mWallpaperManager = wallpaperManager;
+        mJankMonitor = jankMonitor;
 
         mLockscreenShadeTransitionController = lockscreenShadeTransitionController;
         mStartingSurfaceOptional = startingSurfaceOptional;
         mNotifPipelineFlags = notifPipelineFlags;
         lockscreenShadeTransitionController.setStatusbar(this);
+        statusBarWindowStateController.addListener(this::onStatusBarWindowStateChanged);
 
         mScreenOffAnimationController = screenOffAnimationController;
 
@@ -895,6 +904,9 @@ public class StatusBar extends CoreStartable implements
                 data -> mCommandQueueCallbacks.animateExpandSettingsPanel(data.mSubpanel));
         mMessageRouter.subscribeTo(MSG_LAUNCH_TRANSITION_TIMEOUT,
                 id -> onLaunchTransitionTimeout());
+
+        deviceStateManager.registerCallback(mMainExecutor,
+                new FoldStateListener(mContext, this::onFoldedStateChanged));
     }
 
     @Override
@@ -1093,6 +1105,27 @@ public class StatusBar extends CoreStartable implements
                                 requestTopUi, componentTag))));
     }
 
+    private void onFoldedStateChanged(boolean isFolded, boolean willGoToSleep) {
+        // Folded state changes are followed by a screen off event.
+        // By default turning off the screen also closes the shade.
+        // We want to make sure that the shade status is kept after
+        // folding/unfolding.
+        boolean isShadeOpen = mShadeController.isShadeOpen();
+        boolean leaveOpen = isShadeOpen && !willGoToSleep;
+        if (DEBUG) {
+            Log.d(TAG, String.format(
+                    "#onFoldedStateChanged(): "
+                            + "isFolded=%s, "
+                            + "willGoToSleep=%s, "
+                            + "isShadeOpen=%s, "
+                            + "leaveOpen=%s",
+                    isFolded, willGoToSleep, isShadeOpen, leaveOpen));
+        }
+        if (leaveOpen) {
+            mStatusBarStateController.setLeaveOpenOnKeyguardHide(true);
+        }
+    }
+
     // ================================================================================
     // Constructing the view
     // ================================================================================
@@ -1124,10 +1157,12 @@ public class StatusBar extends CoreStartable implements
         // Set up CollapsedStatusBarFragment and PhoneStatusBarView
         StatusBarInitializer initializer = mStatusBarComponent.getStatusBarInitializer();
         initializer.setStatusBarViewUpdatedListener(
-                (statusBarView, statusBarViewController) -> {
+                (statusBarView, statusBarViewController, statusBarTransitions) -> {
                     mStatusBarView = statusBarView;
                     mPhoneStatusBarViewController = statusBarViewController;
-                    mNotificationShadeWindowViewController.setStatusBarView(mStatusBarView);
+                    mStatusBarTransitions = statusBarTransitions;
+                    mNotificationShadeWindowViewController
+                            .setStatusBarViewController(mPhoneStatusBarViewController);
                     // Ensure we re-propagate panel expansion values to the panel controller and
                     // any listeners it may have, such as PanelBar. This will also ensure we
                     // re-display the notification panel if necessary (for example, if
@@ -1381,7 +1416,8 @@ public class StatusBar extends CoreStartable implements
         mNotificationAnimationProvider = new NotificationLaunchAnimatorControllerProvider(
                 mNotificationShadeWindowViewController,
                 mStackScrollerController.getNotificationListContainer(),
-                mHeadsUpManager
+                mHeadsUpManager,
+                mJankMonitor
         );
 
         // TODO: inject this.
@@ -2099,10 +2135,6 @@ public class StatusBar extends CoreStartable implements
         }
     }
 
-    boolean isSameStatusBarState(int state) {
-        return mStatusBarWindowState == state;
-    }
-
     public GestureRecorder getGestureRecorder() {
         return mGestureRec;
     }
@@ -2185,14 +2217,10 @@ public class StatusBar extends CoreStartable implements
                 }, false, sUiEventLogger).show(animationDelay);
     }
 
-    protected BarTransitions getStatusBarTransitions() {
-        return mNotificationShadeWindowViewController.getBarTransitions();
-    }
-
     public void checkBarModes() {
         if (mDemoModeController.isInDemoMode()) return;
-        if (mNotificationShadeWindowViewController != null && getStatusBarTransitions() != null) {
-            checkBarMode(mStatusBarMode, mStatusBarWindowState, getStatusBarTransitions());
+        if (mStatusBarTransitions != null) {
+            checkBarMode(mStatusBarMode, mStatusBarWindowState, mStatusBarTransitions);
         }
         mNavigationBarController.checkNavBarModes(mDisplayId);
         mNoAnimationOnNextBarModeChange = false;
@@ -2219,9 +2247,8 @@ public class StatusBar extends CoreStartable implements
     }
 
     private void finishBarAnimations() {
-        if (mNotificationShadeWindowController != null
-                && mNotificationShadeWindowViewController.getBarTransitions() != null) {
-            mNotificationShadeWindowViewController.getBarTransitions().finishAnimations();
+        if (mStatusBarTransitions != null) {
+            mStatusBarTransitions.finishAnimations();
         }
         mNavigationBarController.finishBarAnimations(mDisplayId);
     }
@@ -2275,8 +2302,7 @@ public class StatusBar extends CoreStartable implements
         pw.println("  ShadeWindowView: ");
         if (mNotificationShadeWindowViewController != null) {
             mNotificationShadeWindowViewController.dump(fd, pw, args);
-            dumpBarTransitions(pw, "PhoneStatusBarTransitions",
-                    mNotificationShadeWindowViewController.getBarTransitions());
+            dumpBarTransitions(pw, "PhoneStatusBarTransitions", mStatusBarTransitions);
         }
 
         pw.println("  mMediaManager: ");
@@ -3162,7 +3188,7 @@ public class StatusBar extends CoreStartable implements
         boolean wakeAndUnlock = mBiometricUnlockController.getMode()
                 == BiometricUnlockController.MODE_WAKE_AND_UNLOCK;
         boolean animate = (!mDozing && mDozeServiceHost.shouldAnimateWakeup() && !wakeAndUnlock)
-                || (mDozing && mDozeServiceHost.shouldAnimateScreenOff()
+                || (mDozing && mDozeParameters.shouldControlScreenOff()
                 && visibleNotOccludedOrWillBe);
 
         mNotificationPanelViewController.setDozing(mDozing, animate, mWakeUpTouchLocation);
@@ -3586,7 +3612,7 @@ public class StatusBar extends CoreStartable implements
 
     final ScreenLifecycle.Observer mScreenObserver = new ScreenLifecycle.Observer() {
         @Override
-        public void onScreenTurningOn() {
+        public void onScreenTurningOn(Runnable onDrawn) {
             mFalsingCollector.onScreenTurningOn();
             mNotificationPanelViewController.onScreenTurningOn();
         }

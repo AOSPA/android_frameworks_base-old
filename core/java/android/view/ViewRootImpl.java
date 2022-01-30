@@ -16,6 +16,8 @@
 
 package android.view;
 
+import static android.graphics.HardwareRenderer.SYNC_CONTEXT_IS_STOPPED;
+import static android.graphics.HardwareRenderer.SYNC_LOST_SURFACE_REWARD_IF_FOUND;
 import static android.os.IInputConstants.INVALID_INPUT_EVENT_ID;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
@@ -93,6 +95,7 @@ import android.annotation.Nullable;
 import android.annotation.UiContext;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
+import android.app.ICompatCameraControlCallback;
 import android.app.ResourcesManager;
 import android.app.WindowConfiguration;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -318,7 +321,7 @@ public final class ViewRootImpl implements ViewParent,
     private static final ArrayList<ConfigChangedCallback> sConfigCallbacks = new ArrayList<>();
 
     /**
-     * Callback for notifying activities about override configuration changes.
+     * Callback for notifying activities.
      */
     public interface ActivityConfigCallback {
 
@@ -328,11 +331,23 @@ public final class ViewRootImpl implements ViewParent,
          * @param newDisplayId New display id, {@link Display#INVALID_DISPLAY} if not changed.
          */
         void onConfigurationChanged(Configuration overrideConfig, int newDisplayId);
+
+        /**
+         * Notify the corresponding activity about the request to show or hide a camera compat
+         * control for stretched issues in the viewfinder.
+         *
+         * @param showControl Whether the control should be shown or hidden.
+         * @param transformationApplied Whether the treatment is already applied.
+         * @param callback The callback executed when the user clicks on a control.
+         */
+        void requestCompatCameraControl(boolean showControl, boolean transformationApplied,
+                ICompatCameraControlCallback callback);
     }
 
     /**
-     * Callback used to notify corresponding activity about override configuration change and make
-     * sure that all resources are set correctly before updating the ViewRootImpl's internal state.
+     * Callback used to notify corresponding activity about camera compat control changes, override
+     * configuration change and make sure that all resources are set correctly before updating the
+     * ViewRootImpl's internal state.
      */
     private ActivityConfigCallback mActivityConfigCallback;
 
@@ -478,6 +493,9 @@ public final class ViewRootImpl implements ViewParent,
     final Choreographer mChoreographer;
     protected final ViewFrameInfo mViewFrameInfo = new ViewFrameInfo();
     private final InputEventAssigner mInputEventAssigner = new InputEventAssigner();
+
+    // Whether to draw this surface as DISPLAY_DECORATION.
+    boolean mDisplayDecorationCached = false;
 
     /**
      * Update the Choreographer's FrameInfo object with the timing information for the current
@@ -735,6 +753,17 @@ public final class ViewRootImpl implements ViewParent,
         int localChanges;
     }
 
+    private final HandwritingInitiator mHandwritingInitiator;
+
+    /**
+     * Used by InputMethodManager.
+     * @hide
+     */
+    @NonNull
+    public HandwritingInitiator getHandwritingInitiator() {
+        return mHandwritingInitiator;
+    }
+
     /**
      * This is only used on the RenderThread when handling a blast sync. Specifically, it's only
      * used when calling {@link BLASTBufferQueue#setSyncTransaction(Transaction)} and then merged
@@ -810,6 +839,8 @@ public final class ViewRootImpl implements ViewParent,
                 ? Choreographer.getSfInstance() : Choreographer.getInstance();
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
         mInsetsController = new InsetsController(new ViewRootInsetsControllerHost(this));
+        mHandwritingInitiator = new HandwritingInitiator(mViewConfiguration,
+                mContext.getSystemService(InputMethodManager.class));
 
         String processorOverrideName = context.getResources().getString(
                                     R.string.config_inputEventCompatProcessorOverrideClassName);
@@ -867,7 +898,10 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    /** Add activity config callback to be notified about override config changes. */
+    /**
+     * Add activity config callback to be notified about override config changes and camera
+     * compat control state updates.
+     */
     public void setActivityConfigCallback(ActivityConfigCallback callback) {
         mActivityConfigCallback = callback;
     }
@@ -1127,7 +1161,7 @@ public final class ViewRootImpl implements ViewParent,
                 final Rect displayCutoutSafe = mTempRect;
                 state.getDisplayCutoutSafe(displayCutoutSafe);
                 final WindowConfiguration winConfig = getConfiguration().windowConfiguration;
-                mWindowLayout.computeWindowFrames(mWindowAttributes, state,
+                mWindowLayout.computeFrames(mWindowAttributes, state,
                         displayCutoutSafe, winConfig.getBounds(), winConfig.getWindowingMode(),
                         UNSPECIFIED_LENGTH, UNSPECIFIED_LENGTH,
                         mInsetsController.getRequestedVisibilities(),
@@ -1378,11 +1412,20 @@ public final class ViewRootImpl implements ViewParent,
      */
     public void registerRtFrameCallback(@NonNull FrameDrawingCallback callback) {
         if (mAttachInfo.mThreadedRenderer != null) {
-            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(frame -> {
-                try {
-                    callback.onFrameDraw(frame);
-                } catch (Exception e) {
-                    Log.e(TAG, "Exception while executing onFrameDraw", e);
+            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(new FrameDrawingCallback() {
+                @Override
+                public void onFrameDraw(long frame) {
+                }
+
+                @Override
+                public HardwareRenderer.FrameCommitCallback onFrameDraw(int syncResult,
+                        long frame) {
+                    try {
+                        return callback.onFrameDraw(syncResult, frame);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Exception while executing onFrameDraw", e);
+                    }
+                    return null;
                 }
             });
         }
@@ -1945,27 +1988,30 @@ public final class ViewRootImpl implements ViewParent,
        return mBoundsLayer;
     }
 
-    Surface getOrCreateBLASTSurface() {
+    void updateBlastSurfaceIfNeeded() {
         if (!mSurfaceControl.isValid()) {
-            return null;
+            return;
         }
 
-        Surface ret = null;
-        if (mBlastBufferQueue == null) {
-            mBlastBufferQueue = new BLASTBufferQueue(mTag, mSurfaceControl,
-                mSurfaceSize.x, mSurfaceSize.y,
-                mWindowAttributes.format);
-            // We only return the Surface the first time, as otherwise
-            // it hasn't changed and there is no need to update.
-            ret = mBlastBufferQueue.createSurface();
-        } else {
+        if (mBlastBufferQueue != null && mBlastBufferQueue.isSameSurfaceControl(mSurfaceControl)) {
             mBlastBufferQueue.update(mSurfaceControl,
                 mSurfaceSize.x, mSurfaceSize.y,
                 mWindowAttributes.format);
+            return;
         }
         ScrollOptimizer.setBLASTBufferQueue(mBlastBufferQueue);
 
-        return ret;
+        // If the SurfaceControl has been updated, destroy and recreate the BBQ to reset the BQ and
+        // BBQ states.
+        if (mBlastBufferQueue != null) {
+            mBlastBufferQueue.destroy();
+        }
+        mBlastBufferQueue = new BLASTBufferQueue(mTag, mSurfaceControl,
+                mSurfaceSize.x, mSurfaceSize.y, mWindowAttributes.format);
+        Surface blastSurface = mBlastBufferQueue.createSurface();
+        // Only call transferFrom if the surface has changed to prevent inc the generation ID and
+        // causing EGL resources to be recreated.
+        mSurface.transferFrom(blastSurface);
     }
 
     private void setBoundsLayerCrop(Transaction t) {
@@ -2829,6 +2875,12 @@ public final class ViewRootImpl implements ViewParent,
                 if (mSurfaceControl.isValid()) {
                     updateOpacity(mWindowAttributes, dragResizing,
                             surfaceControlChanged /*forceUpdate */);
+                    // No need to updateDisplayDecoration if it's a new SurfaceControl and
+                    // mDisplayDecorationCached is false, since that's the default for a new
+                    // SurfaceControl.
+                    if (surfaceControlChanged && mDisplayDecorationCached) {
+                        updateDisplayDecoration();
+                    }
                 }
 
                 if (DEBUG_LAYOUT) Log.v(mTag, "relayout: frame=" + frame.toShortString()
@@ -4007,61 +4059,6 @@ public final class ViewRootImpl implements ViewParent,
         return mAttachInfo.mThreadedRenderer != null && mAttachInfo.mThreadedRenderer.isEnabled();
     }
 
-    private boolean addFrameCompleteCallbackIfNeeded(boolean useBlastSync,
-            boolean reportNextDraw) {
-        if (!isHardwareEnabled()) {
-            return false;
-        }
-
-        if (!useBlastSync && !reportNextDraw) {
-            return false;
-        }
-
-        if (DEBUG_BLAST) {
-            Log.d(mTag, "Creating frameCompleteCallback");
-        }
-
-        final Consumer<SurfaceControl.Transaction> blastSyncConsumer = mBLASTDrawConsumer;
-        mBLASTDrawConsumer = null;
-
-        mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(() -> {
-            long frameNr = mBlastBufferQueue.getLastAcquiredFrameNum();
-            if (DEBUG_BLAST) {
-                Log.d(mTag, "Received frameCompleteCallback "
-                        + " lastAcquiredFrameNum=" + frameNr
-                        + " lastAttemptedDrawFrameNum=" + mRtLastAttemptedDrawFrameNum);
-            }
-
-            boolean frameWasNotDrawn = frameNr != mRtLastAttemptedDrawFrameNum;
-            // If frame wasn't drawn, clear out the next transaction so it doesn't affect the next
-            // draw attempt. The next transaction and transaction complete callback were only set
-            // for the current draw attempt.
-            if (frameWasNotDrawn) {
-                mBlastBufferQueue.setSyncTransaction(null);
-                // Apply the transactions that were sent to mergeWithNextTransaction since the
-                // frame didn't draw on this vsync. It's possible the frame will draw later, but
-                // it's better to not be sync than to block on a frame that may never come.
-                mBlastBufferQueue.applyPendingTransactions(mRtLastAttemptedDrawFrameNum);
-            }
-
-            Transaction tmpTransaction = new Transaction();
-            tmpTransaction.merge(mRtBLASTSyncTransaction);
-            mHandler.postAtFrontOfQueue(() -> {
-                if (useBlastSync) {
-                    mSurfaceChangedTransaction.merge(tmpTransaction);
-                    if (blastSyncConsumer != null) {
-                        blastSyncConsumer.accept(mSurfaceChangedTransaction);
-                    }
-                }
-
-                if (reportNextDraw) {
-                    pendingDrawFinished();
-                }
-            });
-        });
-        return true;
-    }
-
     private void addFrameCommitCallbackIfNeeded() {
         if (!isHardwareEnabled()) {
             return;
@@ -4092,51 +4089,131 @@ public final class ViewRootImpl implements ViewParent,
         });
     }
 
-    private void addFrameCallbackIfNeeded(boolean useBlastSync) {
+    private HardwareRenderer.FrameCommitCallback createFrameCommitCallbackForSync(
+            boolean useBlastSync, boolean reportNextDraw, Consumer<Transaction> blastSyncConsumer) {
+        return didProduceBuffer -> {
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Received frameCommittedCallback "
+                        + " lastAttemptedDrawFrameNum=" + mRtLastAttemptedDrawFrameNum
+                        + " didProduceBuffer=" + didProduceBuffer);
+            }
+
+            // If frame wasn't drawn, clear out the next transaction so it doesn't affect the next
+            // draw attempt. The next transaction and transaction complete callback were only set
+            // for the current draw attempt.
+            if (!didProduceBuffer) {
+                mBlastBufferQueue.setSyncTransaction(null);
+                // Apply the transactions that were sent to mergeWithNextTransaction since the
+                // frame didn't draw on this vsync. It's possible the frame will draw later, but
+                // it's better to not be sync than to block on a frame that may never come.
+                mBlastBufferQueue.applyPendingTransactions(mRtLastAttemptedDrawFrameNum);
+            }
+
+            Transaction tmpTransaction = new Transaction();
+            tmpTransaction.merge(mRtBLASTSyncTransaction);
+            // Post at front of queue so the buffer can be processed immediately and allow RT
+            // to continue processing new buffers. If RT tries to process buffers before the sync
+            // buffer is applied, the new buffers will not get acquired and could result in a
+            // deadlock. UI thread would wait on RT, but RT would be blocked waiting for a free
+            // buffer.
+            mHandler.postAtFrontOfQueue(() -> {
+                if (useBlastSync) {
+                    mSurfaceChangedTransaction.merge(tmpTransaction);
+                    if (blastSyncConsumer != null) {
+                        blastSyncConsumer.accept(mSurfaceChangedTransaction);
+                    }
+                }
+
+                if (reportNextDraw) {
+                    pendingDrawFinished();
+                }
+            });
+        };
+    }
+
+    @Nullable
+    private FrameDrawingCallback createFrameDrawingCallbackIfNeeded(boolean useBlastSync,
+            boolean reportNextDraw) {
+        if (!isHardwareEnabled()) {
+            return null;
+        }
         final boolean hasBlurUpdates = mBlurRegionAggregator.hasUpdates();
         final boolean needsCallbackForBlur = hasBlurUpdates || mBlurRegionAggregator.hasRegions();
 
-        if (!useBlastSync && !needsCallbackForBlur) {
-            return;
+        if (!useBlastSync && !needsCallbackForBlur && !reportNextDraw) {
+            return null;
         }
+
+        final Consumer<SurfaceControl.Transaction> blastSyncConsumer = mBLASTDrawConsumer;
+        mBLASTDrawConsumer = null;
 
         if (DEBUG_BLAST) {
             Log.d(mTag, "Creating frameDrawingCallback"
                     + " nextDrawUseBlastSync=" + useBlastSync
-                    + " hasBlurUpdates=" + hasBlurUpdates);
+                    + " reportNextDraw=" + reportNextDraw
+                    + " hasBlurUpdates=" + hasBlurUpdates
+                    + " hasBlastSyncConsumer=" + (blastSyncConsumer != null));
         }
+
         final BackgroundBlurDrawable.BlurRegion[] blurRegionsForFrame =
                 needsCallbackForBlur ?  mBlurRegionAggregator.getBlurRegionsCopyForRT() : null;
 
         // The callback will run on the render thread.
-        HardwareRenderer.FrameDrawingCallback frameDrawingCallback = frame -> {
-            if (DEBUG_BLAST) {
-                Log.d(mTag, "Received frameDrawingCallback frameNum=" + frame + "."
-                        + " Creating transactionCompleteCallback=" + useBlastSync);
+        return new FrameDrawingCallback() {
+            @Override
+            public void onFrameDraw(long frame) {
             }
 
-            mRtLastAttemptedDrawFrameNum = frame;
+            @Override
+            public HardwareRenderer.FrameCommitCallback onFrameDraw(int syncResult, long frame) {
+                if (DEBUG_BLAST) {
+                    Log.d(mTag,
+                            "Received frameDrawingCallback syncResult=" + syncResult + " frameNum="
+                                    + frame + ".");
+                }
 
-            if (needsCallbackForBlur) {
-                mBlurRegionAggregator
-                    .dispatchBlurTransactionIfNeeded(frame, blurRegionsForFrame, hasBlurUpdates);
-            }
+                mRtLastAttemptedDrawFrameNum = frame;
 
-            if (mBlastBufferQueue == null) {
-                return;
-            }
+                if (needsCallbackForBlur) {
+                    mBlurRegionAggregator.dispatchBlurTransactionIfNeeded(frame,
+                            blurRegionsForFrame, hasBlurUpdates);
+                }
 
-            if (useBlastSync) {
-                // Frame callbacks will always occur after submitting draw requests and before
-                // the draw actually occurs. This will ensure that we set the next transaction
-                // for the frame that's about to get drawn and not on a previous frame that.
+                if (mBlastBufferQueue == null) {
+                    return null;
+                }
 
-                // We don't need to synchronize mRtBLASTSyncTransaction here since it's not
-                // being modified and only sent to BlastBufferQueue.
-                mBlastBufferQueue.setSyncTransaction(mRtBLASTSyncTransaction);
+                if (!useBlastSync && !reportNextDraw) {
+                    return null;
+                }
+
+                // If the syncResults are SYNC_LOST_SURFACE_REWARD_IF_FOUND or
+                // SYNC_CONTEXT_IS_STOPPED it means nothing will draw. There's no need to set up
+                // any blast sync or commit callback, and the code should directly call
+                // pendingDrawFinished.
+                if ((syncResult
+                        & (SYNC_LOST_SURFACE_REWARD_IF_FOUND | SYNC_CONTEXT_IS_STOPPED)) != 0) {
+                    if (reportNextDraw) {
+                        mHandler.postAtFrontOfQueue(() -> pendingDrawFinished());
+                    }
+                    return null;
+                }
+
+                if (DEBUG_BLAST) {
+                    Log.d(mTag, "Setting up sync and frameCommitCallback");
+                }
+
+                if (useBlastSync) {
+                    // Frame callbacks will always occur after submitting draw requests and before
+                    // the draw actually occurs. This will ensure that we set the next transaction
+                    // for the frame that's about to get drawn and not on a previous frame.
+                    mBlastBufferQueue.setSyncTransaction(mRtBLASTSyncTransaction);
+                }
+
+                return createFrameCommitCallbackForSync(useBlastSync, reportNextDraw,
+                        blastSyncConsumer);
             }
         };
-        registerRtFrameCallback(frameDrawingCallback);
     }
 
     private void performDraw(boolean useBlastSync) {
@@ -4152,15 +4229,20 @@ public final class ViewRootImpl implements ViewParent,
         mIsDrawing = true;
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "draw");
 
-        addFrameCallbackIfNeeded(useBlastSync);
+        FrameDrawingCallback frameDrawingCallback = createFrameDrawingCallbackIfNeeded(useBlastSync,
+                mReportNextDraw);
+        if (frameDrawingCallback != null) {
+            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(frameDrawingCallback);
+        }
         addFrameCommitCallbackIfNeeded();
-        boolean usingAsyncReport = addFrameCompleteCallbackIfNeeded(useBlastSync, mReportNextDraw);
+        boolean usingAsyncReport = isHardwareEnabled() && (useBlastSync || mReportNextDraw);
 
         try {
             boolean canUseAsync = draw(fullRedrawNeeded);
             if (usingAsyncReport && !canUseAsync) {
-                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback(null);
+                mAttachInfo.mThreadedRenderer.setFrameCallback(null);
                 usingAsyncReport = false;
+                mAttachInfo.mThreadedRenderer.unregisterRtFrameCallback(frameDrawingCallback);
             }
         } finally {
             mIsDrawing = false;
@@ -6352,6 +6434,7 @@ public final class ViewRootImpl implements ViewParent,
 
         private int processPointerEvent(QueuedInputEvent q) {
             final MotionEvent event = (MotionEvent)q.mEvent;
+            mHandwritingInitiator.onTouchEvent(event);
 
             mAttachInfo.mUnbufferedDispatchRequested = false;
             mAttachInfo.mHandlingPointerEvent = true;
@@ -7536,7 +7619,7 @@ public final class ViewRootImpl implements ViewParent,
         // When a new focused view is selected, we consume the navigation key because
         // navigation doesn't make much sense unless a view already has focus so
         // the key's purpose is to set focus.
-        if (isNavigationKey(event)) {
+        if (event.hasNoModifiers() && isNavigationKey(event)) {
             return ensureTouchMode(false);
         }
 
@@ -7836,13 +7919,7 @@ public final class ViewRootImpl implements ViewParent,
             if (!useBLAST()) {
                 mSurface.copyFrom(mSurfaceControl);
             } else {
-                final Surface blastSurface = getOrCreateBLASTSurface();
-                // If blastSurface == null that means it hasn't changed since the last time we
-                // called. In this situation, avoid calling transferFrom as we would then
-                // inc the generation ID and cause EGL resources to be recreated.
-                if (blastSurface != null) {
-                    mSurface.transferFrom(blastSurface);
-                }
+                updateBlastSurfaceIfNeeded();
             }
             if (mAttachInfo.mThreadedRenderer != null) {
                 mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
@@ -10393,6 +10470,23 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
+     * @hide
+     */
+    public void setDisplayDecoration(boolean displayDecoration) {
+        if (displayDecoration == mDisplayDecorationCached) return;
+
+        mDisplayDecorationCached = displayDecoration;
+
+        if (mSurfaceControl.isValid()) {
+            updateDisplayDecoration();
+        }
+    }
+
+    private void updateDisplayDecoration() {
+        mTransaction.setDisplayDecoration(mSurfaceControl, mDisplayDecorationCached).apply();
+    }
+
+    /**
      * Sends a list of blur regions to SurfaceFlinger, tagged with a frame.
      *
      * @param regionCopy List of regions
@@ -10505,6 +10599,20 @@ public final class ViewRootImpl implements ViewParent,
             OnBufferTransformHintChangedListener listener = listeners.get(i);
             listener.onBufferTransformHintChanged(hint);
         }
+    }
+
+    /**
+     * Shows or hides a Camera app compat toggle for stretched issues with the requested state
+     * for the corresponding activity.
+     *
+     * @param showControl Whether the control should be shown or hidden.
+     * @param transformationApplied Whether the treatment is already applied.
+     * @param callback The callback executed when the user clicks on a control.
+    */
+    public void requestCompatCameraControl(boolean showControl, boolean transformationApplied,
+                ICompatCameraControlCallback callback) {
+        mActivityConfigCallback.requestCompatCameraControl(
+                showControl, transformationApplied, callback);
     }
 
     /**

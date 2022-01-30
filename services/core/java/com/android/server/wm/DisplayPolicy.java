@@ -1593,7 +1593,7 @@ public class DisplayPolicy {
         final InsetsStateController controller = mDisplayContent.getInsetsStateController();
         for (int i = mInsetsSourceWindowsExceptIme.size() - 1; i >= 0; i--) {
             final WindowState win = mInsetsSourceWindowsExceptIme.valueAt(i);
-            mWindowLayout.computeWindowFrames(win.getLayoutingAttrs(displayFrames.mRotation),
+            mWindowLayout.computeFrames(win.getLayoutingAttrs(displayFrames.mRotation),
                     displayFrames.mInsetsState, displayFrames.mDisplayCutoutSafe,
                     displayFrames.mUnrestricted, win.getWindowingMode(), UNSPECIFIED_LENGTH,
                     UNSPECIFIED_LENGTH, win.getRequestedVisibilities(),
@@ -1642,7 +1642,7 @@ public class DisplayPolicy {
 
         sTmpLastParentFrame.set(pf);
 
-        final boolean clippedByDisplayCutout = mWindowLayout.computeWindowFrames(attrs,
+        final boolean clippedByDisplayCutout = mWindowLayout.computeFrames(attrs,
                 win.getInsetsState(), displayFrames.mDisplayCutoutSafe,
                 win.getBounds(), win.getWindowingMode(), requestedWidth, requestedHeight,
                 win.getRequestedVisibilities(), attachedWindowFrame, win.mGlobalScale,
@@ -1856,7 +1856,8 @@ public class DisplayPolicy {
 
         if (mShowingDream != mLastShowingDream) {
             mLastShowingDream = mShowingDream;
-            mService.notifyShowingDreamChanged();
+            // Notify that isShowingDreamLw (which is checked in KeyguardController) has changed.
+            mDisplayContent.notifyKeyguardFlagsChanged();
         }
 
         mService.mPolicy.setAllowLockscreenWhenOn(getDisplayId(), mAllowLockscreenWhenOn);
@@ -2523,8 +2524,7 @@ public class DisplayPolicy {
 
     @VisibleForTesting
     int updateLightNavigationBarLw(int appearance, WindowState navColorWin) {
-        if (navColorWin == null || navColorWin.isDimming()
-                || !isLightBarAllowed(navColorWin, Type.navigationBars())) {
+        if (navColorWin == null || !isLightBarAllowed(navColorWin, Type.navigationBars())) {
             // Clear the light flag while not allowed.
             appearance &= ~APPEARANCE_LIGHT_NAVIGATION_BARS;
             return appearance;

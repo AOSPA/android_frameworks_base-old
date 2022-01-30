@@ -1,13 +1,14 @@
 package com.android.systemui.statusbar.phone
 
-import android.test.suitebuilder.annotation.SmallTest
 import android.testing.AndroidTestingRunner
 import android.view.View
+import androidx.test.filters.SmallTest
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.animation.ShadeInterpolation
 import com.android.systemui.battery.BatteryMeterView
 import com.android.systemui.battery.BatteryMeterViewController
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
 import com.android.systemui.qs.HeaderPrivacyIconsController
@@ -37,11 +38,13 @@ class SplitShadeHeaderControllerTest : SysuiTestCase() {
     @Mock private lateinit var batteryMeterView: BatteryMeterView
     @Mock private lateinit var batteryMeterViewController: BatteryMeterViewController
     @Mock private lateinit var privacyIconsController: HeaderPrivacyIconsController
+    @Mock private lateinit var dumpManager: DumpManager
 
     @JvmField @Rule val mockitoRule = MockitoJUnit.rule()
     var viewVisibility = View.GONE
 
     private lateinit var splitShadeHeaderController: SplitShadeHeaderController
+    private lateinit var carrierIconSlots: List<String>
 
     @Before
     fun setup() {
@@ -65,14 +68,16 @@ class SplitShadeHeaderControllerTest : SysuiTestCase() {
                 privacyIconsController,
                 qsCarrierGroupControllerBuilder,
                 featureFlags,
-                batteryMeterViewController
+                batteryMeterViewController,
+                dumpManager
         )
+        carrierIconSlots = listOf(
+                context.getString(com.android.internal.R.string.status_bar_mobile))
     }
 
     @Test
     fun setVisible_onlyInSplitShade() {
-        splitShadeHeaderController.splitShadeMode = true
-        splitShadeHeaderController.shadeExpanded = true
+        makeShadeVisible()
         assertThat(viewVisibility).isEqualTo(View.VISIBLE)
 
         splitShadeHeaderController.splitShadeMode = false
@@ -81,17 +86,38 @@ class SplitShadeHeaderControllerTest : SysuiTestCase() {
 
     @Test
     fun updateListeners_registersWhenVisible() {
-        splitShadeHeaderController.splitShadeMode = true
-        splitShadeHeaderController.shadeExpanded = true
+        makeShadeVisible()
         verify(qsCarrierGroupController).setListening(true)
         verify(statusBarIconController).addIconGroup(any())
     }
 
     @Test
     fun shadeExpandedFraction_updatesAlpha() {
-        splitShadeHeaderController.splitShadeMode = true
-        splitShadeHeaderController.shadeExpanded = true
+        makeShadeVisible()
         splitShadeHeaderController.shadeExpandedFraction = 0.5f
         verify(view).setAlpha(ShadeInterpolation.getContentAlpha(0.5f))
+    }
+
+    @Test
+    fun singleCarrier_enablesCarrierIconsInStatusIcons() {
+        whenever(qsCarrierGroupController.isSingleCarrier).thenReturn(true)
+
+        makeShadeVisible()
+
+        verify(statusIcons).removeIgnoredSlots(carrierIconSlots)
+    }
+
+    @Test
+    fun dualCarrier_disablesCarrierIconsInStatusIcons() {
+        whenever(qsCarrierGroupController.isSingleCarrier).thenReturn(false)
+
+        makeShadeVisible()
+
+        verify(statusIcons).addIgnoredSlots(carrierIconSlots)
+    }
+
+    private fun makeShadeVisible() {
+        splitShadeHeaderController.splitShadeMode = true
+        splitShadeHeaderController.shadeExpanded = true
     }
 }

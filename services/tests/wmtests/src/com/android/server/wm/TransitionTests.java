@@ -488,7 +488,8 @@ public class TransitionTests extends WindowTestsBase {
         final TestTransitionPlayer player = registerTestTransitionPlayer();
 
         mDisplayContent.getDisplayRotation().setRotation(mDisplayContent.getRotation() + 1);
-        mDisplayContent.requestChangeTransitionIfNeeded(1 /* any changes */);
+        mDisplayContent.requestChangeTransitionIfNeeded(1 /* any changes */,
+                null /* displayChange */);
         final FadeRotationAnimationController fadeController =
                 mDisplayContent.getFadeRotationAnimationController();
         assertNotNull(fadeController);
@@ -520,6 +521,50 @@ public class TransitionTests extends WindowTestsBase {
         // execute directly.
         navBar.setOrientationChanging(false);
         assertFalse(fadeController.isTargetToken(navBar.mToken));
+        assertNull(mDisplayContent.getFadeRotationAnimationController());
+    }
+
+    @Test
+    public void testAppTransitionWithRotationChange() {
+        final WindowState statusBar = createWindow(null, TYPE_STATUS_BAR, "statusBar");
+        makeWindowVisible(statusBar);
+        mDisplayContent.getDisplayPolicy().addWindowLw(statusBar, statusBar.mAttrs);
+        final ActivityRecord app = createActivityRecord(mDisplayContent);
+        final TestTransitionPlayer player = registerTestTransitionPlayer();
+        final Transition transition = app.mTransitionController.createTransition(TRANSIT_OPEN);
+        app.mTransitionController.requestStartTransition(transition, app.getTask(),
+                null /* remoteTransition */, null /* displayChange */);
+        mDisplayContent.getDisplayRotation().setRotation(mDisplayContent.getRotation() + 1);
+        final int anyChanges = 1;
+        mDisplayContent.requestChangeTransitionIfNeeded(anyChanges, null /* displayChange */);
+        transition.setKnownConfigChanges(mDisplayContent, anyChanges);
+        final FadeRotationAnimationController fadeController =
+                mDisplayContent.getFadeRotationAnimationController();
+        assertNotNull(fadeController);
+        assertTrue(fadeController.shouldFreezeInsetsPosition(statusBar));
+
+        statusBar.setOrientationChanging(true);
+        player.startTransition();
+        // Non-app windows should not be collected.
+        assertFalse(statusBar.mToken.inTransition());
+        assertTrue(app.getTask().inTransition());
+
+        final SurfaceControl.Transaction startTransaction = mock(SurfaceControl.Transaction.class);
+        player.onTransactionReady(startTransaction);
+        // The leash should be unrotated.
+        verify(startTransaction).setMatrix(eq(statusBar.mToken.getAnimationLeash()), any(), any());
+
+        // The redrawn window will be faded in when the transition finishes. And because this test
+        // only use one non-activity window, the fade rotation controller should also be cleared.
+        statusBar.mWinAnimator.mDrawState = WindowStateAnimator.DRAW_PENDING;
+        final SurfaceControl.Transaction postDrawTransaction =
+                mock(SurfaceControl.Transaction.class);
+        final boolean layoutNeeded = statusBar.finishDrawing(postDrawTransaction);
+        assertFalse(layoutNeeded);
+        player.finish();
+        // The controller should capture the draw transaction and merge it when preparing to run
+        // fade-in animation.
+        verify(mDisplayContent.getPendingTransaction()).merge(eq(postDrawTransaction));
         assertNull(mDisplayContent.getFadeRotationAnimationController());
     }
 

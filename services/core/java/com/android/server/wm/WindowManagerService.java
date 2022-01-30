@@ -60,6 +60,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 import static android.view.WindowManager.LayoutParams.FLAG_SLIPPERY;
 import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
+import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_SPY;
 import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
@@ -1658,6 +1659,8 @@ public class WindowManagerService extends IWindowManager.Stub
             final DisplayPolicy displayPolicy = displayContent.getDisplayPolicy();
             displayPolicy.adjustWindowParamsLw(win, win.mAttrs);
             attrs.flags = sanitizeFlagSlippery(attrs.flags, win.getName(), callingUid, callingPid);
+            attrs.inputFeatures = sanitizeSpyWindow(attrs.inputFeatures, win.getName(), callingUid,
+                    callingPid);
             win.setRequestedVisibilities(requestedVisibilities);
 
             res = displayPolicy.validateAddingWindowLw(attrs, callingPid, callingUid);
@@ -2149,11 +2152,13 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public void onRectangleOnScreenRequested(IBinder token, Rect rectangle) {
+        final AccessibilityController.AccessibilityControllerInternalImpl a11yControllerInternal =
+                AccessibilityController.getAccessibilityControllerInternal(this);
         synchronized (mGlobalLock) {
-            if (mAccessibilityController.hasCallbacks()) {
+            if (a11yControllerInternal.hasWindowManagerEventDispatcher()) {
                 WindowState window = mWindowMap.get(token);
                 if (window != null) {
-                    mAccessibilityController.onRectangleOnScreenRequested(
+                    a11yControllerInternal.onRectangleOnScreenRequested(
                             window.getDisplayId(), rectangle);
                 }
             }
@@ -2214,6 +2219,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 displayPolicy.adjustWindowParamsLw(win, attrs);
                 win.mToken.adjustWindowParams(win, attrs);
                 attrs.flags = sanitizeFlagSlippery(attrs.flags, win.getName(), uid, pid);
+                attrs.inputFeatures = sanitizeSpyWindow(attrs.inputFeatures, win.getName(), uid,
+                        pid);
                 int disableFlags =
                         (attrs.systemUiVisibility | attrs.subtreeSystemUiVisibility) & DISABLE_MASK;
                 if (disableFlags != 0 && !hasStatusBarPermission(pid, uid)) {
@@ -2546,10 +2553,8 @@ public class WindowManagerService extends IWindowManager.Stub
         if (win.mAttrs.type == TYPE_APPLICATION_STARTING) {
             transit = WindowManagerPolicy.TRANSIT_PREVIEW_DONE;
         }
-        if (win.inTransition()) {
-            focusMayChange = true;
-            win.mAnimatingExit = true;
-        } else if (win.isWinVisibleLw() && winAnimator.applyAnimationLocked(transit, false)) {
+
+        if (win.isWinVisibleLw() && winAnimator.applyAnimationLocked(transit, false)) {
             focusMayChange = true;
             win.mAnimatingExit = true;
         } else if (win.mDisplayContent.okToAnimate() && win.isAnimating(TRANSITION | PARENTS,
@@ -3029,17 +3034,13 @@ public class WindowManagerService extends IWindowManager.Stub
                 aspectRatio);
     }
 
-    /**
-     * Notifies window manager that {@link DisplayPolicy#isShowingDreamLw} has changed.
-     */
-    public void notifyShowingDreamChanged() {
-        // TODO(multi-display): support show dream in multi-display.
-        notifyKeyguardFlagsChanged(null /* callback */, DEFAULT_DISPLAY);
-    }
-
     @Override
     public void notifyKeyguardTrustedChanged() {
-        mAtmInternal.notifyKeyguardTrustedChanged();
+        synchronized (mGlobalLock) {
+            if (mAtmService.mKeyguardController.isKeyguardShowing(DEFAULT_DISPLAY)) {
+                mRoot.ensureActivitiesVisible(null, 0, false /* preserveWindows */);
+            }
+        }
     }
 
     @Override
@@ -3089,15 +3090,6 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public boolean isAppTransitionStateIdle() {
         return getDefaultDisplayContentLocked().mAppTransition.isIdle();
-    }
-
-    /**
-     * Notifies activity manager that some Keyguard flags have changed and that it needs to
-     * reevaluate the visibilities of the activities.
-     * @param callback Runnable to be called when activity manager is done reevaluating visibilities
-     */
-    void notifyKeyguardFlagsChanged(@Nullable Runnable callback, int displayId) {
-        mAtmInternal.notifyKeyguardFlagsChanged(callback, displayId);
     }
 
 
@@ -8269,6 +8261,23 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     /**
+     * You need MONITOR_INPUT permission to be able to set INPUT_FEATURE_SPY.
+     */
+    private int sanitizeSpyWindow(int inputFeatures, String windowName, int callingUid,
+            int callingPid) {
+        if ((inputFeatures & INPUT_FEATURE_SPY) == 0) {
+            return inputFeatures;
+        }
+        final int permissionResult = mContext.checkPermission(
+                permission.MONITOR_INPUT, callingPid, callingUid);
+        if (permissionResult != PackageManager.PERMISSION_GRANTED) {
+            throw new IllegalArgumentException("Cannot use INPUT_FEATURE_SPY from '" + windowName
+                    + "' because it doesn't the have MONITOR_INPUT permission");
+        }
+        return inputFeatures;
+    }
+
+    /**
      * Assigns an InputChannel to a SurfaceControl and configures it to receive
      * touch input according to it's on-screen geometry.
      *
@@ -8321,6 +8330,7 @@ public class WindowManagerService extends IWindowManager.Stub
         h.ownerUid = callingUid;
         h.ownerPid = callingPid;
 
+        // Do not allow any input features to be set without sanitizing them first.
         h.inputFeatures = 0;
 
         if (region == null) {

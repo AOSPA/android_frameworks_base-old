@@ -16,6 +16,8 @@
 
 package android.media.tv.interactive;
 
+import android.annotation.NonNull;
+import android.annotation.StringDef;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -34,6 +36,8 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,6 +49,21 @@ public final class TvIAppInfo implements Parcelable {
     private static final boolean DEBUG = false;
     private static final String TAG = "TvIAppInfo";
 
+    @Retention(RetentionPolicy.SOURCE)
+    @StringDef(prefix = { "INTERACTIVE_APP_TYPE_" }, value = {
+            INTERACTIVE_APP_TYPE_HBBTV,
+            INTERACTIVE_APP_TYPE_ATSC,
+            INTERACTIVE_APP_TYPE_GINGA,
+    })
+    @interface InteractiveAppType {}
+
+    /** HbbTV interactive app type */
+    public static final String INTERACTIVE_APP_TYPE_HBBTV = "hbbtv";
+    /** ATSC interactive app type */
+    public static final String INTERACTIVE_APP_TYPE_ATSC = "atsc";
+    /** Ginga interactive app type */
+    public static final String INTERACTIVE_APP_TYPE_GINGA = "ginga";
+
     private final ResolveInfo mService;
     private final String mId;
     private List<String> mTypes = new ArrayList<>();
@@ -55,13 +74,13 @@ public final class TvIAppInfo implements Parcelable {
         mTypes = types;
     }
 
-    protected TvIAppInfo(Parcel in) {
+    private TvIAppInfo(@NonNull Parcel in) {
         mService = ResolveInfo.CREATOR.createFromParcel(in);
         mId = in.readString();
         in.readStringList(mTypes);
     }
 
-    public static final Creator<TvIAppInfo> CREATOR = new Creator<TvIAppInfo>() {
+    public static final @NonNull Creator<TvIAppInfo> CREATOR = new Creator<TvIAppInfo>() {
         @Override
         public TvIAppInfo createFromParcel(Parcel in) {
             return new TvIAppInfo(in);
@@ -79,12 +98,13 @@ public final class TvIAppInfo implements Parcelable {
     }
 
     @Override
-    public void writeToParcel(Parcel dest, int flags) {
+    public void writeToParcel(@NonNull Parcel dest, int flags) {
         mService.writeToParcel(dest, flags);
         dest.writeString(mId);
         dest.writeStringList(mTypes);
     }
 
+    @NonNull
     public String getId() {
         return mId;
     }
@@ -105,6 +125,13 @@ public final class TvIAppInfo implements Parcelable {
     }
 
     /**
+     * Gets supported interactive app types
+     */
+    public List<String> getSupportedTypes() {
+        return new ArrayList<>(mTypes);
+    }
+
+    /**
      * A convenience builder for creating {@link TvIAppInfo} objects.
      */
     public static final class Builder {
@@ -120,7 +147,7 @@ public final class TvIAppInfo implements Parcelable {
          * @param component The name of the application component to be used for the
          *                  {@link TvIAppService}.
          */
-        public Builder(Context context, ComponentName component) {
+        public Builder(@NonNull Context context, @NonNull ComponentName component) {
             if (context == null) {
                 throw new IllegalArgumentException("context cannot be null.");
             }
@@ -140,6 +167,7 @@ public final class TvIAppInfo implements Parcelable {
          *
          * @return TvIAppInfo containing information about this TV IApp service.
          */
+        @NonNull
         public TvIAppInfo build() {
             ComponentName componentName = new ComponentName(mResolveInfo.serviceInfo.packageName,
                     mResolveInfo.serviceInfo.name);
@@ -183,7 +211,7 @@ public final class TvIAppInfo implements Parcelable {
                 CharSequence[] types = sa.getTextArray(
                         com.android.internal.R.styleable.TvIAppService_supportedTypes);
                 for (CharSequence cs : types) {
-                    mTypes.add(cs.toString());
+                    mTypes.add(cs.toString().toLowerCase());
                 }
 
                 sa.recycle();

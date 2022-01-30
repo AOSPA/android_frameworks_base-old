@@ -20,6 +20,7 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressAutoDoc;
 import android.annotation.SuppressLint;
@@ -28,6 +29,7 @@ import android.annotation.SystemService;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.net.NetworkCapabilities;
 import android.net.ipsec.ike.SaProposal;
 import android.os.Build;
@@ -48,12 +50,14 @@ import android.telephony.ims.feature.RcsFeature;
 import com.android.internal.telephony.ICarrierConfigLoader;
 import com.android.telephony.Rlog;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Provides access to telephony configuration values that are carrier-specific.
  */
 @SystemService(Context.CARRIER_CONFIG_SERVICE)
+@RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
 public class CarrierConfigManager {
     private final static String TAG = "CarrierConfigManager";
 
@@ -569,9 +573,9 @@ public class CarrierConfigManager {
             KEY_DISABLE_CDMA_ACTIVATION_CODE_BOOL = "disable_cdma_activation_code_bool";
 
     /**
-     * List of RIL radio technologies (See {@link ServiceState} {@code RIL_RADIO_TECHNOLOGY_*}
-     * constants) which support only a single data connection at a time. Some carriers do not
-     * support multiple pdp on UMTS.
+     * List of network type constants which support only a single data connection at a time.
+     * Some carriers do not support multiple PDP on UMTS.
+     * @see TelephonyManager NETWORK_TYPE_*
      */
     public static final String
             KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY = "only_single_dc_allowed_int_array";
@@ -813,6 +817,14 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_CROSS_SIM_IMS_AVAILABLE_BOOL =
             "carrier_cross_sim_ims_available_bool";
+
+    /**
+     * Flag specifying whether cross sim calling on opportunistic data is supported for carrier.
+     * When {@code false} the carrier does not support cross sim calling on opportunistic data.
+     * When {@code true} the carrier does support cross sim calling on opportunistic data.
+     */
+    public static final String KEY_ENABLE_CROSS_SIM_CALLING_ON_OPPORTUNISTIC_DATA_BOOL =
+            "enable_cross_sim_calling_on_opportunistic_data_bool";
 
     /**
      * Specifies a map from dialstrings to replacements for roaming network service numbers which
@@ -2317,6 +2329,7 @@ public class CarrierConfigManager {
      * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_PRIVATE
      * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_PAYPHONE
      * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_UNKNOWN
+     * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_UNAVAILABLE
      *
      * <p>
      * 1. For Single SIM(SS) device, it can be customized in both carrier_config_mccmnc.xml
@@ -3715,16 +3728,45 @@ public class CarrierConfigManager {
     public static final String KEY_5G_WATCHDOG_TIME_MS_LONG = "5g_watchdog_time_ms_long";
 
     /**
-     * Which NR types are unmetered. A string array containing the following keys:
+     * Which network types are unmetered. A string array that can contain network type names from
+     * {@link TelephonyManager#getNetworkTypeName(int)} in addition to the following NR keys:
      * NR_NSA - NR NSA is unmetered for sub-6 frequencies
      * NR_NSA_MMWAVE - NR NSA is unmetered for mmwave frequencies
      * NR_SA - NR SA is unmetered for sub-6 frequencies
      * NR_SA_MMWAVE - NR SA is unmetered for mmwave frequencies
+     *
+     * Note that this config only applies if an unmetered SubscriptionPlan is set via
+     * {@link SubscriptionManager#setSubscriptionPlans(int, List)} or an unmetered override is set
+     * via {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, int[], long)}
+     * or {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, long)}.
+     * If neither SubscriptionPlans nor an override are set, then no network types can be unmetered
+     * regardless of the value of this config.
      * TODO: remove other unmetered keys and replace with this
      * @hide
      */
     public static final String KEY_UNMETERED_NETWORK_TYPES_STRING_ARRAY =
             "unmetered_network_types_string_array";
+
+    /**
+     * Which network types are unmetered when roaming. A string array that can contain network type
+     * names from {@link TelephonyManager#getNetworkTypeName(int)} in addition to the following
+     * NR keys:
+     * NR_NSA - NR NSA is unmetered when roaming for sub-6 frequencies
+     * NR_NSA_MMWAVE - NR NSA is unmetered when roaming for mmwave frequencies
+     * NR_SA - NR SA is unmetered when roaming for sub-6 frequencies
+     * NR_SA_MMWAVE - NR SA is unmetered when roaming for mmwave frequencies
+     *
+     * Note that this config only applies if an unmetered SubscriptionPlan is set via
+     * {@link SubscriptionManager#setSubscriptionPlans(int, List)} or an unmetered override is set
+     * via {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, int[], long)}
+     * or {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, long)}.
+     * If neither SubscriptionPlans nor an override are set, then no network types can be unmetered
+     * when roaming regardless of the value of this config.
+     * TODO: remove KEY_UNMETERED_NR_NSA_WHEN_ROAMING_BOOL and replace with this
+     * @hide
+     */
+    public static final String KEY_ROAMING_UNMETERED_NETWORK_TYPES_STRING_ARRAY =
+            "roaming_unmetered_network_types_string_array";
 
     /**
      * Whether NR (non-standalone) should be unmetered for all frequencies.
@@ -3837,6 +3879,17 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ESIM_MAX_DOWNLOAD_RETRY_ATTEMPTS_INT =
             "esim_max_download_retry_attempts_int";
+
+    /**
+     * List of opportunistic carrier-ids associated with CBRS Primary SIM. When CBRS pSIM is
+     * inserted, opportunistic eSIM is download and this configuration is used for grouping pSIM
+     * and opportunistic eSIM. Also when a new CBRS pSIM is inserted, old opportunistic eSIMs are
+     * deleted using the carrier-ids in this configuration.
+     *
+     * @hide
+     */
+    public static final String KEY_OPPORTUNISTIC_CARRIER_IDS_INT_ARRAY =
+            "opportunistic_carrier_ids_int_array";
 
     /**
      * Controls RSRP threshold at which OpportunisticNetworkService will decide whether
@@ -4200,6 +4253,56 @@ public class CarrierConfigManager {
             "gba_ua_tls_cipher_suite_int";
 
     /**
+     * The data stall recovery timers array in milliseconds, each element is the delay before
+     * performining next recovery action.
+     *
+     * The default value of timers array are: [180000ms, 180000ms, 180000ms] (3 minutes)
+     * Array[0]: It's the timer between RECOVERY_ACTION GET_DATA_CALL_LIST and CLEANUP, if data
+     * stall symptom still occurred, it will perform next recovery action after 180000ms.
+     * Array[1]: It's the timer between RECOVERY_ACTION CLEANUP and RADIO_RESTART, if data stall
+     * symptom still occurred, it will perform next recovery action after 180000ms.
+     * Array[2]: It's the timer between RECOVERY_ACTION RADIO_RESTART and RESET_MODEM, if data stall
+     * symptom still occurred, it will perform next recovery action after 180000ms.
+     *
+     * See the {@code RECOVERY_ACTION_*} constants in
+     * {@link com.android.internal.telephony.data.DataStallRecoveryManager}
+     * @hide
+     */
+    public static final String KEY_DATA_STALL_RECOVERY_TIMERS_LONG_ARRAY =
+            "data_stall_recovery_timers_long_array";
+
+    /**
+     * The data stall recovery action boolean array, we use this array to determine if the
+     * data stall recovery action needs to be skipped.
+     *
+     * For example, if the carrier use the same APN for both of IA and default type,
+     * the data call will not disconnect in modem side (so the RECOVERY_ACTION_CLEANUP
+     * did not effect). In this case, we can config the boolean variable of action
+     * RECOVERY_ACTION_CLEANUP to true, then it can be ignored to speed up the recovery
+     * action procedure.
+     *
+     * The default value of boolean array are: [false, false, false, false]
+     * Array[0]: When performing the recovery action, we can use this boolean value to determine
+     * if we need to perform RECOVERY_ACTION_GET_DATA_CALL_LIST.
+     * Array[1]: If data stall symptom still occurred, we can use this boolean value to determine
+     * if we need to perform RECOVERY_ACTION_CLEANUP. For example, if the carrier use the same APN
+     * for both of IA and default type, the data call will not disconnect in modem side
+     * (so the RECOVERY_ACTION_CLEANUP did not effect). In this case, we can config the boolean
+     * variable of action RECOVERY_ACTION_CLEANUP to true, then it can be ignored to speed up the
+     * recovery action procedure.
+     * Array[2]: If data stall symptom still occurred, we can use this boolean value to determine
+     * if we need to perform RECOVERY_ACTION_RADIO_RESTART.
+     * Array[3]: If data stall symptom still occurred, we can use this boolean value to determine
+     * if we need to perform RECOVERY_ACTION_MODEM_RESET.
+     *
+     * See the {@code RECOVERY_ACTION_*} constants in
+     * {@link com.android.internal.telephony.data.DataStallRecoveryManager}
+     * @hide
+     */
+    public static final String KEY_DATA_STALL_RECOVERY_SHOULD_SKIP_BOOL_ARRAY =
+            "data_stall_recovery_should_skip_bool_array";
+
+    /**
      * Configs used by ImsServiceEntitlement.
      */
     public static final class ImsServiceEntitlement {
@@ -4516,6 +4619,29 @@ public class CarrierConfigManager {
      */
     public static final String KEY_SUBSCRIPTION_GROUP_UUID_STRING =
             "subscription_group_uuid_string";
+
+    /**
+     * Controls the cellular usage setting.
+     *
+     * The usage setting indicates whether a device will remain attached to a network based on
+     * the primary use case for the service. A device will detach and search for a more-preferred
+     * network if the primary use case (voice or data) is not satisfied. Depending on the type
+     * of device, it may operate in a voice or data-centric mode by default.
+     *
+     * <p>Sets the usage setting in accordance with 3gpp 24.301 sec 4.3 and 3gpp 24.501 sec 4.3.
+     * Also refer to "UE's usage setting" as defined in 3gpp 24.301 section 3.1 and 3gpp 23.221
+     * Annex A.
+     *
+     * Either omit this key or pass a value of
+     * {@link SubscriptionManager#USAGE_SETTING_UNKNOWN unknown} to preserve the current setting.
+     *
+     * {@link SubscriptionManager#USAGE_SETTING_DEFAULT default},
+     * {@link SubscriptionManager#USAGE_SETTING_VOICE_CENTRIC voice-centric},
+     * or {@link SubscriptionManager#USAGE_SETTING_DATA_CENTRIC data-centric}.
+     * {@see SubscriptionInfo#getUsageSetting}
+     */
+    public static final String KEY_CELLULAR_USAGE_SETTING_INT =
+            "cellular_usage_setting_int";
 
     /**
      * Data switch validation minimal gap time, in milliseconds.
@@ -5226,7 +5352,7 @@ public class CarrierConfigManager {
             "telephony_network_capability_priorities_string_array";
 
     /**
-     * Defines the rules for data retry.
+     * Defines the rules for data setup retry.
      *
      * The syntax of the retry rule:
      * 1. Retry based on {@link NetworkCapabilities}. Note that only APN-type network capabilities
@@ -5258,8 +5384,34 @@ public class CarrierConfigManager {
      * // TODO: remove KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS
      * @hide
      */
-    public static final String KEY_TELEPHONY_DATA_RETRY_RULES_STRING_ARRAY =
-            "telephony_data_retry_rules_string_array";
+    public static final String KEY_TELEPHONY_DATA_SETUP_RETRY_RULES_STRING_ARRAY =
+            "telephony_data_setup_retry_rules_string_array";
+
+    /**
+     * Defines the rules for data handover retry.
+     *
+     * The syntax of the retry rule:
+     * 1. Retry when handover fails.
+     * "retry_interval=[n1|n2|n3|...], [maximum_retries=n]"
+     *
+     * For example,
+     * "retry_interval=1000|3000|5000, maximum_retries=10" means handover retry will happen in 1s,
+     * 3s, 5s, 5s, 5s....up to 10 times.
+     *
+     * 2. Retry when handover fails with certain fail causes.
+     * "retry_interval=[n1|n2|n3|...], fail_causes=[cause1|cause2|cause3|...], [maximum_retries=n]
+     *
+     * For example,
+     * "retry_interval=1000, maximum_retries=3, fail_causes=5" means handover retry every 1 second
+     * for up to 3 times when handover fails with the cause 5.
+     *
+     * "maximum_retries=0, fail_causes=6|10|67" means handover retry should not happen for those
+     * causes.
+     *
+     * @hide
+     */
+    public static final String KEY_TELEPHONY_DATA_HANDOVER_RETRY_RULES_STRING_ARRAY =
+            "telephony_data_handover_retry_rules_string_array";
 
     /**
      * The patterns of missed incoming call sms. This is the regular expression used for
@@ -5444,6 +5596,34 @@ public class CarrierConfigManager {
     public static final String KEY_UNTHROTTLE_DATA_RETRY_WHEN_TAC_CHANGES_BOOL =
             "unthrottle_data_retry_when_tac_changes_bool";
 
+    /**
+     * IWLAN handover rules that determine whether handover is allowed or disallowed between
+     * cellular and IWLAN.
+     *
+     * The handover rules will be matched in the order. Here are some sample rules.
+     * <string-array name="iwlan_handover_rules" num="5">
+     *     <!-- Handover from IWLAN to 2G/3G is not allowed -->
+     *     <item value="source=IWLAN, target=GERAN|UTRAN, type=disallowed"/>
+     *     <!-- Handover from 2G/3G to IWLAN is not allowed -->
+     *     <item value="source=GERAN|UTRAN, target:IWLAN, type=disallowed"/>
+     *     <!-- Handover from IWLAN to 3G/4G/5G is not allowed if the device is roaming. -->
+     *     <item value="source=IWLAN, target=UTRAN|EUTRAN|NGRAN, roaming=true, type=disallowed"/>
+     *     <!-- Handover from 4G to IWLAN is not allowed -->
+     *     <item value="source=EUTRAN, target=IWLAN, type=disallowed"/>
+     *     <!-- Handover is always allowed in any condition. -->
+     *     <item value="source=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN,
+     *         target=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN, type=allowed"/>
+     * </string-array>
+     *
+     * When handover is not allowed, frameworks will tear down the data network on source transport,
+     * and then setup a new one on the target transport when Qualified Network Service changes the
+     * preferred access networks for particular APN types.
+     *
+     * @hide
+     */
+    public static final String KEY_IWLAN_HANDOVER_POLICY_STRING_ARRAY =
+            "iwlan_handover_policy_string_array";
+
      /**
      * Flag indicating whether carrier supports multianchor conference.
      * In multianchor conference, a participant of a conference can add
@@ -5519,6 +5699,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_IGNORE_RESET_UT_CAPABILITY_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_WFC_IMS_AVAILABLE_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_CROSS_SIM_IMS_AVAILABLE_BOOL, false);
+        sDefaults.putBoolean(KEY_ENABLE_CROSS_SIM_CALLING_ON_OPPORTUNISTIC_DATA_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_WFC_SUPPORTS_WIFI_ONLY_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_WFC_SUPPORTS_IMS_PREFERRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_DEFAULT_WFC_IMS_ENABLED_BOOL, false);
@@ -5635,7 +5816,7 @@ public class CarrierConfigManager {
                 "others:max_retries=3, 5000, 5000, 5000"});
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_DEFAULT_LONG, 20000);
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_FASTER_LONG, 3000);
-        sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_RETRY_AFTER_DISCONNECT_LONG, 10000);
+        sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_RETRY_AFTER_DISCONNECT_LONG, 3000);
         sDefaults.putInt(KEY_CARRIER_DATA_CALL_RETRY_NETWORK_REQUESTED_MAX_COUNT_INT, 3);
         sDefaults.putString(KEY_CARRIER_ERI_FILE_NAME_STRING, "eri.xml");
         sDefaults.putInt(KEY_DURATION_BLOCKING_DISABLED_AFTER_EMERGENCY_INT, 7200);
@@ -5649,14 +5830,9 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_CARRIER_WLAN_DISALLOWED_APN_TYPES_STRING_ARRAY,
                 new String[]{""});
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,
-                new int[]{
-                    4, /* IS95A */
-                    5, /* IS95B */
-                    6, /* 1xRTT */
-                    7, /* EVDO_0 */
-                    8, /* EVDO_A */
-                    12 /* EVDO_B */
-                });
+                new int[] {TelephonyManager.NETWORK_TYPE_CDMA, TelephonyManager.NETWORK_TYPE_1xRTT,
+                        TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A,
+                        TelephonyManager.NETWORK_TYPE_EVDO_B});
         sDefaults.putStringArray(KEY_GSM_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_GSM_NONROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putString(KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING, null);
@@ -6001,7 +6177,9 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_NR_ADVANCED_CAPABLE_PCO_ID_INT, 0);
         sDefaults.putBoolean(KEY_ENABLE_NR_ADVANCED_WHILE_ROAMING_BOOL, true);
         sDefaults.putBoolean(KEY_LTE_ENDC_USING_USER_DATA_FOR_RRC_DETECTION_BOOL, false);
-        sDefaults.putStringArray(KEY_UNMETERED_NETWORK_TYPES_STRING_ARRAY, new String[0]);
+        sDefaults.putStringArray(KEY_UNMETERED_NETWORK_TYPES_STRING_ARRAY, new String[] {
+                "NR_NSA", "NR_NSA_MMWAVE", "NR_SA", "NR_SA_MMWAVE"});
+        sDefaults.putStringArray(KEY_ROAMING_UNMETERED_NETWORK_TYPES_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_MMWAVE_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_SUB6_BOOL, false);
@@ -6015,6 +6193,7 @@ public class CarrierConfigManager {
         sDefaults.putString(KEY_SMDP_SERVER_ADDRESS_STRING, "");
         sDefaults.putInt(KEY_ESIM_MAX_DOWNLOAD_RETRY_ATTEMPTS_INT, 5);
         sDefaults.putInt(KEY_ESIM_DOWNLOAD_RETRY_BACKOFF_TIMER_SEC_INT, 60);
+        sDefaults.putIntArray(KEY_OPPORTUNISTIC_CARRIER_IDS_INT_ARRAY, new int[] {0});
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_GOOD */
         sDefaults.putInt(KEY_OPPORTUNISTIC_NETWORK_ENTRY_THRESHOLD_RSRP_INT, -108);
         /* Default value is minimum RSRP level needed for SIGNAL_STRENGTH_MODERATE */
@@ -6062,6 +6241,7 @@ public class CarrierConfigManager {
         sDefaults.putInt(
                 KEY_OPPORTUNISTIC_TIME_TO_SCAN_AFTER_CAPABILITY_SWITCH_TO_PRIMARY_LONG,
                 120000);
+        sDefaults.putAll(ImsServiceEntitlement.getDefaults());
         sDefaults.putAll(Gps.getDefaults());
         sDefaults.putIntArray(KEY_CDMA_ENHANCED_ROAMING_INDICATOR_FOR_HOME_NETWORK_INT_ARRAY,
                 new int[] {
@@ -6123,7 +6303,7 @@ public class CarrierConfigManager {
                         "ims:40", "dun:30", "enterprise:20", "internet:20"
                 });
         sDefaults.putStringArray(
-                KEY_TELEPHONY_DATA_RETRY_RULES_STRING_ARRAY, new String[] {
+                KEY_TELEPHONY_DATA_SETUP_RETRY_RULES_STRING_ARRAY, new String[] {
                         "capabilities=eims, retry_interval=1000, maximum_retries=20",
                         "fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|2253|"
                                 + "2254, maximum_retries=0", // No retry for those causes
@@ -6131,6 +6311,10 @@ public class CarrierConfigManager {
                         "capabilities=internet|enterprise|dun|ims|fota, retry_interval=2500|3000|"
                                 + "5000|10000|15000|20000|40000|60000|120000|240000|"
                                 + "600000|1200000|1800000, maximum_retries=20"
+                });
+        sDefaults.putStringArray(
+                KEY_TELEPHONY_DATA_HANDOVER_RETRY_RULES_STRING_ARRAY, new String[] {
+                        "retry_interval=1000|2000|4000|8000|16000, maximum_retries=5"
                 });
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putBoolean(KEY_DISABLE_DUN_APN_WHILE_ROAMING_WITH_PRESET_APN_BOOL, false);
@@ -6173,6 +6357,16 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_USE_SMS_CALLBACK_MODE_BOOL, false);
         sDefaults.putBoolean(KEY_VONR_SETTING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_VONR_ENABLED_BOOL, false);
+        sDefaults.putStringArray(KEY_IWLAN_HANDOVER_POLICY_STRING_ARRAY, new String[]{
+                "source=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN, "
+                        + "target=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN, type=allowed"});
+        sDefaults.putInt(KEY_CELLULAR_USAGE_SETTING_INT,
+                SubscriptionManager.USAGE_SETTING_UNKNOWN);
+        // Default data stall recovery configurations.
+        sDefaults.putLongArray(KEY_DATA_STALL_RECOVERY_TIMERS_LONG_ARRAY,
+                new long[] {180000, 180000, 180000});
+        sDefaults.putBooleanArray(KEY_DATA_STALL_RECOVERY_SHOULD_SKIP_BOOL_ARRAY,
+                new boolean[] {false, false, false, false});
     }
 
     /**

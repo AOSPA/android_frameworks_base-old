@@ -364,7 +364,7 @@ void ASurfaceTransaction_setBuffer(ASurfaceTransaction* aSurfaceTransaction,
     sp<SurfaceControl> surfaceControl = ASurfaceControl_to_SurfaceControl(aSurfaceControl);
     Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
 
-    sp<GraphicBuffer> graphic_buffer(reinterpret_cast<GraphicBuffer*>(buffer));
+    sp<GraphicBuffer> graphic_buffer(GraphicBuffer::fromAHardwareBuffer(buffer));
 
     std::optional<sp<Fence>> fence = std::nullopt;
     if (acquire_fence_fd != -1) {
@@ -658,4 +658,12 @@ void ASurfaceTransaction_setOnCommit(ASurfaceTransaction* aSurfaceTransaction, v
     Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
 
     transaction->addTransactionCommittedCallback(callback, context);
+}
+
+void ASurfaceTransaction_setFrameTimeline(ASurfaceTransaction* aSurfaceTransaction,
+                                          int64_t vsyncId) {
+    CHECK_NOT_NULL(aSurfaceTransaction);
+    // TODO(b/210043506): Get start time from platform.
+    ASurfaceTransaction_to_Transaction(aSurfaceTransaction)
+            ->setFrameTimelineInfo({.vsyncId = vsyncId, .startTimeNanos = 0});
 }

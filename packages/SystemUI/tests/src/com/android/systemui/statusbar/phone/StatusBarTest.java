@@ -44,6 +44,7 @@ import android.app.trust.TrustManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.IntentFilter;
+import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.hardware.fingerprint.FingerprintManager;
 import android.metrics.LogMaker;
@@ -69,6 +70,7 @@ import android.view.WindowManager;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.colorextraction.ColorExtractor;
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.logging.testing.FakeMetricsLogger;
 import com.android.internal.statusbar.IStatusBarService;
@@ -147,6 +149,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.statusbar.window.StatusBarWindowController;
+import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.util.WallpaperController;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.concurrency.MessageRouterImpl;
@@ -160,6 +163,7 @@ import com.android.wm.shell.startingsurface.StartingSurface;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -173,6 +177,9 @@ import dagger.Lazy;
 @RunWith(AndroidTestingRunner.class)
 @RunWithLooper(setAsMainLooper = true)
 public class StatusBarTest extends SysuiTestCase {
+
+    private static final int FOLD_STATE_FOLDED = 0;
+    private static final int FOLD_STATE_UNFOLDED = 1;
 
     private StatusBar mStatusBar;
     private FakeMetricsLogger mMetricsLogger;
@@ -228,6 +235,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private DynamicPrivacyController mDynamicPrivacyController;
     @Mock private AutoHideController mAutoHideController;
     @Mock private StatusBarWindowController mStatusBarWindowController;
+    @Mock private StatusBarWindowStateController mStatusBarWindowStateController;
     @Mock private NotificationViewHierarchyManager mNotificationViewHierarchyManager;
     @Mock private UserSwitcherController mUserSwitcherController;
     @Mock private NetworkController mNetworkController;
@@ -263,6 +271,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private BrightnessSliderController.Factory mBrightnessSliderFactory;
     @Mock private WallpaperController mWallpaperController;
     @Mock private OngoingCallController mOngoingCallController;
+    @Mock private StatusBarHideIconsForBouncerManager mStatusBarHideIconsForBouncerManager;
     @Mock private LockscreenShadeTransitionController mLockscreenTransitionController;
     @Mock private FeatureFlags mFeatureFlags;
     @Mock private NotificationVisibilityProvider mVisibilityProvider;
@@ -276,6 +285,8 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private ActivityLaunchAnimator mActivityLaunchAnimator;
     @Mock private NotifPipelineFlags mNotifPipelineFlags;
     @Mock private NotifLiveDataStore mNotifLiveDataStore;
+    @Mock private InteractionJankMonitor mJankMonitor;
+    @Mock private DeviceStateManager mDeviceStateManager;
     private ShadeController mShadeController;
     private final FakeSystemClock mFakeSystemClock = new FakeSystemClock();
     private FakeExecutor mMainExecutor = new FakeExecutor(mFakeSystemClock);
@@ -374,6 +385,7 @@ public class StatusBarTest extends SysuiTestCase {
                 mLightBarController,
                 mAutoHideController,
                 mStatusBarWindowController,
+                mStatusBarWindowStateController,
                 mKeyguardUpdateMonitor,
                 mStatusBarSignalPolicy,
                 mPulseExpansionHandler,
@@ -449,7 +461,7 @@ public class StatusBarTest extends SysuiTestCase {
                 mScreenOffAnimationController,
                 mWallpaperController,
                 mOngoingCallController,
-                new StatusBarHideIconsForBouncerManager(mCommandQueue, mMainExecutor, mDumpManager),
+                mStatusBarHideIconsForBouncerManager,
                 mLockscreenTransitionController,
                 mFeatureFlags,
                 mKeyguardUnlockAnimationController,
@@ -459,7 +471,9 @@ public class StatusBarTest extends SysuiTestCase {
                 mWallpaperManager,
                 Optional.of(mStartingSurface),
                 mActivityLaunchAnimator,
-                mNotifPipelineFlags);
+                mNotifPipelineFlags,
+                mJankMonitor,
+                mDeviceStateManager);
         when(mKeyguardViewMediator.registerStatusBar(
                 any(StatusBar.class),
                 any(NotificationPanelViewController.class),
@@ -940,6 +954,47 @@ public class StatusBarTest extends SysuiTestCase {
         mStatusBar.updateResources();
 
         verify(mStatusBarKeyguardViewManager).updateResources();
+    }
+
+    @Test
+    public void deviceStateChange_unfolded_shadeOpen_setsLeaveOpenOnKeyguardHide() {
+        setFoldedStates(FOLD_STATE_FOLDED);
+        setGoToSleepStates(FOLD_STATE_FOLDED);
+        when(mNotificationPanelViewController.isFullyExpanded()).thenReturn(true);
+
+        setDeviceState(FOLD_STATE_UNFOLDED);
+
+        verify(mStatusBarStateController).setLeaveOpenOnKeyguardHide(true);
+    }
+
+    @Test
+    public void deviceStateChange_unfolded_shadeClose_doesNotSetLeaveOpenOnKeyguardHide() {
+        setFoldedStates(FOLD_STATE_FOLDED);
+        setGoToSleepStates(FOLD_STATE_FOLDED);
+        when(mNotificationPanelViewController.isFullyExpanded()).thenReturn(false);
+
+        setDeviceState(FOLD_STATE_UNFOLDED);
+
+        verify(mStatusBarStateController, never()).setLeaveOpenOnKeyguardHide(true);
+    }
+
+    private void setDeviceState(int state) {
+        ArgumentCaptor<DeviceStateManager.DeviceStateCallback> callbackCaptor =
+                ArgumentCaptor.forClass(DeviceStateManager.DeviceStateCallback.class);
+        verify(mDeviceStateManager).registerCallback(any(), callbackCaptor.capture());
+        callbackCaptor.getValue().onStateChanged(state);
+    }
+
+    private void setGoToSleepStates(int... states) {
+        mContext.getOrCreateTestableResources().addOverride(
+                com.android.internal.R.array.config_deviceStatesOnWhichToSleep,
+                states);
+    }
+
+    private void setFoldedStates(int... states) {
+        mContext.getOrCreateTestableResources().addOverride(
+                com.android.internal.R.array.config_foldedDeviceStates,
+                states);
     }
 
     public static class TestableNotificationInterruptStateProviderImpl extends

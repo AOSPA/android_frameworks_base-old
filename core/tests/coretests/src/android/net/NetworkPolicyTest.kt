@@ -16,6 +16,10 @@
 
 package android.net
 
+import android.net.NetworkTemplate.MATCH_BLUETOOTH
+import android.net.NetworkTemplate.MATCH_ETHERNET
+import android.net.NetworkTemplate.MATCH_MOBILE
+import android.net.NetworkTemplate.MATCH_WIFI
 import android.text.format.Time.TIMEZONE_UTC
 import androidx.test.runner.AndroidJUnit4
 import org.junit.Test
@@ -24,16 +28,18 @@ import java.io.ByteArrayInputStream
 import java.io.DataInputStream
 import java.time.ZoneId
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 private const val TEST_IMSI1 = "TESTIMSI1"
-private const val TEST_SSID1 = "TESTISSID1"
+private const val TEST_WIFI_NETWORK_KEY1 = "TESTKEY1"
 
 @RunWith(AndroidJUnit4::class)
 class NetworkPolicyTest {
     @Test
     fun testTemplateBackupRestore() {
         assertPolicyBackupRestore(createTestPolicyForTemplate(
-                NetworkTemplate.buildTemplateWifi(TEST_SSID1)))
+                NetworkTemplate.buildTemplateWifi(TEST_WIFI_NETWORK_KEY1)))
         assertPolicyBackupRestore(createTestPolicyForTemplate(
                 NetworkTemplate.buildTemplateMobileAll(TEST_IMSI1)))
         assertPolicyBackupRestore(createTestPolicyForTemplate(
@@ -52,5 +58,27 @@ class NetworkPolicyTest {
         val stream = DataInputStream(ByteArrayInputStream(bytes))
         val restored = NetworkPolicy.getNetworkPolicyFromBackup(stream)
         assertEquals(policy, restored)
+    }
+
+    @Test
+    fun testIsTemplatePersistable() {
+        listOf(MATCH_MOBILE, MATCH_WIFI).forEach {
+            // Verify wildcard templates cannot be persistable.
+            assertFalse(NetworkPolicy.isTemplatePersistable(NetworkTemplate.Builder(it).build()))
+
+            // Verify mobile/wifi templates can be persistable if the Subscriber Id is supplied.
+            assertTrue(NetworkPolicy.isTemplatePersistable(NetworkTemplate.Builder(it)
+                    .setSubscriberIds(setOf(TEST_IMSI1)).build()))
+        }
+
+        // Verify bluetooth and ethernet templates can be persistable without any other
+        // field is supplied.
+        listOf(MATCH_BLUETOOTH, MATCH_ETHERNET).forEach {
+            assertTrue(NetworkPolicy.isTemplatePersistable(NetworkTemplate.Builder(it).build()))
+        }
+
+        // Verify wifi template can be persistable if the Wifi Network Key is supplied.
+        assertTrue(NetworkPolicy.isTemplatePersistable(NetworkTemplate.Builder(MATCH_WIFI)
+                .setWifiNetworkKeys(setOf(TEST_WIFI_NETWORK_KEY1)).build()))
     }
 }

@@ -357,6 +357,28 @@ public final class TvInputManager {
      */
     public static final int INPUT_STATE_DISCONNECTED = 2;
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({BROADCAST_INFO_TYPE_TS, BROADCAST_INFO_TYPE_TABLE, BROADCAST_INFO_TYPE_SECTION,
+            BROADCAST_INFO_TYPE_PES, BROADCAST_INFO_STREAM_EVENT, BROADCAST_INFO_TYPE_DSMCC,
+            BROADCAST_INFO_TYPE_TV_PROPRIETARY_FUNCTION})
+    public @interface BroadcastInfoType {}
+
+    /** @hide */
+    public static final int BROADCAST_INFO_TYPE_TS = 1;
+    /** @hide */
+    public static final int BROADCAST_INFO_TYPE_TABLE = 2;
+    /** @hide */
+    public static final int BROADCAST_INFO_TYPE_SECTION = 3;
+    /** @hide */
+    public static final int BROADCAST_INFO_TYPE_PES = 4;
+    /** @hide */
+    public static final int BROADCAST_INFO_STREAM_EVENT = 5;
+    /** @hide */
+    public static final int BROADCAST_INFO_TYPE_DSMCC = 6;
+    /** @hide */
+    public static final int BROADCAST_INFO_TYPE_TV_PROPRIETARY_FUNCTION = 7;
+
     /**
      * An unknown state of the client pid gets from the TvInputManager. Client gets this value when
      * query through {@link getClientPid(String sessionId)} fails.
@@ -709,6 +731,9 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onTracksChanged(mSession, tracks);
+                    if (mSession.mIAppNotificationEnabled && mSession.getIAppSession() != null) {
+                        mSession.getIAppSession().notifyTracksChanged(tracks);
+                    }
                 }
             });
         }
@@ -718,6 +743,9 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onTrackSelected(mSession, type, trackId);
+                    if (mSession.mIAppNotificationEnabled && mSession.getIAppSession() != null) {
+                        mSession.getIAppSession().notifyTrackSelected(type, trackId);
+                    }
                 }
             });
         }
@@ -861,6 +889,19 @@ public final class TvInputManager {
                     public void run() {
                         if (mSession.getIAppSession() != null) {
                             mSession.getIAppSession().notifyBroadcastInfoResponse(response);
+                        }
+                    }
+                });
+            }
+        }
+
+        void postAdResponse(final AdResponse response) {
+            if (mSession.mIAppNotificationEnabled) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (mSession.getIAppSession() != null) {
+                            mSession.getIAppSession().notifyAdResponse(response);
                         }
                     }
                 });
@@ -1251,12 +1292,6 @@ public final class TvInputManager {
                     }
                     record.postTuned(channelUri);
                     // TODO: synchronized and wrap the channelUri
-                    if (record.mSession.mIAppNotificationEnabled) {
-                        TvIAppManager.Session iappSession = record.mSession.mIAppSession;
-                        if (iappSession != null) {
-                            iappSession.notifyTuned(channelUri);
-                        }
-                    }
                 }
             }
 
@@ -1293,6 +1328,18 @@ public final class TvInputManager {
                         return;
                     }
                     record.postBroadcastInfoResponse(response);
+                }
+            }
+
+            @Override
+            public void onAdResponse(AdResponse response, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postAdResponse(response);
                 }
             }
         };
@@ -1448,6 +1495,57 @@ public final class TvInputManager {
                 return INPUT_STATE_DISCONNECTED;
             }
             return state;
+        }
+    }
+
+    /**
+     * Returns available extension interfaces of a given hardware TV input. This can be used to
+     * provide domain-specific features that are only known between certain hardware TV inputs
+     * and their clients.
+     *
+     * @param inputId The ID of the TV input.
+     * @return a non-null list of extension interface names available to the caller. An empty
+     *         list indicates the given TV input is not found, or the given TV input is not a
+     *         hardware TV input, or the given TV input doesn't support any extension
+     *         interfaces, or the caller doesn't hold the required permission for the extension
+     *         interfaces supported by the given TV input.
+     * @see #getExtensionInterface
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public List<String> getAvailableExtensionInterfaceNames(@NonNull String inputId) {
+        Preconditions.checkNotNull(inputId);
+        try {
+            return mService.getAvailableExtensionInterfaceNames(inputId, mUserId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns an extension interface of a given hardware TV input. This can be used to provide
+     * domain-specific features that are only known between certain hardware TV inputs and
+     * their clients.
+     *
+     * @param inputId The ID of the TV input.
+     * @param name The extension interface name.
+     * @return an {@link IBinder} for the given extension interface, {@code null} if the given TV
+     *         input is not found, or if the given TV input is not a hardware TV input, or if the
+     *         given TV input doesn't support the given extension interface, or if the caller
+     *         doesn't hold the required permission for the given extension interface.
+     * @see #getAvailableExtensionInterfaceNames
+     * @hide
+     */
+    @SystemApi
+    @Nullable
+    public IBinder getExtensionInterface(@NonNull String inputId, @NonNull String name) {
+        Preconditions.checkNotNull(inputId);
+        Preconditions.checkNotNull(name);
+        try {
+            return mService.getExtensionInterface(inputId, name, mUserId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -2941,7 +3039,35 @@ public final class TvInputManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
 
+        /**
+         * Removes broadcast info.
+         * @param requestId the corresponding request ID sent from
+         *                  {@link #requestBroadcastInfo(android.media.tv.BroadcastInfoRequest)}
+         */
+        public void removeBroadcastInfo(int requestId) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.removeBroadcastInfo(mToken, requestId, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        public void requestAd(AdRequest request) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.requestAd(mToken, request, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
         }
 
         private final class InputEventHandler extends Handler {

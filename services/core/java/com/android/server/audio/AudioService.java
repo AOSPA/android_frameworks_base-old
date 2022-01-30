@@ -130,7 +130,9 @@ import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.os.ServiceManager;
+import android.os.ShellCallback;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -2031,6 +2033,18 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    @Override // Binder call
+    public void onShellCommand(FileDescriptor in, FileDescriptor out,
+            FileDescriptor err, String[] args, ShellCallback callback,
+            ResultReceiver resultReceiver) {
+        if (mContext.checkCallingOrSelfPermission(Manifest.permission.MANAGE_AUDIO_POLICY)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Missing MANAGE_AUDIO_POLICY permission");
+        }
+        new AudioManagerShellCommand(AudioService.this).exec(this, in, out, err,
+                args, callback, resultReceiver);
+    }
+
     /** @see AudioManager#getSurroundFormats() */
     @Override
     public Map<Integer, Boolean> getSurroundFormats() {
@@ -3265,6 +3279,13 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    private void enforceQueryStatePermission() {
+        if (mContext.checkCallingOrSelfPermission(Manifest.permission.QUERY_AUDIO_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Missing QUERY_AUDIO_STATE permissions");
+        }
+    }
+
     private void enforceQueryStateOrModifyRoutingPermission() {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
                 != PackageManager.PERMISSION_GRANTED
@@ -4170,6 +4191,7 @@ public class AudioService extends IAudioService.Stub
 
     /** Get last audible volume before stream was muted. */
     public int getLastAudibleStreamVolume(int streamType) {
+        enforceQueryStatePermission();
         ensureValidStreamType(streamType);
         int device = getDeviceForStream(streamType);
         return (mStreamStates[streamType].getIndex(device) + 5) / 10;
@@ -9836,7 +9858,7 @@ public class AudioService extends IAudioService.Stub
                                      projection)) {
             Slog.w(TAG, "Permission denied to register audio policy for pid "
                     + Binder.getCallingPid() + " / uid " + Binder.getCallingUid()
-                    + ", need MODIFY_AUDIO_ROUTING or MediaProjection that can project audio");
+                    + ", need system permission or a MediaProjection that can project audio");
             return null;
         }
 
@@ -10219,6 +10241,27 @@ public class AudioService extends IAudioService.Stub
                     duckingBehavior == AudioPolicy.FOCUS_POLICY_DUCKING_IN_POLICY);
         }
         return AudioManager.SUCCESS;
+    }
+
+    /** @see AudioPolicy#getFocusStack() */
+    public List<AudioFocusInfo> getFocusStack() {
+        enforceModifyAudioRoutingPermission();
+        return mMediaFocusControl.getFocusStack();
+    }
+
+    /** @see AudioPolicy#sendFocusLoss */
+    public boolean sendFocusLoss(@NonNull AudioFocusInfo focusLoser,
+            @NonNull IAudioPolicyCallback apcb) {
+        Objects.requireNonNull(focusLoser);
+        Objects.requireNonNull(apcb);
+        enforceModifyAudioRoutingPermission();
+        if (!mAudioPolicies.containsKey(apcb.asBinder())) {
+            throw new IllegalStateException("Only registered AudioPolicy can change focus");
+        }
+        if (!mAudioPolicies.get(apcb.asBinder()).mHasFocusListener) {
+            throw new IllegalStateException("AudioPolicy must have focus listener to change focus");
+        }
+        return mMediaFocusControl.sendFocusLoss(focusLoser);
     }
 
     /** see AudioManager.hasRegisteredDynamicPolicy */

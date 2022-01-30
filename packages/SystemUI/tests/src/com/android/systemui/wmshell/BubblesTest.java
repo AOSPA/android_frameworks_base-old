@@ -116,7 +116,6 @@ import com.android.wm.shell.bubbles.BubbleDataRepository;
 import com.android.wm.shell.bubbles.BubbleEntry;
 import com.android.wm.shell.bubbles.BubbleIconFactory;
 import com.android.wm.shell.bubbles.BubbleLogger;
-import com.android.wm.shell.bubbles.BubbleOverflow;
 import com.android.wm.shell.bubbles.BubbleStackView;
 import com.android.wm.shell.bubbles.BubbleViewInfoTask;
 import com.android.wm.shell.bubbles.Bubbles;
@@ -125,6 +124,7 @@ import com.android.wm.shell.common.FloatingContentCoordinator;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TaskStackListenerImpl;
+import com.android.wm.shell.onehanded.OneHandedController;
 
 import com.google.common.collect.ImmutableList;
 
@@ -138,6 +138,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Tests the NotificationEntryManager setup with BubbleController.
@@ -249,6 +250,8 @@ public class BubblesTest extends SysuiTestCase {
     private AuthController mAuthController;
     @Mock
     private TaskViewTransitions mTaskViewTransitions;
+    @Mock
+    private Optional<OneHandedController> mOneHandedOptional;
 
     private TestableBubblePositioner mPositioner;
 
@@ -345,6 +348,7 @@ public class BubblesTest extends SysuiTestCase {
                 mShellTaskOrganizer,
                 mPositioner,
                 mock(DisplayController.class),
+                mOneHandedOptional,
                 syncExecutor,
                 mock(Handler.class),
                 mTaskViewTransitions,
@@ -631,7 +635,7 @@ public class BubblesTest extends SysuiTestCase {
     }
 
     @Test
-    public void testRemoveLastExpanded_selectsOverflow() {
+    public void testRemoveLastExpanded_collapses() {
         // Mark it as a bubble and add it explicitly
         mEntryListener.onPendingEntryAdded(mRow);
         mEntryListener.onPendingEntryAdded(mRow2);
@@ -670,11 +674,10 @@ public class BubblesTest extends SysuiTestCase {
                         stackView.getExpandedBubble().getKey()).getKey(),
                 Bubbles.DISMISS_USER_GESTURE);
 
-        // Overflow should be selected
-        assertEquals(mBubbleData.getSelectedBubble().getKey(), BubbleOverflow.KEY);
-        verify(mBubbleExpandListener).onBubbleExpandChanged(true, BubbleOverflow.KEY);
-        assertTrue(mBubbleController.hasBubbles());
-        assertSysuiStates(true /* stackExpanded */, false /* mangeMenuExpanded */);
+        // We should be collapsed
+        verify(mBubbleExpandListener).onBubbleExpandChanged(false, mRow.getKey());
+        assertFalse(mBubbleController.hasBubbles());
+        assertSysuiStates(false /* stackExpanded */, false /* mangeMenuExpanded */);
     }
 
     @Test

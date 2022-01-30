@@ -40,7 +40,6 @@ import static com.android.server.wm.ActivityRecord.State.RESUMED;
 import static com.android.server.wm.ActivityRecord.State.STOPPED;
 import static com.android.server.wm.ActivityTaskManagerService.TAG_ROOT_TASK;
 import static com.android.server.wm.DisplayContent.alwaysCreateRootTask;
-import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
@@ -1409,9 +1408,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
             leafTask.forAllLeafTaskFragments((taskFrag) -> {
                 final ActivityRecord resumedActivity = taskFrag.getResumedActivity();
-                if (resumedActivity != null
-                        && (taskFrag.getVisibility(resuming) != TASK_FRAGMENT_VISIBILITY_VISIBLE
-                        || !taskFrag.isTopActivityFocusable())) {
+                if (resumedActivity != null && !taskFrag.canBeResumed(resuming)) {
                     if (taskFrag.startPausing(false /* uiSleeping*/, resuming, "pauseBackTasks")) {
                         someActivityPaused[0]++;
                     }

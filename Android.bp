@@ -25,6 +25,18 @@
 //
 // READ ME: ########################################################
 
+// TODO(b/21090328): Remove filter after we are ready to.
+soong_config_module_type {
+    name: "java_library_with_nonpublic_deps",
+    module_type: "java_library",
+    config_namespace: "ANDROID",
+    bool_variables: ["include_nonpublic_framework_api"],
+    properties: [
+        "static_libs",
+        "libs",
+    ],
+}
+
 package {
     default_applicable_licenses: ["frameworks_base_license"],
 }
@@ -142,12 +154,13 @@ filegroup {
     ],
 }
 
-java_library {
+java_library_with_nonpublic_deps {
     name: "framework-updatable-stubs-module_libs_api",
     static_libs: [
         "android.net.ipsec.ike.stubs.module_lib",
         "framework-appsearch.stubs.module_lib",
         "framework-connectivity.stubs.module_lib",
+        "framework-connectivity-tiramisu.stubs.module_lib",
         "framework-graphics.stubs.module_lib",
         "framework-media.stubs.module_lib",
         "framework-mediaprovider.stubs.module_lib",
@@ -159,13 +172,21 @@ java_library {
         "framework-supplementalprocess.stubs.module_lib",
         "framework-tethering.stubs.module_lib",
         "framework-uwb.stubs.module_lib",
+        "framework-nearby.stubs.module_lib",
         "framework-wifi.stubs.module_lib",
     ],
+    soong_config_variables: {
+        include_nonpublic_framework_api: {
+            static_libs: [
+                "framework-supplementalapi.stubs.module_lib",
+            ],
+        },
+    },
     sdk_version: "module_current",
     visibility: ["//visibility:private"],
 }
 
-java_library {
+java_library_with_nonpublic_deps {
     name: "framework-all",
     installable: false,
     static_libs: [
@@ -173,6 +194,7 @@ java_library {
         "framework-minus-apex",
         "framework-appsearch.impl",
         "framework-connectivity.impl",
+        "framework-connectivity-tiramisu.impl",
         "framework-graphics.impl",
         "framework-mediaprovider.impl",
         "framework-permission.impl",
@@ -182,10 +204,18 @@ java_library {
         "framework-statsd.impl",
         "framework-supplementalprocess.impl",
         "framework-tethering.impl",
+        "framework-nearby.impl",
         "framework-uwb.impl",
         "framework-wifi.impl",
         "updatable-media",
     ],
+    soong_config_variables: {
+        include_nonpublic_framework_api: {
+            static_libs: [
+                "framework-supplementalapi.stubs.module_lib",
+            ],
+        },
+    },
     apex_available: ["//apex_available:platform"],
     sdk_version: "core_platform",
     visibility: [
@@ -384,6 +414,7 @@ java_defaults {
         "tv_tuner_resource_manager_aidl_interface-java",
         "soundtrigger_middleware-aidl-java",
         "modules-utils-preconditions",
+        "modules-utils-synchronous-result-receiver",
         "modules-utils-os",
         "framework-permission-aidl-java",
         "spatializer-aidl-java",

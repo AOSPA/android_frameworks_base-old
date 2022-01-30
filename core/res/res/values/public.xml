@@ -3249,6 +3249,9 @@
     <public name="canDisplayOnRemoteDevices" />
     <public name="supportedTypes" />
     <public name="resetEnabledSettingsOnAppDataCleared" />
+    <public name="supportsStylusHandwriting" />
+    <!-- @hide @SystemApi -->
+    <public name="gameSessionService" />
   </staging-public-group>
 
   <staging-public-group type="id" first-id="0x01de0000">
@@ -3260,6 +3263,7 @@
   </staging-public-group>
 
   <staging-public-group type="style" first-id="0x01dd0000">
+    <public name="TextAppearance.DeviceDefault.Headline" />
   </staging-public-group>
 
   <staging-public-group type="string" first-id="0x01dc0000">
@@ -3278,6 +3282,8 @@
   </staging-public-group>
 
   <staging-public-group type="array" first-id="0x01d90000">
+    <!-- @hide @SystemApi -->
+    <public name="config_optionalIpSecAlgorithms" />
   </staging-public-group>
 
   <staging-public-group type="drawable" first-id="0x01d80000">
@@ -3308,6 +3314,10 @@
   </staging-public-group>
 
   <staging-public-group type="bool" first-id="0x01cf0000">
+    <!-- @hide @SystemApi -->
+    <public name="config_systemCaptionsServiceCallsEnabled" />
+    <!-- @hide @TestApi -->
+    <public name="config_preventImeStartupUnlessTextEditor" />
   </staging-public-group>
 
   <staging-public-group type="fraction" first-id="0x01ce0000">

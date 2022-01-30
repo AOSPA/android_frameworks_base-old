@@ -1204,7 +1204,8 @@ public class AudioManager {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
+    @RequiresPermission("android.permission.QUERY_AUDIO_STATE")
     public int getLastAudibleStreamVolume(int streamType) {
         final IAudioService service = getService();
         try {
@@ -2403,6 +2404,77 @@ public class AudioManager {
     }
 
     //====================================================================
+    // Direct playback query
+
+    /** Return value for {@link #getDirectPlaybackSupport(AudioFormat, AudioAttributes)}:
+        direct playback not supported. */
+    public static final int DIRECT_PLAYBACK_NOT_SUPPORTED = AudioSystem.DIRECT_NOT_SUPPORTED;
+    /** Return value for {@link #getDirectPlaybackSupport(AudioFormat, AudioAttributes)}:
+        direct offload playback supported. Compressed offload is a variant of direct playback.
+        It is the feature that allows audio processing tasks to be done on the Android device but
+        not on the application processor, instead, it is handled by dedicated hardware such as audio
+        DSPs. That will allow the application processor to be idle as much as possible, which is
+        good for power saving. Compressed offload playback supports
+        {@link AudioTrack.StreamEventCallback} for event notifications. */
+    public static final int DIRECT_PLAYBACK_OFFLOAD_SUPPORTED =
+            AudioSystem.DIRECT_OFFLOAD_SUPPORTED;
+    /** Return value for {@link #getDirectPlaybackSupport(AudioFormat, AudioAttributes)}:
+        direct offload playback supported with gapless transitions. Compressed offload is a variant
+        of direct playback. It is the feature that allows audio processing tasks to be done on the
+        Android device but not on the application processor, instead, it is handled by dedicated
+        hardware such as audio DSPs. That will allow the application processor to be idle as much as
+        possible, which is good for power saving. Compressed offload playback supports
+        {@link AudioTrack.StreamEventCallback} for event notifications. Gapless transitions
+        indicates the ability to play consecutive audio tracks without an audio silence in
+        between. */
+    public static final int DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED =
+            AudioSystem.DIRECT_OFFLOAD_GAPLESS_SUPPORTED;
+    /** Return value for {@link #getDirectPlaybackSupport(AudioFormat, AudioAttributes)}:
+        direct playback supported. This value covers direct playback that is bitstream pass-through
+        such as compressed pass-through. */
+    public static final int DIRECT_PLAYBACK_BITSTREAM_SUPPORTED =
+            AudioSystem.DIRECT_BITSTREAM_SUPPORTED;
+
+    /** @hide */
+    @IntDef(flag = true, prefix = "DIRECT_PLAYBACK_", value = {
+            DIRECT_PLAYBACK_NOT_SUPPORTED,
+            DIRECT_PLAYBACK_OFFLOAD_SUPPORTED,
+            DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED,
+            DIRECT_PLAYBACK_BITSTREAM_SUPPORTED}
+    )
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface AudioDirectPlaybackMode {}
+
+    /**
+     * Returns a bitfield representing the different forms of direct playback currently available
+     * for a given audio format.
+     * <p>Direct playback means that the audio stream is not altered by the framework. The audio
+     * stream will not be resampled, volume scaled, downmixed or mixed with other content by
+     * the framework. But it may be wrapped in a higher level protocol such as IEC61937 for
+     * passthrough.
+     * <p>Checking for direct support can help the app select the representation of audio content
+     * that most closely matches the capabilities of the device and peripherals (e.g. A/V receiver)
+     * connected to it. Note that the provided stream can still be re-encoded or mixed with other
+     * streams, if needed.
+     * @param format the audio format (codec, sample rate, channels) being checked.
+     * @param attributes the {@link AudioAttributes} to be used for playback
+     * @return the direct playback mode available with given format and attributes. The returned
+     *         value will be {@link #DIRECT_PLAYBACK_NOT_SUPPORTED} or a combination of
+     *         {@link #DIRECT_PLAYBACK_OFFLOAD_SUPPORTED},
+     *         {@link #DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED} and
+     *         {@link #DIRECT_PLAYBACK_BITSTREAM_SUPPORTED}. Note that if
+     *         {@link #DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED} is present in the returned value,
+     *         then {@link #DIRECT_PLAYBACK_OFFLOAD_SUPPORTED} will be too.
+     */
+    @AudioDirectPlaybackMode
+    public static int getDirectPlaybackSupport(@NonNull AudioFormat format,
+                                               @NonNull AudioAttributes attributes) {
+        Objects.requireNonNull(format);
+        Objects.requireNonNull(attributes);
+        return AudioSystem.getDirectPlaybackSupport(format, attributes);
+    }
+
+    //====================================================================
     // Offload query
     /**
      * Returns whether offloaded playback of an audio format is supported on the device.
@@ -2462,7 +2534,9 @@ public class AudioManager {
      *         {@link #PLAYBACK_OFFLOAD_SUPPORTED} if offload playback is supported or
      *         {@link #PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED} if gapless transitions are
      *         also supported.
+     * @deprecated Use {@link #getDirectPlaybackSupport(AudioFormat, AudioAttributes)} instead
      */
+    @Deprecated
     @AudioOffloadMode
     public static int getPlaybackOffloadSupport(@NonNull AudioFormat format,
             @NonNull AudioAttributes attributes) {
@@ -6844,56 +6918,63 @@ public class AudioManager {
 
     /**
      * Returns a list of audio formats that corresponds to encoding formats
-     * supported on offload path for A2DP and LE audio playback.
+     * supported on offload path for A2DP playback.
      *
-     * @param deviceType Indicates the target device type {@link AudioSystem.DeviceType}
      * @return a list of {@link BluetoothCodecConfig} objects containing encoding formats
-     * supported for offload A2DP playback or a list of {@link BluetoothLeAudioCodecConfig}
-     * objects containing encoding formats supported for offload LE Audio playback
+     * supported for offload A2DP playback
      * @hide
      */
-    public List<?> getHwOffloadFormatsSupportedForBluetoothMedia(
-            @AudioSystem.DeviceType int deviceType) {
-        ArrayList<Integer> formatsList = new ArrayList<Integer>();
-        ArrayList<BluetoothCodecConfig> a2dpCodecConfigList = new ArrayList<BluetoothCodecConfig>();
-        ArrayList<BluetoothLeAudioCodecConfig> leAudioCodecConfigList =
-                new ArrayList<BluetoothLeAudioCodecConfig>();
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public @NonNull List<BluetoothCodecConfig> getHwOffloadFormatsSupportedForA2dp() {
+        ArrayList<Integer> formatsList = new ArrayList<>();
+        ArrayList<BluetoothCodecConfig> codecConfigList = new ArrayList<>();
 
-        if (deviceType != AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP
-                && deviceType != AudioSystem.DEVICE_OUT_BLE_HEADSET) {
-            throw new IllegalArgumentException(
-                    "Illegal devicetype for the getHwOffloadFormatsSupportedForBluetoothMedia");
-        }
-
-        int status = AudioSystem.getHwOffloadFormatsSupportedForBluetoothMedia(deviceType,
-                                                                                formatsList);
+        int status = AudioSystem.getHwOffloadFormatsSupportedForBluetoothMedia(
+                AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, formatsList);
         if (status != AudioManager.SUCCESS) {
-            Log.e(TAG, "getHwOffloadFormatsSupportedForBluetoothMedia for deviceType "
-                    + deviceType + " failed:" + status);
-            return a2dpCodecConfigList;
+            Log.e(TAG, "getHwOffloadEncodingFormatsSupportedForA2DP failed:" + status);
+            return codecConfigList;
         }
 
-        if (deviceType == AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP) {
-            for (Integer format : formatsList) {
-                int btSourceCodec = AudioSystem.audioFormatToBluetoothSourceCodec(format);
-                if (btSourceCodec != BluetoothCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
-                    a2dpCodecConfigList.add(new BluetoothCodecConfig(btSourceCodec));
-                }
+        for (Integer format : formatsList) {
+            int btSourceCodec = AudioSystem.audioFormatToBluetoothSourceCodec(format);
+            if (btSourceCodec != BluetoothCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
+                codecConfigList.add(new BluetoothCodecConfig(btSourceCodec));
             }
-            return a2dpCodecConfigList;
-        } else if (deviceType == AudioSystem.DEVICE_OUT_BLE_HEADSET) {
-            for (Integer format : formatsList) {
-                int btLeAudioCodec = AudioSystem.audioFormatToBluetoothLeAudioSourceCodec(format);
-                if (btLeAudioCodec != BluetoothLeAudioCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
-                    leAudioCodecConfigList.add(new BluetoothLeAudioCodecConfig.Builder()
-                                                .setCodecType(btLeAudioCodec)
-                                                .build());
-                }
-            }
+        }
+        return codecConfigList;
+    }
+
+    /**
+     * Returns a list of audio formats that corresponds to encoding formats
+     * supported on offload path for Le audio playback.
+     *
+     * @return a list of {@link BluetoothLeAudioCodecConfig} objects containing encoding formats
+     * supported for offload Le Audio playback
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @NonNull
+    public List<BluetoothLeAudioCodecConfig> getHwOffloadFormatsSupportedForLeAudio() {
+        ArrayList<Integer> formatsList = new ArrayList<>();
+        ArrayList<BluetoothLeAudioCodecConfig> leAudioCodecConfigList = new ArrayList<>();
+
+        int status = AudioSystem.getHwOffloadFormatsSupportedForBluetoothMedia(
+                AudioSystem.DEVICE_OUT_BLE_HEADSET, formatsList);
+        if (status != AudioManager.SUCCESS) {
+            Log.e(TAG, "getHwOffloadEncodingFormatsSupportedForLeAudio failed:" + status);
             return leAudioCodecConfigList;
         }
-        Log.e(TAG, "Input deviceType " + deviceType + " doesn't support.");
-        return a2dpCodecConfigList;
+
+        for (Integer format : formatsList) {
+            int btLeAudioCodec = AudioSystem.audioFormatToBluetoothLeAudioSourceCodec(format);
+            if (btLeAudioCodec != BluetoothLeAudioCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
+                leAudioCodecConfigList.add(new BluetoothLeAudioCodecConfig.Builder()
+                                            .setCodecType(btLeAudioCodec)
+                                            .build());
+            }
+        }
+        return leAudioCodecConfigList;
     }
 
     // Since we need to calculate the changes since THE LAST NOTIFICATION, and not since the

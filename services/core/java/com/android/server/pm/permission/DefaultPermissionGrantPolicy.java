@@ -198,6 +198,7 @@ final class DefaultPermissionGrantPolicy {
     private static final Set<String> SENSORS_PERMISSIONS = new ArraySet<>();
     static {
         SENSORS_PERMISSIONS.add(Manifest.permission.BODY_SENSORS);
+        SENSORS_PERMISSIONS.add(Manifest.permission.BODY_SENSORS_BACKGROUND);
     }
 
     private static final Set<String> STORAGE_PERMISSIONS = new ArraySet<>();
@@ -435,7 +436,8 @@ final class DefaultPermissionGrantPolicy {
                     || !pm.isGranted(Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
                             pkg, UserHandle.of(userId))
                     || !pm.isGranted(Manifest.permission.READ_PHONE_STATE, pkg,
-                            UserHandle.of(userId))) {
+                            UserHandle.of(userId))
+                    || pm.isSysComponentOrPersistentPlatformSignedPrivApp(pkg)) {
                 continue;
             }
 
@@ -808,7 +810,7 @@ final class DefaultPermissionGrantPolicy {
             } else {
                 grantPermissionsToSystemPackage(pm,
                     getDefaultSystemHandlerActivityPackage(pm, ACTION_TRACK, userId), userId,
-                    SENSORS_PERMISSIONS, ALWAYS_LOCATION_PERMISSIONS);
+                    SENSORS_PERMISSIONS);
             }
         }
 

@@ -33,15 +33,18 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.companion.AssociationInfo;
+import android.content.pm.UserInfo;
 import android.net.MacAddress;
 import android.os.Environment;
+import android.util.ArrayMap;
 import android.util.AtomicFile;
-import android.util.ExceptionUtils;
 import android.util.Slog;
+import android.util.SparseArray;
 import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
+import com.android.internal.util.FunctionalUtils.ThrowingConsumer;
 import com.android.internal.util.XmlUtils;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -50,8 +53,11 @@ import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,8 +74,8 @@ import java.util.concurrent.ConcurrentMap;
  *
  * Before Android T the data was stored using the v0 schema.
  *
- * @see #readAssociationsV0(TypedXmlPullParser, int, Set)
- * @see #readAssociationV0(TypedXmlPullParser, int, int, Set)
+ * @see #readAssociationsV0(TypedXmlPullParser, int, Collection)
+ * @see #readAssociationV0(TypedXmlPullParser, int, int, Collection)
  *
  * The following snippet is a sample of a the file that is using v0 schema.
  * <pre>{@code
@@ -100,8 +106,8 @@ import java.util.concurrent.ConcurrentMap;
  * optional.
  *
  * @see #CURRENT_PERSISTENCE_VERSION
- * @see #readAssociationsV1(TypedXmlPullParser, int, Set)
- * @see #readAssociationV1(TypedXmlPullParser, int, Set)
+ * @see #readAssociationsV1(TypedXmlPullParser, int, Collection)
+ * @see #readAssociationV1(TypedXmlPullParser, int, Collection)
  * @see #readPreviouslyUsedIdsV1(TypedXmlPullParser, Map)
  *
  * The following snippet is a sample of a the file that is using v0 schema.
@@ -168,6 +174,23 @@ final class PersistentDataStore {
     private final @NonNull ConcurrentMap<Integer, AtomicFile> mUserIdToStorageFile =
             new ConcurrentHashMap<>();
 
+    void readStateForUsers(@NonNull List<UserInfo> users,
+            @NonNull Set<AssociationInfo> allAssociationsOut,
+            @NonNull SparseArray<Map<String, Set<Integer>>> previouslyUsedIdsPerUserOut) {
+        for (UserInfo user : users) {
+            final int userId = user.id;
+            // Previously used IDs are stored in the "out" collection per-user.
+            final Map<String, Set<Integer>> previouslyUsedIds = new ArrayMap<>();
+
+            // Associations for all users are stored in a single "flat" set: so we read directly
+            // into it.
+            readStateForUser(userId, allAssociationsOut, previouslyUsedIds);
+
+            // Save previously used IDs for this user into the "out" structure.
+            previouslyUsedIdsPerUserOut.append(userId, previouslyUsedIds);
+        }
+    }
+
     /**
      * Reads previously persisted data for the given user "into" the provided containers.
      *
@@ -176,7 +199,7 @@ final class PersistentDataStore {
      * @param previouslyUsedIdsPerPackageOut a container to read the used IDs "into".
      */
     void readStateForUser(@UserIdInt int userId,
-            @NonNull Set<AssociationInfo> associationsOut,
+            @NonNull Collection<AssociationInfo> associationsOut,
             @NonNull Map<String, Set<Integer>> previouslyUsedIdsPerPackageOut) {
         Slog.i(LOG_TAG, "Reading associations for user " + userId + " from disk");
         final AtomicFile file = getStorageFileForUser(userId);
@@ -237,7 +260,8 @@ final class PersistentDataStore {
      * @param associations a set of user's associations.
      * @param previouslyUsedIdsPerPackage a set previously used Association IDs for the user.
      */
-    void persistStateForUser(@UserIdInt int userId, @NonNull Set<AssociationInfo> associations,
+    void persistStateForUser(@UserIdInt int userId,
+            @NonNull Collection<AssociationInfo> associations,
             @NonNull Map<String, Set<Integer>> previouslyUsedIdsPerPackage) {
         Slog.i(LOG_TAG, "Writing associations for user " + userId + " to disk");
         if (DEBUG) Slog.d(LOG_TAG, "  > " + associations);
@@ -250,7 +274,7 @@ final class PersistentDataStore {
     }
 
     private int readStateFromFileLocked(@UserIdInt int userId, @NonNull AtomicFile file,
-            @NonNull String rootTag, @Nullable Set<AssociationInfo> associationsOut,
+            @NonNull String rootTag, @Nullable Collection<AssociationInfo> associationsOut,
             @NonNull Map<String, Set<Integer>> previouslyUsedIdsPerPackageOut) {
         try (FileInputStream in = file.openRead()) {
             final TypedXmlPullParser parser = Xml.resolvePullParser(in);
@@ -282,28 +306,25 @@ final class PersistentDataStore {
     }
 
     private void persistStateToFileLocked(@NonNull AtomicFile file,
-            @Nullable Set<AssociationInfo> associations,
+            @Nullable Collection<AssociationInfo> associations,
             @NonNull Map<String, Set<Integer>> previouslyUsedIdsPerPackage) {
-        file.write(out -> {
-            try {
-                final TypedXmlSerializer serializer = Xml.resolveSerializer(out);
-                serializer.setFeature(
-                        "http://xmlpull.org/v1/doc/features.html#indent-output", true);
+        // Writing to file could fail, for example, if the user has been recently removed and so was
+        // their DE (/data/system_de/<user-id>/) directory.
+        writeToFileSafely(file, out -> {
+            final TypedXmlSerializer serializer = Xml.resolveSerializer(out);
+            serializer.setFeature(
+                    "http://xmlpull.org/v1/doc/features.html#indent-output", true);
 
-                serializer.startDocument(null, true);
-                serializer.startTag(null, XML_TAG_STATE);
-                writeIntAttribute(serializer,
-                        XML_ATTR_PERSISTENCE_VERSION, CURRENT_PERSISTENCE_VERSION);
+            serializer.startDocument(null, true);
+            serializer.startTag(null, XML_TAG_STATE);
+            writeIntAttribute(serializer,
+                    XML_ATTR_PERSISTENCE_VERSION, CURRENT_PERSISTENCE_VERSION);
 
-                writeAssociations(serializer, associations);
-                writePreviouslyUsedIds(serializer, previouslyUsedIdsPerPackage);
+            writeAssociations(serializer, associations);
+            writePreviouslyUsedIds(serializer, previouslyUsedIdsPerPackage);
 
-                serializer.endTag(null, XML_TAG_STATE);
-                serializer.endDocument();
-            } catch (Exception e) {
-                Slog.e(LOG_TAG, "Error while writing associations file", e);
-                throw ExceptionUtils.propagate(e);
-            }
+            serializer.endTag(null, XML_TAG_STATE);
+            serializer.endDocument();
         });
     }
 
@@ -321,7 +342,7 @@ final class PersistentDataStore {
     }
 
     private static void readAssociationsV0(@NonNull TypedXmlPullParser parser,
-            @UserIdInt int userId, @NonNull Set<AssociationInfo> out)
+            @UserIdInt int userId, @NonNull Collection<AssociationInfo> out)
             throws XmlPullParserException, IOException {
         requireStartOfTag(parser, XML_TAG_ASSOCIATIONS);
 
@@ -342,7 +363,8 @@ final class PersistentDataStore {
     }
 
     private static void readAssociationV0(@NonNull TypedXmlPullParser parser, @UserIdInt int userId,
-            int associationId, @NonNull Set<AssociationInfo> out) throws XmlPullParserException {
+            int associationId, @NonNull Collection<AssociationInfo> out)
+            throws XmlPullParserException {
         requireStartOfTag(parser, XML_TAG_ASSOCIATION);
 
         final String appPackage = readStringAttribute(parser, XML_ATTR_PACKAGE);
@@ -360,7 +382,7 @@ final class PersistentDataStore {
     }
 
     private static void readAssociationsV1(@NonNull TypedXmlPullParser parser,
-            @UserIdInt int userId, @NonNull Set<AssociationInfo> out)
+            @UserIdInt int userId, @NonNull Collection<AssociationInfo> out)
             throws XmlPullParserException, IOException {
         requireStartOfTag(parser, XML_TAG_ASSOCIATIONS);
 
@@ -374,7 +396,7 @@ final class PersistentDataStore {
     }
 
     private static void readAssociationV1(@NonNull TypedXmlPullParser parser, @UserIdInt int userId,
-            @NonNull Set<AssociationInfo> out) throws XmlPullParserException, IOException {
+            @NonNull Collection<AssociationInfo> out) throws XmlPullParserException, IOException {
         requireStartOfTag(parser, XML_TAG_ASSOCIATION);
 
         final int associationId = readIntAttribute(parser, XML_ATTR_ID);
@@ -421,9 +443,11 @@ final class PersistentDataStore {
     }
 
     private static void writeAssociations(@NonNull XmlSerializer parent,
-            @Nullable Set<AssociationInfo> associations) throws IOException {
+            @Nullable Collection<AssociationInfo> associations) throws IOException {
         final XmlSerializer serializer = parent.startTag(null, XML_TAG_ASSOCIATIONS);
-        forEach(associations, it -> writeAssociation(serializer, it));
+        for (AssociationInfo association : associations) {
+            writeAssociation(serializer, association);
+        }
         serializer.endTag(null, XML_TAG_ASSOCIATIONS);
     }
 
@@ -497,5 +521,14 @@ final class PersistentDataStore {
             if (DEBUG) Slog.w(LOG_TAG, "Could not create AssociationInfo", e);
         }
         return associationInfo;
+    }
+
+    private static void writeToFileSafely(@NonNull AtomicFile file,
+            @NonNull ThrowingConsumer<FileOutputStream> consumer) {
+        try {
+            file.write(consumer);
+        } catch (Exception e) {
+            Slog.e(LOG_TAG, "Error while writing to file " + file, e);
+        }
     }
 }

@@ -281,7 +281,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
-    int LE_AUDIO_BROADCAST = 26;
+    int LE_AUDIO_BROADCAST = 33;
 
     /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
@@ -289,7 +289,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 32;
+    int MAX_PROFILE_ID = 33;
 
     /**
      * Default priority for devices that we try to auto-connect to and

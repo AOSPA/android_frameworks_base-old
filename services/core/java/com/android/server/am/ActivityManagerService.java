@@ -93,6 +93,7 @@ import static android.provider.Settings.Global.DEBUG_APP;
 import static android.provider.Settings.Global.NETWORK_ACCESS_TIMEOUT_MS;
 import static android.provider.Settings.Global.WAIT_FOR_DEBUGGER;
 import static android.text.format.DateUtils.DAY_IN_MILLIS;
+import static android.util.FeatureFlagUtils.SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ALL;
@@ -307,6 +308,7 @@ import android.text.style.SuggestionSpan;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
+import android.util.FeatureFlagUtils;
 import android.util.IntArray;
 import android.util.Log;
 import android.util.Pair;
@@ -5904,7 +5906,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         return Arrays.binarySearch(allowlist, appId) >= 0
                 || Arrays.binarySearch(mDeviceIdleTempAllowlist, appId) >= 0
-                || mPendingTempAllowlist.indexOfKey(uid) >= 0;
+                || mPendingTempAllowlist.get(uid) != null;
     }
 
     /**
@@ -5997,6 +5999,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (targetPkg == null) {
                 throw new IllegalArgumentException("null target");
             }
+            final int callingUserId = UserHandle.getUserId(r.uid);
+            if (mPackageManagerInt.filterAppAccess(targetPkg, r.uid, callingUserId)) {
+                return;
+            }
 
             Preconditions.checkFlagsArgument(modeFlags, Intent.FLAG_GRANT_READ_URI_PERMISSION
                     | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -6008,7 +6014,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             intent.setFlags(modeFlags);
 
             final NeededUriGrants needed = mUgmInternal.checkGrantUriPermissionFromIntent(intent,
-                    r.uid, targetPkg, UserHandle.getUserId(r.uid));
+                    r.uid, targetPkg, callingUserId);
             mUgmInternal.grantUriPermissionUncheckedFromIntent(needed, null);
         }
     }
@@ -8124,7 +8130,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Obtain Incremental information if available
         if (r != null && r.info != null && r.info.packageName != null) {
             IncrementalStatesInfo incrementalStatesInfo =
-                    mPackageManagerInt.getIncrementalStatesInfo(r.info.packageName, r.uid,
+                    mPackageManagerInt.getIncrementalStatesInfo(r.info.packageName, SYSTEM_UID,
                             r.userId);
             if (incrementalStatesInfo != null) {
                 loadingProgress = incrementalStatesInfo.getProgress();
@@ -9049,8 +9055,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             pw.println();
             if (dumpAll) {
                 pw.println("-------------------------------------------------------------------------------");
+                mProcessList.mAppExitInfoTracker.dumpHistoryProcessExitInfo(pw, dumpPackage);
             }
-            mProcessList.mAppExitInfoTracker.dumpHistoryProcessExitInfo(pw, dumpPackage);
             if (dumpPackage == null) {
                 pw.println();
                 if (dumpAll) {
@@ -13478,12 +13484,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                         !intent.getBooleanExtra(Intent.EXTRA_DONT_KILL_APP, false);
                                 final boolean fullUninstall = removed && !replacing;
                                 if (removed) {
-                                    if (killProcess) {
-                                        forceStopPackageLocked(ssp, UserHandle.getAppId(
-                                                intent.getIntExtra(Intent.EXTRA_UID, -1)),
-                                                false, true, true, false, fullUninstall, userId,
-                                                removed ? "pkg removed" : "pkg changed");
-                                    } else {
+                                    if (!killProcess) {
                                         // Kill any app zygotes always, since they can't fork new
                                         // processes with references to the old code
                                         forceStopAppZygoteLocked(ssp, UserHandle.getAppId(
@@ -14704,6 +14705,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     private void checkExcessivePowerUsage() {
         updateCpuStatsNow();
 
+        final boolean monitorPhantomProcs = mSystemReady && FeatureFlagUtils.isEnabled(mContext,
+                SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS);
         synchronized (mProcLock) {
             final boolean doCpuKills = mLastPowerCheckUptime != 0;
             final long curUptime = SystemClock.uptimeMillis();
@@ -14729,9 +14732,11 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                     updateAppProcessCpuTimeLPr(uptimeSince, doCpuKills, checkDur, cpuLimit, app);
 
-                    // Also check the phantom processes if there is any
-                    updatePhantomProcessCpuTimeLPr(
-                            uptimeSince, doCpuKills, checkDur, cpuLimit, app);
+                    if (monitorPhantomProcs) {
+                        // Also check the phantom processes if there is any
+                        updatePhantomProcessCpuTimeLPr(
+                                uptimeSince, doCpuKills, checkDur, cpuLimit, app);
+                    }
                 }
             });
         }
@@ -15216,11 +15221,13 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // First copy out the pending changes...  we need to leave them in the map for now,
         // in case someone needs to check what is coming up while we don't have the lock held.
-        synchronized (mProcLock) {
-            N = mPendingTempAllowlist.size();
-            list = new PendingTempAllowlist[N];
-            for (int i = 0; i < N; i++) {
-                list[i] = mPendingTempAllowlist.valueAt(i);
+        synchronized (this) {
+            synchronized (mProcLock) {
+                N = mPendingTempAllowlist.size();
+                list = new PendingTempAllowlist[N];
+                for (int i = 0; i < N; i++) {
+                    list[i] = mPendingTempAllowlist.valueAt(i);
+                }
             }
         }
 

@@ -391,6 +391,21 @@ public final class Settings {
             "android.settings.REDUCE_BRIGHT_COLORS_SETTINGS";
 
     /**
+     * Activity Action: Show settings to allow configuration of Color correction.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_COLOR_CORRECTION_SETTINGS =
+            "com.android.settings.ACCESSIBILITY_COLOR_SPACE_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of Color inversion.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -948,6 +963,19 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_LOCALE_SETTINGS =
             "android.settings.LOCALE_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of per application locale.
+     * <p>
+     * Input: The Intent's data URI can specify the application package name to directly invoke the
+     * app locale details GUI specific to the package name.
+     * For example "package:com.my.app".
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_APP_LOCALE_SETTINGS =
+            "android.settings.APP_LOCALE_SETTINGS";
 
     /**
      * Activity Action: Show settings to allow configuration of lockscreen.
@@ -5956,7 +5984,6 @@ public final class Settings {
             MOVED_TO_GLOBAL.add(Settings.Global.CONNECTIVITY_CHANGE_DELAY);
             MOVED_TO_GLOBAL.add(Settings.Global.CAPTIVE_PORTAL_DETECTION_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.CAPTIVE_PORTAL_SERVER);
-            MOVED_TO_GLOBAL.add(Settings.Global.NSD_ON);
             MOVED_TO_GLOBAL.add(Settings.Global.SET_INSTALL_LOCATION);
             MOVED_TO_GLOBAL.add(Settings.Global.DEFAULT_INSTALL_LOCATION);
             MOVED_TO_GLOBAL.add(Settings.Global.INET_CONDITION_DEBOUNCE_UP_DELAY);
@@ -6507,6 +6534,27 @@ public final class Settings {
         public static final String ALLOW_MOCK_LOCATION = "mock_location";
 
         /**
+         * This is used by Bluetooth Manager to store adapter name
+         * @hide
+         */
+        @Readable(maxTargetSdk = Build.VERSION_CODES.S)
+        public static final String BLUETOOTH_NAME = "bluetooth_name";
+
+        /**
+         * This is used by Bluetooth Manager to store adapter address
+         * @hide
+         */
+        @Readable(maxTargetSdk = Build.VERSION_CODES.S)
+        public static final String BLUETOOTH_ADDRESS = "bluetooth_address";
+
+        /**
+         * This is used by Bluetooth Manager to store whether adapter address is valid
+         * @hide
+         */
+        @Readable(maxTargetSdk = Build.VERSION_CODES.S)
+        public static final String BLUETOOTH_ADDR_VALID = "bluetooth_addr_valid";
+
+        /**
          * Setting to indicate that on device captions are enabled.
          *
          * @hide
@@ -6514,6 +6562,16 @@ public final class Settings {
         @SystemApi
         @Readable
         public static final String ODI_CAPTIONS_ENABLED = "odi_captions_enabled";
+
+
+        /**
+         * Setting to indicate live caption button show or hide in the volume
+         * rocker.
+         *
+         * @hide
+         */
+        public static final String ODI_CAPTIONS_VOLUME_UI_ENABLED =
+                "odi_captions_volume_ui_enabled";
 
         /**
          * On Android 8.0 (API level 26) and higher versions of the platform,
@@ -9338,16 +9396,6 @@ public final class Settings {
                 "emergency_gesture_sound_enabled";
 
         /**
-         * The power button "cooldown" period in milliseconds after the Emergency gesture is
-         * triggered, during which single-key actions on the power button are suppressed. Cooldown
-         * period is disabled if set to zero.
-         *
-         * @hide
-         */
-        public static final String EMERGENCY_GESTURE_POWER_BUTTON_COOLDOWN_PERIOD_MS =
-                "emergency_gesture_power_button_cooldown_period_ms";
-
-        /**
          * Whether the camera launch gesture to double tap the power button when the screen is off
          * should be disabled.
          *
@@ -10082,6 +10130,14 @@ public final class Settings {
                 "theme_customization_overlay_packages";
 
         /**
+         * Indicates whether the device is in kids nav mode.
+         * <p>Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String NAV_BAR_KIDS_MODE = "nav_bar_kids_mode";
+
+        /**
          * Navigation bar mode.
          *  0 = 3 button
          *  1 = 2 button
@@ -10443,13 +10499,6 @@ public final class Settings {
          * @hide
          */
         public static final String COMMUNAL_MODE_ENABLED = "communal_mode_enabled";
-
-        /**
-         * An array of all the packages which have been enabled for hub mode by the user.
-         *
-         * @hide
-         */
-        public static final String COMMUNAL_MODE_PACKAGES = "communal_mode_packages";
 
         /**
          * An array of SSIDs of Wi-Fi networks that, when connected, are considered safe to enable
@@ -11580,6 +11629,12 @@ public final class Settings {
         * @hide */
         @Readable
         public static final String PACKAGE_VERIFIER_TIMEOUT = "verifier_timeout";
+
+        /** Timeout for package verification during streaming installations.
+         * @hide */
+        @Readable
+        public static final String PACKAGE_STREAMING_VERIFIER_TIMEOUT =
+                "streaming_verifier_timeout";
 
         /** Timeout for app integrity verification.
          * @hide */
@@ -12884,13 +12939,6 @@ public final class Settings {
         @Readable
         public static final String MIN_DURATION_BETWEEN_RECOVERY_STEPS_IN_MS =
                 "min_duration_between_recovery_steps";
-        /**
-         * Whether network service discovery is enabled.
-         *
-         * @hide
-         */
-        @Readable
-        public static final String NSD_ON = "nsd_on";
 
         /**
          * Let user pick default install location.
@@ -13940,6 +13988,16 @@ public final class Settings {
          */
         @Readable
         public static final String EMERGENCY_AFFORDANCE_NEEDED = "emergency_affordance_needed";
+
+        /**
+         * The power button "cooldown" period in milliseconds after the Emergency gesture is
+         * triggered, during which single-key actions on the power button are suppressed. Cooldown
+         * period is disabled if set to zero.
+         *
+         * @hide
+         */
+        public static final String EMERGENCY_GESTURE_POWER_BUTTON_COOLDOWN_PERIOD_MS =
+                "emergency_gesture_power_button_cooldown_period_ms";
 
         /**
          * Whether to enable automatic system server heap dumps. This only works on userdebug or
@@ -15182,7 +15240,10 @@ public final class Settings {
          * {@code p1[url_bar]:p2:p3[url_foo,url_bas]}
          *
          * @hide
+         * @deprecated Use {@link android.view.autofill.AutofillManager
+         * #DEVICE_CONFIG_AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES} instead.
          */
+        @Deprecated
         @SystemApi
         @Readable
         public static final String AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES =
@@ -17070,6 +17131,15 @@ public final class Settings {
              */
             public static final String CLOCKWORK_SYSUI_MAIN_ACTIVITY =
                     "clockwork_sysui_main_activity";
+
+            /**
+             * Setting to disable power button long press launching Assistant. It's boolean, i.e.
+             * enabled = 1, disabled = 0. By default, this setting is enabled.
+             *
+             * @hide
+             */
+            public static final String CLOCKWORK_LONG_PRESS_TO_ASSISTANT_ENABLED =
+                    "clockwork_long_press_to_assistant_enabled";
         }
     }
 

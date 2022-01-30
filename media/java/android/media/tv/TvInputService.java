@@ -202,6 +202,21 @@ public abstract class TvInputService extends Service {
             }
 
             @Override
+            public List<String>  getAvailableExtensionInterfaceNames() {
+                return TvInputService.this.getAvailableExtensionInterfaceNames();
+            }
+
+            @Override
+            public IBinder getExtensionInterface(String name) {
+                return TvInputService.this.getExtensionInterface(name);
+            }
+
+            @Override
+            public String getExtensionInterfacePermission(String name) {
+                return TvInputService.this.getExtensionInterfacePermission(name);
+            }
+
+            @Override
             public void notifyHardwareAdded(TvInputHardwareInfo hardwareInfo) {
                 mServiceHandler.obtainMessage(ServiceHandler.DO_ADD_HARDWARE_INPUT,
                         hardwareInfo).sendToTarget();
@@ -250,6 +265,67 @@ public abstract class TvInputService extends Service {
     @Nullable
     @SystemApi
     public IBinder createExtension() {
+        return null;
+    }
+
+    /**
+     * Returns available extension interfaces. This can be used to provide domain-specific
+     * features that are only known between certain hardware TV inputs and their clients.
+     *
+     * <p>Note that this service-level extension interface mechanism is only for hardware
+     * TV inputs that are bound even when sessions are not created.
+     *
+     * @return a non-null list of available extension interface names. An empty list
+     *         indicates the TV input doesn't support any extension interfaces.
+     * @see #getExtensionInterface
+     * @see #getExtensionInterfacePermission
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    public List<String> getAvailableExtensionInterfaceNames() {
+        return new ArrayList<>();
+    }
+
+    /**
+     * Returns an extension interface. This can be used to provide domain-specific features
+     * that are only known between certain hardware TV inputs and their clients.
+     *
+     * <p>Note that this service-level extension interface mechanism is only for hardware
+     * TV inputs that are bound even when sessions are not created.
+     *
+     * @param name The extension interface name.
+     * @return an {@link IBinder} for the given extension interface, {@code null} if the TV input
+     *         doesn't support the given extension interface.
+     * @see #getAvailableExtensionInterfaceNames
+     * @see #getExtensionInterfacePermission
+     * @hide
+     */
+    @Nullable
+    @SystemApi
+    public IBinder getExtensionInterface(@NonNull String name) {
+        return null;
+    }
+
+    /**
+     * Returns a permission for the given extension interface. This can be used to provide
+     * domain-specific features that are only known between certain hardware TV inputs and their
+     * clients.
+     *
+     * <p>Note that this service-level extension interface mechanism is only for hardware
+     * TV inputs that are bound even when sessions are not created.
+     *
+     * @param name The extension interface name.
+     * @return a name of the permission being checked for the given extension interface,
+     *         {@code null} if there is no required permission, or if the TV input doesn't
+     *         support the given extension interface.
+     * @see #getAvailableExtensionInterfaceNames
+     * @see #getExtensionInterface
+     * @hide
+     */
+    @Nullable
+    @SystemApi
+    public String getExtensionInterfacePermission(@NonNull String name) {
         return null;
     }
 
@@ -773,7 +849,7 @@ public abstract class TvInputService extends Service {
         /**
          * Notifies response for broadcast info.
          *
-         * @param response
+         * @param response broadcast info response.
          * @hide
          */
         public void notifyBroadcastInfoResponse(@NonNull final BroadcastInfoResponse response) {
@@ -788,6 +864,29 @@ public abstract class TvInputService extends Service {
                         }
                     } catch (RemoteException e) {
                         Log.w(TAG, "error in notifyBroadcastInfoResponse", e);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Notifies response for advertisement.
+         *
+         * @param response advertisement response.
+         * @hide
+         */
+        public void notifyAdResponse(@NonNull final AdResponse response) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) Log.d(TAG, "notifyAdResponse");
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onAdResponse(response);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in notifyAdResponse", e);
                     }
                 }
             });
@@ -962,10 +1061,27 @@ public abstract class TvInputService extends Service {
         public abstract void onSetStreamVolume(@FloatRange(from = 0.0, to = 1.0) float volume);
 
         /**
+         * called when broadcast info is requested.
+         *
          * @param request broadcast info request
          * @hide
          */
         public void onRequestBroadcastInfo(@NonNull BroadcastInfoRequest request) {
+        }
+
+        /**
+         * @hide
+         */
+        public void onRemoveBroadcastInfo(int requestId) {
+        }
+
+        /**
+         * called when advertisement is requested.
+         *
+         * @param request advertisement request
+         * @hide
+         */
+        public void onRequestAd(@NonNull AdRequest request) {
         }
 
         /**
@@ -1575,6 +1691,14 @@ public abstract class TvInputService extends Service {
 
         void requestBroadcastInfo(BroadcastInfoRequest request) {
             onRequestBroadcastInfo(request);
+        }
+
+        void removeBroadcastInfo(int requestId) {
+            onRemoveBroadcastInfo(requestId);
+        }
+
+        void requestAd(AdRequest request) {
+            onRequestAd(request);
         }
 
         /**

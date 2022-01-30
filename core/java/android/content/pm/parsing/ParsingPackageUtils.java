@@ -21,6 +21,7 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_APK;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NOT_APK;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_RESOURCES_ARSC_COMPRESSED;
@@ -931,6 +932,13 @@ public class ParsingPackageUtils {
             return input.error(
                     INSTALL_PARSE_FAILED_BAD_MANIFEST,
                     "Combination <attribution> tags are not valid"
+            );
+        }
+
+        if (ParsedPermissionUtils.declareDuplicatePermission(pkg)) {
+            return input.error(
+                    INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
+                    "Declare duplicate permissions with different protection levels."
             );
         }
 
@@ -3511,7 +3519,7 @@ public class ParsingPackageUtils {
 
             ArraySet<PublicKey> keys = new ArraySet<>(M);
             for (int j = 0; j < M; ++j) {
-                PublicKey pk = (PublicKey) in.readSerializable();
+                PublicKey pk = (PublicKey) in.readSerializable(java.security.PublicKey.class.getClassLoader(), java.security.PublicKey.class);
                 keys.add(pk);
             }
 

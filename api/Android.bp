@@ -97,6 +97,7 @@ genrule {
         ":conscrypt.module.public.api{.public.api.txt}",
         ":framework-appsearch{.public.api.txt}",
         ":framework-connectivity{.public.api.txt}",
+        ":framework-connectivity-tiramisu{.public.api.txt}",
         ":framework-graphics{.public.api.txt}",
         ":framework-media{.public.api.txt}",
         ":framework-mediaprovider{.public.api.txt}",
@@ -123,10 +124,7 @@ genrule {
             dest: "current.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/public/api",
             dest: "android.txt",
         },
@@ -159,6 +157,7 @@ genrule {
         ":conscrypt.module.public.api{.public.stubs.source}",
         ":framework-appsearch{.public.stubs.source}",
         ":framework-connectivity{.public.stubs.source}",
+        ":framework-connectivity-tiramisu{.public.stubs.source}",
         ":framework-graphics{.public.stubs.source}",
         ":framework-media{.public.stubs.source}",
         ":framework-mediaprovider{.public.stubs.source}",
@@ -188,6 +187,7 @@ genrule {
         ":conscrypt.module.public.api{.public.removed-api.txt}",
         ":framework-appsearch{.public.removed-api.txt}",
         ":framework-connectivity{.public.removed-api.txt}",
+        ":framework-connectivity-tiramisu{.public.removed-api.txt}",
         ":framework-graphics{.public.removed-api.txt}",
         ":framework-media{.public.removed-api.txt}",
         ":framework-mediaprovider{.public.removed-api.txt}",
@@ -214,10 +214,7 @@ genrule {
             dest: "removed.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/public/api",
             dest: "removed.txt",
         },
@@ -231,6 +228,7 @@ genrule {
         ":android.net.ipsec.ike{.system.api.txt}",
         ":framework-appsearch{.system.api.txt}",
         ":framework-connectivity{.system.api.txt}",
+        ":framework-connectivity-tiramisu{.system.api.txt}",
         ":framework-graphics{.system.api.txt}",
         ":framework-media{.system.api.txt}",
         ":framework-mediaprovider{.system.api.txt}",
@@ -256,10 +254,7 @@ genrule {
             dest: "system-current.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/system/api",
             dest: "android.txt",
         },
@@ -292,6 +287,7 @@ genrule {
         ":android.net.ipsec.ike{.system.removed-api.txt}",
         ":framework-appsearch{.system.removed-api.txt}",
         ":framework-connectivity{.system.removed-api.txt}",
+        ":framework-connectivity-tiramisu{.system.removed-api.txt}",
         ":framework-graphics{.system.removed-api.txt}",
         ":framework-media{.system.removed-api.txt}",
         ":framework-mediaprovider{.system.removed-api.txt}",
@@ -317,10 +313,7 @@ genrule {
             dest: "system-removed.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/system/api",
             dest: "removed.txt",
         },
@@ -335,6 +328,7 @@ genrule {
         ":android.net.ipsec.ike{.module-lib.api.txt}",
         ":framework-appsearch{.module-lib.api.txt}",
         ":framework-connectivity{.module-lib.api.txt}",
+        ":framework-connectivity-tiramisu{.module-lib.api.txt}",
         ":framework-graphics{.module-lib.api.txt}",
         ":framework-media{.module-lib.api.txt}",
         ":framework-mediaprovider{.module-lib.api.txt}",
@@ -360,10 +354,7 @@ genrule {
             dest: "module-lib-current.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/module-lib/api",
             dest: "android.txt",
         },
@@ -398,6 +389,7 @@ genrule {
         ":android.net.ipsec.ike{.module-lib.removed-api.txt}",
         ":framework-appsearch{.module-lib.removed-api.txt}",
         ":framework-connectivity{.module-lib.removed-api.txt}",
+        ":framework-connectivity-tiramisu{.module-lib.removed-api.txt}",
         ":framework-graphics{.module-lib.removed-api.txt}",
         ":framework-media{.module-lib.removed-api.txt}",
         ":framework-mediaprovider{.module-lib.removed-api.txt}",
@@ -423,10 +415,7 @@ genrule {
             dest: "module-lib-removed.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/module-lib/api",
             dest: "removed.txt",
         },
@@ -467,10 +456,7 @@ genrule {
             dest: "system-server-current.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/system-server/api",
             dest: "android.txt",
         },
@@ -494,10 +480,7 @@ genrule {
             dest: "system-server-removed.txt",
         },
         {
-            targets: [
-                "sdk",
-                "win_sdk",
-            ],
+            targets: ["sdk"],
             dir: "apistubs/android/system-server/api",
             dest: "removed.txt",
         },
@@ -519,6 +502,7 @@ genrule {
         ":conscrypt.module.public.api.stubs{.jar}",
         ":framework-appsearch.stubs{.jar}",
         ":framework-connectivity.stubs{.jar}",
+        ":framework-connectivity-tiramisu.stubs{.jar}",
         ":framework-graphics.stubs{.jar}",
         ":framework-media.stubs{.jar}",
         ":framework-mediaprovider.stubs{.jar}",
@@ -538,9 +522,6 @@ genrule {
     tools: ["api_versions_trimmer"],
     cmd: "$(location api_versions_trimmer) $(out) $(in)",
     dist: {
-        targets: [
-            "sdk",
-            "win_sdk",
-        ],
+        targets: ["sdk"],
     },
 }

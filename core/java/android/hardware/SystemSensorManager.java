@@ -466,7 +466,8 @@ public class SystemSensorManager extends SensorManager {
 
             IntentFilter filter = new IntentFilter("dynamic_sensor_change");
             filter.addAction(Intent.ACTION_DYNAMIC_SENSOR_CHANGED);
-            mContext.registerReceiver(mDynamicSensorBroadcastReceiver, filter);
+            mContext.registerReceiver(mDynamicSensorBroadcastReceiver, filter,
+                    Context.RECEIVER_NOT_EXPORTED);
         }
     }
 
@@ -689,7 +690,7 @@ public class SystemSensorManager extends SensorManager {
                     new WeakReference<>(this), looper.getQueue(),
                     packageName, mode, manager.mContext.getOpPackageName(),
                     manager.mContext.getAttributionTag());
-            mCloseGuard.open("dispose");
+            mCloseGuard.open("BaseEventQueue.dispose");
             mManager = manager;
         }
 

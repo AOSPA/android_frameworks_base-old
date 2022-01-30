@@ -26,6 +26,7 @@ import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSIT
 import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_TOP_OR_LEFT;
 import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_SIDE;
 import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_UNDEFINED;
+import static com.android.wm.shell.transition.Transitions.ENABLE_SHELL_TRANSITIONS;
 
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
@@ -58,6 +59,7 @@ import com.android.internal.logging.InstanceId;
 import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.RemoteCallable;
@@ -124,6 +126,7 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
     private final RootTaskDisplayAreaOrganizer mRootTDAOrganizer;
     private final ShellExecutor mMainExecutor;
     private final SplitScreenImpl mImpl = new SplitScreenImpl();
+    private final DisplayController mDisplayController;
     private final DisplayImeController mDisplayImeController;
     private final DisplayInsetsController mDisplayInsetsController;
     private final Transitions mTransitions;
@@ -138,7 +141,8 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
     public SplitScreenController(ShellTaskOrganizer shellTaskOrganizer,
             SyncTransactionQueue syncQueue, Context context,
             RootTaskDisplayAreaOrganizer rootTDAOrganizer,
-            ShellExecutor mainExecutor, DisplayImeController displayImeController,
+            ShellExecutor mainExecutor, DisplayController displayController,
+            DisplayImeController displayImeController,
             DisplayInsetsController displayInsetsController,
             Transitions transitions, TransactionPool transactionPool, IconProvider iconProvider,
             Optional<RecentTasksController> recentTasks,
@@ -148,6 +152,7 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         mContext = context;
         mRootTDAOrganizer = rootTDAOrganizer;
         mMainExecutor = mainExecutor;
+        mDisplayController = displayController;
         mDisplayImeController = displayImeController;
         mDisplayInsetsController = displayInsetsController;
         mTransitions = transitions;
@@ -176,7 +181,7 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         if (mStageCoordinator == null) {
             // TODO: Multi-display
             mStageCoordinator = new StageCoordinator(mContext, DEFAULT_DISPLAY, mSyncQueue,
-                    mRootTDAOrganizer, mTaskOrganizer, mDisplayImeController,
+                    mRootTDAOrganizer, mTaskOrganizer, mDisplayController, mDisplayImeController,
                     mDisplayInsetsController, mTransitions, mTransactionPool, mLogger,
                     mIconProvider, mRecentTasksOptional, mUnfoldControllerProvider);
         }
@@ -184,6 +189,15 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
 
     public boolean isSplitScreenVisible() {
         return mStageCoordinator.isSplitScreenVisible();
+    }
+
+    @Nullable
+    public ActivityManager.RunningTaskInfo getTaskInfo(@SplitPosition int splitPosition) {
+        if (isSplitScreenVisible()) {
+            int taskId = mStageCoordinator.getTaskId(splitPosition);
+            return mTaskOrganizer.getRunningTaskInfo(taskId);
+        }
+        return null;
     }
 
     public boolean isTaskInSplitScreen(int taskId) {
@@ -225,6 +239,15 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         enterSplitScreen(taskId, leftOrTop, new WindowContainerTransaction());
     }
 
+    public void prepareEnterSplitScreen(WindowContainerTransaction wct,
+            ActivityManager.RunningTaskInfo taskInfo, int startPosition) {
+        mStageCoordinator.prepareEnterSplitScreen(wct, taskInfo, startPosition);
+    }
+
+    public void finishEnterSplitScreen(SurfaceControl.Transaction t) {
+        mStageCoordinator.finishEnterSplitScreen(t);
+    }
+
     public void enterSplitScreen(int taskId, boolean leftOrTop, WindowContainerTransaction wct) {
         final int stageType = isSplitScreenVisible() ? STAGE_TYPE_UNDEFINED : STAGE_TYPE_SIDE;
         final int stagePosition =
@@ -236,20 +259,12 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         mStageCoordinator.exitSplitScreen(toTopTaskId, exitReason);
     }
 
-    public void onKeyguardOccludedChanged(boolean occluded) {
-        mStageCoordinator.onKeyguardOccludedChanged(occluded);
-    }
-
     public void onKeyguardVisibilityChanged(boolean showing) {
         mStageCoordinator.onKeyguardVisibilityChanged(showing);
     }
 
     public void onFinishedWakingUp() {
         mStageCoordinator.onFinishedWakingUp();
-    }
-
-    public void onFinishedGoingToSleep() {
-        mStageCoordinator.onFinishedGoingToSleep();
     }
 
     public void exitSplitScreenOnHide(boolean exitSplitScreenOnHide) {
@@ -305,12 +320,19 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
 
     public void startIntent(PendingIntent intent, Intent fillInIntent, @SplitPosition int position,
             @Nullable Bundle options) {
-        if (!Transitions.ENABLE_SHELL_TRANSITIONS) {
+        if (!ENABLE_SHELL_TRANSITIONS) {
             startIntentLegacy(intent, fillInIntent, position, options);
             return;
         }
-        mStageCoordinator.startIntent(intent, fillInIntent, STAGE_TYPE_UNDEFINED, position, options,
-                null /* remote */);
+
+        try {
+            options = mStageCoordinator.resolveStartStage(STAGE_TYPE_UNDEFINED, position, options,
+                    null /* wct */);
+            intent.send(mContext, 0, fillInIntent, null /* onFinished */, null /* handler */,
+                    null /* requiredPermission */, options);
+        } catch (PendingIntent.CanceledException e) {
+            Slog.e(TAG, "Failed to launch task", e);
+        }
     }
 
     private void startIntentLegacy(PendingIntent intent, Intent fillInIntent,
@@ -354,7 +376,8 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
     }
 
     RemoteAnimationTarget[] onGoingToRecentsLegacy(boolean cancel, RemoteAnimationTarget[] apps) {
-        if (!isSplitScreenVisible()) return null;
+        if (ENABLE_SHELL_TRANSITIONS || apps.length < 2) return null;
+        // TODO(b/206487881): Integrate this with shell transition.
         final SurfaceControl.Builder builder = new SurfaceControl.Builder(new SurfaceSession())
                 .setContainerLayer()
                 .setName("RecentsAnimationSplitTasks")
@@ -471,13 +494,6 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         }
 
         @Override
-        public void onKeyguardOccludedChanged(boolean occluded) {
-            mMainExecutor.execute(() -> {
-                SplitScreenController.this.onKeyguardOccludedChanged(occluded);
-            });
-        }
-
-        @Override
         public void registerSplitScreenListener(SplitScreenListener listener, Executor executor) {
             if (mExecutors.containsKey(listener)) return;
 
@@ -516,13 +532,6 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         public void onFinishedWakingUp() {
             mMainExecutor.execute(() -> {
                 SplitScreenController.this.onFinishedWakingUp();
-            });
-        }
-
-        @Override
-        public void onFinishedGoingToSleep() {
-            mMainExecutor.execute(() -> {
-                SplitScreenController.this.onFinishedGoingToSleep();
             });
         }
     }

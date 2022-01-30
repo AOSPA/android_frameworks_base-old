@@ -1239,8 +1239,11 @@
     <string name="permlab_bodySensors">access body sensors (like heart rate monitors)
     </string>
     <!-- Description of the body sensors permission, listed so the user can decide whether to allow the application to access data from body sensors. [CHAR LIMIT=NONE] -->
-    <string name="permdesc_bodySensors" product="default">Allows the app to access data from sensors
-    that monitor your physical condition, such as your heart rate.</string>
+    <string name="permdesc_bodySensors" product="default">Access to data from body sensors such as heart rate, temperature, blood oxygen percentage, etc.</string>
+    <!-- Title of the background body sensors permission, listed so the user can decide whether to allow the application to access body sensor data in the background. [CHAR LIMIT=80] -->
+    <string name="permlab_bodySensors_background">access body sensors (like heart rate monitors) while in the background</string>
+    <!-- Description of the background body sensors permission, listed so the user can decide whether to allow the application to access data from body sensors in the background. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_bodySensors_background" product="default">Access to data from body sensors such as heart rate, temperature, blood oxygen percentage, etc. while in the background.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readCalendar">Read calendar events and details</string>
@@ -2009,6 +2012,11 @@
     <string name="permlab_startViewPermissionUsage">start view permission usage</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_startViewPermissionUsage">Allows the holder to start the permission usage for an app. Should never be needed for normal apps.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permlab_startReviewPermissionDecisions">start view permission decisions</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permdesc_startReviewPermissionDecisions">Allows the holder to start screen to review permission decisions. Should never be needed for normal apps.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
     <string name="permlab_startViewAppFeatures">start view app features</string>
@@ -5376,6 +5384,8 @@
     <string name="user_creation_account_exists">Allow <xliff:g id="app" example="Gmail">%1$s</xliff:g> to create a new User with <xliff:g id="account" example="foobar@gmail.com">%2$s</xliff:g> (a User with this account already exists) ?</string>
     <!-- Message to user that app is trying to create user for a specified account. [CHAR LIMIT=none] -->
     <string name="user_creation_adding">Allow <xliff:g id="app" example="Gmail">%1$s</xliff:g> to create a new User with <xliff:g id="account" example="foobar@gmail.com">%2$s</xliff:g> ?</string>
+    <!-- String label displayed on buttons that trigger the flow for creating supervised users. [CHAR LIMIT=35] -->
+    <string name="supervised_user_creation_label">Add supervised user</string>
 
     <!-- Locale picker strings -->
 

@@ -237,7 +237,9 @@ final class DeletePackageHelper {
         if (res) {
             final boolean killApp = (deleteFlags & PackageManager.DELETE_DONT_KILL_APP) == 0;
             info.sendPackageRemovedBroadcasts(killApp, removedBySystem);
-            info.sendSystemPackageUpdatedBroadcasts();
+            if (disabledSystemPs != null) {
+                info.sendSystemPackageUpdatedBroadcasts(disabledSystemPs.getAppId());
+            }
         }
         // Force a gc here.
         Runtime.getRuntime().gc();
@@ -442,10 +444,9 @@ final class DeletePackageHelper {
             if (DEBUG_REMOVE) Slog.d(TAG, "Removing system package: " + ps.getPackageName());
             // When an updated system application is deleted we delete the existing resources
             // as well and fall back to existing code in system partition
-            PackageSetting disabledPs = deleteInstalledSystemPackage(action, ps, allUserHandles,
-                    flags, outInfo, writeSettings);
+            deleteInstalledSystemPackage(action, allUserHandles, writeSettings);
             new InstallPackageHelper(mPm).restoreDisabledSystemPackageLIF(
-                    action, ps, allUserHandles, outInfo, writeSettings, disabledPs);
+                    action, allUserHandles, writeSettings);
         } else {
             if (DEBUG_REMOVE) Slog.d(TAG, "Removing non-system package: " + ps.getPackageName());
             deleteInstalledPackageLIF(ps, deleteCodeAndResources, flags, allUserHandles,
@@ -557,7 +558,6 @@ final class DeletePackageHelper {
                     true /*notLaunched*/,
                     false /*hidden*/,
                     0 /*distractionFlags*/,
-                    false /*suspended*/,
                     null /*suspendParams*/,
                     false /*instantApp*/,
                     false /*virtualPreload*/,
@@ -567,15 +567,17 @@ final class DeletePackageHelper {
                     PackageManager.INSTALL_REASON_UNKNOWN,
                     PackageManager.UNINSTALL_REASON_UNKNOWN,
                     null /*harmfulAppWarning*/,
-                    null /*splashScreenTheme*/);
+                    null /*splashScreenTheme*/,
+                    0 /*firstInstallTime*/);
         }
         mPm.mSettings.writeKernelMappingLPr(ps);
     }
 
-    private PackageSetting deleteInstalledSystemPackage(DeletePackageAction action,
-            PackageSetting deletedPs,
-            @NonNull int[] allUserHandles, int flags, @Nullable PackageRemovedInfo outInfo,
-            boolean writeSettings) {
+    private void deleteInstalledSystemPackage(DeletePackageAction action,
+            @NonNull int[] allUserHandles, boolean writeSettings) {
+        int flags = action.mFlags;
+        final PackageSetting deletedPs = action.mDeletingPs;
+        final PackageRemovedInfo outInfo = action.mRemovedInfo;
         final boolean applyUserRestrictions = outInfo != null && (outInfo.mOrigUsers != null);
         final AndroidPackage deletedPkg = deletedPs.getPkg();
         // Confirm if the system package has been updated
@@ -602,20 +604,19 @@ final class DeletePackageHelper {
         if (outInfo != null) {
             // Delete the updated package
             outInfo.mIsRemovedPackageSystemUpdate = true;
+            outInfo.mAppIdChanging = disabledPs.getAppId() != deletedPs.getAppId();
         }
 
-        if (disabledPs.getVersionCode() < deletedPs.getVersionCode()) {
-            // Delete data for downgrades
+        if (disabledPs.getVersionCode() < deletedPs.getVersionCode()
+                || disabledPs.getAppId() != deletedPs.getAppId()) {
+            // Delete data for downgrades, or when the system app changed appId
             flags &= ~PackageManager.DELETE_KEEP_DATA;
         } else {
             // Preserve data by setting flag
             flags |= PackageManager.DELETE_KEEP_DATA;
         }
 
-        deleteInstalledPackageLIF(deletedPs, true, flags, allUserHandles,
-                outInfo, writeSettings);
-
-        return disabledPs;
+        deleteInstalledPackageLIF(deletedPs, true, flags, allUserHandles, outInfo, writeSettings);
     }
 
     public void deletePackageVersionedInternal(VersionedPackage versionedPackage,
