@@ -294,6 +294,9 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
 
     private int mWindowGravity;
 
+    // Variable to track the default row with which the panel is initially shown
+    private VolumeRow mDefaultRow = null;
+
     private FrameLayout mRoundedBorderBottom;
 
     @VisibleForTesting
