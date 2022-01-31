@@ -152,6 +152,7 @@ import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.NativeTombstoneManagerService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.people.PeopleService;
+import com.android.server.pm.ApexManager;
 import com.android.server.pm.CrossProfileAppsService;
 import com.android.server.pm.DataLoaderManagerService;
 import com.android.server.pm.DynamicCodeLoggingService;
@@ -224,6 +225,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TreeSet;
 import java.util.concurrent.CountDownLatch;
@@ -336,6 +338,8 @@ public final class SystemServer implements Dumpable {
             "com.android.server.contentcapture.ContentCaptureManagerService";
     private static final String TRANSLATION_MANAGER_SERVICE_CLASS =
             "com.android.server.translation.TranslationManagerService";
+    private static final String SELECTION_TOOLBAR_MANAGER_SERVICE_CLASS =
+            "com.android.server.selectiontoolbar.SelectionToolbarManagerService";
     private static final String MUSIC_RECOGNITION_MANAGER_SERVICE_CLASS =
             "com.android.server.musicrecognition.MusicRecognitionManagerService";
     private static final String SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS =
@@ -920,6 +924,13 @@ public final class SystemServer implements Dumpable {
             startBootstrapServices(t);
             startCoreServices(t);
             startOtherServices(t);
+            // Apex services must be the last category of services to start. No other service must
+            // be starting after this point. This is to prevent unnessary stability issues when
+            // these apexes are updated outside of OTA; and to avoid breaking dependencies from
+            // system into apexes.
+            // TODO(satayev): lock mSystemServiceManager.startService to stop accepting new services
+            // after this step
+            startApexServices(t);
         } catch (Throwable ex) {
             Slog.e("System", "******************************************");
             Slog.e("System", "************ Failure starting system services", ex);
@@ -1385,7 +1396,6 @@ public final class SystemServer implements Dumpable {
         VcnManagementService vcnManagement = null;
         NetworkStatsService networkStats = null;
         NetworkPolicyManagerService networkPolicy = null;
-        NsdService serviceDiscovery = null;
         WindowManagerService wm = null;
         SerialService serial = null;
         NetworkTimeUpdateService networkTimeUpdater = null;
@@ -2034,16 +2044,6 @@ public final class SystemServer implements Dumpable {
                 }
             }
 
-            t.traceBegin("StartNsdService");
-            try {
-                serviceDiscovery = NsdService.create(context);
-                ServiceManager.addService(
-                        Context.NSD_SERVICE, serviceDiscovery);
-            } catch (Throwable e) {
-                reportWtf("starting Service Discovery Service", e);
-            }
-            t.traceEnd();
-
             t.traceBegin("StartSystemUpdateManagerService");
             try {
                 ServiceManager.addService(Context.SYSTEM_UPDATE_SERVICE,
@@ -2629,6 +2629,11 @@ public final class SystemServer implements Dumpable {
             Slog.d(TAG, "TranslationService not defined by OEM");
         }
 
+        // Selection toolbar service
+        t.traceBegin("StartSelectionToolbarManagerService");
+        mSystemServiceManager.startService(SELECTION_TOOLBAR_MANAGER_SERVICE_CLASS);
+        t.traceEnd();
+
         // NOTE: ClipboardService depends on ContentCapture and Autofill
         t.traceBegin("StartClipboardService");
         mSystemServiceManager.startService(ClipboardService.class);
@@ -3098,6 +3103,27 @@ public final class SystemServer implements Dumpable {
         t.traceEnd();
 
         t.traceEnd(); // startOtherServices
+    }
+
+    /**
+     * Starts system services defined in apexes.
+     */
+    private void startApexServices(@NonNull TimingsTraceAndSlog t) {
+        t.traceBegin("startApexServices");
+        Map<String, String> services = ApexManager.getInstance().getApexSystemServices();
+        // TODO(satayev): filter out already started services
+        // TODO(satayev): introduce android:order for services coming the same apexes
+        for (String name : new TreeSet<>(services.keySet())) {
+            String jarPath = services.get(name);
+            t.traceBegin("starting " + name);
+            if (TextUtils.isEmpty(jarPath)) {
+                mSystemServiceManager.startService(name);
+            } else {
+                mSystemServiceManager.startServiceFromJar(name, jarPath);
+            }
+            t.traceEnd();
+        }
+        t.traceEnd(); // startApexServices
     }
 
     private boolean deviceHasConfigString(@NonNull Context context, @StringRes int resId) {

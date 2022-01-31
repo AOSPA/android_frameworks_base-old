@@ -844,6 +844,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     };
 
+    @Override
+    WindowState asWindowState() {
+        return this;
+    }
+
     /**
      * @see #setSurfaceTranslationY(int)
      */
@@ -2542,7 +2547,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         if (DEBUG_INPUT_METHOD) {
             Slog.i(TAG_WM, "isVisibleRequestedOrAdding " + this + ": "
-                    + isVisibleRequestedOrAdding());
+                    + isVisibleRequestedOrAdding() + " isVisible: " + (isVisible()
+                    && mActivityRecord != null && mActivityRecord.isVisible()));
             if (!isVisibleRequestedOrAdding()) {
                 Slog.i(TAG_WM, "  mSurfaceController=" + mWinAnimator.mSurfaceController
                         + " relayoutCalled=" + mRelayoutCalled
@@ -2557,7 +2563,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
         }
-        return isVisibleRequestedOrAdding();
+        return isVisibleRequestedOrAdding()
+                || (isVisible() && mActivityRecord != null && mActivityRecord.isVisible());
     }
 
     private final class DeadWindowEventReceiver extends InputEventReceiver {
@@ -2880,6 +2887,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     private Configuration getLastReportedConfiguration() {
         return mLastReportedConfiguration.getMergedConfiguration();
+    }
+
+    /** Returns the last window configuration bounds reported to the client. */
+    Rect getLastReportedBounds() {
+        final Rect bounds = getLastReportedConfiguration().windowConfiguration.getBounds();
+        return !bounds.isEmpty() ? bounds : getBounds();
     }
 
     void adjustStartingWindowFlags() {
@@ -5230,6 +5243,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // Child window follows parent's scale.
             return;
         }
+        if (!isVisibleRequested() && !(mIsWallpaper && mToken.isVisible())) {
+            // Skip if it is requested to be invisible, but if it is wallpaper, it may be in
+            // transition that still needs to update the scale for zoom effect.
+            return;
+        }
         float newHScale = mHScale * mGlobalScale * mWallpaperScale;
         float newVScale = mVScale * mGlobalScale * mWallpaperScale;
         if (mLastHScale != newHScale ||
@@ -5249,7 +5267,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         updateSurfacePositionNonOrganized();
         // Send information to SurfaceFlinger about the priority of the current window.
         updateFrameRateSelectionPriorityIfNeeded();
-        if (isVisibleRequested()) updateScaleIfNeeded();
+        updateScaleIfNeeded();
 
         mWinAnimator.prepareSurfaceLocked(getSyncTransaction());
         super.prepareSurfaces();
@@ -5275,11 +5293,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mSurfacePosition);
 
         if (mWallpaperScale != 1f) {
-            DisplayInfo displayInfo = getDisplayInfo();
+            final Rect bounds = getLastReportedBounds();
             Matrix matrix = mTmpMatrix;
             matrix.setTranslate(mXOffset, mYOffset);
-            matrix.postScale(mWallpaperScale, mWallpaperScale, displayInfo.logicalWidth / 2f,
-                displayInfo.logicalHeight / 2f);
+            matrix.postScale(mWallpaperScale, mWallpaperScale, bounds.exactCenterX(),
+                    bounds.exactCenterY());
             matrix.getValues(mTmpMatrixArray);
             mSurfacePosition.offset(Math.round(mTmpMatrixArray[Matrix.MTRANS_X]),
                 Math.round(mTmpMatrixArray[Matrix.MTRANS_Y]));
@@ -5411,7 +5429,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     void assignLayer(Transaction t, int layer) {
-        if (isStartingWindowAssociatedToTask()) {
+        if (mStartingData != null) {
             // The starting window should cover the task.
             t.setLayer(mSurfaceControl, Integer.MAX_VALUE);
             return;
@@ -5731,29 +5749,36 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             Slog.i(TAG, "finishDrawing of relaunch: " + this + " " + duration + "ms");
             mActivityRecord.mRelaunchStartTime = 0;
         }
-
-        executeDrawHandlers(postDrawTransaction);
-
-        final boolean applyPostDrawNow = mClientWasDrawingForSync && postDrawTransaction != null;
-        mClientWasDrawingForSync = false;
-        if (!onSyncFinishedDrawing()) {
-            return mWinAnimator.finishDrawingLocked(postDrawTransaction, applyPostDrawNow);
-        }
-
-        if (mActivityRecord != null
-                && mTransitionController.isShellTransitionsEnabled()
-                && mAttrs.type == TYPE_APPLICATION_STARTING) {
+        if (mActivityRecord != null && mAttrs.type == TYPE_APPLICATION_STARTING) {
             mWmService.mAtmService.mTaskSupervisor.getActivityMetricsLogger()
                     .notifyStartingWindowDrawn(mActivityRecord);
         }
 
-        if (postDrawTransaction != null) {
+        final boolean hasSyncHandlers = executeDrawHandlers(postDrawTransaction);
+
+        boolean skipLayout = false;
+        // Control the timing to switch the appearance of window with different rotations.
+        final FadeRotationAnimationController fadeRotationController =
+                mDisplayContent.getFadeRotationAnimationController();
+        if (fadeRotationController != null
+                && fadeRotationController.handleFinishDrawing(this, postDrawTransaction)) {
+            // Consume the transaction because the controller will apply it with fade animation.
+            // Layout is not needed because the window will be hidden by the fade leash. Clear
+            // sync state because its sync transaction doesn't need to be merged to sync group.
+            postDrawTransaction = null;
+            skipLayout = true;
+            clearSyncState();
+        } else if (onSyncFinishedDrawing() && postDrawTransaction != null) {
             mSyncTransaction.merge(postDrawTransaction);
+            // Consume the transaction because the sync group will merge it.
+            postDrawTransaction = null;
         }
 
-        mWinAnimator.finishDrawingLocked(null, false /* forceApplyNow */);
+        final boolean layoutNeeded =
+                mWinAnimator.finishDrawingLocked(postDrawTransaction, mClientWasDrawingForSync);
+        mClientWasDrawingForSync = false;
         // We always want to force a traversal after a finish draw for blast sync.
-        return true;
+        return !skipLayout && (hasSyncHandlers || layoutNeeded);
     }
 
     void immediatelyNotifyBlastSync() {

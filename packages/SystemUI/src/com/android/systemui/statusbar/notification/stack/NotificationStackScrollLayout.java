@@ -43,7 +43,6 @@ import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.os.Bundle;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.AttributeSet;
@@ -80,6 +79,8 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
+import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.EmptyShadeView;
@@ -131,14 +132,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     public static final float BACKGROUND_ALPHA_DIMMED = 0.7f;
     private static final String TAG = "StackScroller";
-
-    // Usage:
-    // adb shell setprop persist.debug.nssl true && adb reboot
-    private static final boolean DEBUG = SystemProperties.getBoolean("persist.debug.nssl",
-            false /* default */);
-    // TODO(b/187291379) disable again before release
-    private static final boolean DEBUG_REMOVE_ANIMATION = SystemProperties.getBoolean(
-            "persist.debug.nssl.dismiss", false /* default */);
 
     // Delay in milli-seconds before shade closes for clear all.
     private final int DELAY_BEFORE_SHADE_CLOSE = 200;
@@ -192,7 +185,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private float mInitialTouchX;
     private float mInitialTouchY;
 
+    private final boolean mDebugLines;
     private Paint mDebugPaint;
+    /** Used to track the Y positions that were already used to draw debug text labels. */
+    private Set<Integer> mDebugTextUsedYPositions;
+    private final boolean mDebugRemoveAnimation;
+
     private int mContentHeight;
     private int mIntrinsicContentHeight;
     private int mCollapsedSize;
@@ -412,7 +410,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private NotificationShelf mShelf;
     private int mMaxDisplayedNotifications = -1;
     private float mKeyguardBottomPadding = -1;
-    private int mStatusBarHeight;
+    @VisibleForTesting int mStatusBarHeight;
     private int mMinInteractionHeight;
     private final Rect mClipRect = new Rect();
     private boolean mIsClipped;
@@ -569,6 +567,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     public NotificationStackScrollLayout(Context context, AttributeSet attrs) {
         super(context, attrs, 0, 0);
         Resources res = getResources();
+        FeatureFlags featureFlags = Dependency.get(FeatureFlags.class);
+        mDebugLines = featureFlags.isEnabled(Flags.NSSL_DEBUG_LINES);
+        mDebugRemoveAnimation = featureFlags.isEnabled(Flags.NSSL_DEBUG_REMOVE_ANIMATION);
         mSectionsManager = Dependency.get(NotificationSectionsManager.class);
         mScreenOffAnimationController =
                 Dependency.get(ScreenOffAnimationController.class);
@@ -591,10 +592,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                 res.getBoolean(R.bool.config_drawNotificationBackground);
         setOutlineProvider(mOutlineProvider);
 
-        boolean willDraw = mShouldDrawNotificationBackground || DEBUG;
+        boolean willDraw = mShouldDrawNotificationBackground || mDebugLines;
         setWillNotDraw(!willDraw);
         mBackgroundPaint.setAntiAlias(true);
-        if (DEBUG) {
+        if (mDebugLines) {
             mDebugPaint = new Paint();
             mDebugPaint.setColor(0xffff0000);
             mDebugPaint.setStrokeWidth(2);
@@ -669,6 +670,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     public void setIsRemoteInputActive(boolean isActive) {
         mIsRemoteInputActive = isActive;
+        updateFooter();
     }
 
     @VisibleForTesting
@@ -728,18 +730,17 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             drawHeadsUpBackground(canvas);
         }
 
-        if (DEBUG) {
+        if (mDebugLines) {
             onDrawDebug(canvas);
         }
     }
 
-    /** Used to track the Y positions that were already used to draw debug text labels. */
-    private static final Set<Integer> DEBUG_TEXT_USED_Y_POSITIONS =
-            DEBUG ? new HashSet<>() : Collections.emptySet();
-
     private void onDrawDebug(Canvas canvas) {
-        DEBUG_TEXT_USED_Y_POSITIONS.clear();
-
+        if (mDebugTextUsedYPositions == null) {
+            mDebugTextUsedYPositions = new HashSet<>();
+        } else {
+            mDebugTextUsedYPositions.clear();
+        }
         int y = mTopPadding;
         drawDebugInfo(canvas, y, Color.RED, /* label= */ "mTopPadding");
 
@@ -775,10 +776,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     private int computeDebugYTextPosition(int lineY) {
         int textY = lineY;
-        while (DEBUG_TEXT_USED_Y_POSITIONS.contains(textY)) {
+        while (mDebugTextUsedYPositions.contains(textY)) {
             textY = (int) (textY + mDebugPaint.getTextSize());
         }
-        DEBUG_TEXT_USED_Y_POSITIONS.add(textY);
+        mDebugTextUsedYPositions.add(textY);
         return textY;
     }
 
@@ -2701,14 +2702,14 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     boolean generateRemoveAnimation(ExpandableView child) {
         String key = "";
-        if (DEBUG_REMOVE_ANIMATION) {
+        if (mDebugRemoveAnimation) {
             if (child instanceof ExpandableNotificationRow) {
                 key = ((ExpandableNotificationRow) child).getEntry().getKey();
             }
             Log.d(TAG, "generateRemoveAnimation " + key);
         }
         if (removeRemovedChildFromHeadsUpChangeAnimations(child)) {
-            if (DEBUG_REMOVE_ANIMATION) {
+            if (mDebugRemoveAnimation) {
                 Log.d(TAG, "removedBecauseOfHeadsUp " + key);
             }
             mAddedHeadsUpChildren.remove(child);
@@ -2719,7 +2720,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             mClearTransientViewsWhenFinished.add(child);
             return true;
         }
-        if (DEBUG_REMOVE_ANIMATION) {
+        if (mDebugRemoveAnimation) {
             Log.d(TAG, "generateRemove " + key
                     + "\nmIsExpanded " + mIsExpanded
                     + "\nmAnimationsEnabled " + mAnimationsEnabled
@@ -2727,7 +2728,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         }
         if (mIsExpanded && mAnimationsEnabled && !isChildInInvisibleGroup(child)) {
             if (!mChildrenToAddAnimated.contains(child)) {
-                if (DEBUG_REMOVE_ANIMATION) {
+                if (mDebugRemoveAnimation) {
                     Log.d(TAG, "needsAnimation = true " + key);
                 }
                 // Generate Animations
@@ -3212,10 +3213,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                     // Clean up any potential transient views if the child has already been swiped
                     // out, as we won't be animating it further (due to its height already being
                     // clipped to 0.
-                    ViewGroup transientContainer = child.getTransientContainer();
-                    if (transientContainer != null) {
-                        transientContainer.removeTransientView(child);
-                    }
+                    child.removeFromTransientContainer();
                 }
             }
             int animationType = childWasSwipedOut
@@ -3226,7 +3224,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                     ignoreChildren);
             mAnimationEvents.add(event);
             mSwipedOutViews.remove(child);
-            if (DEBUG_REMOVE_ANIMATION) {
+            if (mDebugRemoveAnimation) {
                 String key = "";
                 if (child instanceof ExpandableNotificationRow) {
                     key = ((ExpandableNotificationRow) child).getEntry().getKey();
@@ -3932,7 +3930,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     private void clearTemporaryViewsInGroup(ViewGroup viewGroup) {
         while (viewGroup != null && viewGroup.getTransientViewCount() != 0) {
-            viewGroup.removeTransientView(viewGroup.getTransientView(0));
+            final View transientView = viewGroup.getTransientView(0);
+            viewGroup.removeTransientView(transientView);
+            if (transientView instanceof ExpandableView) {
+                ((ExpandableView) transientView).setTransientContainer(null);
+            }
         }
     }
 
@@ -4101,7 +4103,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     private void clearTransient() {
         for (ExpandableView view : mClearTransientViewsWhenFinished) {
-            StackStateAnimator.removeTransientView(view);
+            view.removeFromTransientContainer();
         }
         mClearTransientViewsWhenFinished.clear();
     }
@@ -4654,18 +4656,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     private void ensureRemovedFromTransientContainer(View v) {
-        if (v.getParent() == this && v instanceof ExpandableView) {
-            ExpandableView expandableView = (ExpandableView) v;
-            ViewGroup transientContainer = expandableView.getTransientContainer();
-            // If the child is animating away, it will still have a parent, so
-            // detach it first
+        if (v.getParent() != null && v instanceof ExpandableView) {
+            // If the child is animating away, it will still have a parent, so detach it first
             // TODO: We should really cancel the active animations here. This will
             //  happen automatically when the view's intro animation starts, but
             //  it's a fragile link.
-            if (transientContainer != null) {
-                transientContainer.removeTransientView(v);
-                expandableView.setTransientContainer(null);
-            }
+            ((ExpandableView) v).removeFromTransientContainerForAdditionTo(this);
         }
     }
 
@@ -4853,8 +4849,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     public int getMinExpansionHeight() {
+        // shelf height is defined in dp but status bar height can be defined in px, that makes
+        // relation between them variable - sometimes one might be bigger than the other when
+        // changing density. That’s why we need to ensure we’re not subtracting negative value below
         return mShelf.getIntrinsicHeight()
-                - (mShelf.getIntrinsicHeight() - mStatusBarHeight + mWaterfallTopInset) / 2
+                - Math.max(0,
+                (mShelf.getIntrinsicHeight() - mStatusBarHeight + mWaterfallTopInset) / 2)
                 + mWaterfallTopInset;
     }
 

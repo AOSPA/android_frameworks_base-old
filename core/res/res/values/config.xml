@@ -2900,6 +2900,10 @@
     <!-- Make the IME killable by the lowmemorykiller by raising its oom_score_adj. -->
     <bool name="config_killableInputMethods">false</bool>
 
+    <!-- Prevent the InputMethodManagerService from starting up the IME unless
+     the currently focused view is a text editor. -->
+    <bool name="config_preventImeStartupUnlessTextEditor">false</bool>
+
     <!-- The list of classes that should be added to the notification ranking pipeline.
      See {@link com.android.server.notification.NotificationSignalExtractor}
       If you add a new extractor to this list make sure to update
@@ -3342,6 +3346,20 @@
          or a single SIM device can have 1 phones/logical modems, but 2 physical slots (one eSIM
          and one pSIM) -->
     <integer name="config_num_physical_slots">1</integer>
+
+    <!--The default "usage setting" indicating that the device is either a voice-centric
+    device (1) or a data-centric device (2). A voice-centric device will require that any cellular
+    service that it uses provides access to voice capability, and a data-centric device will
+    likewise require that the network provides access to data services. These settings are
+    sent to the cellular modem and control the behavior in accordance with 3gpp TS 24.301 sec 4.3
+    (and equivalent functionality in other generations of cellular).-->
+    <integer name="config_default_cellular_usage_setting">1</integer>
+
+    <!--The list of supported cellular usage settings for this device.-->
+    <integer-array translatable="false" name="config_supported_cellular_usage_settings">
+        <item>1</item>    <!-- USAGE_SETTING_VOICE_CENTRIC -->
+        <item>2</item>    <!-- USAGE_SETTING_DATA_CENTRIC -->
+    </integer-array>
 
     <!-- When a radio power off request is received, we will delay completing the request until
          either IMS moves to the deregistered state or the timeout defined by this configuration
@@ -4028,6 +4046,11 @@
          Example: "com.android.captions/.SystemCaptionsManagerService"
     -->
     <string name="config_defaultSystemCaptionsManagerService" translatable="false"></string>
+
+    <!-- Indicates whether the system wide captions service should also support
+         call captioning.
+    -->
+    <bool name="config_systemCaptionsServiceCallsEnabled" translatable="false"></bool>
 
     <!-- The package name for the incident report approver app.
         This app is usually PermissionController or an app that replaces it.  When
@@ -5072,6 +5095,10 @@
         If given value is outside of this range, the option 1 (center) is assummed. -->
     <integer name="config_letterboxDefaultPositionForReachability">1</integer>
 
+    <!-- Whether a camera compat controller is enabled to allow the user to apply or revert
+         treatment for stretched issues in camera viewfinder. -->
+    <bool name="config_isCameraCompatControlForStretchedIssuesEnabled">false</bool>
+
     <!-- If true, hide the display cutout with display area -->
     <bool name="config_hideDisplayCutoutWithDisplayArea">false</bool>
 
@@ -5541,4 +5568,16 @@
     </string-array>
 
     <integer name="config_chooser_max_targets_per_row">4</integer>
+
+    <!-- Package that provides the supervised user creation flow. This package must include an
+         activity with an intent filter for {@link UserManager.ACTION_CREATE_SUPERVISED_USER}.
+         When this resource is defined, an extra button in user settings screen will be shown
+         with a title defined in @*android:string/supervised_user_creation_label
+         and an icon defined in @*android:drawable/ic_add_supervised_user.
+         That button will fire an intent targeted for this package with the mentioned action.
+         When this resource is empty, that button will not be shown. -->
+    <string name="config_supervisedUserCreationPackage" translatable="false"></string>
+
+    <!-- Determines whether SafetyCenter feature is enabled. -->
+    <bool name="config_enableSafetyCenter">true</bool>
 </resources>

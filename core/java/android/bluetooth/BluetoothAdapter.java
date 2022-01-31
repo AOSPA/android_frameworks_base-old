@@ -29,7 +29,6 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
-import android.app.ActivityThread;
 import android.app.PropertyInvalidatedCache;
 import android.bluetooth.BluetoothDevice.Transport;
 import android.bluetooth.BluetoothProfile.ConnectionPolicy;
@@ -48,7 +47,6 @@ import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
@@ -58,7 +56,7 @@ import android.os.ParcelUuid;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
-import android.os.SystemProperties;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 import android.util.Pair;
 
@@ -801,7 +799,7 @@ public final class BluetoothAdapter {
     @RequiresNoPermission
     public static synchronized BluetoothAdapter getDefaultAdapter() {
         if (sAdapter == null) {
-            sAdapter = createAdapter(BluetoothManager.resolveAttributionSource(null));
+            sAdapter = createAdapter(AttributionSource.myAttributionSource());
         }
         return sAdapter;
     }
@@ -1006,7 +1004,6 @@ public final class BluetoothAdapter {
         if (!isBleScanAlwaysAvailable()) {
             return false;
         }
-        String packageName = ActivityThread.currentPackageName();
         try {
             return mManagerService.disableBle(mAttributionSource, mToken);
         } catch (RemoteException e) {
@@ -1053,7 +1050,6 @@ public final class BluetoothAdapter {
         if (!isBleScanAlwaysAvailable()) {
             return false;
         }
-        String packageName = ActivityThread.currentPackageName();
         try {
             return mManagerService.enableBle(mAttributionSource, mToken);
         } catch (RemoteException e) {
@@ -1070,7 +1066,7 @@ public final class BluetoothAdapter {
                 8, BLUETOOTH_GET_STATE_CACHE_PROPERTY) {
                 @Override
                 @SuppressLint("AndroidFrameworkRequiresPermission")
-                protected Integer recompute(Void query) {
+                public Integer recompute(Void query) {
                     try {
                         if (mService != null) {
                             return mService.getState();
@@ -1358,7 +1354,7 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mManagerService != null) {
-                SystemProperties.set("persist.bluetooth.factoryreset", "true");
+                BluetoothProperties.factory_reset(true);
                 /* factoryReset handles both bluetooth reset and config remove
                  * functionality, hence remove onFactoryReset call to avoid redundant code
                  */
@@ -2116,7 +2112,7 @@ public final class BluetoothAdapter {
                 8, BLUETOOTH_FILTERING_CACHE_PROPERTY) {
                 @Override
                 @SuppressLint("AndroidFrameworkRequiresPermission")
-                protected Boolean recompute(Void query) {
+                public Boolean recompute(Void query) {
                     try {
                         mServiceLock.readLock().lock();
                         if (mService != null) {
@@ -2579,7 +2575,7 @@ public final class BluetoothAdapter {
                  */
                 @Override
                 @SuppressLint("AndroidFrameworkRequiresPermission")
-                protected Integer recompute(Void query) {
+                public Integer recompute(Void query) {
                     try {
                         return mService.getAdapterConnectionState();
                     } catch (RemoteException e) {
@@ -2644,7 +2640,7 @@ public final class BluetoothAdapter {
                 8, BLUETOOTH_PROFILE_CACHE_PROPERTY) {
                 @Override
                 @SuppressLint("AndroidFrameworkRequiresPermission")
-                protected Integer recompute(Integer query) {
+                public Integer recompute(Integer query) {
                     try {
                         mServiceLock.readLock().lock();
                         if (mService != null) {

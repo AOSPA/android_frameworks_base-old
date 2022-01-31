@@ -198,7 +198,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
         OneHandedSettingsUtil settingsUtil = new OneHandedSettingsUtil();
         OneHandedAccessibilityUtil accessibilityUtil = new OneHandedAccessibilityUtil(context);
         OneHandedTimeoutHandler timeoutHandler = new OneHandedTimeoutHandler(mainExecutor);
-        OneHandedState transitionState = new OneHandedState();
+        OneHandedState oneHandedState = new OneHandedState();
         OneHandedTutorialHandler tutorialHandler = new OneHandedTutorialHandler(context,
                 settingsUtil, windowManager);
         OneHandedAnimationController animationController =
@@ -216,7 +216,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
                 ServiceManager.getService(Context.OVERLAY_SERVICE));
         return new OneHandedController(context, displayController,
                 oneHandedBackgroundPanelOrganizer, organizer, touchHandler, tutorialHandler,
-                settingsUtil, accessibilityUtil, timeoutHandler, transitionState,
+                settingsUtil, accessibilityUtil, timeoutHandler, oneHandedState,
                 oneHandedUiEventsLogger, overlayManager, taskStackListener, mainExecutor,
                 mainHandler);
     }
@@ -277,6 +277,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
         registerSettingObservers(mUserId);
         setupTimeoutListener();
         updateSettings();
+        updateDisplayLayout(mContext.getDisplayId());
 
         mAccessibilityManager = AccessibilityManager.getInstance(context);
         mAccessibilityManager.addAccessibilityStateChangeListener(
@@ -391,8 +392,10 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
         mEventCallback = callback;
     }
 
-    @VisibleForTesting
-    void registerTransitionCallback(OneHandedTransitionCallback callback) {
+    /**
+     * Registers {@link OneHandedTransitionCallback} to monitor the transition status
+     */
+    public void registerTransitionCallback(OneHandedTransitionCallback callback) {
         mDisplayAreaOrganizer.registerTransitionCallback(callback);
     }
 
@@ -445,8 +448,13 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
         onShortcutEnabledChanged();
     }
 
-    private void updateDisplayLayout(int displayId) {
+    @VisibleForTesting
+    void updateDisplayLayout(int displayId) {
         final DisplayLayout newDisplayLayout = mDisplayController.getDisplayLayout(displayId);
+        if (newDisplayLayout == null) {
+            Slog.w(TAG, "Failed to get new DisplayLayout.");
+            return;
+        }
         mDisplayAreaOrganizer.setDisplayLayout(newDisplayLayout);
         mTutorialHandler.onDisplayChanged(newDisplayLayout);
         mBackgroundPanelOrganizer.onDisplayChanged(newDisplayLayout);

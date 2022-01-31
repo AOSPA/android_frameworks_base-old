@@ -37,16 +37,6 @@ static jlong nativeCreate(JNIEnv* env, jclass clazz, jstring jName) {
     return reinterpret_cast<jlong>(queue.get());
 }
 
-static jlong nativeCreateAndUpdate(JNIEnv* env, jclass clazz, jstring jName, jlong surfaceControl,
-                                   jlong width, jlong height, jint format) {
-    ScopedUtfChars name(env, jName);
-    sp<BLASTBufferQueue> queue =
-            new BLASTBufferQueue(name.c_str(), reinterpret_cast<SurfaceControl*>(surfaceControl),
-                                 width, height, format);
-    queue->incStrong((void*)nativeCreate);
-    return reinterpret_cast<jlong>(queue.get());
-}
-
 static void nativeDestroy(JNIEnv* env, jclass clazz, jlong ptr) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     queue->decStrong((void*)nativeCreate);
@@ -103,11 +93,15 @@ static void nativeApplyPendingTransactions(JNIEnv* env, jclass clazz, jlong ptr,
     queue->applyPendingTransactions(frameNum);
 }
 
+static bool nativeIsSameSurfaceControl(JNIEnv* env, jclass clazz, jlong ptr, jlong surfaceControl) {
+    sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
+    return queue->isSameSurfaceControl(reinterpret_cast<SurfaceControl*>(surfaceControl));
+}
+
 static const JNINativeMethod gMethods[] = {
         /* name, signature, funcPtr */
         // clang-format off
         {"nativeCreate", "(Ljava/lang/String;)J", (void*)nativeCreate},
-        {"nativeCreateAndUpdate", "(Ljava/lang/String;JJJI)J", (void*)nativeCreateAndUpdate},
         {"nativeGetSurface", "(JZ)Landroid/view/Surface;", (void*)nativeGetSurface},
         {"nativeSetUndequeuedBufferCount", "(JI)V", (void*)nativeSetUndequeuedBufferCount},
         {"nativeGetUndequeuedBufferCount", "(J)I", (void*)nativeGetUndequeuedBufferCount},
@@ -117,6 +111,7 @@ static const JNINativeMethod gMethods[] = {
         {"nativeMergeWithNextTransaction", "(JJJ)V", (void*)nativeMergeWithNextTransaction},
         {"nativeGetLastAcquiredFrameNum", "(J)J", (void*)nativeGetLastAcquiredFrameNum},
         {"nativeApplyPendingTransactions", "(JJ)V", (void*)nativeApplyPendingTransactions},
+        {"nativeIsSameSurfaceControl", "(JJ)Z", (void*)nativeIsSameSurfaceControl},
         // clang-format on
 };
 

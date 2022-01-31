@@ -146,7 +146,6 @@ import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 import com.android.server.pm.verify.domain.DomainVerificationUtils;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.utils.WatchedArrayMap;
-import com.android.server.utils.WatchedArraySet;
 import com.android.server.utils.WatchedLongSparseArray;
 import com.android.server.utils.WatchedSparseBooleanArray;
 import com.android.server.utils.WatchedSparseIntArray;
@@ -321,10 +320,7 @@ public class ComputerEngine implements Computer {
     private final WatchedArrayMap<String, AndroidPackage> mPackages;
     private final WatchedArrayMap<ComponentName, ParsedInstrumentation>
             mInstrumentation;
-    private final WatchedArrayMap<String, WatchedLongSparseArray<SharedLibraryInfo>>
-            mStaticLibsByDeclaringPackage;
-    private final WatchedArrayMap<String, WatchedLongSparseArray<SharedLibraryInfo>>
-            mSharedLibraries;
+    private final SharedLibrariesRead mSharedLibraries;
     private final ComponentName mLocalResolveComponentName;
     private final ActivityInfo mResolveActivity;
     private final WatchedSparseBooleanArray mWebInstantAppsDisabled;
@@ -333,7 +329,7 @@ public class ComputerEngine implements Computer {
     private final InstantAppRegistry mInstantAppRegistry;
     private final ApplicationInfo mLocalAndroidApplication;
     private final AppsFilter mAppsFilter;
-    private final WatchedArraySet<String> mFrozenPackages;
+    private final WatchedArrayMap<String, Integer> mFrozenPackages;
 
     // Immutable service attribute
     private final String mAppPredictionServicePackage;
@@ -376,8 +372,7 @@ public class ComputerEngine implements Computer {
         mSettings = new Settings(args.settings);
         mIsolatedOwners = args.isolatedOwners;
         mPackages = args.packages;
-        mSharedLibraries = args.sharedLibs;
-        mStaticLibsByDeclaringPackage = args.staticLibs;
+        mSharedLibraries = args.sharedLibraries;
         mInstrumentation = args.instrumentation;
         mWebInstantAppsDisabled = args.webInstantAppsDisabled;
         mLocalResolveComponentName = args.resolveComponentName;
@@ -1565,7 +1560,7 @@ public class ComputerEngine implements Computer {
                     : mPermissionManager.getGrantedPermissions(ps.getPackageName(), userId);
 
             PackageInfo packageInfo = PackageInfoUtils.generate(p, gids, flags,
-                    ps.getFirstInstallTime(), ps.getLastUpdateTime(), permissions, state, userId,
+                    state.getFirstInstallTime(), ps.getLastUpdateTime(), permissions, state, userId,
                     ps);
 
             if (packageInfo == null) {
@@ -1582,7 +1577,7 @@ public class ComputerEngine implements Computer {
             pi.packageName = ps.getPackageName();
             pi.setLongVersionCode(ps.getVersionCode());
             pi.sharedUserId = (ps.getSharedUser() != null) ? ps.getSharedUser().name : null;
-            pi.firstInstallTime = ps.getFirstInstallTime();
+            pi.firstInstallTime = state.getFirstInstallTime();
             pi.lastUpdateTime = ps.getLastUpdateTime();
 
             ApplicationInfo ai = new ApplicationInfo();
@@ -2007,8 +2002,7 @@ public class ComputerEngine implements Computer {
 
     @Nullable
     public final SharedLibraryInfo getSharedLibraryInfo(String name, long version) {
-        return SharedLibraryHelper.getSharedLibraryInfo(
-                name, version, mSharedLibraries, null);
+        return mSharedLibraries.getSharedLibraryInfo(name, version);
     }
 
     /**
@@ -2059,7 +2053,7 @@ public class ComputerEngine implements Computer {
 
         // Is this a static library?
         WatchedLongSparseArray<SharedLibraryInfo> versionedLib =
-                mStaticLibsByDeclaringPackage.get(packageName);
+                mSharedLibraries.getStaticLibraryInfos(packageName);
         if (versionedLib == null || versionedLib.size() <= 0) {
             return packageName;
         }
@@ -3057,54 +3051,8 @@ public class ComputerEngine implements Computer {
             }
 
             case DumpState.DUMP_LIBS:
-            {
-                boolean printedHeader = false;
-                final int numSharedLibraries = mSharedLibraries.size();
-                for (int index = 0; index < numSharedLibraries; index++) {
-                    final String libName = mSharedLibraries.keyAt(index);
-                    final WatchedLongSparseArray<SharedLibraryInfo> versionedLib =
-                            mSharedLibraries.get(libName);
-                    if (versionedLib == null) {
-                        continue;
-                    }
-                    final int versionCount = versionedLib.size();
-                    for (int i = 0; i < versionCount; i++) {
-                        SharedLibraryInfo libraryInfo = versionedLib.valueAt(i);
-                        if (!checkin) {
-                            if (!printedHeader) {
-                                if (dumpState.onTitlePrinted()) {
-                                    pw.println();
-                                }
-                                pw.println("Libraries:");
-                                printedHeader = true;
-                            }
-                            pw.print("  ");
-                        } else {
-                            pw.print("lib,");
-                        }
-                        pw.print(libraryInfo.getName());
-                        if (libraryInfo.isStatic()) {
-                            pw.print(" version=" + libraryInfo.getLongVersion());
-                        }
-                        if (!checkin) {
-                            pw.print(" -> ");
-                        }
-                        if (libraryInfo.getPath() != null) {
-                            if (libraryInfo.isNative()) {
-                                pw.print(" (so) ");
-                            } else {
-                                pw.print(" (jar) ");
-                            }
-                            pw.print(libraryInfo.getPath());
-                        } else {
-                            pw.print(" (apk) ");
-                            pw.print(libraryInfo.getPackageName());
-                        }
-                        pw.println();
-                    }
-                }
+                mSharedLibraries.dump(pw, dumpState);
                 break;
-            }
 
             case DumpState.DUMP_PREFERRED:
                 mSettings.dumpPreferred(pw, dumpState, packageName);
@@ -3156,7 +3104,7 @@ public class ComputerEngine implements Computer {
                 try {
                     mDomainVerificationManager.printState(writer, packageName,
                             UserHandle.USER_ALL, mSettings::getPackage);
-                } catch (PackageManager.NameNotFoundException e) {
+                } catch (Exception e) {
                     pw.println("Failure printing domain verification information");
                     Slog.e(TAG, "Failure printing domain verification information", e);
                 }
@@ -3545,7 +3493,7 @@ public class ComputerEngine implements Computer {
     @NonNull
     @Override
     public WatchedArrayMap<String, WatchedLongSparseArray<SharedLibraryInfo>> getSharedLibraries() {
-        return mSharedLibraries;
+        return mSharedLibraries.getAll();
     }
 
     @NonNull
@@ -3580,7 +3528,7 @@ public class ComputerEngine implements Computer {
             return PackageManagerService.PACKAGE_STARTABILITY_NOT_SYSTEM;
         }
 
-        if (mFrozenPackages.contains(packageName)) {
+        if (mFrozenPackages.containsKey(packageName)) {
             return PackageManagerService.PACKAGE_STARTABILITY_FROZEN;
         }
 
@@ -5488,12 +5436,11 @@ public class ComputerEngine implements Computer {
             }
             PackageDexUsage.PackageUseInfo packageUseInfo =
                     mDexManager.getPackageUseInfoOrDefault(packageState.getPackageName());
-            if (PackageManagerServiceUtils
-                    .isUnusedSinceTimeInMillis(packageState.getFirstInstallTime(),
-                            currentTimeInMillis, downgradeTimeThresholdMillis, packageUseInfo,
-                            packageState.getTransientState().getLatestPackageUseTimeInMills(),
-                            packageState.getTransientState()
-                                    .getLatestForegroundPackageUseTimeInMills())) {
+            if (PackageManagerServiceUtils.isUnusedSinceTimeInMillis(
+                    PackageStateUtils.getEarliestFirstInstallTime(packageState.getUserStates()),
+                    currentTimeInMillis, downgradeTimeThresholdMillis, packageUseInfo,
+                    packageState.getTransientState().getLatestPackageUseTimeInMills(),
+                    packageState.getTransientState().getLatestForegroundPackageUseTimeInMills())) {
                 unusedPackages.add(packageState.getPackageName());
             }
         }

@@ -67,7 +67,6 @@ import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
 import android.companion.AssociationRequest;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Build;
@@ -1327,7 +1326,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
 
         mAddress = address;
         mAddressType = ADDRESS_TYPE_PUBLIC;
-        mAttributionSource = BluetoothManager.resolveAttributionSource(null);
+        mAttributionSource = AttributionSource.myAttributionSource();
     }
 
     /** {@hide} */
@@ -1790,7 +1789,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 8, BLUETOOTH_BONDING_CACHE_PROPERTY) {
                 @Override
                 @SuppressLint("AndroidFrameworkRequiresPermission")
-                protected Integer recompute(BluetoothDevice query) {
+                public Integer recompute(BluetoothDevice query) {
                     try {
                         return sService.getBondState(query, mAttributionSource);
                     } catch (RemoteException e) {

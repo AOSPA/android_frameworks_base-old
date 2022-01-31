@@ -91,7 +91,7 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     }
 
     /** {@inheritDoc}  */
-    @Presubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     override fun statusBarLayerRotatesScales() {
         // This test doesn't work in shell transitions because of b/206753786
@@ -128,8 +128,8 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     @Presubmit
     @Test
     fun pipWindowRemainInsideVisibleBounds() {
-        testSpec.assertWm {
-            coversAtMost(displayBounds, pipApp.component)
+        testSpec.assertWmVisibleRegion(pipApp.component) {
+            coversAtMost(displayBounds)
         }
     }
 
@@ -140,8 +140,8 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     @Presubmit
     @Test
     fun pipLayerRemainInsideVisibleBounds() {
-        testSpec.assertLayers {
-            coversAtMost(displayBounds, pipApp.component)
+        testSpec.assertLayersVisibleRegion(pipApp.component) {
+            coversAtMost(displayBounds)
         }
     }
 

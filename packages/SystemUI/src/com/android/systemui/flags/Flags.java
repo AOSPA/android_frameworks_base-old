@@ -43,14 +43,17 @@ public class Flags {
     public static final BooleanFlag NEW_NOTIFICATION_PIPELINE_RENDERING =
             new BooleanFlag(101, false);
 
-    public static final BooleanFlag NOTIFICATION_UPDATES =
-            new BooleanFlag(102, true);
-
     public static final BooleanFlag NOTIFICATION_PIPELINE_DEVELOPER_LOGGING =
             new BooleanFlag(103, false);
 
     public static final ResourceBooleanFlag NOTIFICATION_SHADE_DRAG =
             new ResourceBooleanFlag(104, R.bool.config_enableNotificationShadeDrag);
+
+    public static final BooleanFlag NSSL_DEBUG_LINES =
+            new BooleanFlag(105, false);
+
+    public static final BooleanFlag NSSL_DEBUG_REMOVE_ANIMATION =
+            new BooleanFlag(106, false);
 
     /***************************************/
     // 200 - keyguard/lockscreen
@@ -98,9 +101,6 @@ public class Flags {
 
     /***************************************/
     // 600- status bar
-    public static final BooleanFlag STATUS_BAR_PROVIDER_MODEL =
-            new BooleanFlag(600, false);
-
     public static final BooleanFlag COMBINED_STATUS_BAR_SIGNAL_ICONS =
             new BooleanFlag(601, false);
 

@@ -19,8 +19,12 @@ package com.android.server.backup;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.backup.BackupAgent;
@@ -35,17 +39,22 @@ import android.platform.test.annotations.Presubmit;
 
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.server.backup.internal.LifecycleOperationStorage;
 import com.android.server.backup.internal.OnTaskFinishedListener;
 import com.android.server.backup.params.BackupParams;
 import com.android.server.backup.transport.BackupTransportClient;
 import com.android.server.backup.transport.TransportConnection;
 import com.android.server.backup.utils.BackupEligibilityRules;
 
+import com.google.common.collect.ImmutableSet;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import java.util.function.IntConsumer;
 
 @Presubmit
 @RunWith(AndroidJUnit4.class)
@@ -60,7 +69,7 @@ public class UserBackupManagerServiceTest {
     @Mock TransportConnection mTransportConnection;
     @Mock BackupTransportClient mBackupTransport;
     @Mock BackupEligibilityRules mBackupEligibilityRules;
-
+    @Mock LifecycleOperationStorage mOperationStorage;
 
     private TestBackupService mService;
 
@@ -68,7 +77,7 @@ public class UserBackupManagerServiceTest {
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
 
-        mService = new TestBackupService(mContext, mPackageManager);
+        mService = new TestBackupService(mContext, mPackageManager, mOperationStorage);
         mService.setEnabled(true);
         mService.setSetupComplete(true);
     }
@@ -162,6 +171,31 @@ public class UserBackupManagerServiceTest {
         assertThat(operationType).isEqualTo(OperationType.MIGRATION);
     }
 
+    @Test
+    public void testAgentDisconnected_cancelsCurrentOperations() throws Exception {
+        when(mOperationStorage.operationTokensForPackage(eq("com.android.foo"))).thenReturn(
+                ImmutableSet.of(123, 456, 789)
+        );
+
+        mService.agentDisconnected("com.android.foo");
+
+        verify(mOperationStorage).cancelOperation(eq(123), eq(true), any(IntConsumer.class));
+        verify(mOperationStorage).cancelOperation(eq(456), eq(true), any());
+        verify(mOperationStorage).cancelOperation(eq(789), eq(true), any());
+    }
+
+    @Test
+    public void testAgentDisconnected_unknownPackageName_cancelsNothing() throws Exception {
+        when(mOperationStorage.operationTokensForPackage(eq("com.android.foo"))).thenReturn(
+                ImmutableSet.of()
+        );
+
+        mService.agentDisconnected("com.android.foo");
+
+        verify(mOperationStorage, never())
+                .cancelOperation(anyInt(), anyBoolean(), any(IntConsumer.class));
+    }
+
     private static PackageInfo getPackageInfo(String packageName) {
         PackageInfo packageInfo = new PackageInfo();
         packageInfo.applicationInfo = new ApplicationInfo();
@@ -173,8 +207,9 @@ public class UserBackupManagerServiceTest {
         boolean isEnabledStatePersisted = false;
         boolean shouldUseNewBackupEligibilityRules = false;
 
-        TestBackupService(Context context, PackageManager packageManager) {
-            super(context, packageManager);
+        TestBackupService(Context context, PackageManager packageManager,
+                LifecycleOperationStorage operationStorage) {
+            super(context, packageManager, operationStorage);
         }
 
         @Override

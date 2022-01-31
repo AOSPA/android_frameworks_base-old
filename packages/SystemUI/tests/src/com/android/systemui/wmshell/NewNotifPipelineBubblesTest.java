@@ -19,8 +19,11 @@ package com.android.systemui.wmshell;
 import static android.app.Notification.FLAG_BUBBLE;
 import static android.service.notification.NotificationListenerService.REASON_APP_CANCEL;
 import static android.service.notification.NotificationListenerService.REASON_GROUP_SUMMARY_CANCELED;
+
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
+
 import static com.google.common.truth.Truth.assertThat;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -97,7 +100,6 @@ import com.android.wm.shell.bubbles.BubbleData;
 import com.android.wm.shell.bubbles.BubbleDataRepository;
 import com.android.wm.shell.bubbles.BubbleEntry;
 import com.android.wm.shell.bubbles.BubbleLogger;
-import com.android.wm.shell.bubbles.BubbleOverflow;
 import com.android.wm.shell.bubbles.BubbleStackView;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.common.DisplayController;
@@ -105,6 +107,7 @@ import com.android.wm.shell.common.FloatingContentCoordinator;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TaskStackListenerImpl;
+import com.android.wm.shell.onehanded.OneHandedController;
 
 import org.junit.Before;
 import org.junit.Ignore;
@@ -116,6 +119,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Tests the NotifPipeline setup with BubbleController.
@@ -220,6 +224,8 @@ public class NewNotifPipelineBubblesTest extends SysuiTestCase {
     private ScreenOffAnimationController mScreenOffAnimationController;
     @Mock
     private TaskViewTransitions mTaskViewTransitions;
+    @Mock
+    private Optional<OneHandedController> mOneHandedOptional;
 
     private TestableBubblePositioner mPositioner;
 
@@ -307,6 +313,7 @@ public class NewNotifPipelineBubblesTest extends SysuiTestCase {
                 mShellTaskOrganizer,
                 mPositioner,
                 mock(DisplayController.class),
+                mOneHandedOptional,
                 syncExecutor,
                 mock(Handler.class),
                 mTaskViewTransitions,
@@ -572,7 +579,7 @@ public class NewNotifPipelineBubblesTest extends SysuiTestCase {
     }
 
     @Test
-    public void testRemoveLastExpanded_selectsOverflow() {
+    public void testRemoveLastExpanded_collapses() {
         // Mark it as a bubble and add it explicitly
         mEntryListener.onEntryAdded(mRow);
         mEntryListener.onEntryAdded(mRow2);
@@ -611,11 +618,10 @@ public class NewNotifPipelineBubblesTest extends SysuiTestCase {
                         stackView.getExpandedBubble().getKey()).getKey(),
                 Bubbles.DISMISS_USER_GESTURE);
 
-        // Overflow should be selected
-        assertEquals(mBubbleData.getSelectedBubble().getKey(), BubbleOverflow.KEY);
-        verify(mBubbleExpandListener).onBubbleExpandChanged(true, BubbleOverflow.KEY);
-        assertTrue(mBubbleController.hasBubbles());
-        assertSysuiStates(true /* stackExpanded */, false /* mangeMenuExpanded */);
+        // We should be collapsed
+        verify(mBubbleExpandListener).onBubbleExpandChanged(false, mRow.getKey());
+        assertFalse(mBubbleController.hasBubbles());
+        assertSysuiStates(false /* stackExpanded */, false /* mangeMenuExpanded */);
     }
 
     @Test

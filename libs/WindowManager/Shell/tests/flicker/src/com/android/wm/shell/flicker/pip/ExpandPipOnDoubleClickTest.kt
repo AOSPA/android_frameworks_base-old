@@ -78,8 +78,8 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @Presubmit
     @Test
     fun pipWindowRemainInsideVisibleBounds() {
-        testSpec.assertWm {
-            coversAtMost(displayBounds, pipApp.component)
+        testSpec.assertWmVisibleRegion(pipApp.component) {
+            coversAtMost(displayBounds)
         }
     }
 
@@ -90,8 +90,8 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @Presubmit
     @Test
     fun pipLayerRemainInsideVisibleBounds() {
-        testSpec.assertLayers {
-            coversAtMost(displayBounds, pipApp.component)
+        testSpec.assertLayersVisibleRegion(pipApp.component) {
+            coversAtMost(displayBounds)
         }
     }
 
@@ -164,6 +164,10 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
             this.focusDoesNotChange()
         }
     }
+
+    @FlakyTest(bugId = 206753786)
+    @Test
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
     companion object {
         /**
