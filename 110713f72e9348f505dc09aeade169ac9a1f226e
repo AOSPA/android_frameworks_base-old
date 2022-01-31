@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "7c61bc1a_c9150aeb",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-01-31T10:06:42Z",
+      "side": 1,
+      "message": "18596: [YAAP][SQUASH]base: Revert secondary home handle | https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/18596",
+      "revId": "110713f72e9348f505dc09aeade169ac9a1f226e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
