@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2a38e7e8_406ea4b3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-02-02T17:12:13Z",
+      "side": 1,
+      "message": "removed CR+2 since code is black magic to me, will let ido do it for me",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
