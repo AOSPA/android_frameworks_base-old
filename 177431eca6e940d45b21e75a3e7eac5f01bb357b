@@ -16,6 +16,193 @@
       "message": "removed CR+2 since code is black magic to me, will let ido do it for me",
       "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "7e389b3e_6b6766bf",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "Some missing docs \u0026 1 syntax error. Apart from that, LGTM.",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b1c3ef37_017b61cd",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 432,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "460d3b68_5358d19d",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 444,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "d2463b1c_f232528e",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 454,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "265299ea_e82de3cd",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 466,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "a893c4b7_98cecc6c",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 335,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "be348a7c_1de1cc80",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 346,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "0a810c88_9a5600cb",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 349,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "should be: Context context",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c4582cb3_055358a7",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 392,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "46a3a490_24381054",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 819,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "this can be final",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "41d77eeb_d9487f8a",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/WifiSignalController.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 260,
+      "author": {
+        "id": 1000633
+      },
+      "writtenOn": "2022-02-02T17:24:11Z",
+      "side": 1,
+      "message": "this one can also be final",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
