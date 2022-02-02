@@ -35,6 +35,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "554b5cf4_2c4fe59b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "7e389b3e_6b6766bf",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "b1c3ef37_017b61cd",
@@ -48,6 +66,24 @@
       "writtenOn": "2022-02-02T17:24:11Z",
       "side": 1,
       "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0e8bdc2e_eb150c45",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 432,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "b1c3ef37_017b61cd",
       "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -69,6 +105,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "496b85b9_4488427e",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 444,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "460d3b68_5358d19d",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "d2463b1c_f232528e",
@@ -82,6 +136,24 @@
       "writtenOn": "2022-02-02T17:24:11Z",
       "side": 1,
       "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "06bee670_4cdcd209",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 454,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "d2463b1c_f232528e",
       "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -103,6 +175,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "686a74f2_2f754062",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/Utils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 466,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "265299ea_e82de3cd",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "a893c4b7_98cecc6c",
@@ -116,6 +206,24 @@
       "writtenOn": "2022-02-02T17:24:11Z",
       "side": 1,
       "message": "* @param context the Context to use",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a3958d3c_06a100d2",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 335,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "a893c4b7_98cecc6c",
       "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -137,6 +245,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "d62d84d5_0faf09b1",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 346,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "be348a7c_1de1cc80",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "0a810c88_9a5600cb",
@@ -150,6 +276,24 @@
       "writtenOn": "2022-02-02T17:24:11Z",
       "side": 1,
       "message": "should be: Context context",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5b870e2a_5531bd97",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 349,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "0a810c88_9a5600cb",
       "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -171,6 +315,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "20704725_cd398082",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/wifi/WifiUtils.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 392,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "c4582cb3_055358a7",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "46a3a490_24381054",
@@ -188,6 +350,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "f77c137d_c847c29c",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 819,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "46a3a490_24381054",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "41d77eeb_d9487f8a",
@@ -201,6 +381,24 @@
       "writtenOn": "2022-02-02T17:24:11Z",
       "side": 1,
       "message": "this one can also be final",
+      "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d0d3910f_ee69af03",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/WifiSignalController.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 260,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-02-02T18:08:45Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "41d77eeb_d9487f8a",
       "revId": "177431eca6e940d45b21e75a3e7eac5f01bb357b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
