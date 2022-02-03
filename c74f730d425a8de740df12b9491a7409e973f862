@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "7189445e_848c3602",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000765
+      },
+      "writtenOn": "2022-02-03T20:27:17Z",
+      "side": 1,
+      "message": "It makes fingerprint work on my device - Meizu M6 Note.",
+      "revId": "c74f730d425a8de740df12b9491a7409e973f862",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
