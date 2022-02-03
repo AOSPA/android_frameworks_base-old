@@ -23,6 +23,7 @@ import android.hardware.biometrics.fingerprint.ISession;
 import android.hardware.fingerprint.Fingerprint;
 import android.os.IBinder;
 
+import com.android.internal.R;
 import com.android.server.biometrics.sensors.BiometricUtils;
 import com.android.server.biometrics.sensors.InternalCleanupClient;
 import com.android.server.biometrics.sensors.InternalEnumerateClient;
