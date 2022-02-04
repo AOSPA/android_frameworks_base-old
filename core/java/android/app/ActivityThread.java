@@ -1647,7 +1647,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
         @Override
         public void dumpCacheInfo(ParcelFileDescriptor pfd, String[] args) {
-            PropertyInvalidatedCache.dumpCacheInfo(pfd.getFileDescriptor(), args);
+            PropertyInvalidatedCache.dumpCacheInfo(pfd, args);
             IoUtils.closeQuietly(pfd);
         }
 
@@ -4179,15 +4179,20 @@ public final class ActivityThread extends ClientTransactionHandler
         view.requestLayout();
 
         view.getViewTreeObserver().addOnDrawListener(new ViewTreeObserver.OnDrawListener() {
+            private boolean mHandled = false;
             @Override
             public void onDraw() {
+                if (mHandled) {
+                    return;
+                }
+                mHandled = true;
                 // Transfer the splash screen view from shell to client.
                 // Call syncTransferSplashscreenViewTransaction at the first onDraw so we can ensure
                 // the client view is ready to show and we can use applyTransactionOnDraw to make
                 // all transitions happen at the same frame.
                 syncTransferSplashscreenViewTransaction(
                         view, r.token, decorView, startingWindowLeash);
-                view.postOnAnimation(() -> view.getViewTreeObserver().removeOnDrawListener(this));
+                view.post(() -> view.getViewTreeObserver().removeOnDrawListener(this));
             }
         });
     }
@@ -4531,6 +4536,12 @@ public final class ActivityThread extends ClientTransactionHandler
         // we are back active so skip it.
         unscheduleGcIdler();
 
+        // To investigate "duplciate Application objects" bug (b/185177290)
+        if (UserHandle.myUserId() != UserHandle.getUserId(data.info.applicationInfo.uid)) {
+            Slog.wtf(TAG, "handleCreateService called with wrong appinfo UID: myUserId="
+                    + UserHandle.myUserId() + " appinfo.uid=" + data.info.applicationInfo.uid);
+        }
+
         LoadedApk packageInfo = getPackageInfoNoCheck(
                 data.info.applicationInfo, data.compatInfo);
         Service service = null;
@@ -4646,12 +4657,14 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     private void handleDumpGfxInfo(DumpComponentInfo info) {
+        final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
         try {
             ThreadedRenderer.handleDumpGfxInfo(info.fd.getFileDescriptor(), info.args);
         } catch (Exception e) {
             Log.w(TAG, "Caught exception from dumpGfxInfo()", e);
         } finally {
             IoUtils.closeQuietly(info.fd);
+            StrictMode.setThreadPolicy(oldPolicy);
         }
     }
 
@@ -6379,9 +6392,7 @@ public final class ActivityThread extends ClientTransactionHandler
         if (DEBUG_MEMORY_TRIM) Slog.v(TAG, "Trimming memory to level: " + level);
 
         if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
-            for (PropertyInvalidatedCache pic : PropertyInvalidatedCache.getActiveCaches()) {
-                pic.clear();
-            }
+            PropertyInvalidatedCache.onTrimMemory();
         }
 
         final ArrayList<ComponentCallbacks2> callbacks =

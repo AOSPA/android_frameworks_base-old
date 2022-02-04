@@ -23,6 +23,7 @@
         >
 
         <!-- Standard permissions granted to the shell. -->
+    <uses-permission android:name="android.permission.LAUNCH_DEVICE_MANAGER_SETUP" />
     <uses-permission android:name="android.permission.GET_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
@@ -340,6 +341,9 @@
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.SET_WALLPAPER_COMPONENT" />
 
+    <!-- Permission needed to test wallpaper dimming -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER_DIM_AMOUNT" />
+
     <!-- Permission required to test ContentResolver caching. -->
     <uses-permission android:name="android.permission.CACHE_CONTENT" />
 
@@ -348,6 +352,9 @@
 
     <!-- Permission required for CTS test - CrossProfileAppsHostSideTest -->
     <uses-permission android:name="android.permission.INTERACT_ACROSS_PROFILES"/>
+
+    <!-- Permission required for CTS test - CrossProfileAppsHostSideTest -->
+    <uses-permission android:name="android.permission.START_CROSS_PROFILE_ACTIVITIES"/>
 
     <!-- permissions required for CTS test - PhoneStateListenerTest -->
     <uses-permission android:name="android.permission.LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH" />
@@ -607,15 +614,17 @@
     <!-- Permission required for ATS test - CarDevicePolicyManagerTest -->
     <uses-permission android:name="android.permission.LOCK_DEVICE" />
 
-    <!-- Permission required for CTS test - CtsSafetyCenterTestCases -->
+    <!-- Permissions required for CTS test - CtsSafetyCenterTestCases -->
     <uses-permission android:name="android.permission.SEND_SAFETY_CENTER_UPDATE" />
-
-    <!-- Permission required for CTS test - CtsSafetyCenterTestCases -->
     <uses-permission android:name="android.permission.READ_SAFETY_CENTER_STATUS" />
+    <uses-permission android:name="android.permission.MANAGE_SAFETY_CENTER" />
 
-    <!-- Permission required for CTS test - CommunalManagerTest -->
-    <uses-permission android:name="android.permission.WRITE_COMMUNAL_STATE" />
-    <uses-permission android:name="android.permission.READ_COMMUNAL_STATE" />
+
+    <!-- Permission required for CTS test - Notification test suite -->
+    <uses-permission android:name="android.permission.REVOKE_POST_NOTIFICATIONS_WITHOUT_KILL" />
+
+    <!-- Permission required for CTS test - CaptioningManagerTest -->
+    <uses-permission android:name="android.permission.SET_SYSTEM_AUDIO_CAPTION" />
 
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"

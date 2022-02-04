@@ -19,7 +19,7 @@ package com.android.server.companion;
 
 import static android.Manifest.permission.MANAGE_COMPANION_DEVICES;
 import static android.bluetooth.le.ScanSettings.CALLBACK_TYPE_ALL_MATCHES;
-import static android.bluetooth.le.ScanSettings.SCAN_MODE_BALANCED;
+import static android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_POWER;
 import static android.content.pm.PackageManager.CERT_INPUT_SHA256;
 import static android.content.pm.PackageManager.FEATURE_COMPANION_DEVICE_SETUP;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -149,6 +149,9 @@ public class CompanionDeviceManagerService extends SystemService
     private static final String PREF_FILE_NAME = "companion_device_preferences.xml";
     private static final String PREF_KEY_AUTO_REVOKE_GRANTS_DONE = "auto_revoke_grants_done";
 
+    private static final long ASSOCIATION_CLEAN_UP_TIME_WINDOW =
+            90L * 24 * 60 * 60 * 1000; // 3 months
+
     private static DateFormat sDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     static {
         sDateFormat.setTimeZone(TimeZone.getDefault());
@@ -156,7 +159,7 @@ public class CompanionDeviceManagerService extends SystemService
 
     // Persistent data store for all Associations.
     private PersistentDataStore mPersistentStore;
-    private AssociationStoreImpl mAssociationStore;
+    private final AssociationStoreImpl mAssociationStore = new AssociationStoreImpl();
     private AssociationRequestsProcessor mAssociationRequestsProcessor;
 
     private PowerWhitelistManager mPowerWhitelistManager;
@@ -179,6 +182,7 @@ public class CompanionDeviceManagerService extends SystemService
             new ArrayMap<>();
     private final RemoteCallbackList<IOnAssociationsChangedListener> mListeners =
             new RemoteCallbackList<>();
+    private final CompanionDeviceManagerServiceInternal mLocalService = new LocalService(this);
 
     final Handler mMainHandler = Handler.getMain();
     private CompanionDevicePresenceController mCompanionDevicePresenceController;
@@ -208,21 +212,15 @@ public class CompanionDeviceManagerService extends SystemService
         mPermissionControllerManager = requireNonNull(
                 context.getSystemService(PermissionControllerManager.class));
         mUserManager = context.getSystemService(UserManager.class);
+
+        LocalServices.addService(CompanionDeviceManagerServiceInternal.class, mLocalService);
     }
 
     @Override
     public void onStart() {
         mPersistentStore = new PersistentDataStore();
-        final Set<AssociationInfo> allAssociations = new ArraySet<>();
 
-        synchronized (mPreviouslyUsedIds) {
-            // The data is stored in DE directories, so we can read the data for all users now
-            // (which would not be possible if the data was stored to CE directories).
-            mPersistentStore.readStateForUsers(
-                    mUserManager.getAliveUsers(), allAssociations, mPreviouslyUsedIds);
-        }
-
-        mAssociationStore = new AssociationStoreImpl(allAssociations);
+        loadAssociationsFromDisk();
         mAssociationStore.registerListener(this);
 
         mCompanionDevicePresenceController = new CompanionDevicePresenceController(this);
@@ -231,6 +229,18 @@ public class CompanionDeviceManagerService extends SystemService
         // Publish "binder service"
         final CompanionDeviceManagerImpl impl = new CompanionDeviceManagerImpl();
         publishBinderService(Context.COMPANION_DEVICE_SERVICE, impl);
+    }
+
+    void loadAssociationsFromDisk() {
+        final Set<AssociationInfo> allAssociations = new ArraySet<>();
+        synchronized (mPreviouslyUsedIds) {
+            // The data is stored in DE directories, so we can read the data for all users now
+            // (which would not be possible if the data was stored to CE directories).
+            mPersistentStore.readStateForUsers(
+                    mUserManager.getAliveUsers(), allAssociations, mPreviouslyUsedIds);
+        }
+
+        mAssociationStore.setAssociations(allAssociations);
     }
 
     @Override
@@ -250,6 +260,9 @@ public class CompanionDeviceManagerService extends SystemService
             } else {
                 Slog.w(LOG_TAG, "No BluetoothAdapter available");
             }
+        } else if (phase == PHASE_BOOT_COMPLETED) {
+            // Run the Association CleanUp job service daily.
+            AssociationCleanUpService.schedule(getContext());
         }
     }
 
@@ -292,6 +305,24 @@ public class CompanionDeviceManagerService extends SystemService
         }
 
         return association;
+    }
+
+    // Revoke associations if the selfManaged companion device does not connect for 3
+    // months for specific profile.
+    private void associationCleanUp(String profile) {
+        for (AssociationInfo ai : mAssociationStore.getAssociations()) {
+            if (ai.isSelfManaged()
+                    && profile.equals(ai.getDeviceProfile())
+                    && System.currentTimeMillis() - ai.getLastTimeConnectedMs()
+                    >= ASSOCIATION_CLEAN_UP_TIME_WINDOW) {
+                Slog.d(LOG_TAG, "Removing the association for associationId: "
+                        + ai.getId()
+                        + " due to the device does not connect for 3 months."
+                        + " Current time: "
+                        + new Date(System.currentTimeMillis()));
+                disassociateInternal(ai.getId());
+            }
+        }
     }
 
     void maybeGrantAutoRevokeExemptions() {
@@ -573,8 +604,13 @@ public class CompanionDeviceManagerService extends SystemService
                 return;
             }
 
+            AssociationInfo updatedAssociationInfo = AssociationInfo.builder(association)
+                    .setLastTimeConnected(System.currentTimeMillis())
+                    .build();
+            mAssociationStore.updateAssociation(updatedAssociationInfo);
+
             mCompanionDevicePresenceController.onDeviceNotifyAppeared(
-                    association, getContext(), mMainHandler);
+                    updatedAssociationInfo, getContext(), mMainHandler);
         }
 
         @Override
@@ -621,8 +657,10 @@ public class CompanionDeviceManagerService extends SystemService
                         + " for user " + userId));
             }
 
-            association.setNotifyOnDeviceNearby(active);
-            mAssociationStore.updateAssociation(association);
+            AssociationInfo updatedAssociationInfo = AssociationInfo.builder(association)
+                    .setNotifyOnDeviceNearby(active)
+                    .build();
+            mAssociationStore.updateAssociation(updatedAssociationInfo);
         }
 
         @Override
@@ -735,7 +773,8 @@ public class CompanionDeviceManagerService extends SystemService
         final long timestamp = System.currentTimeMillis();
 
         final AssociationInfo association = new AssociationInfo(id, userId, packageName,
-                macAddress, displayName, deviceProfile, selfManaged, false, timestamp);
+                macAddress, displayName, deviceProfile, selfManaged, false, timestamp,
+                Long.MAX_VALUE);
         Slog.i(LOG_TAG, "New CDM association created=" + association);
         mAssociationStore.addAssociation(association);
 
@@ -1169,7 +1208,7 @@ public class CompanionDeviceManagerService extends SystemService
         } else {
             scanner.startScan(
                     filters,
-                    new ScanSettings.Builder().setScanMode(SCAN_MODE_BALANCED).build(),
+                    new ScanSettings.Builder().setScanMode(SCAN_MODE_LOW_POWER).build(),
                     mBleScanCallback);
         }
     }
@@ -1296,5 +1335,18 @@ public class CompanionDeviceManagerService extends SystemService
         }
 
         return Collections.unmodifiableMap(copy);
+    }
+
+    private final class LocalService extends CompanionDeviceManagerServiceInternal {
+        private final CompanionDeviceManagerService mService;
+
+        LocalService(CompanionDeviceManagerService service) {
+            mService = service;
+        }
+
+        @Override
+        public void associationCleanUp(String profile) {
+            mService.associationCleanUp(profile);
+        }
     }
 }

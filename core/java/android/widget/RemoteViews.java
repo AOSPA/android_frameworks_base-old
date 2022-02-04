@@ -1489,7 +1489,7 @@ public class RemoteViews implements Parcelable, Filter {
 
         SetRippleDrawableColor(Parcel parcel) {
             viewId = parcel.readInt();
-            mColorStateList = parcel.readParcelable(null, android.content.res.ColorStateList.class);
+            mColorStateList = parcel.readParcelable(null);
         }
 
         public void writeToParcel(Parcel dest, int flags) {
@@ -6628,6 +6628,7 @@ public class RemoteViews implements Parcelable, Filter {
                 opts = ActivityOptions.makeBasic();
                 opts.setPendingIntentLaunchFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             }
+            opts.setLaunchDisplayId(view.getDisplay().getDisplayId());
             return Pair.create(intent, opts);
         }
     }

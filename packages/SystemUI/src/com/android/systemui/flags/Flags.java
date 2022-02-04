@@ -57,8 +57,10 @@ public class Flags {
 
     /***************************************/
     // 200 - keyguard/lockscreen
-    public static final BooleanFlag KEYGUARD_LAYOUT =
-            new BooleanFlag(200, true);
+
+    // ** Flag retired **
+    // public static final BooleanFlag KEYGUARD_LAYOUT =
+    //         new BooleanFlag(200, true);
 
     public static final BooleanFlag LOCKSCREEN_ANIMATIONS =
             new BooleanFlag(201, true);
@@ -68,6 +70,12 @@ public class Flags {
 
     public static final ResourceBooleanFlag CHARGING_RIPPLE =
             new ResourceBooleanFlag(203, R.bool.flag_charging_ripple);
+
+    public static final ResourceBooleanFlag BOUNCER_USER_SWITCHER =
+            new ResourceBooleanFlag(204, R.bool.config_enableBouncerUserSwitcher);
+
+    public static final ResourceBooleanFlag ACTIVE_UNLOCK =
+            new ResourceBooleanFlag(205, R.bool.flag_active_unlock);
 
     /***************************************/
     // 300 - power menu
@@ -123,7 +131,8 @@ public class Flags {
     /***************************************/
     // 900 - media
     public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, false);
-    public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, false);
+    public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, true);
+    public static final BooleanFlag MEDIA_SESSION_LAYOUT = new BooleanFlag(902, false);
 
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================

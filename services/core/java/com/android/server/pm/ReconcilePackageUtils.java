@@ -28,7 +28,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
 import android.content.pm.SigningDetails;
-import android.content.pm.parsing.ParsingPackageUtils;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import android.os.SystemProperties;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -42,8 +42,8 @@ import java.util.Map;
 
 final class ReconcilePackageUtils {
     public static Map<String, ReconciledPackage> reconcilePackages(
-            final ReconcileRequest request, KeySetManagerService ksms,
-            PackageManagerServiceInjector injector)
+            final ReconcileRequest request, SharedLibrariesImpl sharedLibraries,
+            KeySetManagerService ksms)
             throws ReconcileFailure {
         final Map<String, ScanResult> scannedPackages = request.mScannedPackages;
 
@@ -67,11 +67,10 @@ final class ReconcilePackageUtils {
 
             // in the first pass, we'll build up the set of incoming shared libraries
             final List<SharedLibraryInfo> allowedSharedLibInfos =
-                    SharedLibraryHelper.getAllowedSharedLibInfos(scanResult,
-                            request.mSharedLibrarySource);
+                    sharedLibraries.getAllowedSharedLibInfos(scanResult);
             if (allowedSharedLibInfos != null) {
                 for (SharedLibraryInfo info : allowedSharedLibInfos) {
-                    if (!SharedLibraryHelper.addSharedLibraryToPackageVersionMap(
+                    if (!SharedLibraryUtils.addSharedLibraryToPackageVersionMap(
                             incomingSharedLibraries, info)) {
                         throw new ReconcileFailure("Shared Library " + info.getName()
                                 + " is being installed twice in this set!");
@@ -113,7 +112,8 @@ final class ReconcilePackageUtils {
 
             final PackageSetting disabledPkgSetting = scanResult.mRequest.mDisabledPkgSetting;
             final PackageSetting lastStaticSharedLibSetting =
-                    request.mLastStaticSharedLibSettings.get(installPackageName);
+                    scanResult.mStaticSharedLibraryInfo == null ? null
+                            : sharedLibraries.getStaticSharedLibLatestVersionSetting(scanResult);
             final PackageSetting signatureCheckPs =
                     (prepareResult != null && lastStaticSharedLibSetting != null)
                             ? lastStaticSharedLibSetting
@@ -264,11 +264,9 @@ final class ReconcilePackageUtils {
             }
             try {
                 result.get(installPackageName).mCollectedSharedLibraryInfos =
-                        SharedLibraryHelper.collectSharedLibraryInfos(
-                                scanResult.mRequest.mParsedPackage,
-                                combinedPackages, request.mSharedLibrarySource,
-                                incomingSharedLibraries, injector.getCompatibility());
-
+                        sharedLibraries.collectSharedLibraryInfos(
+                                scanResult.mRequest.mParsedPackage, combinedPackages,
+                                incomingSharedLibraries);
             } catch (PackageManagerException e) {
                 throw new ReconcileFailure(e.error, e.getMessage());
             }

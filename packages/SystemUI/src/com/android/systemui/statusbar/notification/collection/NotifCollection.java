@@ -60,6 +60,7 @@ import android.util.Pair;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.Dumpable;
 import com.android.systemui.dagger.SysUISingleton;
@@ -239,6 +240,10 @@ public class NotifCollection implements Dumpable {
             List<Pair<NotificationEntry, DismissedByUserStats>> entriesToDismiss) {
         Assert.isMainThread();
         checkForReentrantCall();
+
+        // TODO (b/206842750): This method is called from (silent) clear all and non-clear all
+        // contexts and should be checking the NO_CLEAR flag, rather than depending on NSSL
+        // to pass in a properly filtered list of notifications
 
         final List<NotificationEntry> entriesToLocallyDismiss = new ArrayList<>();
         for (int i = 0; i < entriesToDismiss.size(); i++) {
@@ -616,7 +621,7 @@ public class NotifCollection implements Dumpable {
         entry.mLifetimeExtenders.clear();
         mAmDispatchingToOtherCode = true;
         for (NotifLifetimeExtender extender : mLifetimeExtenders) {
-            if (extender.shouldExtendLifetime(entry, entry.mCancellationReason)) {
+            if (extender.maybeExtendLifetime(entry, entry.mCancellationReason)) {
                 mLogger.logLifetimeExtended(entry.getKey(), extender);
                 entry.mLifetimeExtenders.add(extender);
             }
@@ -742,13 +747,15 @@ public class NotifCollection implements Dumpable {
      *
      * See NotificationManager.cancelGroupChildrenByListLocked() for corresponding code.
      */
-    private static boolean shouldAutoDismissChildren(
+    @VisibleForTesting
+    static boolean shouldAutoDismissChildren(
             NotificationEntry entry,
             String dismissedGroupKey) {
         return entry.getSbn().getGroupKey().equals(dismissedGroupKey)
                 && !entry.getSbn().getNotification().isGroupSummary()
-                && !hasFlag(entry, Notification.FLAG_FOREGROUND_SERVICE)
+                && !hasFlag(entry, Notification.FLAG_ONGOING_EVENT)
                 && !hasFlag(entry, Notification.FLAG_BUBBLE)
+                && !hasFlag(entry, Notification.FLAG_NO_CLEAR)
                 && entry.getDismissState() != DISMISSED;
     }
 

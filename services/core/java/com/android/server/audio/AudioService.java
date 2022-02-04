@@ -2646,6 +2646,16 @@ public class AudioService extends IAudioService.Stub
         return getDevicesForAttributesInt(attributes);
     }
 
+    /** @see AudioManager#getAudioDevicesForAttributes(AudioAttributes)
+     * This method is similar with AudioService#getDevicesForAttributes,
+     * only it doesn't enforce permissions because it is used by an unprivileged public API
+     * instead of the system API.
+     */
+    public @NonNull ArrayList<AudioDeviceAttributes> getDevicesForAttributesUnprotected(
+            @NonNull AudioAttributes attributes) {
+        return getDevicesForAttributesInt(attributes);
+    }
+
     /**
      * @see AudioManager#isMusicActive()
      * @param remotely true if query is for remote playback (cast), false for local playback.
@@ -4415,12 +4425,6 @@ public class AudioService extends IAudioService.Stub
         if (!mHasVibrator) {
             return false;
         }
-        final boolean hapticsDisabled = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.HAPTIC_FEEDBACK_ENABLED, 0, UserHandle.USER_CURRENT) == 0;
-        if (hapticsDisabled) {
-            return false;
-        }
-
         if (effect == null) {
             return false;
         }
@@ -8619,7 +8623,7 @@ public class AudioService extends IAudioService.Stub
 
     /** @see Spatializer#getSpatializerCompatibleAudioDevices() */
     public @NonNull List<AudioDeviceAttributes> getSpatializerCompatibleAudioDevices() {
-        enforceModifyAudioRoutingPermission();
+        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.getCompatibleAudioDevices();
     }
 
@@ -9397,8 +9401,6 @@ public class AudioService extends IAudioService.Stub
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
-        mAudioSystem.dump(pw);
-
         sLifecycleLogger.dump(pw);
         if (mAudioHandler != null) {
             pw.println("\nMessage handler (watch for unhandled messages):");
@@ -9479,6 +9481,9 @@ public class AudioService extends IAudioService.Stub
         pw.println("mHasSpatializerEffect:" + mHasSpatializerEffect);
         pw.println("isSpatializerEnabled:" + isSpatializerEnabled());
         pw.println("isSpatialAudioEnabled:" + isSpatialAudioEnabled());
+        mSpatializerHelper.dump(pw);
+
+        mAudioSystem.dump(pw);
     }
 
     private void dumpSupportedSystemUsage(PrintWriter pw) {

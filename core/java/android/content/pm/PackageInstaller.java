@@ -1754,11 +1754,11 @@ public class PackageInstaller {
             installScenario = source.readInt();
             sizeBytes = source.readLong();
             appPackageName = source.readString();
-            appIcon = source.readParcelable(null, android.graphics.Bitmap.class);
+            appIcon = source.readParcelable(null);
             appLabel = source.readString();
-            originatingUri = source.readParcelable(null, android.net.Uri.class);
+            originatingUri = source.readParcelable(null);
             originatingUid = source.readInt();
-            referrerUri = source.readParcelable(null, android.net.Uri.class);
+            referrerUri = source.readParcelable(null);
             abiOverride = source.readString();
             volumeUuid = source.readString();
             grantedRuntimePermissions = source.readStringArray();
@@ -1770,7 +1770,7 @@ public class PackageInstaller {
             forceQueryableOverride = source.readBoolean();
             requiredInstalledVersionCode = source.readLong();
             DataLoaderParamsParcel dataLoaderParamsParcel = source.readParcelable(
-                    DataLoaderParamsParcel.class.getClassLoader(), android.content.pm.DataLoaderParamsParcel.class);
+                    DataLoaderParamsParcel.class.getClassLoader());
             if (dataLoaderParamsParcel != null) {
                 dataLoaderParams = new DataLoaderParams(dataLoaderParamsParcel);
             }
@@ -2367,42 +2367,72 @@ public class PackageInstaller {
         private static final int[] NO_SESSIONS = {};
 
         /** @hide */
-        @IntDef(prefix = { "STAGED_SESSION_" }, value = {
-                STAGED_SESSION_NO_ERROR,
-                STAGED_SESSION_VERIFICATION_FAILED,
-                STAGED_SESSION_ACTIVATION_FAILED,
-                STAGED_SESSION_UNKNOWN,
-                STAGED_SESSION_CONFLICT})
+        @IntDef(prefix = { "SESSION_" }, value = {
+                SESSION_NO_ERROR,
+                SESSION_VERIFICATION_FAILED,
+                SESSION_ACTIVATION_FAILED,
+                SESSION_UNKNOWN_ERROR,
+                SESSION_CONFLICT})
         @Retention(RetentionPolicy.SOURCE)
         public @interface SessionErrorCode {}
         /**
-         * Constant indicating that no error occurred during the preparation or the activation of
-         * this staged session.
+         * @deprecated use {@link #SESSION_NO_ERROR}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_NO_ERROR = 0;
 
         /**
-         * Constant indicating that an error occurred during the verification phase (pre-reboot) of
-         * this staged session.
+         * @deprecated use {@link #SESSION_VERIFICATION_FAILED}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_VERIFICATION_FAILED = 1;
 
         /**
-         * Constant indicating that an error occurred during the activation phase (post-reboot) of
-         * this staged session.
+         * @deprecated use {@link #SESSION_ACTIVATION_FAILED}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_ACTIVATION_FAILED = 2;
 
         /**
-         * Constant indicating that an unknown error occurred while processing this staged session.
+         * @deprecated use {@link #SESSION_UNKNOWN_ERROR}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_UNKNOWN = 3;
 
         /**
-         * Constant indicating that the session was in conflict with another staged session and had
+         * @deprecated use {@link #SESSION_CONFLICT}.
+         */
+        @Deprecated
+        public static final int STAGED_SESSION_CONFLICT = 4;
+
+        /**
+         * Constant indicating that no error occurred during the preparation or the activation of
+         * this session.
+         */
+        public static final int SESSION_NO_ERROR = 0;
+
+        /**
+         * Constant indicating that an error occurred during the verification phase of
+         * this session.
+         */
+        public static final int SESSION_VERIFICATION_FAILED = 1;
+
+        /**
+         * Constant indicating that an error occurred during the activation phase of
+         * this session.
+         */
+        public static final int SESSION_ACTIVATION_FAILED = 2;
+
+        /**
+         * Constant indicating that an unknown error occurred while processing this session.
+         */
+        public static final int SESSION_UNKNOWN_ERROR = 3;
+
+        /**
+         * Constant indicating that the session was in conflict with another session and had
          * to be sacrificed for resolution.
          */
-        public static final int STAGED_SESSION_CONFLICT = 4;
+        public static final int SESSION_CONFLICT = 4;
 
         private static String userActionToString(int requireUserAction) {
             switch(requireUserAction) {
@@ -2533,13 +2563,13 @@ public class PackageInstaller {
             installScenario = source.readInt();
             sizeBytes = source.readLong();
             appPackageName = source.readString();
-            appIcon = source.readParcelable(null, android.graphics.Bitmap.class);
+            appIcon = source.readParcelable(null);
             appLabel = source.readString();
 
             installLocation = source.readInt();
-            originatingUri = source.readParcelable(null, android.net.Uri.class);
+            originatingUri = source.readParcelable(null);
             originatingUid = source.readInt();
-            referrerUri = source.readParcelable(null, android.net.Uri.class);
+            referrerUri = source.readParcelable(null);
             grantedRuntimePermissions = source.readStringArray();
             whitelistedRestrictedPermissions = source.createStringArrayList();
             autoRevokePermissionsMode = source.readInt();

@@ -3554,11 +3554,9 @@ public final class ActiveServices {
     }
 
     private int getAllowMode(Intent service, @Nullable String callingPackage) {
-        if (callingPackage == null || service.getComponent() == null) {
-            return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
-        }
-        if (callingPackage.equals(service.getComponent().getPackageName())) {
-            return ActivityManagerInternal.ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE;
+        if (callingPackage != null && service.getComponent() != null
+                && callingPackage.equals(service.getComponent().getPackageName())) {
+            return ActivityManagerInternal.ALLOW_PROFILES_OR_NON_FULL;
         } else {
             return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
         }
@@ -6979,7 +6977,8 @@ public final class ActiveServices {
                 r.mFgsNotificationShown,
                 durationMs,
                 r.mStartForegroundCount,
-                ActivityManagerUtils.hashComponentNameForAtom(r.shortInstanceName));
+                ActivityManagerUtils.hashComponentNameForAtom(r.shortInstanceName),
+                r.mFgsHasNotificationPermission);
     }
 
     boolean canAllowWhileInUsePermissionInFgsLocked(int callingPid, int callingUid,

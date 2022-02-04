@@ -812,6 +812,21 @@ public final class DisplayManagerGlobal {
     }
 
     /**
+     * Report whether the display supports DISPLAY_DECORATION.
+     *
+     * @param displayId The display whose support is being queried.
+     *
+     * @hide
+     */
+    public boolean getDisplayDecorationSupport(int displayId) {
+        try {
+            return mDm.getDisplayDecorationSupport(displayId);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Gets the brightness of the display.
      *
      * @param displayId The display from which to get the brightness
@@ -881,9 +896,9 @@ public final class DisplayManagerGlobal {
      * Sets the default display mode, according to the refresh rate and the resolution chosen by the
      * user.
      */
-    public void setUserPreferredDisplayMode(Display.Mode mode) {
+    public void setUserPreferredDisplayMode(int displayId, Display.Mode mode) {
         try {
-            mDm.setUserPreferredDisplayMode(mode);
+            mDm.setUserPreferredDisplayMode(displayId, mode);
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }
@@ -892,9 +907,9 @@ public final class DisplayManagerGlobal {
     /**
      * Returns the user preferred display mode.
      */
-    public Display.Mode getUserPreferredDisplayMode() {
+    public Display.Mode getUserPreferredDisplayMode(int displayId) {
         try {
-            return mDm.getUserPreferredDisplayMode();
+            return mDm.getUserPreferredDisplayMode(displayId);
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }

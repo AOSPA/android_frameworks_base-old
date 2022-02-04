@@ -55,6 +55,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
@@ -223,7 +224,6 @@ import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.MergedConfiguration;
 import android.util.Slog;
-import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
@@ -268,6 +268,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.ScrollCaptureResponse;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.view.SurfaceControlViewHost;
 import android.view.SurfaceSession;
 import android.view.TaskTransitionSpec;
 import android.view.View;
@@ -591,20 +592,6 @@ public class WindowManagerService extends IWindowManager.Stub
      * underlying surface.
      */
     final ArrayList<WindowState> mResizingWindows = new ArrayList<>();
-
-    /**
-     * Windows whose animations have ended and now must be removed.
-     */
-    final ArrayList<WindowState> mPendingRemove = new ArrayList<>();
-
-    /**
-     * Used when processing mPendingRemove to avoid working on the original array.
-     */
-    WindowState[] mPendingRemoveTmp = new WindowState[20];
-
-    // TODO: use WindowProcessController once go/wm-unified is done.
-    /** Mapping of process pids to configurations */
-    final SparseArray<Configuration> mProcessConfigurations = new SparseArray<>();
 
     /**
      * Windows whose surface should be destroyed.
@@ -1766,7 +1753,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 activity.attachStartingWindow(win);
                 ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "addWindow: %s startingWindow=%s",
                         activity, win);
-            } else if (type == TYPE_INPUT_METHOD) {
+            } else if (type == TYPE_INPUT_METHOD
+                    // IME window is always touchable.
+                    // Ignore non-touchable windows e.g. Stylus InkWindow.java.
+                    && (win.getAttrs().flags & FLAG_NOT_TOUCHABLE) == 0) {
                 displayContent.setInputMethodWindowLocked(win);
                 imMayMove = false;
             } else if (type == TYPE_INPUT_METHOD_DIALOG) {
@@ -2043,7 +2033,6 @@ public class WindowManagerService extends IWindowManager.Stub
             dc.mWinRemovedSinceNullFocus.add(win);
         }
         mEmbeddedWindowController.onWindowRemoved(win);
-        mPendingRemove.remove(win);
         mResizingWindows.remove(win);
         updateNonSystemOverlayWindowsVisibilityIfNeeded(win, false /* surfaceShown */);
         mWindowsChanged = true;
@@ -2261,6 +2250,15 @@ public class WindowManagerService extends IWindowManager.Stub
                 if ((attrChanges & (WindowManager.LayoutParams.PRIVATE_FLAGS_CHANGED)) != 0) {
                     winAnimator.setColorSpaceAgnosticLocked((win.mAttrs.privateFlags
                             & WindowManager.LayoutParams.PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC) != 0);
+                }
+                if (win.mActivityRecord != null
+                        && !displayContent.mDwpcHelper.keepActivityOnWindowFlagsChanged(
+                                win.mActivityRecord.info, flagChanges, privateFlagChanges)) {
+                    mH.sendMessage(mH.obtainMessage(H.REPARENT_TASK_TO_DEFAULT_DISPLAY,
+                            win.mActivityRecord.getTask()));
+                    Slog.w(TAG_WM, "Activity " + win.mActivityRecord + " window flag changed,"
+                            + " can't remain on display " + displayContent.getDisplayId());
+                    return 0;
                 }
             }
 
@@ -5097,6 +5095,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int ON_POINTER_DOWN_OUTSIDE_FOCUS = 62;
         public static final int LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED = 63;
         public static final int WINDOW_STATE_BLAST_SYNC_TIMEOUT = 64;
+        public static final int REPARENT_TASK_TO_DEFAULT_DISPLAY = 65;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -5411,6 +5410,15 @@ public class WindowManagerService extends IWindowManager.Stub
                         final WindowState ws = (WindowState) msg.obj;
                         Slog.i(TAG, "Blast sync timeout: " + ws);
                         ws.immediatelyNotifyBlastSync();
+                    }
+                    break;
+                }
+                case REPARENT_TASK_TO_DEFAULT_DISPLAY: {
+                    synchronized (mGlobalLock) {
+                        Task task = (Task) msg.obj;
+                        task.reparent(mRoot.getDefaultTaskDisplayArea(), true /* onTop */);
+                        // Resume focusable root task after reparenting to another display area.
+                        task.resumeNextFocusAfterReparent();
                     }
                     break;
                 }
@@ -6369,23 +6377,6 @@ public class WindowManagerService extends IWindowManager.Stub
                     w.dump(pw, "    ", true);
                 } else {
                     pw.println();
-                }
-            }
-        }
-        if (mPendingRemove.size() > 0) {
-            pw.println();
-            pw.println("  Remove pending for:");
-            for (int i=mPendingRemove.size()-1; i>=0; i--) {
-                WindowState w = mPendingRemove.get(i);
-                if (windows == null || windows.contains(w)) {
-                    pw.print("  Remove #"); pw.print(i); pw.print(' ');
-                            pw.print(w);
-                    if (dumpAll) {
-                        pw.println(":");
-                        w.dump(pw, "    ", true);
-                    } else {
-                        pw.println();
-                    }
                 }
             }
         }
@@ -7950,6 +7941,28 @@ public class WindowManagerService extends IWindowManager.Stub
         public boolean shouldRestoreImeVisibility(IBinder imeTargetWindowToken) {
             return WindowManagerService.this.shouldRestoreImeVisibility(imeTargetWindowToken);
         }
+
+        @Override
+        public void addTaskOverlay(int taskId, SurfaceControlViewHost.SurfacePackage overlay) {
+            synchronized (mGlobalLock) {
+                final Task task = mRoot.getRootTask(taskId);
+                if (task == null) {
+                    throw new IllegalArgumentException("no task with taskId" + taskId);
+                }
+                task.addOverlay(overlay);
+            }
+        }
+
+        @Override
+        public void removeTaskOverlay(int taskId, SurfaceControlViewHost.SurfacePackage overlay) {
+            synchronized (mGlobalLock) {
+                final Task task = mRoot.getRootTask(taskId);
+                if (task == null) {
+                    throw new IllegalArgumentException("no task with taskId" + taskId);
+                }
+                task.removeOverlay(overlay);
+            }
+        }
     }
 
     void registerAppFreezeListener(AppFreezeListener listener) {
@@ -8318,7 +8331,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         flags = sanitizeFlagSlippery(flags, name, callingUid, callingPid);
 
-        final int sanitizedFlags = flags & (LayoutParams.FLAG_NOT_TOUCHABLE
+        final int sanitizedFlags = flags & (FLAG_NOT_TOUCHABLE
                 | FLAG_SLIPPERY | LayoutParams.FLAG_NOT_FOCUSABLE);
         h.layoutParamsFlags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | sanitizedFlags;
         h.layoutParamsType = type;

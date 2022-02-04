@@ -592,6 +592,24 @@ public abstract class TvInputService extends Service {
             });
         }
 
+        /** @hide */
+        public void notifyTuned(@NonNull Uri channelUri) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) Log.d(TAG, "notifyTuned");
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onTuned(channelUri);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in notifyTuned", e);
+                    }
+                }
+            });
+        }
+
         /**
          * Sends the list of all audio/video/subtitle tracks. The is used by the framework to
          * maintain the track information for a given session, which in turn is used by
@@ -948,6 +966,27 @@ public abstract class TvInputService extends Service {
         }
 
         /**
+         * Notifies signal strength.
+         * @hide
+         */
+        public void notifySignalStrength(@TvInputManager.SignalStrength final int strength) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) Log.d(TAG, "notifySignalStrength");
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onSignalStrength(strength);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in notifySignalStrength", e);
+                    }
+                }
+            });
+        }
+
+        /**
          * Assigns a size and position to the surface passed in {@link #onSetSurface}. The position
          * is relative to the overlay view that sits on top of this surface.
          *
@@ -1162,7 +1201,7 @@ public abstract class TvInputService extends Service {
          * @param enabled {@code true} to enable, {@code false} to disable.
          * @hide
          */
-        public void onSetIAppNotificationEnabled(boolean enabled) {
+        public void onSetInteractiveAppNotificationEnabled(boolean enabled) {
         }
 
         /**
@@ -1514,10 +1553,10 @@ public abstract class TvInputService extends Service {
         }
 
         /**
-         * Calls {@link #onSetIAppNotificationEnabled}.
+         * Calls {@link #onSetInteractiveAppNotificationEnabled}.
          */
-        void setIAppNotificationEnabled(boolean enabled) {
-            onSetIAppNotificationEnabled(enabled);
+        void setInteractiveAppNotificationEnabled(boolean enabled) {
+            onSetInteractiveAppNotificationEnabled(enabled);
         }
 
         /**

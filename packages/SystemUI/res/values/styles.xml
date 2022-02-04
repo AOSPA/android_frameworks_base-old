@@ -666,6 +666,14 @@
 
     <style name="Screenshot" parent="@android:style/Theme.DeviceDefault.DayNight"/>
 
+    <!-- Clipboard overlay's edit text activity. -->
+    <style name="EditTextActivity" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:navigationBarColor">?android:attr/colorBackgroundFloating</item>
+    </style>
+
     <!-- Privacy dialog -->
     <style name="PrivacyDialog" parent="Theme.SystemUI.QuickSettings.Dialog">
         <item name="android:windowIsTranslucent">true</item>
@@ -968,8 +976,9 @@
     </style>
 
     <style name="InternetDialog.NetworkSummary">
-        <item name="android:layout_marginEnd">34dp</item>
+        <item name="android:layout_marginEnd">7dp</item>
         <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">2</item>
         <item name="android:textAppearance">@style/TextAppearance.InternetDialog.Secondary</item>
     </style>
 

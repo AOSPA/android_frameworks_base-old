@@ -22,10 +22,11 @@ import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 
 import android.app.compat.CompatChanges;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.Disabled;
+import android.compat.annotation.Overridable;
 import android.os.IBinder;
 import android.os.InputConstants;
 import android.os.Looper;
+import android.os.Process;
 import android.util.Slog;
 import android.view.InputChannel;
 import android.view.InputEvent;
@@ -46,7 +47,7 @@ class ActivityRecordInputSink {
      * Feature flag for making Activities consume all touches within their task bounds.
      */
     @ChangeId
-    @Disabled
+    @Overridable
     static final long ENABLE_TOUCH_OPAQUE_ACTIVITIES = 194480991L;
 
     private static final String TAG = "ActivityRecordInputSink";
@@ -113,14 +114,12 @@ class ActivityRecordInputSink {
     }
 
     private InputWindowHandle createInputWindowHandle() {
-        InputWindowHandle inputWindowHandle = new InputWindowHandle(
-                mActivityRecord.getInputApplicationHandle(false),
+        InputWindowHandle inputWindowHandle = new InputWindowHandle(null,
                 mActivityRecord.getDisplayId());
-        inputWindowHandle.replaceTouchableRegionWithCrop(
-                mActivityRecord.getParentSurfaceControl());
+        inputWindowHandle.replaceTouchableRegionWithCrop(mActivityRecord.getSurfaceControl());
         inputWindowHandle.name = mName;
-        inputWindowHandle.ownerUid = mActivityRecord.getUid();
-        inputWindowHandle.ownerPid = mActivityRecord.getPid();
+        inputWindowHandle.ownerUid = Process.myUid();
+        inputWindowHandle.ownerPid = Process.myPid();
         inputWindowHandle.layoutParamsFlags =
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;

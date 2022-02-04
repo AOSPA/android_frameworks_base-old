@@ -67,17 +67,20 @@ import java.util.concurrent.ConcurrentMap;
  * The class responsible for persisting Association records and other related information (such as
  * previously used IDs) to a disk, and reading the data back from the disk.
  *
- * Before Android T the data was stored to `companion_device_manager_associations.xml` file in
- * {@link Environment#getUserSystemDirectory(int)}
- * (eg. `/data/system/users/0/companion_device_manager_associations.xml`)
- * @see #getBaseLegacyStorageFileForUser(int)
+ * <p>
+ * Before Android T the data was stored in "companion_device_manager_associations.xml" file in
+ * {@link Environment#getUserSystemDirectory(int) /data/system/user/}.
  *
- * Before Android T the data was stored using the v0 schema.
+ * See {@link #getBaseLegacyStorageFileForUser(int) getBaseLegacyStorageFileForUser()}.
  *
- * @see #readAssociationsV0(TypedXmlPullParser, int, Collection)
- * @see #readAssociationV0(TypedXmlPullParser, int, int, Collection)
+ * <p>
+ * Before Android T the data was stored using the v0 schema. See:
+ * <ul>
+ * <li>{@link #readAssociationsV0(TypedXmlPullParser, int, Collection) readAssociationsV0()}.
+ * <li>{@link #readAssociationV0(TypedXmlPullParser, int, int, Collection) readAssociationV0()}.
+ * </ul>
  *
- * The following snippet is a sample of a the file that is using v0 schema.
+ * The following snippet is a sample of a file that is using v0 schema.
  * <pre>{@code
  * <associations>
  *   <association
@@ -93,24 +96,28 @@ import java.util.concurrent.ConcurrentMap;
  * </associations>
  * }</pre>
  *
+ * <p>
+ * Since Android T the data is stored to "companion_device_manager.xml" file in
+ * {@link Environment#getDataSystemDeDirectory(int) /data/system_de/}.
  *
- * Since Android T the data is stored to `companion_device_manager.xml` file in
- * {@link Environment#getDataSystemDeDirectory(int)}.
- * (eg. `/data/system_de/0/companion_device_manager.xml`)
- * @see #getBaseStorageFileForUser(int)
-
+ * See {@link #getBaseStorageFileForUser(int) getBaseStorageFileForUser()}
+ *
+ * <p>
  * Since Android T the data is stored using the v1 schema.
- * In the v1 schema, a list of the previously used IDs is storead along with the association
+ *
+ * In the v1 schema, a list of the previously used IDs is stored along with the association
  * records.
- * V1 schema adds a new optional `display_name` attribute, and makes the `mac_address` attribute
+ *
+ * V1 schema adds a new optional "display_name" attribute, and makes the "mac_address" attribute
  * optional.
+ * <ul>
+ * <li> {@link #CURRENT_PERSISTENCE_VERSION}
+ * <li> {@link #readAssociationsV1(TypedXmlPullParser, int, Collection) readAssociationsV1()}
+ * <li> {@link #readAssociationV1(TypedXmlPullParser, int, Collection) readAssociationV1()}
+ * <li> {@link #readPreviouslyUsedIdsV1(TypedXmlPullParser, Map) readPreviouslyUsedIdsV1()}
+ * </ul>
  *
- * @see #CURRENT_PERSISTENCE_VERSION
- * @see #readAssociationsV1(TypedXmlPullParser, int, Collection)
- * @see #readAssociationV1(TypedXmlPullParser, int, Collection)
- * @see #readPreviouslyUsedIdsV1(TypedXmlPullParser, Map)
- *
- * The following snippet is a sample of a the file that is using v0 schema.
+ * The following snippet is a sample of a file that is using v0 schema.
  * <pre>{@code
  * <state persistence-version="1">
  *     <associations>
@@ -168,6 +175,7 @@ final class PersistentDataStore {
     private static final String XML_ATTR_SELF_MANAGED = "self_managed";
     private static final String XML_ATTR_NOTIFY_DEVICE_NEARBY = "notify_device_nearby";
     private static final String XML_ATTR_TIME_APPROVED = "time_approved";
+    private static final String XML_ATTR_LAST_TIME_CONNECTED = "last_time_connected";
 
     private static final String LEGACY_XML_ATTR_DEVICE = "device";
 
@@ -205,6 +213,8 @@ final class PersistentDataStore {
         final AtomicFile file = getStorageFileForUser(userId);
         if (DEBUG) Slog.d(LOG_TAG, "  > File=" + file.getBaseFile().getPath());
 
+        // getStorageFileForUser() ALWAYS returns the SAME OBJECT, which allows us to synchronize
+        // accesses to the file on the file system using this AtomicFile object.
         synchronized (file) {
             File legacyBaseFile = null;
             final AtomicFile readFrom;
@@ -268,6 +278,8 @@ final class PersistentDataStore {
 
         final AtomicFile file = getStorageFileForUser(userId);
         if (DEBUG) Slog.d(LOG_TAG, "  > File=" + file.getBaseFile().getPath());
+        // getStorageFileForUser() ALWAYS returns the SAME OBJECT, which allows us to synchronize
+        // accesses to the file on the file system using this AtomicFile object.
         synchronized (file) {
             persistStateToFileLocked(file, associations, previouslyUsedIdsPerPackage);
         }
@@ -328,6 +340,13 @@ final class PersistentDataStore {
         });
     }
 
+    /**
+     * Creates and caches {@link AtomicFile} object that represents the back-up file for the given
+     * user.
+     *
+     * IMPORTANT: the method will ALWAYS return the same {@link AtomicFile} object, which makes it
+     * possible to synchronize reads and writes to the file using the returned object.
+     */
     private @NonNull AtomicFile getStorageFileForUser(@UserIdInt int userId) {
         return mUserIdToStorageFile.computeIfAbsent(userId,
                 u -> new AtomicFile(getBaseStorageFileForUser(userId)));
@@ -378,7 +397,7 @@ final class PersistentDataStore {
 
         out.add(new AssociationInfo(associationId, userId, appPackage,
                 MacAddress.fromString(deviceAddress), null, profile,
-                /* managedByCompanionApp */false, notify, timeApproved));
+                /* managedByCompanionApp */false, notify, timeApproved, Long.MAX_VALUE));
     }
 
     private static void readAssociationsV1(@NonNull TypedXmlPullParser parser,
@@ -408,9 +427,12 @@ final class PersistentDataStore {
         final boolean selfManaged = readBooleanAttribute(parser, XML_ATTR_SELF_MANAGED);
         final boolean notify = readBooleanAttribute(parser, XML_ATTR_NOTIFY_DEVICE_NEARBY);
         final long timeApproved = readLongAttribute(parser, XML_ATTR_TIME_APPROVED, 0L);
+        final long lastTimeConnected = readLongAttribute(
+                parser, XML_ATTR_LAST_TIME_CONNECTED, Long.MAX_VALUE);
 
         final AssociationInfo associationInfo = createAssociationInfoNoThrow(associationId, userId,
-                appPackage, macAddress, displayName, profile, selfManaged, notify, timeApproved);
+                appPackage, macAddress, displayName, profile, selfManaged, notify, timeApproved,
+                lastTimeConnected);
         if (associationInfo != null) {
             out.add(associationInfo);
         }
@@ -464,6 +486,8 @@ final class PersistentDataStore {
         writeBooleanAttribute(
                 serializer, XML_ATTR_NOTIFY_DEVICE_NEARBY, a.isNotifyOnDeviceNearby());
         writeLongAttribute(serializer, XML_ATTR_TIME_APPROVED, a.getTimeApprovedMs());
+        writeLongAttribute(
+                serializer, XML_ATTR_LAST_TIME_CONNECTED, a.getLastTimeConnectedMs());
 
         serializer.endTag(null, XML_TAG_ASSOCIATION);
     }
@@ -512,11 +536,11 @@ final class PersistentDataStore {
     private static AssociationInfo createAssociationInfoNoThrow(int associationId,
             @UserIdInt int userId, @NonNull String appPackage, @Nullable MacAddress macAddress,
             @Nullable CharSequence displayName, @Nullable String profile, boolean selfManaged,
-            boolean notify, long timeApproved) {
+            boolean notify, long timeApproved, long lastTimeConnected) {
         AssociationInfo associationInfo = null;
         try {
             associationInfo = new AssociationInfo(associationId, userId, appPackage, macAddress,
-                    displayName, profile, selfManaged, notify, timeApproved);
+                    displayName, profile, selfManaged, notify, timeApproved, lastTimeConnected);
         } catch (Exception e) {
             if (DEBUG) Slog.w(LOG_TAG, "Could not create AssociationInfo", e);
         }

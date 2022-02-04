@@ -140,10 +140,13 @@ public class HeadsUpCoordinatorTest extends SysuiTestCase {
     public void testCancelStickyNotification() {
         when(mHeadsUpManager.isSticky(anyString())).thenReturn(true);
         addHUN(mEntry);
+        when(mHeadsUpManager.canRemoveImmediately(anyString())).thenReturn(false, true);
         when(mHeadsUpManager.getEarliestRemovalTime(anyString())).thenReturn(1000L, 0L);
-        assertTrue(mNotifLifetimeExtender.shouldExtendLifetime(mEntry, 0));
+        assertTrue(mNotifLifetimeExtender.maybeExtendLifetime(mEntry, 0));
         mClock.advanceTime(1000L);
         mExecutor.runAllReady();
+        verify(mHeadsUpManager, times(0))
+                .removeNotification(anyString(), eq(false));
         verify(mHeadsUpManager, times(1))
                 .removeNotification(anyString(), eq(true));
     }
@@ -153,9 +156,25 @@ public class HeadsUpCoordinatorTest extends SysuiTestCase {
         when(mHeadsUpManager.isSticky(anyString())).thenReturn(true);
         addHUN(mEntry);
         when(mHeadsUpManager.getEarliestRemovalTime(anyString())).thenReturn(1000L, 500L);
-        assertTrue(mNotifLifetimeExtender.shouldExtendLifetime(mEntry, 0));
+        assertTrue(mNotifLifetimeExtender.maybeExtendLifetime(mEntry, 0));
         mClock.advanceTime(1000L);
         mExecutor.runAllReady();
+        verify(mHeadsUpManager, times(0))
+                .removeNotification(anyString(), eq(false));
+        verify(mHeadsUpManager, times(0))
+                .removeNotification(anyString(), eq(true));
+    }
+
+    @Test
+    public void testCancelNotification() {
+        when(mHeadsUpManager.isSticky(anyString())).thenReturn(false);
+        addHUN(mEntry);
+        when(mHeadsUpManager.getEarliestRemovalTime(anyString())).thenReturn(1000L, 500L);
+        assertTrue(mNotifLifetimeExtender.maybeExtendLifetime(mEntry, 0));
+        mClock.advanceTime(1000L);
+        mExecutor.runAllReady();
+        verify(mHeadsUpManager, times(1))
+                .removeNotification(anyString(), eq(false));
         verify(mHeadsUpManager, times(0))
                 .removeNotification(anyString(), eq(true));
     }
@@ -189,9 +208,16 @@ public class HeadsUpCoordinatorTest extends SysuiTestCase {
         // GIVEN there is a HUN, mEntry
         addHUN(mEntry);
 
+        given(mHeadsUpManager.canRemoveImmediately(anyString())).willAnswer(i -> {
+            String key = i.getArgument(0);
+            for (NotificationEntry entry : mHuns) {
+                if (entry.getKey().equals(key)) return false;
+            }
+            return true;
+        });
         // THEN only the current HUN, mEntry, should be lifetimeExtended
-        assertTrue(mNotifLifetimeExtender.shouldExtendLifetime(mEntry, /* cancellationReason */ 0));
-        assertFalse(mNotifLifetimeExtender.shouldExtendLifetime(
+        assertTrue(mNotifLifetimeExtender.maybeExtendLifetime(mEntry, /* cancellationReason */ 0));
+        assertFalse(mNotifLifetimeExtender.maybeExtendLifetime(
                 new NotificationEntryBuilder()
                         .setPkg("test-package")
                         .build(), /* cancellationReason */ 0));

@@ -16,6 +16,7 @@
 
 package com.android.server.companion.virtual;
 
+import static android.content.pm.ActivityInfo.FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES;
 import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 
@@ -27,9 +28,10 @@ import android.content.ComponentName;
 import android.content.pm.ActivityInfo;
 import android.os.Build;
 import android.os.UserHandle;
+import android.util.ArraySet;
+import android.util.Slog;
 import android.window.DisplayWindowPolicyController;
 
-import java.util.HashSet;
 import java.util.List;
 
 
@@ -38,6 +40,8 @@ import java.util.List;
  */
 class GenericWindowPolicyController extends DisplayWindowPolicyController {
 
+    private static final String TAG = "VirtualDeviceManager";
+
     /**
      * If required, allow the secure activity to display on remote device since
      * {@link android.os.Build.VERSION_CODES#TIRAMISU}.
@@ -45,10 +49,13 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
     @ChangeId
     @EnabledSince(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
     public static final long ALLOW_SECURE_ACTIVITY_DISPLAY_ON_REMOTE_DEVICE = 201712607L;
+    @NonNull private final ArraySet<UserHandle> mAllowedUsers;
 
-    @NonNull final HashSet<Integer> mRunningUids = new HashSet<>();
+    @NonNull final ArraySet<Integer> mRunningUids = new ArraySet<>();
 
-    GenericWindowPolicyController(int windowFlags, int systemWindowFlags) {
+    GenericWindowPolicyController(int windowFlags, int systemWindowFlags,
+            @NonNull ArraySet<UserHandle> allowedUsers) {
+        mAllowedUsers = allowedUsers;
         setInterestedWindowFlags(windowFlags, systemWindowFlags);
     }
 
@@ -58,7 +65,7 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
         final int activityCount = activities.size();
         for (int i = 0; i < activityCount; i++) {
             final ActivityInfo aInfo = activities.get(i);
-            if ((aInfo.flags & ActivityInfo.FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES) == 0) {
+            if (!canContainActivity(aInfo, /* windowFlags= */ 0, /* systemWindowFlags= */ 0)) {
                 return false;
             }
         }
@@ -68,12 +75,41 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
     @Override
     public boolean keepActivityOnWindowFlagsChanged(ActivityInfo activityInfo, int windowFlags,
             int systemWindowFlags) {
-        if ((activityInfo.flags & ActivityInfo.FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES) == 0) {
+        return canContainActivity(activityInfo, windowFlags, systemWindowFlags);
+    }
+
+    @Override
+    public void onTopActivityChanged(ComponentName topActivity, int uid) {
+
+    }
+
+    @Override
+    public void onRunningAppsChanged(ArraySet<Integer> runningUids) {
+        mRunningUids.clear();
+        mRunningUids.addAll(runningUids);
+    }
+
+    /**
+     * Returns true if an app with the given UID has an activity running on the virtual display for
+     * this controller.
+     */
+    boolean containsUid(int uid) {
+        return mRunningUids.contains(uid);
+    }
+
+    private boolean canContainActivity(ActivityInfo activityInfo, int windowFlags,
+            int systemWindowFlags) {
+        if ((activityInfo.flags & FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES) == 0) {
+            return false;
+        }
+        final UserHandle activityUser =
+                UserHandle.getUserHandleForUid(activityInfo.applicationInfo.uid);
+        if (!mAllowedUsers.contains(activityUser)) {
+            Slog.d(TAG, "Virtual device activity not allowed from user " + activityUser);
             return false;
         }
         if (!CompatChanges.isChangeEnabled(ALLOW_SECURE_ACTIVITY_DISPLAY_ON_REMOTE_DEVICE,
-                activityInfo.packageName,
-                UserHandle.getUserHandleForUid(activityInfo.applicationInfo.uid))) {
+                activityInfo.packageName, activityUser)) {
             // TODO(b/201712607): Add checks for the apps that use SurfaceView#setSecure.
             if ((windowFlags & FLAG_SECURE) != 0) {
                 return false;
@@ -83,26 +119,5 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
             }
         }
         return true;
-    }
-
-    @Override
-    public void onTopActivityChanged(ComponentName topActivity, int uid) {
-
-    }
-
-    @Override
-    public void onRunningAppsChanged(int[] runningUids) {
-        mRunningUids.clear();
-        for (int i = 0; i < runningUids.length; i++) {
-            mRunningUids.add(runningUids[i]);
-        }
-    }
-
-    /**
-     * Returns true if an app with the given UID has an activity running on the virtual display for
-     * this controller.
-     */
-    boolean containsUid(int uid) {
-        return mRunningUids.contains(uid);
     }
 }

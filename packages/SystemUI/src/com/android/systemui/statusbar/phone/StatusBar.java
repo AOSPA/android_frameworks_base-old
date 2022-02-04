@@ -1003,7 +1003,7 @@ public class StatusBar extends CoreStartable implements
         internalFilter.addAction(BANNER_ACTION_CANCEL);
         internalFilter.addAction(BANNER_ACTION_SETUP);
         mContext.registerReceiver(mBannerActionBroadcastReceiver, internalFilter, PERMISSION_SELF,
-                null);
+                null, Context.RECEIVER_EXPORTED_UNAUDITED);
 
         if (mWallpaperSupported) {
             IWallpaperManager wallpaperManager = IWallpaperManager.Stub.asInterface(
@@ -1332,7 +1332,8 @@ public class StatusBar extends CoreStartable implements
             demoFilter.addAction(ACTION_FAKE_ARTWORK);
         }
         mContext.registerReceiverAsUser(mDemoReceiver, UserHandle.ALL, demoFilter,
-                android.Manifest.permission.DUMP, null);
+                android.Manifest.permission.DUMP, null,
+                Context.RECEIVER_EXPORTED_UNAUDITED);
 
         // listen for USER_SETUP_COMPLETE setting (per-user)
         mDeviceProvisionedController.addCallback(mUserSetupObserver);
@@ -1359,10 +1360,14 @@ public class StatusBar extends CoreStartable implements
         // Things that mean we're not dismissing the keyguard, and should ignore this expansion:
         // - Keyguard isn't even visible.
         // - Keyguard is visible, but can't be dismissed (swiping up will show PIN/password prompt).
+        // - The SIM is locked, you can't swipe to unlock. If the SIM is locked but there is no
+        //   device lock set, canDismissLockScreen returns true even though you should not be able
+        //   to dismiss the lock screen until entering the SIM PIN.
         // - QS is expanded and we're swiping - swiping up now will hide QS, not dismiss the
         //   keyguard.
         if (!isKeyguardShowing()
                 || !mKeyguardStateController.canDismissLockScreen()
+                || mKeyguardViewMediator.isAnySimPinSecure()
                 || (mNotificationPanelViewController.isQsExpanded() && trackingTouch)) {
             return;
         }
@@ -1412,7 +1417,8 @@ public class StatusBar extends CoreStartable implements
 
     private void setUpPresenter() {
         // Set up the initial notification state.
-        mActivityLaunchAnimator.setCallback(mKeyguardHandler);
+        mActivityLaunchAnimator.setCallback(mActivityLaunchAnimatorCallback);
+        mActivityLaunchAnimator.addListener(mActivityLaunchAnimatorListener);
         mNotificationAnimationProvider = new NotificationLaunchAnimatorControllerProvider(
                 mNotificationShadeWindowViewController,
                 mStackScrollerController.getNotificationListContainer(),
@@ -2958,7 +2964,7 @@ public class StatusBar extends CoreStartable implements
         mMessageRouter.cancelMessages(MSG_LAUNCH_TRANSITION_TIMEOUT);
         if (mUserSwitcherController != null && mUserSwitcherController.useFullscreenUserSwitcher()) {
             mStatusBarStateController.setState(StatusBarState.FULLSCREEN_USER_SWITCHER);
-        } else if (!mPulseExpansionHandler.isWakingToShadeLocked()) {
+        } else if (!mLockscreenShadeTransitionController.isWakingToShadeLocked()) {
             mStatusBarStateController.setState(StatusBarState.KEYGUARD);
         }
         updatePanelExpansionForKeyguard();
@@ -3564,7 +3570,6 @@ public class StatusBar extends CoreStartable implements
             // once we fully woke up.
             updateRevealEffect(true /* wakingUp */);
             updateNotificationPanelTouchState();
-            mPulseExpansionHandler.onStartedWakingUp();
 
             // If we are waking up during the screen off animation, we should undo making the
             // expanded visible (we did that so the LightRevealScrim would be visible).
@@ -4394,7 +4399,7 @@ public class StatusBar extends CoreStartable implements
                 }
             };
 
-    private final ActivityLaunchAnimator.Callback mKeyguardHandler =
+    private final ActivityLaunchAnimator.Callback mActivityLaunchAnimatorCallback =
             new ActivityLaunchAnimator.Callback() {
                 @Override
                 public boolean isOnKeyguard() {
@@ -4413,11 +4418,6 @@ public class StatusBar extends CoreStartable implements
                 }
 
                 @Override
-                public void setBlursDisabledForAppLaunch(boolean disabled) {
-                    mKeyguardViewMediator.setBlursDisabledForAppLaunch(disabled);
-                }
-
-                @Override
                 public int getBackgroundColor(TaskInfo task) {
                     if (!mStartingSurfaceOptional.isPresent()) {
                         Log.w(TAG, "No starting surface, defaulting to SystemBGColor");
@@ -4425,6 +4425,19 @@ public class StatusBar extends CoreStartable implements
                     }
 
                     return mStartingSurfaceOptional.get().getBackgroundColor(task);
+                }
+            };
+
+    private final ActivityLaunchAnimator.Listener mActivityLaunchAnimatorListener =
+            new ActivityLaunchAnimator.Listener() {
+                @Override
+                public void onLaunchAnimationStart() {
+                    mKeyguardViewMediator.setBlursDisabledForAppLaunch(true);
+                }
+
+                @Override
+                public void onLaunchAnimationEnd() {
+                    mKeyguardViewMediator.setBlursDisabledForAppLaunch(false);
                 }
             };
 

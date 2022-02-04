@@ -50,6 +50,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.dex.ArtManager;
+import android.content.pm.pkg.FrameworkPackageUserState;
 import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -88,6 +89,7 @@ import com.android.internal.util.DataClass;
 
 import dalvik.system.VMRuntime;
 
+import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.security.cert.Certificate;
@@ -2734,6 +2736,8 @@ public abstract class PackageManager {
      * API shipped in Android 11.
      * <li><code>202101</code>: corresponds to the features included in the Identity Credential
      * API shipped in Android 12.
+     * <li><code>202201</code>: corresponds to the features included in the Identity Credential
+     * API shipped in Android 13.
      * </ul>
      */
     @SdkConstant(SdkConstantType.FEATURE)
@@ -4064,6 +4068,15 @@ public abstract class PackageManager {
     @TestApi
     public static final String FEATURE_COMMUNAL_MODE = "android.software.communal_mode";
 
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
+     * supports dream overlay feature, which is an informational layer shown on top of dreams.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_DREAM_OVERLAY = "android.software.dream_overlay";
+
     /** @hide */
     public static final boolean APP_ENUMERATION_ENABLED_BY_DEFAULT = true;
 
@@ -4221,6 +4234,17 @@ public abstract class PackageManager {
             "android.content.pm.action.REQUEST_PERMISSIONS";
 
     /**
+     * The action used to request that the user approve a permission request
+     * from the application. Sent from an application other than the one whose permissions
+     * will be granted. Can only be used by the system server.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String ACTION_REQUEST_PERMISSIONS_FOR_OTHER =
+            "android.content.pm.action.REQUEST_PERMISSIONS_FOR_OTHER";
+
+    /**
      * The names of the requested permissions.
      * <p>
      * <strong>Type:</strong> String[]
@@ -4328,8 +4352,9 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_GRANTED_BY_DEFAULT =  1 << 5;
 
     /**
-     * Permission flag: The permission has to be reviewed before any of
-     * the app components can run.
+     * Permission flag: If app targetSDK < M, then the permission has to be reviewed before any of
+     * the app components can run. If app targetSDK >= M, then the system might need to show a
+     * request dialog for this permission on behalf of an app.
      *
      * @hide
      */
@@ -7868,8 +7893,7 @@ public abstract class PackageManager {
     @Deprecated
     @Nullable
     public PackageInfo getPackageArchiveInfo(@NonNull String archiveFilePath, int flags) {
-        throw new UnsupportedOperationException(
-                "getPackageArchiveInfo() not implemented in subclass");
+        return getPackageArchiveInfo(archiveFilePath, PackageInfoFlags.of(flags));
     }
 
     /**
@@ -7878,8 +7902,29 @@ public abstract class PackageManager {
     @Nullable
     public PackageInfo getPackageArchiveInfo(@NonNull String archiveFilePath,
             @NonNull PackageInfoFlags flags) {
-        throw new UnsupportedOperationException(
-                "getPackageArchiveInfo() not implemented in subclass");
+        long flagsBits = flags.getValue();
+        final PackageParser parser = new PackageParser();
+        parser.setCallback(new PackageParser.CallbackImpl(this));
+        final File apkFile = new File(archiveFilePath);
+        try {
+            if ((flagsBits & (MATCH_DIRECT_BOOT_UNAWARE | MATCH_DIRECT_BOOT_AWARE)) != 0) {
+                // Caller expressed an explicit opinion about what encryption
+                // aware/unaware components they want to see, so fall through and
+                // give them what they want
+            } else {
+                // Caller expressed no opinion, so match everything
+                flagsBits |= MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE;
+            }
+
+            PackageParser.Package pkg = parser.parsePackage(apkFile, 0, false);
+            if ((flagsBits & GET_SIGNATURES) != 0) {
+                PackageParser.collectCertificates(pkg, false /* skipVerify */);
+            }
+            return PackageParser.generatePackageInfo(pkg, null, (int) flagsBits, 0, 0, null,
+                    FrameworkPackageUserState.DEFAULT);
+        } catch (PackageParser.PackageParserException e) {
+            return null;
+        }
     }
 
     /**

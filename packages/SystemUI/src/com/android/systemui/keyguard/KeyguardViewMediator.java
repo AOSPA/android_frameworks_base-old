@@ -100,6 +100,7 @@ import com.android.keyguard.KeyguardViewController;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.keyguard.mediator.ScreenOnCoordinator;
 import com.android.systemui.CoreStartable;
+import com.android.systemui.DejankUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.animation.Interpolators;
@@ -896,7 +897,8 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         delayedActionFilter.addAction(DELAYED_KEYGUARD_ACTION);
         delayedActionFilter.addAction(DELAYED_LOCK_PROFILE_ACTION);
         mContext.registerReceiver(mDelayedLockBroadcastReceiver, delayedActionFilter,
-                SYSTEMUI_PERMISSION, null /* scheduler */);
+                SYSTEMUI_PERMISSION, null /* scheduler */,
+                Context.RECEIVER_EXPORTED_UNAUDITED);
 
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
 
@@ -1694,6 +1696,21 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
                 || mUpdateMonitor.isSimPinSecure();
     }
 
+    /**
+     * Whether any of the SIMs on the device are secured with a PIN. If so, the keyguard should not
+     * be dismissable until the PIN is entered, even if the device itself has no lock set.
+     */
+    public boolean isAnySimPinSecure() {
+        for (int i = 0; i < mLastSimStates.size(); i++) {
+            final int key = mLastSimStates.keyAt(i);
+            if (KeyguardUpdateMonitor.isSimPinSecure(mLastSimStates.get(key))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public void setSwitchingUser(boolean switching) {
         mUpdateMonitor.setSwitchingUser(switching);
     }
@@ -1751,7 +1768,7 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         }
     };
 
-    public void keyguardDone() {
+    private void keyguardDone() {
         Trace.beginSection("KeyguardViewMediator#keyguardDone");
         if (DEBUG) Log.d(TAG, "keyguardDone()");
         userActivity();
@@ -1885,9 +1902,8 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
             resetKeyguardDonePendingLocked();
         }
 
-
         if (mGoingToSleep) {
-            mUpdateMonitor.clearBiometricRecognized();
+            mUpdateMonitor.clearBiometricRecognizedWhenKeyguardDone(currentUser);
             Log.i(TAG, "Device is going to sleep, aborting keyguardDone");
             return;
         }
@@ -1908,7 +1924,7 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         }
 
         handleHide();
-        mUpdateMonitor.clearBiometricRecognized();
+        mUpdateMonitor.clearBiometricRecognizedWhenKeyguardDone(currentUser);
         Trace.endSection();
     }
 
@@ -2352,16 +2368,20 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         // Block the panel from expanding, in case we were doing a swipe to dismiss gesture.
         mKeyguardViewControllerLazy.get().blockPanelExpansionFromCurrentTouch();
         final boolean wasShowing = mShowing;
-        onKeyguardExitFinished();
-
-        if (mKeyguardStateController.isDismissingFromSwipe() || wasShowing) {
-            mKeyguardUnlockAnimationControllerLazy.get().hideKeyguardViewAfterRemoteAnimation();
-        }
-
-        finishSurfaceBehindRemoteAnimation(cancelled);
-        mSurfaceBehindRemoteAnimationRequested = false;
-        mKeyguardUnlockAnimationControllerLazy.get().notifyFinishedKeyguardExitAnimation();
         InteractionJankMonitor.getInstance().end(CUJ_LOCKSCREEN_UNLOCK_ANIMATION);
+
+        // Post layout changes to the next frame, so we don't hang at the end of the animation.
+        DejankUtils.postAfterTraversal(() -> {
+            onKeyguardExitFinished();
+
+            if (mKeyguardStateController.isDismissingFromSwipe() || wasShowing) {
+                mKeyguardUnlockAnimationControllerLazy.get().hideKeyguardViewAfterRemoteAnimation();
+            }
+
+            finishSurfaceBehindRemoteAnimation(cancelled);
+            mSurfaceBehindRemoteAnimationRequested = false;
+            mKeyguardUnlockAnimationControllerLazy.get().notifyFinishedKeyguardExitAnimation();
+        });
     }
 
     /**

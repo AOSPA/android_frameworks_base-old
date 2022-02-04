@@ -230,6 +230,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runDexoptJob();
                 case "cancel-bg-dexopt-job":
                     return cancelBgDexOptJob();
+                case "delete-dexopt":
+                    return runDeleteDexOpt();
                 case "dump-profiles":
                     return runDumpProfiles();
                 case "snapshot-profile":
@@ -1917,6 +1919,24 @@ class PackageManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runDeleteDexOpt() throws RemoteException {
+        PrintWriter pw = getOutPrintWriter();
+        String packageName = getNextArg();
+        if (TextUtils.isEmpty(packageName)) {
+            pw.println("Error: no package name");
+            return 1;
+        }
+        long freedBytes = LocalServices.getService(
+                PackageManagerInternal.class).deleteOatArtifactsOfPackage(packageName);
+        if (freedBytes < 0) {
+            pw.println("Error: delete failed");
+            return 1;
+        }
+        pw.println("Success: freed " + freedBytes + " bytes");
+        Slog.i(TAG, "delete-dexopt " + packageName + " ,freed " + freedBytes + " bytes");
+        return 0;
+    }
+
     private int runDumpProfiles() throws RemoteException {
         String packageName = getNextArg();
         mInterface.dumpProfiles(packageName);
@@ -2745,7 +2765,7 @@ class PackageManagerShellCommand extends ShellCommand {
         IUserManager um = IUserManager.Stub.asInterface(
                 ServiceManager.getService(Context.USER_SERVICE));
         if (setEphemeralIfInUse) {
-            return removeUserOrSetEphemeral(um, userId);
+            return removeUserWhenPossible(um, userId);
         } else {
             final boolean success = wait ? removeUserAndWait(um, userId) : removeUser(um, userId);
             if (success) {
@@ -2808,15 +2828,15 @@ class PackageManagerShellCommand extends ShellCommand {
         }
     }
 
-    private int removeUserOrSetEphemeral(IUserManager um, @UserIdInt int userId)
+    private int removeUserWhenPossible(IUserManager um, @UserIdInt int userId)
             throws RemoteException {
         Slog.i(TAG, "Removing " + userId + " or set as ephemeral if in use.");
-        int result = um.removeUserOrSetEphemeral(userId, /* evenWhenDisallowed= */ false);
+        int result = um.removeUserWhenPossible(userId, /* overrideDevicePolicy= */ false);
         switch (result) {
             case UserManager.REMOVE_RESULT_REMOVED:
                 getOutPrintWriter().printf("Success: user %d removed\n", userId);
                 return 0;
-            case UserManager.REMOVE_RESULT_SET_EPHEMERAL:
+            case UserManager.REMOVE_RESULT_DEFERRED:
                 getOutPrintWriter().printf("Success: user %d set as ephemeral\n", userId);
                 return 0;
             case UserManager.REMOVE_RESULT_ALREADY_BEING_REMOVED:
@@ -3999,6 +4019,9 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("");
         pw.println("  force-dex-opt PACKAGE");
         pw.println("    Force immediate execution of dex opt for the given PACKAGE.");
+        pw.println("");
+        pw.println("  delete-dexopt PACKAGE");
+        pw.println("    Delete dex optimization results for the given PACKAGE.");
         pw.println("");
         pw.println("  bg-dexopt-job");
         pw.println("    Execute the background optimizations immediately.");

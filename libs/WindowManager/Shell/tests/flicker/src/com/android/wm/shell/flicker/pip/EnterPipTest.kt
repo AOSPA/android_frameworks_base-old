@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
@@ -26,9 +27,7 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.LAUNCHER_COMPONENT
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.rules.WMFlickerServiceRuleForTestSpec
-import org.junit.Assume.assumeFalse
 import org.junit.FixMethodOrder
 import org.junit.Rule
 import org.junit.Test
@@ -93,11 +92,7 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     /** {@inheritDoc}  */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun statusBarLayerRotatesScales() {
-        // This test doesn't work in shell transitions because of b/206753786
-        assumeFalse(isShellTransitionsEnabled)
-        super.statusBarLayerRotatesScales()
-    }
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
     /**
      * Checks [pipApp] window remains visible throughout the animation
@@ -187,13 +182,14 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     }
 
     /**
-     * Checks the focus doesn't change during the animation
+     * Checks that the focus changes between the [pipApp] window and the launcher when
+     * closing the pip window
      */
-    @FlakyTest
+    @Postsubmit
     @Test
-    fun focusDoesNotChange() {
+    fun focusChanges() {
         testSpec.assertEventLog {
-            this.focusDoesNotChange()
+            this.focusChanges(pipApp.`package`, "NexusLauncherActivity")
         }
     }
 

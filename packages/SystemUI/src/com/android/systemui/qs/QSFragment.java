@@ -25,6 +25,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Bundle;
+import android.os.Trace;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -117,6 +118,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private QSPanelController mQSPanelController;
     private QuickQSPanelController mQuickQSPanelController;
     private QSCustomizerController mQSCustomizerController;
+    @Nullable
     private ScrollListener mScrollListener;
     /**
      * When true, QS will translate from outside the screen. It will be clipped with parallax
@@ -171,9 +173,14 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     @Override
     public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container,
             Bundle savedInstanceState) {
-        inflater = inflater.cloneInContext(new ContextThemeWrapper(getContext(),
-                R.style.Theme_SystemUI_QuickSettings));
-        return inflater.inflate(R.layout.qs_panel, container, false);
+        try {
+            Trace.beginSection("QSFragment#onCreateView");
+            inflater = inflater.cloneInContext(new ContextThemeWrapper(getContext(),
+                    R.style.Theme_SystemUI_QuickSettings));
+            return inflater.inflate(R.layout.qs_panel, container, false);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     @Override

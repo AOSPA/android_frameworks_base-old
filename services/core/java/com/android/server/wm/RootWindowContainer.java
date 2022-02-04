@@ -991,29 +991,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mWmService.checkDrawnWindowsLocked();
         }
 
-        final int N = mWmService.mPendingRemove.size();
-        if (N > 0) {
-            if (mWmService.mPendingRemoveTmp.length < N) {
-                mWmService.mPendingRemoveTmp = new WindowState[N + 10];
-            }
-            mWmService.mPendingRemove.toArray(mWmService.mPendingRemoveTmp);
-            mWmService.mPendingRemove.clear();
-            ArrayList<DisplayContent> displayList = new ArrayList();
-            for (i = 0; i < N; i++) {
-                final WindowState w = mWmService.mPendingRemoveTmp[i];
-                w.removeImmediately();
-                final DisplayContent displayContent = w.getDisplayContent();
-                if (displayContent != null && !displayList.contains(displayContent)) {
-                    displayList.add(displayContent);
-                }
-            }
-
-            for (int j = displayList.size() - 1; j >= 0; --j) {
-                final DisplayContent dc = displayList.get(j);
-                dc.assignWindowLayers(true /*setLayoutNeeded*/);
-            }
-        }
-
         forAllDisplays(dc -> {
             dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
             dc.updateSystemGestureExclusion();
@@ -2059,11 +2036,22 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         try {
             final Task task = r.getTask();
-            final Task rootPinnedTask = taskDisplayArea.getRootPinnedTask();
+
+            // Create a transition now to collect the current pinned Task dismiss. Only do the
+            // create here as the Task (trigger) to enter PIP is not ready yet.
+            final TransitionController transitionController = task.mTransitionController;
+            Transition newTransition = null;
+            if (transitionController.isCollecting()) {
+                transitionController.setReady(task, false /* ready */);
+            } else if (transitionController.getTransitionPlayer() != null) {
+                newTransition = transitionController.createTransition(TRANSIT_PIP);
+            }
 
             // This will change the root pinned task's windowing mode to its original mode, ensuring
             // we only have one root task that is in pinned mode.
+            final Task rootPinnedTask = taskDisplayArea.getRootPinnedTask();
             if (rootPinnedTask != null) {
+                transitionController.collect(rootPinnedTask);
                 rootPinnedTask.dismissPip();
             }
 
@@ -2139,7 +2127,13 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // display area, so reparent.
                 rootTask.reparent(taskDisplayArea, true /* onTop */);
             }
-            rootTask.mTransitionController.requestTransitionIfNeeded(TRANSIT_PIP, rootTask);
+
+            // The new PIP Task is ready, start the transition before updating the windowing mode.
+            if (newTransition != null) {
+                transitionController.requestStartTransition(newTransition, rootTask,
+                        null /* remoteTransition */, null /* displayChange */);
+            }
+            transitionController.collect(rootTask);
 
             // Defer the windowing mode change until after the transition to prevent the activity
             // from doing work and changing the activity visuals while animating

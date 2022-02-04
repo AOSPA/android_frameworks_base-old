@@ -80,6 +80,9 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
     private static final boolean DEBUG = false;
     private static final VibrationAttributes DEFAULT_ATTRIBUTES =
             new VibrationAttributes.Builder().build();
+    private static final int ATTRIBUTES_ALL_BYPASS_FLAGS =
+            VibrationAttributes.FLAG_BYPASS_INTERRUPTION_POLICY
+                    | VibrationAttributes.FLAG_BYPASS_USER_VIBRATION_INTENSITY_OFF;
 
     /** Lifecycle responsible for initializing this class at the right system server phases. */
     public static class Lifecycle extends SystemService {
@@ -975,12 +978,12 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
             usage = VibrationAttributes.USAGE_TOUCH;
         }
         int flags = attrs.getFlags();
-        if (attrs.isFlagSet(VibrationAttributes.FLAG_BYPASS_INTERRUPTION_POLICY)) {
+        if ((flags & ATTRIBUTES_ALL_BYPASS_FLAGS) != 0) {
             if (!(hasPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
                     || hasPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
                     || hasPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING))) {
-                // Remove bypass policy flag from attributes if the app does not have permissions.
-                flags &= ~VibrationAttributes.FLAG_BYPASS_INTERRUPTION_POLICY;
+                // Remove bypass flags from attributes if the app does not have permissions.
+                flags &= ~ATTRIBUTES_ALL_BYPASS_FLAGS;
             }
         }
         if ((usage == attrs.getUsage()) && (flags == attrs.getFlags())) {
@@ -1756,17 +1759,23 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
                 }
                 if (hasFrequencies) {
                     frequencies.add(Float.parseFloat(getNextArgRequired()));
-                } else {
-                    frequencies.add(0f);
                 }
             }
 
             VibrationEffect.WaveformBuilder waveform = VibrationEffect.startWaveform();
             for (int i = 0; i < durations.size(); i++) {
                 if (isContinuous) {
-                    waveform.addRamp(amplitudes.get(i), frequencies.get(i), durations.get(i));
+                    if (hasFrequencies) {
+                        waveform.addRamp(amplitudes.get(i), frequencies.get(i), durations.get(i));
+                    } else {
+                        waveform.addRamp(amplitudes.get(i), durations.get(i));
+                    }
                 } else {
-                    waveform.addStep(amplitudes.get(i), frequencies.get(i), durations.get(i));
+                    if (hasFrequencies) {
+                        waveform.addStep(amplitudes.get(i), frequencies.get(i), durations.get(i));
+                    } else {
+                        waveform.addStep(amplitudes.get(i), durations.get(i));
+                    }
                 }
             }
             composition.addEffect(waveform.build(repeat), delay);
@@ -1865,7 +1874,7 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
                 pw.println("    If -c is provided, the waveform is continuous and will ramp");
                 pw.println("    between values; otherwise each entry is a fixed step.");
                 pw.println("    Duration is in milliseconds; amplitude is a scale of 1-255;");
-                pw.println("    frequency is a relative value around resonant frequency 0;");
+                pw.println("    frequency is an absolute value in hertz;");
                 pw.println("  prebaked [-w delay] [-b] <effect-id>");
                 pw.println("    Vibrates with prebaked effect; ignored when device is on DND ");
                 pw.println("    (Do Not Disturb) mode; touch feedback strength user setting ");

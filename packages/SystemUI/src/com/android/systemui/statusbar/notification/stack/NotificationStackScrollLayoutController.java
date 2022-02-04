@@ -28,7 +28,7 @@ import static com.android.systemui.statusbar.notification.stack.NotificationStac
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_GENTLE;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_HIGH_PRIORITY;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.SelectedRows;
-import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.canChildBeDismissed;
+import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.canChildBeCleared;
 import static com.android.systemui.statusbar.phone.NotificationIconAreaController.HIGH_PRIORITY;
 
 import android.content.res.Configuration;
@@ -93,7 +93,6 @@ import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
-import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy.NotificationGroup;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy.OnGroupChangeListener;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
@@ -127,6 +126,7 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceP
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.util.Compile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -144,7 +144,7 @@ import kotlin.Unit;
 @StatusBarComponent.StatusBarScope
 public class NotificationStackScrollLayoutController {
     private static final String TAG = "StackScrollerController";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = Compile.IS_DEBUG && Log.isLoggable(TAG, Log.DEBUG);
 
     private final boolean mAllowLongPress;
     private final NotificationGutsManager mNotificationGutsManager;
@@ -466,7 +466,7 @@ public class NotificationStackScrollLayoutController {
                  */
 
                 public void handleChildViewDismissed(View view) {
-                    if (mView.getDismissAllInProgress()) {
+                    if (mView.getClearAllInProgress()) {
                         return;
                     }
                     mView.onSwipeEnd();
@@ -510,7 +510,7 @@ public class NotificationStackScrollLayoutController {
                                 && (parent.areGutsExposed()
                                 || mSwipeHelper.getExposedMenuView() == parent
                                 || (parent.getAttachedChildren().size() == 1
-                                && parent.getEntry().isClearable()))) {
+                                && parent.getEntry().isDismissable()))) {
                             // In this case the group is expanded and showing the menu for the
                             // group, further interaction should apply to the group, not any
                             // child notifications so we use the parent of the child. We also do the
@@ -688,11 +688,6 @@ public class NotificationStackScrollLayoutController {
                 (changedRow, expanded) -> mView.onGroupExpandChanged(changedRow, expanded));
         legacyGroupManager.registerGroupChangeListener(new OnGroupChangeListener() {
             @Override
-            public void onGroupCreatedFromChildren(NotificationGroup group) {
-                mStatusBar.requestNotificationUpdate("onGroupCreatedFromChildren");
-            }
-
-            @Override
             public void onGroupsChanged() {
                 mStatusBar.requestNotificationUpdate("onGroupsChanged");
             }
@@ -720,10 +715,10 @@ public class NotificationStackScrollLayoutController {
         mView.setController(this);
         mView.setTouchHandler(new TouchHandler());
         mView.setStatusBar(mStatusBar);
-        mView.setDismissAllAnimationListener(this::onAnimationEnd);
-        mView.setDismissListener((selection) -> mUiEventLogger.log(
+        mView.setClearAllAnimationListener(this::onAnimationEnd);
+        mView.setClearAllListener((selection) -> mUiEventLogger.log(
                 NotificationPanelEvent.fromSelection(selection)));
-        mView.setFooterDismissListener(() ->
+        mView.setFooterClearAllListener(() ->
                 mMetricsLogger.action(MetricsEvent.ACTION_DISMISS_ALL_NOTES));
         mView.setIsRemoteInputActive(mRemoteInputManager.isRemoteInputActive());
         mRemoteInputManager.addControllerCallback(new RemoteInputController.Callback() {
@@ -1452,7 +1447,7 @@ public class NotificationStackScrollLayoutController {
             }
         } else {
             for (ExpandableNotificationRow rowToRemove : viewsToRemove) {
-                if (canChildBeDismissed(rowToRemove)) {
+                if (canChildBeCleared(rowToRemove)) {
                     mNotificationEntryManager.performRemoveNotification(
                             rowToRemove.getEntry().getSbn(),
                             getDismissedByUserStats(rowToRemove.getEntry()),
@@ -1503,7 +1498,7 @@ public class NotificationStackScrollLayoutController {
      *         from the keyguard host to the quick settings one.
      */
     public int getFullShadeTransitionInset() {
-        MediaHeaderView view = mKeyguardMediaController.getSinglePaneContainer();
+        MediaContainerView view = mKeyguardMediaController.getSinglePaneContainer();
         if (view == null || view.getHeight() == 0
                 || mStatusBarStateController.getState() != KEYGUARD) {
             return 0;

@@ -48,6 +48,9 @@ import android.annotation.XmlRes;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.app.assist.AssistStructure;
+import android.app.compat.CompatChanges;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ClipData;
 import android.content.ClipDescription;
@@ -76,6 +79,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.fonts.FontStyle;
 import android.graphics.fonts.FontVariationAxis;
+import android.graphics.text.LineBreakConfig;
 import android.icu.text.DecimalFormatSymbols;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -345,6 +349,7 @@ import java.util.function.Supplier;
  * @attr ref android.R.styleable#TextView_fontVariationSettings
  * @attr ref android.R.styleable#TextView_breakStrategy
  * @attr ref android.R.styleable#TextView_hyphenationFrequency
+ * @attr ref android.R.styleable#TextView_lineBreakStyle
  * @attr ref android.R.styleable#TextView_autoSizeTextType
  * @attr ref android.R.styleable#TextView_autoSizeMinTextSize
  * @attr ref android.R.styleable#TextView_autoSizeMaxTextSize
@@ -452,6 +457,22 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private static final int KEY_DOWN_HANDLED_BY_MOVEMENT_METHOD = 2;
 
     private static final int FLOATING_TOOLBAR_SELECT_ALL_REFRESH_DELAY = 500;
+
+    /**
+     * This change ID enables the fallback text line spacing (line height) for BoringLayout.
+     * @hide
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    public static final long BORINGLAYOUT_FALLBACK_LINESPACING = 210923482L; // buganizer id
+
+    /**
+     * This change ID enables the fallback text line spacing (line height) for StaticLayout.
+     * @hide
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.P)
+    public static final long STATICLAYOUT_FALLBACK_LINESPACING = 37756858; // buganizer id
 
     // System wide time for last cut, copy or text changed action.
     static long sLastCutCopyOrTextChangedTime;
@@ -756,6 +777,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private Layout mLayout;
     private boolean mLocalesChanged = false;
     private int mTextSizeUnit = -1;
+    private LineBreakConfig mLineBreakConfig = new LineBreakConfig();
 
     // This is used to reflect the current user preference for changing font weight and making text
     // more bold.
@@ -766,8 +788,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private boolean mListenerChanged = false;
     // True if internationalized input should be used for numbers and date and time.
     private final boolean mUseInternationalizedInput;
-    // True if fallback fonts that end up getting used should be allowed to affect line spacing.
-    /* package */ boolean mUseFallbackLineSpacing;
+
+    // Fallback fonts that end up getting used should be allowed to affect line spacing.
+    private static final int FALLBACK_LINE_SPACING_NONE = 0;
+    private static final int FALLBACK_LINE_SPACING_STATIC_LAYOUT_ONLY = 1;
+    private static final int FALLBACK_LINE_SPACING_ALL = 2;
+
+    private int mUseFallbackLineSpacing;
     // True if the view text can be padded for compat reasons, when the view is translated.
     private final boolean mUseTextPaddingForUiTranslation;
 
@@ -1418,6 +1445,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     mHyphenationFrequency = a.getInt(attr, Layout.HYPHENATION_FREQUENCY_NONE);
                     break;
 
+                case com.android.internal.R.styleable.TextView_lineBreakStyle:
+                    mLineBreakConfig.setLineBreakStyle(
+                            a.getInt(attr, LineBreakConfig.LINE_BREAK_STYLE_NONE));
+                    break;
+
                 case com.android.internal.R.styleable.TextView_autoSizeTextType:
                     mAutoSizeTextType = a.getInt(attr, AUTO_SIZE_TEXT_TYPE_NONE);
                     break;
@@ -1479,7 +1511,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         final int targetSdkVersion = context.getApplicationInfo().targetSdkVersion;
         mUseInternationalizedInput = targetSdkVersion >= VERSION_CODES.O;
-        mUseFallbackLineSpacing = targetSdkVersion >= VERSION_CODES.P;
+        if (CompatChanges.isChangeEnabled(BORINGLAYOUT_FALLBACK_LINESPACING)) {
+            mUseFallbackLineSpacing = FALLBACK_LINE_SPACING_ALL;
+        } else if (CompatChanges.isChangeEnabled(STATICLAYOUT_FALLBACK_LINESPACING)) {
+            mUseFallbackLineSpacing = FALLBACK_LINE_SPACING_STATIC_LAYOUT_ONLY;
+        } else {
+            mUseFallbackLineSpacing = FALLBACK_LINE_SPACING_NONE;
+        }
         // TODO(b/179693024): Use a ChangeId instead.
         mUseTextPaddingForUiTranslation = targetSdkVersion <= Build.VERSION_CODES.R;
 
@@ -4541,8 +4579,18 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @attr ref android.R.styleable#TextView_fallbackLineSpacing
      */
     public void setFallbackLineSpacing(boolean enabled) {
-        if (mUseFallbackLineSpacing != enabled) {
-            mUseFallbackLineSpacing = enabled;
+        int fallbackStrategy;
+        if (enabled) {
+            if (CompatChanges.isChangeEnabled(BORINGLAYOUT_FALLBACK_LINESPACING)) {
+                fallbackStrategy = FALLBACK_LINE_SPACING_ALL;
+            } else {
+                fallbackStrategy = FALLBACK_LINE_SPACING_STATIC_LAYOUT_ONLY;
+            }
+        } else {
+            fallbackStrategy = FALLBACK_LINE_SPACING_NONE;
+        }
+        if (mUseFallbackLineSpacing != fallbackStrategy) {
+            mUseFallbackLineSpacing = fallbackStrategy;
             if (mLayout != null) {
                 nullLayouts();
                 requestLayout();
@@ -4560,7 +4608,17 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @InspectableProperty
     public boolean isFallbackLineSpacing() {
-        return mUseFallbackLineSpacing;
+        return mUseFallbackLineSpacing != FALLBACK_LINE_SPACING_NONE;
+    }
+
+    private boolean isFallbackLineSpacingForBoringLayout() {
+        return mUseFallbackLineSpacing == FALLBACK_LINE_SPACING_ALL;
+    }
+
+    // Package privte for accessing from Editor.java
+    /* package */ boolean isFallbackLineSpacingForStaticLayout() {
+        return mUseFallbackLineSpacing == FALLBACK_LINE_SPACING_ALL
+                || mUseFallbackLineSpacing == FALLBACK_LINE_SPACING_STATIC_LAYOUT_ONLY;
     }
 
     /**
@@ -4738,13 +4796,50 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
+     * Sets line break configuration indicates which strategy needs to be used when calculating the
+     * text wrapping. There are thee strategies for the line break style(lb):
+     * {@link LineBreakConfig#LINE_BREAK_STYLE_LOOSE},
+     * {@link LineBreakConfig#LINE_BREAK_STYLE_NORMAL} and
+     * {@link LineBreakConfig#LINE_BREAK_STYLE_STRICT}.
+     * The default value of the line break style is {@link LineBreakConfig#LINE_BREAK_STYLE_NONE},
+     * which means no line break style is specified.
+     * See <a href="https://drafts.csswg.org/css-text/#line-break-property">
+     *         the line-break property</a>
+     *
+     * @param lineBreakConfig the line break config for text wrapping.
+     */
+    public void setLineBreakConfig(@NonNull LineBreakConfig lineBreakConfig) {
+        if (mLineBreakConfig.equals(lineBreakConfig)) {
+            return;
+        }
+        mLineBreakConfig.set(lineBreakConfig);
+        if (mLayout != null) {
+            nullLayouts();
+            requestLayout();
+            invalidate();
+        }
+    }
+
+    /**
+     * Get the current line break configuration for text wrapping.
+     *
+     * @return the current line break configuration to be used for text wrapping.
+     */
+    public @NonNull LineBreakConfig getLineBreakConfig() {
+        LineBreakConfig lbConfig = new LineBreakConfig();
+        lbConfig.set(mLineBreakConfig);
+        return lbConfig;
+    }
+
+    /**
      * Gets the parameters for text layout precomputation, for use with {@link PrecomputedText}.
      *
      * @return a current {@link PrecomputedText.Params}
      * @see PrecomputedText
      */
     public @NonNull PrecomputedText.Params getTextMetricsParams() {
-        return new PrecomputedText.Params(new TextPaint(mTextPaint), getTextDirectionHeuristic(),
+        return new PrecomputedText.Params(new TextPaint(mTextPaint), mLineBreakConfig,
+                getTextDirectionHeuristic(),
                 mBreakStrategy, mHyphenationFrequency);
     }
 
@@ -4760,6 +4855,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         mTextDir = params.getTextDirection();
         mBreakStrategy = params.getBreakStrategy();
         mHyphenationFrequency = params.getHyphenationFrequency();
+        mLineBreakConfig.set(params.getLineBreakConfig());
         if (mLayout != null) {
             nullLayouts();
             requestLayout();
@@ -6298,7 +6394,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
             final @PrecomputedText.Params.CheckResultUsableResult int checkResult =
                     precomputed.getParams().checkResultUsable(getPaint(), mTextDir, mBreakStrategy,
-                            mHyphenationFrequency);
+                            mHyphenationFrequency, mLineBreakConfig);
             switch (checkResult) {
                 case PrecomputedText.Params.UNUSABLE:
                     throw new IllegalArgumentException(
@@ -9148,7 +9244,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
             if (hintBoring == UNKNOWN_BORING) {
                 hintBoring = BoringLayout.isBoring(mHint, mTextPaint, mTextDir,
-                                                   mHintBoring);
+                        isFallbackLineSpacingForBoringLayout(), mHintBoring);
                 if (hintBoring != null) {
                     mHintBoring = hintBoring;
                 }
@@ -9190,11 +9286,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         .setTextDirection(mTextDir)
                         .setLineSpacing(mSpacingAdd, mSpacingMult)
                         .setIncludePad(mIncludePad)
-                        .setUseLineSpacingFromFallbacks(mUseFallbackLineSpacing)
+                        .setUseLineSpacingFromFallbacks(isFallbackLineSpacingForStaticLayout())
                         .setBreakStrategy(mBreakStrategy)
                         .setHyphenationFrequency(mHyphenationFrequency)
                         .setJustificationMode(mJustificationMode)
-                        .setMaxLines(mMaxMode == LINES ? mMaximum : Integer.MAX_VALUE);
+                        .setMaxLines(mMaxMode == LINES ? mMaximum : Integer.MAX_VALUE)
+                        .setLineBreakConfig(mLineBreakConfig);
                 if (shouldEllipsize) {
                     builder.setEllipsize(mEllipsize)
                             .setEllipsizedWidth(ellipsisWidth);
@@ -9250,7 +9347,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     .setTextDirection(mTextDir)
                     .setLineSpacing(mSpacingAdd, mSpacingMult)
                     .setIncludePad(mIncludePad)
-                    .setUseLineSpacingFromFallbacks(mUseFallbackLineSpacing)
+                    .setUseLineSpacingFromFallbacks(isFallbackLineSpacingForStaticLayout())
                     .setBreakStrategy(mBreakStrategy)
                     .setHyphenationFrequency(mHyphenationFrequency)
                     .setJustificationMode(mJustificationMode)
@@ -9259,7 +9356,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             result = builder.build();
         } else {
             if (boring == UNKNOWN_BORING) {
-                boring = BoringLayout.isBoring(mTransformed, mTextPaint, mTextDir, mBoring);
+                boring = BoringLayout.isBoring(mTransformed, mTextPaint, mTextDir,
+                        isFallbackLineSpacingForBoringLayout(), mBoring);
                 if (boring != null) {
                     mBoring = boring;
                 }
@@ -9303,11 +9401,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     .setTextDirection(mTextDir)
                     .setLineSpacing(mSpacingAdd, mSpacingMult)
                     .setIncludePad(mIncludePad)
-                    .setUseLineSpacingFromFallbacks(mUseFallbackLineSpacing)
+                    .setUseLineSpacingFromFallbacks(isFallbackLineSpacingForStaticLayout())
                     .setBreakStrategy(mBreakStrategy)
                     .setHyphenationFrequency(mHyphenationFrequency)
                     .setJustificationMode(mJustificationMode)
-                    .setMaxLines(mMaxMode == LINES ? mMaximum : Integer.MAX_VALUE);
+                    .setMaxLines(mMaxMode == LINES ? mMaximum : Integer.MAX_VALUE)
+                    .setLineBreakConfig(mLineBreakConfig);
             if (shouldEllipsize) {
                 builder.setEllipsize(effectiveEllipsize)
                         .setEllipsizedWidth(ellipsisWidth);
@@ -9430,7 +9529,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
 
             if (des < 0) {
-                boring = BoringLayout.isBoring(mTransformed, mTextPaint, mTextDir, mBoring);
+                boring = BoringLayout.isBoring(mTransformed, mTextPaint, mTextDir,
+                        isFallbackLineSpacingForBoringLayout(), mBoring);
                 if (boring != null) {
                     mBoring = boring;
                 }
@@ -9463,7 +9563,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 }
 
                 if (hintDes < 0) {
-                    hintBoring = BoringLayout.isBoring(mHint, mTextPaint, mTextDir, mHintBoring);
+                    hintBoring = BoringLayout.isBoring(mHint, mTextPaint, mTextDir,
+                            isFallbackLineSpacingForBoringLayout(), mHintBoring);
                     if (hintBoring != null) {
                         mHintBoring = hintBoring;
                     }
@@ -9667,12 +9768,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         layoutBuilder.setAlignment(getLayoutAlignment())
                 .setLineSpacing(getLineSpacingExtra(), getLineSpacingMultiplier())
                 .setIncludePad(getIncludeFontPadding())
-                .setUseLineSpacingFromFallbacks(mUseFallbackLineSpacing)
+                .setUseLineSpacingFromFallbacks(isFallbackLineSpacingForStaticLayout())
                 .setBreakStrategy(getBreakStrategy())
                 .setHyphenationFrequency(getHyphenationFrequency())
                 .setJustificationMode(getJustificationMode())
                 .setMaxLines(mMaxMode == LINES ? mMaximum : Integer.MAX_VALUE)
-                .setTextDirection(getTextDirectionHeuristic());
+                .setTextDirection(getTextDirectionHeuristic())
+                .setLineBreakConfig(mLineBreakConfig);
 
         final StaticLayout layout = layoutBuilder.build();
 
@@ -10636,8 +10738,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             return;
         }
 
-        if ((mMarquee == null || mMarquee.isStopped()) && (isFocused() || isSelected())
-                && getLineCount() == 1 && canMarquee()) {
+        if ((mMarquee == null || mMarquee.isStopped()) && isAggregatedVisible()
+                && (isFocused() || isSelected()) && getLineCount() == 1 && canMarquee()) {
 
             if (mMarqueeFadeMode == MARQUEE_FADE_SWITCH_SHOW_ELLIPSIS) {
                 mMarqueeFadeMode = MARQUEE_FADE_SWITCH_SHOW_FADE;
@@ -11094,6 +11196,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             mEditor.hideCursorAndSpanControllers();
             stopTextActionMode();
         }
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        startStopMarquee(isVisible);
     }
 
     /**
@@ -13740,7 +13848,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             mChoreographer.removeFrameCallback(mTickCallback);
 
             final TextView textView = mView.get();
-            if (textView != null && (textView.isFocused() || textView.isSelected())) {
+            if (textView != null && textView.isAggregatedVisible()
+                    && (textView.isFocused() || textView.isSelected())) {
                 long currentMs = mChoreographer.getFrameTime();
                 long deltaMs = currentMs - mLastAnimationMs;
                 mLastAnimationMs = currentMs;

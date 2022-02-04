@@ -294,6 +294,7 @@
     <string-array name="config_systemUIServiceComponents" translatable="false">
         <item>com.android.systemui.util.NotificationChannels</item>
         <item>com.android.systemui.keyguard.KeyguardViewMediator</item>
+        <item>com.android.keyguard.KeyguardBiometricLockoutLogger</item>
         <item>com.android.systemui.recents.Recents</item>
         <item>com.android.systemui.volume.VolumeUI</item>
         <item>com.android.systemui.statusbar.phone.StatusBar</item>
@@ -315,6 +316,7 @@
         <item>com.android.systemui.accessibility.SystemActions</item>
         <item>com.android.systemui.toast.ToastUI</item>
         <item>com.android.systemui.wmshell.WMShell</item>
+        <item>com.android.systemui.clipboardoverlay.ClipboardListener</item>
     </string-array>
 
     <!-- SystemUI Services: The classes of the additional stuff to start. Services here are
@@ -740,4 +742,6 @@
     <!-- Class for the communal source connector to be used -->
     <string name="config_communalSourceConnector" translatable="false"></string>
 
+    <!-- How often in milliseconds to jitter the dream overlay in order to avoid burn-in. -->
+    <integer name="config_dreamOverlayBurnInProtectionUpdateIntervalMillis">500</integer>
 </resources>

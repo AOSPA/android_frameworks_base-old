@@ -107,8 +107,6 @@ public class BtHelper {
     /*package*/  static final int SCO_MODE_UNDEFINED = -1;
     // SCO audio mode is virtual voice call (BluetoothHeadset.startScoUsingVirtualVoiceCall())
     /*package*/  static final int SCO_MODE_VIRTUAL_CALL = 0;
-    // SCO audio mode is raw audio (BluetoothHeadset.connectAudio())
-    private  static final int SCO_MODE_RAW = 1;
     // SCO audio mode is Voice Recognition (BluetoothHeadset.startVoiceRecognition())
     private  static final int SCO_MODE_VR = 2;
     // max valid SCO audio mode values
@@ -127,8 +125,6 @@ public class BtHelper {
                 return "SCO_MODE_UNDEFINED";
             case SCO_MODE_VIRTUAL_CALL:
                 return "SCO_MODE_VIRTUAL_CALL";
-            case SCO_MODE_RAW:
-                return "SCO_MODE_RAW";
             case SCO_MODE_VR:
                 return "SCO_MODE_VR";
             default:
@@ -1080,12 +1076,6 @@ public class BtHelper {
                   ", bluetoothHeadset: " + bluetoothHeadset + ", BluetoothDevice: " + device);
         }
         switch (scoAudioMode) {
-            case SCO_MODE_RAW:
-                if (AudioService.DEBUG_SCO) {
-                    Log.i(TAG, "In disconnectBluetoothScoAudioHelper(), calling "
-                           + "disconnectAudio()");
-                }
-                return bluetoothHeadset.disconnectAudio();
             case SCO_MODE_VIRTUAL_CALL:
                 if (AudioService.DEBUG_SCO) {
                     Log.i(TAG, "In disconnectBluetoothScoAudioHelper(), calling " +
@@ -1110,11 +1100,6 @@ public class BtHelper {
                     ", bluetoothHeadset: " + bluetoothHeadset + ", BluetoothDevice: " + device);
         }
         switch (scoAudioMode) {
-            case SCO_MODE_RAW:
-                if (AudioService.DEBUG_SCO) {
-                    Log.i(TAG, "In connectBluetoothScoAudioHelper(), calling connectAudio()");
-                }
-                return bluetoothHeadset.connectAudio();
             case SCO_MODE_VIRTUAL_CALL:
                 if (AudioService.DEBUG_SCO) {
                     Log.i(TAG, "In connectBluetoothScoAudioHelper(), calling "

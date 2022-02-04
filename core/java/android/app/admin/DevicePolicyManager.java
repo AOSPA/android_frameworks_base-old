@@ -16,6 +16,9 @@
 
 package android.app.admin;
 
+import static android.app.admin.DevicePolicyResources.Drawable.INVALID_ID;
+import static android.app.admin.DevicePolicyResources.Drawable.Source.UNDEFINED;
+
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
 import android.Manifest.permission;
@@ -52,7 +55,9 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.net.PrivateDnsConnectivityChecker;
 import android.net.ProxyInfo;
 import android.net.Uri;
@@ -89,6 +94,7 @@ import android.telephony.data.ApnSetting;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.DebugUtils;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Pair;
 
@@ -123,6 +129,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -480,6 +487,10 @@ public class DevicePolicyManager {
      *
      * <p>Device management role holders are required to have a handler for this intent action.
      *
+     * <p>If {@link #EXTRA_ROLE_HOLDER_STATE} is supplied to this intent, it is the responsibility
+     * of the role holder to restore its state from this extra. This is the same {@link Bundle}
+     * which the role holder returns alongside {@link #RESULT_UPDATE_ROLE_HOLDER}.
+     *
      * <p>A result code of {@link Activity#RESULT_OK} implies that managed profile provisioning
      * finished successfully. If it did not, a result code of {@link Activity#RESULT_CANCELED}
      * is used instead.
@@ -488,8 +499,7 @@ public class DevicePolicyManager {
      *
      * @hide
      */
-    // TODO(b/208628038): Uncomment when the permission is in place
-    //  @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_ROLE_HOLDER)
+    @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_SETUP)
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     @SystemApi
     public static final String ACTION_ROLE_HOLDER_PROVISION_MANAGED_PROFILE =
@@ -528,6 +538,10 @@ public class DevicePolicyManager {
      *
      * <p>Device management role holders are required to have a handler for this intent action.
      *
+     * <p>If {@link #EXTRA_ROLE_HOLDER_STATE} is supplied to this intent, it is the responsibility
+     * of the role holder to restore its state from this extra. This is the same {@link Bundle}
+     * which the role holder returns alongside {@link #RESULT_UPDATE_ROLE_HOLDER}.
+     *
      * <p>The result codes can be either {@link #RESULT_WORK_PROFILE_CREATED}, {@link
      * #RESULT_DEVICE_OWNER_SET} or {@link Activity#RESULT_CANCELED} if provisioning failed.
      *
@@ -535,8 +549,7 @@ public class DevicePolicyManager {
      *
      * @hide
      */
-    // TODO(b/208628038): Uncomment when the permission is in place
-    //  @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_ROLE_HOLDER)
+    @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_SETUP)
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     @SystemApi
     public static final String ACTION_ROLE_HOLDER_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE =
@@ -561,12 +574,52 @@ public class DevicePolicyManager {
      *
      * @hide
      */
-    // TODO(b/208628038): Uncomment when the permission is in place
-    //  @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_ROLE_HOLDER)
+    @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_SETUP)
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     @SystemApi
     public static final String ACTION_ROLE_HOLDER_PROVISION_FINALIZATION =
             "android.app.action.ROLE_HOLDER_PROVISION_FINALIZATION";
+
+    /**
+     * {@link Activity} result code which can be returned by {@link
+     * #ACTION_ROLE_HOLDER_PROVISION_MANAGED_PROFILE} and {@link
+     * #ACTION_ROLE_HOLDER_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE} to signal that an update
+     * to the role holder is required.
+     *
+     * <p>This result code must be accompanied by {@link #EXTRA_ROLE_HOLDER_STATE}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int RESULT_UPDATE_ROLE_HOLDER = 2;
+
+    /**
+     * A {@link Bundle} extra which describes the state of the role holder at the time when it
+     * returns {@link #RESULT_UPDATE_ROLE_HOLDER}.
+     *
+     * <p>After the update completes, the role holder's {@link
+     * #ACTION_ROLE_HOLDER_PROVISION_MANAGED_PROFILE} or {@link
+     * #ACTION_ROLE_HOLDER_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE} intent will be relaunched,
+     * which will contain this extra. It is the role holder's responsibility to restore its
+     * state from this extra.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_ROLE_HOLDER_STATE = "android.app.extra.ROLE_HOLDER_STATE";
+
+    /**
+     * A {@code boolean} extra which determines whether to force a role holder update, regardless
+     * of any internal conditions {@link #ACTION_UPDATE_DEVICE_MANAGEMENT_ROLE_HOLDER} might have.
+     *
+     * <p>This extra can be provided to intents with action {@link
+     * #ACTION_UPDATE_DEVICE_MANAGEMENT_ROLE_HOLDER}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_FORCE_UPDATE_ROLE_HOLDER =
+            "android.app.extra.FORCE_UPDATE_ROLE_HOLDER";
 
     /**
      * Action: Bugreport sharing with device owner has been accepted by the user.
@@ -2832,6 +2885,20 @@ public class DevicePolicyManager {
             "android.app.extra.PROVISIONING_RETURN_BEFORE_POLICY_COMPLIANCE";
 
     /**
+     * A {@code boolean} flag that indicates whether the screen should be on throughout the
+     * provisioning flow.
+     *
+     * <p>The default value is {@code false}.
+     *
+     * <p>This extra can either be passed as an extra to the {@link
+     * #ACTION_PROVISION_MANAGED_PROFILE} intent, or it can be returned by the
+     * admin app when performing the admin-integrated provisioning flow as a result of the
+     * {@link #ACTION_GET_PROVISIONING_MODE} activity.
+     */
+    public static final String EXTRA_PROVISIONING_KEEP_SCREEN_ON =
+            "android.app.extra.PROVISIONING_KEEP_SCREEN_ON";
+
+    /**
      * Activity action: Starts the administrator to show policy compliance for the provisioning.
      * This action is used any time that the administrator has an opportunity to show policy
      * compliance before the end of setup wizard. This could happen as part of the admin-integrated
@@ -2857,10 +2924,12 @@ public class DevicePolicyManager {
      * #RESULT_UPDATE_DEVICE_MANAGEMENT_ROLE_HOLDER_UNRECOVERABLE_ERROR} if it encounters a problem
      * that will not be solved by relaunching it again.
      *
+     * <p>If this activity has additional internal conditions which are not met, it should return
+     * {@link #RESULT_UPDATE_DEVICE_MANAGEMENT_ROLE_HOLDER_UNRECOVERABLE_ERROR}.
+     *
      * @hide
      */
-    // TODO(b/208628038): Uncomment when the permission is in place
-    //  @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_ROLE_HOLDER)
+    @RequiresPermission(android.Manifest.permission.LAUNCH_DEVICE_MANAGER_SETUP)
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     @SystemApi
     public static final String ACTION_UPDATE_DEVICE_MANAGEMENT_ROLE_HOLDER =
@@ -2883,6 +2952,38 @@ public class DevicePolicyManager {
      */
     @SystemApi
     public static final int RESULT_UPDATE_DEVICE_MANAGEMENT_ROLE_HOLDER_UNRECOVERABLE_ERROR = 2;
+
+    /**
+     * An {@link Intent} extra which resolves to a custom user consent screen.
+     *
+     * <p>If this extra is provided to the device management role holder via either {@link
+     * #ACTION_ROLE_HOLDER_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE} or {@link
+     * #ACTION_ROLE_HOLDER_PROVISION_MANAGED_PROFILE}, the device management role holder must
+     * launch this intent which shows the custom user consent screen, replacing its own standard
+     * consent screen.
+     *
+     * <p>If this extra is provided, it is the responsibility of the intent handler to show the
+     * list of disclaimers which are normally shown by the standard consent screen:
+     * <ul>
+     *     <li>Disclaimers set by the IT admin via the {@link #EXTRA_PROVISIONING_DISCLAIMERS}
+     *     provisioning extra</li>
+     *     <li>For fully-managed device provisioning, disclaimers defined in system apps via the
+     *     {@link #EXTRA_PROVISIONING_DISCLAIMER_HEADER} and {@link
+     *     #EXTRA_PROVISIONING_DISCLAIMER_CONTENT} metadata in their manifests</li>
+     *     <li>General disclaimer relevant to the provisioning mode</li>
+     * </ul>
+     *
+     * <p>If the custom consent screens are granted by the user {@link Activity#RESULT_OK} is
+     * returned, otherwise {@link Activity#RESULT_CANCELED} is returned. The device management
+     * role holder should ensure that the provisioning flow terminates immediately if consent
+     * is not granted by the user.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SystemApi
+    public static final String EXTRA_PROVISIONING_ROLE_HOLDER_CUSTOM_USER_CONSENT_INTENT =
+            "android.app.extra.PROVISIONING_ROLE_HOLDER_CUSTOM_USER_CONSENT_INTENT";
 
     /**
      * Maximum supported password length. Kind-of arbitrary.
@@ -3152,6 +3253,36 @@ public class DevicePolicyManager {
      * the driver of the vehicle.
      */
     public static final int OPERATION_SAFETY_REASON_DRIVING_DISTRACTION = 1;
+
+    /**
+     * Broadcast action: notify system apps (e.g. settings, SysUI, etc) that the device management
+     * resources with IDs {@link #EXTRA_RESOURCE_ID} has been updated using, the updated resources
+     * can be retrieved using {@link #getDrawable}.
+     *
+     * <p>This broadcast is sent to registered receivers only.
+     *
+     * <p> The following extras will be included to identify the type of resource being updated:
+     * <ul>
+     *     <li>{@link #EXTRA_RESOURCE_TYPE_DRAWABLE} for drawable resources</li>
+     * </ul>
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_DEVICE_POLICY_RESOURCE_UPDATED =
+            "android.app.action.DEVICE_POLICY_RESOURCE_UPDATED";
+
+    /**
+     * A boolean extra for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to indicate that a
+     * resource of type {@link Drawable} is being updated.
+     */
+    public static final String EXTRA_RESOURCE_TYPE_DRAWABLE =
+            "android.app.extra.RESOURCE_TYPE_DRAWABLE";
+
+    /**
+     * An integer array extra for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to indicate which
+     * drawable IDs (see {@link DevicePolicyResources.UpdatableDrawableId}) have been updated.
+     */
+    public static final String EXTRA_RESOURCE_ID =
+            "android.app.extra.RESOURCE_ID";
 
     /** @hide */
     @NonNull
@@ -14343,5 +14474,244 @@ public class DevicePolicyManager {
     @SystemApi
     public Intent createProvisioningIntentFromNfcIntent(@NonNull Intent nfcIntent) {
         return ProvisioningIntentHelper.createProvisioningIntentFromNfcIntent(nfcIntent);
+    }
+
+    /**
+     * For each {@link DevicePolicyDrawableResource} item in {@code drawables}, if
+     * {@link DevicePolicyDrawableResource#getDrawableSource()} is not set or is set to
+     * {@link DevicePolicyResources.Drawable.Source#UNDEFINED}, it updates the drawable resource for
+     * the combination of {@link DevicePolicyDrawableResource#getDrawableId()} and
+     * {@link DevicePolicyDrawableResource#getDrawableStyle()}, (see
+     * {@link DevicePolicyResources.Drawable} and {@link DevicePolicyResources.Drawable.Style}) to
+     * the drawable with ID {@link DevicePolicyDrawableResource#getCallingPackageResourceId()},
+     * meaning any system UI surface calling {@link #getDrawable}
+     * with {@code drawableId} and {@code drawableStyle} will get the new resource after this API
+     * is called.
+     *
+     * <p>Otherwise, if {@link DevicePolicyDrawableResource#getDrawableSource()} is set (see
+     * {@link DevicePolicyResources.Drawable.Source}, it overrides any drawables that was set for
+     * the same {@code drawableId} and {@code drawableStyle} for the provided source.
+     *
+     * <p>Sends a broadcast with action {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to
+     * registered receivers when a resource has been updated successfully.
+     *
+     * <p>Important notes to consider when using this API:
+     * <ul>
+     * <li>{@link #getDrawable} references the resource
+     * {@link DevicePolicyDrawableResource#getCallingPackageResourceId()} in the
+     * calling package each time it gets called. You have to ensure that the resource is always
+     * available in the calling package as long as it is used as an updated resource.
+     * <li>You still have to re-call {@code setDrawables} even if you only make changes to the
+     * content of the resource with ID
+     * {@link DevicePolicyDrawableResource#getCallingPackageResourceId()} as the content might be
+     * cached and would need updating.
+     * </ul>
+     *
+     * @param drawables The list of {@link DevicePolicyDrawableResource} to update.
+     *
+     * @throws IllegalArgumentException if {@link DevicePolicyDrawableResource#getDrawableId()},
+     * {@link DevicePolicyDrawableResource#getDrawableStyle()}, or
+     * {@link DevicePolicyDrawableResource#getDrawableSource()} aren't defined in
+     * {@link DevicePolicyResources.Drawable}.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES)
+    public void setDrawables(@NonNull Set<DevicePolicyDrawableResource> drawables) {
+        if (mService != null) {
+            try {
+                mService.setDrawables(new ArrayList<>(drawables));
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Removes all updated drawables for the list of {@code drawableIds} (see
+     * {@link DevicePolicyResources.Drawable} that was previously set by calling
+     * {@link #setDrawables}, meaning any subsequent calls to {@link #getDrawable} for the provided
+     * IDs with any {@link DevicePolicyResources.Drawable.Style} and any
+     * {@link DevicePolicyResources.Drawable.Source} will return the default drawable from
+     * {@code defaultDrawableLoader}.
+     *
+     * <p>Sends a broadcast with action {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to
+     * registered receivers when a resource has been reset successfully.
+     *
+     * @param drawableIds The list of IDs  to remove.
+     *
+     * @throws IllegalArgumentException if IDs are not defined in
+     * {@link DevicePolicyResources.Drawable}
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES)
+    public void resetDrawables(@NonNull int[] drawableIds) {
+        if (mService != null) {
+            try {
+                mService.resetDrawables(drawableIds);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Returns the appropriate updated drawable for the {@code drawableId}
+     * (see {@link DevicePolicyResources.Drawable}), with style {@code drawableStyle}
+     * (see {@link DevicePolicyResources.Drawable.Style}) if one was set using
+     * {@code setDrawables}, otherwise returns the drawable from {@code defaultDrawableLoader}.
+     *
+     * <p>Also returns the drawable from {@code defaultDrawableLoader} if
+     * {@link DevicePolicyResources.Drawable#INVALID_ID} was passed.
+     *
+     * <p>This API uses the screen density returned from {@link Resources#getConfiguration()}, to
+     * set a different value use
+     * {@link #getDrawableForDensity(int, int, int, Callable)}.
+     *
+     * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
+     * notified when a resource has been updated.
+     *
+     * <p>Note that each call to this API loads the resource from the package that called
+     * {@code setDrawables} to set the updated resource.
+     *
+     * @param drawableId The drawable ID to get the updated resource for.
+     * @param drawableStyle The drawable style to use.
+     * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
+     *                              the provided params.
+     */
+    @Nullable
+    public Drawable getDrawable(
+            @DevicePolicyResources.UpdatableDrawableId int drawableId,
+            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
+            @NonNull Callable<Drawable> defaultDrawableLoader) {
+        return getDrawable(drawableId, drawableStyle, UNDEFINED, defaultDrawableLoader);
+    }
+
+    /**
+     * Similar to {@link #getDrawable(int, int, Callable)}, but also accepts
+     * a {@code drawableSource} (see {@link DevicePolicyResources.Drawable.Source}) which
+     * could result in returning a different drawable than {@link #getDrawable(int, int, Callable)}
+     * if an override was set for that specific source.
+     *
+     * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
+     * notified when a resource has been updated.
+     *
+     * @param drawableId The drawable ID to get the updated resource for.
+     * @param drawableStyle The drawable style to use.
+     * @param drawableSource The source for the caller.
+     * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
+     *                              the provided params.
+     */
+    @Nullable
+    public Drawable getDrawable(
+            @DevicePolicyResources.UpdatableDrawableId int drawableId,
+            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
+            @DevicePolicyResources.UpdatableDrawableSource int drawableSource,
+            @NonNull Callable<Drawable> defaultDrawableLoader) {
+        Objects.requireNonNull(defaultDrawableLoader, "defaultDrawableLoader can't be null");
+        if (drawableId == INVALID_ID) {
+            return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
+        }
+        if (mService != null) {
+            try {
+                ParcelableResource resource = mService.getDrawable(
+                        drawableId, drawableStyle, drawableSource);
+                if (resource == null) {
+                    return ParcelableResource.loadDefaultDrawable(
+                            defaultDrawableLoader);
+                }
+                return resource.getDrawable(
+                        mContext,
+                        /* density= */ 0,
+                        defaultDrawableLoader);
+
+            } catch (RemoteException e) {
+                Log.e(
+                        TAG,
+                        "Error getting the updated drawable from DevicePolicyManagerService.",
+                        e);
+                return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
+            }
+        }
+        return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
+    }
+
+    /**
+     * Similar to {@link #getDrawable(int, int, Callable)}, but also accepts
+     * {@code density}. See {@link Resources#getDrawableForDensity(int, int, Resources.Theme)}.
+     *
+     * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
+     * notified when a resource has been updated.
+     *
+     * @param drawableId The drawable ID to get the updated resource for.
+     * @param drawableStyle The drawable style to use.
+     * @param density The desired screen density indicated by the resource as
+     *            found in {@link DisplayMetrics}. A value of 0 means to use the
+     *            density returned from {@link Resources#getConfiguration()}.
+     * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
+     *                              the provided params.
+     */
+    @Nullable
+    public Drawable getDrawableForDensity(
+            @DevicePolicyResources.UpdatableDrawableId int drawableId,
+            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
+            int density,
+            @NonNull Callable<Drawable> defaultDrawableLoader) {
+        return getDrawableForDensity(
+                drawableId,
+                drawableStyle,
+                UNDEFINED,
+                density,
+                defaultDrawableLoader);
+    }
+
+     /**
+     * Similar to {@link #getDrawable(int, int, int, Callable)}, but also accepts
+     * {@code density}. See {@link Resources#getDrawableForDensity(int, int, Resources.Theme)}.
+     *
+     * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
+     * notified when a resource has been updated.
+     *
+     * @param drawableId The drawable ID to get the updated resource for.
+     * @param drawableStyle The drawable style to use.
+     * @param drawableSource The source for the caller.
+     * @param density The desired screen density indicated by the resource as
+     *            found in {@link DisplayMetrics}. A value of 0 means to use the
+     *            density returned from {@link Resources#getConfiguration()}.
+     * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
+     *                              the provided params.
+     */
+    @Nullable
+    public Drawable getDrawableForDensity(
+            @DevicePolicyResources.UpdatableDrawableId int drawableId,
+            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
+            @DevicePolicyResources.UpdatableDrawableSource int drawableSource,
+            int density,
+            @NonNull Callable<Drawable> defaultDrawableLoader) {
+        Objects.requireNonNull(defaultDrawableLoader, "defaultDrawableLoader can't be null");
+        if (drawableId == INVALID_ID) {
+            return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
+        }
+        if (mService != null) {
+            try {
+                ParcelableResource resource = mService.getDrawable(
+                        drawableId, drawableStyle, drawableSource);
+                if (resource == null) {
+                    return ParcelableResource.loadDefaultDrawable(
+                            defaultDrawableLoader);
+                }
+                return resource.getDrawable(mContext, density, defaultDrawableLoader);
+            } catch (RemoteException e) {
+                Log.e(
+                        TAG,
+                        "Error getting the updated drawable from DevicePolicyManagerService.",
+                        e);
+                return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
+            }
+        }
+        return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
     }
 }

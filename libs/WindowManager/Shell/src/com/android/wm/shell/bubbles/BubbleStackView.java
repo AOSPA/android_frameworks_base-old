@@ -1485,6 +1485,69 @@ public class BubbleStackView extends FrameLayout
         }
     }
 
+    /**
+     * Update bubbles' icon views accessibility states.
+     */
+    public void updateBubblesAcessibillityStates() {
+        for (int i = 0; i < mBubbleData.getBubbles().size(); i++) {
+            Bubble prevBubble = i > 0 ? mBubbleData.getBubbles().get(i - 1) : null;
+            Bubble bubble = mBubbleData.getBubbles().get(i);
+
+            View bubbleIconView = bubble.getIconView();
+            if (bubbleIconView == null) {
+                continue;
+            }
+
+            if (mIsExpanded) {
+                // when stack is expanded
+                // all bubbles are important for accessibility
+                bubbleIconView
+                        .setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+
+                View prevBubbleIconView = prevBubble != null ? prevBubble.getIconView() : null;
+
+                if (prevBubbleIconView != null) {
+                    bubbleIconView.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+                        @Override
+                        public void onInitializeAccessibilityNodeInfo(View v,
+                                AccessibilityNodeInfo info) {
+                            super.onInitializeAccessibilityNodeInfo(v, info);
+                            info.setTraversalAfter(prevBubbleIconView);
+                        }
+                    });
+                }
+            } else {
+                // when stack is collapsed, only the top bubble is important for accessibility,
+                bubbleIconView.setImportantForAccessibility(
+                        i == 0 ? View.IMPORTANT_FOR_ACCESSIBILITY_YES :
+                                View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+        }
+
+        if (mIsExpanded) {
+            // make the overflow bubble last in the accessibility traversal order
+
+            View bubbleOverflowIconView =
+                    mBubbleOverflow != null ? mBubbleOverflow.getIconView() : null;
+            if (bubbleOverflowIconView != null && !mBubbleData.getBubbles().isEmpty()) {
+                Bubble lastBubble =
+                        mBubbleData.getBubbles().get(mBubbleData.getBubbles().size() - 1);
+                View lastBubbleIconView = lastBubble.getIconView();
+                if (lastBubbleIconView != null) {
+                    bubbleOverflowIconView.setAccessibilityDelegate(
+                            new View.AccessibilityDelegate() {
+                                @Override
+                                public void onInitializeAccessibilityNodeInfo(View v,
+                                        AccessibilityNodeInfo info) {
+                                    super.onInitializeAccessibilityNodeInfo(v, info);
+                                    info.setTraversalAfter(lastBubbleIconView);
+                                }
+                            });
+                }
+            }
+        }
+    }
+
     private void updateSystemGestureExcludeRects() {
         // Exclude the region occupied by the first BubbleView in the stack
         Rect excludeZone = mSystemGestureExclusionRects.get(0);
@@ -2497,6 +2560,7 @@ public class BubbleStackView extends FrameLayout
             if (mFlyout.getVisibility() == View.VISIBLE) {
                 mFlyout.animateUpdate(bubble.getFlyoutMessage(),
                         mStackAnimationController.getStackPosition(), !bubble.showDot(),
+                        bubble.getIconView().getDotCenter(),
                         mAfterFlyoutHidden /* onHide */);
             } else {
                 mFlyout.setVisibility(INVISIBLE);
@@ -3012,6 +3076,16 @@ public class BubbleStackView extends FrameLayout
         mStackViewState.selectedIndex = getBubbleIndex(mExpandedBubble);
         mStackViewState.onLeft = mStackOnLeftOrWillBe;
         return mStackViewState;
+    }
+
+    /**
+     * Handles vertical offset changes, e.g. when one handed mode is switched on/off.
+     *
+     * @param offset new vertical offset.
+     */
+    void onVerticalOffsetChanged(int offset) {
+        // adjust dismiss view vertical position, so that it is still visible to the user
+        mDismissView.setPadding(/* left = */ 0, /* top = */ 0, /* right = */ 0, offset);
     }
 
     /**

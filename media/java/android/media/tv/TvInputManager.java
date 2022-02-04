@@ -18,6 +18,7 @@ package android.media.tv;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -27,6 +28,8 @@ import android.annotation.TestApi;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Rect;
+import android.media.AudioDeviceInfo;
+import android.media.AudioFormat.Encoding;
 import android.media.PlaybackParams;
 import android.media.tv.interactive.TvIAppManager;
 import android.net.Uri;
@@ -60,6 +63,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -359,9 +363,10 @@ public final class TvInputManager {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({BROADCAST_INFO_TYPE_TS, BROADCAST_INFO_TYPE_TABLE, BROADCAST_INFO_TYPE_SECTION,
+    @IntDef(prefix = "BROADCAST_INFO_TYPE_", value =
+            {BROADCAST_INFO_TYPE_TS, BROADCAST_INFO_TYPE_TABLE, BROADCAST_INFO_TYPE_SECTION,
             BROADCAST_INFO_TYPE_PES, BROADCAST_INFO_STREAM_EVENT, BROADCAST_INFO_TYPE_DSMCC,
-            BROADCAST_INFO_TYPE_TV_PROPRIETARY_FUNCTION})
+            BROADCAST_INFO_TYPE_COMMAND, BROADCAST_INFO_TYPE_TIMELINE})
     public @interface BroadcastInfoType {}
 
     /** @hide */
@@ -377,7 +382,31 @@ public final class TvInputManager {
     /** @hide */
     public static final int BROADCAST_INFO_TYPE_DSMCC = 6;
     /** @hide */
-    public static final int BROADCAST_INFO_TYPE_TV_PROPRIETARY_FUNCTION = 7;
+    public static final int BROADCAST_INFO_TYPE_COMMAND = 7;
+    /** @hide */
+    public static final int BROADCAST_INFO_TYPE_TIMELINE = 8;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = "SIGNAL_STRENGTH_",
+            value = {SIGNAL_STRENGTH_LOST, SIGNAL_STRENGTH_WEAK, SIGNAL_STRENGTH_STRONG})
+    public @interface SignalStrength {}
+
+    /**
+     * Signal lost.
+     * @hide
+     */
+    public static final int SIGNAL_STRENGTH_LOST = 1;
+    /**
+     * Weak signal.
+     * @hide
+     */
+    public static final int SIGNAL_STRENGTH_WEAK = 2;
+    /**
+     * Strong signal.
+     * @hide
+     */
+    public static final int SIGNAL_STRENGTH_STRONG = 3;
 
     /**
      * An unknown state of the client pid gets from the TvInputManager. Client gets this value when
@@ -658,6 +687,14 @@ public final class TvInputManager {
         }
 
         /**
+         * This is called when signal strength is updated.
+         * @param session A {@link TvInputManager.Session} associated with this callback.
+         * @param strength The current signal strength.
+         */
+        public void onSignalStrength(Session session, @SignalStrength int strength) {
+        }
+
+        /**
          * This is called when the session has been tuned to the given channel.
          *
          * @param channelUri The URI of a channel.
@@ -731,8 +768,9 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onTracksChanged(mSession, tracks);
-                    if (mSession.mIAppNotificationEnabled && mSession.getIAppSession() != null) {
-                        mSession.getIAppSession().notifyTracksChanged(tracks);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifyTracksChanged(tracks);
                     }
                 }
             });
@@ -743,8 +781,9 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onTrackSelected(mSession, type, trackId);
-                    if (mSession.mIAppNotificationEnabled && mSession.getIAppSession() != null) {
-                        mSession.getIAppSession().notifyTrackSelected(type, trackId);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifyTrackSelected(type, trackId);
                     }
                 }
             });
@@ -764,6 +803,10 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onVideoAvailable(mSession);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifyVideoAvailable();
+                    }
                 }
             });
         }
@@ -773,6 +816,10 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onVideoUnavailable(mSession, reason);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifyVideoUnavailable(reason);
+                    }
                 }
             });
         }
@@ -782,6 +829,10 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onContentAllowed(mSession);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifyContentAllowed();
+                    }
                 }
             });
         }
@@ -791,6 +842,10 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onContentBlocked(mSession, rating);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifyContentBlocked(rating);
+                    }
                 }
             });
         }
@@ -850,13 +905,27 @@ public final class TvInputManager {
             });
         }
 
+        void postSignalStrength(final int strength) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onSignalStrength(mSession, strength);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifySignalStrength(strength);
+                    }
+                }
+            });
+        }
+
         void postTuned(final Uri channelUri) {
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     mSessionCallback.onTuned(mSession, channelUri);
-                    if (mSession.mIAppNotificationEnabled && mSession.getIAppSession() != null) {
-                        mSession.getIAppSession().notifyTuned(channelUri);
+                    if (mSession.mIAppNotificationEnabled
+                            && mSession.getInteractiveAppSession() != null) {
+                        mSession.getInteractiveAppSession().notifyTuned(channelUri);
                     }
                 }
             });
@@ -887,8 +956,9 @@ public final class TvInputManager {
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (mSession.getIAppSession() != null) {
-                            mSession.getIAppSession().notifyBroadcastInfoResponse(response);
+                        if (mSession.getInteractiveAppSession() != null) {
+                            mSession.getInteractiveAppSession()
+                                    .notifyBroadcastInfoResponse(response);
                         }
                     }
                 });
@@ -900,8 +970,8 @@ public final class TvInputManager {
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (mSession.getIAppSession() != null) {
-                            mSession.getIAppSession().notifyAdResponse(response);
+                        if (mSession.getInteractiveAppSession() != null) {
+                            mSession.getInteractiveAppSession().notifyAdResponse(response);
                         }
                     }
                 });
@@ -1279,6 +1349,18 @@ public final class TvInputManager {
                         return;
                     }
                     record.postAitInfoUpdated(aitInfo);
+                }
+            }
+
+            @Override
+            public void onSignalStrength(int strength, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postSignalStrength(strength);
                 }
             }
 
@@ -1786,6 +1868,29 @@ public final class TvInputManager {
     };
 
     /**
+     * Returns a priority for the given use case type and the client's foreground or background
+     * status.
+     *
+     * @param useCase the use case type of the client. When the given use case type is invalid,
+     *        the default use case type will be used. {@see TvInputService#PriorityHintUseCaseType}.
+     * @param sessionId the unique id of the session owned by the client. When {@code null},
+     *        the caller will be used as a client. When the session is invalid, background status
+     *        will be used as a client's status. Otherwise, TV app corresponding to the given
+     *        session id will be used as a client.
+     *        {@see TvInputService#onCreateSession(String, String)}.
+     *
+     * @return the use case priority value for the given use case type and the client's foreground
+     *         or background status.
+     *
+     * @hide
+     */
+    @SystemApi
+    public int getClientPriority(@TvInputService.PriorityHintUseCaseType int useCase,
+            @Nullable String sessionId) {
+        return getClientPriorityInternal(useCase, sessionId);
+    };
+
+    /**
      * Creates a recording {@link Session} for a given TV input.
      *
      * <p>The number of sessions that can be created at the same time is limited by the capability
@@ -1827,6 +1932,14 @@ public final class TvInputManager {
             throw e.rethrowFromSystemServer();
         }
         return clientPid;
+    }
+
+    private int getClientPriorityInternal(int useCase, String sessionId) {
+        try {
+            return mService.getClientPriority(useCase, sessionId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -2218,12 +2331,12 @@ public final class TvInputManager {
             mSessionCallbackRecordMap = sessionCallbackRecordMap;
         }
 
-        public TvIAppManager.Session getIAppSession() {
+        public TvIAppManager.Session getInteractiveAppSession() {
             return mIAppSession;
         }
 
-        public void setIAppSession(TvIAppManager.Session IAppSession) {
-            this.mIAppSession = IAppSession;
+        public void setInteractiveAppSession(TvIAppManager.Session iAppSession) {
+            this.mIAppSession = iAppSession;
         }
 
         /**
@@ -2484,13 +2597,13 @@ public final class TvInputManager {
          *                {@code false} otherwise.
          * @hide
          */
-        public void setIAppNotificationEnabled(boolean enabled) {
+        public void setInteractiveAppNotificationEnabled(boolean enabled) {
             if (mToken == null) {
                 Log.w(TAG, "The session has been already released");
                 return;
             }
             try {
-                mService.setIAppNotificationEnabled(mToken, enabled, mUserId);
+                mService.setInteractiveAppNotificationEnabled(mToken, enabled, mUserId);
                 mIAppNotificationEnabled = enabled;
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -3178,11 +3291,43 @@ public final class TvInputManager {
             return false;
         }
 
+        /**
+         * Override default audio sink from audio policy.
+         *
+         * @param audioType device type of the audio sink to override with.
+         * @param audioAddress device address of the audio sink to override with.
+         * @param samplingRate desired sampling rate. Use default when it's 0.
+         * @param channelMask desired channel mask. Use default when it's
+         *        AudioFormat.CHANNEL_OUT_DEFAULT.
+         * @param format desired format. Use default when it's AudioFormat.ENCODING_DEFAULT.
+         */
         public void overrideAudioSink(int audioType, String audioAddress, int samplingRate,
                 int channelMask, int format) {
             try {
                 mInterface.overrideAudioSink(audioType, audioAddress, samplingRate, channelMask,
                         format);
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        /**
+         * Override default audio sink from audio policy.
+         *
+         * @param device {@link android.media.AudioDeviceInfo} to use.
+         * @param samplingRate desired sampling rate. Use default when it's 0.
+         * @param channelMask desired channel mask. Use default when it's
+         *        AudioFormat.CHANNEL_OUT_DEFAULT.
+         * @param format desired format. Use default when it's AudioFormat.ENCODING_DEFAULT.
+         */
+        public void overrideAudioSink(@NonNull AudioDeviceInfo device,
+                @IntRange(from = 0) int samplingRate,
+                int channelMask, @Encoding int format) {
+            Objects.requireNonNull(device);
+            try {
+                mInterface.overrideAudioSink(
+                        AudioDeviceInfo.convertDeviceTypeToInternalDevice(device.getType()),
+                        device.getAddress(), samplingRate, channelMask, format);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }

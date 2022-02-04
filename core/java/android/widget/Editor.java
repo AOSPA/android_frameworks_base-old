@@ -115,6 +115,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.LinearInterpolator;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.CursorAnchorInfo;
+import android.view.inputmethod.EditorBoundsInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
@@ -1073,7 +1074,7 @@ public class Editor {
                 com.android.internal.R.dimen.textview_error_popup_default_width);
         final StaticLayout l = StaticLayout.Builder.obtain(text, 0, text.length(), tv.getPaint(),
                 defaultWidthInPixels)
-                .setUseLineSpacingFromFallbacks(tv.mUseFallbackLineSpacing)
+                .setUseLineSpacingFromFallbacks(tv.isFallbackLineSpacingForStaticLayout())
                 .build();
 
         float max = 0;
@@ -4570,6 +4571,12 @@ public class Editor {
             mTextView.getLocationOnScreen(mTmpIntOffset);
             mViewToScreenMatrix.postTranslate(mTmpIntOffset[0], mTmpIntOffset[1]);
             builder.setMatrix(mViewToScreenMatrix);
+            final RectF bounds = new RectF();
+            mTextView.getBoundsOnScreen(bounds, false /* clipToParent */);
+            EditorBoundsInfo.Builder boundsBuilder = new EditorBoundsInfo.Builder();
+            //TODO(b/210039666): add Handwriting bounds once they're available.
+            builder.setEditorBoundsInfo(
+                    boundsBuilder.setEditorBounds(bounds).build());
 
             final float viewportToContentHorizontalOffset =
                     mTextView.viewportToContentHorizontalOffset();

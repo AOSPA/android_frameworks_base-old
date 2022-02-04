@@ -70,6 +70,7 @@ import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.ExceptionUtils;
+import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -121,7 +122,7 @@ import java.util.function.Supplier;
 public class PackageInstallerService extends IPackageInstaller.Stub implements
         PackageSessionProvider {
     private static final String TAG = "PackageInstaller";
-    private static final boolean LOGD = false;
+    private static final boolean LOGD = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final boolean DEBUG = Build.IS_DEBUGGABLE;
 
@@ -135,7 +136,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     /** Automatically destroy sessions older than this */
     private static final long MAX_AGE_MILLIS = 3 * DateUtils.DAY_IN_MILLIS;
     /** Automatically destroy staged sessions that have not changed state in this time */
-    private static final long MAX_TIME_SINCE_UPDATE_MILLIS = 7 * DateUtils.DAY_IN_MILLIS;
+    private static final long MAX_TIME_SINCE_UPDATE_MILLIS = 21 * DateUtils.DAY_IN_MILLIS;
     /** Upper bound on number of active sessions for a UID that has INSTALL_PACKAGES */
     private static final long MAX_ACTIVE_SESSIONS_WITH_PERMISSION = 1024;
     /** Upper bound on number of active sessions for a UID without INSTALL_PACKAGES */
@@ -330,7 +331,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 StagingManager.StagedSession stagedSession = session.mStagedSession;
                 if (!stagedSession.isInTerminalState() && stagedSession.hasParentSessionId()
                         && getSession(stagedSession.getParentSessionId()) == null) {
-                    stagedSession.setSessionFailed(SessionInfo.STAGED_SESSION_ACTIVATION_FAILED,
+                    stagedSession.setSessionFailed(SessionInfo.SESSION_ACTIVATION_FAILED,
                             "An orphan staged session " + stagedSession.sessionId() + " is found, "
                                 + "parent " + stagedSession.getParentSessionId() + " is missing");
                     continue;
@@ -510,17 +511,24 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 valid = true;
             }
             if (!valid) {
+                Slog.w(TAG, "Remove old session: " + session.sessionId);
                 // Remove expired sessions as well as child sessions if any
-                mSessions.remove(session.sessionId);
-                // Since this is early during boot we don't send
-                // any observer events about the session, but we
-                // keep details around for dumpsys.
-                addHistoricalSessionLocked(session);
-                for (PackageInstallerSession child : session.getChildSessions()) {
-                    mSessions.remove(child.sessionId);
-                    addHistoricalSessionLocked(child);
-                }
+                removeActiveSession(session);
             }
+        }
+    }
+
+    /**
+     * Moves a session (including the child sessions) from mSessions to mHistoricalSessions.
+     * This should only be called on a root session.
+     */
+    @GuardedBy("mSessions")
+    private void removeActiveSession(PackageInstallerSession session) {
+        mSessions.remove(session.sessionId);
+        addHistoricalSessionLocked(session);
+        for (PackageInstallerSession child : session.getChildSessions()) {
+            mSessions.remove(child.sessionId);
+            addHistoricalSessionLocked(child);
         }
     }
 
@@ -842,7 +850,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 mSilentUpdatePolicy, mInstallThread.getLooper(), mStagingManager, sessionId,
                 userId, callingUid, installSource, params, createdMillis, 0L, stageDir, stageCid,
                 null, null, false, false, false, false, null, SessionInfo.INVALID_ID,
-                false, false, false, SessionInfo.STAGED_SESSION_NO_ERROR, "");
+                false, false, false, SessionInfo.SESSION_NO_ERROR, "");
 
         synchronized (mSessions) {
             mSessions.put(sessionId, session);
@@ -851,6 +859,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mCallbacks.notifySessionCreated(session.sessionId, session.userId);
 
         mSettingsWriteRequest.schedule();
+        if (LOGD) {
+            Slog.d(TAG, "Created session id=" + sessionId + " staged=" + params.isStaged);
+        }
         return sessionId;
     }
 
@@ -1650,10 +1661,18 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         mStagingManager.abortSession(session.mStagedSession);
                     }
                     synchronized (mSessions) {
-                        if (!session.isStaged() || !success) {
-                            mSessions.remove(session.sessionId);
+                        // Child sessions will be removed along with its parent as a whole
+                        if (!session.hasParentSessionId()) {
+                            // Retain policy:
+                            // 1. Don't keep non-staged sessions
+                            // 2. Don't keep explicitly abandoned sessions
+                            // 3. Don't keep sessions that fail validation (isCommitted() is false)
+                            boolean shouldRemove = !session.isStaged() || session.isDestroyed()
+                                    || !session.isCommitted();
+                            if (shouldRemove) {
+                                removeActiveSession(session);
+                            }
                         }
-                        addHistoricalSessionLocked(session);
 
                         final File appIconFile = buildAppIconFile(session.sessionId);
                         if (appIconFile.exists()) {
