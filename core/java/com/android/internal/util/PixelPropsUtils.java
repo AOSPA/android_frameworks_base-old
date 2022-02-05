@@ -39,8 +39,7 @@ public class PixelPropsUtils {
     private static final Map<String, Object> propsToChangeP1;
     private static final Map<String, ArrayList<String>> propsToKeep;
     private static final String[] extraPackagesToChange = {
-        "com.android.chrome",
-        "com.android.vending"
+        "com.android.chrome"
     };
     private static final String[] packagesToChangeP5 = {
         "com.google.android.tts",
