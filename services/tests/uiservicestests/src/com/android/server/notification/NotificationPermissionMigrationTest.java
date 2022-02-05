@@ -536,6 +536,12 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testAreNotificationsEnabledForPackage_viaInternalService() {
+        mInternalService.areNotificationsEnabledForPackage(mContext.getPackageName(), mUid);
+        verify(mPermissionHelper).hasPermission(mUid);
+    }
+
+    @Test
     public void testGetPackageImportance() throws Exception {
         when(mPermissionHelper.hasPermission(mUid)).thenReturn(true);
         assertThat(mBinderService.getPackageImportance(mContext.getPackageName()))
@@ -595,6 +601,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         when(mAppOpsManager.checkOpNoThrow(anyInt(), eq(mUid), eq(PKG))).thenReturn(MODE_IGNORED);
 
         mService.mAppOpsCallback.opChanged(0, mUid, PKG);
+        Thread.sleep(500);
+        waitForIdle();
 
         ArgumentCaptor<Intent> captor = ArgumentCaptor.forClass(Intent.class);
         verify(mContext, times(1)).sendBroadcastAsUser(captor.capture(), any(), eq(null));
@@ -610,6 +618,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         when(mAppOpsManager.checkOpNoThrow(anyInt(), eq(mUid), eq(PKG))).thenReturn(MODE_ALLOWED);
 
         mService.mAppOpsCallback.opChanged(0, mUid, PKG);
+        Thread.sleep(500);
+        waitForIdle();
 
         ArgumentCaptor<Intent> captor = ArgumentCaptor.forClass(Intent.class);
         verify(mContext, times(1)).sendBroadcastAsUser(captor.capture(), any(), eq(null));

@@ -218,12 +218,10 @@ import android.view.Surface.Rotation;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.SurfaceSession;
-import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
-import android.window.DisplayWindowPolicyController;
 import android.window.IDisplayAreaOrganizer;
 import android.window.TransitionRequestInfo;
 
@@ -699,12 +697,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     boolean mDontMoveToTop;
 
     /**
-     * The policy controller of the windows that can be displayed on the virtual display.
+     * The helper of policy controller.
      *
-     * @see DisplayWindowPolicyController
+     * @see DisplayWindowPolicyControllerHelper
      */
-    @Nullable
-    DisplayWindowPolicyController mDisplayWindowPolicyController;
+    DisplayWindowPolicyControllerHelper mDwpcHelper;
 
     private final Consumer<WindowState> mUpdateWindowsForAnimator = w -> {
         WindowStateAnimator winAnimator = w.mWinAnimator;
@@ -1053,8 +1050,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         mAppTransition = new AppTransition(mWmService.mContext, mWmService, this);
         mAppTransition.registerListenerLocked(mWmService.mActivityManagerAppTransitionNotifier);
-        mTransitionController.registerLegacyListener(
-                mWmService.mActivityManagerAppTransitionNotifier);
         mAppTransition.registerListenerLocked(mFixedRotationTransitionListener);
         mAppTransitionController = new AppTransitionController(mWmService, this);
         mUnknownAppVisibilityController = new UnknownAppVisibilityController(mWmService, this);
@@ -1425,7 +1420,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mWaitingForConfig = true;
             if (mTransitionController.isShellTransitionsEnabled()) {
                 requestChangeTransitionIfNeeded(changes, null /* displayChange */);
-            } else {
+            } else if (mLastHasContent) {
                 mWmService.startFreezingDisplay(0 /* exitAnim */, 0 /* enterAnim */, this);
             }
             sendNewConfiguration();
@@ -1702,8 +1697,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             case SOFT_INPUT_STATE_HIDDEN:
                 return false;
         }
-        return r.mLastImeShown && mInputMethodWindow != null && mInputMethodWindow.mHasSurface
-                && mInputMethodWindow.mViewVisibility == View.VISIBLE;
+        return r.mLastImeShown;
     }
 
     /** Returns {@code true} if the top activity is transformed with the new rotation of display. */
@@ -2741,8 +2735,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mDisplayInfo.copyFrom(newDisplayInfo);
             }
 
-            mDisplayWindowPolicyController =
-                    displayManagerInternal.getDisplayWindowPolicyController(mDisplayId);
+            mDwpcHelper = new DisplayWindowPolicyControllerHelper(this);
         }
 
         updateBaseDisplayMetrics(mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight,
@@ -2783,7 +2776,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (displayMetricsChanged || physicalDisplayChanged) {
             if (physicalDisplayChanged) {
                 // Reapply the window settings as the underlying physical display has changed.
-                mWmService.mDisplayWindowSettings.applySettingsToDisplayLocked(this);
+                // Do not include rotation settings here, postpone them until the display
+                // metrics are updated as rotation settings might depend on them
+                mWmService.mDisplayWindowSettings.applySettingsToDisplayLocked(this,
+                        /* includeRotationSettings */ false);
             }
 
             // If there is an override set for base values - use it, otherwise use new values.
@@ -3222,6 +3218,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     void requestChangeTransitionIfNeeded(@ActivityInfo.Config int changes,
             @Nullable TransitionRequestInfo.DisplayChange displayChange) {
+        if (!mLastHasContent) return;
         final TransitionController controller = mTransitionController;
         if (controller.isCollecting()) {
             if (displayChange != null) {
@@ -3451,10 +3448,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mInputMonitor.dump(pw, "  ");
         pw.println();
         mInsetsStateController.dump(prefix, pw);
-        if (mDisplayWindowPolicyController != null) {
-            pw.println();
-            mDisplayWindowPolicyController.dump(prefix, pw);
-        }
+        mDwpcHelper.dump(prefix, pw);
     }
 
     @Override
@@ -3680,6 +3674,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         getInputMonitor().setFocusedAppLw(newFocus);
         updateTouchExcludeRegion();
         return true;
+    }
+
+    /** Update the top activity and the uids of non-finishing activity */
+    void onRunningActivityChanged() {
+        mDwpcHelper.onRunningActivityChanged();
     }
 
     /** Called when the focused {@link TaskDisplayArea} on this display may have changed. */
@@ -4102,7 +4101,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 "IME-snapshot-surface");
         t.setBuffer(imeSurface, buffer);
         t.setColorSpace(mSurfaceControl, ColorSpace.get(ColorSpace.Named.SRGB));
-        t.setRelativeLayer(imeSurface, activity.getSurfaceControl(), 1);
+        t.setLayer(imeSurface, 1);
         t.setPosition(imeSurface, mInputMethodWindow.getDisplayFrame().left,
                 mInputMethodWindow.getDisplayFrame().top);
         return imeSurface;
@@ -4147,15 +4146,17 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * which controls the visibility and animation of the input method window.
      */
     void updateImeInputAndControlTarget(WindowState target) {
-        if (target != null && target.mActivityRecord != null) {
-            target.mActivityRecord.mImeInsetsFrozenUntilStartInput = false;
-        }
         if (mImeInputTarget != target) {
             ProtoLog.i(WM_DEBUG_IME, "setInputMethodInputTarget %s", target);
             setImeInputTarget(target);
             mInsetsStateController.updateAboveInsetsState(mInputMethodWindow, mInsetsStateController
                     .getRawInsetsState().getSourceOrDefaultVisibility(ITYPE_IME));
             updateImeControlTarget();
+        }
+        // Unfreeze IME insets after the new target updated, in case updateAboveInsetsState may
+        // deliver unrelated IME insets change to the non-IME requester.
+        if (target != null && target.mActivityRecord != null) {
+            target.mActivityRecord.mImeInsetsFrozenUntilStartInput = false;
         }
     }
 
@@ -4198,10 +4199,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final SurfaceControl newParent = computeImeParent();
         if (newParent != null && newParent != mInputMethodSurfaceParent) {
             mInputMethodSurfaceParent = newParent;
-            getPendingTransaction().reparent(mImeWindowsContainer.mSurfaceControl, newParent);
+            getSyncTransaction().reparent(mImeWindowsContainer.mSurfaceControl, newParent);
             // When surface parent is removed, the relative layer will also be removed. We need to
             // do a force update to make sure there is a layer set for the new parent.
-            assignRelativeLayerForIme(getPendingTransaction(), true /* forceUpdate */);
+            assignRelativeLayerForIme(getSyncTransaction(), true /* forceUpdate */);
             scheduleAnimation();
         }
     }
@@ -4995,8 +4996,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // exists so it get's layered above the starting window.
         if (imeTarget != null && !(imeTarget.mActivityRecord != null
                 && imeTarget.mActivityRecord.hasStartingWindow())) {
+            final WindowToken imeControlTargetToken =
+                    mImeControlTarget != null && mImeControlTarget.getWindow() != null
+                            ? mImeControlTarget.getWindow().mToken : null;
             final boolean canImeTargetSetRelativeLayer = imeTarget.getSurfaceControl() != null
-                    && imeTarget == mImeControlTarget
+                    && imeTarget.mToken == imeControlTargetToken
                     && !imeTarget.inMultiWindowMode()
                     && imeTarget.mToken.getActivity(app -> app.isAnimating(TRANSITION | PARENTS,
                             ANIMATION_TYPE_ALL & ~ANIMATION_TYPE_RECENTS)) == null;
@@ -5085,6 +5089,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     boolean getLastHasContent() {
         return mLastHasContent;
+    }
+
+    @VisibleForTesting
+    void setLastHasContent() {
+        mLastHasContent = true;
     }
 
     void registerPointerEventListener(@NonNull PointerEventListener listener) {
@@ -6457,9 +6466,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     DisplayArea findAreaForWindowType(int windowType, Bundle options,
             boolean ownerCanManageAppToken, boolean roundedCornerOverlay) {
-        // TODO(b/159767464): figure out how to find an appropriate TDA.
         if (windowType >= FIRST_APPLICATION_WINDOW && windowType <= LAST_APPLICATION_WINDOW) {
-            return getDefaultTaskDisplayArea();
+            return mDisplayAreaPolicy.getTaskDisplayArea(options);
         }
         // Return IME container here because it could be in one of sub RootDisplayAreas depending on
         // the focused edit text. Also, the RootDisplayArea choosing strategy is implemented by

@@ -27,6 +27,7 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_APK;
 import static android.content.pm.PackageManager.INSTALL_FAILED_MEDIA_UNAVAILABLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_MISSING_SPLIT;
+import static android.content.pm.PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NO_CERTIFICATES;
 import static android.content.pm.PackageManager.INSTALL_STAGED;
 import static android.content.pm.PackageManager.INSTALL_SUCCEEDED;
@@ -90,7 +91,7 @@ import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.parsing.ApkLite;
 import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.pm.parsing.PackageLite;
-import android.content.pm.parsing.ParsingPackageUtils;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.graphics.Bitmap;
@@ -468,7 +469,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @GuardedBy("mLock")
     private boolean mSessionFailed;
     @GuardedBy("mLock")
-    private int mSessionErrorCode = SessionInfo.STAGED_SESSION_NO_ERROR;
+    private int mSessionErrorCode = SessionInfo.SESSION_NO_ERROR;
     @GuardedBy("mLock")
     private String mSessionErrorMessage;
 
@@ -1753,61 +1754,22 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @WorkerThread
     private void handleStreamValidateAndCommit() {
-        PackageManagerException unrecoverableFailure = null;
-        // This will track whether the session and any children were validated and are ready to
-        // progress to the next phase of install
-        boolean allSessionsReady = false;
         try {
-            allSessionsReady = streamValidateAndCommit();
+            // This will track whether the session and any children were validated and are ready to
+            // progress to the next phase of install
+            boolean allSessionsReady = true;
+            for (PackageInstallerSession child : getChildSessions()) {
+                allSessionsReady &= child.streamValidateAndCommit();
+            }
+            if (allSessionsReady && streamValidateAndCommit()) {
+                mHandler.obtainMessage(MSG_INSTALL).sendToTarget();
+            }
         } catch (PackageManagerException e) {
-            unrecoverableFailure = e;
+            destroy();
+            String msg = ExceptionUtils.getCompleteMessage(e);
+            dispatchSessionFinished(e.error, msg, null);
+            maybeFinishChildSessions(e.error, msg);
         }
-
-        if (isMultiPackage()) {
-            final List<PackageInstallerSession> childSessions;
-            synchronized (mLock) {
-                childSessions = getChildSessionsLocked();
-            }
-            int childCount = childSessions.size();
-
-            // This will contain all child sessions that do not encounter an unrecoverable failure
-            ArrayList<PackageInstallerSession> nonFailingSessions = new ArrayList<>(childCount);
-
-            for (int i = childCount - 1; i >= 0; --i) {
-                // commit all children, regardless if any of them fail; we'll throw/return
-                // as appropriate once all children have been processed
-                try {
-                    PackageInstallerSession session = childSessions.get(i);
-                    allSessionsReady &= session.streamValidateAndCommit();
-                    nonFailingSessions.add(session);
-                } catch (PackageManagerException e) {
-                    allSessionsReady = false;
-                    if (unrecoverableFailure == null) {
-                        unrecoverableFailure = e;
-                    }
-                }
-            }
-            // If we encountered any unrecoverable failures, destroy all other sessions including
-            // the parent
-            if (unrecoverableFailure != null) {
-                // {@link #streamValidateAndCommit()} calls
-                // {@link #onSessionValidationFailure(PackageManagerException)}, but we don't
-                // expect it to ever do so for parent sessions. Call that on this parent to clean
-                // it up and notify listeners of the error.
-                onSessionValidationFailure(unrecoverableFailure);
-                // fail other child sessions that did not already fail
-                for (int i = nonFailingSessions.size() - 1; i >= 0; --i) {
-                    PackageInstallerSession session = nonFailingSessions.get(i);
-                    session.onSessionValidationFailure(unrecoverableFailure);
-                }
-            }
-        }
-
-        if (!allSessionsReady) {
-            return;
-        }
-
-        mHandler.obtainMessage(MSG_INSTALL).sendToTarget();
     }
 
     private final class FileSystemConnector extends
@@ -2045,11 +2007,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
             return true;
         } catch (PackageManagerException e) {
-            throw onSessionValidationFailure(e);
+            throw e;
         } catch (Throwable e) {
             // Convert all exceptions into package manager exceptions as only those are handled
             // in the code above.
-            throw onSessionValidationFailure(new PackageManagerException(e));
+            throw new PackageManagerException(e);
         }
     }
 
@@ -2112,15 +2074,15 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         if (isStaged()) {
             // This will clean up the session when it reaches the terminal state
             mStagedSession.setSessionFailed(
-                    SessionInfo.STAGED_SESSION_VERIFICATION_FAILED, msgWithErrorCode);
+                    SessionInfo.SESSION_VERIFICATION_FAILED, msgWithErrorCode);
             mStagedSession.notifyEndPreRebootVerification();
         } else {
             // Session is sealed and committed but could not be verified, we need to destroy it.
             destroy();
-            // Dispatch message to remove session from PackageInstallerService.
-            dispatchSessionFinished(error, msg, null);
-            maybeFinishChildSessions(error, msg);
         }
+        // Dispatch message to remove session from PackageInstallerService.
+        dispatchSessionFinished(error, msg, null);
+        maybeFinishChildSessions(error, msg);
     }
 
     private void onSessionInstallationFailure(int error, String detailedMessage) {
@@ -2321,7 +2283,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         if (params.isStaged) {
             // TODO(b/136257624): CTS test fails if we don't send session finished broadcast, even
             //  though ideally, we just need to send session committed broadcast.
-            dispatchSessionFinished(INSTALL_SUCCEEDED, "Session staged", null);
+            sendUpdateToRemoteStatusReceiver(INSTALL_SUCCEEDED, "Session staged", null);
 
             mStagedSession.verifySession();
         } else {
@@ -2567,8 +2529,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         if (isStaged()) {
             mSessionProvider.getSessionVerifier().verifyStaged(mStagedSession, (error, msg) -> {
                 mStagedSession.notifyEndPreRebootVerification();
-                if (error == SessionInfo.STAGED_SESSION_NO_ERROR) {
+                if (error == SessionInfo.SESSION_NO_ERROR) {
                     mStagingManager.commitSession(mStagedSession);
+                } else {
+                    dispatchSessionFinished(INSTALL_FAILED_VERIFICATION_FAILURE, msg, null);
+                    maybeFinishChildSessions(INSTALL_FAILED_VERIFICATION_FAILURE, msg);
                 }
             });
             return;
@@ -2598,7 +2563,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         // Do not try to install staged apex session. Parent session will have at least one apk
         // session.
         if (!isMultiPackage() && isApexSession() && params.isStaged) {
-            sendUpdateToRemoteStatusReceiver(INSTALL_SUCCEEDED,
+            dispatchSessionFinished(INSTALL_SUCCEEDED,
                     "Apex package should have been installed by apexd", null);
             return null;
         }
@@ -2612,14 +2577,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             @Override
             public void onPackageInstalled(String basePackageName, int returnCode, String msg,
                     Bundle extras) {
-                if (isStaged()) {
-                    sendUpdateToRemoteStatusReceiver(returnCode, msg, extras);
-                } else {
+                if (!isStaged()) {
                     // We've reached point of no return; call into PMS to install the stage.
                     // Regardless of success or failure we always destroy session.
                     destroyInternal();
-                    dispatchSessionFinished(returnCode, msg, extras);
                 }
+                dispatchSessionFinished(returnCode, msg, extras);
             }
         };
 
@@ -4193,7 +4156,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mSessionReady = true;
             mSessionApplied = false;
             mSessionFailed = false;
-            mSessionErrorCode = SessionInfo.STAGED_SESSION_NO_ERROR;
+            mSessionErrorCode = SessionInfo.SESSION_NO_ERROR;
             mSessionErrorMessage = "";
         }
         mCallback.onSessionChanged(this);
@@ -4221,7 +4184,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mSessionReady = false;
             mSessionApplied = true;
             mSessionFailed = false;
-            mSessionErrorCode = SessionInfo.STAGED_SESSION_NO_ERROR;
+            mSessionErrorCode = SessionInfo.SESSION_NO_ERROR;
             mSessionErrorMessage = "";
             Slog.d(TAG, "Marking session " + sessionId + " as applied");
         }
@@ -4730,7 +4693,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         final boolean isFailed = in.getAttributeBoolean(null, ATTR_IS_FAILED, false);
         final boolean isApplied = in.getAttributeBoolean(null, ATTR_IS_APPLIED, false);
         final int sessionErrorCode = in.getAttributeInt(null, ATTR_SESSION_ERROR_CODE,
-                SessionInfo.STAGED_SESSION_NO_ERROR);
+                SessionInfo.SESSION_NO_ERROR);
         final String sessionErrorMessage = readStringAttribute(in, ATTR_SESSION_ERROR_MESSAGE);
 
         if (!isStagedSessionStateValid(isReady, isApplied, isFailed)) {

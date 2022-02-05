@@ -750,6 +750,7 @@
 
     <!-- Added in T -->
     <protected-broadcast android:name="android.intent.action.REFRESH_SAFETY_SOURCES" />
+    <protected-broadcast android:name="android.app.action.DEVICE_POLICY_RESOURCE_UPDATED" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -2221,8 +2222,9 @@
     <permission android:name="android.permission.NFC_HANDOVER_STATUS"
         android:protectionLevel="signature|privileged" />
 
-    <!-- @hide Allows internal management of Bluetooth state when on wireless consent mode.
-         <p>Not for use by third-party applications. -->
+    <!-- @SystemApi Allows internal management of Bluetooth state when on wireless consent mode.
+         <p>Not for use by third-party applications.
+         @hide -->
     <permission android:name="android.permission.MANAGE_BLUETOOTH_WHEN_WIRELESS_CONSENT_REQUIRED"
         android:protectionLevel="signature" />
 
@@ -2829,6 +2831,10 @@
     <!-- Allows interaction across profiles in the same profile group. -->
     <permission android:name="android.permission.INTERACT_ACROSS_PROFILES"
         android:protectionLevel="signature|appop" />
+
+    <!-- @SystemApi @hide Allows starting activities across profiles in the same profile group. -->
+    <permission android:name="android.permission.START_CROSS_PROFILE_ACTIVITIES"
+                android:protectionLevel="signature|role" />
 
     <!-- @SystemApi Allows configuring apps to have the INTERACT_ACROSS_PROFILES permission so that
          they can interact across profiles in the same profile group.
@@ -3629,6 +3635,18 @@
     <permission android:name="android.permission.REQUEST_INCIDENT_REPORT_APPROVAL"
         android:protectionLevel="signature|privileged" />
 
+    <!-- ========================================= -->
+    <!-- Permissions for SupplementalApi -->
+    <!-- ========================================= -->
+    <eat-comment />
+
+    <!-- TODO(b/213488783): Update with correct names. -->
+    <!-- Allows an application to access SupplementalApis. -->
+    <permission android:name="android.permission.ACCESS_SUPPLEMENTAL_APIS"
+        android:label="@string/permlab_accessSupplementalApi"
+        android:description="@string/permdesc_accessSupplementalApi"
+        android:protectionLevel="normal" />
+
     <!-- ==================================== -->
     <!-- Private permissions                  -->
     <!-- ==================================== -->
@@ -3851,6 +3869,13 @@
     -->
     <permission android:name="android.permission.GET_TOP_ACTIVITY_INFO"
         android:protectionLevel="signature|recents" />
+
+    <!-- @SystemApi Allows an application to set the system audio caption and its UI
+     enabled state.
+     <p>Not for use by third-party applications.
+     @hide -->
+    <permission android:name="android.permission.SET_SYSTEM_AUDIO_CAPTION"
+                android:protectionLevel="signature|role" />
 
     <!-- Allows an application to retrieve the current state of keys and
          switches.
@@ -4476,6 +4501,12 @@
         @hide -->
     <permission android:name="android.permission.REVOKE_RUNTIME_PERMISSIONS"
          android:protectionLevel="signature|installer|verifier" />
+
+   <!-- @TestApi Allows an application to revoke the POST_NOTIFICATIONS permission from an app
+        without killing the app. Only granted to the shell.
+        @hide -->
+    <permission android:name="android.permission.REVOKE_POST_NOTIFICATIONS_WITHOUT_KILL"
+        android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows the system to read runtime permission state.
         @hide -->
@@ -5362,6 +5393,12 @@
     <permission android:name="android.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi Allows an application to manage weak escrow token on the device. This permission
+         is not available to third party applications.
+         @hide -->
+    <permission android:name="android.permission.MANAGE_WEAK_ESCROW_TOKEN"
+        android:protectionLevel="signature|privileged" />
+
     <!-- Allows an application to listen to trust changes.  Only allowed for system processes.
         @hide -->
     <permission android:name="android.permission.TRUST_LISTENER"
@@ -5611,20 +5648,6 @@
     @hide -->
     <permission android:name="android.permission.VIEW_INSTANT_APPS"
                 android:protectionLevel="signature|preinstalled" />
-
-    <!-- Allows an application to interact with the currently active
-        {@link com.android.server.communal.CommunalManagerService}.
-        @hide
-        @TestApi -->
-    <permission android:name="android.permission.WRITE_COMMUNAL_STATE"
-                android:protectionLevel="signature" />
-
-    <!-- Allows an application to view information from the currently active
-         {@link com.android.server.communal.CommunalManagerService}.
-         @hide
-         @SystemApi -->
-    <permission android:name="android.permission.READ_COMMUNAL_STATE"
-                android:protectionLevel="signature|privileged"/>
 
     <!-- Allows the holder to manage whether the system can bind to services
          provided by instant apps. This permission is intended to protect
@@ -6140,13 +6163,21 @@
          @hide -->
     <permission android:name="android.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES"
                 android:protectionLevel="signature|role" />
-    
+
     <!-- @SystemApi Allows an app to read whether SafetyCenter is enabled/disabled.
              <p>Protection level: signature|privileged
              @hide
         -->
     <permission android:name="android.permission.READ_SAFETY_CENTER_STATUS"
         android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Required to access the safety center internal APIs using the
+             {@link android.safetycenter.SafetyCenterManager}.
+             <p>Protection level: internal|installer|role
+             @hide
+        -->
+    <permission android:name="android.permission.MANAGE_SAFETY_CENTER"
+                android:protectionLevel="internal|installer|role" />
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>
@@ -6553,6 +6584,11 @@
                  android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 
+        <service android:name="com.android.server.SmartStorageMaintIdler"
+                android:exported="true"
+                android:permission="android.permission.BIND_JOB_SERVICE" >
+        </service>
+
         <service android:name="com.android.server.ZramWriteback"
                  android:exported="false"
                  android:permission="android.permission.BIND_JOB_SERVICE" >
@@ -6639,6 +6675,10 @@
         </service>
 
         <service android:name="com.android.server.blob.BlobStoreIdleJobService"
+                 android:permission="android.permission.BIND_JOB_SERVICE">
+        </service>
+
+        <service android:name="com.android.server.companion.AssociationCleanUpService"
                  android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
 

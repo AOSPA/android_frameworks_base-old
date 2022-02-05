@@ -94,8 +94,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * Interface to global information about an application environment.  This is
@@ -3598,10 +3601,18 @@ public abstract class Context {
      * Binds to a service in the given {@code user} in the same manner as
      * {@link #bindService(Intent, ServiceConnection, int)}.
      *
-     * <p>If the given {@code user} is in the same profile group and the target package is the
-     * same as the caller, {@code android.Manifest.permission.INTERACT_ACROSS_PROFILES} is
-     * sufficient. Otherwise, requires {@code android.Manifest.permission.INTERACT_ACROSS_USERS}
-     * for interacting with other users.
+     * <p>Requires that one of the following conditions are met:
+     * <ul>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS_FULL}</li>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS} and is the same
+     *      package as the {@code service} (determined by its component's package) and the Android
+     *      version is at least {@link android.os.Build.VERSION_CODES#S}</li>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS} and is in same
+     *      profile group as the given {@code user}</li>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_PROFILES} and is in same
+     *      profile group as the given {@code user} and is the same package as the {@code service}
+     *      </li>
+     * </ul>
      *
      * @param service Identifies the service to connect to.  The Intent must
      *      specify an explicit component name.
@@ -3623,8 +3634,9 @@ public abstract class Context {
     @SuppressWarnings("unused")
     @RequiresPermission(anyOf = {
             android.Manifest.permission.INTERACT_ACROSS_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
             android.Manifest.permission.INTERACT_ACROSS_PROFILES
-    })
+            }, conditional = true)
     public boolean bindServiceAsUser(
             @NonNull @RequiresPermission Intent service, @NonNull ServiceConnection conn, int flags,
             @NonNull UserHandle user) {
@@ -3637,7 +3649,11 @@ public abstract class Context {
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.INTERACT_ACROSS_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
+            android.Manifest.permission.INTERACT_ACROSS_PROFILES
+            }, conditional = true)
     @UnsupportedAppUsage(trackingBug = 136728678)
     public boolean bindServiceAsUser(Intent service, ServiceConnection conn, int flags,
             Handler handler, UserHandle user) {
@@ -5879,17 +5895,6 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.app.communal.CommunalManager} for interacting with the global system state.
-     *
-     * @see #getSystemService(String)
-     * @see android.app.communal.CommunalManager
-     * @hide
-     */
-    @SystemApi
-    public static final String COMMUNAL_SERVICE = "communal";
-
-    /**
-     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.LocaleManager}.
      *
      * @see #getSystemService(String)
@@ -6406,6 +6411,43 @@ public abstract class Context {
             @Nullable Uri uri, @Nullable String readPermission,
             @Nullable String writePermission, int pid, int uid, @Intent.AccessUriMode int modeFlags,
             @Nullable String message);
+
+
+    /**
+     * Triggers the asynchronous revocation of a permission.
+     *
+     * @param permName The name of the permission to be revoked.
+     * @see #selfRevokePermissions(Collection)
+     */
+    public void selfRevokePermission(@NonNull String permName) {
+        selfRevokePermissions(Collections.singletonList(permName));
+    }
+
+    /**
+     * Triggers the revocation of one or more permissions for the calling package. A package is only
+     * able to revoke a permission under the following conditions:
+     * <ul>
+     * <li>Each permission in {@code permissions} must be granted to the calling package.
+     * <li>Each permission in {@code permissions} must be a runtime permission.
+     * </ul>
+     * <p>
+     * For every permission in {@code permissions}, the entire permission group it belongs to will
+     * be revoked. The revocation happens asynchronously and kills all processes running in the
+     * calling UID. It will be triggered once it is safe to do so. In particular, it will not be
+     * triggered as long as the package remains in the foreground, or has any active manifest
+     * components (e.g. when another app is accessing a content provider in the package).
+     * <p>
+     * If you want to revoke the permissions right away, you could call {@code System.exit()}, but
+     * this could affect other apps that are accessing your app at the moment. For example, apps
+     * accessing a content provider in your app will all crash.
+     *
+     * @param permissions Collection of permissions to be revoked.
+     * @see PackageManager#getGroupOfPlatformPermission(String, Executor, Consumer)
+     * @see PackageManager#getPlatformPermissionsForGroup(String, Executor, Consumer)
+     */
+    public void selfRevokePermissions(@NonNull Collection<String> permissions) {
+        throw new AbstractMethodError("Must be overridden in implementing class");
+    }
 
     /** @hide */
     @IntDef(flag = true, prefix = { "CONTEXT_" }, value = {

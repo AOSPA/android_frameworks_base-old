@@ -34,15 +34,15 @@ import android.media.tv.AdResponse;
 import android.media.tv.BroadcastInfoRequest;
 import android.media.tv.BroadcastInfoResponse;
 import android.media.tv.TvTrackInfo;
-import android.media.tv.interactive.ITvIAppClient;
 import android.media.tv.interactive.ITvIAppManager;
-import android.media.tv.interactive.ITvIAppManagerCallback;
-import android.media.tv.interactive.ITvIAppService;
-import android.media.tv.interactive.ITvIAppServiceCallback;
-import android.media.tv.interactive.ITvIAppSession;
-import android.media.tv.interactive.ITvIAppSessionCallback;
-import android.media.tv.interactive.TvIAppInfo;
+import android.media.tv.interactive.ITvInteractiveAppClient;
+import android.media.tv.interactive.ITvInteractiveAppManagerCallback;
+import android.media.tv.interactive.ITvInteractiveAppService;
+import android.media.tv.interactive.ITvInteractiveAppServiceCallback;
+import android.media.tv.interactive.ITvInteractiveAppSession;
+import android.media.tv.interactive.ITvInteractiveAppSessionCallback;
 import android.media.tv.interactive.TvIAppService;
+import android.media.tv.interactive.TvInteractiveAppInfo;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
@@ -53,6 +53,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.ArrayMap;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.InputChannel;
@@ -112,54 +113,55 @@ public class TvIAppManagerService extends SystemService {
     }
 
     @GuardedBy("mLock")
-    private void buildTvIAppServiceListLocked(int userId, String[] updatedPackages) {
+    private void buildTvInteractiveAppServiceListLocked(int userId, String[] updatedPackages) {
         UserState userState = getOrCreateUserStateLocked(userId);
         userState.mPackageSet.clear();
 
         if (DEBUG) {
-            Slogf.d(TAG, "buildTvIAppServiceListLocked");
+            Slogf.d(TAG, "buildTvInteractiveAppServiceListLocked");
         }
         PackageManager pm = mContext.getPackageManager();
         List<ResolveInfo> services = pm.queryIntentServicesAsUser(
                 new Intent(TvIAppService.SERVICE_INTERFACE),
                 PackageManager.GET_SERVICES | PackageManager.GET_META_DATA,
                 userId);
-        List<TvIAppInfo> iAppList = new ArrayList<>();
+        List<TvInteractiveAppInfo> iAppList = new ArrayList<>();
 
         for (ResolveInfo ri : services) {
             ServiceInfo si = ri.serviceInfo;
-            // TODO: add BIND_TV_IAPP permission and check it here
+            // TODO: add BIND_TV_INTERACTIVE_APP permission and check it here
 
             ComponentName component = new ComponentName(si.packageName, si.name);
             try {
-                TvIAppInfo info = new TvIAppInfo.Builder(mContext, component).build();
+                TvInteractiveAppInfo info =
+                        new TvInteractiveAppInfo(mContext, component);
                 iAppList.add(info);
             } catch (Exception e) {
-                Slogf.e(TAG, "failed to load TV IApp service " + si.name, e);
+                Slogf.e(TAG, "failed to load TV Interactive App service " + si.name, e);
                 continue;
             }
             userState.mPackageSet.add(si.packageName);
         }
 
         // sort the iApp list by iApp service id
-        Collections.sort(iAppList, Comparator.comparing(TvIAppInfo::getId));
-        Map<String, TvIAppState> iAppMap = new HashMap<>();
+        Collections.sort(iAppList, Comparator.comparing(TvInteractiveAppInfo::getId));
+        Map<String, TvInteractiveAppState> iAppMap = new HashMap<>();
         ArrayMap<String, Integer> tiasAppCount = new ArrayMap<>(iAppMap.size());
-        for (TvIAppInfo info : iAppList) {
+        for (TvInteractiveAppInfo info : iAppList) {
             String iAppServiceId = info.getId();
             if (DEBUG) {
                 Slogf.d(TAG, "add " + iAppServiceId);
             }
-            // Running count of IApp for each IApp service
+            // Running count of Interactive App for each Interactive App service
             Integer count = tiasAppCount.get(iAppServiceId);
             count = count == null ? 1 : count + 1;
             tiasAppCount.put(iAppServiceId, count);
-            TvIAppState iAppState = userState.mIAppMap.get(iAppServiceId);
+            TvInteractiveAppState iAppState = userState.mIAppMap.get(iAppServiceId);
             if (iAppState == null) {
-                iAppState = new TvIAppState();
+                iAppState = new TvInteractiveAppState();
             }
             iAppState.mInfo = info;
-            iAppState.mUid = getIAppUid(info);
+            iAppState.mUid = getInteractiveAppUid(info);
             iAppState.mComponentName = info.getComponent();
             iAppMap.put(iAppServiceId, iAppState);
             iAppState.mIAppNumber = count;
@@ -167,14 +169,14 @@ public class TvIAppManagerService extends SystemService {
 
         for (String iAppServiceId : iAppMap.keySet()) {
             if (!userState.mIAppMap.containsKey(iAppServiceId)) {
-                notifyIAppServiceAddedLocked(userState, iAppServiceId);
+                notifyInteractiveAppServiceAddedLocked(userState, iAppServiceId);
             } else if (updatedPackages != null) {
                 // Notify the package updates
                 ComponentName component = iAppMap.get(iAppServiceId).mInfo.getComponent();
                 for (String updatedPackage : updatedPackages) {
                     if (component.getPackageName().equals(updatedPackage)) {
                         updateServiceConnectionLocked(component, userId);
-                        notifyIAppServiceUpdatedLocked(userState, iAppServiceId);
+                        notifyInteractiveAppServiceUpdatedLocked(userState, iAppServiceId);
                         break;
                     }
                 }
@@ -183,12 +185,12 @@ public class TvIAppManagerService extends SystemService {
 
         for (String iAppServiceId : userState.mIAppMap.keySet()) {
             if (!iAppMap.containsKey(iAppServiceId)) {
-                TvIAppInfo info = userState.mIAppMap.get(iAppServiceId).mInfo;
+                TvInteractiveAppInfo info = userState.mIAppMap.get(iAppServiceId).mInfo;
                 ServiceState serviceState = userState.mServiceStateMap.get(info.getComponent());
                 if (serviceState != null) {
                     abortPendingCreateSessionRequestsLocked(serviceState, iAppServiceId, userId);
                 }
-                notifyIAppServiceRemovedLocked(userState, iAppServiceId);
+                notifyInteractiveAppServiceRemovedLocked(userState, iAppServiceId);
             }
         }
 
@@ -197,48 +199,56 @@ public class TvIAppManagerService extends SystemService {
     }
 
     @GuardedBy("mLock")
-    private void notifyIAppServiceAddedLocked(UserState userState, String iAppServiceId) {
+    private void notifyInteractiveAppServiceAddedLocked(UserState userState, String iAppServiceId) {
         if (DEBUG) {
-            Slog.d(TAG, "notifyIAppServiceAddedLocked(iAppServiceId=" + iAppServiceId + ")");
+            Slog.d(TAG, "notifyInteractiveAppServiceAddedLocked(iAppServiceId="
+                    + iAppServiceId + ")");
         }
         int n = userState.mCallbacks.beginBroadcast();
         for (int i = 0; i < n; ++i) {
             try {
-                userState.mCallbacks.getBroadcastItem(i).onIAppServiceAdded(iAppServiceId);
+                userState.mCallbacks.getBroadcastItem(i)
+                        .onInteractiveAppServiceAdded(iAppServiceId);
             } catch (RemoteException e) {
-                Slog.e(TAG, "failed to report added IApp service to callback", e);
+                Slog.e(TAG, "failed to report added Interactive App service to callback", e);
             }
         }
         userState.mCallbacks.finishBroadcast();
     }
 
     @GuardedBy("mLock")
-    private void notifyIAppServiceRemovedLocked(UserState userState, String iAppServiceId) {
+    private void notifyInteractiveAppServiceRemovedLocked(
+            UserState userState, String iAppServiceId) {
         if (DEBUG) {
-            Slog.d(TAG, "notifyIAppServiceRemovedLocked(iAppServiceId=" + iAppServiceId + ")");
+            Slog.d(TAG, "notifyInteractiveAppServiceRemovedLocked(iAppServiceId="
+                    + iAppServiceId + ")");
         }
         int n = userState.mCallbacks.beginBroadcast();
         for (int i = 0; i < n; ++i) {
             try {
-                userState.mCallbacks.getBroadcastItem(i).onIAppServiceRemoved(iAppServiceId);
+                userState.mCallbacks.getBroadcastItem(i)
+                        .onInteractiveAppServiceRemoved(iAppServiceId);
             } catch (RemoteException e) {
-                Slog.e(TAG, "failed to report removed IApp service to callback", e);
+                Slog.e(TAG, "failed to report removed Interactive App service to callback", e);
             }
         }
         userState.mCallbacks.finishBroadcast();
     }
 
     @GuardedBy("mLock")
-    private void notifyIAppServiceUpdatedLocked(UserState userState, String iAppServiceId) {
+    private void notifyInteractiveAppServiceUpdatedLocked(
+            UserState userState, String iAppServiceId) {
         if (DEBUG) {
-            Slog.d(TAG, "notifyIAppServiceUpdatedLocked(iAppServiceId=" + iAppServiceId + ")");
+            Slog.d(TAG, "notifyInteractiveAppServiceUpdatedLocked(iAppServiceId="
+                    + iAppServiceId + ")");
         }
         int n = userState.mCallbacks.beginBroadcast();
         for (int i = 0; i < n; ++i) {
             try {
-                userState.mCallbacks.getBroadcastItem(i).onIAppServiceUpdated(iAppServiceId);
+                userState.mCallbacks.getBroadcastItem(i)
+                        .onInteractiveAppServiceUpdated(iAppServiceId);
             } catch (RemoteException e) {
-                Slog.e(TAG, "failed to report updated IApp service to callback", e);
+                Slog.e(TAG, "failed to report updated Interactive App service to callback", e);
             }
         }
         userState.mCallbacks.finishBroadcast();
@@ -262,7 +272,7 @@ public class TvIAppManagerService extends SystemService {
         userState.mCallbacks.finishBroadcast();
     }
 
-    private int getIAppUid(TvIAppInfo info) {
+    private int getInteractiveAppUid(TvInteractiveAppInfo info) {
         try {
             return getContext().getPackageManager().getApplicationInfo(
                     info.getServiceInfo().packageName, 0).uid;
@@ -286,18 +296,18 @@ public class TvIAppManagerService extends SystemService {
             registerBroadcastReceivers();
         } else if (phase == SystemService.PHASE_THIRD_PARTY_APPS_CAN_START) {
             synchronized (mLock) {
-                buildTvIAppServiceListLocked(mCurrentUserId, null);
+                buildTvInteractiveAppServiceListLocked(mCurrentUserId, null);
             }
         }
     }
 
     private void registerBroadcastReceivers() {
         PackageMonitor monitor = new PackageMonitor() {
-            private void buildTvIAppServiceList(String[] packages) {
+            private void buildTvInteractiveAppServiceList(String[] packages) {
                 int userId = getChangingUserId();
                 synchronized (mLock) {
                     if (mCurrentUserId == userId || mRunningProfiles.contains(userId)) {
-                        buildTvIAppServiceListLocked(userId, packages);
+                        buildTvInteractiveAppServiceListLocked(userId, packages);
                     }
                 }
             }
@@ -305,9 +315,9 @@ public class TvIAppManagerService extends SystemService {
             @Override
             public void onPackageUpdateFinished(String packageName, int uid) {
                 if (DEBUG) Slogf.d(TAG, "onPackageUpdateFinished(packageName=" + packageName + ")");
-                // This callback is invoked when the TV iApp service is reinstalled.
+                // This callback is invoked when the TV interactive App service is reinstalled.
                 // In this case, isReplacing() always returns true.
-                buildTvIAppServiceList(new String[] { packageName });
+                buildTvInteractiveAppServiceList(new String[] { packageName });
             }
 
             @Override
@@ -318,7 +328,7 @@ public class TvIAppManagerService extends SystemService {
                 // This callback is invoked when the media on which some packages exist become
                 // available.
                 if (isReplacing()) {
-                    buildTvIAppServiceList(packages);
+                    buildTvInteractiveAppServiceList(packages);
                 }
             }
 
@@ -331,7 +341,7 @@ public class TvIAppManagerService extends SystemService {
                             + ")");
                 }
                 if (isReplacing()) {
-                    buildTvIAppServiceList(packages);
+                    buildTvInteractiveAppServiceList(packages);
                 }
             }
 
@@ -339,17 +349,19 @@ public class TvIAppManagerService extends SystemService {
             public void onSomePackagesChanged() {
                 if (DEBUG) Slogf.d(TAG, "onSomePackagesChanged()");
                 if (isReplacing()) {
-                    if (DEBUG) Slogf.d(TAG, "Skipped building TV iApp list due to replacing");
-                    // When the package is updated, buildTvIAppServiceListLocked is called in other
-                    // methods instead.
+                    if (DEBUG) {
+                        Slogf.d(TAG, "Skipped building TV interactive App list due to replacing");
+                    }
+                    // When the package is updated, buildTvInteractiveAppServiceListLocked is called
+                    // in other methods instead.
                     return;
                 }
-                buildTvIAppServiceList(null);
+                buildTvInteractiveAppServiceList(null);
             }
 
             @Override
             public boolean onPackageChanged(String packageName, int uid, String[] components) {
-                // The iApp list needs to be updated in any cases, regardless of whether
+                // The interactive App list needs to be updated in any cases, regardless of whether
                 // it happened to the whole package or a specific component. Returning true so that
                 // the update can be handled in {@link #onSomePackagesChanged}.
                 return true;
@@ -401,7 +413,7 @@ public class TvIAppManagerService extends SystemService {
             unbindServiceOfUserLocked(mCurrentUserId);
 
             mCurrentUserId = userId;
-            buildTvIAppServiceListLocked(userId, null);
+            buildTvInteractiveAppServiceListLocked(userId, null);
         }
     }
 
@@ -486,7 +498,7 @@ public class TvIAppManagerService extends SystemService {
     @GuardedBy("mLock")
     private void startProfileLocked(int userId) {
         mRunningProfiles.add(userId);
-        buildTvIAppServiceListLocked(userId, null);
+        buildTvInteractiveAppServiceListLocked(userId, null);
     }
 
     @GuardedBy("mLock")
@@ -601,13 +613,14 @@ public class TvIAppManagerService extends SystemService {
     }
 
     @GuardedBy("mLock")
-    private ITvIAppSession getSessionLocked(IBinder sessionToken, int callingUid, int userId) {
+    private ITvInteractiveAppSession getSessionLocked(
+            IBinder sessionToken, int callingUid, int userId) {
         return getSessionLocked(getSessionStateLocked(sessionToken, callingUid, userId));
     }
 
     @GuardedBy("mLock")
-    private ITvIAppSession getSessionLocked(SessionState sessionState) {
-        ITvIAppSession session = sessionState.mSession;
+    private ITvInteractiveAppSession getSessionLocked(SessionState sessionState) {
+        ITvInteractiveAppSession session = sessionState.mSession;
         if (session == null) {
             throw new IllegalStateException("Session not yet created for token "
                     + sessionState.mSessionToken);
@@ -618,15 +631,15 @@ public class TvIAppManagerService extends SystemService {
     private final class BinderService extends ITvIAppManager.Stub {
 
         @Override
-        public List<TvIAppInfo> getTvIAppServiceList(int userId) {
+        public List<TvInteractiveAppInfo> getTvInteractiveAppServiceList(int userId) {
             final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(),
-                    Binder.getCallingUid(), userId, "getTvIAppServiceList");
+                    Binder.getCallingUid(), userId, "getTvInteractiveAppServiceList");
             final long identity = Binder.clearCallingIdentity();
             try {
                 synchronized (mLock) {
                     UserState userState = getOrCreateUserStateLocked(resolvedUserId);
-                    List<TvIAppInfo> iAppList = new ArrayList<>();
-                    for (TvIAppState state : userState.mIAppMap.values()) {
+                    List<TvInteractiveAppInfo> iAppList = new ArrayList<>();
+                    for (TvInteractiveAppState state : userState.mIAppMap.values()) {
                         iAppList.add(state.mInfo);
                     }
                     return iAppList;
@@ -645,7 +658,7 @@ public class TvIAppManagerService extends SystemService {
             try {
                 synchronized (mLock) {
                     UserState userState = getOrCreateUserStateLocked(resolvedUserId);
-                    TvIAppState iAppState = userState.mIAppMap.get(tiasId);
+                    TvInteractiveAppState iAppState = userState.mIAppMap.get(tiasId);
                     if (iAppState == null) {
                         Slogf.e(TAG, "failed to prepare TIAS - unknown TIAS id " + tiasId);
                         return;
@@ -673,16 +686,16 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void notifyAppLinkInfo(String tiasId, Bundle appLinkInfo, int userId) {
+        public void registerAppLinkInfo(String tiasId, Bundle appLinkInfo, int userId) {
             final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(),
-                    Binder.getCallingUid(), userId, "notifyAppLinkInfo");
+                    Binder.getCallingUid(), userId, "registerAppLinkInfo");
             final long identity = Binder.clearCallingIdentity();
             try {
                 synchronized (mLock) {
                     UserState userState = getOrCreateUserStateLocked(resolvedUserId);
-                    TvIAppState iAppState = userState.mIAppMap.get(tiasId);
+                    TvInteractiveAppState iAppState = userState.mIAppMap.get(tiasId);
                     if (iAppState == null) {
-                        Slogf.e(TAG, "failed to notifyAppLinkInfo - unknown TIAS id "
+                        Slogf.e(TAG, "failed to registerAppLinkInfo - unknown TIAS id "
                                 + tiasId);
                         return;
                     }
@@ -691,18 +704,54 @@ public class TvIAppManagerService extends SystemService {
                     if (serviceState == null) {
                         serviceState = new ServiceState(
                                 componentName, tiasId, resolvedUserId);
-                        serviceState.addPendingAppLink(appLinkInfo);
+                        serviceState.addPendingAppLink(appLinkInfo, true);
                         userState.mServiceStateMap.put(componentName, serviceState);
                         updateServiceConnectionLocked(componentName, resolvedUserId);
                     } else if (serviceState.mService != null) {
-                        serviceState.mService.notifyAppLinkInfo(appLinkInfo);
+                        serviceState.mService.registerAppLinkInfo(appLinkInfo);
                     } else {
-                        serviceState.addPendingAppLink(appLinkInfo);
+                        serviceState.addPendingAppLink(appLinkInfo, true);
                         updateServiceConnectionLocked(componentName, resolvedUserId);
                     }
                 }
             } catch (RemoteException e) {
-                Slogf.e(TAG, "error in notifyAppLinkInfo", e);
+                Slogf.e(TAG, "error in registerAppLinkInfo", e);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void unregisterAppLinkInfo(String tiasId, Bundle appLinkInfo, int userId) {
+            final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(),
+                    Binder.getCallingUid(), userId, "unregisterAppLinkInfo");
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    UserState userState = getOrCreateUserStateLocked(resolvedUserId);
+                    TvInteractiveAppState iAppState = userState.mIAppMap.get(tiasId);
+                    if (iAppState == null) {
+                        Slogf.e(TAG, "failed to unregisterAppLinkInfo - unknown TIAS id "
+                                + tiasId);
+                        return;
+                    }
+                    ComponentName componentName = iAppState.mInfo.getComponent();
+                    ServiceState serviceState = userState.mServiceStateMap.get(componentName);
+                    if (serviceState == null) {
+                        serviceState = new ServiceState(
+                                componentName, tiasId, resolvedUserId);
+                        serviceState.addPendingAppLink(appLinkInfo, false);
+                        userState.mServiceStateMap.put(componentName, serviceState);
+                        updateServiceConnectionLocked(componentName, resolvedUserId);
+                    } else if (serviceState.mService != null) {
+                        serviceState.mService.unregisterAppLinkInfo(appLinkInfo);
+                    } else {
+                        serviceState.addPendingAppLink(appLinkInfo, false);
+                        updateServiceConnectionLocked(componentName, resolvedUserId);
+                    }
+                }
+            } catch (RemoteException e) {
+                Slogf.e(TAG, "error in unregisterAppLinkInfo", e);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -716,7 +765,7 @@ public class TvIAppManagerService extends SystemService {
             try {
                 synchronized (mLock) {
                     UserState userState = getOrCreateUserStateLocked(resolvedUserId);
-                    TvIAppState iAppState = userState.mIAppMap.get(tiasId);
+                    TvInteractiveAppState iAppState = userState.mIAppMap.get(tiasId);
                     if (iAppState == null) {
                         Slogf.e(TAG, "failed to sendAppLinkCommand - unknown TIAS id "
                                 + tiasId);
@@ -743,7 +792,8 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void createSession(final ITvIAppClient client, final String iAppServiceId, int type,
+        public void createSession(
+                final ITvInteractiveAppClient client, final String iAppServiceId, int type,
                 int seq, int userId) {
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
@@ -760,7 +810,7 @@ public class TvIAppManagerService extends SystemService {
                         return;
                     }
                     UserState userState = getOrCreateUserStateLocked(resolvedUserId);
-                    TvIAppState iAppState = userState.mIAppMap.get(iAppServiceId);
+                    TvInteractiveAppState iAppState = userState.mIAppMap.get(iAppServiceId);
                     if (iAppState == null) {
                         Slogf.w(TAG, "Failed to find state for iAppServiceId=" + iAppServiceId);
                         sendSessionTokenToClientLocked(client, iAppServiceId, null, null, seq);
@@ -906,13 +956,123 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void startIApp(IBinder sessionToken, int userId) {
+        public void notifyVideoAvailable(IBinder sessionToken, int userId) {
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
+            final int resolvedUserId = resolveCallingUserId(callingPid, callingUid, userId,
+                    "notifyVideoAvailable");
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        SessionState sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).notifyVideoAvailable();
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in notifyVideoAvailable", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void notifyVideoUnavailable(IBinder sessionToken, int reason, int userId) {
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
+            final int resolvedUserId = resolveCallingUserId(callingPid, callingUid, userId,
+                    "notifyVideoUnavailable");
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        SessionState sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).notifyVideoUnavailable(reason);
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in notifyVideoUnavailable", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void notifyContentAllowed(IBinder sessionToken, int userId) {
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
+            final int resolvedUserId = resolveCallingUserId(callingPid, callingUid, userId,
+                    "notifyContentAllowed");
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        SessionState sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).notifyContentAllowed();
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in notifyContentAllowed", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void notifyContentBlocked(IBinder sessionToken, String rating, int userId) {
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
+            final int resolvedUserId = resolveCallingUserId(callingPid, callingUid, userId,
+                    "notifyContentBlocked");
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        SessionState sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).notifyContentBlocked(rating);
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in notifyContentBlocked", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void notifySignalStrength(IBinder sessionToken, int strength, int userId) {
+            final int callingUid = Binder.getCallingUid();
+            final int callingPid = Binder.getCallingPid();
+            final int resolvedUserId = resolveCallingUserId(callingPid, callingUid, userId,
+                    "notifySignalStrength");
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        SessionState sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).notifySignalStrength(strength);
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in notifySignalStrength", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void startInteractiveApp(IBinder sessionToken, int userId) {
             if (DEBUG) {
                 Slogf.d(TAG, "BinderService#start(userId=%d)", userId);
             }
             final int callingUid = Binder.getCallingUid();
             final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(), callingUid,
-                    userId, "startIApp");
+                    userId, "startInteractiveApp");
             SessionState sessionState = null;
             final long identity = Binder.clearCallingIdentity();
             try {
@@ -920,7 +1080,7 @@ public class TvIAppManagerService extends SystemService {
                     try {
                         sessionState = getSessionStateLocked(sessionToken, callingUid,
                                 resolvedUserId);
-                        getSessionLocked(sessionState).startIApp();
+                        getSessionLocked(sessionState).startInteractiveApp();
                     } catch (RemoteException | SessionNotFoundException e) {
                         Slogf.e(TAG, "error in start", e);
                     }
@@ -931,13 +1091,13 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void stopIApp(IBinder sessionToken, int userId) {
+        public void stopInteractiveApp(IBinder sessionToken, int userId) {
             if (DEBUG) {
                 Slogf.d(TAG, "BinderService#stop(userId=%d)", userId);
             }
             final int callingUid = Binder.getCallingUid();
             final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(), callingUid,
-                    userId, "stopIApp");
+                    userId, "stopInteractiveApp");
             SessionState sessionState = null;
             final long identity = Binder.clearCallingIdentity();
             try {
@@ -945,9 +1105,34 @@ public class TvIAppManagerService extends SystemService {
                     try {
                         sessionState = getSessionStateLocked(sessionToken, callingUid,
                                 resolvedUserId);
-                        getSessionLocked(sessionState).stopIApp();
+                        getSessionLocked(sessionState).stopInteractiveApp();
                     } catch (RemoteException | SessionNotFoundException e) {
                         Slogf.e(TAG, "error in stop", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void resetInteractiveApp(IBinder sessionToken, int userId) {
+            if (DEBUG) {
+                Slogf.d(TAG, "BinderService#reset(userId=%d)", userId);
+            }
+            final int callingUid = Binder.getCallingUid();
+            final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(), callingUid,
+                    userId, "resetInteractiveApp");
+            SessionState sessionState = null;
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).resetInteractiveApp();
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in reset", e);
                     }
                 }
             } finally {
@@ -1000,6 +1185,31 @@ public class TvIAppManagerService extends SystemService {
                         getSessionLocked(sessionState).destroyBiInteractiveApp(biIAppId);
                     } catch (RemoteException | SessionNotFoundException e) {
                         Slogf.e(TAG, "error in destroyBiInteractiveApp", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
+        public void setTeletextAppEnabled(IBinder sessionToken, boolean enable, int userId) {
+            if (DEBUG) {
+                Slogf.d(TAG, "setTeletextAppEnabled(enable=%d)", enable);
+            }
+            final int callingUid = Binder.getCallingUid();
+            final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(), callingUid,
+                    userId, "setTeletextAppEnabled");
+            SessionState sessionState = null;
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).setTeletextAppEnabled(enable);
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in setTeletextAppEnabled", e);
                     }
                 }
             } finally {
@@ -1108,6 +1318,31 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
+        public void sendCurrentTvInputId(IBinder sessionToken, String inputId, int userId) {
+            if (DEBUG) {
+                Slogf.d(TAG, "sendCurrentTvInputId(inputId=%s)", inputId);
+            }
+            final int callingUid = Binder.getCallingUid();
+            final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(), callingUid,
+                    userId, "sendCurrentTvInputId");
+            SessionState sessionState = null;
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    try {
+                        sessionState = getSessionStateLocked(sessionToken, callingUid,
+                                resolvedUserId);
+                        getSessionLocked(sessionState).sendCurrentTvInputId(inputId);
+                    } catch (RemoteException | SessionNotFoundException e) {
+                        Slogf.e(TAG, "error in sendCurrentTvInputId", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
         public void setSurface(IBinder sessionToken, Surface surface, int userId) {
             final int callingUid = Binder.getCallingUid();
             final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(), callingUid,
@@ -1202,7 +1437,7 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void registerCallback(final ITvIAppManagerCallback callback, int userId) {
+        public void registerCallback(final ITvInteractiveAppManagerCallback callback, int userId) {
             int callingPid = Binder.getCallingPid();
             int callingUid = Binder.getCallingUid();
             final int resolvedUserId = resolveCallingUserId(callingPid, callingUid, userId,
@@ -1221,7 +1456,7 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void unregisterCallback(ITvIAppManagerCallback callback, int userId) {
+        public void unregisterCallback(ITvInteractiveAppManagerCallback callback, int userId) {
             final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(),
                     Binder.getCallingUid(), userId, "unregisterCallback");
             final long identity = Binder.clearCallingIdentity();
@@ -1247,7 +1482,7 @@ public class TvIAppManagerService extends SystemService {
                     try {
                         getSessionLocked(sessionToken, callingUid, resolvedUserId)
                                 .createMediaView(windowToken, frame);
-                    } catch (RemoteException | TvIAppManagerService.SessionNotFoundException e) {
+                    } catch (RemoteException | SessionNotFoundException e) {
                         Slog.e(TAG, "error in createMediaView", e);
                     }
                 }
@@ -1267,7 +1502,7 @@ public class TvIAppManagerService extends SystemService {
                     try {
                         getSessionLocked(sessionToken, callingUid, resolvedUserId)
                                 .relayoutMediaView(frame);
-                    } catch (RemoteException | TvIAppManagerService.SessionNotFoundException e) {
+                    } catch (RemoteException | SessionNotFoundException e) {
                         Slog.e(TAG, "error in relayoutMediaView", e);
                     }
                 }
@@ -1287,7 +1522,7 @@ public class TvIAppManagerService extends SystemService {
                     try {
                         getSessionLocked(sessionToken, callingUid, resolvedUserId)
                                 .removeMediaView();
-                    } catch (RemoteException | TvIAppManagerService.SessionNotFoundException e) {
+                    } catch (RemoteException | SessionNotFoundException e) {
                         Slog.e(TAG, "error in removeMediaView", e);
                     }
                 }
@@ -1298,8 +1533,9 @@ public class TvIAppManagerService extends SystemService {
     }
 
     @GuardedBy("mLock")
-    private void sendSessionTokenToClientLocked(ITvIAppClient client, String iAppServiceId,
-            IBinder sessionToken, InputChannel channel, int seq) {
+    private void sendSessionTokenToClientLocked(
+            ITvInteractiveAppClient client, String iAppServiceId, IBinder sessionToken,
+            InputChannel channel, int seq) {
         try {
             client.onSessionCreated(iAppServiceId, sessionToken, channel, seq);
         } catch (RemoteException e) {
@@ -1308,8 +1544,8 @@ public class TvIAppManagerService extends SystemService {
     }
 
     @GuardedBy("mLock")
-    private boolean createSessionInternalLocked(ITvIAppService service, IBinder sessionToken,
-            int userId) {
+    private boolean createSessionInternalLocked(
+            ITvInteractiveAppService service, IBinder sessionToken, int userId) {
         UserState userState = getOrCreateUserStateLocked(userId);
         SessionState sessionState = userState.mSessionStateMap.get(sessionToken);
         if (DEBUG) {
@@ -1319,7 +1555,7 @@ public class TvIAppManagerService extends SystemService {
         InputChannel[] channels = InputChannel.openInputChannelPair(sessionToken.toString());
 
         // Set up a callback to send the session token.
-        ITvIAppSessionCallback callback = new SessionCallback(sessionState, channels);
+        ITvInteractiveAppSessionCallback callback = new SessionCallback(sessionState, channels);
 
         boolean created = true;
         // Create a session. When failed, send a null token immediately.
@@ -1426,7 +1662,8 @@ public class TvIAppManagerService extends SystemService {
         }
 
         boolean shouldBind = (!serviceState.mSessionTokens.isEmpty())
-                || (serviceState.mPendingPrepare) || (!serviceState.mPendingAppLinkInfo.isEmpty());
+                || (serviceState.mPendingPrepare)
+                || (!serviceState.mPendingAppLinkInfo.isEmpty());
 
         if (serviceState.mService == null && shouldBind) {
             // This means that the service is not yet connected but its state indicates that we
@@ -1440,7 +1677,8 @@ public class TvIAppManagerService extends SystemService {
                 Slogf.d(TAG, "bindServiceAsUser(service=" + component + ", userId=" + userId + ")");
             }
 
-            Intent i = new Intent(TvIAppService.SERVICE_INTERFACE).setComponent(component);
+            Intent i =
+                    new Intent(TvIAppService.SERVICE_INTERFACE).setComponent(component);
             serviceState.mBound = mContext.bindServiceAsUser(
                     i, serviceState.mConnection,
                     Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE,
@@ -1458,20 +1696,20 @@ public class TvIAppManagerService extends SystemService {
 
     private static final class UserState {
         private final int mUserId;
-        // A mapping from the TV IApp ID to its TvIAppState.
-        private Map<String, TvIAppState> mIAppMap = new HashMap<>();
+        // A mapping from the TV Interactive App ID to its TvInteractiveAppState.
+        private Map<String, TvInteractiveAppState> mIAppMap = new HashMap<>();
         // A mapping from the token of a client to its state.
         private final Map<IBinder, ClientState> mClientStateMap = new HashMap<>();
-        // A mapping from the name of a TV IApp service to its state.
+        // A mapping from the name of a TV Interactive App service to its state.
         private final Map<ComponentName, ServiceState> mServiceStateMap = new HashMap<>();
-        // A mapping from the token of a TV IApp session to its state.
+        // A mapping from the token of a TV Interactive App session to its state.
         private final Map<IBinder, SessionState> mSessionStateMap = new HashMap<>();
 
-        // A set of all TV IApp service packages.
+        // A set of all TV Interactive App service packages.
         private final Set<String> mPackageSet = new HashSet<>();
 
         // A list of callbacks.
-        private final RemoteCallbackList<ITvIAppManagerCallback> mCallbacks =
+        private final RemoteCallbackList<ITvInteractiveAppManagerCallback> mCallbacks =
                 new RemoteCallbackList<>();
 
         private UserState(int userId) {
@@ -1479,20 +1717,20 @@ public class TvIAppManagerService extends SystemService {
         }
     }
 
-    private static final class TvIAppState {
+    private static final class TvInteractiveAppState {
         private String mIAppServiceId;
         private ComponentName mComponentName;
-        private TvIAppInfo mInfo;
+        private TvInteractiveAppInfo mInfo;
         private int mUid;
         private int mIAppNumber;
     }
 
     private final class SessionState implements IBinder.DeathRecipient {
         private final IBinder mSessionToken;
-        private ITvIAppSession mSession;
+        private ITvInteractiveAppSession mSession;
         private final String mIAppServiceId;
         private final int mType;
-        private final ITvIAppClient mClient;
+        private final ITvInteractiveAppClient mClient;
         private final int mSeq;
         private final ComponentName mComponent;
 
@@ -1507,8 +1745,8 @@ public class TvIAppManagerService extends SystemService {
         private final int mUserId;
 
         private SessionState(IBinder sessionToken, String iAppServiceId, int type,
-                ComponentName componentName, ITvIAppClient client, int seq, int callingUid,
-                int callingPid, int userId) {
+                ComponentName componentName, ITvInteractiveAppClient client, int seq,
+                int callingUid, int callingPid, int userId) {
             mSessionToken = sessionToken;
             mIAppServiceId = iAppServiceId;
             mComponent = componentName;
@@ -1572,12 +1810,12 @@ public class TvIAppManagerService extends SystemService {
         private final ServiceConnection mConnection;
         private final ComponentName mComponent;
         private final String mIAppServiceId;
-        private final List<Bundle> mPendingAppLinkInfo = new ArrayList<>();
+        private final List<Pair<Bundle, Boolean>> mPendingAppLinkInfo = new ArrayList<>();
         private final List<Bundle> mPendingAppLinkCommand = new ArrayList<>();
 
         private boolean mPendingPrepare = false;
         private Integer mPendingPrepareType = null;
-        private ITvIAppService mService;
+        private ITvInteractiveAppService mService;
         private ServiceCallback mCallback;
         private boolean mBound;
         private boolean mReconnecting;
@@ -1591,12 +1829,12 @@ public class TvIAppManagerService extends SystemService {
             mComponent = component;
             mPendingPrepare = pendingPrepare;
             mPendingPrepareType = prepareType;
-            mConnection = new IAppServiceConnection(component, userId);
+            mConnection = new InteractiveAppServiceConnection(component, userId);
             mIAppServiceId = tias;
         }
 
-        private void addPendingAppLink(Bundle info) {
-            mPendingAppLinkInfo.add(info);
+        private void addPendingAppLink(Bundle info, boolean register) {
+            mPendingAppLinkInfo.add(Pair.create(info, register));
         }
 
         private void addPendingAppLinkCommand(Bundle command) {
@@ -1604,11 +1842,11 @@ public class TvIAppManagerService extends SystemService {
         }
     }
 
-    private final class IAppServiceConnection implements ServiceConnection {
+    private final class InteractiveAppServiceConnection implements ServiceConnection {
         private final ComponentName mComponent;
         private final int mUserId;
 
-        private IAppServiceConnection(ComponentName component, int userId) {
+        private InteractiveAppServiceConnection(ComponentName component, int userId) {
             mComponent = component;
             mUserId = userId;
         }
@@ -1626,7 +1864,7 @@ public class TvIAppManagerService extends SystemService {
                     return;
                 }
                 ServiceState serviceState = userState.mServiceStateMap.get(mComponent);
-                serviceState.mService = ITvIAppService.Stub.asInterface(service);
+                serviceState.mService = ITvInteractiveAppService.Stub.asInterface(service);
 
                 if (serviceState.mPendingPrepare) {
                     final long identity = Binder.clearCallingIdentity();
@@ -1642,15 +1880,20 @@ public class TvIAppManagerService extends SystemService {
                 }
 
                 if (!serviceState.mPendingAppLinkInfo.isEmpty()) {
-                    for (Iterator<Bundle> it = serviceState.mPendingAppLinkInfo.iterator();
+                    for (Iterator<Pair<Bundle, Boolean>> it =
+                            serviceState.mPendingAppLinkInfo.iterator();
                             it.hasNext(); ) {
-                        Bundle appLinkInfo = it.next();
+                        Pair<Bundle, Boolean> appLinkInfoPair = it.next();
                         final long identity = Binder.clearCallingIdentity();
                         try {
-                            serviceState.mService.notifyAppLinkInfo(appLinkInfo);
+                            if (appLinkInfoPair.second) {
+                                serviceState.mService.registerAppLinkInfo(appLinkInfoPair.first);
+                            } else {
+                                serviceState.mService.unregisterAppLinkInfo(appLinkInfoPair.first);
+                            }
                             it.remove();
                         } catch (RemoteException e) {
-                            Slogf.e(TAG, "error in notifyAppLinkInfo(" + appLinkInfo
+                            Slogf.e(TAG, "error in notifyAppLinkInfo(" + appLinkInfoPair
                                     + ") when onServiceConnected", e);
                         } finally {
                             Binder.restoreCallingIdentity(identity);
@@ -1715,7 +1958,7 @@ public class TvIAppManagerService extends SystemService {
         }
     }
 
-    private final class ServiceCallback extends ITvIAppServiceCallback.Stub {
+    private final class ServiceCallback extends ITvInteractiveAppServiceCallback.Stub {
         private final ComponentName mComponent;
         private final int mUserId;
 
@@ -1740,7 +1983,7 @@ public class TvIAppManagerService extends SystemService {
         }
     }
 
-    private final class SessionCallback extends ITvIAppSessionCallback.Stub {
+    private final class SessionCallback extends ITvInteractiveAppSessionCallback.Stub {
         private final SessionState mSessionState;
         private final InputChannel[] mInputChannels;
 
@@ -1750,7 +1993,7 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void onSessionCreated(ITvIAppSession session) {
+        public void onSessionCreated(ITvInteractiveAppSession session) {
             if (DEBUG) {
                 Slogf.d(TAG, "onSessionCreated(iAppServiceId="
                         + mSessionState.mIAppServiceId + ")");
@@ -1828,7 +2071,8 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
-        public void onCommandRequest(@TvIAppService.IAppServiceCommandType String cmdType,
+        public void onCommandRequest(
+                @TvIAppService.InteractiveAppServiceCommandType String cmdType,
                 Bundle parameters) {
             synchronized (mLock) {
                 if (DEBUG) {
@@ -1932,6 +2176,23 @@ public class TvIAppManagerService extends SystemService {
         }
 
         @Override
+        public void onRequestCurrentTvInputId() {
+            synchronized (mLock) {
+                if (DEBUG) {
+                    Slogf.d(TAG, "onRequestCurrentTvInputId");
+                }
+                if (mSessionState.mSession == null || mSessionState.mClient == null) {
+                    return;
+                }
+                try {
+                    mSessionState.mClient.onRequestCurrentTvInputId(mSessionState.mSeq);
+                } catch (RemoteException e) {
+                    Slogf.e(TAG, "error in onRequestCurrentTvInputId", e);
+                }
+            }
+        }
+
+        @Override
         public void onAdRequest(AdRequest request) {
             synchronized (mLock) {
                 if (DEBUG) {
@@ -1984,8 +2245,25 @@ public class TvIAppManagerService extends SystemService {
             }
         }
 
+        @Override
+        public void onTeletextAppStateChanged(int state) {
+            synchronized (mLock) {
+                if (DEBUG) {
+                    Slogf.d(TAG, "onTeletextAppStateChanged (state=" + state + ")");
+                }
+                if (mSessionState.mSession == null || mSessionState.mClient == null) {
+                    return;
+                }
+                try {
+                    mSessionState.mClient.onTeletextAppStateChanged(state, mSessionState.mSeq);
+                } catch (RemoteException e) {
+                    Slogf.e(TAG, "error in onTeletextAppStateChanged", e);
+                }
+            }
+        }
+
         @GuardedBy("mLock")
-        private boolean addSessionTokenToClientStateLocked(ITvIAppSession session) {
+        private boolean addSessionTokenToClientStateLocked(ITvInteractiveAppSession session) {
             try {
                 session.asBinder().linkToDeath(mSessionState, 0);
             } catch (RemoteException e) {

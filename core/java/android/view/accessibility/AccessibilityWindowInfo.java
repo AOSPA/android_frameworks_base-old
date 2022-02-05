@@ -84,6 +84,12 @@ public final class AccessibilityWindowInfo implements Parcelable {
      */
     public static final int TYPE_SPLIT_SCREEN_DIVIDER = 5;
 
+    /**
+     * Window type: A system window used to show the UI for the interaction with
+     * window-based magnification, which includes the magnified content and the option menu.
+     */
+    public static final int TYPE_MAGNIFICATION_OVERLAY = 6;
+
     /* Special values for window IDs */
     /** @hide */
     public static final int ACTIVE_WINDOW_ID = Integer.MAX_VALUE;
@@ -801,6 +807,9 @@ public final class AccessibilityWindowInfo implements Parcelable {
             case TYPE_SPLIT_SCREEN_DIVIDER: {
                 return "TYPE_SPLIT_SCREEN_DIVIDER";
             }
+            case TYPE_MAGNIFICATION_OVERLAY: {
+                return "TYPE_MAGNIFICATION_OVERLAY";
+            }
             default:
                 return "<UNKNOWN:" + type + ">";
         }
@@ -908,7 +917,7 @@ public final class AccessibilityWindowInfo implements Parcelable {
                 final int count = source.readInt();
                 for (int i = 0; i < count; i++) {
                     List<AccessibilityWindowInfo> windows = new ArrayList<>();
-                    source.readParcelableList(windows, loader, android.view.accessibility.AccessibilityWindowInfo.class);
+                    source.readParcelableList(windows, loader);
                     array.put(source.readInt(), windows);
                 }
                 return array;

@@ -116,7 +116,6 @@ import com.android.server.biometrics.sensors.iris.IrisService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
-import com.android.server.communal.CommunalManagerService;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.compat.PlatformCompatNative;
 import com.android.server.connectivity.PacProxyService;
@@ -264,10 +263,6 @@ public final class SystemServer implements Dumpable {
             "com.android.server.companion.virtual.VirtualDeviceManagerService";
     private static final String STATS_COMPANION_APEX_PATH =
             "/apex/com.android.os.statsd/javalib/service-statsd.jar";
-    private static final String SCHEDULING_APEX_PATH =
-            "/apex/com.android.scheduling/javalib/service-scheduling.jar";
-    private static final String REBOOT_READINESS_LIFECYCLE_CLASS =
-            "com.android.server.scheduling.RebootReadinessManagerService$Lifecycle";
     private static final String CONNECTIVITY_SERVICE_APEX_PATH =
             "/apex/com.android.tethering/javalib/service-connectivity.jar";
     private static final String STATS_COMPANION_LIFECYCLE_CLASS =
@@ -314,6 +309,8 @@ public final class SystemServer implements Dumpable {
             "com.android.clockwork.connectivity.WearConnectivityService";
     private static final String WEAR_POWER_SERVICE_CLASS =
             "com.android.clockwork.power.WearPowerService";
+    private static final String HEALTH_SERVICE_CLASS =
+            "com.google.android.clockwork.healthservices.HealthService";
     private static final String WEAR_SIDEKICK_SERVICE_CLASS =
             "com.google.android.clockwork.sidekick.SidekickService";
     private static final String WEAR_DISPLAYOFFLOAD_SERVICE_CLASS =
@@ -924,12 +921,6 @@ public final class SystemServer implements Dumpable {
             startBootstrapServices(t);
             startCoreServices(t);
             startOtherServices(t);
-            // Apex services must be the last category of services to start. No other service must
-            // be starting after this point. This is to prevent unnessary stability issues when
-            // these apexes are updated outside of OTA; and to avoid breaking dependencies from
-            // system into apexes.
-            // TODO(satayev): lock mSystemServiceManager.startService to stop accepting new services
-            // after this step
             startApexServices(t);
         } catch (Throwable ex) {
             Slog.e("System", "******************************************");
@@ -1467,13 +1458,18 @@ public final class SystemServer implements Dumpable {
             ServiceManager.addService("scheduling_policy", new SchedulingPolicyService());
             t.traceEnd();
 
-            t.traceBegin("StartTelecomLoaderService");
-            mSystemServiceManager.startService(TelecomLoaderService.class);
-            t.traceEnd();
+            // TelecomLoader hooks into classes with defined HFP logic,
+            // so check for either telephony or microphone.
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE) ||
+                mPackageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
+                t.traceBegin("StartTelecomLoaderService");
+                mSystemServiceManager.startService(TelecomLoaderService.class);
+                t.traceEnd();
+            }
 
             t.traceBegin("StartTelephonyRegistry");
             telephonyRegistry = new TelephonyRegistry(
-                    context, new TelephonyRegistry.ConfigurationProvider());
+                context, new TelephonyRegistry.ConfigurationProvider());
             ServiceManager.addService("telephony.registry", telephonyRegistry);
             t.traceEnd();
 
@@ -1912,7 +1908,7 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("StartNetworkStatsService");
             try {
-                networkStats = NetworkStatsService.create(context, networkManagement);
+                networkStats = NetworkStatsService.create(context);
                 ServiceManager.addService(Context.NETWORK_STATS_SERVICE, networkStats);
             } catch (Throwable e) {
                 reportWtf("starting NetworkStats Service", e);
@@ -2537,6 +2533,10 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(WEAR_POWER_SERVICE_CLASS);
             t.traceEnd();
 
+            t.traceBegin("StartHealthService");
+            mSystemServiceManager.startService(HEALTH_SERVICE_CLASS);
+            t.traceEnd();
+
             t.traceBegin("StartWearConnectivityService");
             mSystemServiceManager.startService(WEAR_CONNECTIVITY_SERVICE_CLASS);
             t.traceEnd();
@@ -2578,12 +2578,6 @@ public final class SystemServer implements Dumpable {
                 STATS_COMPANION_LIFECYCLE_CLASS, STATS_COMPANION_APEX_PATH);
         t.traceEnd();
 
-        // Reboot Readiness
-        t.traceBegin("StartRebootReadinessManagerService");
-        mSystemServiceManager.startServiceFromJar(
-                REBOOT_READINESS_LIFECYCLE_CLASS, SCHEDULING_APEX_PATH);
-        t.traceEnd();
-
         // Statsd pulled atoms
         t.traceBegin("StartStatsPullAtomService");
         mSystemServiceManager.startService(STATS_PULL_ATOM_SERVICE_CLASS);
@@ -2609,10 +2603,12 @@ public final class SystemServer implements Dumpable {
             mActivityManagerService.enterSafeMode();
         }
 
-        // MMS service broker
-        t.traceBegin("StartMmsService");
-        mmsService = mSystemServiceManager.startService(MmsServiceBroker.class);
-        t.traceEnd();
+        if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
+            // MMS service broker
+            t.traceBegin("StartMmsService");
+            mmsService = mSystemServiceManager.startService(MmsServiceBroker.class);
+            t.traceEnd();
+        }
 
         if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOFILL)) {
             t.traceBegin("StartAutoFillService");
@@ -2725,7 +2721,7 @@ public final class SystemServer implements Dumpable {
         t.traceBegin("MakePowerManagerServiceReady");
         try {
             // TODO: use boot phase
-            mPowerManagerService.systemReady(mActivityManagerService.getAppOpsService());
+            mPowerManagerService.systemReady();
         } catch (Throwable e) {
             reportWtf("making Power Manager Service ready", e);
         }
@@ -2805,12 +2801,6 @@ public final class SystemServer implements Dumpable {
         t.traceBegin("AppCompatOverridesService");
         mSystemServiceManager.startService(APP_COMPAT_OVERRIDES_SERVICE_CLASS);
         t.traceEnd();
-
-        if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_COMMUNAL_MODE)) {
-            t.traceBegin("CommunalManagerService");
-            mSystemServiceManager.startService(CommunalManagerService.class);
-            t.traceEnd();
-        }
 
         // These are needed to propagate to the runnable below.
         final NetworkManagementService networkManagementF = networkManagement;
@@ -3047,9 +3037,7 @@ public final class SystemServer implements Dumpable {
             t.traceEnd();
             t.traceBegin("MakeTelephonyRegistryReady");
             try {
-                if (telephonyRegistryF != null) {
-                    telephonyRegistryF.systemRunning();
-                }
+                if (telephonyRegistryF != null) telephonyRegistryF.systemRunning();
             } catch (Throwable e) {
                 reportWtf("Notifying TelephonyRegistry running", e);
             }
@@ -3063,15 +3051,15 @@ public final class SystemServer implements Dumpable {
                 reportWtf("Notifying MediaRouterService running", e);
             }
             t.traceEnd();
-            t.traceBegin("MakeMmsServiceReady");
-            try {
-                if (mmsServiceF != null) {
-                    mmsServiceF.systemRunning();
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
+                t.traceBegin("MakeMmsServiceReady");
+                try {
+                    if (mmsServiceF != null) mmsServiceF.systemRunning();
+                } catch (Throwable e) {
+                    reportWtf("Notifying MmsService running", e);
                 }
-            } catch (Throwable e) {
-                reportWtf("Notifying MmsService running", e);
+                t.traceEnd();
             }
-            t.traceEnd();
 
             t.traceBegin("IncidentDaemonReady");
             try {
@@ -3107,11 +3095,14 @@ public final class SystemServer implements Dumpable {
 
     /**
      * Starts system services defined in apexes.
+     *
+     * <p>Apex services must be the last category of services to start. No other service must be
+     * starting after this point. This is to prevent unnecessary stability issues when these apexes
+     * are updated outside of OTA; and to avoid breaking dependencies from system into apexes.
      */
     private void startApexServices(@NonNull TimingsTraceAndSlog t) {
         t.traceBegin("startApexServices");
         Map<String, String> services = ApexManager.getInstance().getApexSystemServices();
-        // TODO(satayev): filter out already started services
         // TODO(satayev): introduce android:order for services coming the same apexes
         for (String name : new TreeSet<>(services.keySet())) {
             String jarPath = services.get(name);
@@ -3123,6 +3114,10 @@ public final class SystemServer implements Dumpable {
             }
             t.traceEnd();
         }
+
+        // make sure no other services are started after this point
+        mSystemServiceManager.sealStartedServices();
+
         t.traceEnd(); // startApexServices
     }
 

@@ -178,36 +178,6 @@ public class RuntimeShader extends Shader {
         setUniform(uniformName, values, false);
     }
 
-    /**
-     * Old method signature used by some callers within the platform code
-     * @hide
-     * @deprecated use setFloatUniform instead
-     */
-    @Deprecated
-    public void setUniform(@NonNull String uniformName, float[] values) {
-        setFloatUniform(uniformName, values);
-    }
-
-    /**
-     * Old method signature used by some callers within the platform code
-     * @hide
-     * @deprecated use setFloatUniform instead
-     */
-    @Deprecated
-    public void setUniform(@NonNull String uniformName, float value) {
-        setFloatUniform(uniformName, value);
-    }
-
-    /**
-     * Old method signature used by some callers within the platform code
-     * @hide
-     * @deprecated use setFloatUniform instead
-     */
-    @Deprecated
-    public void setUniform(@NonNull String uniformName, float value1, float value2) {
-        setFloatUniform(uniformName, value1, value2);
-    }
-
     private void setFloatUniform(@NonNull String uniformName, float value1, float value2,
             float value3, float value4, int count) {
         if (uniformName == null) {
@@ -309,11 +279,11 @@ public class RuntimeShader extends Shader {
     }
 
     /**
-     * Sets the uniform shader that is declares as input to this shader.  If the shader does not
+     * Assigns the uniform shader to the provided shader parameter.  If the shader program does not
      * have a uniform shader with that name then an IllegalArgumentException is thrown.
      *
-     * @param shaderName name matching the uniform declared in the SKSL shader
-     * @param shader shader passed into the SKSL shader for sampling
+     * @param shaderName name matching the uniform declared in the AGSL shader program
+     * @param shader shader passed into the AGSL shader program for sampling
      */
     public void setInputShader(@NonNull String shaderName, @NonNull Shader shader) {
         if (shaderName == null) {
@@ -326,6 +296,28 @@ public class RuntimeShader extends Shader {
                     mNativeInstanceRuntimeShaderBuilder, shaderName, shader.getNativeInstance());
         discardNativeInstance();
     }
+
+    /**
+     * Assigns the uniform shader to the provided shader parameter.  If the shader program does not
+     * have a uniform shader with that name then an IllegalArgumentException is thrown.
+     *
+     * Unlike setInputShader this method returns samples directly from the bitmap's buffer. This
+     * means that there will be no transformation of the sampled pixels, such as colorspace
+     * conversion or alpha premultiplication.
+     */
+    public void setInputBuffer(@NonNull String shaderName, @NonNull BitmapShader shader) {
+        if (shaderName == null) {
+            throw new NullPointerException("The shaderName parameter must not be null");
+        }
+        if (shader == null) {
+            throw new NullPointerException("The shader parameter must not be null");
+        }
+
+        nativeUpdateShader(mNativeInstanceRuntimeShaderBuilder, shaderName,
+                shader.getNativeInstanceWithDirectSampling());
+        discardNativeInstance();
+    }
+
 
     /** @hide */
     @Override

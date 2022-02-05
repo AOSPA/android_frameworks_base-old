@@ -27,8 +27,6 @@ import android.content.pm.ServiceInfo
 import android.content.pm.Signature
 import android.content.pm.SigningDetails
 import android.content.pm.UserInfo
-import android.content.pm.parsing.ParsingPackage
-import android.content.pm.parsing.ParsingPackageUtils
 import android.content.pm.parsing.result.ParseTypeImpl
 import android.content.res.Resources
 import android.hardware.display.DisplayManager
@@ -68,12 +66,15 @@ import com.android.server.pm.parsing.pkg.AndroidPackage
 import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.parsing.pkg.ParsedPackage
 import com.android.server.pm.permission.PermissionManagerServiceInternal
+import com.android.server.pm.pkg.parsing.ParsingPackage
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal
 import com.android.server.testutils.TestHandler
 import com.android.server.testutils.mock
 import com.android.server.testutils.nullable
 import com.android.server.testutils.whenever
 import com.android.server.utils.WatchedArrayMap
+import libcore.util.HexEncoding
 import org.junit.Assert
 import org.junit.rules.TestRule
 import org.junit.runner.Description
@@ -140,6 +141,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
                 .mockStatic(EventLog::class.java)
                 .mockStatic(LocalServices::class.java)
                 .mockStatic(DeviceConfig::class.java)
+                .mockStatic(HexEncoding::class.java)
                 .apply(withSession)
         session = apply.startMocking()
         whenever(mocks.settings.insertPackageSettingLPw(

@@ -1558,9 +1558,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     void onDisplayChanged(DisplayContent dc) {
         DisplayContent prevDc = mDisplayContent;
         super.onDisplayChanged(dc);
-        if (prevDc == null || prevDc == mDisplayContent) {
+        if (prevDc == mDisplayContent) {
             return;
         }
+
+        mDisplayContent.onRunningActivityChanged();
+
+        if (prevDc == null) {
+            return;
+        }
+        prevDc.onRunningActivityChanged();
 
         // TODO(b/169035022): move to a more-appropriate place.
         mTransitionController.collect(this);
@@ -1635,6 +1642,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         // Trigger TaskInfoChanged to update the camera compat UI.
         getTask().dispatchTaskInfoChangedIfNeeded(true /* force */);
+        // TaskOrganizerController#onTaskInfoChanged adds pending task events to the queue waiting
+        // for the surface placement to be ready. So need to trigger surface placement to dispatch
+        // events to avoid stale state for the camera compat control.
+        getDisplayContent().setLayoutNeeded();
+        mWmService.mWindowPlacerLocked.performSurfacePlacement();
     }
 
     void updateCameraCompatStateFromUser(@CameraCompatControlState int state) {
@@ -2153,7 +2165,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         return activityInfo != null ? activityInfo.applicationInfo : null;
                     });
 
-        final int typeParameter = mWmService.mStartingSurfaceController
+        final int typeParameter = StartingSurfaceController
                 .makeStartingWindowTypeParameter(newTask, taskSwitch, processRunning,
                         allowTaskSnapshot, activityCreated, useEmpty, useLegacy, activityAllDrawn);
 
@@ -3928,6 +3940,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         // Reset the last saved PiP snap fraction on removal.
         mDisplayContent.mPinnedTaskController.onActivityHidden(mActivityComponent);
+        mDisplayContent.onRunningActivityChanged();
         mWmService.mEmbeddedWindowController.onActivityRemoved(this);
         mRemovingFromDisplay = false;
     }
@@ -6731,13 +6744,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return splashScreenThemeResId;
     }
 
+    void showStartingWindow(ActivityRecord prev, boolean newTask, boolean taskSwitch,
+            boolean startActivity, ActivityRecord sourceRecord) {
+        showStartingWindow(prev, newTask, taskSwitch, isProcessRunning(), startActivity,
+                sourceRecord);
+    }
+
     /**
      * @param prev Previous activity which contains a starting window.
+     * @param processRunning Whether the client process is running.
      * @param startActivity Whether this activity is just created from starter.
      * @param sourceRecord The source activity which start this activity.
      */
     void showStartingWindow(ActivityRecord prev, boolean newTask, boolean taskSwitch,
-            boolean startActivity, ActivityRecord sourceRecord) {
+            boolean processRunning, boolean startActivity, ActivityRecord sourceRecord) {
         if (mTaskOverlay) {
             // We don't show starting window for overlay activities.
             return;
@@ -6762,7 +6782,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 && task.getActivity((r) -> !r.finishing && r != this) == null;
 
         final boolean scheduled = addStartingWindow(packageName, resolvedTheme,
-                prev, newTask || newSingleActivity, taskSwitch, isProcessRunning(),
+                prev, newTask || newSingleActivity, taskSwitch, processRunning,
                 allowTaskSnapshot(), activityCreated, mSplashScreenStyleEmpty, allDrawn);
         if (DEBUG_STARTING_WINDOW_VERBOSE && scheduled) {
             Slog.d(TAG, "Scheduled starting window for " + this);

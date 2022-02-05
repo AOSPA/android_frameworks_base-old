@@ -91,7 +91,6 @@ import static com.android.server.pm.PackageManagerServiceUtils.verifySignatures;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
-import android.app.AppOpsManager;
 import android.app.ApplicationPackageManager;
 import android.app.backup.IBackupManager;
 import android.content.ContentResolver;
@@ -113,11 +112,6 @@ import android.content.pm.Signature;
 import android.content.pm.SigningDetails;
 import android.content.pm.VerifierInfo;
 import android.content.pm.dex.DexMetadataHelper;
-import android.content.pm.parsing.ParsingPackageUtils;
-import android.content.pm.parsing.component.ComponentMutateUtils;
-import android.content.pm.parsing.component.ParsedInstrumentation;
-import android.content.pm.parsing.component.ParsedPermission;
-import android.content.pm.parsing.component.ParsedPermissionGroup;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.net.Uri;
@@ -163,6 +157,11 @@ import com.android.server.pm.parsing.pkg.ParsedPackage;
 import com.android.server.pm.permission.Permission;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.PackageStateInternal;
+import com.android.server.pm.pkg.component.ComponentMutateUtils;
+import com.android.server.pm.pkg.component.ParsedInstrumentation;
+import com.android.server.pm.pkg.component.ParsedPermission;
+import com.android.server.pm.pkg.component.ParsedPermissionGroup;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import com.android.server.rollback.RollbackManagerInternal;
 import com.android.server.utils.WatchedArrayMap;
 import com.android.server.utils.WatchedLongSparseArray;
@@ -195,38 +194,32 @@ final class InstallPackageHelper {
     private final AppDataHelper mAppDataHelper;
     private final BroadcastHelper mBroadcastHelper;
     private final RemovePackageHelper mRemovePackageHelper;
-    private final StorageManager mStorageManager;
-    private final RollbackManagerInternal mRollbackManager;
     private final IncrementalManager mIncrementalManager;
     private final ApexManager mApexManager;
     private final DexManager mDexManager;
     private final ArtManagerService mArtManagerService;
-    private final AppOpsManager mAppOpsManager;
     private final Context mContext;
     private final PackageDexOptimizer mPackageDexOptimizer;
     private final PackageAbiHelper mPackageAbiHelper;
     private final ViewCompiler mViewCompiler;
-    private final IBackupManager mIBackupManager;
     private final SharedLibrariesImpl mSharedLibraries;
+    private final PackageManagerServiceInjector mInjector;
 
     // TODO(b/198166813): remove PMS dependency
     InstallPackageHelper(PackageManagerService pm, AppDataHelper appDataHelper) {
         mPm = pm;
+        mInjector = pm.mInjector;
         mAppDataHelper = appDataHelper;
         mBroadcastHelper = new BroadcastHelper(pm.mInjector);
         mRemovePackageHelper = new RemovePackageHelper(pm);
-        mStorageManager = pm.mInjector.getSystemService(StorageManager.class);
-        mRollbackManager = pm.mInjector.getLocalService(RollbackManagerInternal.class);
         mIncrementalManager = pm.mInjector.getIncrementalManager();
         mApexManager = pm.mInjector.getApexManager();
         mDexManager = pm.mInjector.getDexManager();
         mArtManagerService = pm.mInjector.getArtManagerService();
-        mAppOpsManager = pm.mInjector.getSystemService(AppOpsManager.class);
         mContext = pm.mInjector.getContext();
         mPackageDexOptimizer = pm.mInjector.getPackageDexOptimizer();
         mPackageAbiHelper = pm.mInjector.getAbiHelper();
         mViewCompiler = pm.mInjector.getViewCompiler();
-        mIBackupManager = pm.mInjector.getIBackupManager();
         mSharedLibraries = pm.mInjector.getSharedLibrariesImpl();
     }
 
@@ -693,7 +686,8 @@ final class InstallPackageHelper {
      * Returns whether the restore successfully completed.
      */
     private boolean performBackupManagerRestore(int userId, int token, PackageInstalledInfo res) {
-        if (mIBackupManager != null) {
+        IBackupManager iBackupManager = mInjector.getIBackupManager();
+        if (iBackupManager != null) {
             // For backwards compatibility as USER_ALL previously routed directly to USER_SYSTEM
             // in the BackupManager. USER_ALL is used in compatibility tests.
             if (userId == UserHandle.USER_ALL) {
@@ -704,8 +698,8 @@ final class InstallPackageHelper {
             }
             Trace.asyncTraceBegin(TRACE_TAG_PACKAGE_MANAGER, "restore", token);
             try {
-                if (mIBackupManager.isUserReadyForBackup(userId)) {
-                    mIBackupManager.restoreAtInstallForUser(
+                if (iBackupManager.isUserReadyForBackup(userId)) {
+                    iBackupManager.restoreAtInstallForUser(
                             userId, res.mPkg.getPackageName(), token);
                 } else {
                     Slog.w(TAG, "User " + userId + " is not ready. Restore at install "
@@ -756,7 +750,9 @@ final class InstallPackageHelper {
 
         if (ps != null && doSnapshotOrRestore) {
             final String seInfo = AndroidPackageUtils.getSeInfo(res.mPkg, ps);
-            mRollbackManager.snapshotAndRestoreUserData(packageName,
+            final RollbackManagerInternal rollbackManager =
+                    mInjector.getLocalService(RollbackManagerInternal.class);
+            rollbackManager.snapshotAndRestoreUserData(packageName,
                     UserHandle.toUserHandles(installedUsers), appId, ceDataInode, seInfo, token);
             return true;
         }
@@ -894,8 +890,6 @@ final class InstallPackageHelper {
         final Map<String, PackageInstalledInfo> installResults = new ArrayMap<>(requests.size());
         final Map<String, PrepareResult> prepareResults = new ArrayMap<>(requests.size());
         final Map<String, Settings.VersionInfo> versionInfos = new ArrayMap<>(requests.size());
-        final Map<String, PackageSetting> lastStaticSharedLibSettings =
-                new ArrayMap<>(requests.size());
         final Map<String, Boolean> createdAppId = new ArrayMap<>(requests.size());
         boolean success = false;
         try {
@@ -955,35 +949,22 @@ final class InstallPackageHelper {
                     createdAppId.put(packageName, optimisticallyRegisterAppId(result));
                     versionInfos.put(result.mPkgSetting.getPkg().getPackageName(),
                             mPm.getSettingsVersionForPackage(result.mPkgSetting.getPkg()));
-                    if (result.mStaticSharedLibraryInfo != null) {
-                        final PackageSetting staticSharedLibLatestVersionSetting =
-                                mSharedLibraries.getStaticSharedLibLatestVersionSetting(result);
-                        if (staticSharedLibLatestVersionSetting != null) {
-                            lastStaticSharedLibSettings.put(
-                                    result.mPkgSetting.getPkg().getPackageName(),
-                                    staticSharedLibLatestVersionSetting);
-                        }
-                    }
                 } catch (PackageManagerException e) {
                     request.mInstallResult.setError("Scanning Failed.", e);
                     return;
                 }
             }
-            ReconcileRequest
-                    reconcileRequest = new ReconcileRequest(preparedScans, installArgs,
-                    installResults,
-                    prepareResults,
-                    mSharedLibraries.getAll(),
-                    Collections.unmodifiableMap(mPm.mPackages), versionInfos,
-                    lastStaticSharedLibSettings);
+            ReconcileRequest reconcileRequest = new ReconcileRequest(preparedScans, installArgs,
+                    installResults, prepareResults,
+                    Collections.unmodifiableMap(mPm.mPackages), versionInfos);
             CommitRequest commitRequest = null;
             synchronized (mPm.mLock) {
                 Map<String, ReconciledPackage> reconciledPackages;
                 try {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "reconcilePackages");
                     reconciledPackages = ReconcilePackageUtils.reconcilePackages(
-                            reconcileRequest, mPm.mSettings.getKeySetManagerService(),
-                            mPm.mInjector);
+                            reconcileRequest, mSharedLibraries,
+                            mPm.mSettings.getKeySetManagerService());
                 } catch (ReconcileFailure e) {
                     for (InstallRequest request : requests) {
                         request.mInstallResult.setError("Reconciliation failed...", e);
@@ -1226,21 +1207,36 @@ final class InstallPackageHelper {
             }
 
             PackageSetting ps = mPm.mSettings.getPackageLPr(pkgName);
-            if (ps != null) {
-                if (DEBUG_INSTALL) Slog.d(TAG, "Existing package: " + ps);
+            PackageSetting signatureCheckPs = ps;
 
-                // Static shared libs have same package with different versions where
-                // we internally use a synthetic package name to allow multiple versions
-                // of the same package, therefore we need to compare signatures against
-                // the package setting for the latest library version.
-                PackageSetting signatureCheckPs = ps;
-                if (parsedPackage.isStaticSharedLibrary()) {
-                    SharedLibraryInfo libraryInfo = mSharedLibraries.getLatestSharedLibraVersionLPr(
-                            parsedPackage);
-                    if (libraryInfo != null) {
-                        signatureCheckPs = mPm.mSettings.getPackageLPr(
-                                libraryInfo.getPackageName());
-                    }
+            // SDK libs can have other major versions with different package names.
+            if (signatureCheckPs == null && parsedPackage.isSdkLibrary()) {
+                WatchedLongSparseArray<SharedLibraryInfo> libraryInfos =
+                        mSharedLibraries.getSharedLibraryInfos(
+                                parsedPackage.getSdkLibName());
+                if (libraryInfos != null && libraryInfos.size() > 0) {
+                    // Any existing version would do.
+                    SharedLibraryInfo libraryInfo = libraryInfos.valueAt(0);
+                    signatureCheckPs = mPm.mSettings.getPackageLPr(libraryInfo.getPackageName());
+                }
+            }
+
+            // Static shared libs have same package with different versions where
+            // we internally use a synthetic package name to allow multiple versions
+            // of the same package, therefore we need to compare signatures against
+            // the package setting for the latest library version.
+            if (parsedPackage.isStaticSharedLibrary()) {
+                SharedLibraryInfo libraryInfo =
+                        mSharedLibraries.getLatestStaticSharedLibraVersionLPr(parsedPackage);
+                if (libraryInfo != null) {
+                    signatureCheckPs = mPm.mSettings.getPackageLPr(libraryInfo.getPackageName());
+                }
+            }
+
+            if (signatureCheckPs != null) {
+                if (DEBUG_INSTALL) {
+                    Slog.d(TAG,
+                            "Existing package for signature checking: " + signatureCheckPs);
                 }
 
                 // Quick validity check that we're signed correctly if updating;
@@ -1275,6 +1271,10 @@ final class InstallPackageHelper {
                         throw new PrepareFailure(e.error, e.getMessage());
                     }
                 }
+            }
+
+            if (ps != null) {
+                if (DEBUG_INSTALL) Slog.d(TAG, "Existing package: " + ps);
 
                 if (ps.getPkg() != null) {
                     systemApp = ps.getPkg().isSystem();
@@ -1984,14 +1984,15 @@ final class InstallPackageHelper {
                             reconciledPkg.mPrepareResult.mExistingPackage.getPackageName());
                     if ((reconciledPkg.mInstallArgs.mInstallFlags & PackageManager.DONT_KILL_APP)
                             == 0) {
-                        if (ps1.getOldCodePaths() == null) {
-                            ps1.setOldCodePaths(new ArraySet<>());
+                        Set<String> oldCodePaths = ps1.getOldCodePaths();
+                        if (oldCodePaths == null) {
+                            oldCodePaths = new ArraySet<>();
                         }
-                        Collections.addAll(ps1.getOldCodePaths(), oldPackage.getBaseApkPath());
+                        Collections.addAll(oldCodePaths, oldPackage.getBaseApkPath());
                         if (oldPackage.getSplitCodePaths() != null) {
-                            Collections.addAll(ps1.getOldCodePaths(),
-                                    oldPackage.getSplitCodePaths());
+                            Collections.addAll(oldCodePaths, oldPackage.getSplitCodePaths());
                         }
+                        ps1.setOldCodePaths(oldCodePaths);
                     } else {
                         ps1.setOldCodePaths(null);
                     }
@@ -2802,8 +2803,10 @@ final class InstallPackageHelper {
                 // Send broadcast package appeared if external for all users
                 if (res.mPkg.isExternalStorage()) {
                     if (!update) {
+                        final StorageManager storageManager =
+                                mInjector.getSystemService(StorageManager.class);
                         VolumeInfo volume =
-                                mStorageManager.findVolumeByUuid(
+                                storageManager.findVolumeByUuid(
                                         StorageManager.convert(
                                                 res.mPkg.getVolumeUuid()).toString());
                         int packageExternalStorageType =
@@ -3586,15 +3589,12 @@ final class InstallPackageHelper {
                     final String pkgName = scanResult.mPkgSetting.getPackageName();
                     final ReconcileRequest reconcileRequest = new ReconcileRequest(
                             Collections.singletonMap(pkgName, scanResult),
-                            mSharedLibraries.getAll(), mPm.mPackages,
+                            mPm.mPackages,
                             Collections.singletonMap(pkgName,
-                                    mPm.getSettingsVersionForPackage(parsedPackage)),
-                            Collections.singletonMap(pkgName,
-                                    mSharedLibraries.getStaticSharedLibLatestVersionSetting(
-                                            scanResult)));
+                                    mPm.getSettingsVersionForPackage(parsedPackage)));
                     final Map<String, ReconciledPackage> reconcileResult =
                             ReconcilePackageUtils.reconcilePackages(reconcileRequest,
-                                    mPm.mSettings.getKeySetManagerService(), mPm.mInjector);
+                                    mSharedLibraries, mPm.mSettings.getKeySetManagerService());
                     appIdCreated = optimisticallyRegisterAppId(scanResult);
                     commitReconciledScanResultLocked(reconcileResult.get(pkgName),
                             mPm.mUserManager.getUserIds());

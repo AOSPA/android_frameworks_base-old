@@ -50,13 +50,13 @@ import android.content.pm.SuspendDialogInfo;
 import android.content.pm.UserInfo;
 import android.content.pm.VerifierDeviceIdentity;
 import android.content.pm.overlay.OverlayPaths;
-import android.content.pm.parsing.PackageInfoWithoutStateUtils;
-import android.content.pm.parsing.component.ParsedComponent;
-import android.content.pm.parsing.component.ParsedIntentInfo;
-import android.content.pm.parsing.component.ParsedMainComponent;
-import android.content.pm.parsing.component.ParsedPermission;
-import android.content.pm.parsing.component.ParsedProcess;
-import android.content.pm.pkg.PackageUserStateUtils;
+import com.android.server.pm.pkg.parsing.PackageInfoWithoutStateUtils;
+import com.android.server.pm.pkg.component.ParsedComponent;
+import com.android.server.pm.pkg.component.ParsedIntentInfo;
+import com.android.server.pm.pkg.component.ParsedMainComponent;
+import com.android.server.pm.pkg.component.ParsedPermission;
+import com.android.server.pm.pkg.component.ParsedProcess;
+import com.android.server.pm.pkg.PackageUserStateUtils;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -4863,11 +4863,11 @@ public final class Settings implements Watchable, Snappable {
             pw.print(userState.isInstantApp());
             pw.print(" virtual=");
             pw.println(userState.isVirtualPreload());
-            pw.print(" installReason=");
+            pw.print("      installReason=");
             pw.println(userState.getInstallReason());
 
             final PackageUserStateInternal pus = ps.readUserState(user.id);
-            pw.print(" firstInstallTime=");
+            pw.print("      firstInstallTime=");
             date.setTime(pus.getFirstInstallTime());
             pw.println(sdf.format(date));
 

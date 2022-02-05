@@ -37,6 +37,7 @@ import android.util.TimeUtils;
 import android.view.SurfaceControlHdrLayerInfoListener;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.display.DisplayDeviceConfig.HighBrightnessModeData;
 import com.android.server.display.DisplayManagerService.Clock;
 
@@ -80,6 +81,7 @@ class HighBrightnessModeController {
     private boolean mIsInAllowedAmbientRange = false;
     private boolean mIsTimeAvailable = false;
     private boolean mIsAutoBrightnessEnabled = false;
+    private boolean mIsAutoBrightnessOffByState = false;
     private float mBrightness;
     private int mHbmMode = BrightnessInfo.HIGH_BRIGHTNESS_MODE_OFF;
     private boolean mIsHdrLayerPresent = false;
@@ -88,6 +90,8 @@ class HighBrightnessModeController {
     private int mWidth;
     private int mHeight;
     private float mAmbientLux;
+    private int mDisplayStatsId;
+    private int mHbmStatsState = FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__STATE__HBM_OFF;
 
     /**
      * If HBM is currently running, this is the start time for the current HBM session.
@@ -102,15 +106,15 @@ class HighBrightnessModeController {
     private LinkedList<HbmEvent> mEvents = new LinkedList<>();
 
     HighBrightnessModeController(Handler handler, int width, int height, IBinder displayToken,
-            float brightnessMin, float brightnessMax, HighBrightnessModeData hbmData,
-            Runnable hbmChangeCallback, Context context) {
-        this(new Injector(), handler, width, height, displayToken, brightnessMin, brightnessMax,
-                hbmData, hbmChangeCallback, context);
+            String displayUniqueId, float brightnessMin, float brightnessMax,
+            HighBrightnessModeData hbmData, Runnable hbmChangeCallback, Context context) {
+        this(new Injector(), handler, width, height, displayToken, displayUniqueId, brightnessMin,
+            brightnessMax, hbmData, hbmChangeCallback, context);
     }
 
     @VisibleForTesting
     HighBrightnessModeController(Injector injector, Handler handler, int width, int height,
-            IBinder displayToken, float brightnessMin, float brightnessMax,
+            IBinder displayToken, String displayUniqueId, float brightnessMin, float brightnessMax,
             HighBrightnessModeData hbmData, Runnable hbmChangeCallback,
             Context context) {
         mInjector = injector;
@@ -126,10 +130,13 @@ class HighBrightnessModeController {
         mRecalcRunnable = this::recalculateTimeAllowance;
         mHdrListener = new HdrListener();
 
-        resetHbmData(width, height, displayToken, hbmData);
+        resetHbmData(width, height, displayToken, displayUniqueId, hbmData);
     }
 
-    void setAutoBrightnessEnabled(boolean isEnabled) {
+    void setAutoBrightnessEnabled(int state) {
+        final boolean isEnabled = state == AutomaticBrightnessController.AUTO_BRIGHTNESS_ENABLED;
+        mIsAutoBrightnessOffByState =
+                state == AutomaticBrightnessController.AUTO_BRIGHTNESS_OFF_DUE_TO_DISPLAY_STATE;
         if (!deviceSupportsHbm() || isEnabled == mIsAutoBrightnessEnabled) {
             return;
         }
@@ -231,10 +238,12 @@ class HighBrightnessModeController {
         mSettingsObserver.stopObserving();
     }
 
-    void resetHbmData(int width, int height, IBinder displayToken, HighBrightnessModeData hbmData) {
+    void resetHbmData(int width, int height, IBinder displayToken, String displayUniqueId,
+            HighBrightnessModeData hbmData) {
         mWidth = width;
         mHeight = height;
         mHbmData = hbmData;
+        mDisplayStatsId = displayUniqueId.hashCode();
 
         unregisterHdrListener();
         mSkinThermalStatusObserver.stopObserving();
@@ -270,11 +279,13 @@ class HighBrightnessModeController {
         pw.println("  mHbmMode=" + BrightnessInfo.hbmToString(mHbmMode)
                 + (mHbmMode == BrightnessInfo.HIGH_BRIGHTNESS_MODE_HDR
                 ? "(" + getHdrBrightnessValue() + ")" : ""));
+        pw.println("  mHbmStatsState=" + hbmStatsStateToString(mHbmStatsState));
         pw.println("  mHbmData=" + mHbmData);
         pw.println("  mAmbientLux=" + mAmbientLux
                 + (mIsAutoBrightnessEnabled ? "" : " (old/invalid)"));
         pw.println("  mIsInAllowedAmbientRange=" + mIsInAllowedAmbientRange);
         pw.println("  mIsAutoBrightnessEnabled=" + mIsAutoBrightnessEnabled);
+        pw.println("  mIsAutoBrightnessOffByState=" + mIsAutoBrightnessOffByState);
         pw.println("  mIsHdrLayerPresent=" + mIsHdrLayerPresent);
         pw.println("  mBrightnessMin=" + mBrightnessMin);
         pw.println("  mBrightnessMax=" + mBrightnessMax);
@@ -435,9 +446,68 @@ class HighBrightnessModeController {
 
     private void updateHbmMode() {
         int newHbmMode = calculateHighBrightnessMode();
+        updateHbmStats(mHbmMode, newHbmMode);
         if (mHbmMode != newHbmMode) {
             mHbmMode = newHbmMode;
             mHbmChangeCallback.run();
+        }
+    }
+
+    private void updateHbmStats(int mode, int newMode) {
+        int state = FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__STATE__HBM_OFF;
+        if (newMode == BrightnessInfo.HIGH_BRIGHTNESS_MODE_HDR
+                && getHdrBrightnessValue() > mHbmData.transitionPoint) {
+            state = FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__STATE__HBM_ON_HDR;
+        } else if (newMode == BrightnessInfo.HIGH_BRIGHTNESS_MODE_SUNLIGHT) {
+            state = FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__STATE__HBM_ON_SUNLIGHT;
+        }
+        if (state == mHbmStatsState) {
+            return;
+        }
+        mHbmStatsState = state;
+
+        int reason =
+                FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__REASON__HBM_TRANSITION_REASON_UNKNOWN;
+        boolean oldHbmSv = (mode == BrightnessInfo.HIGH_BRIGHTNESS_MODE_SUNLIGHT);
+        boolean newHbmSv = (newMode == BrightnessInfo.HIGH_BRIGHTNESS_MODE_SUNLIGHT);
+        if (oldHbmSv && !newHbmSv) {
+            // If more than one conditions are flipped and turn off HBM sunlight
+            // visibility, only one condition will be reported to make it simple.
+            if (!mIsAutoBrightnessEnabled && mIsAutoBrightnessOffByState) {
+                reason = FrameworkStatsLog
+                                 .DISPLAY_HBM_STATE_CHANGED__REASON__HBM_SV_OFF_DISPLAY_OFF;
+            } else if (!mIsAutoBrightnessEnabled) {
+                reason = FrameworkStatsLog
+                                 .DISPLAY_HBM_STATE_CHANGED__REASON__HBM_SV_OFF_AUTOBRIGHTNESS_OFF;
+            } else if (!mIsInAllowedAmbientRange) {
+                reason = FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__REASON__HBM_SV_OFF_LUX_DROP;
+            } else if (!mIsTimeAvailable) {
+                reason = FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__REASON__HBM_SV_OFF_TIME_LIMIT;
+            } else if (!mIsThermalStatusWithinLimit) {
+                reason = FrameworkStatsLog
+                                 .DISPLAY_HBM_STATE_CHANGED__REASON__HBM_SV_OFF_THERMAL_LIMIT;
+            } else if (mIsHdrLayerPresent) {
+                reason = FrameworkStatsLog
+                                 .DISPLAY_HBM_STATE_CHANGED__REASON__HBM_SV_OFF_HDR_PLAYING;
+            } else if (mIsBlockedByLowPowerMode) {
+                reason = FrameworkStatsLog
+                                 .DISPLAY_HBM_STATE_CHANGED__REASON__HBM_SV_OFF_BATTERY_SAVE_ON;
+            }
+        }
+
+        mInjector.reportHbmStateChange(mDisplayStatsId, state, reason);
+    }
+
+    private String hbmStatsStateToString(int hbmStatsState) {
+        switch (hbmStatsState) {
+        case FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__STATE__HBM_OFF:
+            return "HBM_OFF";
+        case FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__STATE__HBM_ON_HDR:
+            return "HBM_ON_HDR";
+        case FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED__STATE__HBM_ON_SUNLIGHT:
+            return "HBM_ON_SUNLIGHT";
+        default:
+            return String.valueOf(hbmStatsState);
         }
     }
 
@@ -641,6 +711,11 @@ class HighBrightnessModeController {
         public IThermalService getThermalService() {
             return IThermalService.Stub.asInterface(
                     ServiceManager.getService(Context.THERMAL_SERVICE));
+        }
+
+        public void reportHbmStateChange(int display, int state, int reason) {
+            FrameworkStatsLog.write(
+                    FrameworkStatsLog.DISPLAY_HBM_STATE_CHANGED, display, state, reason);
         }
     }
 }

@@ -1816,6 +1816,10 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ODI_CAPTIONS_VOLUME_UI_ENABLED,
                 SecureSettingsProto.Accessibility.ODI_CAPTIONS_VOLUME_UI_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED,
+                SecureSettingsProto.Accessibility
+                        .ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED);
         p.end(accessibilityToken);
 
         final long adaptiveSleepToken = p.start(SecureSettingsProto.ADAPTIVE_SLEEP);
@@ -2915,6 +2919,18 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.System.VIBRATE_WHEN_RINGING,
                 SystemSettingsProto.Vibrate.WHEN_RINGING);
+
+        // NOTIFICATION_VIBRATION_INTENSITY is already logged at Notification.vibration_intensity
+        // HAPTIC_FEEDBACK_INTENSITY is already logged at HapticFeedback.intensity
+        dumpSetting(s, p,
+                Settings.System.ALARM_VIBRATION_INTENSITY,
+                SystemSettingsProto.Vibrate.ALARM_INTENSITY);
+        dumpSetting(s, p,
+                Settings.System.MEDIA_VIBRATION_INTENSITY,
+                SystemSettingsProto.Vibrate.MEDIA_INTENSITY);
+        dumpSetting(s, p,
+                Settings.System.RING_VIBRATION_INTENSITY,
+                SystemSettingsProto.Vibrate.RING_INTENSITY);
         p.end(vibrateToken);
 
         final long volumeToken = p.start(SystemSettingsProto.VOLUME);

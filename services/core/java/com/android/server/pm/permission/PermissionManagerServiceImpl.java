@@ -19,8 +19,6 @@ package com.android.server.pm.permission;
 import static android.Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY;
 import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
-import static android.app.AppOpsManager.MODE_ALLOWED;
-import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.content.pm.PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_AUTO_REVOKED;
@@ -63,7 +61,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.compat.annotation.ChangeId;
@@ -76,11 +73,11 @@ import android.content.pm.PackageManagerInternal;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.content.pm.SigningDetails;
-import android.content.pm.parsing.component.ComponentMutateUtils;
-import android.content.pm.parsing.component.ParsedPermission;
-import android.content.pm.parsing.component.ParsedPermissionGroup;
-import android.content.pm.parsing.component.ParsedPermissionUtils;
-import android.content.pm.permission.CompatibilityPermissionInfo;
+import com.android.server.pm.pkg.component.ComponentMutateUtils;
+import com.android.server.pm.pkg.component.ParsedPermission;
+import com.android.server.pm.pkg.component.ParsedPermissionGroup;
+import com.android.server.pm.pkg.component.ParsedPermissionUtils;
+
 import android.content.pm.permission.SplitPermissionInfoParcelable;
 import android.metrics.LogMaker;
 import android.os.AsyncTask;
@@ -170,6 +167,10 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
     private static final String TAG = "PackageManager";
     private static final String LOG_TAG = PermissionManagerServiceImpl.class.getSimpleName();
 
+    private static final String SKIP_KILL_APP_REASON_NOTIFICATION_TEST = "skip permission revoke "
+            + "app kill for notification test";
+
+
     private static final long BACKUP_TIMEOUT_MILLIS = SECONDS.toMillis(60);
 
     // For automotive products, CarService enforces allow-listing of the privileged permissions
@@ -198,14 +199,19 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
     /** All nearby devices permissions */
     private static final List<String> NEARBY_DEVICES_PERMISSIONS = new ArrayList<>();
 
-    // TODO: This is a placeholder. Replace with actual implementation
-    private static final List<String> NOTIFICATION_PERMISSIONS = new ArrayList<>();
-
     /**
-     * All permissions that should be granted with the REVOKE_WHEN_REQUESTED flag, if they are
-     * implicitly added to a package
+     * All notification permissions.
+     * Notification permission state is treated differently from other permissions. Notification
+     * permission get the REVIEW_REQUIRED flag set for S- apps, or for T+ apps on updating to T or
+     * restoring a pre-T backup. The permission and app op remain denied. The flag will be read by
+     * the notification system, and allow apps to send notifications, until cleared.
+     * The flag is cleared for S- apps by the system showing a permission request prompt, and the
+     * user clicking "allow" or "deny" in the dialog. For T+ apps, the flag is cleared upon the
+     * first activity launch.
+     *
+     * @see PermissionPolicyInternal#showNotificationPromptIfNeeded(String, int, int)
      */
-    private static final List<String> IMPLICIT_GRANTED_PERMISSIONS = new ArrayList<>();
+    private static final List<String> NOTIFICATION_PERMISSIONS = new ArrayList<>();
 
     /** If the permission of the value is granted, so is the key */
     private static final Map<String, String> FULLER_PERMISSION_MAP = new HashMap<>();
@@ -221,7 +227,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         NEARBY_DEVICES_PERMISSIONS.add(Manifest.permission.BLUETOOTH_ADVERTISE);
         NEARBY_DEVICES_PERMISSIONS.add(Manifest.permission.BLUETOOTH_CONNECT);
         NEARBY_DEVICES_PERMISSIONS.add(Manifest.permission.BLUETOOTH_SCAN);
-        IMPLICIT_GRANTED_PERMISSIONS.add(Manifest.permission.POST_NOTIFICATIONS);
+        NOTIFICATION_PERMISSIONS.add(Manifest.permission.POST_NOTIFICATIONS);
     }
 
     /** Set of source package names for Privileged Permission Allowlist */
@@ -243,9 +249,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
     /** Permission controller: User space permission management */
     private PermissionControllerManager mPermissionControllerManager;
-
-    /** App ops manager */
-    private final AppOpsManager mAppOpsManager;
 
     /**
      * Built-in permissions. Read from system configuration files. Mapping is from
@@ -321,11 +324,15 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             mPackageManagerInt.writeSettings(true);
         }
         @Override
-        public void onPermissionRevoked(int uid, int userId, String reason) {
+        public void onPermissionRevoked(int uid, int userId, String reason, boolean overrideKill) {
             mOnPermissionChangeListeners.onPermissionsChanged(uid);
 
             // Critical; after this call the application should never have the permission
             mPackageManagerInt.writeSettings(false);
+            if (overrideKill) {
+                return;
+            }
+
             final int appId = UserHandle.getAppId(uid);
             if (reason == null) {
                 mHandler.post(() -> killUid(appId, userId, KILL_APP_REASON_PERMISSIONS_REVOKED));
@@ -374,7 +381,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         mContext = context;
         mPackageManagerInt = LocalServices.getService(PackageManagerInternal.class);
         mUserManagerInt = LocalServices.getService(UserManagerInternal.class);
-        mAppOpsManager = context.getSystemService(AppOpsManager.class);
 
         mPrivilegedPermissionAllowlistSourcePackageNames.add(PLATFORM_PACKAGE_NAME);
         // PackageManager.hasSystemFeature() is not used here because PackageManagerService
@@ -1440,9 +1446,29 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                 reason, mDefaultPermissionCallback);
     }
 
+    @Override
+    public void revokePostNotificationPermissionWithoutKillForTest(String packageName, int userId) {
+        final int callingUid = Binder.getCallingUid();
+        final boolean overridePolicy =
+                checkUidPermission(callingUid, ADJUST_RUNTIME_PERMISSIONS_POLICY)
+                        == PackageManager.PERMISSION_GRANTED;
+        mContext.enforceCallingPermission(
+                android.Manifest.permission.REVOKE_POST_NOTIFICATIONS_WITHOUT_KILL, "");
+        revokeRuntimePermissionInternal(packageName, Manifest.permission.POST_NOTIFICATIONS,
+                overridePolicy, true, callingUid, userId,
+                SKIP_KILL_APP_REASON_NOTIFICATION_TEST, mDefaultPermissionCallback);
+    }
+
     private void revokeRuntimePermissionInternal(String packageName, String permName,
-            boolean overridePolicy, int callingUid, final int userId, String reason,
-            PermissionCallback callback) {
+            boolean overridePolicy, int callingUid, final int userId,
+            String reason, PermissionCallback callback) {
+        revokeRuntimePermissionInternal(packageName, permName, overridePolicy, false, callingUid,
+                userId, reason, callback);
+    }
+
+    private void revokeRuntimePermissionInternal(String packageName, String permName,
+            boolean overridePolicy, boolean overrideKill, int callingUid, final int userId,
+            String reason, PermissionCallback callback) {
         if (PermissionManager.DEBUG_TRACE_PERMISSION_UPDATES
                 && PermissionManager.shouldTraceGrant(packageName, permName, userId)) {
             Log.i(TAG, "System is revoking " + packageName + " "
@@ -1554,7 +1580,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         if (callback != null) {
             if (isRuntimePermission) {
                 callback.onPermissionRevoked(UserHandle.getUid(userId, pkg.getUid()), userId,
-                        reason);
+                        reason, overrideKill);
             } else {
                 mDefaultPermissionCallback.onInstallPermissionRevoked();
             }
@@ -1563,6 +1589,25 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         if (isRuntimePermission) {
             notifyRuntimePermissionStateChanged(packageName, userId);
         }
+    }
+
+    @Override
+    public void selfRevokePermissions(String packageName, List<String> permissions) {
+        final int callingUid = Binder.getCallingUid();
+        int callingUserId = UserHandle.getUserId(callingUid);
+        int targetPackageUid = mPackageManagerInt.getPackageUid(packageName, 0, callingUserId);
+        if (targetPackageUid != callingUid) {
+            throw new SecurityException("uid " + callingUid
+                    + " cannot revoke permissions for package " + packageName + " with uid "
+                    + targetPackageUid);
+        }
+        for (String permName : permissions) {
+            if (!checkCallingOrSelfPermission(permName)) {
+                throw new SecurityException("uid " + callingUid + " cannot revoke permission "
+                        + permName + " because it does not hold that permission");
+            }
+        }
+        mPermissionControllerManager.selfRevokePermissions(packageName, permissions);
     }
 
     private boolean mayManageRolePermission(int uid) {
@@ -2594,9 +2639,12 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
                     // Cache newImplicitPermissions before modifing permissionsState as for the
                     // shared uids the original and new state are the same object
+                    // TODO(205888750): remove the line for LEGACY_REVIEW once propagated through
+                    // droidfood
                     if (!origState.hasPermissionState(permName)
                             && (pkg.getImplicitPermissions().contains(permName)
-                            || (permName.equals(Manifest.permission.ACTIVITY_RECOGNITION)))) {
+                            || (permName.equals(Manifest.permission.ACTIVITY_RECOGNITION)))
+                            || NOTIFICATION_PERMISSIONS.contains(permName)) {
                         if (pkg.getImplicitPermissions().contains(permName)) {
                             // If permName is an implicit permission, try to auto-grant
                             newImplicitPermissions.add(permName);
@@ -2754,9 +2802,11 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                             }
 
                             // Remove review flag as it is not necessary anymore
-                            if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
-                                flags &= ~FLAG_PERMISSION_REVIEW_REQUIRED;
-                                wasChanged = true;
+                            if (!NOTIFICATION_PERMISSIONS.contains(perm)) {
+                                if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
+                                    flags &= ~FLAG_PERMISSION_REVIEW_REQUIRED;
+                                    wasChanged = true;
+                                }
                             }
 
                             if ((flags & FLAG_PERMISSION_REVOKED_COMPAT) != 0
@@ -3117,26 +3167,35 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                     inheritPermissionStateToNewImplicitPermissionLocked(sourcePerms, newPerm, ps,
                             pkg);
                 }
-            } else if (IMPLICIT_GRANTED_PERMISSIONS.contains(newPerm)
-                    && !origPs.hasPermissionState(newPerm)) {
+            } else if (NOTIFICATION_PERMISSIONS.contains(newPerm)) {
+                //&& (origPs.getPermissionState(newPerm) == null) {
+                // TODO(b/205888750): add back line about origPs once propagated through droidfood
                 Permission bp = mRegistry.getPermission(newPerm);
                 if (bp == null) {
                     throw new IllegalStateException("Unknown new permission " + newPerm);
                 }
-                if ((ps.getPermissionState(newPerm).getFlags()
-                        & FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
-                    // No need to grant if review is required
-                    continue;
+                // TODO(b/205888750): remove the line for REVOKE_WHEN_REQUESTED once propagated
+                //  through droidfood
+                if (!isUserSetOrPregrantedOrFixed(ps.getPermissionFlags(newPerm))) {
+                    updatedUserIds = ArrayUtils.appendInt(updatedUserIds, userId);
+                    ps.updatePermissionFlags(bp, PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED
+                                    | FLAG_PERMISSION_REVOKE_WHEN_REQUESTED,
+                            PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED);
+                    // TODO(b/205888750): remove revoke once propagated through droidfood
+                    if (ps.isPermissionGranted(newPerm)) {
+                        ps.revokePermission(bp);
+                    }
                 }
-                updatedUserIds = ArrayUtils.appendInt(updatedUserIds, userId);
-                ps.updatePermissionFlags(bp,
-                        FLAG_PERMISSION_REVOKE_WHEN_REQUESTED,
-                        FLAG_PERMISSION_REVOKE_WHEN_REQUESTED);
-                ps.grantPermission(bp);
             }
         }
 
         return updatedUserIds;
+    }
+
+    private boolean isUserSetOrPregrantedOrFixed(int flags) {
+        return (flags & (FLAG_PERMISSION_USER_SET | FLAG_PERMISSION_USER_FIXED
+                | FLAG_PERMISSION_POLICY_FIXED | FLAG_PERMISSION_SYSTEM_FIXED
+                | FLAG_PERMISSION_GRANTED_BY_DEFAULT | FLAG_PERMISSION_GRANTED_BY_ROLE)) != 0;
     }
 
     @NonNull
@@ -4323,9 +4382,9 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                 updateAllPermissions(StorageManager.UUID_PRIVATE_INTERNAL, false)
         );
 
-        mSystemReady = true;
-
         synchronized (mLock) {
+            mSystemReady = true;
+
             if (mPrivappPermissionsViolations != null) {
                 throw new IllegalStateException("Signature|privileged permissions not in "
                         + "privapp-permissions allowlist: " + mPrivappPermissionsViolations);
@@ -4905,15 +4964,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             addAllowlistedRestrictedPermissionsInternal(pkg,
                     params.getAllowlistedRestrictedPermissions(),
                     FLAG_PERMISSION_WHITELIST_INSTALLER, userId);
-            final int autoRevokePermissionsMode = params.getAutoRevokePermissionsMode();
-            if (autoRevokePermissionsMode == AppOpsManager.MODE_ALLOWED
-                    || autoRevokePermissionsMode == AppOpsManager.MODE_IGNORED) {
-                // TODO: theianchen Bug: 182523293
-                // We should move this portion of code that's calling
-                // setAutoRevokeExemptedInternal() into the old PMS
-                setAutoRevokeExemptedInternal(pkg,
-                        autoRevokePermissionsMode == AppOpsManager.MODE_IGNORED, userId);
-            }
             grantRequestedRuntimePermissionsInternal(pkg, params.getGrantedPermissions(), userId);
         }
     }
@@ -5182,25 +5232,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         onPackageUninstalledInternal(packageName, appId, pkg, sharedUserPkgs, userIds);
     }
 
-    private boolean setAutoRevokeExemptedInternal(@NonNull AndroidPackage pkg, boolean exempted,
-            @UserIdInt int userId) {
-        final int packageUid = UserHandle.getUid(userId, pkg.getUid());
-        if (mAppOpsManager.checkOpNoThrow(AppOpsManager.OP_AUTO_REVOKE_MANAGED_BY_INSTALLER,
-                packageUid, pkg.getPackageName()) != MODE_ALLOWED) {
-            // Allowlist user set - don't override
-            return false;
-        }
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            mAppOpsManager.setMode(AppOpsManager.OP_AUTO_REVOKE_PERMISSIONS_IF_UNUSED, packageUid,
-                    pkg.getPackageName(), exempted ? MODE_IGNORED : MODE_ALLOWED);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-        return true;
-    }
-
     /**
      * Callbacks invoked when interesting actions have been taken on a permission.
      * <p>
@@ -5213,7 +5244,11 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         public void onPermissionChanged() {}
         public void onPermissionGranted(int uid, @UserIdInt int userId) {}
         public void onInstallPermissionGranted() {}
-        public void onPermissionRevoked(int uid, @UserIdInt int userId, String reason) {}
+        public void onPermissionRevoked(int uid, @UserIdInt int userId, String reason) {
+            onPermissionRevoked(uid, userId, reason, false);
+        }
+        public void onPermissionRevoked(int uid, @UserIdInt int userId, String reason,
+                boolean overrideKill) {}
         public void onInstallPermissionRevoked() {}
         public void onPermissionUpdated(@UserIdInt int[] updatedUserIds, boolean sync) {}
         public void onPermissionUpdatedNotifyListener(@UserIdInt int[] updatedUserIds, boolean sync,

@@ -25,6 +25,9 @@
       "path": "cts/hostsidetests/packagemanager"
     },
     {
+      "path": "cts/hostsidetests/os/test_mappings/packagemanager"
+    },
+    {
       "path": "system/apex/tests"
     }
   ],
@@ -35,6 +38,9 @@
     },
     {
       "name": "CarrierAppIntegrationTestCases"
+    },
+    {
+      "name": "ApkVerityTest"
     },
     {
       "name": "CtsIncrementalInstallHostTestCases",
@@ -125,6 +131,23 @@
           "exclude-annotation": "org.junit.Ignore"
         }
       ]
+    },
+    {
+      "name": "CtsAppSecurityHostTestCases",
+      "options": [
+        {
+          "include-annotation": "android.platform.test.annotations.Presubmit"
+        },
+        {
+          "exclude-annotation": "android.platform.test.annotations.Postsubmit"
+        },
+        {
+          "exclude-annotation": "androidx.test.filters.FlakyTest"
+        },
+        {
+          "exclude-annotation": "org.junit.Ignore"
+        }
+      ]
     }
   ],
   "postsubmit": [
@@ -135,6 +158,9 @@
           "include-filter": "android.appsecurity.cts.AppSecurityTests#testPermissionDiffCert"
         }
       ]
+    },
+    {
+      "name": "CtsInstallHostTestCases"
     }
   ]
 }

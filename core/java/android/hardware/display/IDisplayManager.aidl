@@ -166,8 +166,8 @@ interface IDisplayManager {
 
     // Sets the user preferred display mode.
     // Requires MODIFY_USER_PREFERRED_DISPLAY_MODE permission.
-    void setUserPreferredDisplayMode(in Mode mode);
-    Mode getUserPreferredDisplayMode();
+    void setUserPreferredDisplayMode(int displayId, in Mode mode);
+    Mode getUserPreferredDisplayMode(int displayId);
 
     // When enabled the app requested display resolution and refresh rate is always selected
     // in DisplayModeDirector regardless of user settings and policies for low brightness, low
@@ -180,4 +180,7 @@ interface IDisplayManager {
 
     // Returns the refresh rate switching type.
     int getRefreshRateSwitchingType();
+
+    // Query for DISPLAY_DECORATION support.
+    boolean getDisplayDecorationSupport(int displayId);
 }

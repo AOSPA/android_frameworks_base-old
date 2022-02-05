@@ -142,6 +142,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -6842,6 +6843,24 @@ public class TelephonyManager {
     }
 
     /**
+     * Get the first active portIndex from the corresponding physical slot index.
+     * @param physicalSlotIndex physical slot index
+     * @return first active port index or INVALID_PORT_INDEX if no port is active
+     */
+    private int getFirstActivePortIndex(int physicalSlotIndex) {
+        UiccSlotInfo[] slotInfos = getUiccSlotsInfo();
+        if (slotInfos != null && physicalSlotIndex >= 0 && physicalSlotIndex < slotInfos.length
+                && slotInfos[physicalSlotIndex] != null) {
+            Optional<UiccPortInfo> result =  slotInfos[physicalSlotIndex].getPorts().stream()
+                    .filter(portInfo -> portInfo.isActive()).findFirst();
+            if (result.isPresent()) {
+                return result.get().getPortIndex();
+            }
+        }
+        return INVALID_PORT_INDEX;
+    }
+
+    /**
      * Opens a logical channel to the ICC card.
      *
      * Input parameters equivalent to TS 27.007 AT+CCHO command.
@@ -6887,7 +6906,8 @@ public class TelephonyManager {
      * @param p2 P2 parameter (described in ISO 7816-4).
      * @return an IccOpenLogicalChannelResponse object.
      * @hide
-     * @deprecated instead use {@link #iccOpenLogicalChannelByPort(int, int, String, int)}
+     * @deprecated This API is not compatible on eUICC supporting Multiple Enabled Profile(MEP),
+     * instead use {@link #iccOpenLogicalChannelByPort(int, int, String, int)}
      */
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
@@ -6901,6 +6921,7 @@ public class TelephonyManager {
             if (telephony != null) {
                 IccLogicalChannelRequest request = new IccLogicalChannelRequest();
                 request.slotIndex = slotIndex;
+                request.portIndex = getFirstActivePortIndex(slotIndex);
                 request.aid = aid;
                 request.p2 = p2;
                 request.callingPackage = getOpPackageName();
@@ -7056,7 +7077,8 @@ public class TelephonyManager {
      *            iccOpenLogicalChannel.
      * @return true if the channel was closed successfully.
      * @hide
-     * @deprecated instead use {@link #iccCloseLogicalChannelByPort(int, int, int)}
+     * @deprecated This API is not compatible on eUICC supporting Multiple Enabled Profile(MEP),
+     * instead use {@link #iccCloseLogicalChannelByPort(int, int, int)}
      */
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
@@ -7068,6 +7090,7 @@ public class TelephonyManager {
             if (telephony != null) {
                 IccLogicalChannelRequest request = new IccLogicalChannelRequest();
                 request.slotIndex = slotIndex;
+                request.portIndex = getFirstActivePortIndex(slotIndex);
                 request.channel = channel;
                 return telephony.iccCloseLogicalChannel(request);
             }
@@ -7188,7 +7211,8 @@ public class TelephonyManager {
      * @return The APDU response from the ICC card with the status appended at the end, or null if
      * there is an issue connecting to the Telephony service.
      * @hide
-     * @deprecated instead use
+     * @deprecated This API is not compatible on eUICC supporting Multiple Enabled Profile(MEP),
+     * instead use
      * {@link #iccTransmitApduLogicalChannelByPort(int, int, int, int, int, int, int, int, String)}
      */
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
@@ -7201,8 +7225,9 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.iccTransmitApduLogicalChannelByPort(slotIndex, DEFAULT_PORT_INDEX,
-                         channel, cla, instruction, p1, p2, p3, data);
+                return telephony.iccTransmitApduLogicalChannelByPort(slotIndex,
+                        getFirstActivePortIndex(slotIndex), channel, cla, instruction,
+                        p1, p2, p3, data);
             }
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
@@ -7340,7 +7365,8 @@ public class TelephonyManager {
      * @return The APDU response from the ICC card with the status appended at
      *            the end.
      * @hide
-     * @deprecated instead use
+     * @deprecated This API is not compatible on eUICC supporting Multiple Enabled Profile(MEP),
+     * instead use
      * {@link #iccTransmitApduBasicChannelByPort(int, int, int, int, int, int, int, String)}
      */
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
@@ -7353,8 +7379,9 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.iccTransmitApduBasicChannelByPort(slotIndex, DEFAULT_PORT_INDEX,
-                         getOpPackageName(), cla, instruction, p1, p2, p3, data);
+                return telephony.iccTransmitApduBasicChannelByPort(slotIndex,
+                        getFirstActivePortIndex(slotIndex), getOpPackageName(),
+                        cla, instruction, p1, p2, p3, data);
             }
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
@@ -12623,12 +12650,15 @@ public class TelephonyManager {
         if (carriers == null || !SubscriptionManager.isValidPhoneId(slotIndex)) {
             return -1;
         }
-        // Execute the method setCarrierRestrictionRules with an empty excluded list and
-        // indicating priority for the allowed list.
+        // Execute the method setCarrierRestrictionRules with an empty excluded list.
+        // If the allowed list is empty, it means that all carriers are allowed (default allowed),
+        // otherwise it means that only specified carriers are allowed (default not allowed).
         CarrierRestrictionRules carrierRestrictionRules = CarrierRestrictionRules.newBuilder()
                 .setAllowedCarriers(carriers)
                 .setDefaultCarrierRestriction(
-                    CarrierRestrictionRules.CARRIER_RESTRICTION_DEFAULT_NOT_ALLOWED)
+                    carriers.isEmpty()
+                        ? CarrierRestrictionRules.CARRIER_RESTRICTION_DEFAULT_ALLOWED
+                        : CarrierRestrictionRules.CARRIER_RESTRICTION_DEFAULT_NOT_ALLOWED)
                 .build();
 
         int result = setCarrierRestrictionRules(carrierRestrictionRules);

@@ -26,6 +26,7 @@ import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.admin.DeviceAdminReceiver.ACTION_COMPLIANCE_ACKNOWLEDGEMENT_REQUIRED;
 import static android.app.admin.DeviceAdminReceiver.EXTRA_TRANSFER_OWNERSHIP_ADMIN_EXTRAS_BUNDLE;
 import static android.app.admin.DevicePolicyManager.ACTION_CHECK_POLICY_COMPLIANCE;
+import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_RESOURCE_UPDATED;
 import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_DEVICE;
 import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE;
 import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_USER;
@@ -56,6 +57,8 @@ import static android.app.admin.DevicePolicyManager.DELEGATION_PACKAGE_ACCESS;
 import static android.app.admin.DevicePolicyManager.DELEGATION_PERMISSION_GRANT;
 import static android.app.admin.DevicePolicyManager.DELEGATION_SECURITY_LOGGING;
 import static android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_PER_USER;
+import static android.app.admin.DevicePolicyManager.EXTRA_RESOURCE_ID;
+import static android.app.admin.DevicePolicyManager.EXTRA_RESOURCE_TYPE_DRAWABLE;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_BASE_INFO;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_IMEI;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_INDIVIDUAL_ATTESTATION;
@@ -161,6 +164,7 @@ import android.app.StatusBarManager;
 import android.app.admin.DeviceAdminInfo;
 import android.app.admin.DeviceAdminReceiver;
 import android.app.admin.DevicePolicyCache;
+import android.app.admin.DevicePolicyDrawableResource;
 import android.app.admin.DevicePolicyEventLogger;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.DevicePolicyManager.DeviceOwnerType;
@@ -177,6 +181,7 @@ import android.app.admin.FullyManagedDeviceProvisioningParams;
 import android.app.admin.ManagedProfileProvisioningParams;
 import android.app.admin.NetworkEvent;
 import android.app.admin.ParcelableGranteeMap;
+import android.app.admin.ParcelableResource;
 import android.app.admin.PasswordMetrics;
 import android.app.admin.PasswordPolicy;
 import android.app.admin.SecurityLog;
@@ -231,6 +236,7 @@ import android.media.IAudioService;
 import android.net.ConnectivityManager;
 import android.net.ConnectivitySettingsManager;
 import android.net.IIpConnectivityMetrics;
+import android.net.ProfileNetworkPreference;
 import android.net.ProxyInfo;
 import android.net.Uri;
 import android.net.VpnManager;
@@ -258,6 +264,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.UserManager.UserRestrictionSource;
 import android.os.storage.StorageManager;
 import android.permission.AdminPermissionControlParams;
 import android.permission.IPermissionManager;
@@ -286,6 +293,7 @@ import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
+import android.util.DebugUtils;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Pair;
@@ -712,6 +720,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      */
     // Guarded by mHandler
     private @UserIdInt int mNetworkLoggingNotificationUserId = UserHandle.USER_NULL;
+
+    private final DeviceManagementResourcesProvider mDeviceManagementResourcesProvider;
 
     private static final boolean ENABLE_LOCK_GUARD = true;
 
@@ -1737,6 +1747,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         void setDevicePolicySafetyChecker(DevicePolicySafetyChecker safetyChecker) {
             mSafetyChecker = safetyChecker;
         }
+
+        DeviceManagementResourcesProvider getDeviceManagementResourcesProvider() {
+            return new DeviceManagementResourcesProvider();
+        }
     }
 
     /**
@@ -1789,6 +1803,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         mTransferOwnershipMetadataManager = mInjector.newTransferOwnershipMetadataManager();
         mBugreportCollectionManager = new RemoteBugreportManager(this, mInjector);
 
+        mDeviceManagementResourcesProvider = mInjector.getDeviceManagementResourcesProvider();
+
         // "Lite" interface is available even when the device doesn't have the feature
         LocalServices.addService(DevicePolicyManagerLiteInternal.class, mLocalService);
         if (!mHasFeature) {
@@ -1835,6 +1851,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         loadOwners();
 
         performPolicyVersionUpgrade();
+
+        mDeviceManagementResourcesProvider.load();
     }
 
     /**
@@ -13211,12 +13229,17 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     /**
      * @param restriction The restriction enforced by admin. It could be any user restriction or
-     *                    policy like {@link DevicePolicyManager#POLICY_DISABLE_CAMERA} and
-     *                    {@link DevicePolicyManager#POLICY_DISABLE_SCREEN_CAPTURE}.
+     *                    policy like {@link DevicePolicyManager#POLICY_DISABLE_CAMERA},
+     *                    {@link DevicePolicyManager#POLICY_DISABLE_SCREEN_CAPTURE} and  {@link
+     *                    DevicePolicyManager#POLICY_SUSPEND_PACKAGES}.
      */
     private Bundle getEnforcingAdminAndUserDetailsInternal(int userId, String restriction) {
         Bundle result = null;
-        if (restriction == null) {
+
+        // For POLICY_SUSPEND_PACKAGES return PO or DO to keep the behavior same as
+        // before the bug fix for b/192245204.
+        if (restriction == null || DevicePolicyManager.POLICY_SUSPEND_PACKAGES.equals(
+                restriction)) {
             ComponentName profileOwner = mOwners.getProfileOwnerComponent(userId);
             if (profileOwner != null) {
                 result = new Bundle();
@@ -13271,14 +13294,29 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             try {
                 List<UserManager.EnforcingUser> sources = mUserManager
                         .getUserRestrictionSources(restriction, UserHandle.of(userId));
-                if (sources == null || sources.isEmpty()) {
+                if (sources == null) {
                     // The restriction is not enforced.
                     return null;
-                } else if (sources.size() > 1) {
+                }
+                int sizeBefore = sources.size();
+                if (sizeBefore > 1) {
+                    Slogf.d(LOG_TAG, "getEnforcingAdminAndUserDetailsInternal(%d, %s): "
+                            + "%d sources found, excluding those set by UserManager",
+                            userId, restriction, sizeBefore);
+                    sources = getDevicePolicySources(sources);
+                }
+                if (sources.isEmpty()) {
+                    // The restriction is not enforced (or is just enforced by the system)
+                    return null;
+                }
+
+                if (sources.size() > 1) {
                     // In this case, we'll show an admin support dialog that does not
                     // specify the admin.
                     // TODO(b/128928355): if this restriction is enforced by multiple DPCs, return
                     // the admin for the calling user.
+                    Slogf.w(LOG_TAG, "getEnforcingAdminAndUserDetailsInternal(%d, %s): multiple "
+                            + "sources for restriction %s on user %d", restriction, userId);
                     result = new Bundle();
                     result.putInt(Intent.EXTRA_USER_ID, userId);
                     return result;
@@ -13321,6 +13359,32 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         }
         return null;
+    }
+
+    /**
+     *  Excludes restrictions imposed by UserManager.
+     */
+    private List<UserManager.EnforcingUser> getDevicePolicySources(
+            List<UserManager.EnforcingUser> sources) {
+        int sizeBefore = sources.size();
+        List<UserManager.EnforcingUser> realSources = new ArrayList<>(sizeBefore);
+        for (int i = 0; i < sizeBefore; i++) {
+            UserManager.EnforcingUser source = sources.get(i);
+            int type = source.getUserRestrictionSource();
+            if (type != UserManager.RESTRICTION_SOURCE_PROFILE_OWNER
+                    && type != UserManager.RESTRICTION_SOURCE_DEVICE_OWNER) {
+                // TODO(b/128928355): add unit test
+                Slogf.d(LOG_TAG, "excluding source of type %s at index %d",
+                        userRestrictionSourceToString(type), i);
+                continue;
+            }
+            realSources.add(source);
+        }
+        return realSources;
+    }
+
+    private static String userRestrictionSourceToString(@UserRestrictionSource int source) {
+        return DebugUtils.flagsToString(UserManager.class, "RESTRICTION_", source);
     }
 
     /**
@@ -17784,10 +17848,14 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
         int networkPreference = preferentialNetworkServiceEnabled
                 ? PROFILE_NETWORK_PREFERENCE_ENTERPRISE : PROFILE_NETWORK_PREFERENCE_DEFAULT;
+        ProfileNetworkPreference.Builder preferenceBuilder =
+                new ProfileNetworkPreference.Builder();
+        preferenceBuilder.setPreference(networkPreference);
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.add(preferenceBuilder.build());
         mInjector.binderWithCleanCallingIdentity(() ->
-                mInjector.getConnectivityManager().setProfileNetworkPreference(
-                        UserHandle.of(userId),
-                        networkPreference,
+                mInjector.getConnectivityManager().setProfileNetworkPreferences(
+                        UserHandle.of(userId), preferences,
                         null /* executor */, null /* listener */));
     }
 
@@ -17907,5 +17975,55 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 mInjector.getUsbManager() != null
                         && mInjector.getUsbManager().getUsbHalVersion() >= UsbManager.USB_HAL_V1_3
         );
+    }
+
+    @Override
+    public void setDrawables(@NonNull List<DevicePolicyDrawableResource> drawables) {
+        Preconditions.checkCallAuthorization(hasCallingOrSelfPermission(
+                android.Manifest.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES));
+
+        Objects.requireNonNull(drawables, "drawables must be provided.");
+
+        mInjector.binderWithCleanCallingIdentity(() -> {
+            if (mDeviceManagementResourcesProvider.updateDrawables(drawables)) {
+                sendDrawableUpdatedBroadcast(
+                        drawables.stream().mapToInt(d -> d.getDrawableId()).toArray());
+            }
+        });
+    }
+
+    @Override
+    public void resetDrawables(@NonNull int[] drawableIds) {
+        Preconditions.checkCallAuthorization(hasCallingOrSelfPermission(
+                android.Manifest.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES));
+
+        Objects.requireNonNull(drawableIds, "drawableIds must be provided.");
+
+        mInjector.binderWithCleanCallingIdentity(() -> {
+            if (mDeviceManagementResourcesProvider.removeDrawables(drawableIds)) {
+                sendDrawableUpdatedBroadcast(drawableIds);
+            }
+        });
+    }
+
+    @Override
+    public ParcelableResource getDrawable(int drawableId, int drawableStyle, int drawableSource) {
+        return mInjector.binderWithCleanCallingIdentity(() ->
+                mDeviceManagementResourcesProvider.getDrawable(
+                        drawableId, drawableStyle, drawableSource));
+    }
+
+    private void sendDrawableUpdatedBroadcast(int[] drawableIds) {
+        final Intent intent = new Intent(ACTION_DEVICE_POLICY_RESOURCE_UPDATED);
+        intent.putExtra(EXTRA_RESOURCE_ID, drawableIds);
+        intent.putExtra(EXTRA_RESOURCE_TYPE_DRAWABLE, /* value= */ true);
+        intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+        intent.setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+
+        List<UserInfo> users = mUserManager.getAliveUsers();
+        for (int i = 0; i < users.size(); i++) {
+            UserHandle user = users.get(i).getUserHandle();
+            mContext.sendBroadcastAsUser(intent, user);
+        }
     }
 }

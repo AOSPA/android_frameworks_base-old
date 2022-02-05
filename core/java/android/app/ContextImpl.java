@@ -113,6 +113,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -310,6 +311,14 @@ class ContextImpl extends Context {
 
     @ContextType
     private int mContextType;
+
+    /**
+     * {@code true} to indicate that the {@link Context} owns the {@link #getWindowContextToken()}
+     * and is responsible for detaching the token when the Context is released.
+     *
+     * @see #finalize()
+     */
+    private boolean mOwnsToken = false;
 
     @GuardedBy("mSync")
     private File mDatabasesDir;
@@ -2170,6 +2179,11 @@ class ContextImpl extends Context {
     }
 
     @Override
+    public void selfRevokePermissions(@NonNull Collection<String> permissions) {
+        getSystemService(PermissionManager.class).selfRevokePermissions(permissions);
+    }
+
+    @Override
     public int checkCallingPermission(String permission) {
         if (permission == null) {
             throw new IllegalArgumentException("permission is null");
@@ -3009,7 +3023,7 @@ class ContextImpl extends Context {
         // WindowContainer. We should detach from WindowContainer when the Context is finalized
         // if this Context is not a WindowContext. WindowContext finalization is handled in
         // WindowContext class.
-        if (mToken instanceof WindowTokenClient && mContextType != CONTEXT_TYPE_WINDOW_CONTEXT) {
+        if (mToken instanceof WindowTokenClient && mOwnsToken) {
             ((WindowTokenClient) mToken).detachFromWindowContainerIfNeeded();
         }
         super.finalize();
@@ -3040,6 +3054,7 @@ class ContextImpl extends Context {
         token.attachContext(context);
         token.attachToDisplayContent(displayId);
         context.mContextType = CONTEXT_TYPE_SYSTEM_OR_SYSTEM_UI;
+        context.mOwnsToken = true;
 
         return context;
     }

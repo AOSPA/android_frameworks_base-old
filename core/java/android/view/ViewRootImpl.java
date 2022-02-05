@@ -10649,4 +10649,9 @@ public final class ViewRootImpl implements ViewParent,
     boolean wasRelayoutRequested() {
         return mRelayoutRequested;
     }
+
+    void forceWmRelayout() {
+       mForceNextWindowRelayout = true;
+       scheduleTraversals();
+    }
 }

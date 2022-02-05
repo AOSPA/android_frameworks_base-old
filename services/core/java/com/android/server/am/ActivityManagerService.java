@@ -233,11 +233,11 @@ import android.content.pm.ProcessInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ProviderInfoList;
 import android.content.pm.ResolveInfo;
-import android.content.pm.SELinuxUtil;
+import com.android.server.pm.pkg.SELinuxUtil;
 import android.content.pm.ServiceInfo;
 import android.content.pm.TestUtilityService;
 import android.content.pm.UserInfo;
-import android.content.pm.parsing.ParsingPackageUtils;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -396,6 +396,7 @@ import com.android.server.graphics.fonts.FontManagerInternal;
 import com.android.server.job.JobSchedulerInternal;
 import com.android.server.os.NativeTombstoneManager;
 import com.android.server.pm.Installer;
+import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.uri.GrantUri;
@@ -2355,7 +2356,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         offloadConstants.SLOW_TIME = Integer.MAX_VALUE;
 
         mEnableOffloadQueue = SystemProperties.getBoolean(
-                "persist.device_config.activity_manager_native_boot.offload_queue_enabled", false);
+                "persist.device_config.activity_manager_native_boot.offload_queue_enabled", true);
 
         mFgBroadcastQueue = new BroadcastQueue(this, mHandler,
                 "foreground", foreConstants, false);
@@ -10443,10 +10444,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (thread != null) {
                 pw.println("\n\n** Cache info for pid " + pid + " [" + r.processName + "] **");
                 pw.flush();
-                if (pid == MY_PID) {
-                    PropertyInvalidatedCache.dumpCacheInfo(fd, args);
-                    continue;
-                }
                 try {
                     TransferPipe tp = new TransferPipe();
                     try {
@@ -13418,6 +13415,14 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             switch (action) {
+                case Intent.ACTION_MEDIA_SCANNER_SCAN_FILE:
+                    UserManagerInternal umInternal = LocalServices.getService(
+                            UserManagerInternal.class);
+                    UserInfo userInfo = umInternal.getUserInfo(userId);
+                    if (userInfo != null && userInfo.isCloneProfile()) {
+                        userId = umInternal.getProfileParentId(userId);
+                    }
+                    break;
                 case Intent.ACTION_UID_REMOVED:
                 case Intent.ACTION_PACKAGE_REMOVED:
                 case Intent.ACTION_PACKAGE_CHANGED:
@@ -13484,7 +13489,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                                         !intent.getBooleanExtra(Intent.EXTRA_DONT_KILL_APP, false);
                                 final boolean fullUninstall = removed && !replacing;
                                 if (removed) {
-                                    if (!killProcess) {
+                                    if (killProcess) {
+                                        forceStopPackageLocked(ssp, UserHandle.getAppId(
+                                                intent.getIntExtra(Intent.EXTRA_UID, -1)),
+                                                false, true, true, false, fullUninstall, userId,
+                                                removed ? "pkg removed" : "pkg changed");
+                                    } else {
                                         // Kill any app zygotes always, since they can't fork new
                                         // processes with references to the old code
                                         forceStopAppZygoteLocked(ssp, UserHandle.getAppId(

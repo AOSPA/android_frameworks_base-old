@@ -4612,6 +4612,43 @@ public final class Settings {
         public static final String VIBRATE_INPUT_DEVICES = "vibrate_input_devices";
 
         /**
+         * The intensity of alarm vibrations, if configurable.
+         *
+         * Not all devices are capable of changing their vibration intensity; on these devices
+         * there will likely be no difference between the various vibration intensities except for
+         * intensity 0 (off) and the rest.
+         *
+         * <b>Values:</b><br/>
+         * 0 - Vibration is disabled<br/>
+         * 1 - Weak vibrations<br/>
+         * 2 - Medium vibrations<br/>
+         * 3 - Strong vibrations
+         * @hide
+         */
+        public static final String ALARM_VIBRATION_INTENSITY =
+                "alarm_vibration_intensity";
+
+        /**
+         * The intensity of media vibrations, if configurable.
+         *
+         * This includes any vibration that is part of media, such as music, movie, soundtrack,
+         * game or animations.
+         *
+         * Not all devices are capable of changing their vibration intensity; on these devices
+         * there will likely be no difference between the various vibration intensities except for
+         * intensity 0 (off) and the rest.
+         *
+         * <b>Values:</b><br/>
+         * 0 - Vibration is disabled<br/>
+         * 1 - Weak vibrations<br/>
+         * 2 - Medium vibrations<br/>
+         * 3 - Strong vibrations
+         * @hide
+         */
+        public static final String MEDIA_VIBRATION_INTENSITY =
+                "media_vibration_intensity";
+
+        /**
          * The intensity of notification vibrations, if configurable.
          *
          * Not all devices are capable of changing their vibration intensity; on these devices
@@ -4628,6 +4665,7 @@ public final class Settings {
         @Readable
         public static final String NOTIFICATION_VIBRATION_INTENSITY =
                 "notification_vibration_intensity";
+
         /**
          * The intensity of ringtone vibrations, if configurable.
          *
@@ -4679,7 +4717,6 @@ public final class Settings {
          * 3 - Strong vibrations
          * @hide
          */
-        @Readable
         public static final String HARDWARE_HAPTIC_FEEDBACK_INTENSITY =
                 "hardware_haptic_feedback_intensity";
 
@@ -5092,7 +5129,12 @@ public final class Settings {
          * It was about AudioManager's setting and thus affected all the applications which
          * relied on the setting, while this is purely about the vibration setting for incoming
          * calls.
+         *
+         * @deprecated Replaced by using {@link android.os.VibrationAttributes#USAGE_RINGTONE} on
+         * vibrations for incoming calls. User settings are applied automatically by the service and
+         * should not be applied by individual apps.
          */
+        @Deprecated
         @Readable
         public static final String VIBRATE_WHEN_RINGING = "vibrate_when_ringing";
 
@@ -5153,7 +5195,12 @@ public final class Settings {
         /**
          * Whether haptic feedback (Vibrate on tap) is enabled. The value is
          * boolean (1 or 0).
+         *
+         * @deprecated Replaced by using {@link android.os.VibrationAttributes#USAGE_TOUCH} on
+         * vibrations. User settings are applied automatically by the service and should not be
+         * applied by individual apps.
          */
+        @Deprecated
         @Readable
         public static final String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
 
@@ -8948,6 +8995,15 @@ public final class Settings {
         public static final String UI_NIGHT_MODE = "ui_night_mode";
 
         /**
+         * The current night mode custom type that has been selected by the user.  Owned
+         * and controlled by UiModeManagerService. Constants are as per UiModeManager.
+         * @hide
+         */
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String UI_NIGHT_MODE_CUSTOM_TYPE = "ui_night_mode_custom_type";
+
+        /**
          * The current night mode that has been overridden to turn on by the system.  Owned
          * and controlled by UiModeManagerService.  Constants are as per
          * UiModeManager.
@@ -9960,6 +10016,7 @@ public final class Settings {
          *
          * @hide
          */
+        @Readable
         public static final String NOTIFICATION_PERMISSION_ENABLED =
                 "notification_permission_enabled";
 
@@ -10122,6 +10179,29 @@ public final class Settings {
          * category, formatted as a serialized {@link org.json.JSONObject}. If there is no
          * corresponding package included for a category, then all overlay packages in that
          * category must be disabled.
+         *
+         * A few category keys have special meaning and are used for Material You theming.
+         *
+         * A {@code FabricatedOverlay} containing Material You tonal palettes will be generated
+         * in case {@code android.theme.customization.system_palette} contains a
+         * {@link android.annotation.ColorInt}.
+         *
+         * The strategy used for generating the tonal palettes can be defined with the
+         * {@code android.theme.customization.theme_style} key, with one of the following options:
+         * <ul>
+         *   <li> TONAL_SPOT = Default Material You theme since Android S.</li>
+         *   <li> VIBRANT = Theme where accent 2 and 3 are analogous to accent 1.</li>
+         *   <li> EXPRESSIVE = Highly chromatic theme.</li>
+         *   <li> SPRITZ = Desaturated theme, almost greyscale.</li>
+         * </ul>
+         *
+         * Example of valid fabricated theme specification:
+         * <pre>
+         * {
+         *     "android.theme.customization.system_palette":"B1611C",
+         *     "android.theme.customization.theme_style":"EXPRESSIVE"
+         * }
+         * </pre>
          * @hide
          */
         @SystemApi
@@ -10257,6 +10337,13 @@ public final class Settings {
          */
         @TestApi
         public static final int ACCESSIBILITY_MAGNIFICATION_MODE_ALL = 0x3;
+
+        /**
+         * Whether the following typing focus feature for magnification is enabled.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED =
+                "accessibility_magnification_follow_typing_enabled";
 
         /**
          * Controls magnification capability. Accessibility magnification is capable of at least one
@@ -10468,7 +10555,7 @@ public final class Settings {
                 DEVICE_STATE_ROTATION_LOCK_UNLOCKED,
         })
         @Retention(RetentionPolicy.SOURCE)
-        @interface DeviceStateRotationLockSetting {
+        public @interface DeviceStateRotationLockSetting {
         }
 
         /**

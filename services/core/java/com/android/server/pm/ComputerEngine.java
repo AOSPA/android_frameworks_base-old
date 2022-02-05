@@ -92,14 +92,14 @@ import android.content.pm.SigningDetails;
 import android.content.pm.SigningInfo;
 import android.content.pm.UserInfo;
 import android.content.pm.VersionedPackage;
-import android.content.pm.parsing.PackageInfoWithoutStateUtils;
-import android.content.pm.parsing.component.ParsedActivity;
-import android.content.pm.parsing.component.ParsedInstrumentation;
-import android.content.pm.parsing.component.ParsedIntentInfo;
-import android.content.pm.parsing.component.ParsedMainComponent;
-import android.content.pm.parsing.component.ParsedProvider;
-import android.content.pm.parsing.component.ParsedService;
-import android.content.pm.pkg.PackageUserStateUtils;
+import com.android.server.pm.pkg.parsing.PackageInfoWithoutStateUtils;
+import com.android.server.pm.pkg.component.ParsedActivity;
+import com.android.server.pm.pkg.component.ParsedInstrumentation;
+import com.android.server.pm.pkg.component.ParsedIntentInfo;
+import com.android.server.pm.pkg.component.ParsedMainComponent;
+import com.android.server.pm.pkg.component.ParsedProvider;
+import com.android.server.pm.pkg.component.ParsedService;
+import com.android.server.pm.pkg.PackageUserStateUtils;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
@@ -3490,9 +3490,8 @@ public class ComputerEngine implements Computer {
         return mSettings.getRenamedPackageLPr(packageName);
     }
 
-    @NonNull
-    @Override
-    public WatchedArrayMap<String, WatchedLongSparseArray<SharedLibraryInfo>> getSharedLibraries() {
+    private WatchedArrayMap<String, WatchedLongSparseArray<SharedLibraryInfo>>
+            getSharedLibraries() {
         return mSharedLibraries.getAll();
     }
 
@@ -4788,7 +4787,7 @@ public class ComputerEngine implements Computer {
     @Override
     public List<PackageStateInternal> findSharedNonSystemLibraries(
             @NonNull PackageStateInternal pkgSetting) {
-        List<SharedLibraryInfo> deps = SharedLibraryHelper.findSharedLibraries(pkgSetting);
+        List<SharedLibraryInfo> deps = SharedLibraryUtils.findSharedLibraries(pkgSetting);
         if (!deps.isEmpty()) {
             List<PackageStateInternal> retValue = new ArrayList<>();
             for (SharedLibraryInfo info : deps) {

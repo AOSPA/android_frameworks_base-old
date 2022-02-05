@@ -66,6 +66,7 @@ interface ITvInputManager {
             int seq, int userId);
     void releaseSession(in IBinder sessionToken, int userId);
     int getClientPid(in String sessionId);
+    int getClientPriority(int useCase, in String sessionId);
 
     void setMainSession(in IBinder sessionToken, int userId);
     void setSurface(in IBinder sessionToken, in Surface surface, int userId);
@@ -76,7 +77,7 @@ interface ITvInputManager {
     void setCaptionEnabled(in IBinder sessionToken, boolean enabled, int userId);
     void selectTrack(in IBinder sessionToken, int type, in String trackId, int userId);
 
-    void setIAppNotificationEnabled(in IBinder sessionToken, boolean enabled, int userId);
+    void setInteractiveAppNotificationEnabled(in IBinder sessionToken, boolean enabled, int userId);
 
     void sendAppPrivateCommand(in IBinder sessionToken, in String action, in Bundle data,
             int userId);

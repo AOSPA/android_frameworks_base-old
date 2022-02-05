@@ -46,6 +46,7 @@ import android.window.WindowContainerTransaction;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.common.ShellExecutor;
@@ -72,8 +73,6 @@ public class OneHandedControllerTest extends OneHandedTestCase {
     @Mock
     DisplayController mMockDisplayController;
     @Mock
-    OneHandedBackgroundPanelOrganizer mMockBackgroundOrganizer;
-    @Mock
     OneHandedDisplayAreaOrganizer mMockDisplayAreaOrganizer;
     @Mock
     OneHandedEventCallback mMockEventCallback;
@@ -85,6 +84,8 @@ public class OneHandedControllerTest extends OneHandedTestCase {
     OneHandedSettingsUtil mMockSettingsUitl;
     @Mock
     OneHandedUiEventLogger mMockUiEventLogger;
+    @Mock
+    InteractionJankMonitor mMockJankMonitor;
     @Mock
     IOverlayManager mMockOverlayManager;
     @Mock
@@ -112,7 +113,6 @@ public class OneHandedControllerTest extends OneHandedTestCase {
         when(mMockDisplayController.getDisplayLayout(anyInt())).thenReturn(null);
         when(mMockDisplayAreaOrganizer.getDisplayAreaTokenMap()).thenReturn(new ArrayMap<>());
         when(mMockDisplayAreaOrganizer.isReady()).thenReturn(true);
-        when(mMockBackgroundOrganizer.isRegistered()).thenReturn(true);
         when(mMockSettingsUitl.getSettingsOneHandedModeEnabled(any(), anyInt())).thenReturn(
                 mDefaultEnabled);
         when(mMockSettingsUitl.getSettingsOneHandedModeTimeout(any(), anyInt())).thenReturn(
@@ -131,7 +131,6 @@ public class OneHandedControllerTest extends OneHandedTestCase {
         mSpiedOneHandedController = spy(new OneHandedController(
                 mContext,
                 mMockDisplayController,
-                mMockBackgroundOrganizer,
                 mMockDisplayAreaOrganizer,
                 mMockTouchHandler,
                 mMockTutorialHandler,
@@ -139,6 +138,7 @@ public class OneHandedControllerTest extends OneHandedTestCase {
                 mOneHandedAccessibilityUtil,
                 mSpiedTimeoutHandler,
                 mSpiedTransitionState,
+                mMockJankMonitor,
                 mMockUiEventLogger,
                 mMockOverlayManager,
                 mMockTaskStackListener,

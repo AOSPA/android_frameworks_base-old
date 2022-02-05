@@ -137,8 +137,15 @@ android_library {
 }
 
 filegroup {
+    name: "AAA-src",
+    srcs: ["tests/src/com/android/AAAPlusPlusVerifySysuiRequiredTestPropertiesTest.java"],
+    path: "tests/src",
+}
+
+filegroup {
     name: "SystemUI-tests-utils",
     srcs: [
+        "tests/src/com/android/systemui/SysuiBaseFragmentTest.java",
         "tests/src/com/android/systemui/SysuiTestCase.java",
         "tests/src/com/android/systemui/TestableDependency.java",
         "tests/src/com/android/systemui/classifier/FalsingManagerFake.java",
@@ -146,6 +153,7 @@ filegroup {
         "tests/src/com/android/systemui/statusbar/RankingBuilder.java",
         "tests/src/com/android/systemui/statusbar/SbnBuilder.java",
         "tests/src/com/android/systemui/SysuiTestableContext.java",
+        "tests/src/com/android/systemui/util/**/*Fake.java",
         "tests/src/com/android/systemui/utils/leaks/BaseLeakChecker.java",
         "tests/src/com/android/systemui/utils/leaks/LeakCheckedTest.java",
         "tests/src/com/android/systemui/**/Fake*.java",

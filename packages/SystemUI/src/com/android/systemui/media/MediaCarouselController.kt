@@ -418,7 +418,7 @@ class MediaCarouselController @Inject constructor(
                 .elementAtOrNull(mediaCarouselScrollHandler.visibleMediaIndex)
         if (existingPlayer == null) {
             var newPlayer = mediaControlPanelFactory.get()
-            if (mediaFlags.areMediaSessionActionsEnabled()) {
+            if (mediaFlags.useMediaSessionLayout()) {
                 newPlayer.attachPlayer(
                         PlayerSessionViewHolder.create(LayoutInflater.from(context), mediaContent),
                         MediaViewController.TYPE.PLAYER_SESSION)
@@ -865,6 +865,10 @@ class MediaCarouselController @Inject constructor(
             println("playerKeys: ${MediaPlayerData.playerKeys()}")
             println("smartspaceMediaData: ${MediaPlayerData.smartspaceMediaData}")
             println("shouldPrioritizeSs: ${MediaPlayerData.shouldPrioritizeSs}")
+            println("current size: $currentCarouselWidth x $currentCarouselHeight")
+            println("location: $desiredLocation")
+            println("state: ${desiredHostState?.expansion}, " +
+                "only active ${desiredHostState?.showsOnlyActiveMedia}")
         }
     }
 }

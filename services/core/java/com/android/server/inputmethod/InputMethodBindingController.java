@@ -18,8 +18,6 @@ package com.android.server.inputmethod;
 
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 
-import static com.android.server.inputmethod.InputMethodManagerService.MSG_INITIALIZE_IME;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.PendingIntent;
@@ -264,6 +262,13 @@ final class InputMethodBindingController {
     }
 
     /**
+     * Returns {@code true} if current IME supports Stylus Handwriting.
+     */
+    boolean supportsStylusHandwriting() {
+        return mSupportsStylusHw;
+    }
+
+    /**
      * Used to bring IME service up to visible adjustment while it is being shown.
      */
     @GuardedBy("ImfLock.class")
@@ -302,15 +307,14 @@ final class InputMethodBindingController {
                         return;
                     }
                     if (DEBUG) Slog.v(TAG, "Initiating attach with token: " + mCurToken);
-                    // Dispatch display id for InputMethodService to update context display.
-                    mService.executeOrSendMessage(mCurMethod,
-                            mService.mCaller.obtainMessageIOO(MSG_INITIALIZE_IME,
-                                    mMethodMap.get(mSelectedMethodId).getConfigChanges(),
-                                    mCurMethod, mCurToken));
+                    final InputMethodInfo info = mMethodMap.get(mSelectedMethodId);
+                    mSupportsStylusHw = info.supportsStylusHandwriting();
+                    mService.executeOrSendInitializeIme(mCurMethod, mCurToken,
+                            info.getConfigChanges(), mSupportsStylusHw);
                     mService.scheduleNotifyImeUidToAudioService(mCurMethodUid);
                     mService.reRequestCurrentClientSessionLocked();
                 }
-                mSupportsStylusHw = mMethodMap.get(mSelectedMethodId).supportsStylusHandwriting();
+
                 if (mSupportsStylusHw) {
                     // TODO init Handwriting spy.
                 }

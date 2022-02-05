@@ -69,6 +69,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.os.UserManager;
 import android.os.VibrationEffect;
 import android.provider.Settings;
@@ -185,7 +186,7 @@ import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
-import com.android.systemui.statusbar.notification.stack.MediaHeaderView;
+import com.android.systemui.statusbar.notification.stack.MediaContainerView;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
@@ -1592,7 +1593,7 @@ public class NotificationPanelViewController extends PanelViewController {
                 if (row.isRemoved()) {
                     continue;
                 }
-            } else if (child instanceof MediaHeaderView) {
+            } else if (child instanceof MediaContainerView) {
                 if (child.getVisibility() == GONE) {
                     continue;
                 }
@@ -2444,12 +2445,12 @@ public class NotificationPanelViewController extends PanelViewController {
         // mLockscreenShadeTransitionController.getDragProgress change.
         // When in lockscreen, getDragProgress indicates the true expanded fraction of QS
         float shadeExpandedFraction = mTransitioningToFullShadeProgress > 0
-                ? mLockscreenShadeTransitionController.getDragProgress()
+                ? mLockscreenShadeTransitionController.getQSDragProgress()
                 : getExpandedFraction();
         mSplitShadeHeaderController.setShadeExpandedFraction(shadeExpandedFraction);
         mSplitShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
         mSplitShadeHeaderController.setShadeExpanded(mQsVisible);
-
+        mKeyguardStatusBarViewController.updateViewState();
 
         if (mCommunalViewController != null) {
             mCommunalViewController.updateQsExpansion(qsExpansionFraction);
@@ -4601,11 +4602,13 @@ public class NotificationPanelViewController extends PanelViewController {
 
         @Override
         public void onSmallestScreenWidthChanged() {
+            Trace.beginSection("onSmallestScreenWidthChanged");
             if (DEBUG) Log.d(TAG, "onSmallestScreenWidthChanged");
 
             // Can affect multi-user switcher visibility as it depends on screen size by default:
             // it is enabled only for devices with large screens (see config_keyguardUserSwitcher)
             reInflateViews();
+            Trace.endSection();
         }
 
         @Override
@@ -4744,8 +4747,6 @@ public class NotificationPanelViewController extends PanelViewController {
     public interface NotificationPanelViewStateProvider {
         /** Returns the expanded height of the panel view. */
         float getPanelViewExpandedHeight();
-        /** Returns the fraction of QS that's expanded. */
-        float getQsExpansionFraction();
         /**
          * Returns true if heads up should be visible.
          *
@@ -4766,18 +4767,15 @@ public class NotificationPanelViewController extends PanelViewController {
                 }
 
                 @Override
-                public float getQsExpansionFraction() {
-                    return computeQsExpansionFraction();
-                }
-
-                @Override
                 public boolean shouldHeadsUpBeVisible() {
                     return mHeadsUpAppearanceController.shouldBeVisible();
                 }
 
                 @Override
                 public float getLockscreenShadeDragProgress() {
-                    return mLockscreenShadeTransitionController.getDragProgress();
+                    return mTransitioningToFullShadeProgress > 0
+                            ? mLockscreenShadeTransitionController.getQSDragProgress()
+                            : computeQsExpansionFraction();
                 }
             };
 

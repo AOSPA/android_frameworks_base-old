@@ -30,7 +30,6 @@ import static android.app.WindowConfiguration.PINNED_WINDOWING_MODE_ELEVATION_IN
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.app.WindowConfiguration.activityTypeToString;
 import static android.app.WindowConfiguration.windowingModeToString;
@@ -127,6 +126,8 @@ import static com.android.server.wm.TaskProto.SURFACE_HEIGHT;
 import static com.android.server.wm.TaskProto.SURFACE_WIDTH;
 import static com.android.server.wm.TaskProto.TASK_FRAGMENT;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
+import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
+import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowContainerChildProto.TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_MOVEMENT;
@@ -488,7 +489,6 @@ class Task extends TaskFragment {
     // to layout without loading all the task snapshots
     final PersistedTaskSnapshotData mLastTaskSnapshotData;
 
-    private Dimmer mDimmer = new Dimmer(this);
     private final Rect mTmpDimBoundsRect = new Rect();
 
     /** @see #setCanAffectSystemUiFlags */
@@ -622,6 +622,8 @@ class Task extends TaskFragment {
      * {@link ActivityRecord#clearLastParentBeforePip()}.
      */
     ActivityRecord mChildPipActivity;
+
+    boolean mLastSurfaceShowing = true;
 
     private Task(ActivityTaskManagerService atmService, int _taskId, Intent _intent,
             Intent _affinityIntent, String _affinity, String _rootAffinity,
@@ -938,13 +940,6 @@ class Task extends TaskFragment {
             }
             if (!animate) {
                 mTaskSupervisor.mNoAnimActivities.add(topActivity);
-            }
-
-            if (toRootTaskWindowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
-                    && moveRootTaskMode == REPARENT_KEEP_ROOT_TASK_AT_FRONT) {
-                // Move recents to front so it is not behind root home task when going into docked
-                // mode
-                mTaskSupervisor.moveRecentsRootTaskToFront(reason);
             }
         } finally {
             mAtmService.continueWindowLayout();
@@ -1763,7 +1758,7 @@ class Task extends TaskFragment {
      */
     boolean canBeLaunchedOnDisplay(int displayId) {
         return mTaskSupervisor.canPlaceEntityOnDisplay(displayId,
-                -1 /* don't check PID */, -1 /* don't check UID */, null /* activityInfo */);
+                -1 /* don't check PID */, -1 /* don't check UID */, this);
     }
 
     /**
@@ -2340,8 +2335,7 @@ class Task extends TaskFragment {
 
         final int windowingMode = getWindowingMode();
         if (!isActivityTypeStandardOrUndefined()
-                || windowingMode == WINDOWING_MODE_FULLSCREEN
-                || (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY && !isResizeable())) {
+                || windowingMode == WINDOWING_MODE_FULLSCREEN) {
             return isResizeable() ? rootTask.getRequestedOverrideBounds() : null;
         } else if (!getWindowConfiguration().persistTaskBounds()) {
             return rootTask.getRequestedOverrideBounds();
@@ -3322,6 +3316,17 @@ class Task extends TaskFragment {
         if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
             scheduleAnimation();
         }
+
+        // We intend to let organizer manage task visibility but it doesn't
+        // have enough information until we finish shell transitions.
+        // In the mean time we do an easy fix here.
+        final boolean show = isVisible() || isAnimating(TRANSITION | PARENTS);
+        if (mSurfaceControl != null) {
+            if (show != mLastSurfaceShowing) {
+                getSyncTransaction().setVisibility(mSurfaceControl, show);
+            }
+        }
+        mLastSurfaceShowing = show;
     }
 
     @Override
@@ -4637,25 +4642,7 @@ class Task extends TaskFragment {
     }
 
     void moveToFront(String reason, Task task) {
-        if (inSplitScreenSecondaryWindowingMode()) {
-            // If the root task is in split-screen secondary mode, we need to make sure we move the
-            // primary split-screen root task forward in the case it is currently behind a
-            // fullscreen root task so both halves of the split-screen appear on-top and the
-            // fullscreen root task isn't cutting between them.
-            // TODO(b/70677280): This is a workaround until we can fix as part of b/70677280.
-            final TaskDisplayArea taskDisplayArea = getDisplayArea();
-            final Task topFullScreenRootTask =
-                    taskDisplayArea.getTopRootTaskInWindowingMode(WINDOWING_MODE_FULLSCREEN);
-            if (topFullScreenRootTask != null) {
-                final Task primarySplitScreenRootTask =
-                        taskDisplayArea.getRootSplitScreenPrimaryTask();
-                if (primarySplitScreenRootTask != null
-                        && topFullScreenRootTask.compareTo(primarySplitScreenRootTask) > 0) {
-                    primarySplitScreenRootTask.moveToFrontInner(reason + " splitScreenToTop",
-                            null /* task */);
-                }
-            }
-        } else if (mMoveAdjacentTogether && getAdjacentTaskFragment() != null) {
+        if (mMoveAdjacentTogether && getAdjacentTaskFragment() != null) {
             final Task adjacentTask = getAdjacentTaskFragment().asTask();
             if (adjacentTask != null) {
                 adjacentTask.moveToFrontInner(reason + " adjacentTaskToTop", null /* task */);
@@ -5166,8 +5153,8 @@ class Task extends TaskFragment {
 
                 final ActivityRecord prev = baseTask.getActivity(
                         a -> a.mStartingData != null && a.showToCurrentUser());
-                r.showStartingWindow(prev, newTask, isTaskSwitch,
-                        true /* startActivity */, sourceRecord);
+                mWmService.mStartingSurfaceController.showStartingWindow(r, prev, newTask,
+                        isTaskSwitch, sourceRecord);
             }
         } else {
             // If this is the first activity, don't do any fancy animations,
@@ -5988,7 +5975,19 @@ class Task extends TaskFragment {
     }
 
     void reparent(TaskDisplayArea newParent, boolean onTop) {
-        reparent(newParent, onTop ? POSITION_TOP : POSITION_BOTTOM);
+        if (newParent == null) {
+            throw new IllegalArgumentException("Task can't reparent to null " + this);
+        }
+
+        if (getParent() == newParent) {
+            throw new IllegalArgumentException("Task=" + this + " already child of " + newParent);
+        }
+
+        if (canBeLaunchedOnDisplay(newParent.getDisplayId())) {
+            reparent(newParent, onTop ? POSITION_TOP : POSITION_BOTTOM);
+        } else {
+            Slog.w(TAG, "Task=" + this + " can't reparent to " + newParent);
+        }
     }
 
     void setLastRecentsAnimationTransaction(@NonNull PictureInPictureSurfaceTransaction transaction,

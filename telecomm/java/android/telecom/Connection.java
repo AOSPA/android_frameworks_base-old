@@ -562,17 +562,26 @@ public abstract class Connection extends Conferenceable {
     public static final int PROPERTY_CROSS_SIM = 1 << 13;
 
     /**
+     * Connection is a tethered external call.
+     * <p>
+     * Indicates that the {@link Connection} is fixed on this device but the audio streams are
+     * re-routed to another device.
+     * <p>
+     */
+    public static final int PROPERTY_TETHERED_CALL = 1 << 14;
+
+    /**
      * Set by the framework to indicate that a Connection is participant host, which
      * means the conference participant's handle is the same as the conference host's handle.
      * <p>
      * This property is specific to IMS conference calls originating in Telephony.
      * @hide
      */
-    public static final int PROPERTY_IS_PARTICIPANT_HOST = 1 << 14;
+    public static final int PROPERTY_IS_PARTICIPANT_HOST = 1 << 15;
 
 
     //**********************************************************************************************
-    // Next PROPERTY value: 1<<14
+    // Next PROPERTY value: 1<<16
     //**********************************************************************************************
 
     /**
@@ -3566,9 +3575,9 @@ public abstract class Connection extends Conferenceable {
             mIsBlocked = in.readByte() != 0;
             mIsInContacts = in.readByte() != 0;
             CallScreeningService.ParcelableCallResponse response
-                    = in.readParcelable(CallScreeningService.class.getClassLoader(), android.telecom.CallScreeningService.ParcelableCallResponse.class);
+                    = in.readParcelable(CallScreeningService.class.getClassLoader());
             mCallResponse = response == null ? null : response.toCallResponse();
-            mCallScreeningComponent = in.readParcelable(ComponentName.class.getClassLoader(), android.content.ComponentName.class);
+            mCallScreeningComponent = in.readParcelable(ComponentName.class.getClassLoader());
         }
 
         @NonNull

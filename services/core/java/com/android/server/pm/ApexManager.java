@@ -32,9 +32,9 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.pm.SigningDetails;
-import android.content.pm.parsing.PackageInfoWithoutStateUtils;
-import android.content.pm.parsing.ParsingPackageUtils;
-import android.content.pm.parsing.component.ParsedApexSystemService;
+import com.android.server.pm.pkg.parsing.PackageInfoWithoutStateUtils;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
+import com.android.server.pm.pkg.component.ParsedApexSystemService;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.os.Binder;
@@ -799,7 +799,7 @@ public abstract class ApexManager {
                 throw new RuntimeException(re);
             } catch (Exception e) {
                 throw new PackageManagerException(
-                        PackageInstaller.SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
+                        PackageInstaller.SessionInfo.SESSION_VERIFICATION_FAILED,
                         "apexd verification failed : " + e.getMessage());
             }
         }
@@ -826,7 +826,7 @@ public abstract class ApexManager {
                 throw new RuntimeException(re);
             } catch (Exception e) {
                 throw new PackageManagerException(
-                        PackageInstaller.SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
+                        PackageInstaller.SessionInfo.SESSION_VERIFICATION_FAILED,
                         "Failed to mark apexd session as ready : " + e.getMessage());
             }
         }
