@@ -5630,4 +5630,8 @@
 
     <!-- Flag indicating if help links for Settings app should be enabled. -->
     <bool name="config_settingsHelpLinksEnabled">false</bool>
+
+    <!-- Maximum time in millisecs for telephony should wait to deactivate data call
+         when user turned off mobile data or data roaming during CIWLAN -->
+    <integer name="config_maximumDelayTimeToDeactivateDataCall">7000</integer>
 </resources>

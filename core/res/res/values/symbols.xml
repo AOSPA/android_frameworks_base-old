@@ -4674,4 +4674,6 @@
   <java-symbol type="string" name="config_supervisedUserCreationPackage"/>
 
   <java-symbol type="bool" name="config_enableSafetyCenter" />
+
+  <java-symbol type="integer" name="config_maximumDelayTimeToDeactivateDataCall" />
 </resources>
