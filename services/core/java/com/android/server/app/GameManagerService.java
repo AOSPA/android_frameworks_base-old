@@ -39,9 +39,11 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.GameManager;
 import android.app.GameManager.GameMode;
+import android.app.GameModeInfo;
 import android.app.GameState;
 import android.app.IGameManagerService;
 import android.app.compat.PackageOverride;
@@ -81,6 +83,7 @@ import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.SystemService;
 import com.android.server.SystemService.TargetUser;
+import com.android.server.app.GameManagerService.GamePackageConfiguration.GameModeConfiguration;
 
 import java.io.FileDescriptor;
 import java.util.List;
@@ -113,6 +116,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
     private final Context mContext;
     private final Object mLock = new Object();
     private final Object mDeviceConfigLock = new Object();
+    private final Object mOverrideConfigLock = new Object();
     private final Handler mHandler;
     private final PackageManager mPackageManager;
     private final IPlatformCompat mPlatformCompat;
@@ -122,6 +126,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
     private final ArrayMap<Integer, GameManagerSettings> mSettings = new ArrayMap<>();
     @GuardedBy("mDeviceConfigLock")
     private final ArrayMap<String, GamePackageConfiguration> mConfigs = new ArrayMap<>();
+    @GuardedBy("mOverrideConfigLock")
+    private final ArrayMap<String, GamePackageConfiguration> mOverrideConfigs = new ArrayMap<>();
 
     public GameManagerService(Context context) {
         this(context, createServiceThread().getLooper());
@@ -281,13 +287,51 @@ public final class GameManagerService extends IGameManagerService.Stub {
         return 0;
     }
 
+    public enum FrameRate {
+        FPS_DEFAULT(0),
+        FPS_30(30),
+        FPS_45(45),
+        FPS_60(60),
+        FPS_90(90),
+        FPS_120(120),
+        FPS_INVALID(-1);
+
+        public final int fps;
+
+        FrameRate(int fps) {
+            this.fps = fps;
+        }
+    }
+
+    // Turn the raw string to the corresponding fps int.
+    // Return 0 when disabling, -1 for invalid fps.
+    static int getFpsInt(String raw) {
+        switch (raw) {
+            case "30":
+                return FrameRate.FPS_30.fps;
+            case "45":
+                return FrameRate.FPS_45.fps;
+            case "60":
+                return FrameRate.FPS_60.fps;
+            case "90":
+                return FrameRate.FPS_90.fps;
+            case "120":
+                return FrameRate.FPS_120.fps;
+            case "disable":
+            case "":
+                return FrameRate.FPS_DEFAULT.fps;
+        }
+        return FrameRate.FPS_INVALID.fps;
+    }
+
     /**
      * Called by games to communicate the current state to the platform.
      * @param packageName The client package name.
      * @param gameState An object set to the current state.
      * @param userId The user associated with this state.
      */
-    public void setGameState(String packageName, @NonNull GameState gameState, int userId) {
+    public void setGameState(String packageName, @NonNull GameState gameState,
+            @UserIdInt int userId) {
         if (!isPackageGame(packageName, userId)) {
             // Restrict to games only.
             return;
@@ -399,11 +443,14 @@ public final class GameManagerService extends IGameManagerService.Stub {
             public static final String TAG = "GameManagerService_GameModeConfiguration";
             public static final String MODE_KEY = "mode";
             public static final String SCALING_KEY = "downscaleFactor";
+            public static final String FPS_KEY = "fps";
             public static final String DEFAULT_SCALING = "1.0";
+            public static final String DEFAULT_FPS = "";
             public static final String ANGLE_KEY = "useAngle";
 
             private final @GameMode int mGameMode;
-            private final String mScaling;
+            private String mScaling;
+            private String mFps;
             private final boolean mUseAngle;
 
             GameModeConfiguration(KeyValueListParser parser) {
@@ -414,6 +461,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
                 // using ANGLE).
                 mScaling = !mAllowDownscale || willGamePerformOptimizations(mGameMode)
                         ? DEFAULT_SCALING : parser.getString(SCALING_KEY, DEFAULT_SCALING);
+
+                mFps = parser.getString(FPS_KEY, DEFAULT_FPS);
                 // We only want to use ANGLE if:
                 // - We're allowed to use ANGLE (the app hasn't opted out via the manifest) AND
                 // - The app has not opted in to performing the work itself AND
@@ -430,14 +479,27 @@ public final class GameManagerService extends IGameManagerService.Stub {
                 return mScaling;
             }
 
+            public int getFps() {
+                return GameManagerService.getFpsInt(mFps);
+            }
+
             public boolean getUseAngle() {
                 return mUseAngle;
             }
 
+            public void setScaling(String scaling) {
+                mScaling = scaling;
+            }
+
+            public void setFpsStr(String fpsStr) {
+                mFps = fpsStr;
+            }
+
             public boolean isValid() {
-                return mGameMode == GameManager.GAME_MODE_STANDARD
+                return (mGameMode == GameManager.GAME_MODE_STANDARD
                         || mGameMode == GameManager.GAME_MODE_PERFORMANCE
-                        || mGameMode == GameManager.GAME_MODE_BATTERY;
+                        || mGameMode == GameManager.GAME_MODE_BATTERY)
+                        && !willGamePerformOptimizations(mGameMode);
             }
 
             /**
@@ -445,7 +507,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
              */
             public String toString() {
                 return "[Game Mode:" + mGameMode + ",Scaling:" + mScaling + ",Use Angle:"
-                        + mUseAngle + "]";
+                        + mUseAngle + ",Fps:" + mFps + "]";
             }
 
             /**
@@ -633,6 +695,32 @@ public final class GameManagerService extends IGameManagerService.Stub {
         }
     }
 
+    private @GameMode int[] getAvailableGameModesUnchecked(String packageName) {
+        GamePackageConfiguration config = null;
+        synchronized (mOverrideConfigLock) {
+            config = mOverrideConfigs.get(packageName);
+        }
+        if (config == null) {
+            synchronized (mDeviceConfigLock) {
+                config = mConfigs.get(packageName);
+            }
+        }
+        if (config == null) {
+            return new int[]{};
+        }
+        return config.getAvailableGameModes();
+    }
+
+    private boolean isPackageGame(String packageName, @UserIdInt int userId) {
+        try {
+            final ApplicationInfo applicationInfo = mPackageManager
+                    .getApplicationInfoAsUser(packageName, PackageManager.MATCH_ALL, userId);
+            return applicationInfo.category == ApplicationInfo.CATEGORY_GAME;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
     /**
      * Get an array of game modes available for a given package.
      * Checks that the caller has {@link android.Manifest.permission#MANAGE_GAME_MODE}.
@@ -641,16 +729,10 @@ public final class GameManagerService extends IGameManagerService.Stub {
     @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
     public @GameMode int[] getAvailableGameModes(String packageName) throws SecurityException {
         checkPermission(Manifest.permission.MANAGE_GAME_MODE);
-        synchronized (mDeviceConfigLock) {
-            final GamePackageConfiguration config = mConfigs.get(packageName);
-            if (config == null) {
-                return new int[]{GameManager.GAME_MODE_UNSUPPORTED};
-            }
-            return config.getAvailableGameModes();
-        }
+        return getAvailableGameModesUnchecked(packageName);
     }
 
-    private @GameMode int getGameModeFromSettings(String packageName, int userId) {
+    private @GameMode int getGameModeFromSettings(String packageName, @UserIdInt int userId) {
         synchronized (mLock) {
             if (!mSettings.containsKey(userId)) {
                 Slog.w(TAG, "User ID '" + userId + "' does not have a Game Mode"
@@ -668,28 +750,22 @@ public final class GameManagerService extends IGameManagerService.Stub {
      * {@link android.Manifest.permission#MANAGE_GAME_MODE}.
      */
     @Override
-    public @GameMode int getGameMode(String packageName, int userId)
+    public @GameMode int getGameMode(@NonNull String packageName, @UserIdInt int userId)
             throws SecurityException {
         userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
                 Binder.getCallingUid(), userId, false, true, "getGameMode",
                 "com.android.server.app.GameManagerService");
 
         // Restrict to games only.
-        try {
-            final ApplicationInfo applicationInfo = mPackageManager
-                    .getApplicationInfoAsUser(packageName, PackageManager.MATCH_ALL, userId);
-            if (applicationInfo.category != ApplicationInfo.CATEGORY_GAME) {
-                // The game mode for applications that are not identified as game is always
-                // UNSUPPORTED. See {@link PackageManager#setApplicationCategoryHint(String, int)}
-                return GameManager.GAME_MODE_UNSUPPORTED;
-            }
-        } catch (PackageManager.NameNotFoundException e) {
+        if (!isPackageGame(packageName, userId)) {
+            // The game mode for applications that are not identified as game is always
+            // UNSUPPORTED. See {@link PackageManager#setApplicationCategoryHint(String, int)}
             return GameManager.GAME_MODE_UNSUPPORTED;
         }
 
         // This function handles two types of queries:
-        // 1.) A normal, non-privileged app querying its own Game Mode.
-        // 2.) A privileged system service querying the Game Mode of another package.
+        // 1) A normal, non-privileged app querying its own Game Mode.
+        // 2) A privileged system service querying the Game Mode of another package.
         // The least privileged case is a normal app performing a query, so check that first and
         // return a value if the package name is valid. Next, check if the caller has the necessary
         // permission and return a value. Do this check last, since it can throw an exception.
@@ -702,14 +778,32 @@ public final class GameManagerService extends IGameManagerService.Stub {
         return getGameModeFromSettings(packageName, userId);
     }
 
-    private boolean isPackageGame(String packageName, int userId) {
-        try {
-            final ApplicationInfo applicationInfo = mPackageManager
-                    .getApplicationInfoAsUser(packageName, PackageManager.MATCH_ALL, userId);
-            return applicationInfo.category == ApplicationInfo.CATEGORY_GAME;
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
+    /**
+     * Get the GameModeInfo for the package name.
+     * Verifies that the calling process is for the matching package UID or has
+     * {@link android.Manifest.permission#MANAGE_GAME_MODE}. If the package is not a game,
+     * null is always returned.
+     */
+    @Override
+    @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
+    @Nullable
+    public GameModeInfo getGameModeInfo(@NonNull String packageName, @UserIdInt int userId) {
+        userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
+                Binder.getCallingUid(), userId, false, true, "getGameModeInfo",
+                "com.android.server.app.GameManagerService");
+
+        // Check the caller has the necessary permission.
+        checkPermission(Manifest.permission.MANAGE_GAME_MODE);
+
+        // Restrict to games only.
+        if (!isPackageGame(packageName, userId)) {
+            return null;
         }
+
+        final @GameMode int activeGameMode = getGameModeFromSettings(packageName, userId);
+        final @GameMode int[] availableGameModes = getAvailableGameModesUnchecked(packageName);
+
+        return new GameModeInfo(activeGameMode, availableGameModes);
     }
 
     /**
@@ -743,7 +837,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
                 mHandler.sendMessageDelayed(msg, WRITE_SETTINGS_DELAY);
             }
         }
-        updateInterventions(packageName, gameMode);
+        updateInterventions(packageName, gameMode, userId);
     }
 
     /**
@@ -844,6 +938,19 @@ public final class GameManagerService extends IGameManagerService.Stub {
         }
     }
 
+    /**
+     * Remove frame rate override due to mode switch
+     */
+    private void resetFps(String packageName, @UserIdInt int userId) {
+        try {
+            final float fps = 0.0f;
+            final int uid = mPackageManager.getPackageUidAsUser(packageName, userId);
+            nativeSetOverrideFrameRate(uid, fps);
+        } catch (PackageManager.NameNotFoundException e) {
+            return;
+        }
+    }
+
     private void enableCompatScale(String packageName, long scaleId) {
         final long uid = Binder.clearCallingIdentity();
         try {
@@ -876,41 +983,26 @@ public final class GameManagerService extends IGameManagerService.Stub {
         }
     }
 
-    private void updateCompatModeDownscale(String packageName, @GameMode int gameMode) {
-        synchronized (mDeviceConfigLock) {
-            if (gameMode == GameManager.GAME_MODE_STANDARD
-                    || gameMode == GameManager.GAME_MODE_UNSUPPORTED) {
-                disableCompatScale(packageName);
-                return;
-            }
-            final GamePackageConfiguration packageConfig = mConfigs.get(packageName);
-            if (packageConfig == null) {
-                disableCompatScale(packageName);
-                Slog.v(TAG, "Package configuration not found for " + packageName);
-                return;
-            }
-            if (DEBUG) {
-                Slog.v(TAG, dumpDeviceConfigs());
-            }
-            if (packageConfig.willGamePerformOptimizations(gameMode)) {
-                disableCompatScale(packageName);
-                return;
-            }
-            final GamePackageConfiguration.GameModeConfiguration modeConfig =
-                    packageConfig.getGameModeConfiguration(gameMode);
-            if (modeConfig == null) {
-                Slog.i(TAG, "Game mode " + gameMode + " not found for " + packageName);
-                return;
-            }
-            long scaleId = modeConfig.getCompatChangeId();
-            if (scaleId == 0) {
-                Slog.i(TAG, "Invalid downscaling change id " + scaleId + " for "
-                        + packageName);
-                return;
-            }
+    private void updateCompatModeDownscale(GamePackageConfiguration packageConfig,
+            String packageName, @GameMode int gameMode) {
 
-            enableCompatScale(packageName, scaleId);
+        if (DEBUG) {
+            Slog.v(TAG, dumpDeviceConfigs());
         }
+        final GamePackageConfiguration.GameModeConfiguration modeConfig =
+                packageConfig.getGameModeConfiguration(gameMode);
+        if (modeConfig == null) {
+            Slog.i(TAG, "Game mode " + gameMode + " not found for " + packageName);
+            return;
+        }
+        long scaleId = modeConfig.getCompatChangeId();
+        if (scaleId == 0) {
+            Slog.w(TAG, "Invalid downscaling change id " + scaleId + " for "
+                    + packageName);
+            return;
+        }
+
+        enableCompatScale(packageName, scaleId);
     }
 
     private int modeToBitmask(@GameMode int gameMode) {
@@ -927,16 +1019,234 @@ public final class GameManagerService extends IGameManagerService.Stub {
         // ship.
     }
 
-    private void updateInterventions(String packageName, @GameMode int gameMode) {
-        updateCompatModeDownscale(packageName, gameMode);
+
+    private void updateFps(GamePackageConfiguration packageConfig, String packageName,
+            @GameMode int gameMode, @UserIdInt int userId) {
+        final GamePackageConfiguration.GameModeConfiguration modeConfig =
+                packageConfig.getGameModeConfiguration(gameMode);
+        if (modeConfig == null) {
+            Slog.d(TAG, "Game mode " + gameMode + " not found for " + packageName);
+            return;
+        }
+        try {
+            final float fps = modeConfig.getFps();
+            final int uid = mPackageManager.getPackageUidAsUser(packageName, userId);
+            nativeSetOverrideFrameRate(uid, fps);
+        } catch (PackageManager.NameNotFoundException e) {
+            return;
+        }
+    }
+
+
+    private void updateInterventions(String packageName,
+            @GameMode int gameMode, @UserIdInt int userId) {
+        if (gameMode == GameManager.GAME_MODE_STANDARD
+                || gameMode == GameManager.GAME_MODE_UNSUPPORTED) {
+            disableCompatScale(packageName);
+            resetFps(packageName, userId);
+            return;
+        }
+        GamePackageConfiguration packageConfig = null;
+
+        synchronized (mOverrideConfigLock) {
+            packageConfig = mOverrideConfigs.get(packageName);
+        }
+
+        if (packageConfig == null) {
+            synchronized (mDeviceConfigLock) {
+                packageConfig = mConfigs.get(packageName);
+            }
+        }
+
+        if (packageConfig == null) {
+            disableCompatScale(packageName);
+            Slog.v(TAG, "Package configuration not found for " + packageName);
+            return;
+        }
+        if (packageConfig.willGamePerformOptimizations(gameMode)) {
+            return;
+        }
+        updateCompatModeDownscale(packageConfig, packageName, gameMode);
+        updateFps(packageConfig, packageName, gameMode, userId);
         updateUseAngle(packageName, gameMode);
+    }
+
+    /**
+     * Set the override Game Mode Configuration.
+     * Update the config if exists, create one if not.
+     */
+    @VisibleForTesting
+    @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
+    public void setGameModeConfigOverride(String packageName, @UserIdInt int userId,
+            @GameMode int gameMode, String fpsStr, String scaling) throws SecurityException {
+        checkPermission(Manifest.permission.MANAGE_GAME_MODE);
+        synchronized (mLock) {
+            if (!mSettings.containsKey(userId)) {
+                return;
+            }
+        }
+        // Adding override game mode configuration of the given package name
+        synchronized (mOverrideConfigLock) {
+            // look for the existing override GamePackageConfiguration
+            GamePackageConfiguration overrideConfig = mOverrideConfigs.get(packageName);
+            if (overrideConfig == null) {
+                overrideConfig = new GamePackageConfiguration(packageName, userId);
+                mOverrideConfigs.put(packageName, overrideConfig);
+            }
+
+            // modify GameModeConfiguration intervention settings
+            GamePackageConfiguration.GameModeConfiguration overrideModeConfig =
+                    overrideConfig.getGameModeConfiguration(gameMode);
+
+            if (fpsStr != null) {
+                overrideModeConfig.setFpsStr(fpsStr);
+            } else {
+                overrideModeConfig.setFpsStr(
+                        GamePackageConfiguration.GameModeConfiguration.DEFAULT_FPS);
+            }
+            if (scaling != null) {
+                overrideModeConfig.setScaling(scaling);
+            } else {
+                overrideModeConfig.setScaling(
+                        GamePackageConfiguration.GameModeConfiguration.DEFAULT_SCALING);
+            }
+            Slog.i(TAG, "Package Name: " + packageName
+                    + " FPS: " + String.valueOf(overrideModeConfig.getFps())
+                    + " Scaling: " + overrideModeConfig.getScaling());
+        }
+        setGameMode(packageName, gameMode, userId);
+    }
+
+    /**
+     * Reset the overridden gameModeConfiguration of the given mode.
+     * Remove the override config if game mode is not specified.
+     */
+    @VisibleForTesting
+    @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
+    public void resetGameModeConfigOverride(String packageName, @UserIdInt int userId,
+            @GameMode int gameModeToReset) throws SecurityException {
+        checkPermission(Manifest.permission.MANAGE_GAME_MODE);
+        synchronized (mLock) {
+            if (!mSettings.containsKey(userId)) {
+                return;
+            }
+        }
+
+        // resets GamePackageConfiguration of a given packageName.
+        // If a gameMode is specified, only reset the GameModeConfiguration of the gameMode.
+        if (gameModeToReset != -1) {
+            GamePackageConfiguration overrideConfig = null;
+            synchronized (mOverrideConfigLock) {
+                overrideConfig = mOverrideConfigs.get(packageName);
+            }
+
+            GamePackageConfiguration config = null;
+            synchronized (mDeviceConfigLock) {
+                config = mConfigs.get(packageName);
+            }
+
+            int[] modes = overrideConfig.getAvailableGameModes();
+
+            // First check if the mode to reset exists
+            boolean isGameModeExist = false;
+            for (int mode : modes) {
+                if (gameModeToReset == mode) {
+                    isGameModeExist = true;
+                }
+            }
+            if (!isGameModeExist) {
+                return;
+            }
+
+            // If the game mode to reset is the only mode other than standard mode,
+            // The override config is removed.
+            if (modes.length <= 2) {
+                synchronized (mOverrideConfigLock) {
+                    mOverrideConfigs.remove(packageName);
+                }
+            } else {
+                // otherwise we reset the mode by copying the original config.
+                overrideConfig.addModeConfig(config.getGameModeConfiguration(gameModeToReset));
+            }
+        } else {
+            synchronized (mOverrideConfigLock) {
+                // remove override config if there is one
+                mOverrideConfigs.remove(packageName);
+            }
+        }
+
+        // Make sure after resetting the game mode is still supported.
+        // If not, set the game mode to standard
+        int gameMode = getGameMode(packageName, userId);
+        int newGameMode = gameMode;
+
+        GamePackageConfiguration config = null;
+        synchronized (mOverrideConfigLock) {
+            config = mOverrideConfigs.get(packageName);
+        }
+        synchronized (mDeviceConfigLock) {
+            config = mConfigs.get(packageName);
+        }
+        if (config != null) {
+            int modesBitfield = config.getAvailableGameModesBitfield();
+            // Remove UNSUPPORTED to simplify the logic here, since we really just
+            // want to check if we support selectable game modes
+            modesBitfield &= ~modeToBitmask(GameManager.GAME_MODE_UNSUPPORTED);
+            if (!bitFieldContainsModeBitmask(modesBitfield, gameMode)) {
+                if (bitFieldContainsModeBitmask(modesBitfield,
+                        GameManager.GAME_MODE_STANDARD)) {
+                    // If the current set mode isn't supported,
+                    // but we support STANDARD, then set the mode to STANDARD.
+                    newGameMode = GameManager.GAME_MODE_STANDARD;
+                } else {
+                    // If we don't support any game modes, then set to UNSUPPORTED
+                    newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
+                }
+            }
+        } else if (gameMode != GameManager.GAME_MODE_UNSUPPORTED) {
+            // If we have no config for the package, but the configured mode is not
+            // UNSUPPORTED, then set to UNSUPPORTED
+            newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
+        }
+        if (gameMode != newGameMode) {
+            setGameMode(packageName, GameManager.GAME_MODE_STANDARD, userId);
+            return;
+        }
+        setGameMode(packageName, gameMode, userId);
+    }
+
+    /**
+     * Returns the string listing all the interventions currently set to a game.
+     */
+    public String getInterventionList(String packageName) {
+        GamePackageConfiguration packageConfig = null;
+        synchronized (mOverrideConfigLock) {
+            packageConfig = mOverrideConfigs.get(packageName);
+        }
+
+        if (packageConfig == null) {
+            synchronized (mDeviceConfigLock) {
+                packageConfig = mConfigs.get(packageName);
+            }
+        }
+
+        StringBuilder listStrSb = new StringBuilder();
+        if (packageConfig == null) {
+            listStrSb.append("\n No intervention found for package ")
+                    .append(packageName);
+            return listStrSb.toString();
+        }
+        listStrSb.append("\nPackage name: ")
+                .append(packageName)
+                .append(packageConfig.toString());
+        return listStrSb.toString();
     }
 
     /**
      * @hide
      */
     @VisibleForTesting
-    void updateConfigsForUser(int userId, String ...packageNames) {
+    void updateConfigsForUser(@UserIdInt int userId, String ...packageNames) {
         try {
             synchronized (mDeviceConfigLock) {
                 for (final String packageName : packageNames) {
@@ -954,43 +1264,47 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     }
                 }
             }
-            for (final String packageName : packageNames) {
-                if (mSettings.containsKey(userId)) {
-                    int gameMode = getGameMode(packageName, userId);
-                    int newGameMode = gameMode;
-                    // Make sure the user settings and package configs don't conflict. I.e. the
-                    // user setting is set to a mode that no longer available due to config/manifest
-                    // changes. Most of the time we won't have to change anything.
-                    GamePackageConfiguration config;
-                    synchronized (mDeviceConfigLock) {
-                        config = mConfigs.get(packageName);
-                    }
-                    if (config != null) {
-                        int modesBitfield = config.getAvailableGameModesBitfield();
-                        // Remove UNSUPPORTED to simplify the logic here, since we really just
-                        // want to check if we support selectable game modes
-                        modesBitfield &= ~modeToBitmask(GameManager.GAME_MODE_UNSUPPORTED);
-                        if (!bitFieldContainsModeBitmask(modesBitfield, gameMode)) {
-                            if (bitFieldContainsModeBitmask(modesBitfield,
-                                    GameManager.GAME_MODE_STANDARD)) {
-                                // If the current set mode isn't supported, but we support STANDARD,
-                                // then set the mode to STANDARD.
-                                newGameMode = GameManager.GAME_MODE_STANDARD;
-                            } else {
-                                // If we don't support any game modes, then set to UNSUPPORTED
-                                newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
-                            }
-                        }
-                    } else if (gameMode != GameManager.GAME_MODE_UNSUPPORTED) {
-                        // If we have no config for the package, but the configured mode is not
-                        // UNSUPPORTED, then set to UNSUPPORTED
-                        newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
-                    }
-                    if (newGameMode != gameMode) {
-                        setGameMode(packageName, newGameMode, userId);
-                    }
-                    updateInterventions(packageName, gameMode);
+            synchronized (mLock) {
+                if (!mSettings.containsKey(userId)) {
+                    return;
                 }
+            }
+            for (final String packageName : packageNames) {
+                int gameMode = getGameMode(packageName, userId);
+                int newGameMode = gameMode;
+                // Make sure the user settings and package configs don't conflict.
+                // I.e. the user setting is set to a mode that no longer available due to
+                // config/manifest changes.
+                // Most of the time we won't have to change anything.
+                GamePackageConfiguration config = null;
+                synchronized (mDeviceConfigLock) {
+                    config = mConfigs.get(packageName);
+                }
+                if (config != null) {
+                    int modesBitfield = config.getAvailableGameModesBitfield();
+                    // Remove UNSUPPORTED to simplify the logic here, since we really just
+                    // want to check if we support selectable game modes
+                    modesBitfield &= ~modeToBitmask(GameManager.GAME_MODE_UNSUPPORTED);
+                    if (!bitFieldContainsModeBitmask(modesBitfield, gameMode)) {
+                        if (bitFieldContainsModeBitmask(modesBitfield,
+                                GameManager.GAME_MODE_STANDARD)) {
+                            // If the current set mode isn't supported,
+                            // but we support STANDARD, then set the mode to STANDARD.
+                            newGameMode = GameManager.GAME_MODE_STANDARD;
+                        } else {
+                            // If we don't support any game modes, then set to UNSUPPORTED
+                            newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
+                        }
+                    }
+                } else if (gameMode != GameManager.GAME_MODE_UNSUPPORTED) {
+                    // If we have no config for the package, but the configured mode is not
+                    // UNSUPPORTED, then set to UNSUPPORTED
+                    newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
+                }
+                if (newGameMode != gameMode) {
+                    setGameMode(packageName, newGameMode, userId);
+                }
+                updateInterventions(packageName, gameMode, userId);
             }
         } catch (Exception e) {
             Slog.e(TAG, "Failed to update compat modes for user " + userId + ": " + e);
@@ -1011,7 +1325,16 @@ public final class GameManagerService extends IGameManagerService.Stub {
      */
     @VisibleForTesting
     public GamePackageConfiguration getConfig(String packageName) {
-        return mConfigs.get(packageName);
+        GamePackageConfiguration packageConfig = null;
+        synchronized (mOverrideConfigLock) {
+            packageConfig = mOverrideConfigs.get(packageName);
+        }
+        if (packageConfig == null) {
+            synchronized (mDeviceConfigLock) {
+                packageConfig = mConfigs.get(packageName);
+            }
+        }
+        return packageConfig;
     }
 
     private void registerPackageReceiver() {
@@ -1047,6 +1370,9 @@ public final class GameManagerService extends IGameManagerService.Stub {
                             break;
                         case ACTION_PACKAGE_REMOVED:
                             disableCompatScale(packageName);
+                            synchronized (mOverrideConfigLock) {
+                                mOverrideConfigs.remove(packageName);
+                            }
                             synchronized (mDeviceConfigLock) {
                                 mConfigs.remove(packageName);
                             }
@@ -1083,4 +1409,9 @@ public final class GameManagerService extends IGameManagerService.Stub {
         handlerThread.start();
         return handlerThread;
     }
+
+    /**
+     * load dynamic library for frame rate overriding JNI calls
+     */
+    private static native void nativeSetOverrideFrameRate(int uid, float frameRate);
 }

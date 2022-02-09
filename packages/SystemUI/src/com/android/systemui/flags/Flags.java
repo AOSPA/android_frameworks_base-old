@@ -74,9 +74,6 @@ public class Flags {
     public static final ResourceBooleanFlag BOUNCER_USER_SWITCHER =
             new ResourceBooleanFlag(204, R.bool.config_enableBouncerUserSwitcher);
 
-    public static final ResourceBooleanFlag ACTIVE_UNLOCK =
-            new ResourceBooleanFlag(205, R.bool.flag_active_unlock);
-
     /***************************************/
     // 300 - power menu
     public static final BooleanFlag POWER_MENU_LITE =
@@ -88,7 +85,7 @@ public class Flags {
             new BooleanFlag(400, true);
 
     public static final BooleanFlag SMARTSPACE_SHARED_ELEMENT_TRANSITION_ENABLED =
-            new BooleanFlag(401, false);
+            new BooleanFlag(401, true);
 
     public static final ResourceBooleanFlag SMARTSPACE =
             new ResourceBooleanFlag(402, R.bool.flag_smartspace);

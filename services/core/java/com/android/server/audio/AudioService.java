@@ -190,6 +190,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -11105,6 +11106,10 @@ public class AudioService extends IAudioService.Stub
             delayMillis = 0;
         }
         return delayMillis;
+    }
+
+    UUID getDeviceSensorUuid(AudioDeviceAttributes device) {
+        return mDeviceBroker.getDeviceSensorUuid(device);
     }
 
     //======================

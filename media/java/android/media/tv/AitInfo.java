@@ -17,12 +17,12 @@
 package android.media.tv;
 
 import android.annotation.NonNull;
+import android.media.tv.interactive.TvInteractiveAppInfo;
 import android.os.Parcel;
 import android.os.Parcelable;
 
 /**
- * AIT info.
- * @hide
+ * AIT (Application Information Table) info.
  */
 public final class AitInfo implements Parcelable {
     static final String TAG = "AitInfo";
@@ -50,14 +50,15 @@ public final class AitInfo implements Parcelable {
     /**
      * Constructs AIT info.
      */
-    public AitInfo(int type, int version) {
+    public AitInfo(@TvInteractiveAppInfo.InteractiveAppType int type, int version) {
         mType = type;
         mVersion = version;
     }
 
     /**
-     * Gets type.
+     * Gets interactive app type.
      */
+    @TvInteractiveAppInfo.InteractiveAppType
     public int getType() {
         return mType;
     }

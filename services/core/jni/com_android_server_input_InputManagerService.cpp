@@ -277,6 +277,7 @@ public:
     void setInputDispatchMode(bool enabled, bool frozen);
     void setSystemUiLightsOut(bool lightsOut);
     void setPointerSpeed(int32_t speed);
+    void setPointerAcceleration(float acceleration);
     void setInputDeviceEnabled(uint32_t deviceId, bool enabled);
     void setShowTouches(bool enabled);
     void setInteractive(bool interactive);
@@ -286,6 +287,7 @@ public:
     void requestPointerCapture(const sp<IBinder>& windowToken, bool enabled);
     void setCustomPointerIcon(const SpriteIcon& icon);
     void setMotionClassifierEnabled(bool enabled);
+    void notifyPointerDisplayIdChanged();
 
     /* --- InputReaderPolicyInterface implementation --- */
 
@@ -362,6 +364,9 @@ private:
         // Pointer speed.
         int32_t pointerSpeed;
 
+        // Pointer acceleration.
+        float pointerAcceleration;
+
         // True if pointer gestures are enabled.
         bool pointerGesturesEnabled;
 
@@ -411,6 +416,7 @@ NativeInputManager::NativeInputManager(jobject contextObj,
         AutoMutex _l(mLock);
         mLocked.systemUiLightsOut = false;
         mLocked.pointerSpeed = 0;
+        mLocked.pointerAcceleration = android::os::IInputConstants::DEFAULT_POINTER_ACCELERATION;
         mLocked.pointerGesturesEnabled = true;
         mLocked.showTouches = false;
         mLocked.pointerDisplayId = ADISPLAY_ID_DEFAULT;
@@ -438,6 +444,7 @@ void NativeInputManager::dump(std::string& dump) {
         dump += StringPrintf(INDENT "System UI Lights Out: %s\n",
                              toString(mLocked.systemUiLightsOut));
         dump += StringPrintf(INDENT "Pointer Speed: %" PRId32 "\n", mLocked.pointerSpeed);
+        dump += StringPrintf(INDENT "Pointer Acceleration: %0.3f\n", mLocked.pointerAcceleration);
         dump += StringPrintf(INDENT "Pointer Gestures Enabled: %s\n",
                 toString(mLocked.pointerGesturesEnabled));
         dump += StringPrintf(INDENT "Show Touches: %s\n", toString(mLocked.showTouches));
@@ -627,6 +634,7 @@ void NativeInputManager::getReaderConfiguration(InputReaderConfiguration* outCon
 
         outConfig->pointerVelocityControlParameters.scale = exp2f(mLocked.pointerSpeed
                 * POINTER_SPEED_EXPONENT);
+        outConfig->pointerVelocityControlParameters.acceleration = mLocked.pointerAcceleration;
         outConfig->pointerGesturesEnabled = mLocked.pointerGesturesEnabled;
 
         outConfig->showTouches = mLocked.showTouches;
@@ -1065,6 +1073,22 @@ void NativeInputManager::setPointerSpeed(int32_t speed) {
             InputReaderConfiguration::CHANGE_POINTER_SPEED);
 }
 
+void NativeInputManager::setPointerAcceleration(float acceleration) {
+    { // acquire lock
+        AutoMutex _l(mLock);
+
+        if (mLocked.pointerAcceleration == acceleration) {
+            return;
+        }
+
+        ALOGI("Setting pointer acceleration to %0.3f", acceleration);
+        mLocked.pointerAcceleration = acceleration;
+    } // release lock
+
+    mInputManager->getReader().requestRefreshConfiguration(
+            InputReaderConfiguration::CHANGE_POINTER_SPEED);
+}
+
 void NativeInputManager::setInputDeviceEnabled(uint32_t deviceId, bool enabled) {
     { // acquire lock
         AutoMutex _l(mLock);
@@ -1494,6 +1518,18 @@ void NativeInputManager::setMotionClassifierEnabled(bool enabled) {
     mInputManager->getClassifier().setMotionClassifierEnabled(enabled);
 }
 
+void NativeInputManager::notifyPointerDisplayIdChanged() {
+    int32_t pointerDisplayId = getPointerDisplayId();
+
+    { // acquire lock
+        AutoMutex _l(mLock);
+        mLocked.pointerDisplayId = pointerDisplayId;
+    } // release lock
+
+    mInputManager->getReader().requestRefreshConfiguration(
+            InputReaderConfiguration::CHANGE_DISPLAY_INFO);
+}
+
 // ----------------------------------------------------------------------------
 
 static jlong nativeInit(JNIEnv* env, jclass /* clazz */,
@@ -1571,6 +1607,13 @@ static jboolean nativeHasKeys(JNIEnv* env, jclass /* clazz */,
     env->ReleaseBooleanArrayElements(outFlags, flags, 0);
     env->ReleaseIntArrayElements(keyCodes, codes, 0);
     return result;
+}
+
+static jint nativeGetKeyCodeForKeyLocation(JNIEnv* env, jclass /* clazz */, jlong ptr,
+                                           jint deviceId, jint locationKeyCode) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+    return (jint)im->getInputManager()->getReader().getKeyCodeForKeyLocation(deviceId,
+                                                                             locationKeyCode);
 }
 
 static void handleInputChannelDisposed(JNIEnv* env, jobject /* inputChannelObj */,
@@ -1860,6 +1903,13 @@ static void nativeSetPointerSpeed(JNIEnv* /* env */, jclass /* clazz */, jlong p
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
 
     im->setPointerSpeed(speed);
+}
+
+static void nativeSetPointerAcceleration(JNIEnv* /* env */, jclass /* clazz */, jlong ptr,
+                                         jfloat acceleration) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+
+    im->setPointerAcceleration(acceleration);
 }
 
 static void nativeSetShowTouches(JNIEnv* /* env */,
@@ -2186,6 +2236,18 @@ static void nativeNotifyPortAssociationsChanged(JNIEnv* env, jclass /* clazz */,
             InputReaderConfiguration::CHANGE_DISPLAY_INFO);
 }
 
+static void nativeNotifyPointerDisplayIdChanged(JNIEnv* env, jclass /* clazz */, jlong ptr) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+    im->notifyPointerDisplayIdChanged();
+}
+
+static void nativeSetDisplayEligibilityForPointerCapture(JNIEnv* env, jclass /* clazz */, jlong ptr,
+                                                         jint displayId, jboolean isEligible) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+    im->getInputManager()->getDispatcher().setDisplayEligibilityForPointerCapture(displayId,
+                                                                                  isEligible);
+}
+
 static void nativeChangeUniqueIdAssociation(JNIEnv* env, jclass /* clazz */, jlong ptr) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
     im->getInputManager()->getReader().requestRefreshConfiguration(
@@ -2312,6 +2374,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"nativeGetKeyCodeState", "(JIII)I", (void*)nativeGetKeyCodeState},
         {"nativeGetSwitchState", "(JIII)I", (void*)nativeGetSwitchState},
         {"nativeHasKeys", "(JII[I[Z)Z", (void*)nativeHasKeys},
+        {"nativeGetKeyCodeForKeyLocation", "(JII)I", (void*)nativeGetKeyCodeForKeyLocation},
         {"nativeCreateInputChannel", "(JLjava/lang/String;)Landroid/view/InputChannel;",
          (void*)nativeCreateInputChannel},
         {"nativeCreateInputMonitor", "(JIZLjava/lang/String;I)Landroid/view/InputChannel;",
@@ -2340,6 +2403,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
          (void*)nativeTransferTouchFocus},
         {"nativeTransferTouch", "(JLandroid/os/IBinder;)Z", (void*)nativeTransferTouch},
         {"nativeSetPointerSpeed", "(JI)V", (void*)nativeSetPointerSpeed},
+        {"nativeSetPointerAcceleration", "(JF)V", (void*)nativeSetPointerAcceleration},
         {"nativeSetShowTouches", "(JZ)V", (void*)nativeSetShowTouches},
         {"nativeSetInteractive", "(JZ)V", (void*)nativeSetInteractive},
         {"nativeReloadCalibration", "(J)V", (void*)nativeReloadCalibration},
@@ -2370,6 +2434,9 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"nativeCanDispatchToDisplay", "(JII)Z", (void*)nativeCanDispatchToDisplay},
         {"nativeNotifyPortAssociationsChanged", "(J)V", (void*)nativeNotifyPortAssociationsChanged},
         {"nativeChangeUniqueIdAssociation", "(J)V", (void*)nativeChangeUniqueIdAssociation},
+        {"nativeNotifyPointerDisplayIdChanged", "(J)V", (void*)nativeNotifyPointerDisplayIdChanged},
+        {"nativeSetDisplayEligibilityForPointerCapture", "(JIZ)V",
+         (void*)nativeSetDisplayEligibilityForPointerCapture},
         {"nativeSetMotionClassifierEnabled", "(JZ)V", (void*)nativeSetMotionClassifierEnabled},
         {"nativeGetSensorList", "(JI)[Landroid/hardware/input/InputSensorInfo;",
          (void*)nativeGetSensorList},

@@ -54,6 +54,7 @@ import android.hardware.display.DisplayManagerInternal;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityModuleConnector;
 import android.net.NetworkStackClient;
+import android.net.TrafficStats;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
@@ -104,6 +105,7 @@ import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.widget.ILockSettings;
 import com.android.server.am.ActivityManagerService;
+import com.android.server.ambientcontext.AmbientContextManagerService;
 import com.android.server.appbinding.AppBindingService;
 import com.android.server.art.ArtManagerLocal;
 import com.android.server.attention.AttentionManagerService;
@@ -137,6 +139,7 @@ import com.android.server.integrity.AppIntegrityManagerService;
 import com.android.server.lights.LightsService;
 import com.android.server.locales.LocaleManagerService;
 import com.android.server.location.LocationManagerService;
+import com.android.server.logcat.LogcatManagerService;
 import com.android.server.media.MediaRouterService;
 import com.android.server.media.metrics.MediaMetricsManagerService;
 import com.android.server.media.projection.MediaProjectionManagerService;
@@ -195,7 +198,7 @@ import com.android.server.tracing.TracingServiceProxy;
 import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
-import com.android.server.tv.interactive.TvIAppManagerService;
+import com.android.server.tv.interactive.TvInteractiveAppManagerService;
 import com.android.server.tv.tunerresourcemanager.TunerResourceManagerService;
 import com.android.server.twilight.TwilightService;
 import com.android.server.uri.UriGrantsManagerService;
@@ -265,6 +268,8 @@ public final class SystemServer implements Dumpable {
             "/apex/com.android.os.statsd/javalib/service-statsd.jar";
     private static final String CONNECTIVITY_SERVICE_APEX_PATH =
             "/apex/com.android.tethering/javalib/service-connectivity.jar";
+    private static final String NEARBY_SERVICE_APEX_PATH =
+            "/apex/com.android.nearby/javalib/service-nearby.jar";
     private static final String STATS_COMPANION_LIFECYCLE_CLASS =
             "com.android.server.stats.StatsCompanion$Lifecycle";
     private static final String STATS_PULL_ATOM_SERVICE_CLASS =
@@ -275,6 +280,8 @@ public final class SystemServer implements Dumpable {
             "com.android.server.usb.UsbService$Lifecycle";
     private static final String MIDI_SERVICE_CLASS =
             "com.android.server.midi.MidiService$Lifecycle";
+    private static final String NEARBY_SERVICE_CLASS =
+            "com.android.server.nearby.NearbyService";
     private static final String WIFI_APEX_SERVICE_JAR_PATH =
             "/apex/com.android.wifi/javalib/service-wifi.jar";
     private static final String WIFI_SERVICE_CLASS =
@@ -407,8 +414,6 @@ public final class SystemServer implements Dumpable {
     private static final String SAFETY_CENTER_SERVICE_CLASS =
             "com.android.safetycenter.SafetyCenterService";
 
-    private static final String SUPPLEMENTALPROCESS_APEX_PATH =
-            "/apex/com.android.supplementalprocess/javalib/service-supplementalprocess.jar";
     private static final String SUPPLEMENTALPROCESS_SERVICE_CLASS =
             "com.android.server.supplementalprocess.SupplementalProcessManagerService$Lifecycle";
 
@@ -1636,6 +1641,10 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(AppIntegrityManagerService.class);
             t.traceEnd();
 
+            t.traceBegin("StartLogcatManager");
+            mSystemServiceManager.startService(LogcatManagerService.class);
+            t.traceEnd();
+
         } catch (Throwable e) {
             Slog.e("System", "******************************************");
             Slog.e("System", "************ Failure starting core service");
@@ -1816,6 +1825,7 @@ public final class SystemServer implements Dumpable {
             startRotationResolverService(context, t);
             startSystemCaptionsManagerService(context, t);
             startTextToSpeechManagerService(context, t);
+            startAmbientContextService(t);
 
             // System Speech Recognition Service
             t.traceBegin("StartSpeechRecognitionManagerService");
@@ -1910,6 +1920,7 @@ public final class SystemServer implements Dumpable {
             try {
                 networkStats = NetworkStatsService.create(context);
                 ServiceManager.addService(Context.NETWORK_STATS_SERVICE, networkStats);
+                TrafficStats.init(context);
             } catch (Throwable e) {
                 reportWtf("starting NetworkStats Service", e);
             }
@@ -1982,6 +1993,16 @@ public final class SystemServer implements Dumpable {
                 ServiceManager.addService(Context.PAC_PROXY_SERVICE, pacProxyService);
             } catch (Throwable e) {
                 reportWtf("starting PacProxyService", e);
+            }
+            t.traceEnd();
+
+            // Start Nearby Service.
+            t.traceBegin("StartNearbyService");
+            try {
+                mSystemServiceManager.startServiceFromJar(NEARBY_SERVICE_CLASS,
+                        NEARBY_SERVICE_APEX_PATH);
+            } catch (Throwable e) {
+                reportWtf("starting NearbyService", e);
             }
             t.traceEnd();
 
@@ -2404,8 +2425,8 @@ public final class SystemServer implements Dumpable {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_LIVE_TV)
                     || mPackageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
-                t.traceBegin("StartTvIAppManager");
-                mSystemServiceManager.startService(TvIAppManagerService.class);
+                t.traceBegin("StartTvInteractiveAppManager");
+                mSystemServiceManager.startService(TvInteractiveAppManagerService.class);
                 t.traceEnd();
             }
 
@@ -2595,8 +2616,7 @@ public final class SystemServer implements Dumpable {
 
         // Supplemental Process
         t.traceBegin("StartSupplementalProcessManagerService");
-        mSystemServiceManager.startServiceFromJar(SUPPLEMENTALPROCESS_SERVICE_CLASS,
-                SUPPLEMENTALPROCESS_APEX_PATH);
+        mSystemServiceManager.startService(SUPPLEMENTALPROCESS_SERVICE_CLASS);
         t.traceEnd();
 
         if (safeMode) {
@@ -3203,6 +3223,17 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(RotationResolverManagerService.class);
         t.traceEnd();
 
+    }
+
+    private void startAmbientContextService(@NonNull TimingsTraceAndSlog t) {
+        if (!AmbientContextManagerService.isDetectionServiceConfigured()) {
+            Slog.d(TAG, "AmbientContextDetectionService is not configured on this device");
+            return;
+        }
+
+        t.traceBegin("StartAmbientContextService");
+        mSystemServiceManager.startService(AmbientContextManagerService.class);
+        t.traceEnd();
     }
 
     private static void startSystemUi(Context context, WindowManagerService windowManager) {

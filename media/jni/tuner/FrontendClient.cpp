@@ -143,6 +143,25 @@ Result FrontendClient::getHardwareInfo(string& info) {
     return Result::INVALID_STATE;
 }
 
+Result FrontendClient::removeOutputPid(int32_t pid) {
+    if (mTunerFrontend != nullptr) {
+        Status s = mTunerFrontend->removeOutputPid(pid);
+        return ClientHelper::getServiceSpecificErrorCode(s);
+    }
+
+    return Result::INVALID_STATE;
+}
+
+vector<FrontendStatusReadiness> FrontendClient::getStatusReadiness(
+        const std::vector<FrontendStatusType>& statusTypes) {
+    vector<FrontendStatusReadiness> readiness;
+    if (mTunerFrontend != nullptr) {
+        mTunerFrontend->getFrontendStatusReadiness(statusTypes, &readiness);
+    }
+
+    return readiness;
+}
+
 shared_ptr<ITunerFrontend> FrontendClient::getAidlFrontend() {
     return mTunerFrontend;
 }

@@ -1622,6 +1622,45 @@ int32_t JTuner::getMaxNumberOfFrontends(int32_t type) {
     return mTunerClient->getMaxNumberOfFrontends(static_cast<FrontendType>(type));
 }
 
+jint JTuner::removeOutputPid(int32_t pid) {
+    if (mFeClient == nullptr) {
+        ALOGE("frontend is not initialized");
+        return (jint)Result::INVALID_STATE;
+    }
+
+    return (jint)mFeClient->removeOutputPid(pid);
+}
+
+jobjectArray JTuner::getFrontendStatusReadiness(jintArray types) {
+    if (mFeClient == nullptr) {
+        ALOGE("frontend is not initialized");
+        return nullptr;
+    }
+
+    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    jsize size = env->GetArrayLength(types);
+    jint intTypes[size];
+    env->GetIntArrayRegion(types, 0, size, intTypes);
+    std::vector<FrontendStatusType> v;
+    for (int i = 0; i < size; i++) {
+        v.push_back(static_cast<FrontendStatusType>(intTypes[i]));
+    }
+
+    vector<FrontendStatusReadiness> readiness = mFeClient->getStatusReadiness(v);
+    if (readiness.size() < size) {
+        return nullptr;
+    }
+
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/FrontendStatusReadiness");
+    jmethodID init = env->GetMethodID(clazz, "<init>", "(II)V");
+    jobjectArray valObj = env->NewObjectArray(size, clazz, nullptr);
+    for (int i = 0; i < size; i++) {
+        jobject readinessObj = env->NewObject(clazz, init, intTypes[i], readiness[i]);
+        env->SetObjectArrayElement(valObj, i, readinessObj);
+    }
+    return valObj;
+}
+
 jobject JTuner::openLnbByHandle(int handle) {
     if (mTunerClient == nullptr) {
         return nullptr;
@@ -2606,6 +2645,24 @@ jobject JTuner::getFrontendStatus(jintArray types) {
 
                 jintArray valObj = env->NewIntArray(v.size());
                 env->SetIntArrayRegion(valObj, 0, v.size(), reinterpret_cast<jint *>(&ids[0]));
+
+                env->SetObjectField(statusObj, field, valObj);
+                break;
+            }
+            case FrontendStatus::Tag::allPlpInfo: {
+                jfieldID field = env->GetFieldID(clazz, "mAllPlpInfo",
+                                                 "[Landroid/media/tv/tuner/frontend/Atsc3PlpInfo;");
+                jclass plpClazz = env->FindClass("android/media/tv/tuner/frontend/Atsc3PlpInfo");
+                jmethodID initPlp = env->GetMethodID(plpClazz, "<init>", "(IZ)V");
+
+                vector<FrontendScanAtsc3PlpInfo> plpInfos =
+                        s.get<FrontendStatus::Tag::allPlpInfo>();
+                jobjectArray valObj = env->NewObjectArray(plpInfos.size(), plpClazz, nullptr);
+                for (int i = 0; i < plpInfos.size(); i++) {
+                    jobject plpObj = env->NewObject(plpClazz, initPlp, plpInfos[i].plpId,
+                                                    plpInfos[i].bLlsFlag);
+                    env->SetObjectArrayElement(valObj, i, plpObj);
+                }
 
                 env->SetObjectField(statusObj, field, valObj);
                 break;
@@ -4357,6 +4414,17 @@ static jint android_media_tv_Tuner_get_maximum_frontends(JNIEnv *env, jobject th
     return tuner->getMaxNumberOfFrontends(type);
 }
 
+static jint android_media_tv_Tuner_remove_output_pid(JNIEnv *env, jobject thiz, jint pid) {
+    sp<JTuner> tuner = getTuner(env, thiz);
+    return tuner->removeOutputPid(pid);
+}
+
+static jobjectArray android_media_tv_Tuner_get_frontend_status_readiness(JNIEnv *env, jobject thiz,
+                                                                         jintArray types) {
+    sp<JTuner> tuner = getTuner(env, thiz);
+    return tuner->getFrontendStatusReadiness(types);
+}
+
 static jint android_media_tv_Tuner_close_frontend(JNIEnv* env, jobject thiz, jint /* handle */) {
     sp<JTuner> tuner = getTuner(env, thiz);
     return tuner->closeFrontend();
@@ -4676,6 +4744,11 @@ static const JNINativeMethod gTunerMethods[] = {
              (void *)android_media_tv_Tuner_set_maximum_frontends },
     { "nativeGetMaxNumberOfFrontends", "(I)I",
             (void *)android_media_tv_Tuner_get_maximum_frontends },
+    { "nativeRemoveOutputPid", "(I)I",
+            (void *)android_media_tv_Tuner_remove_output_pid },
+    { "nativeGetFrontendStatusReadiness",
+            "([I)[Landroid/media/tv/tuner/frontend/FrontendStatusReadiness;",
+            (void *)android_media_tv_Tuner_get_frontend_status_readiness },
 };
 
 static const JNINativeMethod gFilterMethods[] = {

@@ -1061,7 +1061,7 @@ public final class CachedAppOptimizer {
         }
 
         opt.setFreezerOverride(false);
-        if (!opt.isFrozen()) {
+        if (pid == 0 || !opt.isFrozen()) {
             return;
         }
 
