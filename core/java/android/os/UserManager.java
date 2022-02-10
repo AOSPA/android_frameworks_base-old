@@ -16,6 +16,9 @@
 
 package android.os;
 
+import static android.app.admin.DevicePolicyResources.Strings.Core.WORK_PROFILE_BADGED_LABEL;
+import static android.app.admin.DevicePolicyResources.Strings.UNDEFINED;
+
 import android.Manifest;
 import android.accounts.AccountManager;
 import android.annotation.ColorInt;
@@ -820,6 +823,20 @@ public class UserManager {
     public static final String DISALLOW_ADD_MANAGED_PROFILE = "no_add_managed_profile";
 
     /**
+     * Specifies if a user is disallowed from creating clone profile.
+     * <p>The default value for an unmanaged user is <code>false</code>.
+     * For users with a device owner set, the default is <code>true</code>.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     * @hide
+     */
+    public static final String DISALLOW_ADD_CLONE_PROFILE = "no_add_clone_profile";
+
+    /**
      * Specifies if a user is disallowed from disabling application verification. The default
      * value is <code>false</code>.
      *
@@ -1497,6 +1514,7 @@ public class UserManager {
             DISALLOW_FACTORY_RESET,
             DISALLOW_ADD_USER,
             DISALLOW_ADD_MANAGED_PROFILE,
+            DISALLOW_ADD_CLONE_PROFILE,
             ENSURE_VERIFY_APPS,
             DISALLOW_CONFIG_CELL_BROADCASTS,
             DISALLOW_CONFIG_MOBILE_NETWORKS,
@@ -4645,6 +4663,18 @@ public class UserManager {
         if (!hasBadge(userId)) {
             return label;
         }
+        DevicePolicyManager dpm = mContext.getSystemService(DevicePolicyManager.class);
+        return dpm.getString(
+                getUpdatableUserBadgedLabelId(userId),
+                () -> getDefaultUserBadgedLabel(label, userId),
+                /* formatArgs= */ label);
+    }
+
+    private String getUpdatableUserBadgedLabelId(int userId) {
+        return isManagedProfile(userId) ? WORK_PROFILE_BADGED_LABEL : UNDEFINED;
+    }
+
+    private String getDefaultUserBadgedLabel(CharSequence label, int userId) {
         try {
             final int resourceId = mService.getUserBadgeLabelResId(userId);
             return Resources.getSystem().getString(resourceId, label);
@@ -4751,33 +4781,6 @@ public class UserManager {
             boolean overrideDevicePolicy) {
         try {
             return mService.removeUserWhenPossible(user.getIdentifier(), overrideDevicePolicy);
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Immediately removes the user or, if the user cannot be removed, such as when the user is
-     * the current user, then set the user as ephemeral so that it will be removed when it is
-     * stopped.
-     *
-     * @param evenWhenDisallowed when {@code true}, user is removed even if the caller has the
-     * {@link #DISALLOW_REMOVE_USER} or {@link #DISALLOW_REMOVE_MANAGED_PROFILE} restriction
-     *
-     * @return the {@link RemoveResult} code
-     *
-     * @deprecated  TODO(b/199446770): remove this call after converting all calls to
-     * removeUserWhenPossible(UserHandle, boolean)
-     *
-     * @hide
-     */
-    @Deprecated
-    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
-            Manifest.permission.CREATE_USERS})
-    public @RemoveResult int removeUserOrSetEphemeral(@UserIdInt int userId,
-            boolean evenWhenDisallowed) {
-        try {
-            return mService.removeUserWhenPossible(userId, evenWhenDisallowed);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

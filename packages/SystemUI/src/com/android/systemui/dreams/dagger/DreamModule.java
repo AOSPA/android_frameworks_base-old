@@ -16,15 +16,13 @@
 
 package com.android.systemui.dreams.dagger;
 
-import com.android.systemui.dreams.appwidgets.dagger.AppWidgetComponent;
-
 import dagger.Module;
 
 /**
  * Dagger Module providing Communal-related functionality.
  */
 @Module(subcomponents = {
-        AppWidgetComponent.class,
-        DreamOverlayComponent.class})
+        DreamOverlayComponent.class,
+})
 public interface DreamModule {
 }

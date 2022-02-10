@@ -24,6 +24,8 @@ import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
 import android.view.WindowManagerPolicyConstants;
 
+import androidx.annotation.Nullable;
+
 import com.android.settingslib.fuelgauge.BatteryStatus;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 
@@ -222,6 +224,11 @@ public class KeyguardUpdateMonitorCallback {
      * Called after trust was granted with non-zero flags.
      */
     public void onTrustGrantedWithFlags(int flags, int userId) { }
+
+    /**
+     * Called when setting the trust granted message.
+     */
+    public void showTrustGrantedMessage(@Nullable CharSequence message) { }
 
     /**
      * Called when a biometric has been acquired.

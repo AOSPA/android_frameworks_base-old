@@ -92,6 +92,7 @@ public final class PackageManagerServiceTestParams {
     public ViewCompiler viewCompiler;
     public @Nullable String retailDemoPackage;
     public @Nullable String recentsPackage;
+    public @Nullable String ambientContextDetectionPackage;
     public ComponentName resolveComponentName;
     public ArrayMap<String, AndroidPackage> packages;
     public boolean enableFreeCacheV2;
@@ -112,4 +113,5 @@ public final class PackageManagerServiceTestParams {
     public PreferredActivityHelper preferredActivityHelper;
     public ResolveIntentHelper resolveIntentHelper;
     public DexOptHelper dexOptHelper;
+    public SuspendPackageHelper suspendPackageHelper;
 }

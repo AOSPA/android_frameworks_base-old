@@ -22,14 +22,15 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.media.tv.TvInputManager;
 import android.media.tv.TvTrackInfo;
 import android.media.tv.TvView;
-import android.media.tv.interactive.TvIAppManager.Session;
-import android.media.tv.interactive.TvIAppManager.Session.FinishedInputEventCallback;
-import android.media.tv.interactive.TvIAppManager.SessionCallback;
+import android.media.tv.interactive.TvInteractiveAppManager.Session;
+import android.media.tv.interactive.TvInteractiveAppManager.Session.FinishedInputEventCallback;
+import android.media.tv.interactive.TvInteractiveAppManager.SessionCallback;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -50,7 +51,6 @@ import java.util.concurrent.Executor;
 
 /**
  * Displays contents of interactive TV applications.
- * @hide
  */
 public class TvInteractiveAppView extends ViewGroup {
     private static final String TAG = "TvInteractiveAppView";
@@ -61,7 +61,7 @@ public class TvInteractiveAppView extends ViewGroup {
     private static final int UNSET_TVVIEW_SUCCESS = 3;
     private static final int UNSET_TVVIEW_FAIL = 4;
 
-    private final TvIAppManager mTvInteractiveAppManager;
+    private final TvInteractiveAppManager mTvInteractiveAppManager;
     private final Handler mHandler = new Handler();
     private final Object mCallbackLock = new Object();
     private Session mSession;
@@ -141,8 +141,8 @@ public class TvInteractiveAppView extends ViewGroup {
         }
         mDefStyleAttr = defStyleAttr;
         resetSurfaceView();
-        mTvInteractiveAppManager = (TvIAppManager) getContext().getSystemService(
-                Context.TV_IAPP_SERVICE);
+        mTvInteractiveAppManager = (TvInteractiveAppManager) getContext().getSystemService(
+                Context.TV_INTERACTIVE_APP_SERVICE);
     }
 
     /**
@@ -152,8 +152,8 @@ public class TvInteractiveAppView extends ViewGroup {
      *                 callback.
      */
     public void setCallback(
-            @NonNull TvInteractiveAppCallback callback,
-            @NonNull @CallbackExecutor Executor executor) {
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull TvInteractiveAppCallback callback) {
         synchronized (mCallbackLock) {
             mCallbackExecutor = executor;
             mCallback = callback;
@@ -238,6 +238,7 @@ public class TvInteractiveAppView extends ViewGroup {
         // The surface view's content should be treated as secure all the time.
         mSurfaceView.setSecure(true);
         mSurfaceView.getHolder().addCallback(mSurfaceHolderCallback);
+        mSurfaceView.getHolder().setFormat(PixelFormat.TRANSLUCENT);
         addView(mSurfaceView);
     }
 
@@ -381,9 +382,15 @@ public class TvInteractiveAppView extends ViewGroup {
 
     /**
      * Prepares the interactive application.
-     * @hide
+     *
+     * @param iAppServiceId the interactive app service ID, which can be found in
+     *                      {@link TvInteractiveAppInfo#getId()}.
+     *
+     * @see android.media.tv.interactive.TvInteractiveAppManager#getTvInteractiveAppServiceList()
      */
-    public void prepareInteractiveApp(@NonNull String iAppServiceId, int type) {
+    public void prepareInteractiveApp(
+            @NonNull String iAppServiceId,
+            @TvInteractiveAppInfo.InteractiveAppType int type) {
         // TODO: document and handle the cases that this method is called multiple times.
         if (DEBUG) {
             Log.d(TAG, "prepareInteractiveApp");
@@ -408,7 +415,6 @@ public class TvInteractiveAppView extends ViewGroup {
 
     /**
      * Stops the interactive application.
-     * @hide
      */
     public void stopInteractiveApp() {
         if (DEBUG) {
@@ -516,8 +522,10 @@ public class TvInteractiveAppView extends ViewGroup {
     /**
      * Creates broadcast-independent(BI) interactive application.
      *
-     * @see #destroyBiInteractiveApp(String)
-     * @hide
+     * <p>{@link TvInteractiveAppCallback#onBiInteractiveAppCreated(String, Uri, String)} will be
+     * called for the result.
+     *
+     * @see TvInteractiveAppCallback#onBiInteractiveAppCreated(String, Uri, String)
      */
     public void createBiInteractiveApp(@NonNull Uri biIAppUri, @Nullable Bundle params) {
         if (DEBUG) {
@@ -534,7 +542,6 @@ public class TvInteractiveAppView extends ViewGroup {
      * @param biIAppId the BI interactive app ID from {@link #createBiInteractiveApp(Uri, Bundle)}
      *
      * @see #createBiInteractiveApp(Uri, Bundle)
-     * @hide
      */
     public void destroyBiInteractiveApp(@NonNull String biIAppId) {
         if (DEBUG) {
@@ -552,11 +559,10 @@ public class TvInteractiveAppView extends ViewGroup {
 
     /**
      * Sets the TvInteractiveAppView to receive events from TIS. This method links the session of
-     * TvIAppManager to TvInputManager session, so the TIAS can get the TIS events.
+     * TvInteractiveAppManager to TvInputManager session, so the TIAS can get the TIS events.
      *
      * @param tvView the TvView to be linked to this TvInteractiveAppView via linking of Sessions.
-     * @return to be added
-     * @hide
+     * @return The result of the operation.
      */
     public int setTvView(@Nullable TvView tvView) {
         if (tvView == null) {
@@ -583,6 +589,7 @@ public class TvInteractiveAppView extends ViewGroup {
     /**
      * To toggle Digital Teletext Application if there is one in AIT app list.
      * @param enable
+     * @hide
      */
     public void setTeletextAppEnabled(boolean enable) {
         if (DEBUG) {
@@ -609,18 +616,23 @@ public class TvInteractiveAppView extends ViewGroup {
          */
         public void onCommandRequest(
                 @NonNull String iAppServiceId,
-                @NonNull @TvIAppService.InteractiveAppServiceCommandType String cmdType,
+                @NonNull @TvInteractiveAppService.InteractiveAppServiceCommandType String cmdType,
                 @Nullable Bundle parameters) {
         }
 
         /**
-         * This is called when the session state is changed.
+         * This is called when the state of corresponding interactive app is changed.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
-         * @param state current session state.
-         * @hide
+         * @param state the current state.
+         * @param err the error code for error state. {@link TvInteractiveAppManager#ERROR_NONE}
+         *              is used when the state is not
+         *              {@link TvInteractiveAppManager#INTERACTIVE_APP_STATE_ERROR}.
          */
-        public void onSessionStateChanged(@NonNull String iAppServiceId, int state) {
+        public void onStateChanged(
+                @NonNull String iAppServiceId,
+                @TvInteractiveAppManager.InteractiveAppState int state,
+                @TvInteractiveAppManager.ErrorCode int err) {
         }
 
         /**
@@ -628,10 +640,12 @@ public class TvInteractiveAppView extends ViewGroup {
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
          * @param biIAppUri URI associated this BI interactive app. This is the same URI in
-         *                  {@link Session#createBiInteractiveApp(Uri, Bundle)}
+         *                  {@link #createBiInteractiveApp(Uri, Bundle)}
          * @param biIAppId BI interactive app ID, which can be used to destroy the BI interactive
-         *                 app.
-         * @hide
+         *                 app. {@code null} if it's not created successfully.
+         *
+         * @see #createBiInteractiveApp(Uri, Bundle)
+         * @see #destroyBiInteractiveApp(String)
          */
         public void onBiInteractiveAppCreated(@NonNull String iAppServiceId, @NonNull Uri biIAppUri,
                 @Nullable String biIAppId) {
@@ -642,13 +656,15 @@ public class TvInteractiveAppView extends ViewGroup {
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
          * @param state digital teletext app current state.
+         * @hide
          */
         public void onTeletextAppStateChanged(
-                @NonNull String iAppServiceId, @TvIAppManager.TeletextAppState int state) {
+                @NonNull String iAppServiceId,
+                @TvInteractiveAppManager.TeletextAppState int state) {
         }
 
         /**
-         * This is called when {@link TvIAppService.Session#SetVideoBounds} is called.
+         * This is called when {@link TvInteractiveAppService.Session#SetVideoBounds} is called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
          * @hide
@@ -657,7 +673,7 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         /**
-         * This is called when {@link TvIAppService.Session#RequestCurrentChannelUri} is
+         * This is called when {@link TvInteractiveAppService.Session#RequestCurrentChannelUri} is
          * called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
@@ -667,7 +683,7 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         /**
-         * This is called when {@link TvIAppService.Session#RequestCurrentChannelLcn} is
+         * This is called when {@link TvInteractiveAppService.Session#RequestCurrentChannelLcn} is
          * called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
@@ -677,7 +693,7 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         /**
-         * This is called when {@link TvIAppService.Session#RequestStreamVolume} is
+         * This is called when {@link TvInteractiveAppService.Session#RequestStreamVolume} is
          * called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
@@ -687,7 +703,7 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         /**
-         * This is called when {@link TvIAppService.Session#RequestTrackInfoList} is
+         * This is called when {@link TvInteractiveAppService.Session#RequestTrackInfoList} is
          * called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
@@ -700,6 +716,7 @@ public class TvInteractiveAppView extends ViewGroup {
          * This is called when {@link TvIAppService.Session#RequestCurrentTvInputId} is called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
+         * @hide
          */
         public void onRequestCurrentTvInputId(@NonNull String iAppServiceId) {
         }
@@ -801,7 +818,7 @@ public class TvInteractiveAppView extends ViewGroup {
         @Override
         public void onCommandRequest(
                 Session session,
-                @TvIAppService.InteractiveAppServiceCommandType String cmdType,
+                @TvInteractiveAppService.InteractiveAppServiceCommandType String cmdType,
                 Bundle parameters) {
             if (DEBUG) {
                 Log.d(TAG, "onCommandRequest (cmdType=" + cmdType + ", parameters="
@@ -825,9 +842,12 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         @Override
-        public void onSessionStateChanged(Session session, int state) {
+        public void onSessionStateChanged(
+                Session session,
+                @TvInteractiveAppManager.InteractiveAppState int state,
+                @TvInteractiveAppManager.ErrorCode int err) {
             if (DEBUG) {
-                Log.d(TAG, "onSessionStateChanged (state=" + state +  ")");
+                Log.d(TAG, "onSessionStateChanged (state=" + state + "; err=" + err + ")");
             }
             if (this != mSessionCallback) {
                 Log.w(TAG, "onSessionStateChanged - session not created");
@@ -838,7 +858,7 @@ public class TvInteractiveAppView extends ViewGroup {
                     mCallbackExecutor.execute(() -> {
                         synchronized (mCallbackLock) {
                             if (mCallback != null) {
-                                mCallback.onSessionStateChanged(mIAppServiceId, state);
+                                mCallback.onStateChanged(mIAppServiceId, state, err);
                             }
                         }
                     });

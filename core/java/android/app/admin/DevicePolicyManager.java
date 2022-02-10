@@ -16,9 +16,6 @@
 
 package android.app.admin;
 
-import static android.app.admin.DevicePolicyResources.Drawable.INVALID_ID;
-import static android.app.admin.DevicePolicyResources.Drawable.Source.UNDEFINED;
-
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
 import android.Manifest.permission;
@@ -42,6 +39,7 @@ import android.annotation.WorkerThread;
 import android.app.Activity;
 import android.app.IServiceConnection;
 import android.app.KeyguardManager;
+import android.app.admin.DevicePolicyResources.Drawables;
 import android.app.admin.SecurityLog.SecurityEvent;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
@@ -62,6 +60,7 @@ import android.net.PrivateDnsConnectivityChecker;
 import android.net.ProxyInfo;
 import android.net.Uri;
 import android.nfc.NfcAdapter;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
@@ -99,6 +98,7 @@ import android.util.Log;
 import android.util.Pair;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.infra.AndroidFuture;
 import com.android.internal.net.NetworkUtilsInternal;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.Preconditions;
@@ -133,6 +133,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 // TODO(b/172376923) - add CarDevicePolicyManager examples below (or remove reference to it).
 /**
@@ -620,6 +621,32 @@ public class DevicePolicyManager {
     @SystemApi
     public static final String EXTRA_FORCE_UPDATE_ROLE_HOLDER =
             "android.app.extra.FORCE_UPDATE_ROLE_HOLDER";
+
+    /**
+     * A boolean extra indicating whether offline provisioning is allowed.
+     *
+     * <p>For the online provisioning flow, there will be an attempt to download and install
+     * the latest version of the device management role holder. The platform will then delegate
+     * provisioning to the device management role holder via role holder-specific provisioning
+     * actions.
+     *
+     * <p>For the offline provisioning flow, the provisioning flow will always be handled by
+     * the platform.
+     *
+     * <p>If this extra is set to {@code false}, the provisioning flow will enforce that an
+     * internet connection is established, which will start the online provisioning flow. If an
+     * internet connection cannot be established, provisioning will fail.
+     *
+     * <p>If this extra is set to {@code true}, the provisioning flow will still try to connect to
+     * the internet, but if it fails it will start the offline provisioning flow.
+     *
+     * <p>The default value is {@code false}.
+     *
+     * <p>This extra is respected when provided via the provisioning intent actions such as {@link
+     * #ACTION_PROVISION_MANAGED_PROFILE}.
+     */
+    public static final String EXTRA_PROVISIONING_ALLOW_OFFLINE =
+            "android.app.extra.PROVISIONING_ALLOW_OFFLINE";
 
     /**
      * Action: Bugreport sharing with device owner has been accepted by the user.
@@ -1552,6 +1579,78 @@ public class DevicePolicyManager {
     public static final int FLAG_SUPPORTED_MODES_DEVICE_OWNER = 1 << 2;
 
     /**
+     * Constant for {@link #getMinimumRequiredWifiSecurityLevel()} and
+     * {@link #setMinimumRequiredWifiSecurityLevel(int)}: no minimum security level.
+     *
+     * <p> When returned from {@link #getMinimumRequiredWifiSecurityLevel()}, the constant
+     * represents the current minimum security level required.
+     * When passed to {@link #setMinimumRequiredWifiSecurityLevel(int)}, it sets the
+     * minimum security level a Wi-Fi network must meet.
+     *
+     * @see #WIFI_SECURITY_PERSONAL
+     * @see #WIFI_SECURITY_ENTERPRISE_EAP
+     * @see #WIFI_SECURITY_ENTERPRISE_192
+     */
+    public static final int WIFI_SECURITY_OPEN = 0;
+
+    /**
+     * Constant for {@link #getMinimumRequiredWifiSecurityLevel()} and
+     * {@link #setMinimumRequiredWifiSecurityLevel(int)}: personal network such as WEP, WPA2-PSK.
+     *
+     * <p> When returned from {@link #getMinimumRequiredWifiSecurityLevel()}, the constant
+     * represents the current minimum security level required.
+     * When passed to {@link #setMinimumRequiredWifiSecurityLevel(int)}, it sets the
+     * minimum security level a Wi-Fi network must meet.
+     *
+     * @see #WIFI_SECURITY_OPEN
+     * @see #WIFI_SECURITY_ENTERPRISE_EAP
+     * @see #WIFI_SECURITY_ENTERPRISE_192
+     */
+    public static final int WIFI_SECURITY_PERSONAL = 1;
+
+    /**
+     * Constant for {@link #getMinimumRequiredWifiSecurityLevel()} and
+     * {@link #setMinimumRequiredWifiSecurityLevel(int)}: enterprise EAP network.
+     *
+     * <p> When returned from {@link #getMinimumRequiredWifiSecurityLevel()}, the constant
+     * represents the current minimum security level required.
+     * When passed to {@link #setMinimumRequiredWifiSecurityLevel(int)}, it sets the
+     * minimum security level a Wi-Fi network must meet.
+     *
+     * @see #WIFI_SECURITY_OPEN
+     * @see #WIFI_SECURITY_PERSONAL
+     * @see #WIFI_SECURITY_ENTERPRISE_192
+     */
+    public static final int WIFI_SECURITY_ENTERPRISE_EAP = 2;
+
+    /**
+     * Constant for {@link #getMinimumRequiredWifiSecurityLevel()} and
+     * {@link #setMinimumRequiredWifiSecurityLevel(int)}: enterprise 192 bit network.
+     *
+     * <p> When returned from {@link #getMinimumRequiredWifiSecurityLevel()}, the constant
+     * represents the current minimum security level required.
+     * When passed to {@link #setMinimumRequiredWifiSecurityLevel(int)}, it sets the
+     * minimum security level a Wi-Fi network must meet.
+     *
+     * @see #WIFI_SECURITY_OPEN
+     * @see #WIFI_SECURITY_PERSONAL
+     * @see #WIFI_SECURITY_ENTERPRISE_EAP
+     */
+    public static final int WIFI_SECURITY_ENTERPRISE_192 = 3;
+
+    /**
+     * Possible Wi-Fi minimum security levels
+     *
+     * @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"WIFI_SECURITY_"}, value = {
+            WIFI_SECURITY_OPEN,
+            WIFI_SECURITY_PERSONAL,
+            WIFI_SECURITY_ENTERPRISE_EAP,
+            WIFI_SECURITY_ENTERPRISE_192})
+    public @interface WifiSecurity {}
+
+    /**
      * This MIME type is used for starting the device owner provisioning.
      *
      * <p>During device owner provisioning a device admin app is set as the owner of the device.
@@ -1695,6 +1794,28 @@ public class DevicePolicyManager {
     @SystemApi
     public static final String ACTION_RESET_PROTECTION_POLICY_CHANGED =
             "android.app.action.RESET_PROTECTION_POLICY_CHANGED";
+
+    /**
+     * Broadcast action: sent when there is a location update on a device in lost mode. This
+     * broadcast is explicitly sent to the device policy controller app only.
+     *
+     * @see DevicePolicyManager#sendLostModeLocationUpdate
+     * @hide
+     */
+    @SystemApi
+    public static final String ACTION_LOST_MODE_LOCATION_UPDATE =
+            "android.app.action.LOST_MODE_LOCATION_UPDATE";
+
+    /**
+     * Extra used with {@link #ACTION_LOST_MODE_LOCATION_UPDATE} to send the location of a device
+     * in lost mode. Value is {@code Location}.
+     *
+     * @see DevicePolicyManager#sendLostModeLocationUpdate
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_LOST_MODE_LOCATION =
+            "android.app.extra.LOST_MODE_LOCATION";
 
     /**
      * The ComponentName of the administrator component.
@@ -2986,6 +3107,54 @@ public class DevicePolicyManager {
             "android.app.extra.PROVISIONING_ROLE_HOLDER_CUSTOM_USER_CONSENT_INTENT";
 
     /**
+     * Activity action: attempts to establish network connection
+     *
+     * <p>This intent can be accompanied by any of the relevant provisioning extras related to
+     * network connectivity, such as:
+     * <ul>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_SSID}</li>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_HIDDEN}</li>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE}</li>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_PASSWORD}</li>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_PROXY_HOST}</li>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_PROXY_PORT}</li>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_PROXY_BYPASS}</li>
+     *     <li>{@link #EXTRA_PROVISIONING_WIFI_PAC_URL}</li>
+     *     <li>{@code #EXTRA_PROVISIONING_WIFI_EAP_METHOD}</li>
+     *     <li>{@code #EXTRA_PROVISIONING_WIFI_PHASE2_AUTH}</li>
+     *     <li>{@code #EXTRA_PROVISIONING_WIFI_CA_CERTIFICATE}</li>
+     *     <li>{@code #EXTRA_PROVISIONING_WIFI_USER_CERTIFICATE}</li>
+     *     <li>{@code #EXTRA_PROVISIONING_WIFI_IDENTITY}</li>
+     *     <li>{@code #EXTRA_PROVISIONING_WIFI_ANONYMOUS_IDENTITY}</li>
+     *     <li>{@code #EXTRA_PROVISIONING_WIFI_DOMAIN}</li>
+     * </ul>
+     *
+     * <p>If there are provisioning extras related to network connectivity, this activity
+     * attempts to connect to the specified network. Otherwise it prompts the end-user to connect.
+     *
+     * <p>This activity is meant to be started by the provisioning initiator prior to starting
+     * {@link #ACTION_PROVISION_MANAGED_PROFILE} or {@link
+     * #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}.
+     *
+     * <p>Note that network connectivity is still also handled when provisioning via {@link
+     * #ACTION_PROVISION_MANAGED_PROFILE} or {@link
+     * #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}. {@link
+     * #ACTION_ESTABLISH_NETWORK_CONNECTION} should only be used in cases when the provisioning
+     * initiator would like to do some additional logic after the network connectivity step and
+     * before the start of provisioning.
+     *
+     * If network connection is established, {@link Activity#RESULT_OK} will be returned. Otherwise
+     * the result will be {@link Activity#RESULT_CANCELED}.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.DISPATCH_PROVISIONING_MESSAGE)
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SystemApi
+    public static final String ACTION_ESTABLISH_NETWORK_CONNECTION =
+            "android.app.action.ESTABLISH_NETWORK_CONNECTION";
+
+    /**
      * Maximum supported password length. Kind-of arbitrary.
      * @hide
      */
@@ -3256,14 +3425,15 @@ public class DevicePolicyManager {
 
     /**
      * Broadcast action: notify system apps (e.g. settings, SysUI, etc) that the device management
-     * resources with IDs {@link #EXTRA_RESOURCE_ID} has been updated using, the updated resources
-     * can be retrieved using {@link #getDrawable}.
+     * resources with IDs {@link #EXTRA_RESOURCE_ID} has been updated, the updated resources can be
+     * retrieved using {@link #getDrawable} and {@code #getString}.
      *
      * <p>This broadcast is sent to registered receivers only.
      *
      * <p> The following extras will be included to identify the type of resource being updated:
      * <ul>
      *     <li>{@link #EXTRA_RESOURCE_TYPE_DRAWABLE} for drawable resources</li>
+     *     <li>{@link #EXTRA_RESOURCE_TYPE_STRING} for string resources</li>
      * </ul>
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
@@ -3278,8 +3448,16 @@ public class DevicePolicyManager {
             "android.app.extra.RESOURCE_TYPE_DRAWABLE";
 
     /**
+     * A boolean extra for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to indicate that a
+     * resource of type {@link String} is being updated.
+     */
+    public static final String EXTRA_RESOURCE_TYPE_STRING =
+            "android.app.extra.RESOURCE_TYPE_STRING";
+
+    /**
      * An integer array extra for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to indicate which
-     * drawable IDs (see {@link DevicePolicyResources.UpdatableDrawableId}) have been updated.
+     * resource IDs (see {@link DevicePolicyResources.UpdatableDrawableId} and
+     * {@link DevicePolicyResources.UpdatableStringId}) have been updated.
      */
     public static final String EXTRA_RESOURCE_ID =
             "android.app.extra.RESOURCE_ID";
@@ -5666,6 +5844,56 @@ public class DevicePolicyManager {
             }
         }
         return null;
+    }
+
+    /**
+     * Send a lost mode location update to the admin. This API is limited to organization-owned
+     * devices, which includes devices with a device owner or devices with a profile owner on an
+     * organization-owned managed profile.
+     *
+     * <p>The caller must hold the
+     * {@link android.Manifest.permission#SEND_LOST_MODE_LOCATION_UPDATES} permission.
+     *
+     * <p> Not for use by third-party applications.
+     *
+     * @param executor The executor through which the callback should be invoked.
+     * @param callback A callback object that will inform the caller whether a lost mode location
+     *                 update was successfully sent
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.SEND_LOST_MODE_LOCATION_UPDATES)
+    public void sendLostModeLocationUpdate(@NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Boolean> callback) {
+        throwIfParentInstance("sendLostModeLocationUpdate");
+        if (mService == null) {
+            executeCallback(AndroidFuture.completedFuture(false), executor, callback);
+            return;
+        }
+        try {
+            final AndroidFuture<Boolean> future = new AndroidFuture<>();
+            mService.sendLostModeLocationUpdate(future);
+            executeCallback(future, executor, callback);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    private void executeCallback(AndroidFuture<Boolean> future,
+            @CallbackExecutor @NonNull Executor executor,
+            Consumer<Boolean> callback) {
+        future.whenComplete((result, error) -> executor.execute(() -> {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                if (error != null) {
+                    callback.accept(false);
+                } else {
+                    callback.accept(result);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }));
     }
 
     /**
@@ -9864,14 +10092,17 @@ public class DevicePolicyManager {
 
     /**
      * Gets the user a {@link #logoutUser(ComponentName)} call would switch to,
-     * or {@link UserHandle#USER_NULL} if the current user is not in a session.
+     * or {@code null} if the current user is not in a session.
      *
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    public @UserIdInt int getLogoutUserId() {
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public @Nullable UserHandle getLogoutUser() {
+        // TODO(b/214336184): add CTS test
         try {
-            return mService.getLogoutUserId();
+            int userId = mService.getLogoutUserId();
+            return userId == UserHandle.USER_NULL ? null : UserHandle.of(userId);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -9885,7 +10116,9 @@ public class DevicePolicyManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public void clearLogoutUser() {
+        // TODO(b/214336184): add CTS test
         try {
             mService.clearLogoutUser();
         } catch (RemoteException re) {
@@ -14477,19 +14710,118 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Called by device owner or profile owner of an organization-owned managed profile to
+     * specify the minimum security level required for Wi-Fi networks.
+     * The device may not connect to networks that do not meet the minimum security level.
+     * If the current network does not meet the minimum security level set, it will be disconnected.
+     *
+     *
+     * @param level minimum security level
+     * @throws SecurityException if the caller is not a device owner or a profile owner on
+     *         an organization-owned managed profile.
+     */
+    public void setMinimumRequiredWifiSecurityLevel(@WifiSecurity int level) {
+        throwIfParentInstance("setMinimumRequiredWifiSecurityLevel");
+        if (mService != null) {
+            try {
+                mService.setMinimumRequiredWifiSecurityLevel(level);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Returns the current Wi-Fi minimum security level.
+     *
+     * @see #setMinimumRequiredWifiSecurityLevel(int)
+     */
+    public @WifiSecurity int getMinimumRequiredWifiSecurityLevel() {
+        throwIfParentInstance("getMinimumRequiredWifiSecurityLevel");
+        if (mService == null) {
+            return WIFI_SECURITY_OPEN;
+        }
+        try {
+            return mService.getMinimumRequiredWifiSecurityLevel();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by device owner or profile owner of an organization-owned managed profile to
+     * specify the Wi-Fi SSID policy ({@link WifiSsidPolicy}).
+     * Wi-Fi SSID policy specifies the SSID restriction the network must satisfy
+     * in order to be eligible for a connection. Providing a null policy results in the
+     * deactivation of the SSID restriction
+     *
+     * @param policy Wi-Fi SSID policy
+     * @throws SecurityException if the caller is not a device owner or a profile owner on
+     *         an organization-owned managed profile.
+     */
+    public void setWifiSsidPolicy(@Nullable WifiSsidPolicy policy) {
+        throwIfParentInstance("setWifiSsidPolicy");
+        if (mService != null) {
+            try {
+                if (policy == null) {
+                    mService.setSsidAllowlist(new ArrayList<>());
+                } else {
+                    int policyType = policy.getPolicyType();
+                    if (policyType == WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_ALLOWLIST) {
+                        mService.setSsidAllowlist(new ArrayList<>(policy.getSsids()));
+                    } else {
+                        mService.setSsidDenylist(new ArrayList<>(policy.getSsids()));
+                    }
+                }
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Returns the current Wi-Fi SSID policy.
+     * If the policy has not been set, it will return NULL.
+     *
+     * @see #setWifiSsidPolicy(WifiSsidPolicy)
+     * @throws SecurityException if the caller is not a device owner or a profile owner on
+     * an organization-owned managed profile or a system app.
+     */
+    @Nullable
+    public WifiSsidPolicy getWifiSsidPolicy() {
+        throwIfParentInstance("getWifiSsidPolicy");
+        if (mService == null) {
+            return null;
+        }
+        try {
+            List<String> allowlist = mService.getSsidAllowlist();
+            if (!allowlist.isEmpty()) {
+                return WifiSsidPolicy.createAllowlistPolicy(new ArraySet<>(allowlist));
+            }
+            List<String> denylist = mService.getSsidDenylist();
+            if (!denylist.isEmpty()) {
+                return WifiSsidPolicy.createDenylistPolicy(new ArraySet<>(denylist));
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        return null;
+    }
+
+    /**
      * For each {@link DevicePolicyDrawableResource} item in {@code drawables}, if
      * {@link DevicePolicyDrawableResource#getDrawableSource()} is not set or is set to
-     * {@link DevicePolicyResources.Drawable.Source#UNDEFINED}, it updates the drawable resource for
+     * {@link DevicePolicyResources.Drawables.Source#UNDEFINED}, it updates the drawable resource for
      * the combination of {@link DevicePolicyDrawableResource#getDrawableId()} and
      * {@link DevicePolicyDrawableResource#getDrawableStyle()}, (see
-     * {@link DevicePolicyResources.Drawable} and {@link DevicePolicyResources.Drawable.Style}) to
+     * {@link DevicePolicyResources.Drawables} and {@link DevicePolicyResources.Drawables.Style}) to
      * the drawable with ID {@link DevicePolicyDrawableResource#getCallingPackageResourceId()},
      * meaning any system UI surface calling {@link #getDrawable}
      * with {@code drawableId} and {@code drawableStyle} will get the new resource after this API
      * is called.
      *
      * <p>Otherwise, if {@link DevicePolicyDrawableResource#getDrawableSource()} is set (see
-     * {@link DevicePolicyResources.Drawable.Source}, it overrides any drawables that was set for
+     * {@link DevicePolicyResources.Drawables.Source}, it overrides any drawables that was set for
      * the same {@code drawableId} and {@code drawableStyle} for the provided source.
      *
      * <p>Sends a broadcast with action {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to
@@ -14509,11 +14841,6 @@ public class DevicePolicyManager {
      *
      * @param drawables The list of {@link DevicePolicyDrawableResource} to update.
      *
-     * @throws IllegalArgumentException if {@link DevicePolicyDrawableResource#getDrawableId()},
-     * {@link DevicePolicyDrawableResource#getDrawableStyle()}, or
-     * {@link DevicePolicyDrawableResource#getDrawableSource()} aren't defined in
-     * {@link DevicePolicyResources.Drawable}.
-     *
      * @hide
      */
     @SystemApi
@@ -14530,10 +14857,10 @@ public class DevicePolicyManager {
 
     /**
      * Removes all updated drawables for the list of {@code drawableIds} (see
-     * {@link DevicePolicyResources.Drawable} that was previously set by calling
+     * {@link DevicePolicyResources.Drawables} that was previously set by calling
      * {@link #setDrawables}, meaning any subsequent calls to {@link #getDrawable} for the provided
-     * IDs with any {@link DevicePolicyResources.Drawable.Style} and any
-     * {@link DevicePolicyResources.Drawable.Source} will return the default drawable from
+     * IDs with any {@link DevicePolicyResources.Drawables.Style} and any
+     * {@link DevicePolicyResources.Drawables.Source} will return the default drawable from
      * {@code defaultDrawableLoader}.
      *
      * <p>Sends a broadcast with action {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to
@@ -14541,14 +14868,11 @@ public class DevicePolicyManager {
      *
      * @param drawableIds The list of IDs  to remove.
      *
-     * @throws IllegalArgumentException if IDs are not defined in
-     * {@link DevicePolicyResources.Drawable}
-     *
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES)
-    public void resetDrawables(@NonNull int[] drawableIds) {
+    public void resetDrawables(@NonNull String[] drawableIds) {
         if (mService != null) {
             try {
                 mService.resetDrawables(drawableIds);
@@ -14560,16 +14884,19 @@ public class DevicePolicyManager {
 
     /**
      * Returns the appropriate updated drawable for the {@code drawableId}
-     * (see {@link DevicePolicyResources.Drawable}), with style {@code drawableStyle}
-     * (see {@link DevicePolicyResources.Drawable.Style}) if one was set using
+     * (see {@link DevicePolicyResources.Drawables}), with style {@code drawableStyle}
+     * (see {@link DevicePolicyResources.Drawables.Style}) if one was set using
      * {@code setDrawables}, otherwise returns the drawable from {@code defaultDrawableLoader}.
      *
      * <p>Also returns the drawable from {@code defaultDrawableLoader} if
-     * {@link DevicePolicyResources.Drawable#INVALID_ID} was passed.
+     * {@link DevicePolicyResources.Drawables#UNDEFINED} was passed.
+     *
+     * <p>{@code defaultDrawableLoader} must return a non {@code null} {@link Drawable}, otherwise a
+     * {@link NullPointerException} is thrown.
      *
      * <p>This API uses the screen density returned from {@link Resources#getConfiguration()}, to
      * set a different value use
-     * {@link #getDrawableForDensity(int, int, int, Callable)}.
+     * {@link #getDrawableForDensity(String, String, int, Callable)}.
      *
      * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
      * notified when a resource has been updated.
@@ -14582,19 +14909,24 @@ public class DevicePolicyManager {
      * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
      *                              the provided params.
      */
-    @Nullable
+    @NonNull
     public Drawable getDrawable(
-            @DevicePolicyResources.UpdatableDrawableId int drawableId,
-            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
+            @NonNull @DevicePolicyResources.UpdatableDrawableId String drawableId,
+            @NonNull @DevicePolicyResources.UpdatableDrawableStyle String drawableStyle,
             @NonNull Callable<Drawable> defaultDrawableLoader) {
-        return getDrawable(drawableId, drawableStyle, UNDEFINED, defaultDrawableLoader);
+        return getDrawable(
+                drawableId, drawableStyle, Drawables.Source.UNDEFINED, defaultDrawableLoader);
     }
 
     /**
-     * Similar to {@link #getDrawable(int, int, Callable)}, but also accepts
-     * a {@code drawableSource} (see {@link DevicePolicyResources.Drawable.Source}) which
-     * could result in returning a different drawable than {@link #getDrawable(int, int, Callable)}
+     * Similar to {@link #getDrawable(String, String, Callable)}, but also accepts
+     * a {@code drawableSource} (see {@link DevicePolicyResources.Drawables.Source}) which
+     * could result in returning a different drawable than
+     * {@link #getDrawable(String, String, Callable)}
      * if an override was set for that specific source.
+     *
+     * <p>{@code defaultDrawableLoader} must return a non {@code null} {@link Drawable}, otherwise a
+     * {@link NullPointerException} is thrown.
      *
      * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
      * notified when a resource has been updated.
@@ -14605,14 +14937,19 @@ public class DevicePolicyManager {
      * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
      *                              the provided params.
      */
-    @Nullable
+    @NonNull
     public Drawable getDrawable(
-            @DevicePolicyResources.UpdatableDrawableId int drawableId,
-            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
-            @DevicePolicyResources.UpdatableDrawableSource int drawableSource,
+            @NonNull @DevicePolicyResources.UpdatableDrawableId String drawableId,
+            @NonNull @DevicePolicyResources.UpdatableDrawableStyle String drawableStyle,
+            @NonNull @DevicePolicyResources.UpdatableDrawableSource String drawableSource,
             @NonNull Callable<Drawable> defaultDrawableLoader) {
+
+        Objects.requireNonNull(drawableId, "drawableId can't be null");
+        Objects.requireNonNull(drawableStyle, "drawableStyle can't be null");
+        Objects.requireNonNull(drawableSource, "drawableSource can't be null");
         Objects.requireNonNull(defaultDrawableLoader, "defaultDrawableLoader can't be null");
-        if (drawableId == INVALID_ID) {
+
+        if (Drawables.UNDEFINED.equals(drawableId)) {
             return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
         }
         if (mService != null) {
@@ -14640,8 +14977,11 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Similar to {@link #getDrawable(int, int, Callable)}, but also accepts
+     * Similar to {@link #getDrawable(String, String, Callable)}, but also accepts
      * {@code density}. See {@link Resources#getDrawableForDensity(int, int, Resources.Theme)}.
+     *
+     * <p>{@code defaultDrawableLoader} must return a non {@code null} {@link Drawable}, otherwise a
+     * {@link NullPointerException} is thrown.
      *
      * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
      * notified when a resource has been updated.
@@ -14654,23 +14994,26 @@ public class DevicePolicyManager {
      * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
      *                              the provided params.
      */
-    @Nullable
+    @NonNull
     public Drawable getDrawableForDensity(
-            @DevicePolicyResources.UpdatableDrawableId int drawableId,
-            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
+            @NonNull @DevicePolicyResources.UpdatableDrawableId String drawableId,
+            @NonNull @DevicePolicyResources.UpdatableDrawableStyle String drawableStyle,
             int density,
             @NonNull Callable<Drawable> defaultDrawableLoader) {
         return getDrawableForDensity(
                 drawableId,
                 drawableStyle,
-                UNDEFINED,
+                Drawables.Source.UNDEFINED,
                 density,
                 defaultDrawableLoader);
     }
 
      /**
-     * Similar to {@link #getDrawable(int, int, int, Callable)}, but also accepts
+     * Similar to {@link #getDrawable(String, String, String, Callable)}, but also accepts
      * {@code density}. See {@link Resources#getDrawableForDensity(int, int, Resources.Theme)}.
+     *
+     * <p>{@code defaultDrawableLoader} must return a non {@code null} {@link Drawable}, otherwise a
+     * {@link NullPointerException} is thrown.
      *
      * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
      * notified when a resource has been updated.
@@ -14684,15 +15027,20 @@ public class DevicePolicyManager {
      * @param defaultDrawableLoader To get the default drawable if no updated drawable was set for
      *                              the provided params.
      */
-    @Nullable
+    @NonNull
     public Drawable getDrawableForDensity(
-            @DevicePolicyResources.UpdatableDrawableId int drawableId,
-            @DevicePolicyResources.UpdatableDrawableStyle int drawableStyle,
-            @DevicePolicyResources.UpdatableDrawableSource int drawableSource,
+            @NonNull @DevicePolicyResources.UpdatableDrawableId String drawableId,
+            @NonNull @DevicePolicyResources.UpdatableDrawableStyle String drawableStyle,
+            @NonNull @DevicePolicyResources.UpdatableDrawableSource String drawableSource,
             int density,
             @NonNull Callable<Drawable> defaultDrawableLoader) {
+
+        Objects.requireNonNull(drawableId, "drawableId can't be null");
+        Objects.requireNonNull(drawableStyle, "drawableStyle can't be null");
+        Objects.requireNonNull(drawableSource, "drawableSource can't be null");
         Objects.requireNonNull(defaultDrawableLoader, "defaultDrawableLoader can't be null");
-        if (drawableId == INVALID_ID) {
+
+        if (Drawables.UNDEFINED.equals(drawableId)) {
             return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
         }
         if (mService != null) {
@@ -14713,5 +15061,168 @@ public class DevicePolicyManager {
             }
         }
         return ParcelableResource.loadDefaultDrawable(defaultDrawableLoader);
+    }
+
+    /**
+     * For each {@link DevicePolicyStringResource} item in {@code strings}, it updates the string
+     * resource for {@link DevicePolicyStringResource#getStringId()} to the string with ID
+     * {@code callingPackageResourceId} (see {@link DevicePolicyResources.String}), meaning any
+     * system UI surface calling {@link #getString} with {@code stringId} will get
+     * the new resource after this API is called.
+     *
+     * <p>Sends a broadcast with action {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to
+     * registered receivers when a resource has been updated successfully.
+     *
+     * <p>Important notes to consider when using this API:
+     * <ul>
+     * <li> {@link #getString} references the resource
+     * {@code callingPackageResourceId} in the calling package each time it gets called. You have to
+     * ensure that the resource is always available in the calling package as long as it is used as
+     * an updated resource.
+     * <li> You still have to re-call {@code setStrings} even if you only make changes to the
+     * content of the resource with ID {@code callingPackageResourceId} as the content might be
+     * cached and would need updating.
+     * </ul>
+     *
+     * @param strings The list of {@link DevicePolicyStringResource} to update.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES)
+    public void setStrings(@NonNull Set<DevicePolicyStringResource> strings) {
+        if (mService != null) {
+            try {
+                mService.setStrings(new ArrayList<>(strings));
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Removes the updated strings for the list of {@code stringIds} (see
+     * {@link DevicePolicyResources.String}) that was previously set by calling {@link #setStrings},
+     * meaning any subsequent calls to {@link #getString} for the provided IDs will
+     * return the default string from {@code defaultStringLoader}.
+     *
+     * <p>Sends a broadcast with action {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to
+     * registered receivers when a resource has been reset successfully.
+     *
+     * @param stringIds The list of IDs to remove the updated resources for.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.UPDATE_DEVICE_MANAGEMENT_RESOURCES)
+    public void resetStrings(@NonNull String[] stringIds) {
+        if (mService != null) {
+            try {
+                mService.resetStrings(stringIds);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Returns the appropriate updated string for the {@code stringId} (see
+     * {@link DevicePolicyResources.String}) if one was set using
+     * {@link #setStrings}, otherwise returns the string from {@code defaultStringLoader}.
+     *
+     * <p>Also returns the string from {@code defaultStringLoader} if
+     * {@link DevicePolicyResources.String#INVALID_ID} was passed.
+     *
+     * <p>{@code defaultStringLoader} must return a non {@code null} {@link String}, otherwise a
+     * {@link NullPointerException} is thrown.
+     *
+     * <p>Callers should register for {@link #ACTION_DEVICE_POLICY_RESOURCE_UPDATED} to get
+     * notified when a resource has been updated.
+     *
+     * <p>Note that each call to this API loads the resource from the package that called
+     * {@link #setStrings} to set the updated resource.
+     *
+     * @param stringId The IDs to get the updated resource for.
+     * @param defaultStringLoader To get the default string if no updated string was set for
+     *         {@code stringId}.
+     *
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public String getString(
+            @NonNull @DevicePolicyResources.UpdatableStringId String stringId,
+            @NonNull Callable<String> defaultStringLoader) {
+
+        Objects.requireNonNull(stringId, "stringId can't be null");
+        Objects.requireNonNull(defaultStringLoader, "defaultStringLoader can't be null");
+
+        if (stringId.equals(DevicePolicyResources.Strings.UNDEFINED)) {
+            return ParcelableResource.loadDefaultString(defaultStringLoader);
+        }
+        if (mService != null) {
+            try {
+                ParcelableResource resource = mService.getString(stringId);
+                if (resource == null) {
+                    return ParcelableResource.loadDefaultString(defaultStringLoader);
+                }
+                return resource.getString(mContext, defaultStringLoader);
+            } catch (RemoteException e) {
+                Log.e(
+                        TAG,
+                        "Error getting the updated string from DevicePolicyManagerService.",
+                        e);
+                return ParcelableResource.loadDefaultString(defaultStringLoader);
+            }
+        }
+        return ParcelableResource.loadDefaultString(defaultStringLoader);
+    }
+
+    /**
+     * Similar to {@link #getString(String, Callable)} but accepts {@code formatArgs} and returns a
+     * localized formatted string, substituting the format arguments as defined in
+     * {@link java.util.Formatter} and {@link java.lang.String#format}, (see
+     * {@link Resources#getString(int, Object...)}).
+     *
+     * <p>{@code defaultStringLoader} must return a non {@code null} {@link String}, otherwise a
+     * {@link NullPointerException} is thrown.
+     *
+     * @param stringId The IDs to get the updated resource for.
+     * @param defaultStringLoader To get the default string if no updated string was set for
+     *         {@code stringId}.
+     * @param formatArgs The format arguments that will be used for substitution.
+     *
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    @SuppressLint("SamShouldBeLast")
+    public String getString(
+            @NonNull @DevicePolicyResources.UpdatableStringId String stringId,
+            @NonNull Callable<String> defaultStringLoader,
+            @NonNull Object... formatArgs) {
+
+        Objects.requireNonNull(stringId, "stringId can't be null");
+        Objects.requireNonNull(defaultStringLoader, "defaultStringLoader can't be null");
+
+        if (stringId.equals(DevicePolicyResources.Strings.UNDEFINED)) {
+            return ParcelableResource.loadDefaultString(defaultStringLoader);
+        }
+        if (mService != null) {
+            try {
+                ParcelableResource resource = mService.getString(stringId);
+                if (resource == null) {
+                    return ParcelableResource.loadDefaultString(defaultStringLoader);
+                }
+                return resource.getString(mContext, defaultStringLoader, formatArgs);
+            } catch (RemoteException e) {
+                Log.e(
+                        TAG,
+                        "Error getting the updated string from DevicePolicyManagerService.",
+                        e);
+                return ParcelableResource.loadDefaultString(defaultStringLoader);
+            }
+        }
+        return ParcelableResource.loadDefaultString(defaultStringLoader);
     }
 }

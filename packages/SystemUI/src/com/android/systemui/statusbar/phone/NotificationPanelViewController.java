@@ -46,6 +46,7 @@ import static java.lang.Float.isNaN;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
+import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.Fragment;
 import android.app.StatusBarManager;
@@ -139,6 +140,7 @@ import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.idle.IdleHostView;
 import com.android.systemui.idle.IdleHostViewController;
 import com.android.systemui.idle.dagger.IdleViewComponent;
+import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.media.KeyguardMediaController;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.media.MediaHierarchyManager;
@@ -213,8 +215,10 @@ import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -794,6 +798,7 @@ public class NotificationPanelViewController extends PanelViewController {
             ControlsComponent controlsComponent,
             InteractionJankMonitor interactionJankMonitor,
             QsFrameTranslateController qsFrameTranslateController,
+            KeyguardUnlockAnimationController keyguardUnlockAnimationController,
             EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         super(view,
                 featureFlags,
@@ -809,7 +814,8 @@ public class NotificationPanelViewController extends PanelViewController {
                 lockscreenGestureLogger,
                 panelExpansionStateManager,
                 ambientState,
-                interactionJankMonitor);
+                interactionJankMonitor,
+                keyguardUnlockAnimationController);
         mView = view;
         mVibratorHelper = vibratorHelper;
         mKeyguardMediaController = keyguardMediaController;
@@ -929,8 +935,33 @@ public class NotificationPanelViewController extends PanelViewController {
         mQsFrameTranslateController = qsFrameTranslateController;
         updateUserSwitcherFlags();
         onFinishInflate();
-
         mUseCombinedQSHeaders = featureFlags.isEnabled(Flags.COMBINED_QS_HEADERS);
+        keyguardUnlockAnimationController.addKeyguardUnlockAnimationListener(
+                new KeyguardUnlockAnimationController.KeyguardUnlockAnimationListener() {
+                    @Override
+                    public void onUnlockAnimationFinished() {
+                        // Make sure the clock is in the correct position after the unlock animation
+                        // so that it's not in the wrong place when we show the keyguard again.
+                        positionClockAndNotifications(true /* forceClockUpdate */);
+                    }
+
+                    @Override
+                    public void onUnlockAnimationStarted(
+                            boolean playingCannedAnimation, boolean isWakeAndUnlock) {
+                        // Disable blurs while we're unlocking so that panel expansion does not
+                        // cause blurring. This will eventually be re-enabled by the panel view on
+                        // ACTION_UP, since the user's finger might still be down after a swipe to
+                        // unlock gesture, and we don't want that to cause blurring either.
+                        mDepthController.setBlursDisabledForUnlock(mTracking);
+
+                        if (playingCannedAnimation && !isWakeAndUnlock) {
+                            // Fling the panel away so it's not in the way or the surface behind the
+                            // keyguard, which will be appearing. If we're wake and unlocking, the
+                            // lock screen is hidden instantly so should not be flung away.
+                            fling(0f, false, 0.7f, false);
+                        }
+                    }
+                });
     }
 
     private void onFinishInflate() {
@@ -3332,6 +3363,10 @@ public class NotificationPanelViewController extends PanelViewController {
                 mAffordanceHelper.reset(true);
             }
         }
+
+        // If we unlocked from a swipe, the user's finger might still be down after the
+        // unlock animation ends. We need to wait until ACTION_UP to enable blurs again.
+        mDepthController.setBlursDisabledForUnlock(false);
     }
 
     private void updateMaxHeadsUpTranslation() {
@@ -4607,7 +4642,14 @@ public class NotificationPanelViewController extends PanelViewController {
 
             // Can affect multi-user switcher visibility as it depends on screen size by default:
             // it is enabled only for devices with large screens (see config_keyguardUserSwitcher)
-            reInflateViews();
+            boolean prevKeyguardUserSwitcherEnabled = mKeyguardUserSwitcherEnabled;
+            boolean prevKeyguardQsUserSwitchEnabled = mKeyguardQsUserSwitchEnabled;
+            updateUserSwitcherFlags();
+            if (prevKeyguardUserSwitcherEnabled != mKeyguardUserSwitcherEnabled
+                    || prevKeyguardQsUserSwitchEnabled != mKeyguardQsUserSwitchEnabled) {
+                reInflateViews();
+            }
+
             Trace.endSection();
         }
 
@@ -4924,33 +4966,53 @@ public class NotificationPanelViewController extends PanelViewController {
 
     private class DebugDrawable extends Drawable {
 
+        private final Set<Integer> mDebugTextUsedYPositions = new HashSet<>();
+        private final Paint mDebugPaint = new Paint();
+
         @Override
-        public void draw(Canvas canvas) {
-            Paint p = new Paint();
-            p.setColor(Color.RED);
-            p.setStrokeWidth(2);
-            p.setStyle(Paint.Style.STROKE);
-            canvas.drawLine(0, getMaxPanelHeight(), mView.getWidth(), getMaxPanelHeight(), p);
-            p.setTextSize(24);
-            if (mHeaderDebugInfo != null) canvas.drawText(mHeaderDebugInfo, 50, 100, p);
-            p.setColor(Color.BLUE);
-            canvas.drawLine(0, getExpandedHeight(), mView.getWidth(), getExpandedHeight(), p);
-            p.setColor(Color.GREEN);
-            canvas.drawLine(0, calculatePanelHeightQsExpanded(), mView.getWidth(),
-                    calculatePanelHeightQsExpanded(), p);
-            p.setColor(Color.YELLOW);
-            canvas.drawLine(0, calculatePanelHeightShade(), mView.getWidth(),
-                    calculatePanelHeightShade(), p);
-            p.setColor(Color.MAGENTA);
-            canvas.drawLine(
-                    0, calculateNotificationsTopPadding(), mView.getWidth(),
-                    calculateNotificationsTopPadding(), p);
-            p.setColor(Color.CYAN);
+        public void draw(@NonNull Canvas canvas) {
+            mDebugTextUsedYPositions.clear();
+
+            mDebugPaint.setColor(Color.RED);
+            mDebugPaint.setStrokeWidth(2);
+            mDebugPaint.setStyle(Paint.Style.STROKE);
+            mDebugPaint.setTextSize(24);
+            if (mHeaderDebugInfo != null) canvas.drawText(mHeaderDebugInfo, 50, 100, mDebugPaint);
+
+            drawDebugInfo(canvas, getMaxPanelHeight(), Color.RED, "getMaxPanelHeight()");
+            drawDebugInfo(canvas, (int) getExpandedHeight(), Color.BLUE, "getExpandedHeight()");
+            drawDebugInfo(canvas, calculatePanelHeightQsExpanded(), Color.GREEN,
+                    "calculatePanelHeightQsExpanded()");
+            drawDebugInfo(canvas, calculatePanelHeightShade(), Color.YELLOW,
+                    "calculatePanelHeightShade()");
+            drawDebugInfo(canvas, (int) calculateNotificationsTopPadding(), Color.MAGENTA,
+                    "calculateNotificationsTopPadding()");
+            drawDebugInfo(canvas, mClockPositionResult.clockY, Color.GRAY,
+                    "mClockPositionResult.clockY");
+
+            mDebugPaint.setColor(Color.CYAN);
             canvas.drawLine(0, mClockPositionResult.stackScrollerPadding, mView.getWidth(),
-                    mNotificationStackScrollLayoutController.getTopPadding(), p);
-            p.setColor(Color.GRAY);
-            canvas.drawLine(0, mClockPositionResult.clockY, mView.getWidth(),
-                    mClockPositionResult.clockY, p);
+                    mNotificationStackScrollLayoutController.getTopPadding(), mDebugPaint);
+        }
+
+        private void drawDebugInfo(Canvas canvas, int y, int color, String label) {
+            mDebugPaint.setColor(color);
+            canvas.drawLine(/* startX= */ 0, /* startY= */ y, /* stopX= */ mView.getWidth(),
+                    /* stopY= */ y, mDebugPaint);
+            canvas.drawText(label, /* x= */ 0, /* y= */ computeDebugYTextPosition(y), mDebugPaint);
+        }
+
+        private int computeDebugYTextPosition(int lineY) {
+            if (lineY - mDebugPaint.getTextSize() < 0) {
+                // Avoiding drawing out of bounds
+                lineY += mDebugPaint.getTextSize();
+            }
+            int textY = lineY;
+            while (mDebugTextUsedYPositions.contains(textY)) {
+                textY = (int) (textY + mDebugPaint.getTextSize());
+            }
+            mDebugTextUsedYPositions.add(textY);
+            return textY;
         }
 
         @Override
