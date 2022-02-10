@@ -44,8 +44,7 @@ public class PixelPropsUtils {
     };
     private static final String[] packagesToChangeP5 = {
         "com.google.android.tts",
-        "com.google.android.googlequicksearchbox",
-        "com.google.android.apps.inputmethod.latin"
+        "com.google.android.googlequicksearchbox"
     };
     private static final String[] packagesToChangeP1 = {
          "com.google.android.apps.photos"
