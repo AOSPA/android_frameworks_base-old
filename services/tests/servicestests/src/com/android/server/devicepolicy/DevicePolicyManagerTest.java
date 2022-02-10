@@ -18,7 +18,6 @@ package com.android.server.devicepolicy;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.OP_ACTIVATE_VPN;
-import static android.app.Notification.EXTRA_TEXT;
 import static android.app.Notification.EXTRA_TITLE;
 import static android.app.admin.DevicePolicyManager.ACTION_CHECK_POLICY_COMPLIANCE;
 import static android.app.admin.DevicePolicyManager.DELEGATION_APP_RESTRICTIONS;
@@ -34,12 +33,17 @@ import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_LOW;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_MEDIUM;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_NONE;
 import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR;
+import static android.app.admin.DevicePolicyManager.WIFI_SECURITY_ENTERPRISE_192;
+import static android.app.admin.DevicePolicyManager.WIFI_SECURITY_ENTERPRISE_EAP;
+import static android.app.admin.DevicePolicyManager.WIFI_SECURITY_OPEN;
+import static android.app.admin.DevicePolicyManager.WIFI_SECURITY_PERSONAL;
 import static android.app.admin.DevicePolicyManager.WIPE_EUICC;
 import static android.app.admin.PasswordMetrics.computeForPasswordOrPin;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_DIRECT_BOOT_AWARE;
 import static android.net.ConnectivityManager.PROFILE_NETWORK_PREFERENCE_DEFAULT;
 import static android.net.ConnectivityManager.PROFILE_NETWORK_PREFERENCE_ENTERPRISE;
 import static android.net.InetAddresses.parseNumericAddress;
+import static android.net.NetworkCapabilities.NET_ENTERPRISE_ID_1;
 
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_NONE;
 import static com.android.internal.widget.LockPatternUtils.EscrowTokenStateChangeCallback;
@@ -91,6 +95,7 @@ import android.app.admin.DevicePolicyManagerLiteInternal;
 import android.app.admin.FactoryResetProtectionPolicy;
 import android.app.admin.PasswordMetrics;
 import android.app.admin.SystemUpdatePolicy;
+import android.app.admin.WifiSsidPolicy;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -1112,6 +1117,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 eq(UserManager.DISALLOW_ADD_MANAGED_PROFILE),
                 eq(true), eq(UserHandle.SYSTEM));
 
+        verify(getServices().userManager, times(1)).setUserRestriction(
+                eq(UserManager.DISALLOW_ADD_CLONE_PROFILE),
+                eq(true), eq(UserHandle.SYSTEM));
+
         verify(mContext.spiedContext, times(1)).sendBroadcastAsUser(
                 MockUtils.checkIntentAction(DevicePolicyManager.ACTION_DEVICE_OWNER_CHANGED),
                 MockUtils.checkUserHandle(UserHandle.USER_SYSTEM));
@@ -1391,6 +1400,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         verify(getServices().userManager).setUserRestriction(eq(UserManager.DISALLOW_ADD_USER),
                 eq(false),
+                MockUtils.checkUserHandle(UserHandle.USER_SYSTEM));
+
+        verify(getServices().userManager)
+                .setUserRestriction(eq(UserManager.DISALLOW_ADD_CLONE_PROFILE), eq(false),
                 MockUtils.checkUserHandle(UserHandle.USER_SYSTEM));
 
         verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
@@ -4123,6 +4136,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         ProfileNetworkPreference preferenceDetails2 =
                 new ProfileNetworkPreference.Builder()
                         .setPreference(PROFILE_NETWORK_PREFERENCE_ENTERPRISE)
+                        .setPreferenceEnterpriseId(NET_ENTERPRISE_ID_1)
                         .build();
         List<ProfileNetworkPreference> preferences2 = new ArrayList<>();
         preferences2.add(preferenceDetails);
@@ -7209,8 +7223,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verify(getServices().alarmManager, times(1)).set(anyInt(), eq(PROFILE_OFF_DEADLINE), any());
         // Now the user should see a warning notification.
         verify(getServices().notificationManager, times(1))
-                .notify(anyInt(), argThat(hasExtra(EXTRA_TITLE, PROFILE_OFF_SUSPENSION_TITLE,
-                        EXTRA_TEXT, PROFILE_OFF_SUSPENSION_SOON_TEXT)));
+                .notify(anyInt(), any());
         // Apps shouldn't be suspended yet.
         verifyZeroInteractions(getServices().ipackageManager);
         clearInvocations(getServices().alarmManager);
@@ -7224,8 +7237,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verifyZeroInteractions(getServices().alarmManager);
         // Now the user should see a notification about suspended apps.
         verify(getServices().notificationManager, times(1))
-                .notify(anyInt(), argThat(hasExtra(EXTRA_TITLE, PROFILE_OFF_SUSPENSION_TITLE,
-                        EXTRA_TEXT, PROFILE_OFF_SUSPENSION_TEXT)));
+                .notify(anyInt(), any());
         // Verify that the apps are suspended.
         verify(getServices().ipackageManager, times(1)).setPackagesSuspendedAsUser(
                 any(), eq(true), any(), any(), any(), any(), anyInt());
@@ -7828,6 +7840,173 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 () -> dpm.getOrganizationNameForUser(UserHandle.USER_SYSTEM));
     }
 
+    @Test
+    public void testSetWifiMinimumSecurity_noDeviceOwnerOrPoOfOrgOwnedDevice() {
+        assertThrows(SecurityException.class, () -> dpm.setMinimumRequiredWifiSecurityLevel(
+                DevicePolicyManager.WIFI_SECURITY_PERSONAL));
+    }
+
+    @Test
+    public void testSetWifiMinimumSecurity_asDeviceOwner() throws Exception {
+        setDeviceOwner();
+
+        final Set<Integer> allowedLevels = Set.of(WIFI_SECURITY_OPEN, WIFI_SECURITY_PERSONAL,
+                WIFI_SECURITY_ENTERPRISE_EAP, WIFI_SECURITY_ENTERPRISE_192);
+        for (int level : allowedLevels) {
+            dpm.setMinimumRequiredWifiSecurityLevel(level);
+            assertThat(dpm.getMinimumRequiredWifiSecurityLevel()).isEqualTo(level);
+        }
+    }
+
+    @Test
+    public void testSetWifiMinimumSecurity_asPoOfOrgOwnedDevice() throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        configureProfileOwnerOfOrgOwnedDevice(admin1, managedProfileUserId);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        final Set<Integer> allowedLevels = Set.of(WIFI_SECURITY_OPEN, WIFI_SECURITY_PERSONAL,
+                WIFI_SECURITY_ENTERPRISE_EAP, WIFI_SECURITY_ENTERPRISE_192);
+        for (int level : allowedLevels) {
+            dpm.setMinimumRequiredWifiSecurityLevel(level);
+            assertThat(dpm.getMinimumRequiredWifiSecurityLevel()).isEqualTo(level);
+        }
+    }
+
+    @Test
+    public void testSetSsidAllowlist_noDeviceOwnerOrPoOfOrgOwnedDevice() {
+        final Set<String> ssids = Collections.singleton("ssid1");
+        WifiSsidPolicy policy = WifiSsidPolicy.createAllowlistPolicy(ssids);
+        assertThrows(SecurityException.class, () -> dpm.setWifiSsidPolicy(policy));
+    }
+
+    @Test
+    public void testSetSsidAllowlist_asDeviceOwner() throws Exception {
+        setDeviceOwner();
+
+        final Set<String> ssids = Collections.singleton("ssid1");
+        WifiSsidPolicy policy = WifiSsidPolicy.createAllowlistPolicy(ssids);
+        dpm.setWifiSsidPolicy(policy);
+        assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
+        assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_ALLOWLIST);
+    }
+
+    @Test
+    public void testSetSsidAllowlist_asPoOfOrgOwnedDevice() throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        configureProfileOwnerOfOrgOwnedDevice(admin1, managedProfileUserId);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        final Set<String> ssids = new ArraySet<>(Arrays.asList("ssid1", "ssid2", "ssid3"));
+        WifiSsidPolicy policy = WifiSsidPolicy.createAllowlistPolicy(ssids);
+        dpm.setWifiSsidPolicy(policy);
+        assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
+        assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_ALLOWLIST);
+    }
+
+    @Test
+    public void testSetSsidAllowlist_emptyList() throws Exception {
+        setDeviceOwner();
+
+        final Set<String> ssids = new ArraySet<>();
+        assertThrows(IllegalArgumentException.class,
+                () -> WifiSsidPolicy.createAllowlistPolicy(ssids));
+    }
+
+    @Test
+    public void testSetSsidDenylist_noDeviceOwnerOrPoOfOrgOwnedDevice() {
+        final Set<String> ssids = Collections.singleton("ssid1");
+        WifiSsidPolicy policy = WifiSsidPolicy.createDenylistPolicy(ssids);
+        assertThrows(SecurityException.class, () -> dpm.setWifiSsidPolicy(policy));
+    }
+
+    @Test
+    public void testSetSsidDenylist_asDeviceOwner() throws Exception {
+        setDeviceOwner();
+
+        final Set<String> ssids = Collections.singleton("ssid1");
+        WifiSsidPolicy policy = WifiSsidPolicy.createDenylistPolicy(ssids);
+        dpm.setWifiSsidPolicy(policy);
+        assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
+        assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_DENYLIST);
+    }
+
+    @Test
+    public void testSetSsidDenylist_asPoOfOrgOwnedDevice() throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        configureProfileOwnerOfOrgOwnedDevice(admin1, managedProfileUserId);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        final Set<String> ssids = new ArraySet<>(Arrays.asList("ssid1", "ssid2", "ssid3"));
+        WifiSsidPolicy policy = WifiSsidPolicy.createDenylistPolicy(ssids);
+        dpm.setWifiSsidPolicy(policy);
+        assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
+        assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_DENYLIST);
+    }
+
+    @Test
+    public void testSetSsidDenylist_emptyList() throws Exception {
+        setDeviceOwner();
+
+        final Set<String> ssids = new ArraySet<>();
+        assertThrows(IllegalArgumentException.class,
+                () -> WifiSsidPolicy.createDenylistPolicy(ssids));
+    }
+
+    @Test
+    public void testSendLostModeLocationUpdate_noPermission() {
+        assertThrows(SecurityException.class, () -> dpm.sendLostModeLocationUpdate(
+                getServices().executor, /* empty callback */ result -> {}));
+    }
+
+    @Test
+    public void testSendLostModeLocationUpdate_notOrganizationOwnedDevice() {
+        mContext.callerPermissions.add(permission.SEND_LOST_MODE_LOCATION_UPDATES);
+        assertThrows(IllegalStateException.class, () -> dpm.sendLostModeLocationUpdate(
+                getServices().executor, /* empty callback */ result -> {}));
+    }
+
+    @Test
+    public void testSendLostModeLocationUpdate_asDeviceOwner() throws Exception {
+        final String TEST_PROVIDER = "network";
+        mContext.callerPermissions.add(permission.SEND_LOST_MODE_LOCATION_UPDATES);
+        setDeviceOwner();
+        when(getServices().locationManager.getAllProviders()).thenReturn(List.of(TEST_PROVIDER));
+        when(getServices().locationManager.isProviderEnabled(TEST_PROVIDER)).thenReturn(true);
+
+        dpm.sendLostModeLocationUpdate(getServices().executor, /* empty callback */ result -> {});
+
+        verify(getServices().locationManager, times(1)).getCurrentLocation(
+                eq(TEST_PROVIDER), any(), eq(getServices().executor), any());
+    }
+
+    @Test
+    public void testSendLostModeLocationUpdate_asProfileOwnerOfOrgOwnedDevice() throws Exception {
+        final String TEST_PROVIDER = "network";
+        final int MANAGED_PROFILE_ADMIN_UID =
+                UserHandle.getUid(CALLER_USER_HANDLE, DpmMockContext.SYSTEM_UID);
+        mContext.binder.callingUid = MANAGED_PROFILE_ADMIN_UID;
+        mContext.callerPermissions.add(permission.SEND_LOST_MODE_LOCATION_UPDATES);
+        addManagedProfile(admin1, MANAGED_PROFILE_ADMIN_UID, admin1);
+        configureProfileOwnerOfOrgOwnedDevice(admin1, CALLER_USER_HANDLE);
+        when(getServices().locationManager.getAllProviders()).thenReturn(List.of(TEST_PROVIDER));
+        when(getServices().locationManager.isProviderEnabled(TEST_PROVIDER)).thenReturn(true);
+
+        dpm.sendLostModeLocationUpdate(getServices().executor, /* empty callback */ result -> {});
+
+        verify(getServices().locationManager, times(1)).getCurrentLocation(
+                eq(TEST_PROVIDER), any(), eq(getServices().executor), any());
+    }
+
     private void setupVpnAuthorization(String userVpnPackage, int userVpnUid) {
         final AppOpsManager.PackageOps vpnOp = new AppOpsManager.PackageOps(userVpnPackage,
                 userVpnUid, List.of(new AppOpsManager.OpEntry(
@@ -7862,18 +8041,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         dpms.mMockInjector.setSystemCurrentTimeMillis(PROFILE_OFF_START);
         // To allow creation of Notification via Notification.Builder
         mContext.applicationInfo = mRealTestContext.getApplicationInfo();
-
-        // Setup resources to render notification titles and texts.
-        when(mServiceContext.resources
-                .getString(R.string.personal_apps_suspension_title))
-                .thenReturn(PROFILE_OFF_SUSPENSION_TITLE);
-        when(mServiceContext.resources
-                .getString(R.string.personal_apps_suspension_text))
-                .thenReturn(PROFILE_OFF_SUSPENSION_TEXT);
-        when(mServiceContext.resources
-                .getString(eq(R.string.personal_apps_suspension_soon_text),
-                        anyString(), anyString(), anyInt()))
-                .thenReturn(PROFILE_OFF_SUSPENSION_SOON_TEXT);
 
         // Make locale available for date formatting:
         when(mServiceContext.resources.getConfiguration())

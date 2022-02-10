@@ -19,6 +19,7 @@ import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.admin.DevicePolicyDrawableResource;
 import android.app.admin.DevicePolicySafetyChecker;
+import android.app.admin.DevicePolicyStringResource;
 import android.app.admin.FullyManagedDeviceProvisioningParams;
 import android.app.admin.IDevicePolicyManager;
 import android.app.admin.ManagedProfileProvisioningParams;
@@ -170,11 +171,22 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     public void setDrawables(@NonNull List<DevicePolicyDrawableResource> drawables){}
 
     @Override
-    public void resetDrawables(@NonNull int[] drawableIds){}
+    public void resetDrawables(@NonNull String[] drawableIds){}
 
     @Override
     public ParcelableResource getDrawable(
-            int drawableId, int drawableStyle, int drawableSource) {
+            String drawableId, String drawableStyle, String drawableSource) {
+        return null;
+    }
+
+    @Override
+    public void setStrings(@NonNull List<DevicePolicyStringResource> strings){}
+
+    @Override
+    public void resetStrings(String[] stringIds){}
+
+    @Override
+    public ParcelableResource getString(String stringId) {
         return null;
     }
 }

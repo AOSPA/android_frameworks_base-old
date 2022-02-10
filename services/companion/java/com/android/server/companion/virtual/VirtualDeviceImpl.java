@@ -29,10 +29,15 @@ import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
 import android.companion.AssociationInfo;
 import android.companion.virtual.IVirtualDevice;
+import android.companion.virtual.IVirtualDeviceActivityListener;
+import android.companion.virtual.VirtualDeviceManager.ActivityListener;
 import android.companion.virtual.VirtualDeviceParams;
+import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Point;
+import android.graphics.PointF;
 import android.hardware.display.DisplayManager;
+import android.hardware.input.InputManagerInternal;
 import android.hardware.input.VirtualKeyEvent;
 import android.hardware.input.VirtualMouseButtonEvent;
 import android.hardware.input.VirtualMouseRelativeEvent;
@@ -50,11 +55,11 @@ import android.util.SparseArray;
 import android.window.DisplayWindowPolicyController;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.LocalServices;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Set;
 
 
 final class VirtualDeviceImpl extends IVirtualDevice.Stub
@@ -69,10 +74,34 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     private final int mOwnerUid;
     private final InputController mInputController;
     @VisibleForTesting
-    final List<Integer> mVirtualDisplayIds = new ArrayList<>();
+    final Set<Integer> mVirtualDisplayIds = new ArraySet<>();
     private final OnDeviceCloseListener mListener;
     private final IBinder mAppToken;
     private final VirtualDeviceParams mParams;
+    private final IVirtualDeviceActivityListener mActivityListener;
+
+    private ActivityListener createListenerAdapter(int displayId) {
+        return new ActivityListener() {
+
+            @Override
+            public void onTopActivityChanged(int unusedDisplayId, ComponentName topActivity) {
+                try {
+                    mActivityListener.onTopActivityChanged(displayId, topActivity);
+                } catch (RemoteException e) {
+                    Slog.w(TAG, "Unable to call mActivityListener", e);
+                }
+            }
+
+            @Override
+            public void onDisplayEmpty(int unusedDisplayId) {
+                try {
+                    mActivityListener.onDisplayEmpty(displayId);
+                } catch (RemoteException e) {
+                    Slog.w(TAG, "Unable to call mActivityListener", e);
+                }
+            }
+        };
+    }
 
     /**
      * A mapping from the virtual display ID to its corresponding
@@ -83,18 +112,22 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
 
     VirtualDeviceImpl(Context context, AssociationInfo associationInfo,
             IBinder token, int ownerUid, OnDeviceCloseListener listener,
-            PendingTrampolineCallback pendingTrampolineCallback, VirtualDeviceParams params) {
+            PendingTrampolineCallback pendingTrampolineCallback,
+            IVirtualDeviceActivityListener activityListener,
+            VirtualDeviceParams params) {
         this(context, associationInfo, token, ownerUid, /* inputController= */ null, listener,
-                pendingTrampolineCallback, params);
+                pendingTrampolineCallback, activityListener, params);
     }
 
     @VisibleForTesting
     VirtualDeviceImpl(Context context, AssociationInfo associationInfo, IBinder token,
             int ownerUid, InputController inputController, OnDeviceCloseListener listener,
-            PendingTrampolineCallback pendingTrampolineCallback, VirtualDeviceParams params) {
+            PendingTrampolineCallback pendingTrampolineCallback,
+            IVirtualDeviceActivityListener activityListener, VirtualDeviceParams params) {
         mContext = context;
         mAssociationInfo = associationInfo;
         mPendingTrampolineCallback = pendingTrampolineCallback;
+        mActivityListener = activityListener;
         mOwnerUid = ownerUid;
         mAppToken = token;
         mParams = params;
@@ -202,7 +235,8 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
         final long token = Binder.clearCallingIdentity();
         try {
-            mInputController.createKeyboard(deviceName, vendorId, productId, deviceToken);
+            mInputController.createKeyboard(deviceName, vendorId, productId, deviceToken,
+                    displayId);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -227,7 +261,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
         final long token = Binder.clearCallingIdentity();
         try {
-            mInputController.createMouse(deviceName, vendorId, productId, deviceToken);
+            mInputController.createMouse(deviceName, vendorId, productId, deviceToken, displayId);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -254,7 +288,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         final long token = Binder.clearCallingIdentity();
         try {
             mInputController.createTouchscreen(deviceName, vendorId, productId,
-                    deviceToken, screenSize);
+                    deviceToken, displayId, screenSize);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -324,10 +358,21 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
     }
 
+    @Override // Binder call
+    public PointF getCursorPosition(IBinder token) {
+        final long binderToken = Binder.clearCallingIdentity();
+        try {
+            return mInputController.getCursorPosition(token);
+        } finally {
+            Binder.restoreCallingIdentity(binderToken);
+        }
+    }
+
     @Override
     protected void dump(FileDescriptor fd, PrintWriter fout, String[] args) {
         fout.println("  VirtualDevice: ");
         fout.println("    mAssociationId: " + mAssociationInfo.getId());
+        fout.println("    mParams: " + mParams);
         fout.println("    mVirtualDisplayIds: ");
         synchronized (mVirtualDeviceLock) {
             for (int id : mVirtualDisplayIds) {
@@ -343,9 +388,15 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                     "Virtual device already have a virtual display with ID " + displayId);
         }
         mVirtualDisplayIds.add(displayId);
+        LocalServices.getService(InputManagerInternal.class).setDisplayEligibilityForPointerCapture(
+                displayId, false);
         final GenericWindowPolicyController dwpc =
                 new GenericWindowPolicyController(FLAG_SECURE,
-                        SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS, getAllowedUserHandles());
+                        SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS,
+                        getAllowedUserHandles(),
+                        mParams.getAllowedActivities(),
+                        mParams.getBlockedActivities(),
+                        createListenerAdapter(displayId));
         mWindowPolicyControllers.put(displayId, dwpc);
         return dwpc;
     }
@@ -374,6 +425,8 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                     "Virtual device doesn't have a virtual display with ID " + displayId);
         }
         mVirtualDisplayIds.remove(displayId);
+        LocalServices.getService(InputManagerInternal.class).setDisplayEligibilityForPointerCapture(
+                displayId, true);
         mWindowPolicyControllers.remove(displayId);
     }
 

@@ -24,8 +24,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.FLAG_RESUME_WHILE_PAUSING;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
@@ -39,6 +37,7 @@ import static android.view.WindowManager.TRANSIT_FLAG_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BACK_PREVIEW;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
 import static com.android.server.wm.ActivityRecord.State.PAUSED;
 import static com.android.server.wm.ActivityRecord.State.PAUSING;
@@ -102,6 +101,7 @@ import com.android.internal.util.function.pooled.PooledPredicate;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -259,6 +259,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     private final Rect mTmpFullBounds = new Rect();
     private final Rect mTmpStableBounds = new Rect();
     private final Rect mTmpNonDecorBounds = new Rect();
+
+    //TODO(b/207481538) Remove once the infrastructure to support per-activity screenshot is
+    // implemented
+    HashMap<String, SurfaceControl.ScreenshotHardwareBuffer> mBackScreenshots = new HashMap<>();
 
     private final EnsureActivitiesVisibleHelper mEnsureActivitiesVisibleHelper =
             new EnsureActivitiesVisibleHelper(this);
@@ -796,13 +800,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return TASK_FRAGMENT_VISIBILITY_VISIBLE;
         }
 
-        boolean gotRootSplitScreenFragment = false;
-        boolean gotOpaqueSplitScreenPrimary = false;
-        boolean gotOpaqueSplitScreenSecondary = false;
         boolean gotTranslucentFullscreen = false;
         boolean gotTranslucentAdjacent = false;
-        boolean gotTranslucentSplitScreenPrimary = false;
-        boolean gotTranslucentSplitScreenSecondary = false;
         boolean shouldBeVisible = true;
 
         // This TaskFragment is only considered visible if all its parent TaskFragments are
@@ -821,8 +820,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
 
         final List<TaskFragment> adjacentTaskFragments = new ArrayList<>();
-        final int windowingMode = getWindowingMode();
-        final boolean isAssistantType = isActivityTypeAssistant();
         for (int i = parent.getChildCount() - 1; i >= 0; --i) {
             final WindowContainer other = parent.getChildAt(i);
             if (other == null) continue;
@@ -870,37 +867,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 }
                 // Multi-window TaskFragment that matches parent bounds would occlude other children
                 return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
-            } else if (otherWindowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
-                    && !gotOpaqueSplitScreenPrimary) {
-                gotRootSplitScreenFragment = true;
-                gotTranslucentSplitScreenPrimary = isTranslucent(other, starting);
-                gotOpaqueSplitScreenPrimary = !gotTranslucentSplitScreenPrimary;
-                if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
-                        && gotOpaqueSplitScreenPrimary) {
-                    // Can't be visible behind another opaque TaskFragment in split-screen-primary.
-                    return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
-                }
-            } else if (otherWindowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
-                    && !gotOpaqueSplitScreenSecondary) {
-                gotRootSplitScreenFragment = true;
-                gotTranslucentSplitScreenSecondary = isTranslucent(other, starting);
-                gotOpaqueSplitScreenSecondary = !gotTranslucentSplitScreenSecondary;
-                if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
-                        && gotOpaqueSplitScreenSecondary) {
-                    // Can't be visible behind another opaque TaskFragment in split-screen-secondary
-                    return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
-                }
-            }
-            if (gotOpaqueSplitScreenPrimary && gotOpaqueSplitScreenSecondary) {
-                // Can not be visible if we are in split-screen windowing mode and both halves of
-                // the screen are opaque.
-                return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
-            }
-            if (isAssistantType && gotRootSplitScreenFragment) {
-                // Assistant TaskFragment can't be visible behind split-screen. In addition to
-                // this not making sense, it also works around an issue here we boost the z-order
-                // of the assistant window surfaces in window manager whenever it is visible.
-                return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
             }
 
             final TaskFragment otherTaskFrag = other.asTaskFragment();
@@ -924,34 +890,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         if (!shouldBeVisible) {
             return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
-        }
-
-        // Handle cases when there can be a translucent split-screen TaskFragment on top.
-        switch (windowingMode) {
-            case WINDOWING_MODE_FULLSCREEN:
-                if (gotTranslucentSplitScreenPrimary || gotTranslucentSplitScreenSecondary) {
-                    // At least one of the split-screen TaskFragment that covers this one is
-                    // translucent.
-                    // When in split mode, home will be reparented to the secondary split while
-                    // leaving TaskFragments not supporting split below. Due to
-                    // TaskDisplayArea#assignRootTaskOrdering always adjusts home surface layer to
-                    // the bottom, this makes sure TaskFragments not in split roots won't occlude
-                    // home task unexpectedly.
-                    return TASK_FRAGMENT_VISIBILITY_INVISIBLE;
-                }
-                break;
-            case WINDOWING_MODE_SPLIT_SCREEN_PRIMARY:
-                if (gotTranslucentSplitScreenPrimary) {
-                    // Covered by translucent primary split-screen on top.
-                    return TASK_FRAGMENT_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
-                }
-                break;
-            case WINDOWING_MODE_SPLIT_SCREEN_SECONDARY:
-                if (gotTranslucentSplitScreenSecondary) {
-                    // Covered by translucent secondary split-screen on top.
-                    return TASK_FRAGMENT_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
-                }
-                break;
         }
 
         // Lastly - check if there is a translucent fullscreen TaskFragment on top.
@@ -1709,6 +1647,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     @Override
     void addChild(WindowContainer child, int index) {
+        ActivityRecord r = topRunningActivity();
         mClearedTaskForReuse = false;
 
         boolean isAddingActivity = child.asActivityRecord() != null;
@@ -1723,6 +1662,18 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         super.addChild(child, index);
 
         if (isAddingActivity && task != null) {
+
+            // TODO(b/207481538): temporary per-activity screenshoting
+            if (r != null && BackNavigationController.isEnabled()) {
+                ProtoLog.v(WM_DEBUG_BACK_PREVIEW, "Screenshotting Activity %s",
+                        r.mActivityComponent.flattenToString());
+                Rect outBounds = r.getBounds();
+                SurfaceControl.ScreenshotHardwareBuffer backBuffer = SurfaceControl.captureLayers(
+                        r.mSurfaceControl,
+                        new Rect(0, 0, outBounds.width(), outBounds.height()),
+                        1f);
+                mBackScreenshots.put(r.mActivityComponent.flattenToString(), backBuffer);
+            }
             child.asActivityRecord().inHistory = true;
             task.onDescendantActivityAdded(taskHadActivity, activityType, child.asActivityRecord());
         }
@@ -2316,6 +2267,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     void removeChild(WindowContainer child, boolean removeSelfIfPossible) {
         super.removeChild(child);
+        if (BackNavigationController.isEnabled()) {
+            //TODO(b/207481538) Remove once the infrastructure to support per-activity screenshot is
+            // implemented
+            ActivityRecord r = child.asActivityRecord();
+            if (r != null) {
+                mBackScreenshots.remove(r.mActivityComponent.flattenToString());
+            }
+        }
         if (removeSelfIfPossible && (!mCreatedByOrganizer || mIsRemovalRequested) && !hasChild()) {
             removeImmediately("removeLastChild " + child);
         }

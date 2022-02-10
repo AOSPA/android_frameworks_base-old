@@ -670,6 +670,10 @@
     <string name="quick_settings_dark_mode_secondary_label_on_at">On at <xliff:g id="time" example="10 pm">%s</xliff:g></string>
     <!-- QuickSettings: Secondary text for when the Dark theme or some other tile will be on until some user-selected time. [CHAR LIMIT=20] -->
     <string name="quick_settings_dark_mode_secondary_label_until">Until <xliff:g id="time" example="7 am">%s</xliff:g></string>
+    <!-- QuickSettings: Secondary text for when the Dark theme will be enabled at bedtime. [CHAR LIMIT=40] -->
+    <string name="quick_settings_dark_mode_secondary_label_on_at_bedtime">On at bedtime</string>
+    <!-- QuickSettings: Secondary text for when the Dark theme or some other tile will be on until bedtime ends. [CHAR LIMIT=40] -->
+    <string name="quick_settings_dark_mode_secondary_label_until_bedtime_ends">Until bedtime ends</string>
 
     <!-- QuickSettings: NFC tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_label">NFC</string>
@@ -2154,8 +2158,14 @@
     <string name="media_transfer_undo">Undo</string>
     <!-- Text to ask the user to move their device closer to a different device (deviceName) in order to play media on the different device. [CHAR LIMIT=75] -->
     <string name="media_move_closer_to_start_cast">Move closer to play on <xliff:g id="deviceName" example="My Tablet">%1$s</xliff:g></string>
+    <!-- Text to ask the user to move their device closer to a different device (deviceName) in order to transfer media from the different device and back onto the current device. [CHAR LIMIT=75] -->
+    <string name="media_move_closer_to_end_cast">Move closer to <xliff:g id="deviceName" example="My Tablet">%1$s</xliff:g> to play here</string>
     <!-- Text informing the user that their media is now playing on a different device (deviceName). [CHAR LIMIT=50] -->
-    <string name="media_transfer_playing">Playing on <xliff:g id="deviceName" example="My Tablet">%1$s</xliff:g></string>
+    <string name="media_transfer_playing_different_device">Playing on <xliff:g id="deviceName" example="My Tablet">%1$s</xliff:g></string>
+    <!-- Text informing the user that their media is now playing on this device. [CHAR LIMIT=50] -->
+    <string name="media_transfer_playing_this_device">Playing on this phone</string>
+    <!-- Text informing the user that the media transfer has failed because something went wrong. [CHAR LIMIT=50] -->
+    <string name="media_transfer_failed">Something went wrong</string>
 
     <!-- Error message indicating that a control timed out while waiting for an update [CHAR_LIMIT=30] -->
     <string name="controls_error_timeout">Inactive, check app</string>
@@ -2354,4 +2364,6 @@
     <string name="clipboard_edit_text_copy">Copy</string>
     <!-- Text informing user that content has been copied to the system clipboard [CHAR LIMIT=NONE] -->
     <string name="clipboard_overlay_text_copied">Copied</string>
+    <!-- Label for button to dismiss clipboard overlay [CHAR LIMIT=NONE] -->
+    <string name="clipboard_dismiss_description">Dismiss copy UI</string>
 </resources>

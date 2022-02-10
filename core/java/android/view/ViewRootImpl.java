@@ -83,6 +83,8 @@ import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_FREEFORM;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.IME_FOCUS_CONTROLLER;
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.INSETS_CONTROLLER;
@@ -193,6 +195,7 @@ import android.view.contentcapture.MainContentCaptureSession;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Scroller;
 import android.window.ClientWindowFrames;
+import android.window.WindowOnBackInvokedDispatcher;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
@@ -310,6 +313,12 @@ public final class ViewRootImpl implements ViewParent,
     private @SurfaceControl.BufferTransform
             int mPreviousTransformHint = SurfaceControl.BUFFER_TRANSFORM_IDENTITY;
     /**
+     * The fallback {@link OnBackInvokedDispatcher} when the window doesn't have a decor view.
+     */
+    private WindowOnBackInvokedDispatcher mFallbackOnBackInvokedDispatcher =
+            new WindowOnBackInvokedDispatcher();
+
+    /**
      * Callback for notifying about global configuration changes.
      */
     public interface ConfigChangedCallback {
@@ -391,6 +400,8 @@ public final class ViewRootImpl implements ViewParent,
     @NonNull Display mDisplay;
     final DisplayManager mDisplayManager;
     final String mBasePackageName;
+
+    private @Surface.Rotation int mDisplayInstallOrientation;
 
     final int[] mTmpLocation = new int[2];
 
@@ -743,7 +754,10 @@ public final class ViewRootImpl implements ViewParent,
         return mImeFocusController;
     }
 
-    private final GestureExclusionTracker mGestureExclusionTracker = new GestureExclusionTracker();
+    private final ViewRootRectTracker mGestureExclusionTracker =
+            new ViewRootRectTracker(v -> v.getSystemGestureExclusionRects());
+    private final ViewRootRectTracker mKeepClearRectsTracker =
+            new ViewRootRectTracker(v -> v.collectPreferKeepClearRects());
 
     private IAccessibilityEmbeddedConnection mAccessibilityEmbeddedConnection;
 
@@ -873,6 +887,7 @@ public final class ViewRootImpl implements ViewParent,
         mFastScrollSoundEffectsEnabled = audioManager.areNavigationRepeatSoundEffectsEnabled();
 
         mScrollCaptureRequestTimeout = SCROLL_CAPTURE_REQUEST_TIMEOUT_MILLIS;
+        mFallbackOnBackInvokedDispatcher.attachToWindow(mWindowSession, mWindow);
     }
 
     public static void addFirstDrawHandler(Runnable callback) {
@@ -1019,6 +1034,7 @@ public final class ViewRootImpl implements ViewParent,
                 mView = view;
 
                 mAttachInfo.mDisplayState = mDisplay.getState();
+                mDisplayInstallOrientation = mDisplay.getInstallOrientation();
                 mViewLayoutDirectionInitial = mView.getRawLayoutDirection();
                 mFallbackEventHandler.setView(view);
                 mWindowAttributes.copyFrom(attrs);
@@ -1122,6 +1138,9 @@ public final class ViewRootImpl implements ViewParent,
                     if (pendingInsetsController != null) {
                         pendingInsetsController.replayAndAttach(mInsetsController);
                     }
+                    ((RootViewSurfaceTaker) mView)
+                            .provideWindowOnBackInvokedDispatcher()
+                            .attachToWindow(mWindowSession, mWindow);
                 }
 
                 try {
@@ -2854,9 +2873,9 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 relayoutResult = relayoutWindow(params, viewVisibility, insetsPending);
                 final boolean freeformResizing = (relayoutResult
-                        & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_FREEFORM) != 0;
+                        & RELAYOUT_RES_DRAG_RESIZING_FREEFORM) != 0;
                 final boolean dockedResizing = (relayoutResult
-                        & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED) != 0;
+                        & RELAYOUT_RES_DRAG_RESIZING_DOCKED) != 0;
                 final boolean dragResizing = freeformResizing || dockedResizing;
                 if ((relayoutResult & WindowManagerGlobal.RELAYOUT_RES_BLAST_SYNC) != 0) {
                     if (DEBUG_BLAST) {
@@ -4759,7 +4778,7 @@ public final class ViewRootImpl implements ViewParent,
      * the root's view hierarchy.
      */
     public void setRootSystemGestureExclusionRects(@NonNull List<Rect> rects) {
-        mGestureExclusionTracker.setRootSystemGestureExclusionRects(rects);
+        mGestureExclusionTracker.setRootRects(rects);
         mHandler.sendEmptyMessage(MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED);
     }
 
@@ -4769,7 +4788,26 @@ public final class ViewRootImpl implements ViewParent,
      */
     @NonNull
     public List<Rect> getRootSystemGestureExclusionRects() {
-        return mGestureExclusionTracker.getRootSystemGestureExclusionRects();
+        return mGestureExclusionTracker.getRootRects();
+    }
+
+    /**
+     * Called from View when the position listener is triggered
+     */
+    void updateKeepClearRectsForView(View view) {
+        mKeepClearRectsTracker.updateRectsForView(view);
+        mHandler.sendEmptyMessage(MSG_KEEP_CLEAR_RECTS_CHANGED);
+    }
+
+    void keepClearRectsChanged() {
+        final List<Rect> rectsForWindowManager = mKeepClearRectsTracker.computeChangedRects();
+        if (rectsForWindowManager != null && mView != null) {
+            try {
+                mWindowSession.reportKeepClearAreasChanged(mWindow, rectsForWindowManager);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
     }
 
     /**
@@ -5265,6 +5303,7 @@ public final class ViewRootImpl implements ViewParent,
     private static final int MSG_HIDE_INSETS = 35;
     private static final int MSG_REQUEST_SCROLL_CAPTURE = 36;
     private static final int MSG_WINDOW_TOUCH_MODE_CHANGED = 37;
+    private static final int MSG_KEEP_CLEAR_RECTS_CHANGED = 38;
 
 
     final class ViewRootHandler extends Handler {
@@ -5333,6 +5372,8 @@ public final class ViewRootImpl implements ViewParent,
                     return "MSG_HIDE_INSETS";
                 case MSG_WINDOW_TOUCH_MODE_CHANGED:
                     return "MSG_WINDOW_TOUCH_MODE_CHANGED";
+                case MSG_KEEP_CLEAR_RECTS_CHANGED:
+                    return "MSG_KEEP_CLEAR_RECTS_CHANGED";
             }
             return super.getMessageName(message);
         }
@@ -5556,7 +5597,10 @@ public final class ViewRootImpl implements ViewParent,
                 } break;
                 case MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED: {
                     systemGestureExclusionChanged();
-                } break;
+                }   break;
+                case MSG_KEEP_CLEAR_RECTS_CHANGED: {
+                    keepClearRectsChanged();
+                }   break;
                 case MSG_REQUEST_SCROLL_CAPTURE:
                     handleScrollCaptureRequest((IScrollCaptureResponseListener) msg.obj);
                     break;
@@ -7895,17 +7939,24 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
-        long frameNumber = -1;
-        if (mSurface.isValid()) {
-            frameNumber = mSurface.getNextFrameNumber();
-        }
+        final int requestedWidth = (int) (mView.getMeasuredWidth() * appScale + 0.5f);
+        final int requestedHeight = (int) (mView.getMeasuredHeight() * appScale + 0.5f);
 
         int relayoutResult = mWindowSession.relayout(mWindow, params,
-                (int) (mView.getMeasuredWidth() * appScale + 0.5f),
-                (int) (mView.getMeasuredHeight() * appScale + 0.5f), viewVisibility,
-                insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0, frameNumber,
+                requestedWidth, requestedHeight, viewVisibility,
+                insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0,
                 mTmpFrames, mPendingMergedConfiguration, mSurfaceControl, mTempInsets,
-                mTempControls, mSurfaceSize);
+                mTempControls);
+
+        final int transformHint = SurfaceControl.rotationToBufferTransform(
+                (mDisplayInstallOrientation + mDisplay.getRotation()) % 4);
+        mSurfaceControl.setTransformHint(transformHint);
+
+        final WindowConfiguration winConfig = getConfiguration().windowConfiguration;
+        final boolean dragResizing = (relayoutResult
+                & (RELAYOUT_RES_DRAG_RESIZING_DOCKED | RELAYOUT_RES_DRAG_RESIZING_FREEFORM)) != 0;
+        WindowLayout.computeSurfaceSize(mWindowAttributes, winConfig.getMaxBounds(), requestedWidth,
+                requestedHeight, mTmpFrames.frame, dragResizing, mSurfaceSize);
 
         if (mAttachInfo.mContentCaptureManager != null) {
             MainContentCaptureSession mainSession = mAttachInfo.mContentCaptureManager
@@ -7925,7 +7976,6 @@ public final class ViewRootImpl implements ViewParent,
                 mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
                 mAttachInfo.mThreadedRenderer.setBlastBufferQueue(mBlastBufferQueue);
             }
-            int transformHint = mSurfaceControl.getTransformHint();
             if (mPreviousTransformHint != transformHint) {
                 mPreviousTransformHint = transformHint;
                 dispatchTransformHintChanged(transformHint);
@@ -10644,7 +10694,7 @@ public final class ViewRootImpl implements ViewParent,
        }
        mBLASTDrawConsumer = consume;
        return true;
-   }
+    }
 
     boolean wasRelayoutRequested() {
         return mRelayoutRequested;
@@ -10653,5 +10703,17 @@ public final class ViewRootImpl implements ViewParent,
     void forceWmRelayout() {
        mForceNextWindowRelayout = true;
        scheduleTraversals();
+    }
+
+    /**
+     * Returns the {@link OnBackInvokedDispatcher} on the decor view if one exists, or the
+     * fallback {@link OnBackInvokedDispatcher} instance.
+     */
+    @Nullable
+    public OnBackInvokedDispatcher getOnBackInvokedDispatcher() {
+        if (mView instanceof RootViewSurfaceTaker) {
+            return ((RootViewSurfaceTaker) mView).provideWindowOnBackInvokedDispatcher();
+        }
+        return mFallbackOnBackInvokedDispatcher;
     }
 }

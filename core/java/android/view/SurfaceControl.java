@@ -1834,13 +1834,15 @@ public final class SurfaceControl implements Parcelable {
         public float density;
         public boolean secure;
         public DeviceProductInfo deviceProductInfo;
+        public @Surface.Rotation int installOrientation;
 
         @Override
         public String toString() {
             return "StaticDisplayInfo{isInternal=" + isInternal
                     + ", density=" + density
                     + ", secure=" + secure
-                    + ", deviceProductInfo=" + deviceProductInfo + "}";
+                    + ", deviceProductInfo=" + deviceProductInfo
+                    + ", installOrientation=" + installOrientation + "}";
         }
 
         @Override
@@ -1851,12 +1853,13 @@ public final class SurfaceControl implements Parcelable {
             return isInternal == that.isInternal
                     && density == that.density
                     && secure == that.secure
-                    && Objects.equals(deviceProductInfo, that.deviceProductInfo);
+                    && Objects.equals(deviceProductInfo, that.deviceProductInfo)
+                    && installOrientation == that.installOrientation;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(isInternal, density, secure, deviceProductInfo);
+            return Objects.hash(isInternal, density, secure, deviceProductInfo, installOrientation);
         }
     }
 

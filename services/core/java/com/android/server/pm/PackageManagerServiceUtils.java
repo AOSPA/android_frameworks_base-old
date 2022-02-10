@@ -51,7 +51,6 @@ import android.content.pm.Signature;
 import android.content.pm.SigningDetails;
 import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.pm.parsing.PackageLite;
-import com.android.server.pm.pkg.component.ParsedMainComponent;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.os.Binder;
@@ -92,6 +91,7 @@ import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
+import com.android.server.pm.pkg.component.ParsedMainComponent;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 
 import dalvik.system.VMRuntime;
@@ -228,11 +228,9 @@ public class PackageManagerServiceUtils {
         }
         final File baseFile = new File(pkg.getBaseApkPath());
         long maxModifiedTime = baseFile.lastModified();
-        if (pkg.getSplitCodePaths() != null) {
-            for (int i = pkg.getSplitCodePaths().length - 1; i >=0; --i) {
-                final File splitFile = new File(pkg.getSplitCodePaths()[i]);
-                maxModifiedTime = Math.max(maxModifiedTime, splitFile.lastModified());
-            }
+        for (int i = pkg.getSplitCodePaths().length - 1; i >=0; --i) {
+            final File splitFile = new File(pkg.getSplitCodePaths()[i]);
+            maxModifiedTime = Math.max(maxModifiedTime, splitFile.lastModified());
         }
         return maxModifiedTime;
     }
@@ -560,8 +558,8 @@ public class PackageManagerServiceUtils {
 
             if (!match) {
                 throw new PackageManagerException(INSTALL_FAILED_UPDATE_INCOMPATIBLE,
-                        "Package " + packageName +
-                        " signatures do not match previously installed version; ignoring!");
+                        "Existing package " + packageName
+                                + " signatures do not match newer version; ignoring!");
             }
         }
         // Check for shared user signatures

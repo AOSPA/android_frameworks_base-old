@@ -205,6 +205,8 @@ struct JTuner : public RefBase {
     Result getFrontendHardwareInfo(string& info);
     jint setMaxNumberOfFrontends(int32_t frontendType, int32_t maxNumber);
     int32_t getMaxNumberOfFrontends(int32_t frontendType);
+    jint removeOutputPid(int32_t pid);
+    jobjectArray getFrontendStatusReadiness(jintArray types);
 
     jweak getObject();
 

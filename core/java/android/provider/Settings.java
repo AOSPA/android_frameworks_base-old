@@ -7179,6 +7179,12 @@ public final class Settings {
         public static final String LOCATION_COARSE_ACCURACY_M = "locationCoarseAccuracy";
 
         /**
+         * Whether or not to show display system location accesses.
+         * @hide
+         */
+        public static final String LOCATION_SHOW_SYSTEM_OPS = "locationShowSystemOps";
+
+        /**
          * A flag containing settings used for biometric weak
          * @hide
          */
@@ -9068,6 +9074,16 @@ public final class Settings {
         public static final String SCREENSAVER_DEFAULT_COMPONENT = "screensaver_default_component";
 
         /**
+         * The complications that are enabled to be shown over the screensaver by the user. Holds
+         * a comma separated list of
+         * {@link com.android.settingslib.dream.DreamBackend.ComplicationType}.
+         *
+         * @hide
+         */
+        public static final String SCREENSAVER_ENABLED_COMPLICATIONS =
+                "screensaver_enabled_complications";
+
+        /**
          * The default NFC payment component
          * @hide
          */
@@ -10595,6 +10611,14 @@ public final class Settings {
          */
         public static final String COMMUNAL_MODE_TRUSTED_NETWORKS =
                 "communal_mode_trusted_networks";
+
+        /**
+         * Setting to allow Fast Pair scans to be enabled.
+         * @hide
+         */
+        @SystemApi
+        @Readable
+        public static final String FAST_PAIR_SCAN_ENABLED = "fast_pair_scan_enabled";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -12838,16 +12862,6 @@ public final class Settings {
         @Readable
         public static final String
                 SYS_STORAGE_CACHE_PERCENTAGE = "sys_storage_cache_percentage";
-
-        /**
-         * Maximum bytes of storage on the device that is reserved for cached
-         * data.
-         *
-         * @hide
-         */
-        @Readable
-        public static final String
-                SYS_STORAGE_CACHE_MAX_BYTES = "sys_storage_cache_max_bytes";
 
         /**
          * The maximum reconnect delay for short network outages or when the

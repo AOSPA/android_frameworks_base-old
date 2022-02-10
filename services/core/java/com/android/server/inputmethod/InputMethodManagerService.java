@@ -97,7 +97,6 @@ import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.IInterface;
 import android.os.LocaleList;
 import android.os.Message;
 import android.os.Parcel;
@@ -168,7 +167,6 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
 import com.android.internal.view.IInlineSuggestionsResponseCallback;
 import com.android.internal.view.IInputContext;
-import com.android.internal.view.IInputMethod;
 import com.android.internal.view.IInputMethodClient;
 import com.android.internal.view.IInputMethodManager;
 import com.android.internal.view.IInputMethodSession;
@@ -220,22 +218,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     private static final int MSG_SHOW_IM_SUBTYPE_PICKER = 1;
-    private static final int MSG_SHOW_IM_SUBTYPE_ENABLER = 2;
-    private static final int MSG_SHOW_IM_CONFIG = 3;
 
-    private static final int MSG_UNBIND_INPUT = 1000;
-    private static final int MSG_BIND_INPUT = 1010;
-    private static final int MSG_SHOW_SOFT_INPUT = 1020;
-    private static final int MSG_HIDE_SOFT_INPUT = 1030;
     private static final int MSG_HIDE_CURRENT_INPUT_METHOD = 1035;
-    private static final int MSG_INITIALIZE_IME = 1040;
-    private static final int MSG_CREATE_SESSION = 1050;
     private static final int MSG_REMOVE_IME_SURFACE = 1060;
     private static final int MSG_REMOVE_IME_SURFACE_FROM_WINDOW = 1061;
     private static final int MSG_UPDATE_IME_WINDOW_STATUS = 1070;
-    private static final int MSG_START_HANDWRITING = 1100;
-
-    private static final int MSG_START_INPUT = 2000;
 
     private static final int MSG_UNBIND_CLIENT = 3000;
     private static final int MSG_BIND_CLIENT = 3010;
@@ -247,8 +234,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     private static final int MSG_SYSTEM_UNLOCK_USER = 5000;
     private static final int MSG_DISPATCH_ON_INPUT_METHOD_LIST_UPDATED = 5010;
-
-    private static final int MSG_INLINE_SUGGESTIONS_REQUEST = 6000;
 
     private static final int MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE = 7000;
 
@@ -343,7 +328,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     static class SessionState {
         final ClientState client;
-        final IInputMethod method;
+        final IInputMethodInvoker method;
 
         IInputMethodSession session;
         InputChannel channel;
@@ -352,14 +337,14 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         public String toString() {
             return "SessionState{uid " + client.uid + " pid " + client.pid
                     + " method " + Integer.toHexString(
-                            System.identityHashCode(method))
+                            IInputMethodInvoker.getBinderIdentityHashCode(method))
                     + " session " + Integer.toHexString(
                             System.identityHashCode(session))
                     + " channel " + channel
                     + "}";
         }
 
-        SessionState(ClientState _client, IInputMethod _method,
+        SessionState(ClientState _client, IInputMethodInvoker _method,
                 IInputMethodSession _session, InputChannel _channel) {
             client = _client;
             method = _method;
@@ -627,7 +612,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
      */
     @GuardedBy("ImfLock.class")
     @Nullable
-    private IInputMethod getCurMethodLocked() {
+    private IInputMethodInvoker getCurMethodLocked() {
         return mBindingController.getCurMethod();
     }
 
@@ -654,9 +639,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     boolean mBoundToMethod;
 
     /**
-     * Currently enabled session.  Only touched by service thread, not
-     * protected by a lock.
+     * Currently enabled session.
      */
+    @GuardedBy("ImfLock.class")
     SessionState mEnabledSession;
 
     /**
@@ -705,11 +690,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             new CopyOnWriteArrayList<>();
 
     /**
-     * Internal state snapshot when {@link #MSG_START_INPUT} message is about to be posted to the
-     * internal message queue. Any subsequent state change inside {@link InputMethodManagerService}
-     * will not affect those tasks that are already posted.
+     * Internal state snapshot when
+     * {@link com.android.internal.view.IInputMethod#startInput(IBinder, IInputContext, EditorInfo,
+     * boolean)} is about to be called.
      *
-     * <p>Posting {@link #MSG_START_INPUT} message basically means that
+     * <p>Calling that IPC endpoint basically means that
      * {@link InputMethodService#doStartInput(InputConnection, EditorInfo, boolean)} will be called
      * back in the current IME process shortly, which will also affect what the current IME starts
      * receiving from {@link InputMethodService#getCurrentInputConnection()}. In other words, this
@@ -785,7 +770,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             final int mFocusedWindowSoftInputMode;
             @SoftInputShowHideReason
             final int mReason;
-            // The timing of handling MSG_SHOW_SOFT_INPUT or MSG_HIDE_SOFT_INPUT.
+            // The timing of handling showCurrentInputLocked() or hideCurrentInputLocked().
             final long mTimestamp;
             final long mWallTime;
             final boolean mInFullscreenMode;
@@ -1575,7 +1560,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             mHandler.removeCallbacks(mUserSwitchHandlerTask);
         }
         // Hide soft input before user switch task since switch task may block main handler a while
-        // and delayed the MSG_HIDE_SOFT_INPUT.
+        // and delayed the hideCurrentInputLocked().
         hideCurrentInputLocked(
                 mCurFocusedWindow, 0, null, SoftInputShowHideReason.HIDE_SWITCH_USER);
         final UserSwitchHandlerTask task = new UserSwitchHandlerTask(this, userId,
@@ -1782,8 +1767,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         com.android.internal.R.bool.show_ongoing_ime_switcher);
                 if (mShowOngoingImeSwitcherForPhones) {
                     mWindowManagerInternal.setOnHardKeyboardStatusChangeListener(available -> {
-                        mHandler.obtainMessage(MSG_HARD_KEYBOARD_SWITCH_CHANGED, available ? 1 : 0)
-                                .sendToTarget();
+                        mHandler.obtainMessage(MSG_HARD_KEYBOARD_SWITCH_CHANGED,
+                                available ? 1 : 0, 0 /* unused */).sendToTarget();
                     });
                 }
 
@@ -1965,15 +1950,14 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             InlineSuggestionsRequestInfo requestInfo, IInlineSuggestionsRequestCallback callback) {
         final InputMethodInfo imi = mMethodMap.get(getSelectedMethodIdLocked());
         try {
-            IInputMethod curMethod = getCurMethodLocked();
+            IInputMethodInvoker curMethod = getCurMethodLocked();
             if (userId == mSettings.getCurrentUserId() && imi != null
                     && imi.isInlineSuggestionsEnabled() && curMethod != null) {
-                executeOrSendMessage(curMethod,
-                        mCaller.obtainMessageOOO(MSG_INLINE_SUGGESTIONS_REQUEST, curMethod,
-                                requestInfo, new InlineSuggestionsRequestCallbackDecorator(callback,
-                                        imi.getPackageName(), mCurTokenDisplayId,
-                                        getCurTokenLocked(),
-                                        this)));
+                final IInlineSuggestionsRequestCallback callbackImpl =
+                        new InlineSuggestionsRequestCallbackDecorator(callback,
+                                imi.getPackageName(), mCurTokenDisplayId, getCurTokenLocked(),
+                                this);
+                curMethod.onCreateInlineSuggestionsRequest(requestInfo, callbackImpl);
             } else {
                 callback.onInlineSuggestionsUnsupported();
             }
@@ -2201,10 +2185,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                             mCurFocusedWindow, 0, null, SoftInputShowHideReason.HIDE_REMOVE_CLIENT);
                     if (mBoundToMethod) {
                         mBoundToMethod = false;
-                        IInputMethod curMethod = getCurMethodLocked();
+                        IInputMethodInvoker curMethod = getCurMethodLocked();
                         if (curMethod != null) {
-                            executeOrSendMessage(curMethod, mCaller.obtainMessageO(
-                                    MSG_UNBIND_INPUT, curMethod));
+                            curMethod.unbindInput();
                         }
                     }
                     mCurClient = null;
@@ -2216,8 +2199,14 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
-    private void executeOrSendMessage(IInterface target, Message msg) {
+    private void executeOrSendMessage(IInputMethodClient target, Message msg) {
          if (target.asBinder() instanceof Binder) {
+             // This is supposed to be emulating the one-way semantics when the IME client is
+             // system_server itself, which has not been explicitly prohibited so far while we have
+             // never ever officially supported such a use case...
+             // We probably should create a simple wrapper of IInputMethodClient as the first step
+             // to get rid of executeOrSendMessage() then should prohibit system_server to be the
+             // IME client for long term.
              mCaller.sendMessage(msg);
          } else {
              handleMessage(msg);
@@ -2232,10 +2221,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     + mCurClient.client.asBinder());
             if (mBoundToMethod) {
                 mBoundToMethod = false;
-                IInputMethod curMethod = getCurMethodLocked();
+                IInputMethodInvoker curMethod = getCurMethodLocked();
                 if (curMethod != null) {
-                    executeOrSendMessage(curMethod, mCaller.obtainMessageO(
-                            MSG_UNBIND_INPUT, curMethod));
+                    curMethod.unbindInput();
                 }
             }
 
@@ -2284,16 +2272,15 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     @NonNull
     InputBindResult attachNewInputLocked(@StartInputReason int startInputReason, boolean initial) {
         if (!mBoundToMethod) {
-            IInputMethod curMethod = getCurMethodLocked();
-            executeOrSendMessage(curMethod, mCaller.obtainMessageOO(
-                    MSG_BIND_INPUT, curMethod, mCurClient.binding));
+            getCurMethodLocked().bindInput(mCurClient.binding);
             mBoundToMethod = true;
         }
 
+        final boolean restarting = !initial;
         final Binder startInputToken = new Binder();
         final StartInputInfo info = new StartInputInfo(mSettings.getCurrentUserId(),
                 getCurTokenLocked(),
-                mCurTokenDisplayId, getCurIdLocked(), startInputReason, !initial,
+                mCurTokenDisplayId, getCurIdLocked(), startInputReason, restarting,
                 UserHandle.getUserId(mCurClient.uid), mCurClient.selfReportedDisplayId,
                 mCurFocusedWindow, mCurAttribute, mCurFocusedWindowSoftInputMode,
                 getSequenceNumberLocked());
@@ -2312,9 +2299,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
 
         final SessionState session = mCurClient.curSession;
-        executeOrSendMessage(session.method, mCaller.obtainMessageIIOOOO(
-                MSG_START_INPUT, 0 /* unused */, initial ? 0 : 1 /* restarting */,
-                startInputToken, session, mCurInputContext, mCurAttribute));
+        setEnabledSessionLocked(session);
+        session.method.startInput(startInputToken, mCurInputContext, mCurAttribute, restarting);
+
         if (mShowRequested) {
             if (DEBUG) Slog.v(TAG, "Attach new input asks to show input");
             showCurrentInputLocked(mCurFocusedWindow, getAppShowFlagsLocked(), null,
@@ -2330,11 +2317,20 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 curId, getSequenceNumberLocked(), suppressesSpellChecker);
     }
 
+    /**
+     * Called by {@link #startInputOrWindowGainedFocusInternalLocked} to bind/unbind/attach the
+     * selected InputMethod to the given focused IME client.
+     *
+     * Note that this should be called after validating if the IME client has IME focus.
+     *
+     * @see WindowManagerInternal#hasInputMethodClientFocus(IBinder, int, int, int)
+     */
     @GuardedBy("ImfLock.class")
     @NonNull
-    InputBindResult startInputUncheckedLocked(@NonNull ClientState cs, IInputContext inputContext,
-            @NonNull EditorInfo attribute, @StartInputFlags int startInputFlags,
-            @StartInputReason int startInputReason, int unverifiedTargetSdkVersion) {
+    private InputBindResult startInputUncheckedLocked(@NonNull ClientState cs,
+            IInputContext inputContext, @NonNull EditorInfo attribute,
+            @StartInputFlags int startInputFlags, @StartInputReason int startInputReason,
+            int unverifiedTargetSdkVersion) {
         // If no method is currently selected, do nothing.
         String selectedMethodId = getSelectedMethodIdLocked();
         if (selectedMethodId == null) {
@@ -2356,10 +2352,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             return InputBindResult.INVALID_PACKAGE_NAME;
         }
 
-        if (!mWindowManagerInternal.isUidAllowedOnDisplay(cs.selfReportedDisplayId, cs.uid)) {
-            // Wait, the client no longer has access to the display.
-            return InputBindResult.INVALID_DISPLAY_ID;
-        }
         // Compute the final shown display ID with validated cs.selfReportedDisplayId for this
         // session & other conditions.
         mDisplayIdToShowIme = computeImeDisplayIdForTarget(cs.selfReportedDisplayId,
@@ -2501,11 +2493,15 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
-    @AnyThread
-    void executeOrSendInitializeIme(@NonNull IInputMethod inputMethod, @NonNull IBinder token,
+    @GuardedBy("ImfLock.class")
+    void initializeImeLocked(@NonNull IInputMethodInvoker inputMethod, @NonNull IBinder token,
             @android.content.pm.ActivityInfo.Config int configChanges, boolean supportStylusHw) {
-        executeOrSendMessage(inputMethod, mCaller.obtainMessageIOOO(MSG_INITIALIZE_IME,
-                configChanges, inputMethod, token, supportStylusHw));
+        if (DEBUG) {
+            Slog.v(TAG, "Sending attach of token: " + token + " for display: "
+                    + mCurTokenDisplayId);
+        }
+        inputMethod.initializeInternal(token, new InputMethodPrivilegedOperationsImpl(this, token),
+                configChanges, supportStylusHw);
     }
 
     @AnyThread
@@ -2515,7 +2511,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @BinderThread
-    void onSessionCreated(IInputMethod method, IInputMethodSession session, InputChannel channel) {
+    void onSessionCreated(IInputMethodInvoker method, IInputMethodSession session,
+            InputChannel channel) {
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.onSessionCreated");
         try {
             synchronized (ImfLock.class) {
@@ -2525,7 +2522,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     channel.dispose();
                     return;
                 }
-                IInputMethod curMethod = getCurMethodLocked();
+                IInputMethodInvoker curMethod = getCurMethodLocked();
                 if (curMethod != null && method != null
                         && curMethod.asBinder() == method.asBinder()) {
                     if (mCurClient != null) {
@@ -2579,22 +2576,38 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     void requestClientSessionLocked(ClientState cs) {
         if (!cs.sessionRequested) {
             if (DEBUG) Slog.v(TAG, "Creating new session for client " + cs);
-            InputChannel[] channels = InputChannel.openInputChannelPair(cs.toString());
+            final InputChannel serverChannel;
+            final InputChannel clientChannel;
+            {
+                final InputChannel[] channels = InputChannel.openInputChannelPair(cs.toString());
+                serverChannel = channels[0];
+                clientChannel = channels[1];
+            }
+
             cs.sessionRequested = true;
-            IInputMethod curMethod = getCurMethodLocked();
-            executeOrSendMessage(curMethod, mCaller.obtainMessageOOO(
-                    MSG_CREATE_SESSION, curMethod, channels[1],
-                    new IInputSessionCallback.Stub() {
-                        @Override
-                        public void sessionCreated(IInputMethodSession session) {
-                            final long ident = Binder.clearCallingIdentity();
-                            try {
-                                onSessionCreated(curMethod, session, channels[0]);
-                            } finally {
-                                Binder.restoreCallingIdentity(ident);
-                            }
-                        }
-                    }));
+
+            final IInputMethodInvoker curMethod = getCurMethodLocked();
+            final IInputSessionCallback.Stub callback = new IInputSessionCallback.Stub() {
+                @Override
+                public void sessionCreated(IInputMethodSession session) {
+                    final long ident = Binder.clearCallingIdentity();
+                    try {
+                        onSessionCreated(curMethod, session, serverChannel);
+                    } finally {
+                        Binder.restoreCallingIdentity(ident);
+                    }
+                }
+            };
+
+            try {
+                curMethod.createSession(clientChannel, callback);
+            } finally {
+                // Dispose the channel because the remote proxy will get its own copy when
+                // unparceled.
+                if (clientChannel != null) {
+                    clientChannel.dispose();
+                }
+            }
         }
     }
 
@@ -2975,14 +2988,10 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
             if (newSubtype != oldSubtype) {
                 setSelectedInputMethodAndSubtypeLocked(info, subtypeId, true);
-                IInputMethod curMethod = getCurMethodLocked();
+                IInputMethodInvoker curMethod = getCurMethodLocked();
                 if (curMethod != null) {
-                    try {
-                        updateSystemUiLocked(mImeWindowVis, mBackDisposition);
-                        curMethod.changeInputMethodSubtype(newSubtype);
-                    } catch (RemoteException e) {
-                        Slog.w(TAG, "Failed to call changeInputMethodSubtype");
-                    }
+                    updateSystemUiLocked(mImeWindowVis, mBackDisposition);
+                    curMethod.changeInputMethodSubtype(newSubtype);
                 }
             }
             return;
@@ -3059,9 +3068,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     return;
                 }
                 if (DEBUG) Slog.v(TAG, "Client requesting Stylus Handwriting to be started");
-                if (getCurMethodLocked() != null) {
-                    executeOrSendMessage(getCurMethodLocked(), mCaller.obtainMessageIO(
-                            MSG_START_HANDWRITING, ++mHwRequestId, getCurMethodLocked()));
+                final IInputMethodInvoker curMethod = getCurMethodLocked();
+                if (curMethod != null) {
+                    curMethod.canStartStylusHandwriting(++mHwRequestId);
                 }
             } finally {
                 Binder.restoreCallingIdentity(ident);
@@ -3112,18 +3121,24 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
 
         mBindingController.setCurrentMethodVisible();
-        if (getCurMethodLocked() != null) {
+        final IInputMethodInvoker curMethod = getCurMethodLocked();
+        if (curMethod != null) {
             // create a placeholder token for IMS so that IMS cannot inject windows into client app.
             Binder showInputToken = new Binder();
             mShowRequestWindowMap.put(showInputToken, windowToken);
-            IInputMethod curMethod = getCurMethodLocked();
-            executeOrSendMessage(curMethod, mCaller.obtainMessageIIOOO(MSG_SHOW_SOFT_INPUT,
-                    getImeShowFlagsLocked(), reason, curMethod, resultReceiver,
-                    showInputToken));
+            final int showFlags = getImeShowFlagsLocked();
+            if (DEBUG) {
+                Slog.v(TAG, "Calling " + curMethod + ".showSoftInput(" + showInputToken
+                        + ", " + showFlags + ", " + resultReceiver + ") for reason: "
+                        + InputMethodDebug.softInputDisplayReasonToString(reason));
+            }
+            // TODO(b/192412909): Check if we can always call onShowHideSoftInputRequested() or not.
+            if (curMethod.showSoftInput(showInputToken, showFlags, resultReceiver)) {
+                onShowHideSoftInputRequested(true /* show */, windowToken, reason);
+            }
             mInputShown = true;
             return true;
         }
-
         return false;
     }
 
@@ -3147,14 +3162,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     // be made before input is started in it.
                     final ClientState cs = mClients.get(client.asBinder());
                     if (cs == null) {
-                        throw new IllegalArgumentException(
-                                "unknown client " + client.asBinder());
+                        throw new IllegalArgumentException("unknown client " + client.asBinder());
                     }
-                    if (!mWindowManagerInternal.isInputMethodClientFocus(cs.uid, cs.pid,
-                            cs.selfReportedDisplayId)) {
+                    if (!isImeClientFocused(windowToken, cs)) {
                         if (DEBUG) {
-                            Slog.w(TAG,
-                                    "Ignoring hideSoftInput of uid " + uid + ": " + client);
+                            Slog.w(TAG, "Ignoring hideSoftInput of uid " + uid + ": " + client);
                         }
                         return false;
                     }
@@ -3191,7 +3203,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         // since Android Eclair.  That's why we need to accept IMM#hideSoftInput() even when only
         // IMMS#InputShown indicates that the software keyboard is shown.
         // TODO: Clean up, IMMS#mInputShown, IMMS#mImeWindowVis and mShowRequested.
-        IInputMethod curMethod = getCurMethodLocked();
+        IInputMethodInvoker curMethod = getCurMethodLocked();
         final boolean shouldHideSoftInput = (curMethod != null) && (mInputShown
                 || (mImeWindowVis & InputMethodService.IME_ACTIVE) != 0);
         boolean res;
@@ -3202,8 +3214,15 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             // delivered to the IME process as an IPC.  Hence the inconsistency between
             // IMMS#mInputShown and IMMS#mImeWindowVis should be resolved spontaneously in
             // the final state.
-            executeOrSendMessage(curMethod, mCaller.obtainMessageIOOO(MSG_HIDE_SOFT_INPUT,
-                    reason, curMethod, resultReceiver, hideInputToken));
+            if (DEBUG) {
+                Slog.v(TAG, "Calling " + curMethod + ".hideSoftInput(0, " + hideInputToken
+                        + ", " + resultReceiver + ") for reason: "
+                        + InputMethodDebug.softInputDisplayReasonToString(reason));
+            }
+            // TODO(b/192412909): Check if we can always call onShowHideSoftInputRequested() or not.
+            if (curMethod.hideSoftInput(hideInputToken, 0 /* flags */, resultReceiver)) {
+                onShowHideSoftInputRequested(false /* show */, windowToken, reason);
+            }
             res = true;
         } else {
             res = false;
@@ -3214,6 +3233,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         mShowExplicitlyRequested = false;
         mShowForced = false;
         return res;
+    }
+
+    private boolean isImeClientFocused(IBinder windowToken, ClientState cs) {
+        final int imeClientFocus = mWindowManagerInternal.hasInputMethodClientFocus(
+                windowToken, cs.uid, cs.pid, cs.selfReportedDisplayId);
+        return imeClientFocus == WindowManagerInternal.ImeClientFocusResult.HAS_IME_FOCUS;
     }
 
     @NonNull
@@ -3309,31 +3334,30 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     + " unverifiedTargetSdkVersion=" + unverifiedTargetSdkVersion);
         }
 
-        final int windowDisplayId = mWindowManagerInternal.getDisplayIdForWindow(windowToken);
-
         final ClientState cs = mClients.get(client.asBinder());
         if (cs == null) {
             throw new IllegalArgumentException("unknown client " + client.asBinder());
         }
-        if (cs.selfReportedDisplayId != windowDisplayId) {
-            Slog.e(TAG, "startInputOrWindowGainedFocusInternal: display ID mismatch."
-                    + " from client:" + cs.selfReportedDisplayId
-                    + " from window:" + windowDisplayId);
-            return InputBindResult.DISPLAY_ID_MISMATCH;
-        }
 
-        if (!mWindowManagerInternal.isInputMethodClientFocus(cs.uid, cs.pid,
-                cs.selfReportedDisplayId)) {
-            // Check with the window manager to make sure this client actually
-            // has a window with focus.  If not, reject.  This is thread safe
-            // because if the focus changes some time before or after, the
-            // next client receiving focus that has any interest in input will
-            // be calling through here after that change happens.
-            if (DEBUG) {
-                Slog.w(TAG, "Focus gain on non-focused client " + cs.client
-                        + " (uid=" + cs.uid + " pid=" + cs.pid + ")");
-            }
-            return InputBindResult.NOT_IME_TARGET_WINDOW;
+        final int imeClientFocus = mWindowManagerInternal.hasInputMethodClientFocus(
+                windowToken, cs.uid, cs.pid, cs.selfReportedDisplayId);
+        switch (imeClientFocus) {
+            case WindowManagerInternal.ImeClientFocusResult.DISPLAY_ID_MISMATCH:
+                Slog.e(TAG, "startInputOrWindowGainedFocusInternal: display ID mismatch.");
+                return InputBindResult.DISPLAY_ID_MISMATCH;
+            case WindowManagerInternal.ImeClientFocusResult.NOT_IME_TARGET_WINDOW:
+                // Check with the window manager to make sure this client actually
+                // has a window with focus.  If not, reject.  This is thread safe
+                // because if the focus changes some time before or after, the
+                // next client receiving focus that has any interest in input will
+                // be calling through here after that change happens.
+                if (DEBUG) {
+                    Slog.w(TAG, "Focus gain on non-focused client " + cs.client
+                            + " (uid=" + cs.uid + " pid=" + cs.pid + ")");
+                }
+                return InputBindResult.NOT_IME_TARGET_WINDOW;
+            case WindowManagerInternal.ImeClientFocusResult.INVALID_DISPLAY_ID:
+                return InputBindResult.INVALID_DISPLAY_ID;
         }
 
         if (mUserSwitchHandlerTask != null) {
@@ -3561,8 +3585,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             if (cs == null) {
                 throw new IllegalArgumentException("unknown client " + client.asBinder());
             }
-            if (!mWindowManagerInternal.isInputMethodClientFocus(cs.uid, cs.pid,
-                    cs.selfReportedDisplayId)) {
+            if (!isImeClientFocused(mCurFocusedWindow, cs)) {
                 Slog.w(TAG, String.format("Ignoring %s of uid %d : %s", methodName, uid, client));
                 return false;
             }
@@ -3679,8 +3702,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             if (!calledFromValidUserLocked()) {
                 return;
             }
-            executeOrSendMessage(getCurMethodLocked(), mCaller.obtainMessageO(
-                    MSG_SHOW_IM_SUBTYPE_ENABLER, inputMethodId));
+            showInputMethodAndSubtypeEnabler(inputMethodId);
         }
     }
 
@@ -4104,7 +4126,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
-    /** Called right after {@link IInputMethod#showSoftInput}. */
+    /** Called right after {@link com.android.internal.view.IInputMethod#showSoftInput}. */
     @GuardedBy("ImfLock.class")
     private void onShowHideSoftInputRequested(boolean show, IBinder requestToken,
             @SoftInputShowHideReason int reason) {
@@ -4155,22 +4177,17 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
-    void setEnabledSessionInHandlerThread(SessionState session) {
+    @GuardedBy("ImfLock.class")
+    void setEnabledSessionLocked(SessionState session) {
         if (mEnabledSession != session) {
             if (mEnabledSession != null && mEnabledSession.session != null) {
-                try {
-                    if (DEBUG) Slog.v(TAG, "Disabling: " + mEnabledSession);
-                    mEnabledSession.method.setSessionEnabled(mEnabledSession.session, false);
-                } catch (RemoteException e) {
-                }
+                if (DEBUG) Slog.v(TAG, "Disabling: " + mEnabledSession);
+                mEnabledSession.method.setSessionEnabled(mEnabledSession.session, false);
             }
             mEnabledSession = session;
             if (mEnabledSession != null && mEnabledSession.session != null) {
-                try {
-                    if (DEBUG) Slog.v(TAG, "Enabling: " + mEnabledSession);
-                    mEnabledSession.method.setSessionEnabled(mEnabledSession.session, true);
-                } catch (RemoteException e) {
-                }
+                if (DEBUG) Slog.v(TAG, "Enabling: " + mEnabledSession);
+                mEnabledSession.method.setSessionEnabled(mEnabledSession.session, true);
             }
         }
     }
@@ -4203,69 +4220,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 mMenuController.showInputMethodMenu(showAuxSubtypes, displayId);
                 return true;
 
-            case MSG_SHOW_IM_SUBTYPE_ENABLER:
-                showInputMethodAndSubtypeEnabler((String)msg.obj);
-                return true;
-
-            case MSG_SHOW_IM_CONFIG:
-                showConfigureInputMethods();
-                return true;
-
             // ---------------------------------------------------------
 
-            case MSG_UNBIND_INPUT:
-                try {
-                    ((IInputMethod)msg.obj).unbindInput();
-                } catch (RemoteException e) {
-                    // There is nothing interesting about the method dying.
-                }
-                return true;
-            case MSG_BIND_INPUT:
-                args = (SomeArgs)msg.obj;
-                try {
-                    ((IInputMethod)args.arg1).bindInput((InputBinding)args.arg2);
-                } catch (RemoteException e) {
-                }
-                args.recycle();
-                return true;
-            case MSG_SHOW_SOFT_INPUT:
-                args = (SomeArgs) msg.obj;
-                try {
-                    final @SoftInputShowHideReason int reason = msg.arg2;
-                    if (DEBUG) Slog.v(TAG, "Calling " + args.arg1 + ".showSoftInput("
-                            + args.arg3 + ", " + msg.arg1 + ", " + args.arg2 + ") for reason: "
-                            + InputMethodDebug.softInputDisplayReasonToString(reason));
-                    final IBinder token = (IBinder) args.arg3;
-                    ((IInputMethod) args.arg1).showSoftInput(
-                            token, msg.arg1 /* flags */, (ResultReceiver) args.arg2);
-                    final IBinder requestToken;
-                    synchronized (ImfLock.class) {
-                        requestToken = mShowRequestWindowMap.get(token);
-                        onShowHideSoftInputRequested(true /* show */, requestToken, reason);
-                    }
-                } catch (RemoteException e) {
-                }
-                args.recycle();
-                return true;
-            case MSG_HIDE_SOFT_INPUT:
-                args = (SomeArgs) msg.obj;
-                try {
-                    final @SoftInputShowHideReason int reason = msg.arg1;
-                    if (DEBUG) Slog.v(TAG, "Calling " + args.arg1 + ".hideSoftInput(0, "
-                            + args.arg3 + ", " + args.arg2 + ") for reason: "
-                            + InputMethodDebug.softInputDisplayReasonToString(reason));
-                    final IBinder token = (IBinder) args.arg3;
-                    ((IInputMethod)args.arg1).hideSoftInput(
-                            token, 0 /* flags */, (ResultReceiver) args.arg2);
-                    final IBinder requestToken;
-                    synchronized (ImfLock.class) {
-                        requestToken = mHideRequestWindowMap.get(token);
-                        onShowHideSoftInputRequested(false /* show */, requestToken, reason);
-                    }
-                } catch (RemoteException e) {
-                }
-                args.recycle();
-                return true;
             case MSG_HIDE_CURRENT_INPUT_METHOD:
                 synchronized (ImfLock.class) {
                     final @SoftInputShowHideReason int reason = (int) msg.obj;
@@ -4273,40 +4229,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
                 }
                 return true;
-            case MSG_INITIALIZE_IME:
-                args = (SomeArgs)msg.obj;
-                try {
-                    if (DEBUG) {
-                        synchronized (ImfLock.class) {
-                            Slog.v(TAG, "Sending attach of token: " + args.arg2 + " for display: "
-                                    + mCurTokenDisplayId);
-                        }
-                    }
-                    final IBinder token = (IBinder) args.arg2;
-                    ((IInputMethod) args.arg1).initializeInternal(token,
-                            new InputMethodPrivilegedOperationsImpl(this, token),
-                            msg.arg1, (boolean) args.arg3);
-                } catch (RemoteException e) {
-                }
-                args.recycle();
-                return true;
-            case MSG_CREATE_SESSION: {
-                args = (SomeArgs)msg.obj;
-                IInputMethod method = (IInputMethod)args.arg1;
-                InputChannel channel = (InputChannel)args.arg2;
-                try {
-                    method.createSession(channel, (IInputSessionCallback)args.arg3);
-                } catch (RemoteException e) {
-                } finally {
-                    // Dispose the channel if the input method is not local to this process
-                    // because the remote proxy will get its own copy when unparceled.
-                    if (channel != null && Binder.isProxy(method)) {
-                        channel.dispose();
-                    }
-                }
-                args.recycle();
-                return true;
-            }
             case MSG_REMOVE_IME_SURFACE: {
                 synchronized (ImfLock.class) {
                     try {
@@ -4336,25 +4258,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 updateImeWindowStatus(msg.arg1 == 1);
                 return true;
             }
-            // ---------------------------------------------------------
-
-            case MSG_START_INPUT: {
-                final boolean restarting = msg.arg2 != 0;
-                args = (SomeArgs) msg.obj;
-                final IBinder startInputToken = (IBinder) args.arg1;
-                final SessionState session = (SessionState) args.arg2;
-                final IInputContext inputContext = (IInputContext) args.arg3;
-                final EditorInfo editorInfo = (EditorInfo) args.arg4;
-                try {
-                    setEnabledSessionInHandlerThread(session);
-                    session.method.startInput(startInputToken, inputContext, editorInfo,
-                            restarting);
-                } catch (RemoteException e) {
-                }
-                args.recycle();
-                return true;
-            }
-
             // ---------------------------------------------------------
 
             case MSG_UNBIND_CLIENT:
@@ -4430,23 +4333,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
 
             // ---------------------------------------------------------------
-            case MSG_INLINE_SUGGESTIONS_REQUEST: {
-                args = (SomeArgs) msg.obj;
-                final InlineSuggestionsRequestInfo requestInfo =
-                        (InlineSuggestionsRequestInfo) args.arg2;
-                final IInlineSuggestionsRequestCallback callback =
-                        (IInlineSuggestionsRequestCallback) args.arg3;
-                try {
-                    ((IInputMethod) args.arg1).onCreateInlineSuggestionsRequest(requestInfo,
-                            callback);
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "RemoteException calling onCreateInlineSuggestionsRequest(): " + e);
-                }
-                args.recycle();
-                return true;
-            }
-
-            // ---------------------------------------------------------------
             case MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE: {
                 if (mAudioManagerInternal == null) {
                     mAudioManagerInternal = LocalServices.getService(AudioManagerInternal.class);
@@ -4456,13 +4342,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 }
                 return true;
             }
-            case MSG_START_HANDWRITING:
-                try {
-                    (((IInputMethod) msg.obj)).canStartStylusHandwriting(msg.arg1);
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "RemoteException calling canStartStylusHandwriting(): ", e);
-                }
-                return true;
         }
         return false;
     }
@@ -4475,12 +4354,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 return;
             }
 
-            try {
-                // TODO: replace null  with actual Channel, MotionEvents
-                getCurMethodLocked().startStylusHandwriting(null, null);
-            } catch (RemoteException e) {
-                Slog.w(TAG, "RemoteException calling startStylusHandwriting(): ", e);
-            }
+            // TODO: replace null  with actual Channel, MotionEvents
+            getCurMethodLocked().startStylusHandwriting(null, null);
         }
     }
 
@@ -4739,14 +4614,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             userId = mSettings.getCurrentUserId();
         }
         mContext.startActivityAsUser(intent, null, UserHandle.of(userId));
-    }
-
-    private void showConfigureInputMethods() {
-        Intent intent = new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-                | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        mContext.startActivityAsUser(intent, null, UserHandle.CURRENT);
     }
 
     // ----------------------------------------------------------------------
@@ -5221,7 +5088,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     @BinderThread
     private void dumpAsStringNoCheck(FileDescriptor fd, PrintWriter pw, String[] args,
             boolean isCritical) {
-        IInputMethod method;
+        IInputMethodInvoker method;
         ClientState client;
         ClientState focusedWindowClient;
 
