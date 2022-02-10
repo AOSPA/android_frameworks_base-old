@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b294aa79_eb832284",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2022-02-10T11:35:19Z",
+      "side": 1,
+      "message": "I think this killed monet in gboard for me, might be better to remove it altogether",
+      "revId": "d629209d396a65e0979dad58330d4478945505be",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
