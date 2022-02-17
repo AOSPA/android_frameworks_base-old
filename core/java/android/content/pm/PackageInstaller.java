@@ -19,8 +19,16 @@ package android.content.pm;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.MODE_IGNORED;
+import static android.content.pm.Checksum.TYPE_PARTIAL_MERKLE_ROOT_1M_SHA256;
+import static android.content.pm.Checksum.TYPE_PARTIAL_MERKLE_ROOT_1M_SHA512;
+import static android.content.pm.Checksum.TYPE_WHOLE_MD5;
+import static android.content.pm.Checksum.TYPE_WHOLE_MERKLE_ROOT_4K_SHA256;
+import static android.content.pm.Checksum.TYPE_WHOLE_SHA1;
+import static android.content.pm.Checksum.TYPE_WHOLE_SHA256;
+import static android.content.pm.Checksum.TYPE_WHOLE_SHA512;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.CurrentTimeMillisLong;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -62,12 +70,16 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 
 import java.io.Closeable;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.security.MessageDigest;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -405,6 +417,13 @@ public class PackageInstaller {
             LOCATION_MEDIA_DATA})
     @Retention(RetentionPolicy.SOURCE)
     public @interface FileLocation{}
+
+    /** Default set of checksums - includes all available checksums.
+     * @see Session#requestChecksums  */
+    private static final int DEFAULT_CHECKSUMS =
+            TYPE_WHOLE_MERKLE_ROOT_4K_SHA256 | TYPE_WHOLE_MD5 | TYPE_WHOLE_SHA1 | TYPE_WHOLE_SHA256
+                    | TYPE_WHOLE_SHA512 | TYPE_PARTIAL_MERKLE_ROOT_1M_SHA256
+                    | TYPE_PARTIAL_MERKLE_ROOT_1M_SHA512;
 
     private final IPackageInstaller mInstaller;
     private final int mUserId;
@@ -1256,7 +1275,7 @@ public class PackageInstaller {
          * @param name      previously written as part of this session.
          *                  {@link #openWrite}
          * @param checksums installer intends to make available via
-         *                  {@link PackageManager#requestChecksums}.
+         *                  {@link PackageManager#requestChecksums} or {@link #requestChecksums}.
          * @param signature DER PKCS#7 detached signature bytes over binary serialized checksums
          *                  to enable integrity checking for the checksums or null for no integrity
          *                  checking. {@link PackageManager#requestChecksums} will return
@@ -1288,6 +1307,93 @@ public class PackageInstaller {
             } catch (RuntimeException e) {
                 ExceptionUtils.maybeUnwrapIOException(e);
                 throw e;
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        private static List<byte[]> encodeCertificates(List<Certificate> certs) throws
+                CertificateEncodingException {
+            if (certs == null) {
+                return null;
+            }
+            List<byte[]> result = new ArrayList<>(certs.size());
+            for (Certificate cert : certs) {
+                if (!(cert instanceof X509Certificate)) {
+                    throw new CertificateEncodingException("Only X509 certificates supported.");
+                }
+                result.add(cert.getEncoded());
+            }
+            return result;
+        }
+
+        /**
+         * Requests checksums for the APK file in session.
+         * <p>
+         * A possible use case is replying to {@link Intent#ACTION_PACKAGE_NEEDS_VERIFICATION}
+         * broadcast.
+         * The checksums will be returned asynchronously via onChecksumsReadyListener.
+         * <p>
+         * By default returns all readily available checksums:
+         * <ul>
+         * <li>enforced by platform,
+         * <li>enforced by the installer.
+         * </ul>
+         * If the caller needs a specific checksum type, they can specify it as required.
+         * <p>
+         * <b>Caution: Android can not verify installer-provided checksums. Make sure you specify
+         * trusted installers.</b>
+         * <p>
+         * @param name      previously written as part of this session.
+         *                  {@link #openWrite}
+         * @param required to explicitly request the checksum types. Will incur significant
+         *                 CPU/memory/disk usage.
+         * @param trustedInstallers for checksums enforced by installer, which installers are to be
+         *                          trusted.
+         *                          {@link PackageManager#TRUST_ALL} will return checksums from any
+         *                          installer,
+         *                          {@link PackageManager#TRUST_NONE} disables optimized
+         *                          installer-enforced checksums, otherwise the list has to be
+         *                          a non-empty list of certificates.
+         * @param executor the {@link Executor} on which to invoke the callback
+         * @param onChecksumsReadyListener called once when the results are available.
+         * @throws CertificateEncodingException if an encoding error occurs for trustedInstallers.
+         * @throws FileNotFoundException if the file does not exist.
+         * @throws IllegalArgumentException if the list of trusted installer certificates is empty.
+         */
+        public void requestChecksums(@NonNull String name, @Checksum.TypeMask int required,
+                @NonNull List<Certificate> trustedInstallers,
+                @NonNull @CallbackExecutor Executor executor,
+                @NonNull PackageManager.OnChecksumsReadyListener onChecksumsReadyListener)
+                throws CertificateEncodingException, FileNotFoundException {
+            Objects.requireNonNull(name);
+            Objects.requireNonNull(trustedInstallers);
+            Objects.requireNonNull(executor);
+            Objects.requireNonNull(onChecksumsReadyListener);
+            if (trustedInstallers == PackageManager.TRUST_ALL) {
+                trustedInstallers = null;
+            } else if (trustedInstallers == PackageManager.TRUST_NONE) {
+                trustedInstallers = Collections.emptyList();
+            } else if (trustedInstallers.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "trustedInstallers has to be one of TRUST_ALL/TRUST_NONE or a non-empty "
+                                + "list of certificates.");
+            }
+            try {
+                IOnChecksumsReadyListener onChecksumsReadyListenerDelegate =
+                        new IOnChecksumsReadyListener.Stub() {
+                            @Override
+                            public void onChecksumsReady(List<ApkChecksum> checksums)
+                                    throws RemoteException {
+                                executor.execute(
+                                        () -> onChecksumsReadyListener.onChecksumsReady(checksums));
+                            }
+                        };
+                mSession.requestChecksums(name, DEFAULT_CHECKSUMS, required,
+                        encodeCertificates(trustedInstallers), onChecksumsReadyListenerDelegate);
+            } catch (ParcelableException e) {
+                e.maybeRethrow(FileNotFoundException.class);
+                throw new RuntimeException(e);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -2261,42 +2367,72 @@ public class PackageInstaller {
         private static final int[] NO_SESSIONS = {};
 
         /** @hide */
-        @IntDef(prefix = { "STAGED_SESSION_" }, value = {
-                STAGED_SESSION_NO_ERROR,
-                STAGED_SESSION_VERIFICATION_FAILED,
-                STAGED_SESSION_ACTIVATION_FAILED,
-                STAGED_SESSION_UNKNOWN,
-                STAGED_SESSION_CONFLICT})
+        @IntDef(prefix = { "SESSION_" }, value = {
+                SESSION_NO_ERROR,
+                SESSION_VERIFICATION_FAILED,
+                SESSION_ACTIVATION_FAILED,
+                SESSION_UNKNOWN_ERROR,
+                SESSION_CONFLICT})
         @Retention(RetentionPolicy.SOURCE)
-        public @interface StagedSessionErrorCode{}
+        public @interface SessionErrorCode {}
         /**
-         * Constant indicating that no error occurred during the preparation or the activation of
-         * this staged session.
+         * @deprecated use {@link #SESSION_NO_ERROR}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_NO_ERROR = 0;
 
         /**
-         * Constant indicating that an error occurred during the verification phase (pre-reboot) of
-         * this staged session.
+         * @deprecated use {@link #SESSION_VERIFICATION_FAILED}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_VERIFICATION_FAILED = 1;
 
         /**
-         * Constant indicating that an error occurred during the activation phase (post-reboot) of
-         * this staged session.
+         * @deprecated use {@link #SESSION_ACTIVATION_FAILED}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_ACTIVATION_FAILED = 2;
 
         /**
-         * Constant indicating that an unknown error occurred while processing this staged session.
+         * @deprecated use {@link #SESSION_UNKNOWN_ERROR}.
          */
+        @Deprecated
         public static final int STAGED_SESSION_UNKNOWN = 3;
 
         /**
-         * Constant indicating that the session was in conflict with another staged session and had
+         * @deprecated use {@link #SESSION_CONFLICT}.
+         */
+        @Deprecated
+        public static final int STAGED_SESSION_CONFLICT = 4;
+
+        /**
+         * Constant indicating that no error occurred during the preparation or the activation of
+         * this session.
+         */
+        public static final int SESSION_NO_ERROR = 0;
+
+        /**
+         * Constant indicating that an error occurred during the verification phase of
+         * this session.
+         */
+        public static final int SESSION_VERIFICATION_FAILED = 1;
+
+        /**
+         * Constant indicating that an error occurred during the activation phase of
+         * this session.
+         */
+        public static final int SESSION_ACTIVATION_FAILED = 2;
+
+        /**
+         * Constant indicating that an unknown error occurred while processing this session.
+         */
+        public static final int SESSION_UNKNOWN_ERROR = 3;
+
+        /**
+         * Constant indicating that the session was in conflict with another session and had
          * to be sacrificed for resolution.
          */
-        public static final int STAGED_SESSION_CONFLICT = 4;
+        public static final int SESSION_CONFLICT = 4;
 
         private static String userActionToString(int requireUserAction) {
             switch(requireUserAction) {
@@ -2380,13 +2516,13 @@ public class PackageInstaller {
         public int[] childSessionIds = NO_SESSIONS;
 
         /** {@hide} */
-        public boolean isStagedSessionApplied;
+        public boolean isSessionApplied;
         /** {@hide} */
-        public boolean isStagedSessionReady;
+        public boolean isSessionReady;
         /** {@hide} */
-        public boolean isStagedSessionFailed;
-        private int mStagedSessionErrorCode;
-        private String mStagedSessionErrorMessage;
+        public boolean isSessionFailed;
+        private int mSessionErrorCode;
+        private String mSessionErrorMessage;
 
         /** {@hide} */
         public boolean isCommitted;
@@ -2447,11 +2583,11 @@ public class PackageInstaller {
             if (childSessionIds == null) {
                 childSessionIds = NO_SESSIONS;
             }
-            isStagedSessionApplied = source.readBoolean();
-            isStagedSessionReady = source.readBoolean();
-            isStagedSessionFailed = source.readBoolean();
-            mStagedSessionErrorCode = source.readInt();
-            mStagedSessionErrorMessage = source.readString();
+            isSessionApplied = source.readBoolean();
+            isSessionReady = source.readBoolean();
+            isSessionFailed = source.readBoolean();
+            mSessionErrorCode = source.readInt();
+            mSessionErrorMessage = source.readString();
             isCommitted = source.readBoolean();
             rollbackDataPolicy = source.readInt();
             createdMillis = source.readLong();
@@ -2845,7 +2981,7 @@ public class PackageInstaller {
          * since that is the one that should have been {@link Session#commit committed}.
          */
         public boolean isStagedSessionActive() {
-            return isStaged && isCommitted && !isStagedSessionApplied && !isStagedSessionFailed
+            return isStaged && isCommitted && !isSessionApplied && !isSessionFailed
                     && !hasParentSessionId();
         }
 
@@ -2886,7 +3022,7 @@ public class PackageInstaller {
          */
         public boolean isStagedSessionApplied() {
             checkSessionIsStaged();
-            return isStagedSessionApplied;
+            return isSessionApplied;
         }
 
         /**
@@ -2895,7 +3031,7 @@ public class PackageInstaller {
          */
         public boolean isStagedSessionReady() {
             checkSessionIsStaged();
-            return isStagedSessionReady;
+            return isSessionReady;
         }
 
         /**
@@ -2904,16 +3040,16 @@ public class PackageInstaller {
          */
         public boolean isStagedSessionFailed() {
             checkSessionIsStaged();
-            return isStagedSessionFailed;
+            return isSessionFailed;
         }
 
         /**
          * If something went wrong with a staged session, clients can check this error code to
          * understand which kind of failure happened. Only meaningful if {@code isStaged} is true.
          */
-        public @StagedSessionErrorCode int getStagedSessionErrorCode() {
+        public @SessionErrorCode int getStagedSessionErrorCode() {
             checkSessionIsStaged();
-            return mStagedSessionErrorCode;
+            return mSessionErrorCode;
         }
 
         /**
@@ -2922,14 +3058,13 @@ public class PackageInstaller {
          */
         public @NonNull String getStagedSessionErrorMessage() {
             checkSessionIsStaged();
-            return mStagedSessionErrorMessage;
+            return mSessionErrorMessage;
         }
 
         /** {@hide} */
-        public void setStagedSessionErrorCode(@StagedSessionErrorCode int errorCode,
-                                              String errorMessage) {
-            mStagedSessionErrorCode = errorCode;
-            mStagedSessionErrorMessage = errorMessage;
+        public void setSessionErrorCode(@SessionErrorCode int errorCode, String errorMessage) {
+            mSessionErrorCode = errorCode;
+            mSessionErrorMessage = errorMessage;
         }
 
         /**
@@ -3018,11 +3153,11 @@ public class PackageInstaller {
             dest.writeBoolean(forceQueryable);
             dest.writeInt(parentSessionId);
             dest.writeIntArray(childSessionIds);
-            dest.writeBoolean(isStagedSessionApplied);
-            dest.writeBoolean(isStagedSessionReady);
-            dest.writeBoolean(isStagedSessionFailed);
-            dest.writeInt(mStagedSessionErrorCode);
-            dest.writeString(mStagedSessionErrorMessage);
+            dest.writeBoolean(isSessionApplied);
+            dest.writeBoolean(isSessionReady);
+            dest.writeBoolean(isSessionFailed);
+            dest.writeInt(mSessionErrorCode);
+            dest.writeString(mSessionErrorMessage);
             dest.writeBoolean(isCommitted);
             dest.writeInt(rollbackDataPolicy);
             dest.writeLong(createdMillis);

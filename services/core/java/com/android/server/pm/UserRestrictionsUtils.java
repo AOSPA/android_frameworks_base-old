@@ -142,7 +142,10 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_MICROPHONE_TOGGLE,
             UserManager.DISALLOW_CAMERA_TOGGLE,
             UserManager.DISALLOW_CHANGE_WIFI_STATE,
-            UserManager.DISALLOW_WIFI_TETHERING
+            UserManager.DISALLOW_WIFI_TETHERING,
+            UserManager.DISALLOW_SHARING_ADMIN_CONFIGURED_WIFI,
+            UserManager.DISALLOW_WIFI_DIRECT,
+            UserManager.DISALLOW_ADD_WIFI_CONFIG
     });
 
     public static final Set<String> DEPRECATED_USER_RESTRICTIONS = Sets.newArraySet(
@@ -188,7 +191,9 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_MICROPHONE_TOGGLE,
             UserManager.DISALLOW_CAMERA_TOGGLE,
             UserManager.DISALLOW_CHANGE_WIFI_STATE,
-            UserManager.DISALLOW_WIFI_TETHERING
+            UserManager.DISALLOW_WIFI_TETHERING,
+            UserManager.DISALLOW_WIFI_DIRECT,
+            UserManager.DISALLOW_ADD_WIFI_CONFIG
     );
 
     /**
@@ -225,7 +230,9 @@ public class UserRestrictionsUtils {
                     UserManager.DISALLOW_CONFIG_DATE_TIME,
                     UserManager.DISALLOW_CONFIG_PRIVATE_DNS,
                     UserManager.DISALLOW_CHANGE_WIFI_STATE,
-                    UserManager.DISALLOW_WIFI_TETHERING
+                    UserManager.DISALLOW_WIFI_TETHERING,
+                    UserManager.DISALLOW_WIFI_DIRECT,
+                    UserManager.DISALLOW_ADD_WIFI_CONFIG
     );
 
     /**

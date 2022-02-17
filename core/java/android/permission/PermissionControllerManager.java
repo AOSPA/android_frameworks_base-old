@@ -69,6 +69,7 @@ import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 /**
  * Interface for communicating with the permission controller.
@@ -785,5 +786,71 @@ public final class PermissionControllerManager {
                 Binder.restoreCallingIdentity(token);
             }
         }, executor);
+    }
+
+    /**
+     * Get the number of unused, hibernating apps for the user.
+     *
+     * @param executor executor to run callback on
+     * @param callback callback for when result is generated
+     */
+    public void getUnusedAppCount(@NonNull @CallbackExecutor Executor executor,
+            @NonNull IntConsumer callback) {
+        checkNotNull(executor);
+        checkNotNull(callback);
+
+        mRemoteService.postAsync(service -> {
+            AndroidFuture<Integer> unusedAppCountResult = new AndroidFuture<>();
+            service.getUnusedAppCount(unusedAppCountResult);
+            return unusedAppCountResult;
+        }).whenCompleteAsync((count, err) -> {
+            if (err != null) {
+                Log.e(TAG, "Error getting unused app count", err);
+                callback.accept(0);
+            } else {
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    callback.accept((int) count);
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
+            }
+        });
+    }
+
+    /**
+     * Triggers the revocation of one or more permissions for a package, under the following
+     * conditions:
+     * <ul>
+     * <li>The package {@code packageName} must be under the same UID as the calling process
+     * (typically, the target package is the calling package).
+     * <li>Each permission in {@code permissions} must be granted to the package
+     * {@code packageName}.
+     * <li>Each permission in {@code permissions} must be a runtime permission.
+     * </ul>
+     * <p>
+     * For every permission in {@code permissions}, the entire permission group it belongs to will
+     * be revoked. This revocation happens asynchronously and kills all processes running in the
+     * same UID as {@code packageName}. It will be triggered once it is safe to do so.
+     *
+     * @param packageName The name of the package for which the permissions will be revoked.
+     * @param permissions List of permissions to be revoked.
+     *
+     * @see Context#selfRevokePermissions(Collection)
+     *
+     * @hide
+     */
+    public void selfRevokePermissions(@NonNull String packageName,
+            @NonNull List<String> permissions) {
+        mRemoteService.postAsync(service -> {
+            AndroidFuture<Void> future = new AndroidFuture<>();
+            service.selfRevokePermissions(packageName, permissions, future);
+            return future;
+        }).whenComplete((result, err) -> {
+            if (err != null) {
+                Log.e(TAG, "Failed to self revoke " + String.join(",", permissions)
+                        + " for package " + packageName, err);
+            }
+        });
     }
 }

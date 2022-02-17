@@ -16,17 +16,20 @@
 
 package com.android.internal.os;
 
-import static android.os.BatteryStats.STATS_SINCE_CHARGED;
 import static android.os.BatteryStats.Uid.NUM_PROCESS_STATE;
 import static android.os.BatteryStats.Uid.PROCESS_STATE_BACKGROUND;
 import static android.os.BatteryStats.Uid.PROCESS_STATE_CACHED;
 import static android.os.BatteryStats.Uid.PROCESS_STATE_FOREGROUND_SERVICE;
 import static android.os.BatteryStats.Uid.PROCESS_STATE_TOP;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -35,8 +38,8 @@ import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
 import android.os.BatteryStats;
+import android.os.WakeLockStats;
 import android.util.SparseArray;
-import android.util.SparseIntArray;
 import android.view.Display;
 
 import androidx.test.filters.LargeTest;
@@ -50,8 +53,11 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.List;
+
 @LargeTest
 @RunWith(AndroidJUnit4.class)
+@SuppressWarnings("GuardedBy")
 public class BatteryStatsImplTest {
     private static final long[] CPU_FREQS = {1, 2, 3, 4, 5};
     private static final int NUM_CPU_FREQS = CPU_FREQS.length;
@@ -61,29 +67,26 @@ public class BatteryStatsImplTest {
     @Mock
     private KernelSingleUidTimeReader mKernelSingleUidTimeReader;
 
+    private final MockClock mMockClock = new MockClock();
     private MockBatteryStatsImpl mBatteryStatsImpl;
-
-    private MockClock mMockClock = new MockClock();
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
+        when(mKernelUidCpuFreqTimeReader.isFastCpuTimesReader()).thenReturn(true);
         when(mKernelUidCpuFreqTimeReader.readFreqs(any())).thenReturn(CPU_FREQS);
         when(mKernelUidCpuFreqTimeReader.allUidTimesAvailable()).thenReturn(true);
         when(mKernelSingleUidTimeReader.singleUidCpuTimesAvailable()).thenReturn(true);
         mBatteryStatsImpl = new MockBatteryStatsImpl(mMockClock)
                 .setKernelCpuUidFreqTimeReader(mKernelUidCpuFreqTimeReader)
-                .setKernelSingleUidTimeReader(mKernelSingleUidTimeReader)
-                .setTrackingCpuByProcStateEnabled(true);
+                .setKernelSingleUidTimeReader(mKernelSingleUidTimeReader);
     }
 
     @Test
     public void testUpdateProcStateCpuTimes() {
         mBatteryStatsImpl.setOnBatteryInternal(true);
-        synchronized (mBatteryStatsImpl) {
-            mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_ON, 0, 0);
-        }
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_ON, 0, 0);
 
         final int[] testUids = {10032, 10048, 10145, 10139};
         final int[] activityManagerProcStates = {
@@ -98,15 +101,24 @@ public class BatteryStatsImplTest {
                 PROCESS_STATE_TOP,
                 PROCESS_STATE_CACHED
         };
-        addPendingUids(testUids, testProcStates);
 
         // Initialize time-in-freq counters
         mMockClock.realtime = 1000;
         for (int i = 0; i < testUids.length; ++i) {
-            mBatteryStatsImpl.noteUidProcessStateLocked(testUids[i], activityManagerProcStates[i]);
             mockKernelSingleUidTimeReader(testUids[i], new long[5]);
+            mBatteryStatsImpl.noteUidProcessStateLocked(testUids[i], activityManagerProcStates[i]);
         }
-        mBatteryStatsImpl.updateProcStateCpuTimes(true, false);
+
+        final long[] timeInFreqs = new long[NUM_CPU_FREQS];
+
+        // Verify there are no cpu times initially.
+        for (int i = 0; i < testUids.length; ++i) {
+            final BatteryStats.Uid u = mBatteryStatsImpl.getUidStatsLocked(testUids[i]);
+            for (int procState = 0; procState < NUM_PROCESS_STATE; ++procState) {
+                assertFalse(u.getCpuFreqTimes(timeInFreqs, procState));
+                assertFalse(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
+            }
+        }
 
         // Obtain initial CPU time-in-freq counts
         final long[][] cpuTimes = {
@@ -115,32 +127,25 @@ public class BatteryStatsImplTest {
                 {989834, 384098, 98483, 23809, 4984},
                 {4859048, 348903, 4578967, 5973894, 298549}
         };
-        for (int i = 0; i < testUids.length; ++i) {
-            mockKernelSingleUidTimeReader(testUids[i], cpuTimes[i]);
-
-            // Verify there are no cpu times initially.
-            final BatteryStats.Uid u = mBatteryStatsImpl.getUidStatsLocked(testUids[i]);
-            for (int procState = 0; procState < NUM_PROCESS_STATE; ++procState) {
-                assertNull(u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
-                assertNull(u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
-            }
-        }
-        addPendingUids(testUids, testProcStates);
 
         mMockClock.realtime += 1000;
-        mBatteryStatsImpl.updateProcStateCpuTimes(true, false);
 
-        verifyNoPendingUids();
+        for (int i = 0; i < testUids.length; ++i) {
+            mockKernelSingleUidTimeReader(testUids[i], cpuTimes[i]);
+            mBatteryStatsImpl.updateProcStateCpuTimesLocked(testUids[i],
+                    mMockClock.realtime);
+        }
+
         for (int i = 0; i < testUids.length; ++i) {
             final BatteryStats.Uid u = mBatteryStatsImpl.getUidStats().get(testUids[i]);
             for (int procState = 0; procState < NUM_PROCESS_STATE; ++procState) {
+                final boolean hasTimeInFreq = u.getCpuFreqTimes(timeInFreqs, procState);
                 if (procState == testProcStates[i]) {
-                    assertArrayEquals("Uid=" + testUids[i], cpuTimes[i],
-                            u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertArrayEquals("Uid=" + testUids[i], cpuTimes[i], timeInFreqs);
                 } else {
-                    assertNull(u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertFalse(hasTimeInFreq);
                 }
-                assertNull(u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                assertFalse(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
             }
         }
 
@@ -151,19 +156,19 @@ public class BatteryStatsImplTest {
                 {945894, 9089432, 19478, 3834, 7845},
                 {843895, 43948, 949582, 99, 384}
         };
+
+        mMockClock.realtime += 1000;
+
         for (int i = 0; i < testUids.length; ++i) {
             long[] newCpuTimes = new long[cpuTimes[i].length];
             for (int j = 0; j < cpuTimes[i].length; j++) {
                 newCpuTimes[j] = cpuTimes[i][j] + delta1[i][j];
             }
             mockKernelSingleUidTimeReader(testUids[i], newCpuTimes);
+            mBatteryStatsImpl.updateProcStateCpuTimesLocked(testUids[i],
+                    mMockClock.realtime);
         }
-        addPendingUids(testUids, testProcStates);
 
-        mMockClock.realtime += 1000;
-        mBatteryStatsImpl.updateProcStateCpuTimes(true, false);
-
-        verifyNoPendingUids();
         for (int i = 0; i < testUids.length; ++i) {
             final BatteryStats.Uid u = mBatteryStatsImpl.getUidStats().get(testUids[i]);
             for (int procState = 0; procState < NUM_PROCESS_STATE; ++procState) {
@@ -172,20 +177,18 @@ public class BatteryStatsImplTest {
                     for (int j = 0; j < expectedCpuTimes.length; ++j) {
                         expectedCpuTimes[j] += delta1[i][j];
                     }
-                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes,
-                            u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertTrue(u.getCpuFreqTimes(timeInFreqs, procState));
+                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes, timeInFreqs);
                 } else {
-                    assertNull(u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertFalse(u.getCpuFreqTimes(timeInFreqs, procState));
                 }
-                assertNull(u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                assertFalse(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
             }
         }
 
         // Validate the on-battery-screen-off counter
-        synchronized (mBatteryStatsImpl) {
-            mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0,
-                    mMockClock.realtime * 1000);
-        }
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0,
+                mMockClock.realtime * 1000);
 
         final long[][] delta2 = {
                 {95932, 2943, 49834, 89034, 139},
@@ -193,19 +196,19 @@ public class BatteryStatsImplTest {
                 {678, 7498, 9843, 889, 4894},
                 {488, 998, 8498, 394, 574}
         };
+
+        mMockClock.realtime += 1000;
+
         for (int i = 0; i < testUids.length; ++i) {
             long[] newCpuTimes = new long[cpuTimes[i].length];
             for (int j = 0; j < cpuTimes[i].length; j++) {
                 newCpuTimes[j] = cpuTimes[i][j] + delta1[i][j] + delta2[i][j];
             }
             mockKernelSingleUidTimeReader(testUids[i], newCpuTimes);
+            mBatteryStatsImpl.updateProcStateCpuTimesLocked(testUids[i],
+                    mMockClock.realtime);
         }
-        addPendingUids(testUids, testProcStates);
 
-        mMockClock.realtime += 1000;
-        mBatteryStatsImpl.updateProcStateCpuTimes(true, true);
-
-        verifyNoPendingUids();
         for (int i = 0; i < testUids.length; ++i) {
             final BatteryStats.Uid u = mBatteryStatsImpl.getUidStats().get(testUids[i]);
             for (int procState = 0; procState < NUM_PROCESS_STATE; ++procState) {
@@ -214,13 +217,13 @@ public class BatteryStatsImplTest {
                     for (int j = 0; j < expectedCpuTimes.length; ++j) {
                         expectedCpuTimes[j] += delta1[i][j] + delta2[i][j];
                     }
-                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes,
-                            u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
-                    assertArrayEquals("Uid=" + testUids[i], delta2[i],
-                            u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertTrue(u.getCpuFreqTimes(timeInFreqs, procState));
+                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes, timeInFreqs);
+                    assertTrue(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
+                    assertArrayEquals("Uid=" + testUids[i], delta2[i], timeInFreqs);
                 } else {
-                    assertNull(u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
-                    assertNull(u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertFalse(u.getCpuFreqTimes(timeInFreqs, procState));
+                    assertFalse(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
                 }
             }
         }
@@ -235,24 +238,25 @@ public class BatteryStatsImplTest {
                 {3049509483598l, 4597834, 377654, 94589035, 7854},
                 {9493, 784, 99895, 8974893, 9879843}
         };
-        for (int i = 0; i < testUids.length; ++i) {
-            long[] newCpuTimes = new long[cpuTimes[i].length];
-            for (int j = 0; j < cpuTimes[i].length; j++) {
-                newCpuTimes[j] = cpuTimes[i][j] + delta1[i][j] + delta2[i][j] + delta3[i][j];
-            }
-            mockKernelSingleUidTimeReader(testUids[i], newCpuTimes);
-        }
-        addPendingUids(testUids, testProcStates);
+
+        mMockClock.realtime += 1000;
+
         final int parentUid = testUids[1];
         final int childUid = 99099;
         addIsolatedUid(parentUid, childUid);
         final long[] isolatedUidCpuTimes = {495784, 398473, 4895, 4905, 30984093};
         mockKernelSingleUidTimeReader(childUid, isolatedUidCpuTimes, isolatedUidCpuTimes);
 
-        mMockClock.realtime += 1000;
-        mBatteryStatsImpl.updateProcStateCpuTimes(true, true);
+        for (int i = 0; i < testUids.length; ++i) {
+            long[] newCpuTimes = new long[cpuTimes[i].length];
+            for (int j = 0; j < cpuTimes[i].length; j++) {
+                newCpuTimes[j] = cpuTimes[i][j] + delta1[i][j] + delta2[i][j] + delta3[i][j];
+            }
+            mockKernelSingleUidTimeReader(testUids[i], newCpuTimes);
+            mBatteryStatsImpl.updateProcStateCpuTimesLocked(testUids[i],
+                    mMockClock.realtime);
+        }
 
-        verifyNoPendingUids();
         for (int i = 0; i < testUids.length; ++i) {
             final BatteryStats.Uid u = mBatteryStatsImpl.getUidStats().get(testUids[i]);
             for (int procState = 0; procState < NUM_PROCESS_STATE; ++procState) {
@@ -262,29 +266,27 @@ public class BatteryStatsImplTest {
                         expectedCpuTimes[j] += delta1[i][j] + delta2[i][j] + delta3[i][j]
                                 + (testUids[i] == parentUid ? isolatedUidCpuTimes[j] : 0);
                     }
-                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes,
-                            u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertTrue(u.getCpuFreqTimes(timeInFreqs, procState));
+                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes, timeInFreqs);
                     long[] expectedScreenOffTimes = delta2[i].clone();
                     for (int j = 0; j < expectedScreenOffTimes.length; ++j) {
                         expectedScreenOffTimes[j] += delta3[i][j]
                                 + (testUids[i] == parentUid ? isolatedUidCpuTimes[j] : 0);
                     }
-                    assertArrayEquals("Uid=" + testUids[i], expectedScreenOffTimes,
-                            u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertTrue(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
+                    assertArrayEquals("Uid=" + testUids[i], expectedScreenOffTimes, timeInFreqs);
                 } else {
-                    assertNull(u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
-                    assertNull(u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertFalse(u.getCpuFreqTimes(timeInFreqs, procState));
+                    assertFalse(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
                 }
             }
         }
     }
 
     @Test
-    public void testCopyFromAllUidsCpuTimes() {
+    public void testUpdateCpuTimesForAllUids() {
         mBatteryStatsImpl.setOnBatteryInternal(false);
-        synchronized (mBatteryStatsImpl) {
-            mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_ON, 0, 0);
-        }
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_ON, 0, 0);
 
         mMockClock.realtime = 1000;
 
@@ -295,14 +297,14 @@ public class BatteryStatsImplTest {
                 PROCESS_STATE_TOP,
                 PROCESS_STATE_CACHED
         };
-        addPendingUids(testUids, testProcStates);
 
         for (int i = 0; i < testUids.length; ++i) {
             BatteryStatsImpl.Uid uid = mBatteryStatsImpl.getUidStatsLocked(testUids[i]);
             uid.setProcessStateForTest(testProcStates[i], mMockClock.elapsedRealtime());
             mockKernelSingleUidTimeReader(testUids[i], new long[NUM_CPU_FREQS]);
+            mBatteryStatsImpl.updateProcStateCpuTimesLocked(testUids[i],
+                    mMockClock.elapsedRealtime());
         }
-        mBatteryStatsImpl.updateProcStateCpuTimes(true, false);
 
         final SparseArray<long[]> allUidCpuTimes = new SparseArray<>();
         long[][] allCpuTimes = {
@@ -326,19 +328,21 @@ public class BatteryStatsImplTest {
         }
 
         mMockClock.realtime += 1000;
-        mBatteryStatsImpl.copyFromAllUidsCpuTimes(true, false);
 
-        verifyNoPendingUids();
+        mBatteryStatsImpl.updateCpuTimesForAllUids();
+
+        final long[] timeInFreqs = new long[NUM_CPU_FREQS];
+
         for (int i = 0; i < testUids.length; ++i) {
             final BatteryStats.Uid u = mBatteryStatsImpl.getUidStats().get(testUids[i]);
             for (int procState = 0; procState < NUM_PROCESS_STATE; ++procState) {
                 if (procState == testProcStates[i]) {
-                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes[i],
-                            u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertTrue(u.getCpuFreqTimes(timeInFreqs, procState));
+                    assertArrayEquals("Uid=" + testUids[i], expectedCpuTimes[i], timeInFreqs);
                 } else {
-                    assertNull(u.getCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                    assertFalse(u.getCpuFreqTimes(timeInFreqs, procState));
                 }
-                assertNull(u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED, procState));
+                assertFalse(u.getScreenOffCpuFreqTimes(timeInFreqs, procState));
             }
         }
     }
@@ -404,9 +408,7 @@ public class BatteryStatsImplTest {
         final int releaseTimeMs = 1005;
         final int currentTimeMs = 1011;
 
-        synchronized (mBatteryStatsImpl) {
-            mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
-        }
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
 
         // Create a Uid Object
         final BatteryStats.Uid u = mBatteryStatsImpl.getUidStatsLocked(testUid);
@@ -429,9 +431,7 @@ public class BatteryStatsImplTest {
         final int acquireTimeMs = 1000;
         final int currentTimeMs = 1011;
 
-        synchronized (mBatteryStatsImpl) {
-            mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
-        }
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
 
         // Create a Uid Object
         final BatteryStats.Uid u = mBatteryStatsImpl.getUidStatsLocked(testUid);
@@ -457,9 +457,7 @@ public class BatteryStatsImplTest {
         final int releaseTimeMs_2 = 1009;
         final int currentTimeMs = 1011;
 
-        synchronized (mBatteryStatsImpl) {
-            mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
-        }
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
 
         // Create a Uid Object
         final BatteryStats.Uid u = mBatteryStatsImpl.getUidStatsLocked(testUid);
@@ -489,9 +487,7 @@ public class BatteryStatsImplTest {
         final int releaseTimeMs_2 = 1009;
         final int currentTimeMs = 1011;
 
-        synchronized (mBatteryStatsImpl) {
-            mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
-        }
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
 
         // Create a Uid Object
         final BatteryStats.Uid u = mBatteryStatsImpl.getUidStatsLocked(testUid);
@@ -517,16 +513,50 @@ public class BatteryStatsImplTest {
         u.addIsolatedUid(childUid);
     }
 
-    private void addPendingUids(int[] uids, int[] procStates) {
-        final SparseIntArray pendingUids = mBatteryStatsImpl.getPendingUids();
-        for (int i = 0; i < uids.length; ++i) {
-            pendingUids.put(uids[i], procStates[i]);
-        }
-    }
+    @Test
+    public void testGetWakeLockStats() {
+        mBatteryStatsImpl.updateTimeBasesLocked(true, Display.STATE_OFF, 0, 0);
 
-    private void verifyNoPendingUids() {
-        final SparseIntArray pendingUids = mBatteryStatsImpl.getPendingUids();
-        assertEquals("There shouldn't be any pending uids left: " + pendingUids,
-                0, pendingUids.size());
+        // First wakelock, acquired once, not currently held
+        mMockClock.realtime = 1000;
+        mBatteryStatsImpl.noteStartWakeLocked(10100, 100, null, "wakeLock1", null,
+                BatteryStats.WAKE_TYPE_PARTIAL, false);
+
+        mMockClock.realtime = 3000;
+        mBatteryStatsImpl.noteStopWakeLocked(10100, 100, null, "wakeLock1", null,
+                BatteryStats.WAKE_TYPE_PARTIAL);
+
+        // Second wakelock, acquired twice, still held
+        mMockClock.realtime = 4000;
+        mBatteryStatsImpl.noteStartWakeLocked(10200, 101, null, "wakeLock2", null,
+                BatteryStats.WAKE_TYPE_PARTIAL, false);
+
+        mMockClock.realtime = 5000;
+        mBatteryStatsImpl.noteStopWakeLocked(10200, 101, null, "wakeLock2", null,
+                BatteryStats.WAKE_TYPE_PARTIAL);
+
+        mMockClock.realtime = 6000;
+        mBatteryStatsImpl.noteStartWakeLocked(10200, 101, null, "wakeLock2", null,
+                BatteryStats.WAKE_TYPE_PARTIAL, false);
+
+        mMockClock.realtime = 9000;
+
+        List<WakeLockStats.WakeLock> wakeLockStats =
+                mBatteryStatsImpl.getWakeLockStats().getWakeLocks();
+        assertThat(wakeLockStats).hasSize(2);
+
+        WakeLockStats.WakeLock wakeLock1 = wakeLockStats.stream()
+                .filter(wl -> wl.uid == 10100 && wl.name.equals("wakeLock1")).findFirst().get();
+
+        assertThat(wakeLock1.timesAcquired).isEqualTo(1);
+        assertThat(wakeLock1.timeHeldMs).isEqualTo(0);  // Not currently held
+        assertThat(wakeLock1.totalTimeHeldMs).isEqualTo(2000); // 3000-1000
+
+        WakeLockStats.WakeLock wakeLock2 = wakeLockStats.stream()
+                .filter(wl -> wl.uid == 10200 && wl.name.equals("wakeLock2")).findFirst().get();
+
+        assertThat(wakeLock2.timesAcquired).isEqualTo(2);
+        assertThat(wakeLock2.timeHeldMs).isEqualTo(3000);  // 9000-6000
+        assertThat(wakeLock2.totalTimeHeldMs).isEqualTo(4000); // (5000-4000) + (9000-6000)
     }
 }

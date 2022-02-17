@@ -33,8 +33,11 @@ import android.content.res.Configuration;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.view.contentcapture.ContentCaptureManager;
+
+import com.android.internal.annotations.GuardedBy;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -312,6 +315,16 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
     private static final String TAG = "Service";
 
     /**
+     * Selector for {@link #stopForeground(int)}:  equivalent to passing {@code false}
+     * to the legacy API {@link #stopForeground(boolean)}.
+     *
+     * @deprecated Use {@link #STOP_FOREGROUND_DETACH} instead.  The legacy
+     * behavior was inconsistent, leading to bugs around unpredictable results.
+     */
+    @Deprecated
+    public static final int STOP_FOREGROUND_LEGACY = 0;
+
+    /**
      * Selector for {@link #stopForeground(int)}: if supplied, the notification previously
      * supplied to {@link #startForeground} will be cancelled and removed from display.
      */
@@ -326,6 +339,7 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
 
     /** @hide */
     @IntDef(flag = false, prefix = { "STOP_FOREGROUND_" }, value = {
+            STOP_FOREGROUND_LEGACY,
             STOP_FOREGROUND_REMOVE,
             STOP_FOREGROUND_DETACH
     })
@@ -729,6 +743,7 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
             mActivityManager.setServiceForeground(
                     new ComponentName(this, mClassName), mToken, id,
                     notification, 0, FOREGROUND_SERVICE_TYPE_MANIFEST);
+            clearStartForegroundServiceStackTrace();
         } catch (RemoteException ex) {
         }
     }
@@ -782,6 +797,7 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
             mActivityManager.setServiceForeground(
                     new ComponentName(this, mClassName), mToken, id,
                     notification, 0, foregroundServiceType);
+            clearStartForegroundServiceStackTrace();
         } catch (RemoteException ex) {
         }
     }
@@ -790,15 +806,17 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
      * Legacy version of {@link #stopForeground(int)}.
      * @param removeNotification If true, the {@link #STOP_FOREGROUND_REMOVE}
      * selector will be passed to {@link #stopForeground(int)}; otherwise
-     * {@code zero} will be passed.
+     * {@link #STOP_FOREGROUND_LEGACY} will be passed.
      * @see #stopForeground(int)
      * @see #startForeground(int, Notification)
      *
-     * @deprecated use {@link #stopForeground(int)} instead.
+     * @deprecated call {@link #stopForeground(int)} and pass either
+     * {@link #STOP_FOREGROUND_REMOVE} or {@link #STOP_FOREGROUND_DETACH}
+     * explicitly instead.
      */
     @Deprecated
     public final void stopForeground(boolean removeNotification) {
-        stopForeground(removeNotification ? STOP_FOREGROUND_REMOVE : 0);
+        stopForeground(removeNotification ? STOP_FOREGROUND_REMOVE : STOP_FOREGROUND_LEGACY);
     }
 
     /**
@@ -956,4 +974,34 @@ public abstract class Service extends ContextWrapper implements ComponentCallbac
     private IActivityManager mActivityManager = null;
     @UnsupportedAppUsage
     private boolean mStartCompatibility = false;
+
+    /**
+     * This keeps track of the stacktrace where Context.startForegroundService() was called
+     * for each service class. We use that when we crash the app for not calling
+     * {@link #startForeground} in time, in {@link ActivityThread#throwRemoteServiceException}.
+     */
+    @GuardedBy("sStartForegroundServiceStackTraces")
+    private static final ArrayMap<String, StackTrace> sStartForegroundServiceStackTraces =
+            new ArrayMap<>();
+
+    /** @hide */
+    public static void setStartForegroundServiceStackTrace(
+            @NonNull String className, @NonNull StackTrace stacktrace) {
+        synchronized (sStartForegroundServiceStackTraces) {
+            sStartForegroundServiceStackTraces.put(className, stacktrace);
+        }
+    }
+
+    private void clearStartForegroundServiceStackTrace() {
+        synchronized (sStartForegroundServiceStackTraces) {
+            sStartForegroundServiceStackTraces.remove(this.getClassName());
+        }
+    }
+
+    /** @hide */
+    public static StackTrace getStartForegroundServiceStackTrace(@NonNull String className) {
+        synchronized (sStartForegroundServiceStackTraces) {
+            return sStartForegroundServiceStackTraces.get(className);
+        }
+    }
 }

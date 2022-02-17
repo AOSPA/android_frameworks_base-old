@@ -23,7 +23,7 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertTrue;
 
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
@@ -60,7 +60,6 @@ import android.util.Log;
 
 import androidx.test.InstrumentationRegistry;
 
-import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.settingslib.R;
 import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.mobile.MobileMappings.Config;
@@ -72,6 +71,7 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -87,7 +87,6 @@ import org.junit.runner.Description;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.MockitoSession;
-import org.mockito.quality.Strictness;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -156,14 +155,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
 
     @Before
     public void setUp() throws Exception {
-        mMockingSession = ExtendedMockito.mockitoSession().strictness(Strictness.LENIENT)
-                .mockStatic(FeatureFlags.class).startMocking();
-        ExtendedMockito.doReturn(true).when(() ->
-                FeatureFlags.isProviderModelSettingEnabled(mContext));
         mFeatureFlags = mock(FeatureFlags.class);
-        when(mFeatureFlags.isCombinedStatusBarSignalIconsEnabled()).thenReturn(false);
-        when(mFeatureFlags.isProviderModelSettingEnabled()).thenReturn(true);
-
+        when(mFeatureFlags.isEnabled(Flags.COMBINED_STATUS_BAR_SIGNAL_ICONS)).thenReturn(false);
 
         mInstrumentation = InstrumentationRegistry.getInstrumentation();
         Settings.Global.putInt(mContext.getContentResolver(), Global.AIRPLANE_MODE_ON, 0);
@@ -216,8 +209,6 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
         when(mMockProvisionController.isCurrentUserSetup()).thenReturn(true);
         doAnswer(invocation -> {
             mUserCallback = (DeviceProvisionedListener) invocation.getArguments()[0];
-            mUserCallback.onUserSetupChanged();
-            mUserCallback.onDeviceProvisionedChanged();
             TestableLooper.get(this).processAllMessages();
             return null;
         }).when(mMockProvisionController).addCallback(any());
@@ -240,7 +231,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 mMockBd,
                 mDemoModeController,
                 mCarrierConfigTracker,
-                mFeatureFlags);
+                mFeatureFlags
+        );
         setupNetworkController();
 
         // Trigger blank callbacks to always get the current state (some tests don't trigger

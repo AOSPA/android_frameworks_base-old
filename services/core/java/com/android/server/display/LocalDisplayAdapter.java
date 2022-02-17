@@ -426,6 +426,15 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                     : mDefaultModeId;
         }
 
+        private int getLogicalDensity() {
+            DensityMap densityMap = getDisplayDeviceConfig().getDensityMap();
+            if (densityMap == null) {
+                return (int) (mStaticDisplayInfo.density * 160 + 0.5);
+            }
+
+            return densityMap.getDensityForResolution(mInfo.width, mInfo.height);
+        }
+
         private void loadDisplayDeviceConfig() {
             // Load display device config
             final Context context = getOverlayContext();
@@ -591,7 +600,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 final DisplayAddress.Physical physicalAddress =
                         DisplayAddress.fromPhysicalDisplayId(mPhysicalDisplayId);
                 mInfo.address = physicalAddress;
-                mInfo.densityDpi = (int) (mStaticDisplayInfo.density * 160 + 0.5f);
+                mInfo.densityDpi = getLogicalDensity();
                 mInfo.xDpi = mActiveSfDisplayMode.xDpi;
                 mInfo.yDpi = mActiveSfDisplayMode.yDpi;
                 mInfo.deviceProductInfo = mStaticDisplayInfo.deviceProductInfo;
@@ -862,11 +871,20 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         public void setUserPreferredDisplayModeLocked(Display.Mode mode) {
             final int oldModeId = getPreferredModeId();
             mUserPreferredMode = mode;
+            if (mode != null && (mode.isRefreshRateSet() ^ mode.isResolutionSet())) {
+                mUserPreferredMode = findMode(mode.getPhysicalWidth(),
+                        mode.getPhysicalHeight(), mode.getRefreshRate());
+            }
             mUserPreferredModeId = findUserPreferredModeIdLocked(mode);
 
             if (oldModeId != getPreferredModeId()) {
                 updateDeviceInfoLocked();
             }
+        }
+
+        @Override
+        public Display.Mode getUserPreferredDisplayModeLocked() {
+            return mUserPreferredMode;
         }
 
         @Override
@@ -1053,7 +1071,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             for (int i = 0; i < mSupportedModes.size(); i++) {
                 pw.println("  " + mSupportedModes.valueAt(i));
             }
-            pw.println("mSupportedColorModes=" + mSupportedColorModes.toString());
+            pw.println("mSupportedColorModes=" + mSupportedColorModes);
             pw.println("mDisplayDeviceConfig=" + mDisplayDeviceConfig);
         }
 
@@ -1075,6 +1093,18 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 }
             }
             return matchingModeId;
+        }
+
+       // Returns a mode with resolution (width, height) and/or refreshRate. If any one of the
+       // resolution or refresh-rate is valid, a mode having the valid parameters is returned.
+        private Display.Mode findMode(int width, int height, float refreshRate) {
+            for (int i = 0; i < mSupportedModes.size(); i++) {
+                Display.Mode supportedMode = mSupportedModes.valueAt(i).mMode;
+                if (supportedMode.matchesIfValid(width, height, refreshRate)) {
+                    return supportedMode;
+                }
+            }
+            return null;
         }
 
         private int findUserPreferredModeIdLocked(Display.Mode userPreferredMode) {

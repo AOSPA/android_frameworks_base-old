@@ -20,7 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 
 import com.android.wm.shell.common.annotations.ExternalThread;
-import com.android.wm.shell.common.split.SplitLayout.SplitPosition;
+import com.android.wm.shell.common.split.SplitScreenConstants.SplitPosition;
 
 import java.util.concurrent.Executor;
 
@@ -76,16 +76,13 @@ public interface SplitScreen {
     }
 
     /**
-     * Called when the keyguard occluded state changes.
-     * @param occluded Indicates if the keyguard is now occluded.
-     */
-    void onKeyguardOccludedChanged(boolean occluded);
-
-    /**
      * Called when the visibility of the keyguard changes.
      * @param showing Indicates if the keyguard is now visible.
      */
     void onKeyguardVisibilityChanged(boolean showing);
+
+    /** Called when device waking up finished. */
+    void onFinishedWakingUp();
 
     /** Get a string representation of a stage type */
     static String stageTypeToString(@StageType int stage) {

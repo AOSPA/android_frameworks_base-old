@@ -33,7 +33,6 @@ import android.app.admin.DevicePolicyManager;
 import android.app.trust.TrustManager;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
-import android.os.RemoteException;
 import android.telephony.TelephonyManager;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
@@ -41,10 +40,11 @@ import android.testing.TestableLooper.RunWithLooper;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.internal.policy.IKeyguardDrawnCallback;
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardDisplayManager;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.mediator.ScreenOnCoordinator;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollectorFake;
@@ -53,25 +53,21 @@ import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.DozeParameters;
+import com.android.systemui.statusbar.phone.ScreenOffAnimationController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
-import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
-import com.android.systemui.unfold.SysUIUnfoldComponent;
+import com.android.systemui.unfold.FoldAodAnimationController;
 import com.android.systemui.unfold.UnfoldLightRevealOverlayAnimation;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.DeviceConfigProxyFake;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
 
-import java.util.Optional;
-import java.util.function.Function;
-
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -94,15 +90,15 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private @Mock NavigationModeController mNavigationModeController;
     private @Mock KeyguardDisplayManager mKeyguardDisplayManager;
     private @Mock DozeParameters mDozeParameters;
-    private @Mock Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent;
-    private @Mock Optional<UnfoldLightRevealOverlayAnimation> mUnfoldAnimationOptional;
-    private @Mock UnfoldLightRevealOverlayAnimation mUnfoldAnimation;
     private @Mock SysuiStatusBarStateController mStatusBarStateController;
     private @Mock KeyguardStateController mKeyguardStateController;
     private @Mock NotificationShadeDepthController mNotificationShadeDepthController;
     private @Mock KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
-    private @Mock UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
-    private @Mock IKeyguardDrawnCallback mKeyguardDrawnCallback;
+    private @Mock ScreenOffAnimationController mScreenOffAnimationController;
+    private @Mock InteractionJankMonitor mInteractionJankMonitor;
+    private @Mock ScreenOnCoordinator mScreenOnCoordinator;
+    private @Mock FoldAodAnimationController mFoldAodAnimationController;
+    private @Mock UnfoldLightRevealOverlayAnimation mUnfoldAnimation;
     private DeviceConfigProxy mDeviceConfig = new DeviceConfigProxyFake();
     private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
 
@@ -115,37 +111,10 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
 
         when(mLockPatternUtils.getDevicePolicyManager()).thenReturn(mDevicePolicyManager);
         when(mPowerManager.newWakeLock(anyInt(), any())).thenReturn(mock(WakeLock.class));
-        when(mSysUIUnfoldComponent.map(
-                ArgumentMatchers.<Function<SysUIUnfoldComponent, UnfoldLightRevealOverlayAnimation>>
-                        any()))
-            .thenReturn(mUnfoldAnimationOptional);
-        when(mUnfoldAnimationOptional.isPresent()).thenReturn(true);
-        when(mUnfoldAnimationOptional.get()).thenReturn(mUnfoldAnimation);
+        when(mInteractionJankMonitor.begin(any(), anyInt())).thenReturn(true);
+        when(mInteractionJankMonitor.end(anyInt())).thenReturn(true);
 
-        mViewMediator = new KeyguardViewMediator(
-                mContext,
-                mFalsingCollector,
-                mLockPatternUtils,
-                mBroadcastDispatcher,
-                () -> mStatusBarKeyguardViewManager,
-                mDismissCallbackRegistry,
-                mUpdateMonitor,
-                mDumpManager,
-                mUiBgExecutor,
-                mPowerManager,
-                mTrustManager,
-                mUserSwitcherController,
-                mDeviceConfig,
-                mNavigationModeController,
-                mKeyguardDisplayManager,
-                mDozeParameters,
-                mSysUIUnfoldComponent,
-                mStatusBarStateController,
-                mKeyguardStateController,
-                () -> mKeyguardUnlockAnimationController,
-                mUnlockedScreenOffAnimationController,
-                () -> mNotificationShadeDepthController);
-        mViewMediator.start();
+        createAndStartViewMediator();
     }
 
     @Test
@@ -168,33 +137,9 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     }
 
     @Test
-    @TestableLooper.RunWithLooper(setAsMainLooper = true)
-    public void testUnfoldTransitionEnabledDrawnTasksReady_onScreenTurningOn_callsDrawnCallback()
-            throws RemoteException {
-        mViewMediator.onScreenTurningOn(mKeyguardDrawnCallback);
-        TestableLooper.get(this).processAllMessages();
-        onUnfoldOverlayReady();
-
-        // Should be called when both unfold overlay and keyguard drawn ready
-        verify(mKeyguardDrawnCallback).onDrawn();
-    }
-
-    @Test
-    @TestableLooper.RunWithLooper(setAsMainLooper = true)
-    public void testUnfoldTransitionDisabledDrawnTasksReady_onScreenTurningOn_callsDrawnCallback()
-            throws RemoteException {
-        when(mUnfoldAnimationOptional.isPresent()).thenReturn(false);
-
-        mViewMediator.onScreenTurningOn(mKeyguardDrawnCallback);
-        TestableLooper.get(this).processAllMessages();
-
-        // Should be called when only keyguard drawn
-        verify(mKeyguardDrawnCallback).onDrawn();
-    }
-
-    @Test
     public void testIsAnimatingScreenOff() {
         when(mDozeParameters.shouldControlUnlockedScreenOff()).thenReturn(true);
+        when(mDozeParameters.shouldAnimateDozingChange()).thenReturn(true);
 
         mViewMediator.onFinishedGoingToSleep(OFF_BECAUSE_OF_USER, false);
         mViewMediator.setDozing(true);
@@ -213,5 +158,40 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
         verify(mUnfoldAnimation).onScreenTurningOn(overlayReadyCaptor.capture());
         overlayReadyCaptor.getValue().run();
         TestableLooper.get(this).processAllMessages();
+    }
+
+    private void onFoldAodReady() {
+        ArgumentCaptor<Runnable> ready = ArgumentCaptor.forClass(Runnable.class);
+        verify(mFoldAodAnimationController).onScreenTurningOn(ready.capture());
+        ready.getValue().run();
+        TestableLooper.get(this).processAllMessages();
+    }
+
+    private void createAndStartViewMediator() {
+        mViewMediator = new KeyguardViewMediator(
+                mContext,
+                mFalsingCollector,
+                mLockPatternUtils,
+                mBroadcastDispatcher,
+                () -> mStatusBarKeyguardViewManager,
+                mDismissCallbackRegistry,
+                mUpdateMonitor,
+                mDumpManager,
+                mUiBgExecutor,
+                mPowerManager,
+                mTrustManager,
+                mUserSwitcherController,
+                mDeviceConfig,
+                mNavigationModeController,
+                mKeyguardDisplayManager,
+                mDozeParameters,
+                mStatusBarStateController,
+                mKeyguardStateController,
+                () -> mKeyguardUnlockAnimationController,
+                mScreenOffAnimationController,
+                () -> mNotificationShadeDepthController,
+                mScreenOnCoordinator,
+                mInteractionJankMonitor);
+        mViewMediator.start();
     }
 }

@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Թույլ է տալիս հավելվածին փոփոխել Android TV սարքի զանգերի մատյանը, այդ թվում՝ մուտքային և ելքային զանգերի մասին տվյալները: Վնասարար հավելվածները կարող են սա օգտագործել՝ ձեր զանգերի մատյանը ջնջելու կամ փոփոխելու համար:"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Թույլ է տալիս հավելվածին փոփոխել ձեր հեռախոսի զանգերի մատյանը, այդ թվում` մուտքային և ելքային զանգերի մասին տվյալները: Վնասարար հավելվածները կարող են սա օգտագործել` ձեր զանգերի մատյանը ջնջելու կամ փոփոխելու համար:"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"օգտագործել մարմնի սենսորները (օրինակ՝ սրտի կծկումների հաճախականության չափիչ)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Հավելվածին թույլ է տալիս մուտք ունենալ սենսորների տվյալներին, որոնք վերահսկում են ձեր ֆիզիկական վիճակը, օրինակ՝ ձեր սրտի զարկերը:"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Մարմնի սենսորների տվյալների (օրինակ՝ սրտի զարկերի հաճախականության, ջերմաստիճանի, արյան մեջ թթվածնի տոկոսային պարունակության ցուցանիշների) օգտագործման թույլտվություն"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"ֆոնային ռեժիմում մարմնի սենսորների տվյալների օգտագործման թույլտվություն"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Ֆոնային ռեժիմում մարմնի սենսորների տվյալների (օրինակ՝ սրտի զարկերի հաճախականության, ջերմաստիճանի, արյան մեջ թթվածնի տոկոսային պարունակության ցուցանիշների) օգտագործման թույլտվություն"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Կարդալ օրացույցի միջոցառումները և տվյալները"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Այս հավելվածը կարող է կարդալ օրացույցի՝ ձեր պլանշետում պահված բոլոր միջոցառումները, ինչպես նաև հրապարակել կամ պահել ձեր օրացույցի տվյալները:"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Այս հավելվածը կարող է կարդալ օրացույցի՝ ձեր Android TV սարքում պահված բոլոր միջոցառումները, ինչպես նաև հրապարակել կամ պահել ձեր օրացույցի տվյալները:"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Թույլ է տալիս հավելվածին IMS ծառայության միջոցով կատարել զանգեր՝ առանց ձեր միջամտության:"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"կարդալ հեռախոսի կարգավիճակը և ինքնությունը"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Թույլ է տալիս հավելվածին օգտագործել սարքի հեռախոսային գործիքները: Այս թույլտվությունը հավելվածին հնարավորություն է տալիս որոշել հեռախոսահամարը և սարքի ID-ները, արդյոք զանգը ակտիվ է և միացված զանգի հեռակա հեռախոսահամարը:"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"Կարդալ հիմնական հեռախոսային գործառույթների կարգավիճակը և նույնականացնող տվյալներ"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Հավելվածին հասանելի է դարձնում սարքի հիմնական հեռախոսային գործառույթները:"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"զանգերն ուղարկել համակարգի միջոցով"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Հավելվածին թույլ է տալիս իր զանգերն ուղարկել համակարգի միջոցով՝ կապի որակը բարձրացնելու նպատակով։"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"Զանգերի դիտում և վերահսկում համակարգի միջոցով"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Հպեք՝ ձեր դեմքի նմուշը ջնջելու համար, այնուհետև նորից ավելացրեք այն:"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Կարգավորեք դեմքով ապակողպումը"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Ապակողպելու համար պարզապես նայեք հեռախոսին"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Դեմքով ապակողպումն օգտագործելու համար անցեք Կարգավորումներ &gt; Գաղտնիություն և տրամադրեք "<b>"տեսախցիկն օգտագործելու թույլտվություն"</b>"։"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Կարգավորեք ապակողպելու այլ եղանակներ"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Հպեք՝ մատնահետք ավելացնելու համար"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Մատնահետքով ապակողպում"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Թույլ է տալիս հավելվածին փոփոխել «Չանհանգստացնել» գործառույթի կազմաձևումը:"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"թույլտվությունների մասին տվյալների հասանելիություն"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Հավելվածին հասանելի կդառնան թույլտվությունների մասին տվյալները։ Այս թույլտվությունն անհրաժեշտ չէ սովորական հավելվածներին։"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"սկսել թույլտվությունների հետ գործողությունների դիտումը"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Թույլ է տալիս դիտել թույլտվությունների հետ գործողությունները։ Սովորական հավելվածների համար երբևէ չպետք է անհրաժեշտ լինի։"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"հավելվածի գործառույթների դիտում"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Թույլ է տալիս դիտել հավելվածի գործառույթների մասին տեղեկությունները։"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"օգտագործել սենսորների տվյալները բարձր հաճախականության վրա"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Վերահսկել էկրանի ապակողպման փորձերը"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Վերահսկել սխալ գաղտնաբառերի թիվը, որոնք մուտքագրվել են էկրանն ապակողպելիս, և կողպել պլանշետը կամ ջնջել պլանշետի բոլոր տվյալները, եթե մուտքագրվել են չափից շատ սխալ գաղտնաբառեր:"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Գրանցել էկրանի ապակողպման համար մուտքագրվող սխալ գաղտնաբառերի թիվը և կողպել Android TV սարքը կամ ջնջել սարքի բոլոր տվյալները՝ չափից ավելի շատ սխալ գաղտնաբառեր մուտքագրելու դեպքում:"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Վերահսկել սխալ գաղտնաբառերի թիվը, որոնք մուտքագրվել են էկրանը ապակողպելիս, և կողպել տեղեկատվաժամանցային համակարգը կամ ջնջել բոլոր տվյալները, եթե չափից ավելի սխալ գաղտնաբառեր են մուտքագրվել։"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Վերահսկել սխալ գաղտնաբառերի թիվը, որոնք մուտքագրվել են էկրանն ապակողպելիս, և կողպել հեռախոսը կամ ջնջել հեռախոսի բոլոր տվյալները, եթե մուտքագրվել են չափից շատ սխալ գաղտնաբառեր:"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Կառավարել էկրանն ապակողպելիս մուտքագրվող սխալ գաղտնաբառերի թիվը և կողպել պլանշետը կամ ջնջել այս օգտատիրոջ բոլոր տվյալները չափից ավելի սխալ գաղտնաբառեր մուտքագրելու դեպքում:"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Գրանցել էկրանի ապակողպման համար մուտքագրվող սխալ գաղտնաբառերի թիվը և կողպել Android TV սարքը կամ ջնջել այս օգտատիրոջ բոլոր տվյալները՝ չափից ավելի շատ սխալ գաղտնաբառեր մուտքագրելու դեպքում:"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Վերահսկել սխալ գաղտնաբառերի թիվը, որոնք մուտքագրվել են էկրանը ապակողպելիս, և կողպել տեղեկատվաժամանցային համակարգը կամ ջնջել այս պրոֆիլի բոլոր տվյալները, եթե չափից ավելի սխալ գաղտնաբառեր են մուտքագրվել։"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Կառավարել էկրանն ապակողպելիս մուտքագրվող սխալ գաղտնաբառերի թիվը և կողպել հեռախոսը կամ ջնջել այս օգտատիրոջ բոլոր տվյալները չափից ավելի սխալ գաղտնաբառեր մուտքագրելու դեպքում:"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Փոխել էկրանի կողպման գաղտնաբառը"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Փոխել էկրանի կողպման գաղտնաբառը:"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Ջնջել բոլոր տվյալները"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Ջնջել պլանշետի տվյալներն առանց նախազգուշացման` կատարելով գործարանային տվյալների վերակայում:"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Ջնջել Android TV սարքի տվյալներն առանց զգուշացման՝ վերականգնելով գործարանային կարգավորումները:"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Ջնջել տեղեկատվաժամանցային համակարգի տվյալները առանց զգուշացման՝ վերականգնելով գործարանային կարգավորումները։"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Ջնջել հեռախոսի տվյալներն առանց նախազգուշացման` կատարելով գործարանային տվյալների վերակայում:"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Ջնջել օգտատիրոջ տվյալները"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Պրոֆիլի տվյալների ջնջում"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Ջնջել օգտատիրոջ տվյալները"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Ջնջել այս օգտատիրոջ տվյալներն այս պլանշետում առանց նախազգուշացման:"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Ջնջել այս օգտատիրոջ տվյալներն Android TV սարքում առանց նախազգուշացման:"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Ջնջել տեղեկատվաժամանցային համակարգի այս պրոֆիլի տվյալները առանց զգուշացման։"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Ջնջել այս օգտատիրոջ տվյալներն այս հեռախոսում առանց նախազգուշացման:"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Կարգավորել սարքի համաշխարհային պրոքսին"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Կարգավորել, որ սարքի համընդհանուր պրոքսի-սերվերն օգտագործվի, երբ քաղաքականությունը միացված է: Միայն սարքի սեփականատերը կարող է կարգավորել համընդհանուր պրոքսի-սերվերը:"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> հավելվածը պատրաստվում է:"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Հավելվածները մեկնարկում են:"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Բեռնումն ավարտվում է:"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Անջատե՞լ էկրանը"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Մատնահետքը կարգավորելու ժամանակ դուք սեղմել եք սնուցման կոճակը։\n\nՍովորաբար դրա արդյունքում էկրանն անջատվում է։"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Անջատել"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Չեղարկել"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Շարունակե՞լ կարգավորումը"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Դուք սեղմել եք սնուցման կոճակը։ Սովորաբար դրա արդյունքում էկրանն անջատվում է։\n\nՄատնահետքը ավելացնելու համար թեթևակի հպեք կոճակին։"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Անջատել էկրանը"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Շարունակել գրանցումը"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Շարունակե՞լ մատնահետքի սկանավորումը"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Դուք սեղմել եք սնուցման կոճակը։ Սովորաբար դրա արդյունքում էկրանն անջատվում է։\n\nՄատնահետքը սկանավորելու համար թեթևակի հպեք կոճակին։"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Անջատել էկրանը"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Շարունակել"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g>-ն աշխատում է"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Հպեք՝ խաղին վերադառնալու համար"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Ընտրեք խաղ"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Հավելվածի հատուկ ծանուցում"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Թույլատրե՞լ <xliff:g id="APP">%1$s</xliff:g> հավելվածին <xliff:g id="ACCOUNT">%2$s</xliff:g> հաշվով նոր Օգտատեր ստեղծել (նման հաշվով Օգտատեր արդեն գոյություն ունի):"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Թույլատրե՞լ <xliff:g id="APP">%1$s</xliff:g> հավելվածին <xliff:g id="ACCOUNT">%2$s</xliff:g> հաշվով նոր Օգտատեր ստեղծել:"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Ավելացնել վերահսկվող օգտատեր"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Ավելացնել լեզու"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Նախընտրելի տարածաշրջան"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Մուտքագրեք լեզուն"</string>

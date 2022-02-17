@@ -453,7 +453,8 @@ public class TransactionParcelTests {
                 boolean b2, boolean b3, Configuration configuration,
                 CompatibilityInfo compatibilityInfo, Map map, Bundle bundle1, String s1,
                 AutofillOptions ao, ContentCaptureOptions co, long[] disableCompatChanges,
-                SharedMemory serializedSystemFontMap)
+                SharedMemory serializedSystemFontMap,
+                long startRequestedElapsedTime, long startRequestedUptime)
                 throws RemoteException {
         }
 
@@ -532,7 +533,7 @@ public class TransactionParcelTests {
         }
 
         @Override
-        public void scheduleCrash(String s, int i) throws RemoteException {
+        public void scheduleCrash(String s, int i, Bundle extras) throws RemoteException {
         }
 
         @Override

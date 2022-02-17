@@ -80,6 +80,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.TaskViewTransitions;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayChangeController;
 import com.android.wm.shell.common.DisplayController;
@@ -88,6 +89,8 @@ import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TaskStackListenerCallback;
 import com.android.wm.shell.common.TaskStackListenerImpl;
+import com.android.wm.shell.onehanded.OneHandedController;
+import com.android.wm.shell.onehanded.OneHandedTransitionCallback;
 import com.android.wm.shell.pip.PinnedStackListenerForwarder;
 
 import java.io.FileDescriptor;
@@ -97,6 +100,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -136,6 +140,7 @@ public class BubbleController {
     private final TaskStackListenerImpl mTaskStackListener;
     private final ShellTaskOrganizer mTaskOrganizer;
     private final DisplayController mDisplayController;
+    private final TaskViewTransitions mTaskViewTransitions;
     private final SyncTransactionQueue mSyncQueue;
 
     // Used to post to main UI thread
@@ -146,6 +151,7 @@ public class BubbleController {
     private BubbleData mBubbleData;
     @Nullable private BubbleStackView mStackView;
     private BubbleIconFactory mBubbleIconFactory;
+    private BubbleBadgeIconFactory mBubbleBadgeIconFactory;
     private BubblePositioner mBubblePositioner;
     private Bubbles.SysuiProxy mSysuiProxy;
 
@@ -196,6 +202,9 @@ public class BubbleController {
     /** True when user is in status bar unlock shade. */
     private boolean mIsStatusBarShade = true;
 
+    /** One handed mode controller to register transition listener. */
+    private Optional<OneHandedController> mOneHandedOptional;
+
     /**
      * Creates an instance of the BubbleController.
      */
@@ -210,8 +219,10 @@ public class BubbleController {
             UiEventLogger uiEventLogger,
             ShellTaskOrganizer organizer,
             DisplayController displayController,
+            Optional<OneHandedController> oneHandedOptional,
             ShellExecutor mainExecutor,
             Handler mainHandler,
+            TaskViewTransitions taskViewTransitions,
             SyncTransactionQueue syncQueue) {
         BubbleLogger logger = new BubbleLogger(uiEventLogger);
         BubblePositioner positioner = new BubblePositioner(context, windowManager);
@@ -219,8 +230,9 @@ public class BubbleController {
         return new BubbleController(context, data, synchronizer, floatingContentCoordinator,
                 new BubbleDataRepository(context, launcherApps, mainExecutor),
                 statusBarService, windowManager, windowManagerShellWrapper, launcherApps,
-                logger, taskStackListener, organizer, positioner, displayController, mainExecutor,
-                mainHandler, syncQueue);
+                logger, taskStackListener, organizer, positioner, displayController,
+                oneHandedOptional, mainExecutor, mainHandler, taskViewTransitions,
+                syncQueue);
     }
 
     /**
@@ -241,8 +253,10 @@ public class BubbleController {
             ShellTaskOrganizer organizer,
             BubblePositioner positioner,
             DisplayController displayController,
+            Optional<OneHandedController> oneHandedOptional,
             ShellExecutor mainExecutor,
             Handler mainHandler,
+            TaskViewTransitions taskViewTransitions,
             SyncTransactionQueue syncQueue) {
         mContext = context;
         mLauncherApps = launcherApps;
@@ -265,8 +279,30 @@ public class BubbleController {
         mBubbleData = data;
         mSavedBubbleKeysPerUser = new SparseSetArray<>();
         mBubbleIconFactory = new BubbleIconFactory(context);
+        mBubbleBadgeIconFactory = new BubbleBadgeIconFactory(context);
         mDisplayController = displayController;
+        mTaskViewTransitions = taskViewTransitions;
+        mOneHandedOptional = oneHandedOptional;
         mSyncQueue = syncQueue;
+    }
+
+    private void registerOneHandedState(OneHandedController oneHanded) {
+        oneHanded.registerTransitionCallback(
+                new OneHandedTransitionCallback() {
+                    @Override
+                    public void onStartFinished(Rect bounds) {
+                        if (mStackView != null) {
+                            mStackView.onVerticalOffsetChanged(bounds.top);
+                        }
+                    }
+
+                    @Override
+                    public void onStopFinished(Rect bounds) {
+                        if (mStackView != null) {
+                            mStackView.onVerticalOffsetChanged(bounds.top);
+                        }
+                    }
+                });
     }
 
     public void initialize() {
@@ -392,6 +428,8 @@ public class BubbleController {
                         }
                     }
                 });
+
+        mOneHandedOptional.ifPresent(this::registerOneHandedState);
     }
 
     @VisibleForTesting
@@ -464,6 +502,7 @@ public class BubbleController {
             }
             mStackView.updateStackPosition();
             mBubbleIconFactory = new BubbleIconFactory(mContext);
+            mBubbleBadgeIconFactory = new BubbleBadgeIconFactory(mContext);
             mStackView.onDisplaySizeChanged();
         }
         if (b.getBoolean(EXTRA_BUBBLE_OVERFLOW_OPENED, false)) {
@@ -568,6 +607,10 @@ public class BubbleController {
 
     SyncTransactionQueue getSyncTransactionQueue() {
         return mSyncQueue;
+    }
+
+    TaskViewTransitions getTaskViewTransitions() {
+        return mTaskViewTransitions;
     }
 
     /** Contains information to help position things on the screen.  */
@@ -738,13 +781,17 @@ public class BubbleController {
             mStackView.onThemeChanged();
         }
         mBubbleIconFactory = new BubbleIconFactory(mContext);
+        mBubbleBadgeIconFactory = new BubbleBadgeIconFactory(mContext);
+
         // Reload each bubble
-        for (Bubble b: mBubbleData.getBubbles()) {
+        for (Bubble b : mBubbleData.getBubbles()) {
             b.inflate(null /* callback */, mContext, this, mStackView, mBubbleIconFactory,
+                    mBubbleBadgeIconFactory,
                     false /* skipInflation */);
         }
-        for (Bubble b: mBubbleData.getOverflowBubbles()) {
+        for (Bubble b : mBubbleData.getOverflowBubbles()) {
             b.inflate(null /* callback */, mContext, this, mStackView, mBubbleIconFactory,
+                    mBubbleBadgeIconFactory,
                     false /* skipInflation */);
         }
     }
@@ -760,6 +807,7 @@ public class BubbleController {
                 mScreenBounds.set(newConfig.windowConfiguration.getBounds());
                 mBubbleData.onMaxBubblesChanged();
                 mBubbleIconFactory = new BubbleIconFactory(mContext);
+                mBubbleBadgeIconFactory = new BubbleBadgeIconFactory(mContext);
                 mStackView.onDisplaySizeChanged();
             }
             if (newConfig.fontScale != mFontScale) {
@@ -921,7 +969,8 @@ public class BubbleController {
                 }
                 bubble.inflate(
                         (b) -> mBubbleData.overflowBubble(Bubbles.DISMISS_RELOAD_FROM_DISK, bubble),
-                        mContext, this, mStackView, mBubbleIconFactory, true /* skipInflation */);
+                        mContext, this, mStackView, mBubbleIconFactory, mBubbleBadgeIconFactory,
+                        true /* skipInflation */);
             });
             return null;
         });
@@ -956,7 +1005,8 @@ public class BubbleController {
         ensureStackViewCreated();
         bubble.setInflateSynchronously(mInflateSynchronously);
         bubble.inflate(b -> mBubbleData.notificationEntryUpdated(b, suppressFlyout, showInShade),
-                mContext, this, mStackView, mBubbleIconFactory, false /* skipInflation */);
+                mContext, this, mStackView, mBubbleIconFactory, mBubbleBadgeIconFactory,
+                false /* skipInflation */);
     }
 
     /**
@@ -1279,6 +1329,7 @@ public class BubbleController {
      * Updates the visibility of the bubbles based on current state.
      * Does not un-bubble, just hides or un-hides.
      * Updates stack description for TalkBack focus.
+     * Updates bubbles' icon views clickable states
      */
     public void updateStack() {
         if (mStackView == null) {
@@ -1296,6 +1347,8 @@ public class BubbleController {
         }
 
         mStackView.updateContentDescription();
+
+        mStackView.updateBubblesAcessibillityStates();
     }
 
     @VisibleForTesting

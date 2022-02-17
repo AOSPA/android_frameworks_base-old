@@ -16,6 +16,10 @@
 
 package com.android.server.wm;
 
+import static android.app.TaskInfo.CAMERA_COMPAT_CONTROL_DISMISSED;
+import static android.app.TaskInfo.CAMERA_COMPAT_CONTROL_HIDDEN;
+import static android.app.TaskInfo.CAMERA_COMPAT_CONTROL_TREATMENT_APPLIED;
+import static android.app.TaskInfo.CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
@@ -39,6 +43,7 @@ import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.os.Process.NOBODY_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.InsetsState.ITYPE_IME;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -98,10 +103,12 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 
 import android.app.ActivityOptions;
+import android.app.ICompatCameraControlCallback;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.DestroyActivityItem;
@@ -128,6 +135,9 @@ import android.view.IRemoteAnimationFinishedCallback;
 import android.view.IRemoteAnimationRunner.Stub;
 import android.view.IWindowManager;
 import android.view.IWindowSession;
+import android.view.InsetsSource;
+import android.view.InsetsState;
+import android.view.InsetsVisibilities;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
 import android.view.Surface;
@@ -144,6 +154,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.invocation.InvocationOnMock;
 
 import java.util.ArrayList;
@@ -1778,11 +1789,6 @@ public class ActivityRecordTests extends WindowTestsBase {
                 anyInt() /* orientation */, anyInt() /* lastRotation */);
         // Set to visible so the activity can freeze the screen.
         activity.setVisibility(true);
-        // Update the display policy to make the screen fully turned on so the freeze is allowed
-        display.getDisplayPolicy().screenTurnedOn(null);
-        display.getDisplayPolicy().finishKeyguardDrawn();
-        display.getDisplayPolicy().finishWindowsDrawn();
-        display.getDisplayPolicy().finishScreenTurningOn();
 
         display.rotateInDifferentOrientationIfNeeded(activity);
         display.setFixedRotationLaunchingAppUnchecked(activity);
@@ -2308,17 +2314,15 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Set initial orientation and update.
         activity.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
-        mDisplayContent.updateOrientation(
-                mDisplayContent.getRequestedOverrideConfiguration(),
-                null /* freezeThisOneIfNeeded */, false /* forceUpdate */);
+        mDisplayContent.updateOrientation(null /* freezeThisOneIfNeeded */,
+                false /* forceUpdate */);
         assertEquals(SCREEN_ORIENTATION_LANDSCAPE, mDisplayContent.getLastOrientation());
         appWindow.mResizeReported = false;
 
         // Update the orientation to perform 180 degree rotation and check that resize was reported.
         activity.setOrientation(SCREEN_ORIENTATION_REVERSE_LANDSCAPE);
-        mDisplayContent.updateOrientation(
-                mDisplayContent.getRequestedOverrideConfiguration(),
-                null /* freezeThisOneIfNeeded */, false /* forceUpdate */);
+        mDisplayContent.updateOrientation(null /* freezeThisOneIfNeeded */,
+                false /* forceUpdate */);
         // In this test, DC will not get config update. Set the waiting flag to false.
         mDisplayContent.mWaitingForConfig = false;
         mWm.mRoot.performSurfacePlacement();
@@ -3029,6 +3033,85 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
     }
 
+    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @Test
+    public void testImeInsetsFrozenFlag_resetWhenReportedToBeImeInputTarget() {
+        final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
+
+        InsetsSource imeSource = new InsetsSource(ITYPE_IME);
+        app.getInsetsState().addSource(imeSource);
+        mDisplayContent.setImeLayeringTarget(app);
+        mDisplayContent.updateImeInputAndControlTarget(app);
+
+        InsetsState state = mDisplayContent.getInsetsPolicy().getInsetsForWindow(app);
+        assertFalse(state.getSource(ITYPE_IME).isVisible());
+        assertTrue(state.getSource(ITYPE_IME).getFrame().isEmpty());
+
+        // Simulate app is closing and expect IME insets is frozen.
+        mDisplayContent.mOpeningApps.clear();
+        app.mActivityRecord.commitVisibility(false, false);
+        app.mActivityRecord.onWindowsGone();
+        assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+
+        // Simulate app re-start input or turning screen off/on then unlocked by un-secure
+        // keyguard to back to the app, expect IME insets is not frozen
+        imeSource.setFrame(new Rect(100, 400, 500, 500));
+        app.getInsetsState().addSource(imeSource);
+        app.getInsetsState().setSourceVisible(ITYPE_IME, true);
+        mDisplayContent.updateImeInputAndControlTarget(app);
+        assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+
+        // Verify when IME is visible and the app can receive the right IME insets from policy.
+        makeWindowVisibleAndDrawn(app, mImeWindow);
+        state = mDisplayContent.getInsetsPolicy().getInsetsForWindow(app);
+        assertTrue(state.getSource(ITYPE_IME).isVisible());
+        assertEquals(state.getSource(ITYPE_IME).getFrame(), imeSource.getFrame());
+    }
+
+    @UseTestDisplay(addWindows = {W_ACTIVITY, W_INPUT_METHOD})
+    @Test
+    public void testImeInsetsFrozenFlag_noDispatchVisibleInsetsWhenAppNotRequest()
+            throws RemoteException {
+        final WindowState app1 = createWindow(null, TYPE_APPLICATION, "app1");
+        final WindowState app2 = createWindow(null, TYPE_APPLICATION, "app2");
+
+        mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_IME).setWindow(
+                mImeWindow, null, null);
+        mImeWindow.getControllableInsetProvider().setServerVisible(true);
+
+        // Simulate app2 is closing and let app1 is visible to be IME targets.
+        makeWindowVisibleAndDrawn(app1, mImeWindow);
+        mDisplayContent.setImeLayeringTarget(app1);
+        mDisplayContent.updateImeInputAndControlTarget(app1);
+        app2.mActivityRecord.commitVisibility(false, false);
+
+        // app1 requests IME visible.
+        final InsetsVisibilities requestedVisibilities = new InsetsVisibilities();
+        requestedVisibilities.setVisibility(ITYPE_IME, true);
+        app1.setRequestedVisibilities(requestedVisibilities);
+        mDisplayContent.getInsetsStateController().onInsetsModified(app1);
+
+        // Verify app1's IME insets is visible and app2's IME insets frozen flag set.
+        assertTrue(app1.getInsetsState().peekSource(ITYPE_IME).isVisible());
+        assertTrue(app2.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+
+        // Simulate switching to app2 to make it visible to be IME targets.
+        makeWindowVisibleAndDrawn(app2);
+        spyOn(app2);
+        spyOn(app2.mClient);
+        ArgumentCaptor<InsetsState> insetsStateCaptor = ArgumentCaptor.forClass(InsetsState.class);
+        doReturn(true).when(app2).isReadyToDispatchInsetsState();
+        mDisplayContent.setImeLayeringTarget(app2);
+        mDisplayContent.updateImeInputAndControlTarget(app2);
+
+        // Verify after unfreezing app2's IME insets state, we won't dispatch visible IME insets
+        // to client if the app didn't request IME visible.
+        assertFalse(app2.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+        verify(app2.mClient, atLeastOnce()).insetsChanged(insetsStateCaptor.capture(), anyBoolean(),
+                anyBoolean());
+        assertFalse(insetsStateCaptor.getAllValues().get(0).peekSource(ITYPE_IME).isVisible());
+    }
+
     @Test
     public void testInClosingAnimation_doNotHideSurface() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
@@ -3049,6 +3132,188 @@ public class ActivityRecordTests extends WindowTestsBase {
         // Ensure onAnimationFinished will callback when the closing animation is finished.
         verify(app.mActivityRecord).onAnimationFinished(eq(ANIMATION_TYPE_APP_TRANSITION),
                 eq(null));
+    }
+
+    @Test
+    public void testUpdateCameraCompatState_flagIsEnabled_controlStateIsUpdated() {
+        final ActivityRecord activity = createActivityWithTask();
+        // Mock a flag being enabled.
+        doReturn(true).when(activity).isCameraCompatControlEnabled();
+
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ false, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED);
+
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_APPLIED);
+
+        activity.updateCameraCompatState(/* showControl */ false,
+                /* transformationApplied */ false, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_HIDDEN);
+
+        activity.updateCameraCompatState(/* showControl */ false,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_HIDDEN);
+    }
+
+    @Test
+    public void testUpdateCameraCompatState_flagIsDisabled_controlStateIsHidden() {
+        final ActivityRecord activity = createActivityWithTask();
+        // Mock a flag being disabled.
+        doReturn(false).when(activity).isCameraCompatControlEnabled();
+
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ false, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_HIDDEN);
+
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_HIDDEN);
+    }
+
+    @Test
+    public void testUpdateCameraCompatStateFromUser_clickedOnDismiss() throws RemoteException {
+        final ActivityRecord activity = createActivityWithTask();
+        // Mock a flag being enabled.
+        doReturn(true).when(activity).isCameraCompatControlEnabled();
+
+        ICompatCameraControlCallback callback = getCompatCameraControlCallback();
+        spyOn(callback);
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ false, callback);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED);
+
+        // Clicking on the button.
+        activity.updateCameraCompatStateFromUser(CAMERA_COMPAT_CONTROL_DISMISSED);
+
+        verify(callback, never()).revertCameraCompatTreatment();
+        verify(callback, never()).applyCameraCompatTreatment();
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_DISMISSED);
+
+        // All following updates are ignored.
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ false, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_DISMISSED);
+
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_DISMISSED);
+
+        activity.updateCameraCompatState(/* showControl */ false,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_DISMISSED);
+    }
+
+    @Test
+    public void testUpdateCameraCompatStateFromUser_clickedOnApplyTreatment()
+            throws RemoteException {
+        final ActivityRecord activity = createActivityWithTask();
+        // Mock a flag being enabled.
+        doReturn(true).when(activity).isCameraCompatControlEnabled();
+
+        ICompatCameraControlCallback callback = getCompatCameraControlCallback();
+        spyOn(callback);
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ false, callback);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED);
+
+        // Clicking on the button.
+        activity.updateCameraCompatStateFromUser(CAMERA_COMPAT_CONTROL_TREATMENT_APPLIED);
+
+        verify(callback, never()).revertCameraCompatTreatment();
+        verify(callback).applyCameraCompatTreatment();
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_APPLIED);
+
+        // Request from the client to show the control are ignored respecting the user choice.
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ false, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_APPLIED);
+
+        // Request from the client to hide the control is respected.
+        activity.updateCameraCompatState(/* showControl */ false,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_HIDDEN);
+
+        // Request from the client to show the control again is respected.
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ false, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED);
+    }
+
+    @Test
+    public void testUpdateCameraCompatStateFromUser_clickedOnRevertTreatment()
+            throws RemoteException {
+        final ActivityRecord activity = createActivityWithTask();
+        // Mock a flag being enabled.
+        doReturn(true).when(activity).isCameraCompatControlEnabled();
+
+        ICompatCameraControlCallback callback = getCompatCameraControlCallback();
+        spyOn(callback);
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ true, callback);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_APPLIED);
+
+        // Clicking on the button.
+        activity.updateCameraCompatStateFromUser(CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED);
+
+        verify(callback).revertCameraCompatTreatment();
+        verify(callback, never()).applyCameraCompatTreatment();
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED);
+
+        // Request from the client to show the control are ignored respecting the user choice.
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_SUGGESTED);
+
+        // Request from the client to hide the control is respected.
+        activity.updateCameraCompatState(/* showControl */ false,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(), CAMERA_COMPAT_CONTROL_HIDDEN);
+
+        // Request from the client to show the control again is respected.
+        activity.updateCameraCompatState(/* showControl */ true,
+                /* transformationApplied */ true, /* callback */ null);
+
+        assertEquals(activity.getCameraCompatControlState(),
+                CAMERA_COMPAT_CONTROL_TREATMENT_APPLIED);
+    }
+
+    private ICompatCameraControlCallback getCompatCameraControlCallback() {
+        return new ICompatCameraControlCallback.Stub() {
+            @Override
+            public void applyCameraCompatTreatment() {}
+
+            @Override
+            public void revertCameraCompatTreatment() {}
+        };
     }
 
     private void assertHasStartingWindow(ActivityRecord atoken) {

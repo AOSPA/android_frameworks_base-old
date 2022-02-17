@@ -16,16 +16,35 @@
 
 package com.android.systemui.media.dagger;
 
+import android.app.Service;
+import android.content.Context;
+import android.view.WindowManager;
+
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.media.MediaHierarchyManager;
 import com.android.systemui.media.MediaHost;
 import com.android.systemui.media.MediaHostStatesManager;
+import com.android.systemui.media.taptotransfer.MediaTttCommandLineHelper;
+import com.android.systemui.media.taptotransfer.MediaTttFlags;
+import com.android.systemui.media.taptotransfer.receiver.MediaTttChipControllerReceiver;
+import com.android.systemui.media.taptotransfer.sender.MediaTttChipControllerSender;
+import com.android.systemui.media.taptotransfer.sender.MediaTttSenderService;
+import com.android.systemui.statusbar.commandline.CommandRegistry;
+import com.android.systemui.util.concurrency.DelayableExecutor;
+
+import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import javax.inject.Named;
 
+import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
+import dagger.multibindings.ClassKey;
+import dagger.multibindings.IntoMap;
 
 /** Dagger module for the media package. */
 @Module
@@ -63,4 +82,61 @@ public interface MediaModule {
             MediaHostStatesManager statesManager) {
         return new MediaHost(stateHolder, hierarchyManager, dataManager, statesManager);
     }
+
+    /** */
+    @Provides
+    @SysUISingleton
+    static Optional<MediaTttChipControllerSender> providesMediaTttChipControllerSender(
+            MediaTttFlags mediaTttFlags,
+            Context context,
+            WindowManager windowManager,
+            @Main Executor mainExecutor,
+            @Background Executor backgroundExecutor) {
+        if (!mediaTttFlags.isMediaTttEnabled()) {
+            return Optional.empty();
+        }
+        return Optional.of(new MediaTttChipControllerSender(
+                context, windowManager, mainExecutor, backgroundExecutor));
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
+    static Optional<MediaTttChipControllerReceiver> providesMediaTttChipControllerReceiver(
+            MediaTttFlags mediaTttFlags,
+            Context context,
+            WindowManager windowManager) {
+        if (!mediaTttFlags.isMediaTttEnabled()) {
+            return Optional.empty();
+        }
+        return Optional.of(new MediaTttChipControllerReceiver(context, windowManager));
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
+    static Optional<MediaTttCommandLineHelper> providesMediaTttCommandLineHelper(
+            MediaTttFlags mediaTttFlags,
+            CommandRegistry commandRegistry,
+            Context context,
+            MediaTttChipControllerSender mediaTttChipControllerSender,
+            MediaTttChipControllerReceiver mediaTttChipControllerReceiver,
+            @Main DelayableExecutor mainExecutor) {
+        if (!mediaTttFlags.isMediaTttEnabled()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+                new MediaTttCommandLineHelper(
+                        commandRegistry,
+                        context,
+                        mediaTttChipControllerSender,
+                        mediaTttChipControllerReceiver,
+                        mainExecutor));
+    }
+
+    /** Inject into MediaTttSenderService. */
+    @Binds
+    @IntoMap
+    @ClassKey(MediaTttSenderService.class)
+    Service bindMediaTttSenderService(MediaTttSenderService service);
 }

@@ -149,14 +149,21 @@ private:
     void getRestartEvent(jobjectArray& arr, const int size, const DemuxFilterEvent& event);
 };
 
+struct JTuner;
 struct FrontendClientCallbackImpl : public FrontendClientCallback {
-    FrontendClientCallbackImpl(jweak tunerObj);
+    FrontendClientCallbackImpl(JTuner*, jweak);
     ~FrontendClientCallbackImpl();
     virtual void onEvent(FrontendEventType frontendEventType);
     virtual void onScanMessage(
             FrontendScanMessageType type, const FrontendScanMessage& message);
 
-    jweak mObject;
+    void executeOnScanMessage(JNIEnv *env, const jclass& clazz, const jobject& frontend,
+                              FrontendScanMessageType type,
+                              const FrontendScanMessage& message);
+    void addCallbackListener(JTuner*, jweak obj);
+    void removeCallbackListener(JTuner* jtuner);
+    std::unordered_map<JTuner*, jweak> mListenersMap;
+    std::mutex mMutex;
 };
 
 struct JTuner : public RefBase {
@@ -171,6 +178,10 @@ struct JTuner : public RefBase {
     jobject getFrontendIds();
     jobject openFrontendByHandle(int feHandle);
     int shareFrontend(int feId);
+    int unshareFrontend();
+    void registerFeCbListener(JTuner* jtuner);
+    void unregisterFeCbListener(JTuner* jtuner);
+    void updateFrontend(JTuner* jtuner);
     jint closeFrontendById(int id);
     jobject getFrontendInfo(int id);
     int tune(const FrontendSettings& settings);
@@ -191,6 +202,11 @@ struct JTuner : public RefBase {
     jint close();
     jint closeFrontend();
     jint closeDemux();
+    Result getFrontendHardwareInfo(string& info);
+    jint setMaxNumberOfFrontends(int32_t frontendType, int32_t maxNumber);
+    int32_t getMaxNumberOfFrontends(int32_t frontendType);
+
+    jweak getObject();
 
 protected:
     virtual ~JTuner();
@@ -200,6 +216,7 @@ private:
     jweak mObject;
     static sp<TunerClient> mTunerClient;
     sp<FrontendClient> mFeClient;
+    sp<FrontendClientCallbackImpl> mFeClientCb;
     int mFeId;
     int mSharedFeId;
     sp<LnbClient> mLnbClient;

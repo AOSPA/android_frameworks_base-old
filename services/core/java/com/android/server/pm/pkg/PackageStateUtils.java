@@ -20,14 +20,15 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.pm.ComponentInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.parsing.component.ParsedMainComponent;
-import android.content.pm.pkg.PackageUserStateUtils;
+import com.android.server.pm.pkg.component.ParsedMainComponent;
+
+import android.util.SparseArray;
 
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 public class PackageStateUtils {
 
-    public static boolean isMatch(PackageState packageState, int flags) {
+    public static boolean isMatch(PackageState packageState, long flags) {
         if ((flags & PackageManager.MATCH_SYSTEM_ONLY) != 0) {
             return packageState.isSystem();
         }
@@ -54,7 +55,7 @@ public class PackageStateUtils {
     }
 
     public static boolean isEnabledAndMatches(@Nullable PackageStateInternal packageState,
-            ComponentInfo componentInfo, int flags, int userId) {
+            ComponentInfo componentInfo, long flags, int userId) {
         if (packageState == null) return false;
 
         final PackageUserState userState = packageState.getUserStateOrDefault(userId);
@@ -62,7 +63,7 @@ public class PackageStateUtils {
     }
 
     public static boolean isEnabledAndMatches(@Nullable PackageStateInternal packageState,
-            @NonNull ParsedMainComponent component, int flags, int userId) {
+            @NonNull ParsedMainComponent component, long flags, int userId) {
         if (packageState == null) {
             return false;
         }
@@ -74,5 +75,24 @@ public class PackageStateUtils {
         final PackageUserState userState = packageState.getUserStateOrDefault(userId);
         return PackageUserStateUtils.isMatch(userState, packageState.isSystem(),
                 pkg.isEnabled(), component, flags);
+    }
+
+    /**
+     * Return the earliest non-zero first-install timestamp of an installed app among all the users,
+     * unless none of the users have a non-zero first-install timestamp. In that case, return 0.
+     */
+    public static long getEarliestFirstInstallTime(
+            @Nullable SparseArray<? extends PackageUserStateInternal> userStatesInternal) {
+        if (userStatesInternal == null || userStatesInternal.size() == 0) {
+            return 0;
+        }
+        long earliestFirstInstallTime = Long.MAX_VALUE;
+        for (int i = 0; i < userStatesInternal.size(); i++) {
+            final long firstInstallTime = userStatesInternal.valueAt(i).getFirstInstallTime();
+            if (firstInstallTime != 0 && firstInstallTime < earliestFirstInstallTime) {
+                earliestFirstInstallTime = firstInstallTime;
+            }
+        }
+        return earliestFirstInstallTime == Long.MAX_VALUE ? 0 : earliestFirstInstallTime;
     }
 }

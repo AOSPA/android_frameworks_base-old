@@ -26,8 +26,6 @@ import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
 import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
-import android.app.communal.CommunalManager;
-import android.app.communal.ICommunalManager;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
 import android.app.job.JobSchedulerFrameworkInitializer;
@@ -130,11 +128,14 @@ import android.media.tv.interactive.ITvIAppManager;
 import android.media.tv.interactive.TvIAppManager;
 import android.media.tv.tunerresourcemanager.ITunerResourceManager;
 import android.media.tv.tunerresourcemanager.TunerResourceManager;
+import android.nearby.NearbyFrameworkInitializer;
 import android.net.ConnectivityFrameworkInitializer;
+import android.net.ConnectivityFrameworkInitializerTiramisu;
 import android.net.EthernetManager;
 import android.net.IEthernetManager;
 import android.net.IIpSecService;
 import android.net.INetworkPolicyManager;
+import android.net.INetworkStatsService;
 import android.net.IPacProxyManager;
 import android.net.IVpnManager;
 import android.net.IpSecManager;
@@ -146,8 +147,6 @@ import android.net.TetheringManager;
 import android.net.VpnManager;
 import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
-import android.net.nsd.INsdManager;
-import android.net.nsd.NsdManager;
 import android.net.vcn.IVcnManagementService;
 import android.net.vcn.VcnManager;
 import android.net.wifi.WifiFrameworkInitializer;
@@ -196,14 +195,18 @@ import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
 import android.print.IPrintManager;
 import android.print.PrintManager;
+import android.safetycenter.SafetyCenterFrameworkInitializer;
 import android.scheduling.SchedulingFrameworkInitializer;
 import android.security.FileIntegrityManager;
 import android.security.IFileIntegrityService;
+import android.security.attestationverification.AttestationVerificationManager;
+import android.security.attestationverification.IAttestationVerificationManagerService;
 import android.service.oemlock.IOemLockService;
 import android.service.oemlock.OemLockManager;
 import android.service.persistentdata.IPersistentDataBlockService;
 import android.service.persistentdata.PersistentDataBlockManager;
 import android.service.vr.IVrManager;
+import android.supplementalprocess.SupplementalProcessFrameworkInitializer;
 import android.telecom.TelecomManager;
 import android.telephony.MmsManager;
 import android.telephony.TelephonyFrameworkInitializer;
@@ -224,6 +227,8 @@ import android.view.contentcapture.ContentCaptureManager;
 import android.view.contentcapture.IContentCaptureManager;
 import android.view.displayhash.DisplayHashManager;
 import android.view.inputmethod.InputMethodManager;
+import android.view.selectiontoolbar.ISelectionToolbarManager;
+import android.view.selectiontoolbar.SelectionToolbarManager;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textservice.TextServicesManager;
 import android.view.translation.ITranslationManager;
@@ -362,6 +367,15 @@ public final class SystemServiceRegistry {
             public TextClassificationManager createService(ContextImpl ctx) {
                 return new TextClassificationManager(ctx);
             }});
+
+        registerService(Context.SELECTION_TOOLBAR_SERVICE, SelectionToolbarManager.class,
+                new CachedServiceFetcher<SelectionToolbarManager>() {
+                    @Override
+                    public SelectionToolbarManager createService(ContextImpl ctx) {
+                        IBinder b = ServiceManager.getService(Context.SELECTION_TOOLBAR_SERVICE);
+                        return new SelectionToolbarManager(ctx.getOuterContext(),
+                                ISelectionToolbarManager.Stub.asInterface(b));
+                    }});
 
         registerService(Context.FONT_SERVICE, FontManager.class,
                 new CachedServiceFetcher<FontManager>() {
@@ -570,15 +584,6 @@ public final class SystemServiceRegistry {
                                     com.android.internal.R.style.Theme_DeviceDefault_Dialog,
                                     com.android.internal.R.style.Theme_DeviceDefault_Light_Dialog)),
                     ctx.mMainThread.getHandler());
-            }});
-
-        registerService(Context.NSD_SERVICE, NsdManager.class,
-                new CachedServiceFetcher<NsdManager>() {
-            @Override
-            public NsdManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getServiceOrThrow(Context.NSD_SERVICE);
-                INsdManager service = INsdManager.Stub.asInterface(b);
-                return new NsdManager(ctx.getOuterContext(), service);
             }});
 
         registerService(Context.PEOPLE_SERVICE, PeopleManager.class,
@@ -1008,7 +1013,11 @@ public final class SystemServiceRegistry {
                 new CachedServiceFetcher<NetworkStatsManager>() {
             @Override
             public NetworkStatsManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                return new NetworkStatsManager(ctx.getOuterContext());
+                // TODO: Replace with an initializer in the module, see
+                //  {@code ConnectivityFrameworkInitializer}.
+                final INetworkStatsService service = INetworkStatsService.Stub.asInterface(
+                        ServiceManager.getServiceOrThrow(Context.NETWORK_STATS_SERVICE));
+                return new NetworkStatsManager(ctx.getOuterContext(), service);
             }});
 
         registerService(Context.PERSISTENT_DATA_BLOCK_SERVICE, PersistentDataBlockManager.class,
@@ -1423,6 +1432,19 @@ public final class SystemServiceRegistry {
                         return new FileIntegrityManager(ctx.getOuterContext(),
                                 IFileIntegrityService.Stub.asInterface(b));
                     }});
+
+        registerService(Context.ATTESTATION_VERIFICATION_SERVICE,
+                AttestationVerificationManager.class,
+                new CachedServiceFetcher<AttestationVerificationManager>() {
+                    @Override
+                    public AttestationVerificationManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.ATTESTATION_VERIFICATION_SERVICE);
+                        return new AttestationVerificationManager(ctx.getOuterContext(),
+                                IAttestationVerificationManagerService.Stub.asInterface(b));
+                    }});
+
         //CHECKSTYLE:ON IndentationCheck
         registerService(Context.APP_INTEGRITY_SERVICE, AppIntegrityManager.class,
                 new CachedServiceFetcher<AppIntegrityManager>() {
@@ -1496,21 +1518,6 @@ public final class SystemServiceRegistry {
                     }
                 });
 
-        registerService(Context.COMMUNAL_MANAGER_SERVICE, CommunalManager.class,
-                new CachedServiceFetcher<CommunalManager>() {
-                    @Override
-                    public CommunalManager createService(ContextImpl ctx) {
-                        if (!ctx.getPackageManager().hasSystemFeature(
-                                PackageManager.FEATURE_COMMUNAL_MODE)) {
-                            return null;
-                        }
-                        IBinder iBinder =
-                                ServiceManager.getService(Context.COMMUNAL_MANAGER_SERVICE);
-                        return iBinder != null ? new CommunalManager(
-                                ICommunalManager.Stub.asInterface(iBinder)) : null;
-                    }
-                });
-
         sInitializing = true;
         try {
             // Note: the following functions need to be @SystemApis, once they become mainline
@@ -1527,7 +1534,11 @@ public final class SystemServiceRegistry {
             MediaFrameworkInitializer.registerServiceWrappers();
             RoleFrameworkInitializer.registerServiceWrappers();
             SchedulingFrameworkInitializer.registerServiceWrappers();
+            SupplementalProcessFrameworkInitializer.registerServiceWrappers();
             UwbFrameworkInitializer.registerServiceWrappers();
+            SafetyCenterFrameworkInitializer.registerServiceWrappers();
+            ConnectivityFrameworkInitializerTiramisu.registerServiceWrappers();
+            NearbyFrameworkInitializer.registerServiceWrappers();
         } finally {
             // If any of the above code throws, we're in a pretty bad shape and the process
             // will likely crash, but we'll reset it just in case there's an exception handler...

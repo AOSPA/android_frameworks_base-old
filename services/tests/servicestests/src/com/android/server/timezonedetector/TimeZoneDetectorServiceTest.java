@@ -60,12 +60,13 @@ public class TimeZoneDetectorServiceTest {
     private static final long ARBITRARY_ELAPSED_REALTIME_MILLIS = 1234L;
 
     private Context mMockContext;
-    private FakeTimeZoneDetectorStrategy mFakeTimeZoneDetectorStrategy;
 
     private TimeZoneDetectorService mTimeZoneDetectorService;
     private HandlerThread mHandlerThread;
     private TestHandler mTestHandler;
     private TestCallerIdentityInjector mTestCallerIdentityInjector;
+    private FakeServiceConfigAccessor mFakeServiceConfigAccessor;
+    private FakeTimeZoneDetectorStrategy mFakeTimeZoneDetectorStrategy;
 
 
     @Before
@@ -81,10 +82,11 @@ public class TimeZoneDetectorServiceTest {
         mTestCallerIdentityInjector.initializeCallingUserId(ARBITRARY_USER_ID);
 
         mFakeTimeZoneDetectorStrategy = new FakeTimeZoneDetectorStrategy();
+        mFakeServiceConfigAccessor = new FakeServiceConfigAccessor();
 
         mTimeZoneDetectorService = new TimeZoneDetectorService(
                 mMockContext, mTestHandler, mTestCallerIdentityInjector,
-                mFakeTimeZoneDetectorStrategy);
+                mFakeServiceConfigAccessor, mFakeTimeZoneDetectorStrategy);
     }
 
     @After
@@ -114,7 +116,7 @@ public class TimeZoneDetectorServiceTest {
 
         ConfigurationInternal configuration =
                 createConfigurationInternal(true /* autoDetectionEnabled*/);
-        mFakeTimeZoneDetectorStrategy.initializeConfiguration(configuration);
+        mFakeServiceConfigAccessor.initializeConfiguration(configuration);
 
         assertEquals(configuration.createCapabilitiesAndConfig(),
                 mTimeZoneDetectorService.getCapabilitiesAndConfig());
@@ -160,7 +162,7 @@ public class TimeZoneDetectorServiceTest {
     public void testListenerRegistrationAndCallbacks() throws Exception {
         ConfigurationInternal initialConfiguration =
                 createConfigurationInternal(false /* autoDetectionEnabled */);
-        mFakeTimeZoneDetectorStrategy.initializeConfiguration(initialConfiguration);
+        mFakeServiceConfigAccessor.initializeConfiguration(initialConfiguration);
 
         IBinder mockListenerBinder = mock(IBinder.class);
         ITimeZoneDetectorListener mockListener = mock(ITimeZoneDetectorListener.class);
@@ -187,6 +189,9 @@ public class TimeZoneDetectorServiceTest {
             TimeZoneConfiguration autoDetectEnabledConfiguration =
                     createTimeZoneConfiguration(true /* autoDetectionEnabled */);
             mTimeZoneDetectorService.updateConfiguration(autoDetectEnabledConfiguration);
+
+            // The configuration update notification is asynchronous.
+            mTestHandler.waitForMessagesToBeProcessed();
 
             verify(mMockContext).enforceCallingPermission(
                     eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
@@ -349,11 +354,15 @@ public class TimeZoneDetectorServiceTest {
         when(mMockContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP))
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
 
+        Dumpable dumpable = mock(Dumpable.class);
+        mTimeZoneDetectorService.addDumpable(dumpable);
+
         PrintWriter pw = new PrintWriter(new StringWriter());
         mTimeZoneDetectorService.dump(null, pw, null);
 
         verify(mMockContext).checkCallingOrSelfPermission(eq(android.Manifest.permission.DUMP));
         mFakeTimeZoneDetectorStrategy.verifyDumpCalled();
+        verify(dumpable).dump(any(), any());
     }
 
     private static TimeZoneConfiguration createTimeZoneConfiguration(boolean autoDetectionEnabled) {
@@ -369,10 +378,13 @@ public class TimeZoneDetectorServiceTest {
         return new ConfigurationInternal.Builder(ARBITRARY_USER_ID)
                 .setTelephonyDetectionFeatureSupported(true)
                 .setGeoDetectionFeatureSupported(true)
+                .setTelephonyFallbackSupported(false)
+                .setGeoDetectionRunInBackgroundEnabled(false)
+                .setEnhancedMetricsCollectionEnabled(false)
                 .setUserConfigAllowed(true)
-                .setAutoDetectionEnabled(autoDetectionEnabled)
-                .setLocationEnabled(geoDetectionEnabled)
-                .setGeoDetectionEnabled(geoDetectionEnabled)
+                .setAutoDetectionEnabledSetting(autoDetectionEnabled)
+                .setLocationEnabledSetting(geoDetectionEnabled)
+                .setGeoDetectionEnabledSetting(geoDetectionEnabled)
                 .build();
     }
 

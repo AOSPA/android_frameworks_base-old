@@ -22,8 +22,11 @@ import android.content.res.Configuration;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.IndentingPrintWriter;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
@@ -516,6 +519,67 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
         return mChangingPosition;
     }
 
+    /**
+     * Called when removing a view from its transient container, such as at the end of an animation.
+     * Generally, when operating on ExpandableView instances, this should be used rather than
+     * {@link ExpandableView#removeTransientView(View)} to ensure that the
+     * {@link #getTransientContainer() transient container} is correctly reset.
+     */
+    public void removeFromTransientContainer() {
+        final ViewGroup transientContainer = getTransientContainer();
+        if (transientContainer == null) {
+            return;
+        }
+        final ViewParent parent = getParent();
+        if (parent != transientContainer) {
+            Log.w(TAG, "Expandable view " + this
+                    + " has transient container " + transientContainer
+                    + " but different parent " + parent);
+            setTransientContainer(null);
+            return;
+        }
+        transientContainer.removeTransientView(this);
+        setTransientContainer(null);
+    }
+
+    /**
+     * Called before adding this view to a group, which would always throw an exception if this view
+     * has a different parent, so clean up the transient container and throw an exception if the
+     * parent isn't a transient container.  Provide as much detail as possible in the crash.
+     */
+    public void removeFromTransientContainerForAdditionTo(ViewGroup newParent) {
+        final ViewParent parent = getParent();
+        final ViewGroup transientContainer = getTransientContainer();
+        if (parent == null || parent == newParent) {
+            // If this view's current parent is null or the same as the new parent, the add will
+            // succeed, so just make sure the tracked transient container is in sync with the
+            // current parent.
+            if (transientContainer != null && transientContainer != parent) {
+                Log.w(TAG, "Expandable view " + this
+                        + " has transient container " + transientContainer
+                        + " but different parent" + parent);
+                setTransientContainer(null);
+            }
+            return;
+        }
+        if (transientContainer == null) {
+            throw new IllegalStateException("Can't add view " + this + " to container " + newParent
+                    + "; current parent " + parent + " is not a transient container");
+        }
+        if (transientContainer != parent) {
+            // Crash with details before addView() crashes without any; the view is being added
+            // to a different parent, and the transient container isn't the parent, so we can't
+            // even (safely) clean that up.
+            throw new IllegalStateException("Expandable view " + this
+                    + " has transient container " + transientContainer
+                    + " but different parent " + parent);
+        }
+        Log.w(TAG, "Removing view " + this + " from transient container "
+                + transientContainer + " in preparation for moving to parent " + newParent);
+        transientContainer.removeTransientView(this);
+        setTransientContainer(null);
+    }
+
     public void setTransientContainer(ViewGroup transientContainer) {
         mTransientContainer = transientContainer;
     }
@@ -743,15 +807,16 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     }
 
     @Override
-    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+    public void dump(FileDescriptor fd, PrintWriter pwOriginal, String[] args) {
+        IndentingPrintWriter pw = DumpUtilsKt.asIndenting(pwOriginal);
         pw.println(getClass().getSimpleName());
-        DumpUtilsKt.withIndenting(pw, ipw -> {
+        DumpUtilsKt.withIncreasedIndent(pw, () -> {
             ExpandableViewState viewState = getViewState();
             if (viewState == null) {
-                ipw.println("no viewState!!!");
+                pw.println("no viewState!!!");
             } else {
-                viewState.dump(fd, ipw, args);
-                ipw.println();
+                viewState.dump(fd, pw, args);
+                pw.println();
             }
         });
     }

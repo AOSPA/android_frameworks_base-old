@@ -16,10 +16,15 @@
 
 package com.android.internal.os;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import android.annotation.NonNull;
+import android.app.usage.NetworkStatsManager;
 import android.net.NetworkStats;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.SparseIntArray;
 
 import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidActiveTimeReader;
 import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidClusterTimeReader;
@@ -59,6 +64,9 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
         // A no-op handler.
         mHandler = new Handler(Looper.getMainLooper()) {
         };
+
+        mCpuUidFreqTimeReader = mock(KernelCpuUidTimeReader.KernelCpuUidFreqTimeReader.class);
+        when(mCpuUidFreqTimeReader.readFreqs(any())).thenReturn(new long[]{100, 200});
     }
 
     public void initMeasuredEnergyStats(String[] customBucketNames) {
@@ -110,7 +118,8 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
     }
 
     @Override
-    protected NetworkStats readNetworkStatsLocked(String[] ifaces) {
+    protected NetworkStats readNetworkStatsLocked(@NonNull NetworkStatsManager networkStatsManager,
+            String[] ifaces) {
         return mNetworkStats;
     }
 
@@ -178,15 +187,6 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
         return this;
     }
 
-    public MockBatteryStatsImpl setTrackingCpuByProcStateEnabled(boolean enabled) {
-        mConstants.TRACK_CPU_TIMES_BY_PROC_STATE = enabled;
-        return this;
-    }
-
-    public SparseIntArray getPendingUids() {
-        return mPendingUids;
-    }
-
     public int getAndClearExternalStatsSyncFlags() {
         final int flags = mExternalStatsSync.flags;
         mExternalStatsSync.flags = 0;
@@ -217,18 +217,6 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
         }
 
         @Override
-        public Future<?> scheduleReadProcStateCpuTimes(boolean onBattery,
-                boolean onBatteryScreenOff, long delayMillis) {
-            return null;
-        }
-
-        @Override
-        public Future<?> scheduleCopyFromAllUidsCpuTimes(
-                boolean onBattery, boolean onBatteryScreenOff) {
-            return null;
-        }
-
-        @Override
         public Future<?> scheduleSyncDueToScreenStateChange(int flag, boolean onBattery,
                 boolean onBatteryScreenOff, int screenState, int[] perDisplayScreenStates) {
             flags |= flag;
@@ -246,6 +234,11 @@ public class MockBatteryStatsImpl extends BatteryStatsImpl {
 
         @Override
         public Future<?> scheduleSyncDueToBatteryLevelChange(long delayMillis) {
+            return null;
+        }
+
+        @Override
+        public Future<?> scheduleSyncDueToProcessStateChange(long delayMillis) {
             return null;
         }
     }

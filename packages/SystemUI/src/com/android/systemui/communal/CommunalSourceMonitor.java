@@ -16,25 +16,24 @@
 
 package com.android.systemui.communal;
 
-import android.database.ContentObserver;
-import android.os.Handler;
-import android.os.UserHandle;
-import android.provider.Settings;
-import android.util.Log;
+import static com.android.systemui.communal.dagger.CommunalModule.COMMUNAL_CONDITIONS;
 
-import androidx.annotation.MainThread;
+import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.dagger.SysUISingleton;
-import com.android.systemui.util.settings.SecureSettings;
+import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.util.condition.Monitor;
 
 import com.google.android.collect.Lists;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * A Monitor for reporting a {@link CommunalSource} presence.
@@ -46,37 +45,33 @@ public class CommunalSourceMonitor {
 
     // A list of {@link Callback} that have registered to receive updates.
     private final ArrayList<WeakReference<Callback>> mCallbacks = Lists.newArrayList();
-    private final SecureSettings mSecureSettings;
+    private final Monitor mConditionsMonitor;
+    private final Executor mExecutor;
 
     private CommunalSource mCurrentSource;
-    private boolean mCommunalEnabled;
 
-    private CommunalSource.Callback mSourceCallback = new CommunalSource.Callback() {
-        @Override
-        public void onDisconnected() {
-            // Clear source reference.
-            setSource(null /* source */);
-        }
-    };
+    // Whether all conditions for communal mode to show have been met.
+    private boolean mAllCommunalConditionsMet = false;
+
+    // Whether the class is currently listening for condition changes.
+    private boolean mListeningForConditions = false;
+
+    private final Monitor.Callback mConditionsCallback =
+            allConditionsMet -> {
+                if (mAllCommunalConditionsMet != allConditionsMet) {
+                    if (DEBUG) Log.d(TAG, "communal conditions changed: " + allConditionsMet);
+
+                    mAllCommunalConditionsMet = allConditionsMet;
+                    executeOnSourceAvailableCallbacks();
+                }
+            };
 
     @VisibleForTesting
     @Inject
-    public CommunalSourceMonitor(
-            @MainThread Handler mainThreadHandler,
-            SecureSettings secureSettings) {
-        mSecureSettings = secureSettings;
-
-        ContentObserver settingsObserver = new ContentObserver(mainThreadHandler) {
-            @Override
-            public void onChange(boolean selfChange) {
-                reloadSettings();
-            }
-        };
-        mSecureSettings.registerContentObserverForUser(
-                Settings.Secure.COMMUNAL_MODE_ENABLED,
-                /* notifyForDescendants= */false,
-                settingsObserver, UserHandle.USER_SYSTEM);
-        reloadSettings();
+    public CommunalSourceMonitor(@Main Executor executor,
+            @Named(COMMUNAL_CONDITIONS) Monitor communalConditionsMonitor) {
+        mExecutor = executor;
+        mConditionsMonitor = communalConditionsMonitor;
     }
 
     /**
@@ -86,35 +81,28 @@ public class CommunalSourceMonitor {
      * @param source The new {@link CommunalSource}.
      */
     public void setSource(CommunalSource source) {
-        if (mCurrentSource != null) {
-            mCurrentSource.removeCallback(mSourceCallback);
-        }
-
         mCurrentSource = source;
 
-        if (mCommunalEnabled) {
+        if (mAllCommunalConditionsMet) {
             executeOnSourceAvailableCallbacks();
-        }
-
-        // Add callback to be informed when the source disconnects.
-        if (mCurrentSource != null) {
-            mCurrentSource.addCallback(mSourceCallback);
         }
     }
 
     private void executeOnSourceAvailableCallbacks() {
-        // If the new source is valid, inform registered Callbacks of its presence.
-        Iterator<WeakReference<Callback>> itr = mCallbacks.iterator();
-        while (itr.hasNext()) {
-            Callback cb = itr.next().get();
-            if (cb == null) {
-                itr.remove();
-            } else {
-                cb.onSourceAvailable(
-                        (mCommunalEnabled && mCurrentSource != null) ? new WeakReference<>(
-                                mCurrentSource) : null);
+        mExecutor.execute(() -> {
+            // If the new source is valid, inform registered Callbacks of its presence.
+            Iterator<WeakReference<Callback>> itr = mCallbacks.iterator();
+            while (itr.hasNext()) {
+                Callback cb = itr.next().get();
+                if (cb == null) {
+                    itr.remove();
+                } else {
+                    cb.onSourceAvailable(
+                            (mAllCommunalConditionsMet && mCurrentSource != null)
+                                    ? new WeakReference<>(mCurrentSource) : null);
+                }
             }
-        }
+        });
     }
 
     /**
@@ -123,12 +111,19 @@ public class CommunalSourceMonitor {
      * @param callback The {@link Callback} to add.
      */
     public void addCallback(Callback callback) {
-        mCallbacks.add(new WeakReference<>(callback));
+        mExecutor.execute(() -> {
+            mCallbacks.add(new WeakReference<>(callback));
 
-        // Inform the callback of any already present CommunalSource.
-        if (mCommunalEnabled && mCurrentSource != null) {
-            callback.onSourceAvailable(new WeakReference<>(mCurrentSource));
-        }
+            // Inform the callback of any already present CommunalSource.
+            if (mAllCommunalConditionsMet && mCurrentSource != null) {
+                callback.onSourceAvailable(new WeakReference<>(mCurrentSource));
+            }
+
+            if (!mListeningForConditions) {
+                mConditionsMonitor.addCallback(mConditionsCallback);
+                mListeningForConditions = true;
+            }
+        });
     }
 
     /**
@@ -137,23 +132,14 @@ public class CommunalSourceMonitor {
      * @param callback The {@link Callback} to add.
      */
     public void removeCallback(Callback callback) {
-        mCallbacks.removeIf(el -> el.get() == callback);
-    }
+        mExecutor.execute(() -> {
+            mCallbacks.removeIf(el -> el.get() == callback);
 
-    private void reloadSettings() {
-        boolean newCommunalEnabled = mSecureSettings.getIntForUser(
-                Settings.Secure.COMMUNAL_MODE_ENABLED,
-                1,
-                UserHandle.USER_SYSTEM) == 1;
-
-        if (DEBUG) {
-            Log.d(TAG, "communal mode settings reloaded with value:" + newCommunalEnabled);
-        }
-
-        if (mCommunalEnabled != newCommunalEnabled) {
-            mCommunalEnabled = newCommunalEnabled;
-            executeOnSourceAvailableCallbacks();
-        }
+            if (mCallbacks.isEmpty() && mListeningForConditions) {
+                mConditionsMonitor.removeCallback(mConditionsCallback);
+                mListeningForConditions = false;
+            }
+        });
     }
 
     /**

@@ -38,7 +38,6 @@ import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.Region;
-import android.inputmethodservice.SoftInputWindow;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.CancellationSignal;
@@ -157,7 +156,7 @@ public class VoiceInteractionSession implements KeyEvent.Callback, ComponentCall
     TypedArray mThemeAttrs;
     View mRootView;
     FrameLayout mContentFrame;
-    SoftInputWindow mWindow;
+    VoiceInteractionWindow mWindow;
 
     boolean mUiEnabled = true;
     boolean mInitialized;
@@ -859,7 +858,7 @@ public class VoiceInteractionSession implements KeyEvent.Callback, ComponentCall
     static final int MSG_REGISTER_VISIBLE_ACTIVITY_CALLBACK = 110;
     static final int MSG_UNREGISTER_VISIBLE_ACTIVITY_CALLBACK = 111;
 
-    class MyCallbacks implements HandlerCaller.Callback, SoftInputWindow.Callback {
+    class MyCallbacks implements HandlerCaller.Callback, VoiceInteractionWindow.Callback {
         @Override
         public void executeMessage(Message msg) {
             SomeArgs args = null;
@@ -1250,7 +1249,7 @@ public class VoiceInteractionSession implements KeyEvent.Callback, ComponentCall
         mInitialized = true;
         mInflater = (LayoutInflater)mContext.getSystemService(
                 Context.LAYOUT_INFLATER_SERVICE);
-        mWindow = new SoftInputWindow(mContext, "VoiceInteractionSession", mTheme,
+        mWindow = new VoiceInteractionWindow(mContext, "VoiceInteractionSession", mTheme,
                 mCallbacks, this, mDispatcherState,
                 WindowManager.LayoutParams.TYPE_VOICE_INTERACTION, Gravity.BOTTOM, true);
         mWindow.getWindow().getAttributes().setFitInsetsTypes(0 /* types */);
@@ -1470,10 +1469,10 @@ public class VoiceInteractionSession implements KeyEvent.Callback, ComponentCall
      * Requests a list of supported actions from an app.
      *
      * @param activityId Ths activity id of the app to get the actions from.
-     * @param resultExecutor The handler to receive the callback
      * @param cancellationSignal A signal to cancel the operation in progress,
      *     or {@code null} if none.
-     * @param callback The callback to receive the response
+     * @param resultExecutor The handler to receive the callback.
+     * @param callback The callback to receive the response.
      */
     public final void requestDirectActions(@NonNull ActivityId activityId,
             @Nullable CancellationSignal cancellationSignal,
@@ -1749,8 +1748,9 @@ public class VoiceInteractionSession implements KeyEvent.Callback, ComponentCall
     /**
      * Called when there has been a failure transferring the {@link AssistStructure} to
      * the assistant.  This may happen, for example, if the data is too large and results
-     * in an out of memory exception, or the client has provided corrupt data.  This will
-     * be called immediately before {@link #onHandleAssist} and the AssistStructure supplied
+     * in an out of memory exception, the data has been cleared during transferring due to
+     * the new incoming assist data, or the client has provided corrupt data. This will be
+     * called immediately before {@link #onHandleAssist} and the AssistStructure supplied
      * there afterwards will be null.
      *
      * @param failure The failure exception that was thrown when building the
@@ -1788,7 +1788,8 @@ public class VoiceInteractionSession implements KeyEvent.Callback, ComponentCall
      * Called to receive data from the application that the user was currently viewing when
      * an assist session is started. If the original show request did not specify
      * {@link #SHOW_WITH_ASSIST}, {@link AssistState} parameter will only provide
-     * {@link ActivityId}.
+     * {@link ActivityId}. If there was a failure to write the assist data to
+     * {@link AssistStructure}, the {@link AssistState#getAssistStructure()} will return null.
      *
      * <p>This method is called for all activities along with an index and count that indicates
      * which activity the data is for. {@code index} will be between 0 and {@code count}-1 and
@@ -2213,7 +2214,8 @@ public class VoiceInteractionSession implements KeyEvent.Callback, ComponentCall
          * @return If available, the structure definition of all windows currently
          * displayed by the app. May be null if assist data has been disabled by the user
          * or device policy; will be null if the original show request did not specify
-         * {@link #SHOW_WITH_ASSIST}; will be an empty stub if the application has disabled assist
+         * {@link #SHOW_WITH_ASSIST} or the assist data has been corrupt when writing the data to
+         * {@link AssistStructure}; will be an empty stub if the application has disabled assist
          * by marking its window as secure.
          */
         public @Nullable AssistStructure getAssistStructure() {

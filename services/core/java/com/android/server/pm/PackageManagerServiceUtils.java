@@ -18,13 +18,16 @@ package com.android.server.pm;
 
 import static android.content.pm.PackageManager.INSTALL_FAILED_SHARED_USER_INCOMPATIBLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
+import static android.content.pm.PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE;
 import static android.system.OsConstants.O_CREAT;
 import static android.system.OsConstants.O_RDWR;
 
+import static com.android.internal.content.NativeLibraryHelper.LIB_DIR_NAME;
 import static com.android.server.pm.PackageManagerService.COMPRESSED_EXTENSION;
 import static com.android.server.pm.PackageManagerService.DEBUG_COMPRESSION;
 import static com.android.server.pm.PackageManagerService.DEBUG_INTENT_MATCHING;
 import static com.android.server.pm.PackageManagerService.DEBUG_PREFERRED;
+import static com.android.server.pm.PackageManagerService.RANDOM_CODEPATH_PREFIX;
 import static com.android.server.pm.PackageManagerService.RANDOM_DIR_PREFIX;
 import static com.android.server.pm.PackageManagerService.STUB_SUFFIX;
 import static com.android.server.pm.PackageManagerService.TAG;
@@ -33,7 +36,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.EnabledAfter;
+import android.compat.annotation.EnabledSince;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -41,13 +44,14 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.ComponentInfo;
 import android.content.pm.PackageInfoLite;
 import android.content.pm.PackageManager;
+import android.content.pm.PackagePartitions;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
 import android.content.pm.SigningDetails;
 import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.pm.parsing.PackageLite;
-import android.content.pm.parsing.component.ParsedMainComponent;
+import com.android.server.pm.pkg.component.ParsedMainComponent;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.os.Binder;
@@ -58,6 +62,7 @@ import android.os.FileUtils;
 import android.os.Process;
 import android.os.SystemProperties;
 import android.os.incremental.IncrementalManager;
+import android.os.incremental.IncrementalStorage;
 import android.os.incremental.V4Signature;
 import android.os.incremental.V4Signature.HashingInfo;
 import android.os.storage.DiskInfo;
@@ -67,6 +72,7 @@ import android.stats.storage.StorageEnums;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.ArraySet;
+import android.util.AtomicFile;
 import android.util.Base64;
 import android.util.Log;
 import android.util.LogPrinter;
@@ -81,6 +87,7 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.HexDump;
 import com.android.server.EventLogTags;
 import com.android.server.IntentResolver;
+import com.android.server.Watchdog;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
@@ -100,7 +107,6 @@ import java.io.FileReader;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -123,6 +129,8 @@ import java.util.zip.GZIPInputStream;
 public class PackageManagerServiceUtils {
     private static final long MAX_CRITICAL_INFO_DUMP_SIZE = 3 * 1000 * 1000; // 3MB
 
+    private static final boolean DEBUG = Build.IS_DEBUGGABLE;
+
     public final static Predicate<PackageStateInternal> REMOVE_IF_NULL_PKG =
             pkgSetting -> pkgSetting.getPkg() == null;
 
@@ -137,7 +145,7 @@ public class PackageManagerServiceUtils {
      * allow 3P apps to trigger internal-only functionality.
      */
     @ChangeId
-    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.S)
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
     private static final long ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS = 161252188;
 
     /**
@@ -645,6 +653,58 @@ public class PackageManagerServiceUtils {
     }
 
     /**
+     * Extract native libraries to a target path
+     */
+    public static int extractNativeBinaries(File dstCodePath, String packageName) {
+        final File libraryRoot = new File(dstCodePath, LIB_DIR_NAME);
+        NativeLibraryHelper.Handle handle = null;
+        try {
+            handle = NativeLibraryHelper.Handle.create(dstCodePath);
+            return NativeLibraryHelper.copyNativeBinariesWithOverride(handle, libraryRoot,
+                    null /*abiOverride*/, false /*isIncremental*/);
+        } catch (IOException e) {
+            logCriticalInfo(Log.ERROR, "Failed to extract native libraries"
+                    + "; pkg: " + packageName);
+            return PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
+        } finally {
+            IoUtils.closeQuietly(handle);
+        }
+    }
+
+    /**
+     * Remove native libraries of a given package
+     */
+    public static void removeNativeBinariesLI(PackageSetting ps) {
+        if (ps != null) {
+            NativeLibraryHelper.removeNativeBinariesLI(ps.getLegacyNativeLibraryPath());
+        }
+    }
+
+    /**
+     * Wait for native library extraction to be done in IncrementalService
+     */
+    public static void waitForNativeBinariesExtractionForIncremental(
+            ArraySet<IncrementalStorage> incrementalStorages) {
+        if (incrementalStorages.isEmpty()) {
+            return;
+        }
+        try {
+            // Native library extraction may take very long time: each page could potentially
+            // wait for either 10s or 100ms (adb vs non-adb data loader), and that easily adds
+            // up to a full watchdog timeout of 1 min, killing the system after that. It doesn't
+            // make much sense as blocking here doesn't lock up the framework, but only blocks
+            // the installation session and the following ones.
+            Watchdog.getInstance().pauseWatchingCurrentThread("native_lib_extract");
+            for (int i = 0; i < incrementalStorages.size(); ++i) {
+                IncrementalStorage storage = incrementalStorages.valueAtUnchecked(i);
+                storage.waitForNativeBinariesExtraction();
+            }
+        } finally {
+            Watchdog.getInstance().resumeWatchingCurrentThread("native_lib_extract");
+        }
+    }
+
+    /**
      * Decompress files stored in codePath to dstCodePath for a certain package.
      */
     public static int decompressFiles(String codePath, File dstCodePath, String packageName) {
@@ -679,17 +739,23 @@ public class PackageManagerServiceUtils {
                     + "; src: " + srcFile.getAbsolutePath()
                     + ", dst: " + dstFile.getAbsolutePath());
         }
+        final AtomicFile atomicFile = new AtomicFile(dstFile);
+        FileOutputStream outputStream = null;
         try (
-                InputStream fileIn = new GZIPInputStream(new FileInputStream(srcFile));
-                OutputStream fileOut = new FileOutputStream(dstFile, false /*append*/);
+                InputStream fileIn = new GZIPInputStream(new FileInputStream(srcFile))
         ) {
-            FileUtils.copy(fileIn, fileOut);
-            Os.chmod(dstFile.getAbsolutePath(), 0644);
+            outputStream = atomicFile.startWrite();
+            FileUtils.copy(fileIn, outputStream);
+            // Flush anything in buffer before chmod, because any writes after chmod will fail.
+            outputStream.flush();
+            Os.fchmod(outputStream.getFD(), 0644);
+            atomicFile.finishWrite(outputStream);
             return PackageManager.INSTALL_SUCCEEDED;
         } catch (IOException e) {
             logCriticalInfo(Log.ERROR, "Failed to decompress file"
                     + "; src: " + srcFile.getAbsolutePath()
                     + ", dst: " + dstFile.getAbsolutePath());
+            atomicFile.failWrite(outputStream);
         }
         return PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
     }
@@ -1069,7 +1135,7 @@ public class PackageManagerServiceUtils {
     public static boolean hasAnyDomainApproval(
             @NonNull DomainVerificationManagerInternal manager,
             @NonNull PackageStateInternal pkgSetting, @NonNull Intent intent,
-            @PackageManager.ResolveInfoFlags int resolveInfoFlags, @UserIdInt int userId) {
+            @PackageManager.ResolveInfoFlagsBits long resolveInfoFlags, @UserIdInt int userId) {
         return manager.approvalLevelForDomain(pkgSetting, intent, resolveInfoFlags, userId)
                 > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE;
     }
@@ -1116,13 +1182,28 @@ public class PackageManagerServiceUtils {
         File firstLevelDir;
         do {
             random.nextBytes(bytes);
-            String dirName = RANDOM_DIR_PREFIX
+            String firstLevelDirName = RANDOM_DIR_PREFIX
                     + Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
-            firstLevelDir = new File(targetDir, dirName);
+            firstLevelDir = new File(targetDir, firstLevelDirName);
         } while (firstLevelDir.exists());
+
         random.nextBytes(bytes);
-        String suffix = Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
-        return new File(firstLevelDir, packageName + "-" + suffix);
+        String dirName = packageName + RANDOM_CODEPATH_PREFIX + Base64.encodeToString(bytes,
+                Base64.URL_SAFE | Base64.NO_WRAP);
+        final File result = new File(firstLevelDir, dirName);
+        if (DEBUG && !Objects.equals(tryParsePackageName(result.getName()), packageName)) {
+            throw new RuntimeException(
+                    "codepath is off: " + result.getName() + " (" + packageName + ")");
+        }
+        return result;
+    }
+
+    static String tryParsePackageName(@NonNull String codePath) throws IllegalArgumentException {
+        int packageNameEnds = codePath.indexOf(RANDOM_CODEPATH_PREFIX);
+        if (packageNameEnds == -1) {
+            throw new IllegalArgumentException("Not a valid package folder name");
+        }
+        return codePath.substring(0, packageNameEnds);
     }
 
     /**
@@ -1209,7 +1290,7 @@ public class PackageManagerServiceUtils {
         // identify cached items. In particular, changing the value of certain
         // feature flags should cause us to invalidate any caches.
         final String cacheName = FORCE_PACKAGE_PARSED_CACHE_ENABLED ? "debug"
-                : SystemProperties.digestOf("ro.build.fingerprint");
+                : PackagePartitions.FINGERPRINT;
 
         // Reconcile cache directories, keeping only what we'd actually use.
         for (File cacheDir : FileUtils.listFilesOrEmpty(cacheBaseDir)) {
@@ -1254,5 +1335,40 @@ public class PackageManagerServiceUtils {
         }
 
         return cacheDir;
+    }
+
+    /**
+     * Check and throw if the given before/after packages would be considered a
+     * downgrade.
+     */
+    public static void checkDowngrade(AndroidPackage before, PackageInfoLite after)
+            throws PackageManagerException {
+        if (after.getLongVersionCode() < before.getLongVersionCode()) {
+            throw new PackageManagerException(INSTALL_FAILED_VERSION_DOWNGRADE,
+                    "Update version code " + after.versionCode + " is older than current "
+                            + before.getLongVersionCode());
+        } else if (after.getLongVersionCode() == before.getLongVersionCode()) {
+            if (after.baseRevisionCode < before.getBaseRevisionCode()) {
+                throw new PackageManagerException(INSTALL_FAILED_VERSION_DOWNGRADE,
+                        "Update base revision code " + after.baseRevisionCode
+                                + " is older than current " + before.getBaseRevisionCode());
+            }
+
+            if (!ArrayUtils.isEmpty(after.splitNames)) {
+                for (int i = 0; i < after.splitNames.length; i++) {
+                    final String splitName = after.splitNames[i];
+                    final int j = ArrayUtils.indexOf(before.getSplitNames(), splitName);
+                    if (j != -1) {
+                        if (after.splitRevisionCodes[i] < before.getSplitRevisionCodes()[j]) {
+                            throw new PackageManagerException(INSTALL_FAILED_VERSION_DOWNGRADE,
+                                    "Update split " + splitName + " revision code "
+                                            + after.splitRevisionCodes[i]
+                                            + " is older than current "
+                                            + before.getSplitRevisionCodes()[j]);
+                        }
+                    }
+                }
+            }
+        }
     }
 }

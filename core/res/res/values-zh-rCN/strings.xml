@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"允许应用修改您的 Android TV 设备的通话记录，包括关于来电和去电的数据。恶意应用可能会借此清空或修改您的通话记录。"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"允许该应用修改手机的通话记录，包括有关来电和外拨电话的数据。恶意应用可能会借此清除或修改您的通话记录。"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"访问身体传感器（如心率监测器）"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"允许该应用存取监测您身体状况的传感器所收集的数据，例如您的心率。"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"访问身体传感器获得的数据，例如心率、体温、血氧百分比等。"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"在后台时访问身体传感器（如心率监测器）"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"在后台时访问身体传感器获得的数据，例如心率、体温、血氧百分比等。"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"读取日历活动和详情"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"此应用可读取您平板电脑上存储的所有日历活动，并分享或保存您的日历数据。"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"此应用可读取您的 Android TV 设备上存储的所有日历活动，以及分享或保存您的日历数据。"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"允许应用自行使用即时通讯服务拨打电话。"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"读取手机状态和身份"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"允许该应用访问设备的电话功能。此权限可让该应用确定本机号码和设备 ID、是否正处于通话状态以及拨打的号码。"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"读取基本电话状态和身份信息"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"允许该应用使用设备的基本电话功能。"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"通过系统转接来电"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"允许该应用通过系统转接来电，以改善通话体验。"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"查看并控制通过系统拨打的电话。"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"请点按以删除您的脸部模型，然后再添加您的脸部模型"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"设置人脸解锁"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"脸部对准手机即可将其解锁"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"如需使用人脸解锁功能，请在“设置”&gt;“隐私权”中开启"<b>"摄像头使用权限"</b></string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"设置更多解锁方式"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"点按即可添加指纹"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"指纹解锁"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"允许此应用读取和写入“勿扰”模式配置。"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"授权使用“查看权限”"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"允许该应用开始查看应用的权限使用情况（普通应用绝不需要此权限）。"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"开始查看权限决策"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"允许具有该权限的应用启动屏幕以查看权限决策。普通应用绝不需要此权限。"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"开始查看应用功能"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"允许具有该权限的应用开始查看某个应用的功能信息。"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"以高采样率访问传感器数据"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"监控屏幕解锁尝试次数"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"监视在解锁屏幕时输错密码的次数，如果输错次数过多，则锁定平板电脑或清除其所有数据。"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"监控用户在解锁屏幕时输错密码的次数；如果用户输错密码的次数超出上限，系统就会锁定 Android TV 设备或清空 Android TV 设备上的所有数据。"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"监控在解锁屏幕时输错密码的次数，并在输错次数过多时锁定信息娱乐系统或清除信息娱乐系统上的所有数据。"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"监视在解锁屏幕时输错密码的次数，如果输错次数过多，则锁定手机或清除其所有数据。"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"监控在解锁屏幕时输错密码的次数，并在输错次数过多时锁定平板电脑或清空此用户的所有数据。"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"监控用户在解锁屏幕时输错密码的次数；如果用户输错密码的次数超出上限，系统就会锁定 Android TV 设备或清空该用户的所有数据。"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"监控在解锁屏幕时输错密码的次数，并在输错次数过多时锁定信息娱乐系统或清除此个人资料的所有数据。"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"监控在解锁屏幕时输错密码的次数，并在输错次数过多时锁定手机或清空此用户的所有数据。"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"更改锁屏方式"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"更改锁屏方式。"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"清除所有数据"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"恢复出厂设置时，系统会在不发出警告的情况下清除平板电脑上的数据。"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"不事先发出警告就以恢复出厂设置的方式清空 Android TV 设备中的数据。"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"在不发出警告的情况下，通过恢复出厂设置来清除信息娱乐系统上的数据。"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"恢复出厂设置时，系统会在不发出警告的情况下清除手机上的数据。"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"清空用户数据"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"清除个人资料数据"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"清空用户数据"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"清空此用户在这台平板电脑上的数据，而不事先发出警告。"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"不事先发出警告就清空此用户在这台 Android TV 设备上的数据。"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"在不发出警告的情况下，从该信息娱乐系统中清除此个人资料的所有数据。"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"清空此用户在这部手机上的数据，而不事先发出警告。"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"设置设备全局代理"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"设置在规范启用时要使用的设备全局代理。只有设备所有者才能设置全局代理。"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"正在准备升级<xliff:g id="APPNAME">%1$s</xliff:g>。"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"正在启动应用。"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"即将完成启动。"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"要关闭屏幕吗？"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"您在设置指纹时按了电源按钮。\n\n此操作通常会关闭屏幕。"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"关闭"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"取消"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"要继续设置吗？"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"您已按电源按钮，这通常会关闭屏幕。\n\n请尝试在设置指纹时轻轻按一下。"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"关闭屏幕"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"继续设置"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"要继续验证您的指纹吗？"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"您已按电源按钮，这通常会关闭屏幕。\n\n请尝试轻轻按一下来验证您的指纹。"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"关闭屏幕"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"继续"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g>正在运行"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"点按即可返回游戏"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"选择游戏"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"自定义应用通知"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"允许<xliff:g id="APP">%1$s</xliff:g>使用 <xliff:g id="ACCOUNT">%2$s</xliff:g>（目前已有用户使用此帐号）创建新用户吗？"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"允许<xliff:g id="APP">%1$s</xliff:g>使用 <xliff:g id="ACCOUNT">%2$s</xliff:g> 创建新用户吗？"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"添加受监管用户"</string>
     <string name="language_selection_title" msgid="52674936078683285">"添加语言"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"区域偏好设置"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"输入语言名称"</string>

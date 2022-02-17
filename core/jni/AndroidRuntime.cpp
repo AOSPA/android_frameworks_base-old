@@ -198,8 +198,8 @@ extern int register_com_android_internal_content_NativeLibraryHelper(JNIEnv *env
 extern int register_com_android_internal_content_om_OverlayConfig(JNIEnv *env);
 extern int register_com_android_internal_net_NetworkUtilsInternal(JNIEnv* env);
 extern int register_com_android_internal_os_ClassLoaderFactory(JNIEnv* env);
-extern int register_com_android_internal_os_DmabufInfoReader(JNIEnv* env);
 extern int register_com_android_internal_os_FuseAppLoop(JNIEnv* env);
+extern int register_com_android_internal_os_KernelAllocationStats(JNIEnv* env);
 extern int register_com_android_internal_os_KernelCpuBpfTracking(JNIEnv* env);
 extern int register_com_android_internal_os_KernelCpuTotalBpfMapReader(JNIEnv* env);
 extern int register_com_android_internal_os_KernelCpuUidBpfMapReader(JNIEnv *env);
@@ -234,8 +234,7 @@ static const char* PROFILE_BOOT_CLASS_PATH = "profilebootclasspath";
 // TODO: Rename the server-level flag or remove.
 static const char* ENABLE_JITZYGOTE_IMAGE = "enable_apex_image";
 // Flag to pass to the runtime when using the JIT Zygote image.
-static const char* kJitZygoteImageOption =
-        "-Ximage:boot.art:/nonx/boot-framework.art!/system/etc/boot-image.prof";
+static const char* kJitZygoteImageOption = "-Xforcejitzygote";
 
 // Feature flag name for disabling lock profiling.
 static const char* DISABLE_LOCK_PROFILING = "disable_lock_profiling";
@@ -752,8 +751,9 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
     }
 
     const bool checkJni = GetBoolProperty("dalvik.vm.checkjni", false);
-    ALOGV("CheckJNI is %s\n", checkJni ? "ON" : "OFF");
     if (checkJni) {
+        ALOGD("CheckJNI is ON");
+
         /* extended JNI checking */
         addOption("-Xcheck:jni");
 
@@ -988,9 +988,9 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
                         "--instruction-set-features=", "-Xcompiler-option");
 
     /*
-     * When running with debug.generate-debug-info, add --generate-debug-info to
-     * the compiler options so that both JITted code and the boot image extension,
-     * if it is compiled on device, will include native debugging information.
+     * When running with debug.generate-debug-info, add --generate-debug-info to the compiler
+     * options so that both JITted code and the boot image, if it is compiled on device, will
+     * include native debugging information.
      */
     property_get("debug.generate-debug-info", propBuf, "");
     bool generate_debug_info = (strcmp(propBuf, "true") == 0);
@@ -1013,7 +1013,7 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
     property_get("dalvik.vm.extra-opts", extraOptsBuf, "");
     parseExtraOpts(extraOptsBuf, NULL);
 
-    // Extra options for boot image extension generation.
+    // Extra options for boot image generation.
     if (skip_compilation) {
         addOption("-Xnoimage-dex2oat");
     } else {
@@ -1036,8 +1036,8 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
         parseCompilerOption("dalvik.vm.image-dex2oat-cpu-set", dex2oatCpuSetImageBuf, "--cpu-set=",
                             "-Ximage-compiler-option");
 
-        // The runtime may compile a boot image extension, when necessary, not using installd.
-        // Thus, we need to pass the instruction-set-features/variant as an image-compiler-option.
+        // The runtime may compile a boot image, when necessary, not using installd. Thus, we need
+        // to pass the instruction-set-features/variant as an image-compiler-option.
         // Note: it is OK to reuse the buffer, as the values are exactly the same between
         //       * compiler-option, used for runtime compilation (DexClassLoader)
         //       * image-compiler-option, used for boot-image compilation on device
@@ -1657,8 +1657,8 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_security_Scrypt),
         REG_JNI(register_com_android_internal_content_F2fsUtils),
         REG_JNI(register_com_android_internal_content_NativeLibraryHelper),
-        REG_JNI(register_com_android_internal_os_DmabufInfoReader),
         REG_JNI(register_com_android_internal_os_FuseAppLoop),
+        REG_JNI(register_com_android_internal_os_KernelAllocationStats),
         REG_JNI(register_com_android_internal_os_KernelCpuBpfTracking),
         REG_JNI(register_com_android_internal_os_KernelCpuTotalBpfMapReader),
         REG_JNI(register_com_android_internal_os_KernelCpuUidBpfMapReader),

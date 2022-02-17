@@ -1595,7 +1595,7 @@ static jobject nativeCreateInputChannel(JNIEnv* env, jclass /* clazz */, jlong p
 
     if (!inputChannel.ok()) {
         std::string message = inputChannel.error().message();
-        message += StringPrintf(" Status=%d", inputChannel.error().code());
+        message += StringPrintf(" Status=%d", static_cast<int>(inputChannel.error().code()));
         jniThrowRuntimeException(env, message.c_str());
         return nullptr;
     }
@@ -1629,7 +1629,7 @@ static jobject nativeCreateInputMonitor(JNIEnv* env, jclass /* clazz */, jlong p
 
     if (!inputChannel.ok()) {
         std::string message = inputChannel.error().message();
-        message += StringPrintf(" Status=%d", inputChannel.error().code());
+        message += StringPrintf(" Status=%d", static_cast<int>(inputChannel.error().code()));
         jniThrowRuntimeException(env, message.c_str());
         return nullptr;
     }
@@ -2292,6 +2292,11 @@ static jboolean nativeFlushSensor(JNIEnv* env, jclass /* clazz */, jlong ptr, ji
                                                                       sensorType));
 }
 
+static void nativeCancelCurrentTouch(JNIEnv* env, jclass /* clazz */, jlong ptr) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+    im->getInputManager()->getDispatcher().cancelCurrentTouch();
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gInputManagerMethods[] = {
@@ -2371,6 +2376,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"nativeEnableSensor", "(JIIII)Z", (void*)nativeEnableSensor},
         {"nativeDisableSensor", "(JII)V", (void*)nativeDisableSensor},
         {"nativeFlushSensor", "(JII)Z", (void*)nativeFlushSensor},
+        {"nativeCancelCurrentTouch", "(J)V", (void*)nativeCancelCurrentTouch},
 };
 
 #define FIND_CLASS(var, className) \

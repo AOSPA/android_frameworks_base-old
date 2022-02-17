@@ -17,7 +17,6 @@
 package com.android.systemui.shared.system;
 
 import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
-import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
@@ -57,7 +56,7 @@ public class RemoteAnimationTargetCompat {
     public final int activityType;
 
     public final int taskId;
-    public final SurfaceControlCompat leash;
+    public final SurfaceControl leash;
     public final boolean isTranslucent;
     public final Rect clipRect;
     public final int prefixOrderIndex;
@@ -65,6 +64,7 @@ public class RemoteAnimationTargetCompat {
     public final Rect localBounds;
     public final Rect sourceContainerBounds;
     public final Rect screenSpaceBounds;
+    public final Rect startScreenSpaceBounds;
     public final boolean isNotInRecents;
     public final Rect contentInsets;
     public final ActivityManager.RunningTaskInfo taskInfo;
@@ -81,13 +81,14 @@ public class RemoteAnimationTargetCompat {
     public RemoteAnimationTargetCompat(RemoteAnimationTarget app) {
         taskId = app.taskId;
         mode = app.mode;
-        leash = new SurfaceControlCompat(app.leash);
+        leash = app.leash;
         isTranslucent = app.isTranslucent;
         clipRect = app.clipRect;
         position = app.position;
         localBounds = app.localBounds;
         sourceContainerBounds = app.sourceContainerBounds;
         screenSpaceBounds = app.screenSpaceBounds;
+        startScreenSpaceBounds = screenSpaceBounds;
         prefixOrderIndex = app.prefixOrderIndex;
         isNotInRecents = app.isNotInRecents;
         contentInsets = app.contentInsets;
@@ -117,7 +118,7 @@ public class RemoteAnimationTargetCompat {
 
     public RemoteAnimationTarget unwrap() {
         return new RemoteAnimationTarget(
-                taskId, mode, leash.getSurfaceControl(), isTranslucent, clipRect, contentInsets,
+                taskId, mode, leash, isTranslucent, clipRect, contentInsets,
                 prefixOrderIndex, position, localBounds, screenSpaceBounds, windowConfiguration,
                 isNotInRecents, mStartLeash, startBounds, taskInfo, allowEnterPip, windowType
         );
@@ -138,22 +139,11 @@ public class RemoteAnimationTargetCompat {
         // changes should be ordered top-to-bottom in z
         final int mode = change.getMode();
 
-        // Don't move anything that isn't independent within its parents
-        if (!TransitionInfo.isIndependent(change, info)) {
-            if (mode == TRANSIT_OPEN || mode == TRANSIT_TO_FRONT || mode == TRANSIT_CHANGE) {
-                t.show(leash);
-                t.setPosition(leash, change.getEndRelOffset().x, change.getEndRelOffset().y);
-            }
-            return;
-        }
+        // Launcher animates leaf tasks directly, so always reparent all task leashes to root leash.
+        t.reparent(leash, info.getRootLeash());
+        t.setPosition(leash, change.getStartAbsBounds().left - info.getRootOffset().x,
+                change.getStartAbsBounds().top - info.getRootOffset().y);
 
-        boolean hasParent = change.getParent() != null;
-
-        if (!hasParent) {
-            t.reparent(leash, info.getRootLeash());
-            t.setPosition(leash, change.getStartAbsBounds().left - info.getRootOffset().x,
-                    change.getStartAbsBounds().top - info.getRootOffset().y);
-        }
         t.show(leash);
         // Put all the OPEN/SHOW on top
         if (mode == TRANSIT_OPEN || mode == TRANSIT_TO_FRONT) {
@@ -209,7 +199,7 @@ public class RemoteAnimationTargetCompat {
         mode = newModeToLegacyMode(change.getMode());
 
         // TODO: once we can properly sync transactions across process, then get rid of this leash.
-        leash = new SurfaceControlCompat(createLeash(info, change, order, t));
+        leash = createLeash(info, change, order, t);
 
         isTranslucent = (change.getFlags() & TransitionInfo.FLAG_TRANSLUCENT) != 0
                 || (change.getFlags() & TransitionInfo.FLAG_SHOW_WALLPAPER) != 0;
@@ -219,6 +209,8 @@ public class RemoteAnimationTargetCompat {
         localBounds.offsetTo(change.getEndRelOffset().x, change.getEndRelOffset().y);
         sourceContainerBounds = null;
         screenSpaceBounds = new Rect(change.getEndAbsBounds());
+        startScreenSpaceBounds = new Rect(change.getStartAbsBounds());
+
         prefixOrderIndex = order;
         // TODO(shell-transitions): I guess we need to send content insets? evaluate how its used.
         contentInsets = new Rect(0, 0, 0, 0);
@@ -262,14 +254,15 @@ public class RemoteAnimationTargetCompat {
             SurfaceControl.Transaction t, ArrayMap<SurfaceControl, SurfaceControl> leashMap) {
         final ArrayList<RemoteAnimationTargetCompat> out = new ArrayList<>();
         for (int i = 0; i < info.getChanges().size(); i++) {
-            boolean changeIsWallpaper =
-                    (info.getChanges().get(i).getFlags() & TransitionInfo.FLAG_IS_WALLPAPER) != 0;
+            final TransitionInfo.Change change = info.getChanges().get(i);
+            final boolean changeIsWallpaper =
+                    (change.getFlags() & TransitionInfo.FLAG_IS_WALLPAPER) != 0;
             if (wallpapers != changeIsWallpaper) continue;
-            out.add(new RemoteAnimationTargetCompat(info.getChanges().get(i),
-                    info.getChanges().size() - i, info, t));
-            if (leashMap == null) continue;
-            leashMap.put(info.getChanges().get(i).getLeash(),
-                    out.get(out.size() - 1).leash.mSurfaceControl);
+
+            out.add(new RemoteAnimationTargetCompat(change, info.getChanges().size() - i, info, t));
+            if (leashMap != null) {
+                leashMap.put(change.getLeash(), out.get(out.size() - 1).leash);
+            }
         }
         return out.toArray(new RemoteAnimationTargetCompat[out.size()]);
     }
@@ -278,7 +271,9 @@ public class RemoteAnimationTargetCompat {
      * @see SurfaceControl#release()
      */
     public void release() {
-        leash.mSurfaceControl.release();
+        if (leash != null) {
+            leash.release();
+        }
         if (mStartLeash != null) {
             mStartLeash.release();
         }

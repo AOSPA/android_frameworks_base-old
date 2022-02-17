@@ -107,6 +107,7 @@
     <string name="accessibility_phone_button" msgid="4256353121703100427">"ਫ਼ੋਨ ਕਰੋ"</string>
     <string name="accessibility_voice_assist_button" msgid="6497706615649754510">"ਅਵਾਜ਼ੀ ਸਹਾਇਕ"</string>
     <string name="accessibility_wallet_button" msgid="1458258783460555507">"ਵਾਲੇਟ"</string>
+    <string name="accessibility_qr_code_scanner_button" msgid="7521277927692910795">"QR ਕੋਡ ਸਕੈਨਰ"</string>
     <string name="accessibility_unlock_button" msgid="122785427241471085">"ਅਣਲਾਕ ਕਰੋ"</string>
     <string name="accessibility_lock_icon" msgid="661492842417875775">"ਡੀਵਾਈਸ ਲਾਕ ਹੈ"</string>
     <string name="accessibility_scanning_face" msgid="3093828357921541387">"ਚਿਹਰਾ ਸਕੈਨ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ"</string>
@@ -174,33 +175,15 @@
     <string name="accessibility_desc_lock_screen" msgid="5983125095181194887">" ਲਾਕ  ਸਕ੍ਰੀਨ।"</string>
     <string name="accessibility_desc_work_lock" msgid="4355620395354680575">"ਕਾਰਜ-ਸਥਾਨ  ਲਾਕ  ਸਕ੍ਰੀਨ"</string>
     <string name="accessibility_desc_close" msgid="8293708213442107755">"ਬੰਦ ਕਰੋ"</string>
-    <string name="accessibility_quick_settings_wifi_changed_off" msgid="2230487165558877262">"Wifi ਬੰਦ ਕੀਤਾ।"</string>
-    <string name="accessibility_quick_settings_wifi_changed_on" msgid="1490362586009027611">"Wifi ਚਾਲੂ ਕੀਤਾ।"</string>
-    <string name="accessibility_quick_settings_airplane_changed_off" msgid="8880183481476943754">"ਏਅਰਪਲੇਨ ਮੋਡ ਬੰਦ ਹੈ।"</string>
-    <string name="accessibility_quick_settings_airplane_changed_on" msgid="6327378061894076288">"ਏਅਰਪਲੇਨ ਮੋਡ ਚਾਲੂ ਹੋਇਆ"</string>
     <string name="accessibility_quick_settings_dnd_none_on" msgid="3235552940146035383">"ਪੂਰਾ ਸ਼ਾਂਤ"</string>
     <string name="accessibility_quick_settings_dnd_alarms_on" msgid="3375848309132140014">"ਸਿਰਫ਼ ਅਲਾਰਮ"</string>
     <string name="accessibility_quick_settings_dnd" msgid="2415967452264206047">"ਪਰੇਸ਼ਾਨ ਨਾ ਕਰੋ।"</string>
-    <string name="accessibility_quick_settings_dnd_changed_off" msgid="1457150026842505799">"\'ਪਰੇਸ਼ਾਨ ਨਾ ਕਰੋ\' ਨੂੰ ਬੰਦ ਕੀਤਾ ਗਿਆ।"</string>
-    <string name="accessibility_quick_settings_dnd_changed_on" msgid="186315911607486129">"\'ਪਰੇਸ਼ਾਨ ਨਾ ਕਰੋ\' ਨੂੰ ਚਾਲੂ ਕੀਤਾ ਗਿਆ।"</string>
     <string name="accessibility_quick_settings_bluetooth" msgid="8250942386687551283">"ਬਲੂਟੁੱਥ।"</string>
     <string name="accessibility_quick_settings_bluetooth_on" msgid="3819082137684078013">"Bluetooth ਚਾਲੂ।"</string>
-    <string name="accessibility_quick_settings_bluetooth_changed_off" msgid="3344226652293797283">"Bluetooth ਬੰਦ ਹੈ।"</string>
-    <string name="accessibility_quick_settings_bluetooth_changed_on" msgid="1263282011749437549">"Bluetooth ਚਾਲੂ ਕੀਤੀ।"</string>
-    <string name="accessibility_quick_settings_location_changed_off" msgid="5132776369388699133">"ਟਿਕਾਣਾ ਰਿਪੋਰਟਿੰਗ ਬੰਦ ਕੀਤੀ।"</string>
-    <string name="accessibility_quick_settings_location_changed_on" msgid="7159115433070112154">"ਟਿਕਾਣਾ ਰਿਪੋਰਟਿੰਗ ਚਾਲੂ ਕੀਤੀ।"</string>
     <string name="accessibility_quick_settings_alarm" msgid="558094529584082090">"ਅਲਾਰਮ <xliff:g id="TIME">%s</xliff:g> ਲਈ ਸੈੱਟ ਕੀਤਾ ਗਿਆ।"</string>
     <string name="accessibility_quick_settings_more_time" msgid="7646479831704665284">"ਹੋਰ ਸਮਾਂ।"</string>
     <string name="accessibility_quick_settings_less_time" msgid="9110364286464977870">"ਘੱਟ ਸਮਾਂ।"</string>
-    <string name="accessibility_quick_settings_flashlight_changed_off" msgid="3782375441381402599">"ਫਲੈਸ਼ਲਾਈਟ ਬੰਦ ਕੀਤਾ।"</string>
-    <string name="accessibility_quick_settings_flashlight_changed_on" msgid="4747870681508334200">"ਫਲੈਸ਼ਲਾਈਟ ਚਾਲੂ ਕੀਤੀ।"</string>
-    <string name="accessibility_quick_settings_color_inversion_changed_off" msgid="7548045840282925393">"ਰੰਗ ਦੀ ਉਲਟੀ ਤਰਤੀਬ ਬੰਦ ਕੀਤੀ।"</string>
-    <string name="accessibility_quick_settings_color_inversion_changed_on" msgid="4711141858364404084">"ਰੰਗ ਦੀ ਉਲਟੀ ਤਰਤੀਬ ਚਾਲੂ ਕੀਤੀ।"</string>
-    <string name="accessibility_quick_settings_hotspot_changed_off" msgid="7002061268910095176">"ਮੋਬਾਈਲ ਹੌਟਸਪੌਟ ਬੰਦ ਕੀਤਾ।"</string>
-    <string name="accessibility_quick_settings_hotspot_changed_on" msgid="2576895346762408840">"ਮੋਬਾਈਲ ਹੌਟਸਪੌਟ ਚਾਲੂ ਕੀਤਾ।"</string>
     <string name="accessibility_casting_turned_off" msgid="1387906158563374962">"ਸਕ੍ਰੀਨ ਜੋੜਨਾ ਬੰਦ ਹੋਇਆ।"</string>
-    <string name="accessibility_quick_settings_data_saver_changed_off" msgid="4910847127871603832">"ਡਾਟਾ ਸੇਵਰ ਬੰਦ ਕੀਤਾ ਗਿਆ।"</string>
-    <string name="accessibility_quick_settings_data_saver_changed_on" msgid="6370606590802623078">"ਡਾਟਾ ਸੇਵਰ ਚਾਲੂ ਕੀਤਾ ਗਿਆ।"</string>
     <string name="accessibility_brightness" msgid="5391187016177823721">"ਡਿਸਪਲੇ ਚਮਕ"</string>
     <string name="data_usage_disabled_dialog_mobile_title" msgid="2286843518689837719">"ਮੋਬਾਈਲ ਡਾਟਾ ਰੋਕ ਦਿੱਤਾ ਗਿਆ ਹੈ"</string>
     <string name="data_usage_disabled_dialog_title" msgid="9131615296036724838">" ਡਾਟਾ  ਰੁਕ ਗਿਆ ਹੈ"</string>
@@ -249,7 +232,9 @@
     <string name="quick_settings_cast_detail_empty_text" msgid="2846282280014617785">"ਕੋਈ ਡਿਵਾਈਸਾਂ ਉਪਲਬਧ ਨਹੀਂ"</string>
     <string name="quick_settings_cast_no_wifi" msgid="6980194769795014875">"ਵਾਈ-ਫਾਈ ਕਨੈਕਟ ਨਹੀਂ ਕੀਤਾ ਗਿਆ"</string>
     <string name="quick_settings_brightness_dialog_title" msgid="4980669966716685588">"ਚਮਕ"</string>
-    <string name="quick_settings_inversion_label" msgid="5078769633069667698">"ਰੰਗ ਪਲਟਾਓ"</string>
+    <string name="quick_settings_inversion_label" msgid="3501527749494755688">"ਰੰਗ ਪਲਟਨਾ"</string>
+    <!-- no translation found for quick_settings_color_correction_label (5636617913560474664) -->
+    <skip />
     <string name="quick_settings_more_settings" msgid="2878235926753776694">"ਹੋਰ ਸੈਟਿੰਗਾਂ"</string>
     <string name="quick_settings_more_user_settings" msgid="1064187451100861954">"ਵਰਤੋਂਕਾਰ ਸੈਟਿੰਗਾਂ"</string>
     <string name="quick_settings_done" msgid="2163641301648855793">"ਹੋ ਗਿਆ"</string>
@@ -291,6 +276,7 @@
     <string name="quick_settings_screen_record_label" msgid="8650355346742003694">"ਸਕ੍ਰੀਨ ਰਿਕਾਰਡ"</string>
     <string name="quick_settings_screen_record_start" msgid="1574725369331638985">"ਸ਼ੁਰੂ ਕਰੋ"</string>
     <string name="quick_settings_screen_record_stop" msgid="8087348522976412119">"ਰੋਕੋ"</string>
+    <string name="quick_settings_onehanded_label" msgid="2416537930246274991">"ਇੱਕ ਹੱਥ ਮੋਡ"</string>
     <string name="sensor_privacy_start_use_mic_dialog_title" msgid="563796653825944944">"ਕੀ ਡੀਵਾਈਸ ਦੇ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਨੂੰ ਅਣਬਲਾਕ ਕਰਨਾ ਹੈ?"</string>
     <string name="sensor_privacy_start_use_camera_dialog_title" msgid="8807639852654305227">"ਕੀ ਡੀਵਾਈਸ ਦੇ ਕੈਮਰੇ ਨੂੰ ਅਣਬਲਾਕ ਕਰਨਾ ਹੈ?"</string>
     <string name="sensor_privacy_start_use_mic_camera_dialog_title" msgid="4316471859905020023">"ਕੀ ਡੀਵਾਈਸ ਦੇ ਕੈਮਰੇ ਅਤੇ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਨੂੰ ਅਣਬਲਾਕ ਕਰਨਾ ਹੈ?"</string>
@@ -464,6 +450,8 @@
     <string name="wallet_secondary_label_device_locked" msgid="5175862019125370506">"ਵਰਤਣ ਲਈ ਅਣਲਾਕ ਕਰੋ"</string>
     <string name="wallet_error_generic" msgid="257704570182963611">"ਤੁਹਾਡੇ ਕਾਰਡ ਪ੍ਰਾਪਤ ਕਰਨ ਵਿੱਚ ਕੋਈ ਸਮੱਸਿਆ ਆਈ, ਕਿਰਪਾ ਕਰਕੇ ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ"</string>
     <string name="wallet_lockscreen_settings_label" msgid="3539105300870383570">"ਲਾਕ ਸਕ੍ਰੀਨ ਸੈਟਿੰਗਾਂ"</string>
+    <string name="qr_code_scanner_title" msgid="1598912458255252498">"QR ਸਕੈਨ ਕਰੋ"</string>
+    <string name="qr_code_scanner_description" msgid="7452098243938659945">"QR ਕੋਡ ਨੂੰ ਸਕੈਨ ਕਰਨ ਲਈ ਕਲਿੱਕ ਕਰੋ"</string>
     <string name="status_bar_work" msgid="5238641949837091056">"ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ"</string>
     <string name="status_bar_airplane" msgid="4848702508684541009">"ਹਵਾਈ-ਜਹਾਜ਼ ਮੋਡ"</string>
     <string name="zen_alarm_warning" msgid="7844303238486849503">"ਤੁਸੀਂ <xliff:g id="WHEN">%1$s</xliff:g> ਵਜੇ ਆਪਣਾ ਅਗਲਾ ਅਲਾਰਮ ਨਹੀਂ ਸੁਣੋਗੇ"</string>
@@ -483,6 +471,7 @@
     <string name="enable_bluetooth_message" msgid="6740938333772779717">"ਆਪਣੇ ਟੈਬਲੈੱਟ ਨਾਲ ਆਪਣਾ ਕੀ-ਬੋਰਡ ਕਨੈਕਟ ਕਰਨ ਲਈ, ਤੁਹਾਨੂੰ ਪਹਿਲਾਂ ਬਲੂਟੁੱਥ ਚਾਲੂ ਕਰਨ ਦੀ ਲੋੜ ਹੈ।"</string>
     <string name="enable_bluetooth_confirmation_ok" msgid="2866408183324184876">"ਚਾਲੂ ਕਰੋ"</string>
     <string name="tuner_full_importance_settings" msgid="1388025816553459059">"ਪਾਵਰ ਸੂਚਨਾ ਕੰਟਰੋਲ"</string>
+    <string name="rotation_lock_camera_rotation_on" msgid="789434807790534274">"ਚਾਲੂ ਹੈ - ਚਿਹਰਾ-ਆਧਾਰਿਤ"</string>
     <string name="power_notification_controls_description" msgid="1334963837572708952">"ਪਾਵਰ ਸੂਚਨਾ ਕੰਟਰੋਲਾਂ ਨਾਲ, ਤੁਸੀਂ ਕਿਸੇ ਐਪ ਦੀਆਂ ਸੂਚਨਾਵਾਂ ਲਈ ਮਹੱਤਤਾ ਪੱਧਰ ਨੂੰ 0 ਤੋਂ 5 ਤੱਕ ਸੈੱਟ ਕਰ ਸਕਦੇ ਹੋ। \n\n"<b>"ਪੱਧਰ 5"</b>" \n- ਸੂਚਨਾ ਸੂਚੀ ਦੇ ਸਿਖਰ \'ਤੇ ਦਿਖਾਓ \n- ਪੂਰੀ ਸਕ੍ਰੀਨ ਰੁਕਾਵਟ ਦੀ ਆਗਿਆ ਦਿਓ \n- ਹਮੇਸ਼ਾਂ ਝਲਕ ਦਿਖਾਓ \n\n"<b>"ਪੱਧਰ 4"</b>" \n- ਪੂਰੀ ਸਕ੍ਰੀਨ ਰੁਕਾਵਟ ਨੂੰ ਰੋਕੋ \n- ਹਮੇਸ਼ਾਂ ਝਲਕ ਦਿਖਾਓ \n\n"<b>"ਪੱਧਰ 3"</b>" \n- ਪੂਰੀ ਸਕ੍ਰੀਨ ਰੁਕਾਵਟ ਨੂੰ ਰੋਕੋ \n- ਕਦੇ ਝਲਕ ਨਾ ਦਿਖਾਓ \n\n"<b>"ਪੱਧਰ 2"</b>" \n- ਪੂਰੀ ਸਕ੍ਰੀਨ ਰੁਕਾਵਟ ਨੂੰ ਰੋਕੋ \n- ਕਦੇ ਝਲਕ ਨਾ ਦਿਖਾਓ \n- ਕਦੇ ਵੀ ਧੁਨੀ ਜਾਂ ਥਰਥਰਾਹਟ ਨਾ ਕਰੋ \n\n"<b>"ਪੱਧਰ 1"</b>" \n- ਪੂਰੀ ਸਕ੍ਰੀਨ ਰੁਕਾਵਟ ਨੂੰ ਰੋਕੋ \n- ਕਦੇ ਝਲਕ ਨਾ ਦਿਖਾਓ \n- ਕਦੇ ਧੁਨੀ ਜਾਂ ਥਰਥਰਾਹਟ ਨਾ ਕਰੋ \n- ਲਾਕ ਸਕ੍ਰੀਨ ਅਤੇ ਸਥਿਤੀ ਪੱਟੀ ਤੋਂ ਲੁਕਾਓ \n- ਸੂਚਨਾ ਸੂਚੀ ਦੇ ਹੇਠਾਂ ਦਿਖਾਓ \n\n"<b>"ਪੱਧਰ 0"</b>" \n- ਐਪ ਤੋਂ ਸਾਰੀਆਂ ਸੂਚਨਾਵਾਂ ਨੂੰ ਬਲਾਕ ਕਰੋ"</string>
     <string name="inline_done_button" msgid="6043094985588909584">"ਹੋ ਗਿਆ"</string>
     <string name="inline_ok_button" msgid="603075490581280343">"ਲਾਗੂ ਕਰੋ"</string>
@@ -743,7 +732,7 @@
     <string name="magnification_mode_switch_state_full_screen" msgid="5229653514979530561">"ਪੂਰੀ ਸਕ੍ਰੀਨ ਨੂੰ ਵੱਡਦਰਸ਼ੀ ਕਰੋ"</string>
     <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"ਸਕ੍ਰੀਨ ਦੇ ਹਿੱਸੇ ਨੂੰ ਵੱਡਾ ਕਰੋ"</string>
     <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"ਸਵਿੱਚ"</string>
-    <string name="accessibility_floating_button_migration_tooltip" msgid="4431046858918714564">"ਪਹੁੰਚਯੋਗਤਾ ਬਟਨ ਨੂੰ ਪਹੁੰਚਯੋਗਤਾ ਸੰਕੇਤ ਨਾਲ ਬਦਲ ਦਿੱਤਾ ਗਿਆ\n\n"<annotation id="link">"ਸੈਟਿੰਗਾਂ ਦੇਖੋ"</annotation></string>
+    <string name="accessibility_floating_button_migration_tooltip" msgid="5217151214439341902">"ਪਹੁੰਚਯੋਗਤਾ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਖੋਲ੍ਹਣ ਲਈ ਟੈਪ ਕਰੋ। ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਇਹ ਬਟਨ ਵਿਉਂਤਬੱਧ ਕਰੋ ਜਾਂ ਬਦਲੋ।\n\n"<annotation id="link">"ਸੈਟਿੰਗਾਂ ਦੇਖੋ"</annotation></string>
     <string name="accessibility_floating_button_docking_tooltip" msgid="6814897496767461517">"ਬਟਨ ਨੂੰ ਅਸਥਾਈ ਤੌਰ \'ਤੇ ਲੁਕਾਉਣ ਲਈ ਕਿਨਾਰੇ \'ਤੇ ਲਿਜਾਓ"</string>
     <string name="accessibility_floating_button_action_move_top_left" msgid="6253520703618545705">"ਉੱਪਰ ਵੱਲ ਖੱਬੇ ਲਿਜਾਓ"</string>
     <string name="accessibility_floating_button_action_move_top_right" msgid="6106225581993479711">"ਉੱਪਰ ਵੱਲ ਸੱਜੇ ਲਿਜਾਓ"</string>
@@ -794,10 +783,17 @@
     <string name="controls_media_settings_button" msgid="5815790345117172504">"ਸੈਟਿੰਗਾਂ"</string>
     <string name="controls_media_playing_item_description" msgid="4531853311504359098">"<xliff:g id="APP_LABEL">%3$s</xliff:g> ਤੋਂ <xliff:g id="ARTIST_NAME">%2$s</xliff:g> ਦਾ <xliff:g id="SONG_NAME">%1$s</xliff:g> ਚੱਲ ਰਿਹਾ ਹੈ"</string>
     <string name="controls_media_seekbar_description" msgid="4389621713616214611">"<xliff:g id="TOTAL_TIME">%2$s</xliff:g> ਵਿੱਚੋਂ <xliff:g id="ELAPSED_TIME">%1$s</xliff:g>"</string>
+    <string name="controls_media_button_play" msgid="2705068099607410633">"ਚਲਾਓ"</string>
+    <string name="controls_media_button_pause" msgid="8614887780950376258">"ਰੋਕੋ"</string>
+    <string name="controls_media_button_prev" msgid="8126822360056482970">"ਪਿਛਲਾ ਟਰੈਕ"</string>
+    <string name="controls_media_button_next" msgid="6662636627525947610">"ਅਗਲਾ ਟਰੈਕ"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"ਚਲਾਓ"</string>
     <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"<xliff:g id="APP_LABEL">%1$s</xliff:g> ਖੋਲ੍ਹੋ"</string>
     <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"<xliff:g id="APP_LABEL">%3$s</xliff:g> ਤੋਂ <xliff:g id="ARTIST_NAME">%2$s</xliff:g> ਦਾ <xliff:g id="SONG_NAME">%1$s</xliff:g> ਚਲਾਓ"</string>
     <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"<xliff:g id="APP_LABEL">%2$s</xliff:g> ਤੋਂ <xliff:g id="SONG_NAME">%1$s</xliff:g> ਚਲਾਓ"</string>
+    <string name="media_transfer_undo" msgid="1895606387620728736">"ਅਣਕੀਤਾ ਕਰੋ"</string>
+    <string name="media_move_closer_to_transfer" msgid="1628426856415585141">"<xliff:g id="DEVICENAME">%1$s</xliff:g> \'ਤੇ ਚਲਾਉਣ ਲਈ ਨੇੜੇ ਲਿਜਾਓ"</string>
+    <string name="media_transfer_playing" msgid="3760048096352107789">"<xliff:g id="DEVICENAME">%1$s</xliff:g> \'ਤੇ ਚਲਾਇਆ ਜਾ ਰਿਹਾ ਹੈ"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"ਅਕਿਰਿਆਸ਼ੀਲ, ਐਪ ਦੀ ਜਾਂਚ ਕਰੋ"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"ਨਹੀਂ ਮਿਲਿਆ"</string>
     <string name="controls_error_removed_title" msgid="1207794911208047818">"ਕੰਟਰੋਲ ਉਪਲਬਧ ਨਹੀਂ ਹੈ"</string>
@@ -812,7 +808,7 @@
     <string name="media_output_dialog_single_device" msgid="3102758980643351058">"1 ਡੀਵਾਈਸ ਨੂੰ ਚੁਣਿਆ ਗਿਆ"</string>
     <string name="media_output_dialog_multiple_devices" msgid="1093771040315422350">"<xliff:g id="COUNT">%1$d</xliff:g> ਡੀਵਾਈਸਾਂ ਨੂੰ ਚੁਣਿਆ ਗਿਆ"</string>
     <string name="media_output_dialog_disconnected" msgid="7090512852817111185">"(ਡਿਸਕਨੈਕਟ ਹੈ)"</string>
-    <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"ਕਨੈਕਟ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
+    <string name="media_output_dialog_connect_failed" msgid="3080972621975339387">"ਬਦਲਿਆ ਨਹੀਂ ਜਾ ਸਕਦਾ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰਨ ਲਈ ਟੈਪ ਕਰੋ।"</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"ਨਵਾਂ ਡੀਵਾਈਸ ਜੋੜਾਬੱਧ ਕਰੋ"</string>
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"ਬਿਲਡ ਨੰਬਰ"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"ਬਿਲਡ ਨੰਬਰ ਨੂੰ ਕਲਿੱਪਬੋਰਡ \'ਤੇ ਕਾਪੀ ਕੀਤਾ ਗਿਆ।"</string>
@@ -877,8 +873,11 @@
     <string name="see_all_networks" msgid="3773666844913168122">"ਸਭ ਦੇਖੋ"</string>
     <string name="to_switch_networks_disconnect_ethernet" msgid="6698111101156951955">"ਨੈੱਟਵਰਕਾਂ ਨੂੰ ਬਦਲਣ ਲਈ, ਈਥਰਨੈੱਟ ਨੂੰ ਡਿਸਕਨੈਕਟ ਕਰੋ"</string>
     <string name="wifi_scan_notify_message" msgid="3753839537448621794">"ਡੀਵਾਈਸ ਦੇ ਅਨੁਭਵ ਨੂੰ ਬਿਹਤਰ ਬਣਾਉਣ ਲਈ, ਐਪਾਂ ਅਤੇ ਸੇਵਾਵਾਂ ਕਿਸੇ ਵੀ ਸਮੇਂ ਵਾਈ-ਫਾਈ ਨੈੱਟਵਰਕਾਂ ਲਈ ਸਕੈਨ ਕਰ ਸਕਦੀਆਂ ਹਨ, ਭਾਵੇਂ ਵਾਈ-ਫਾਈ ਬੰਦ ਹੀ ਕਿਉਂ ਨਾ ਹੋਵੇ। ਤੁਸੀਂ ਇਸ ਨੂੰ ਵਾਈ‑ਫਾਈ ਸਕੈਨਿੰਗ ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਜਾ ਕੇ ਬਦਲ ਸਕਦੇ ਹੋ। "<annotation id="link">"ਬਦਲੋ"</annotation></string>
+    <string name="turn_off_airplane_mode" msgid="8425587763226548579">"ਹਵਾਈ-ਜਹਾਜ਼ ਮੋਡ ਬੰਦ ਕਰੋ"</string>
     <string name="qs_tile_request_dialog_text" msgid="3501359944139877694">"<xliff:g id="APPNAME">%1$s</xliff:g> ਅੱਗੇ ਦਿੱਤੀ ਟਾਇਲ ਨੂੰ ਤਤਕਾਲ ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰਨਾ ਚਾਹੁੰਦੀ ਹੈ"</string>
     <string name="qs_tile_request_dialog_add" msgid="4888460910694986304">"ਟਾਇਲ ਸ਼ਾਮਲ ਕਰੋ"</string>
     <string name="qs_tile_request_dialog_not_add" msgid="4168716573114067296">"ਟਾਇਲ ਸ਼ਾਮਲ ਨਾ ਕਰੋ"</string>
     <string name="qs_user_switch_dialog_title" msgid="3045189293587781366">"ਵਰਤੋਂਕਾਰ ਚੁਣੋ"</string>
+    <string name="fgs_manager_dialog_title" msgid="656091833603337197">"ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਚੱਲ ਰਹੀਆਂ ਐਪਾਂ"</string>
+    <string name="fgs_manager_app_item_stop_button_label" msgid="7188317969020801156">"ਬੰਦ ਕਰੋ"</string>
 </resources>

@@ -122,6 +122,7 @@
     <uses-permission android:name="android.permission.SET_ORIENTATION" />
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
     <uses-permission android:name="android.permission.MONITOR_INPUT" />
+    <uses-permission android:name="android.permission.ALLOW_SLIPPERY_TOUCHES" />
     <uses-permission android:name="android.permission.INPUT_CONSUMER" />
 
     <!-- DreamManager -->
@@ -149,9 +150,6 @@
     <uses-permission android:name="android.permission.MANAGE_SLICE_PERMISSIONS" />
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.GET_RUNTIME_PERMISSIONS" />
-
-    <!-- Communal mode -->
-    <uses-permission android:name="android.permission.WRITE_COMMUNAL_STATE" />
 
     <!-- Needed for WallpaperManager.clear in ImageWallpaper.updateWallpaperLocked -->
     <uses-permission android:name="android.permission.SET_WALLPAPER"/>
@@ -218,8 +216,8 @@
 
     <!-- notifications & DND access -->
     <uses-permission android:name="android.permission.MANAGE_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.REVOKE_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.GET_RUNTIME_PERMISSIONS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- It's like, reality, but, you know, virtual -->
     <uses-permission android:name="android.permission.ACCESS_VR_MANAGER" />
@@ -260,6 +258,8 @@
     <uses-permission android:name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS" />
     <!-- For handling silent audio recordings -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_ROUTING" />
+    <!-- For asking AudioManager audio information -->
+    <uses-permission android:name="android.permission.QUERY_AUDIO_STATE"/>
 
     <!-- to read and change hvac values in a car -->
     <uses-permission android:name="android.car.permission.CONTROL_CAR_CLIMATE" />
@@ -299,6 +299,9 @@
     <uses-permission android:name="android.permission.READ_PEOPLE_DATA" />
 
     <uses-permission android:name="android.permission.BIND_APPWIDGET" />
+
+    <!-- For clipboard overlay -->
+    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
 
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
@@ -349,6 +352,7 @@
         <!-- started from PhoneWindowManager
              TODO: Should have an android:permission attribute -->
         <service android:name=".screenshot.TakeScreenshotService"
+            android:permission="com.android.systemui.permission.SELF"
             android:process=":screenshot"
             android:exported="false" />
 
@@ -379,6 +383,7 @@
         </receiver>
 
         <service android:name=".ImageWallpaper"
+                android:singleUser="true"
                 android:permission="android.permission.BIND_WALLPAPER"
                 android:exported="true" />
 
@@ -591,11 +596,7 @@
             android:theme="@style/Theme.SystemUI.Dialog.Alert"
             android:finishOnCloseSystemDialogs="true"
             android:excludeFromRecents="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.android.intent.action.REQUEST_SLICE_PERMISSION" />
-            </intent-filter>
-        </activity>
+            android:exported="true" />
 
         <!-- platform logo easter egg activity -->
         <activity
@@ -764,6 +765,12 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".clipboardoverlay.EditTextActivity"
+                  android:theme="@style/EditTextActivity"
+                  android:exported="false"
+                  android:excludeFromRecents="true"
+                  />
+
         <activity android:name=".controls.management.ControlsProviderSelectorActivity"
                   android:label="@string/controls_providers_title"
                   android:theme="@style/Theme.ControlsManagement"
@@ -848,6 +855,12 @@
             android:exported="true"
             android:singleUser="true"
             android:permission="android.permission.BIND_DREAM_SERVICE" />
+
+        <!-- Service for external clients to do media transfer -->
+        <!-- TODO(b/203800643): Export and guard with a permission. -->
+        <service
+            android:name=".media.taptotransfer.sender.MediaTttSenderService"
+           />
 
         <receiver
             android:name=".tuner.TunerService$ClearReceiver"

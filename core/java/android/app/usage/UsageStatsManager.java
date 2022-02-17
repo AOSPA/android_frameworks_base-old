@@ -16,6 +16,7 @@
 
 package android.app.usage;
 
+import android.annotation.CurrentTimeMillisLong;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -766,6 +767,74 @@ public final class UsageStatsManager {
         final ParceledListSlice<AppStandbyInfo> slice = new ParceledListSlice<>(bucketInfoList);
         try {
             mService.setAppStandbyBuckets(slice, mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Changes an app's estimated launch time. An app is considered "launched" when a user opens
+     * one of its {@link android.app.Activity Activities}. The provided time is persisted across
+     * reboots and is used unless 1) the time is more than a week in the future and the platform
+     * thinks the app will be launched sooner, 2) the estimated time has passed. Passing in
+     * {@link Long#MAX_VALUE} effectively clears the previously set launch time for the app.
+     *
+     * @param packageName               The package name of the app to set the bucket for.
+     * @param estimatedLaunchTimeMillis The next time the app is expected to be launched. Units are
+     *                                  in milliseconds since epoch (the same as
+     *                                  {@link System#currentTimeMillis()}).
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE)
+    public void setEstimatedLaunchTimeMillis(@NonNull String packageName,
+            @CurrentTimeMillisLong long estimatedLaunchTimeMillis) {
+        if (packageName == null) {
+            throw new NullPointerException("package name cannot be null");
+        }
+        if (estimatedLaunchTimeMillis <= 0) {
+            throw new IllegalArgumentException("estimated launch time must be positive");
+        }
+        try {
+            mService.setEstimatedLaunchTime(
+                    packageName, estimatedLaunchTimeMillis, mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Changes the estimated launch times for multiple apps at once. The map is keyed by the
+     * package name and the value is the estimated launch time.
+     *
+     * @param estimatedLaunchTimesMillis A map of package name to estimated launch time.
+     * @see #setEstimatedLaunchTimeMillis(String, long)
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE)
+    public void setEstimatedLaunchTimesMillis(
+            @NonNull Map<String, Long> estimatedLaunchTimesMillis) {
+        if (estimatedLaunchTimesMillis == null) {
+            throw new NullPointerException("estimatedLaunchTimesMillis cannot be null");
+        }
+        final List<AppLaunchEstimateInfo> estimateList =
+                new ArrayList<>(estimatedLaunchTimesMillis.size());
+        for (Map.Entry<String, Long> estimateEntry : estimatedLaunchTimesMillis.entrySet()) {
+            final String pkgName = estimateEntry.getKey();
+            if (pkgName == null) {
+                throw new NullPointerException("package name cannot be null");
+            }
+            final Long estimatedLaunchTime = estimateEntry.getValue();
+            if (estimatedLaunchTime == null || estimatedLaunchTime <= 0) {
+                throw new IllegalArgumentException("estimated launch time must be positive");
+            }
+            estimateList.add(new AppLaunchEstimateInfo(pkgName, estimatedLaunchTime));
+        }
+        final ParceledListSlice<AppLaunchEstimateInfo> slice =
+                new ParceledListSlice<>(estimateList);
+        try {
+            mService.setEstimatedLaunchTimes(slice, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

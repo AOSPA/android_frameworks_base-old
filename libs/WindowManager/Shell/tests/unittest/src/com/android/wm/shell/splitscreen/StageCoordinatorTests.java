@@ -19,16 +19,23 @@ package com.android.wm.shell.splitscreen;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.view.Display.DEFAULT_DISPLAY;
 
-import static com.android.internal.util.FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__RETURN_HOME;
-import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_BOTTOM_OR_RIGHT;
-import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_TOP_OR_LEFT;
+import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_BOTTOM_OR_RIGHT;
+import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_TOP_OR_LEFT;
+import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_UNDEFINED;
+import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_MAIN;
+import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_SIDE;
+import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_UNDEFINED;
 import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_RETURN_HOME;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,12 +51,12 @@ import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.ShellTestCase;
 import com.android.wm.shell.TestRunningTaskInfoBuilder;
+import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.split.SplitLayout;
-import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.transition.Transitions;
 
 import org.junit.Before;
@@ -85,6 +92,8 @@ public class StageCoordinatorTests extends ShellTestCase {
     @Mock
     private SplitLayout mSplitLayout;
     @Mock
+    private DisplayController mDisplayController;
+    @Mock
     private DisplayImeController mDisplayImeController;
     @Mock
     private DisplayInsetsController mDisplayInsetsController;
@@ -103,19 +112,48 @@ public class StageCoordinatorTests extends ShellTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        mStageCoordinator = createStageCoordinator(/* splitLayout */ null);
+        mStageCoordinator = spy(createStageCoordinator(/* splitLayout */ null));
+        doNothing().when(mStageCoordinator).updateActivityOptions(any(), anyInt());
 
         when(mSplitLayout.getBounds1()).thenReturn(mBounds1);
         when(mSplitLayout.getBounds2()).thenReturn(mBounds2);
+        when(mSplitLayout.isLandscape()).thenReturn(false);
     }
 
     @Test
-    public void testMoveToSideStage() {
+    public void testMoveToStage() {
         final ActivityManager.RunningTaskInfo task = new TestRunningTaskInfoBuilder().build();
 
-        mStageCoordinator.moveToSideStage(task, SPLIT_POSITION_BOTTOM_OR_RIGHT);
+        mStageCoordinator.moveToStage(task, STAGE_TYPE_MAIN, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                new WindowContainerTransaction());
+        verify(mMainStage).addTask(eq(task), any(WindowContainerTransaction.class));
+        assertEquals(SPLIT_POSITION_BOTTOM_OR_RIGHT, mStageCoordinator.getMainStagePosition());
 
+        mStageCoordinator.moveToStage(task, STAGE_TYPE_SIDE, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                new WindowContainerTransaction());
         verify(mSideStage).addTask(eq(task), any(WindowContainerTransaction.class));
+        assertEquals(SPLIT_POSITION_BOTTOM_OR_RIGHT, mStageCoordinator.getSideStagePosition());
+    }
+
+    @Test
+    public void testMoveToUndefinedStage() {
+        final ActivityManager.RunningTaskInfo task = new TestRunningTaskInfoBuilder().build();
+
+        // Verify move to undefined stage while split screen not activated moves task to side stage.
+        when(mMainStage.isActive()).thenReturn(false);
+        mStageCoordinator.setSideStagePosition(SPLIT_POSITION_TOP_OR_LEFT, null);
+        mStageCoordinator.moveToStage(task, STAGE_TYPE_UNDEFINED, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                new WindowContainerTransaction());
+        verify(mSideStage).addTask(eq(task), any(WindowContainerTransaction.class));
+        assertEquals(SPLIT_POSITION_BOTTOM_OR_RIGHT, mStageCoordinator.getSideStagePosition());
+
+        // Verify move to undefined stage after split screen activated moves task based on position.
+        when(mMainStage.isActive()).thenReturn(true);
+        assertEquals(SPLIT_POSITION_TOP_OR_LEFT, mStageCoordinator.getMainStagePosition());
+        mStageCoordinator.moveToStage(task, STAGE_TYPE_UNDEFINED, SPLIT_POSITION_TOP_OR_LEFT,
+                new WindowContainerTransaction());
+        verify(mMainStage).addTask(eq(task), any(WindowContainerTransaction.class));
+        assertEquals(SPLIT_POSITION_TOP_OR_LEFT, mStageCoordinator.getMainStagePosition());
     }
 
     @Test
@@ -134,8 +172,9 @@ public class StageCoordinatorTests extends ShellTestCase {
 
         mStageCoordinator.onLayoutSizeChanged(mSplitLayout);
 
-        verify(mMainUnfoldController).onLayoutChanged(mBounds2);
-        verify(mSideUnfoldController).onLayoutChanged(mBounds1);
+        verify(mMainUnfoldController).onLayoutChanged(mBounds2, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                false);
+        verify(mSideUnfoldController).onLayoutChanged(mBounds1, SPLIT_POSITION_TOP_OR_LEFT, false);
     }
 
     @Test
@@ -146,8 +185,10 @@ public class StageCoordinatorTests extends ShellTestCase {
 
         mStageCoordinator.onLayoutSizeChanged(mSplitLayout);
 
-        verify(mMainUnfoldController).onLayoutChanged(mBounds1);
-        verify(mSideUnfoldController).onLayoutChanged(mBounds2);
+        verify(mMainUnfoldController).onLayoutChanged(mBounds1, SPLIT_POSITION_TOP_OR_LEFT,
+                false);
+        verify(mSideUnfoldController).onLayoutChanged(mBounds2, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                false);
     }
 
     @Test
@@ -195,10 +236,67 @@ public class StageCoordinatorTests extends ShellTestCase {
         verify(mMainStage).deactivate(any(WindowContainerTransaction.class), eq(false));
     }
 
+    @Test
+    public void testResolveStartStage_beforeSplitActivated_setsStagePosition() {
+        mStageCoordinator.setSideStagePosition(SPLIT_POSITION_TOP_OR_LEFT, null /* wct */);
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_UNDEFINED, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getSideStagePosition(), SPLIT_POSITION_BOTTOM_OR_RIGHT);
+        verify(mStageCoordinator).updateActivityOptions(any(), eq(SPLIT_POSITION_BOTTOM_OR_RIGHT));
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_UNDEFINED, SPLIT_POSITION_TOP_OR_LEFT,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getSideStagePosition(), SPLIT_POSITION_TOP_OR_LEFT);
+        verify(mStageCoordinator).updateActivityOptions(any(), eq(SPLIT_POSITION_TOP_OR_LEFT));
+    }
+
+    @Test
+    public void testResolveStartStage_afterSplitActivated_retrievesStagePosition() {
+        when(mMainStage.isActive()).thenReturn(true);
+        mStageCoordinator.setSideStagePosition(SPLIT_POSITION_TOP_OR_LEFT, null /* wct */);
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_UNDEFINED, SPLIT_POSITION_TOP_OR_LEFT,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getSideStagePosition(), SPLIT_POSITION_TOP_OR_LEFT);
+        verify(mStageCoordinator).updateActivityOptions(any(), eq(SPLIT_POSITION_TOP_OR_LEFT));
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_UNDEFINED, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getMainStagePosition(), SPLIT_POSITION_BOTTOM_OR_RIGHT);
+        verify(mStageCoordinator).updateActivityOptions(any(), eq(SPLIT_POSITION_BOTTOM_OR_RIGHT));
+    }
+
+    @Test
+    public void testResolveStartStage_setsSideStagePosition() {
+        mStageCoordinator.setSideStagePosition(SPLIT_POSITION_TOP_OR_LEFT, null /* wct */);
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_SIDE, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getSideStagePosition(), SPLIT_POSITION_BOTTOM_OR_RIGHT);
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_MAIN, SPLIT_POSITION_BOTTOM_OR_RIGHT,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getMainStagePosition(), SPLIT_POSITION_BOTTOM_OR_RIGHT);
+    }
+
+    @Test
+    public void testResolveStartStage_retrievesStagePosition() {
+        mStageCoordinator.setSideStagePosition(SPLIT_POSITION_TOP_OR_LEFT, null /* wct */);
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_SIDE, SPLIT_POSITION_UNDEFINED,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getSideStagePosition(), SPLIT_POSITION_TOP_OR_LEFT);
+
+        mStageCoordinator.resolveStartStage(STAGE_TYPE_MAIN, SPLIT_POSITION_UNDEFINED,
+                null /* options */, null /* wct */);
+        assertEquals(mStageCoordinator.getMainStagePosition(), SPLIT_POSITION_BOTTOM_OR_RIGHT);
+    }
+
     private StageCoordinator createStageCoordinator(SplitLayout splitLayout) {
         return new SplitTestUtils.TestStageCoordinator(mContext, DEFAULT_DISPLAY,
                 mSyncQueue, mRootTDAOrganizer, mTaskOrganizer, mMainStage, mSideStage,
-                mDisplayImeController, mDisplayInsetsController, splitLayout,
+                mDisplayController, mDisplayImeController, mDisplayInsetsController, splitLayout,
                 mTransitions, mTransactionPool, mLogger, Optional.empty(),
                 new UnfoldControllerProvider());
     }

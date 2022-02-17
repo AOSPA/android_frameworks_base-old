@@ -25,8 +25,10 @@ import static com.android.server.job.controllers.Package.packageToString;
 import android.annotation.CurrentTimeMillisLong;
 import android.annotation.ElapsedRealtimeLong;
 import android.annotation.NonNull;
+import android.app.job.JobInfo;
 import android.app.usage.UsageStatsManagerInternal;
 import android.app.usage.UsageStatsManagerInternal.EstimatedLaunchTimeChangedListener;
+import android.appwidget.AppWidgetManager;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -61,6 +63,13 @@ public class PrefetchController extends StateController {
     private final PcConstants mPcConstants;
     private final PcHandler mHandler;
 
+    // Note: when determining prefetch bit satisfaction, we mark the bit as satisfied for apps with
+    // active widgets assuming that any prefetch jobs are being used for the widget. However, we
+    // don't have a callback telling us when widget status changes, which is incongruent with the
+    // aforementioned assumption. This inconsistency _should_ be fine since any jobs scheduled
+    // before the widget is activated are definitely not for the widget and don't have to be updated
+    // to "satisfied=true".
+    private AppWidgetManager mAppWidgetManager;
     private final UsageStatsManagerInternal mUsageStatsManagerInternal;
 
     @GuardedBy("mLock")
@@ -98,6 +107,7 @@ public class PrefetchController extends StateController {
 
     private static final int MSG_RETRIEVE_ESTIMATED_LAUNCH_TIME = 0;
     private static final int MSG_PROCESS_UPDATED_ESTIMATED_LAUNCH_TIME = 1;
+    private static final int MSG_PROCESS_TOP_STATE_CHANGE = 2;
 
     public PrefetchController(JobSchedulerService service) {
         super(service);
@@ -109,6 +119,11 @@ public class PrefetchController extends StateController {
 
         mUsageStatsManagerInternal
                 .registerLaunchTimeChangedListener(mEstimatedLaunchTimeChangedListener);
+    }
+
+    @Override
+    public void onSystemServicesReady() {
+        mAppWidgetManager = mContext.getSystemService(AppWidgetManager.class);
     }
 
     @Override
@@ -165,6 +180,16 @@ public class PrefetchController extends StateController {
         mThresholdAlarmListener.removeAlarmsForUserId(userId);
     }
 
+    @GuardedBy("mLock")
+    @Override
+    public void onUidBiasChangedLocked(int uid, int prevBias, int newBias) {
+        final boolean isNowTop = newBias == JobInfo.BIAS_TOP_APP;
+        final boolean wasTop = prevBias == JobInfo.BIAS_TOP_APP;
+        if (isNowTop != wasTop) {
+            mHandler.obtainMessage(MSG_PROCESS_TOP_STATE_CHANGE, uid, 0).sendToTarget();
+        }
+    }
+
     /** Return the app's next estimated launch time. */
     @GuardedBy("mLock")
     @CurrentTimeMillisLong
@@ -203,6 +228,35 @@ public class PrefetchController extends StateController {
             changed |= updateConstraintLocked(js, now, nowElapsed);
         }
         return changed;
+    }
+
+    private void maybeUpdateConstraintForUid(int uid) {
+        synchronized (mLock) {
+            final ArraySet<String> pkgs = mService.getPackagesForUidLocked(uid);
+            if (pkgs == null) {
+                return;
+            }
+            final int userId = UserHandle.getUserId(uid);
+            final ArraySet<JobStatus> changedJobs = new ArraySet<>();
+            final long now = sSystemClock.millis();
+            final long nowElapsed = sElapsedRealtimeClock.millis();
+            for (int p = pkgs.size() - 1; p >= 0; --p) {
+                final String pkgName = pkgs.valueAt(p);
+                final ArraySet<JobStatus> jobs = mTrackedJobs.get(userId, pkgName);
+                if (jobs == null) {
+                    continue;
+                }
+                for (int i = 0; i < jobs.size(); i++) {
+                    final JobStatus js = jobs.valueAt(i);
+                    if (updateConstraintLocked(js, now, nowElapsed)) {
+                        changedJobs.add(js);
+                    }
+                }
+            }
+            if (changedJobs.size() > 0) {
+                mStateChangedListener.onControllerStateChanged(changedJobs);
+            }
+        }
     }
 
     private void processUpdatedEstimatedLaunchTime(int userId, @NonNull String pkgName,
@@ -244,9 +298,31 @@ public class PrefetchController extends StateController {
     @GuardedBy("mLock")
     private boolean updateConstraintLocked(@NonNull JobStatus jobStatus,
             @CurrentTimeMillisLong long now, @ElapsedRealtimeLong long nowElapsed) {
-        return jobStatus.setPrefetchConstraintSatisfied(nowElapsed,
-                willBeLaunchedSoonLocked(
-                        jobStatus.getSourceUserId(), jobStatus.getSourcePackageName(), now));
+        // Mark a prefetch constraint as satisfied in the following scenarios:
+        //   1. The app is not open but it will be launched soon
+        //   2. The app is open and the job is already running (so we let it finish)
+        //   3. The app is not open but has an active widget (we can't tell if a widget displays
+        //      status/data, so this assumes the prefetch job is to update the data displayed on
+        //      the widget).
+        final boolean appIsOpen =
+                mService.getUidBias(jobStatus.getSourceUid()) == JobInfo.BIAS_TOP_APP;
+        final boolean satisfied;
+        if (!appIsOpen) {
+            final int userId = jobStatus.getSourceUserId();
+            final String pkgName = jobStatus.getSourcePackageName();
+            satisfied = willBeLaunchedSoonLocked(userId, pkgName, now)
+                    // At the time of implementation, isBoundWidgetPackage() results in a process ID
+                    // check and then a lookup into a map. Calling the method here every time
+                    // is based on the assumption that widgets won't change often and
+                    // AppWidgetManager won't be a bottleneck, so having a local cache won't provide
+                    // huge performance gains. If anything changes, we should reconsider having a
+                    // local cache.
+                    || (mAppWidgetManager != null
+                            && mAppWidgetManager.isBoundWidgetPackage(pkgName, userId));
+        } else {
+            satisfied = mService.isCurrentlyRunningLocked(jobStatus);
+        }
+        return jobStatus.setPrefetchConstraintSatisfied(nowElapsed, satisfied);
     }
 
     @GuardedBy("mLock")
@@ -398,6 +474,11 @@ public class PrefetchController extends StateController {
                     final SomeArgs args = (SomeArgs) msg.obj;
                     processUpdatedEstimatedLaunchTime(args.argi1, (String) args.arg1, args.argl1);
                     args.recycle();
+                    break;
+
+                case MSG_PROCESS_TOP_STATE_CHANGE:
+                    final int uid = msg.arg1;
+                    maybeUpdateConstraintForUid(uid);
                     break;
             }
         }

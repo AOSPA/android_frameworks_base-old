@@ -234,6 +234,7 @@ public final class FakeGnssHal extends GnssNative.GnssHal {
         private boolean mMeasurementCollectionStarted = false;
         private boolean mMeasurementCollectionFullTracking = false;
         private boolean mMeasurementCollectionCorrVecOutputsEnabled = false;
+        private int mMeasurementCollectionIntervalMillis = 0;
         private GnssHalPositionMode mPositionMode = new GnssHalPositionMode();
         private GnssHalBatchingMode mBatchingMode = new GnssHalBatchingMode();
         private final ArrayList<Location> mBatchedLocations = new ArrayList<>();
@@ -428,11 +429,15 @@ public final class FakeGnssHal extends GnssNative.GnssHal {
     }
 
     @Override
-    protected void injectLocation(double latitude, double longitude, float accuracy) {
+    protected void injectLocation(@GnssLocationFlags int gnssLocationFlags, double latitude,
+            double longitude, double altitude, float speed, float bearing, float horizontalAccuracy,
+            float verticalAccuracy, float speedAccuracy, float bearingAccuracy, long timestamp,
+            @GnssRealtimeFlags int elapsedRealtimeFlags, long elapsedRealtimeNanos,
+            double elapsedRealtimeUncertaintyNanos) {
         mState.mInjectedLocation = new Location("injected");
         mState.mInjectedLocation.setLatitude(latitude);
         mState.mInjectedLocation.setLongitude(longitude);
-        mState.mInjectedLocation.setAccuracy(accuracy);
+        mState.mInjectedLocation.setAccuracy(horizontalAccuracy);
     }
 
     @Override
@@ -523,10 +528,11 @@ public final class FakeGnssHal extends GnssNative.GnssHal {
 
     @Override
     protected boolean startMeasurementCollection(boolean enableFullTracking,
-            boolean enableCorrVecOutputs) {
+            boolean enableCorrVecOutputs, int intervalMillis) {
         mState.mMeasurementCollectionStarted = true;
         mState.mMeasurementCollectionFullTracking = enableFullTracking;
         mState.mMeasurementCollectionCorrVecOutputsEnabled = enableCorrVecOutputs;
+        mState.mMeasurementCollectionIntervalMillis = intervalMillis;
         return true;
     }
 
@@ -535,6 +541,7 @@ public final class FakeGnssHal extends GnssNative.GnssHal {
         mState.mMeasurementCollectionStarted = false;
         mState.mMeasurementCollectionFullTracking = false;
         mState.mMeasurementCollectionCorrVecOutputsEnabled = false;
+        mState.mMeasurementCollectionIntervalMillis = 0;
         return true;
     }
 

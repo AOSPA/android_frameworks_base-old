@@ -120,6 +120,11 @@ public class PipDismissTargetHandler implements ViewTreeObserver.OnPreDrawListen
         mEnableDismissDragToEdge = res.getBoolean(R.bool.config_pipEnableDismissDragToEdge);
         mDismissAreaHeight = res.getDimensionPixelSize(R.dimen.floating_dismiss_gradient_height);
 
+        if (mTargetViewContainer != null) {
+            // init can be called multiple times, remove the old one from view hierarchy first.
+            cleanUpDismissTarget();
+        }
+
         mTargetView = new DismissCircleView(mContext);
         mTargetViewContainer = new FrameLayout(mContext);
         mTargetViewContainer.setBackgroundDrawable(
@@ -135,6 +140,7 @@ public class PipDismissTargetHandler implements ViewTreeObserver.OnPreDrawListen
         });
 
         mMagnetizedPip = mMotionHelper.getMagnetizedPip();
+        mMagnetizedPip.clearAllTargets();
         mMagneticTarget = mMagnetizedPip.addTarget(mTargetView, 0);
         updateMagneticTargetSize();
 

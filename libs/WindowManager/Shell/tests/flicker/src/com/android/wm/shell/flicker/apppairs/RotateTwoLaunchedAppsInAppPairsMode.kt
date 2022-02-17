@@ -87,11 +87,15 @@ class RotateTwoLaunchedAppsInAppPairsMode(
         testSpec.appPairsPrimaryBoundsIsVisibleAtEnd(testSpec.endRotation,
             primaryApp.component)
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun appPairsSecondaryBoundsIsVisibleAtEnd() =
         testSpec.appPairsSecondaryBoundsIsVisibleAtEnd(testSpec.endRotation,
             secondaryApp.component)
+
+    @FlakyTest(bugId = 206753786)
+    @Test
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

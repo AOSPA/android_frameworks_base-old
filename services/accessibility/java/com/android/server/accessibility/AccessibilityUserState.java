@@ -105,6 +105,7 @@ class AccessibilityUserState {
     private String mTargetAssignedToAccessibilityButton;
 
     private boolean mBindInstantServiceAllowed;
+    private boolean mIsAudioDescriptionByDefaultRequested;
     private boolean mIsAutoclickEnabled;
     private boolean mIsDisplayMagnificationEnabled;
     private boolean mIsFilterKeyEventsEnabled;
@@ -128,6 +129,8 @@ class AccessibilityUserState {
     private final SparseIntArray mMagnificationModes = new SparseIntArray();
     // The magnification capabilities used to know magnification mode could be switched.
     private int mMagnificationCapabilities = ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN;
+    // Whether the following typing focus feature for magnification is enabled.
+    private boolean mMagnificationFollowTypingEnabled = true;
 
     /** The stroke width of the focus rectangle in pixels */
     private int mFocusStrokeWidth;
@@ -209,6 +212,7 @@ class AccessibilityUserState {
         mMagnificationModes.clear();
         mFocusStrokeWidth = mFocusStrokeWidthDefaultValue;
         mFocusColor = mFocusColorDefaultValue;
+        mMagnificationFollowTypingEnabled = true;
     }
 
     void addServiceLocked(AccessibilityServiceConnection serviceConnection) {
@@ -411,6 +415,10 @@ class AccessibilityUserState {
         if (mIsTextHighContrastEnabled) {
             clientState |= AccessibilityManager.STATE_FLAG_HIGH_TEXT_CONTRAST_ENABLED;
         }
+        if (mIsAudioDescriptionByDefaultRequested) {
+            clientState |=
+                    AccessibilityManager.STATE_FLAG_AUDIO_DESCRIPTION_BY_DEFAULT_ENABLED;
+        }
 
         clientState |= traceClientState;
 
@@ -506,6 +514,8 @@ class AccessibilityUserState {
         pw.append(", magnificationModes=").append(String.valueOf(mMagnificationModes));
         pw.append(", magnificationCapabilities=")
                 .append(String.valueOf(mMagnificationCapabilities));
+        pw.append(", audioDescriptionByDefaultEnabled=")
+                .append(String.valueOf(mIsAudioDescriptionByDefaultRequested));
         pw.append("}");
         pw.println();
         pw.append("     shortcut key:{");
@@ -678,6 +688,14 @@ class AccessibilityUserState {
         mMagnificationCapabilities = capabilities;
     }
 
+    public void setMagnificationFollowTypingEnabled(boolean enabled) {
+        mMagnificationFollowTypingEnabled = enabled;
+    }
+
+    public boolean isMagnificationFollowTypingEnabled() {
+        return mMagnificationFollowTypingEnabled;
+    }
+
     /**
      * Sets the magnification mode to the given display.
      *
@@ -822,6 +840,14 @@ class AccessibilityUserState {
 
     public void setTextHighContrastEnabledLocked(boolean enabled) {
         mIsTextHighContrastEnabled = enabled;
+    }
+
+    public boolean isAudioDescriptionByDefaultEnabledLocked() {
+        return mIsAudioDescriptionByDefaultRequested;
+    }
+
+    public void setAudioDescriptionByDefaultEnabledLocked(boolean enabled) {
+        mIsAudioDescriptionByDefaultRequested = enabled;
     }
 
     public boolean isTouchExplorationEnabledLocked() {

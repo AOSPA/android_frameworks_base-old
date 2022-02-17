@@ -19,6 +19,7 @@ package com.android.server.am;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.Process.FIRST_APPLICATION_UID;
+import static android.util.FeatureFlagUtils.SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS;
 
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_CRITICAL;
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_LOW;
@@ -77,6 +78,7 @@ import android.provider.DeviceConfig.Properties;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.DebugUtils;
+import android.util.FeatureFlagUtils;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -958,7 +960,6 @@ public class AppProfiler {
 
     @GuardedBy({"mService", "mProcLock"})
     boolean updateLowMemStateLSP(int numCached, int numEmpty, int numTrimming) {
-        final long now = SystemClock.uptimeMillis();
         int memFactor;
         if (mLowMemDetector != null && mLowMemDetector.isAvailable()) {
             memFactor = mLowMemDetector.getMemFactor();
@@ -1013,7 +1014,9 @@ public class AppProfiler {
         mLastNumProcesses = mService.mProcessList.getLruSizeLOSP();
         boolean allChanged;
         int trackerMemFactor;
+        final long now;
         synchronized (mService.mProcessStats.mLock) {
+            now = SystemClock.uptimeMillis();
             allChanged = mService.mProcessStats.setMemFactorLocked(memFactor,
                     mService.mAtmInternal == null || !mService.mAtmInternal.isSleeping(), now);
             trackerMemFactor = mService.mProcessStats.getMemFactorLocked();
@@ -1049,7 +1052,7 @@ public class AppProfiler {
                 final int curProcState = state.getCurProcState();
                 IApplicationThread thread;
                 if (allChanged || state.hasProcStateChanged()) {
-                    mService.setProcessTrackerStateLOSP(app, trackerMemFactor, now);
+                    mService.setProcessTrackerStateLOSP(app, trackerMemFactor);
                     state.setProcStateChanged(false);
                 }
                 trimMemoryUiHiddenIfNecessaryLSP(app);
@@ -1118,7 +1121,7 @@ public class AppProfiler {
                 final IApplicationThread thread;
                 final ProcessStateRecord state = app.mState;
                 if (allChanged || state.hasProcStateChanged()) {
-                    mService.setProcessTrackerStateLOSP(app, trackerMemFactor, now);
+                    mService.setProcessTrackerStateLOSP(app, trackerMemFactor);
                     state.setProcStateChanged(false);
                 }
                 trimMemoryUiHiddenIfNecessaryLSP(app);
@@ -1809,6 +1812,8 @@ public class AppProfiler {
     }
 
     void updateCpuStatsNow() {
+        final boolean monitorPhantomProcs = mService.mSystemReady && FeatureFlagUtils.isEnabled(
+                mService.mContext, SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS);
         synchronized (mProcessCpuTracker) {
             mProcessCpuMutexFree.set(false);
             final long now = SystemClock.uptimeMillis();
@@ -1847,7 +1852,7 @@ public class AppProfiler {
                 }
             }
 
-            if (haveNewCpuStats) {
+            if (monitorPhantomProcs && haveNewCpuStats) {
                 mService.mPhantomProcessList.updateProcessCpuStatesLocked(mProcessCpuTracker);
             }
 

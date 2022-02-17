@@ -121,6 +121,8 @@ public final class AccessibilityManager {
     public static final int STATE_FLAG_TRACE_A11Y_INTERACTION_CLIENT_ENABLED = 0x00000400;
     /** @hide */
     public static final int STATE_FLAG_TRACE_A11Y_SERVICE_ENABLED = 0x00000800;
+    /** @hide */
+    public static final int STATE_FLAG_AUDIO_DESCRIPTION_BY_DEFAULT_ENABLED = 0x00001000;
 
     /** @hide */
     public static final int DALTONIZER_DISABLED = -1;
@@ -244,6 +246,8 @@ public final class AccessibilityManager {
     @UnsupportedAppUsage(trackingBug = 123768939L)
     boolean mIsHighTextContrastEnabled;
 
+    boolean mIsAudioDescriptionByDefaultRequested;
+
     // accessibility tracing state
     int mAccessibilityTracingState = 0;
 
@@ -268,6 +272,9 @@ public final class AccessibilityManager {
 
     private final ArrayMap<AccessibilityServicesStateChangeListener, Executor>
             mServicesStateChangeListeners = new ArrayMap<>();
+
+    private final ArrayMap<AudioDescriptionRequestedChangeListener, Executor>
+            mAudioDescriptionRequestedChangeListeners = new ArrayMap<>();
 
     /**
      * Map from a view's accessibility id to the list of request preparers set for that view
@@ -346,6 +353,21 @@ public final class AccessibilityManager {
          * @param enabled Whether high text contrast is enabled.
          */
         void onHighTextContrastStateChanged(boolean enabled);
+    }
+
+    /**
+     * Listener for the audio description by default state. To listen for
+     * changes to the audio description by default state on the device,
+     * implement this interface and register it with the system by calling
+     * {@link #addAudioDescriptionRequestedChangeListener}.
+     */
+    public interface AudioDescriptionRequestedChangeListener {
+        /**
+         * Called when the audio description enabled state changes.
+         *
+         * @param enabled Whether audio description by default is enabled.
+         */
+        void onAudioDescriptionRequestedChanged(boolean enabled);
     }
 
     /**
@@ -1155,6 +1177,35 @@ public final class AccessibilityManager {
     }
 
     /**
+     * Registers a {@link AudioDescriptionRequestedChangeListener}
+     * for changes in the audio description by default state of the system.
+     * The value could be read via {@link #isAudioDescriptionRequested}.
+     *
+     * @param executor The executor on which the listener should be called back.
+     * @param listener The listener.
+     */
+    public void addAudioDescriptionRequestedChangeListener(
+            @NonNull Executor executor,
+            @NonNull AudioDescriptionRequestedChangeListener listener) {
+        synchronized (mLock) {
+            mAudioDescriptionRequestedChangeListeners.put(listener, executor);
+        }
+    }
+
+    /**
+     * Unregisters a {@link AudioDescriptionRequestedChangeListener}.
+     *
+     * @param listener The listener.
+     * @return True if listener was previously registered.
+     */
+    public boolean removeAudioDescriptionRequestedChangeListener(
+            @NonNull AudioDescriptionRequestedChangeListener listener) {
+        synchronized (mLock) {
+            return (mAudioDescriptionRequestedChangeListeners.remove(listener) != null);
+        }
+    }
+
+    /**
      * Sets the {@link AccessibilityPolicy} controlling this manager.
      *
      * @param policy The policy.
@@ -1293,15 +1344,19 @@ public final class AccessibilityManager {
                 (stateFlags & STATE_FLAG_TOUCH_EXPLORATION_ENABLED) != 0;
         final boolean highTextContrastEnabled =
                 (stateFlags & STATE_FLAG_HIGH_TEXT_CONTRAST_ENABLED) != 0;
+        final boolean audioDescriptionEnabled =
+                (stateFlags & STATE_FLAG_AUDIO_DESCRIPTION_BY_DEFAULT_ENABLED) != 0;
 
         final boolean wasEnabled = isEnabled();
         final boolean wasTouchExplorationEnabled = mIsTouchExplorationEnabled;
         final boolean wasHighTextContrastEnabled = mIsHighTextContrastEnabled;
+        final boolean wasAudioDescriptionByDefaultRequested = mIsAudioDescriptionByDefaultRequested;
 
         // Ensure listeners get current state from isZzzEnabled() calls.
         mIsEnabled = enabled;
         mIsTouchExplorationEnabled = touchExplorationEnabled;
         mIsHighTextContrastEnabled = highTextContrastEnabled;
+        mIsAudioDescriptionByDefaultRequested = audioDescriptionEnabled;
 
         if (wasEnabled != isEnabled()) {
             notifyAccessibilityStateChanged();
@@ -1313,6 +1368,11 @@ public final class AccessibilityManager {
 
         if (wasHighTextContrastEnabled != highTextContrastEnabled) {
             notifyHighTextContrastStateChanged();
+        }
+
+        if (wasAudioDescriptionByDefaultRequested
+                != audioDescriptionEnabled) {
+            notifyAudioDescriptionbyDefaultStateChanged();
         }
 
         updateAccessibilityTracingState(stateFlags);
@@ -1678,6 +1738,102 @@ public final class AccessibilityManager {
         }
     }
 
+    /**
+     * Determines if users want to select sound track with audio description by default.
+     * <p>
+     * Audio description, also referred to as a video description, described video, or
+     * more precisely called a visual description, is a form of narration used to provide
+     * information surrounding key visual elements in a media work for the benefit of
+     * blind and visually impaired consumers.
+     * </p>
+     * <p>
+     * The method provides the preference value to content provider apps to select the
+     * default sound track during playing a video or movie.
+     * </p>
+     * <p>
+     * Add listener to detect the state change via
+     * {@link #addAudioDescriptionRequestedChangeListener}
+     * </p>
+     * @return {@code true} if the audio description is enabled, {@code false} otherwise.
+     */
+    public boolean isAudioDescriptionRequested() {
+        synchronized (mLock) {
+            IAccessibilityManager service = getServiceLocked();
+            if (service == null) {
+                return false;
+            }
+            return mIsAudioDescriptionByDefaultRequested;
+        }
+    }
+
+    /**
+     * Sets the system audio caption enabled state.
+     *
+     * @param isEnabled The system audio captioning enabled state.
+     * @param userId The user Id.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.SET_SYSTEM_AUDIO_CAPTION)
+    public void setSystemAudioCaptioningRequested(boolean isEnabled, int userId) {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return;
+            }
+        }
+        try {
+            service.setSystemAudioCaptioningRequested(isEnabled, userId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Gets the system audio caption UI enabled state.
+     *
+     * @param userId The user Id.
+     * @return the system audio caption UI enabled state.
+     * @hide
+     */
+    public boolean isSystemAudioCaptioningUiRequested(int userId) {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return false;
+            }
+        }
+        try {
+            return service.isSystemAudioCaptioningUiRequested(userId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the system audio caption UI enabled state.
+     *
+     * @param isEnabled The system audio captioning UI enabled state.
+     * @param userId The user Id.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.SET_SYSTEM_AUDIO_CAPTION)
+    public void setSystemAudioCaptioningUiRequested(boolean isEnabled, int userId) {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return;
+            }
+        }
+        try {
+            service.setSystemAudioCaptioningUiRequested(isEnabled, userId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
     private IAccessibilityManager getServiceLocked() {
         if (mService == null) {
             tryConnectToServiceLocked(null);
@@ -1769,6 +1925,29 @@ public final class AccessibilityManager {
             final HighTextContrastChangeListener listener = listeners.keyAt(i);
             listeners.valueAt(i).post(() ->
                     listener.onHighTextContrastStateChanged(isHighTextContrastEnabled));
+        }
+    }
+
+    /**
+     * Notifies the registered {@link AudioDescriptionStateChangeListener}s.
+     */
+    private void notifyAudioDescriptionbyDefaultStateChanged() {
+        final boolean isAudioDescriptionByDefaultRequested;
+        final ArrayMap<AudioDescriptionRequestedChangeListener, Executor> listeners;
+        synchronized (mLock) {
+            if (mAudioDescriptionRequestedChangeListeners.isEmpty()) {
+                return;
+            }
+            isAudioDescriptionByDefaultRequested = mIsAudioDescriptionByDefaultRequested;
+            listeners = new ArrayMap<>(mAudioDescriptionRequestedChangeListeners);
+        }
+
+        final int numListeners = listeners.size();
+        for (int i = 0; i < numListeners; i++) {
+            final AudioDescriptionRequestedChangeListener listener = listeners.keyAt(i);
+            listeners.valueAt(i).execute(() ->
+                    listener.onAudioDescriptionRequestedChanged(
+                        isAudioDescriptionByDefaultRequested));
         }
     }
 

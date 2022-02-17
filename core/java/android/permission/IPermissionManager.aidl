@@ -67,12 +67,16 @@ interface IPermissionManager {
     void revokeRuntimePermission(String packageName, String permissionName, int userId,
             String reason);
 
+    void revokePostNotificationPermissionWithoutKillForTest(String packageName, int userId);
+
     boolean shouldShowRequestPermissionRationale(String packageName, String permissionName,
             int userId);
 
     boolean isPermissionRevokedByPolicy(String packageName, String permissionName, int userId);
 
     List<SplitPermissionInfoParcelable> getSplitPermissions();
+
+    void selfRevokePermissions(String packageName, in List<String> permissions);
 
     void startOneTimePermissionSession(String packageName, int userId, long timeout,
             int importanceToResetTimer, int importanceToKeepSessionAlive);

@@ -16,16 +16,21 @@
 
 package androidx.window.extensions.embedding;
 
+import static android.os.Process.THREAD_PRIORITY_DISPLAY;
 import static android.view.RemoteAnimationTarget.MODE_CLOSING;
+import static android.view.WindowManager.TRANSIT_OLD_ACTIVITY_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_ACTIVITY_OPEN;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_CLOSE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_CHANGE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_CLOSE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_OPEN;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
 
 import android.animation.Animator;
 import android.animation.ValueAnimator;
 import android.graphics.Rect;
 import android.os.Handler;
-import android.os.Looper;
+import android.os.HandlerThread;
 import android.os.RemoteException;
 import android.util.Log;
 import android.view.IRemoteAnimationFinishedCallback;
@@ -46,10 +51,14 @@ import java.util.function.BiFunction;
 class TaskFragmentAnimationRunner extends IRemoteAnimationRunner.Stub {
 
     private static final String TAG = "TaskFragAnimationRunner";
-    private final Handler mHandler = new Handler(Looper.myLooper());
+    private final Handler mHandler;
     private final TaskFragmentAnimationSpec mAnimationSpec;
 
     TaskFragmentAnimationRunner() {
+        HandlerThread animationThread = new HandlerThread(
+                "androidx.window.extensions.embedding", THREAD_PRIORITY_DISPLAY);
+        animationThread.start();
+        mHandler = animationThread.getThreadHandler();
         mAnimationSpec = new TaskFragmentAnimationSpec(mHandler);
     }
 
@@ -155,9 +164,13 @@ class TaskFragmentAnimationRunner extends IRemoteAnimationRunner.Stub {
             @WindowManager.TransitionOldType int transit,
             @NonNull RemoteAnimationTarget[] targets) {
         switch (transit) {
+            case TRANSIT_OLD_ACTIVITY_OPEN:
             case TRANSIT_OLD_TASK_FRAGMENT_OPEN:
+            case TRANSIT_OLD_TASK_OPEN:
                 return createOpenAnimationAdapters(targets);
+            case TRANSIT_OLD_ACTIVITY_CLOSE:
             case TRANSIT_OLD_TASK_FRAGMENT_CLOSE:
+            case TRANSIT_OLD_TASK_CLOSE:
                 return createCloseAnimationAdapters(targets);
             case TRANSIT_OLD_TASK_FRAGMENT_CHANGE:
                 return createChangeAnimationAdapters(targets);

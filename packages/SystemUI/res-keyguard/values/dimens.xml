@@ -37,7 +37,6 @@
 
     <!-- Margin around the various security views -->
     <dimen name="keyguard_security_view_top_margin">8dp</dimen>
-    <dimen name="keyguard_security_view_lateral_margin">20dp</dimen>
 
     <dimen name="keyguard_eca_top_margin">18dp</dimen>
     <dimen name="keyguard_eca_bottom_margin">12dp</dimen>
@@ -106,4 +105,17 @@
          opacity is zero), but this controls how much motion will actually be applied to it while
          animating. Larger values will cause it to move "faster" while fading out/in. -->
     <dimen name="one_handed_bouncer_move_animation_translation">120dp</dimen>
+
+
+    <dimen name="bouncer_user_switcher_header_text_size">20sp</dimen>
+    <dimen name="bouncer_user_switcher_item_text_size">20sp</dimen>
+    <dimen name="bouncer_user_switcher_item_line_height">24sp</dimen>
+    <dimen name="bouncer_user_switcher_item_icon_size">28dp</dimen>
+    <dimen name="bouncer_user_switcher_item_icon_padding">12dp</dimen>
+    <dimen name="bouncer_user_switcher_width">248dp</dimen>
+    <dimen name="bouncer_user_switcher_icon_size">190dp</dimen>
+    <dimen name="bouncer_user_switcher_popup_header_height">12dp</dimen>
+    <dimen name="bouncer_user_switcher_popup_divider_height">4dp</dimen>
+    <dimen name="bouncer_user_switcher_item_padding_vertical">10dp</dimen>
+    <dimen name="bouncer_user_switcher_item_padding_horizontal">12dp</dimen>
 </resources>

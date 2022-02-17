@@ -226,9 +226,9 @@
     <string name="reboot_to_update_title" msgid="2125818841916373708">"Pemutakhiran sistem Android"</string>
     <string name="reboot_to_update_prepare" msgid="6978842143587422365">"Bersiap untuk memperbarui..."</string>
     <string name="reboot_to_update_package" msgid="4644104795527534811">"Memproses pembaruan paket…"</string>
-    <string name="reboot_to_update_reboot" msgid="4474726009984452312">"Memulai kembali…"</string>
+    <string name="reboot_to_update_reboot" msgid="4474726009984452312">"Memulai ulang…"</string>
     <string name="reboot_to_reset_title" msgid="2226229680017882787">"Kembalikan ke setelan pabrik"</string>
-    <string name="reboot_to_reset_message" msgid="3347690497972074356">"Memulai kembali…"</string>
+    <string name="reboot_to_reset_message" msgid="3347690497972074356">"Memulai ulang…"</string>
     <string name="shutdown_progress" msgid="5017145516412657345">"Sedang mematikan..."</string>
     <string name="shutdown_confirm" product="tablet" msgid="2872769463279602432">"Tablet Anda akan dimatikan."</string>
     <string name="shutdown_confirm" product="tv" msgid="7975942887313518330">"Perangkat Android TV akan dimatikan."</string>
@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Mengizinkan aplikasi mengubah log panggilan perangkat Android TV, termasuk data tentang panggilan masuk dan keluar. Aplikasi berbahaya dapat menggunakan izin ini untuk menghapus atau mengubah log panggilan Anda."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Memungkinkan apl memodifikasi log panggilan ponsel Anda, termasuk data tentang panggilan masuk dan keluar. Apl berbahaya dapat menggunakan ini untuk menghapus atau memodifikasi log panggilan Anda."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"akses sensor tubuh (misalnya, monitor detak jantung)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Mengizinkan aplikasi untuk mengakses data dari sensor yang memantau kondisi fisik Anda, seperti denyut jantung."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Akses ke data dari sensor tubuh seperti detak jantung, suhu, persentase oksigen dalam darah, dan lainnya."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"akses sensor tubuh (misalnya, monitor detak jantung) saat di latar belakang"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Akses ke data dari sensor tubuh seperti detak jantung, suhu, persentase oksigen dalam darah, dan lainnya saat di latar belakang."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Baca acara kalender dan detailnya"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Aplikasi ini dapat membaca semua acara kalender yang tersimpan di tablet dan membagikan atau menyimpan data kalender."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Aplikasi ini dapat membaca semua acara kalender yang tersimpan di perangkat Android TV dan membagikan atau menyimpan data kalender."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Memungkinkan aplikasi menggunakan layanan IMS untuk melakukan panggilan tanpa campur tangan Anda."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"baca identitas dan status ponsel"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Memungkinkan aplikasi mengakses fitur telepon perangkat. Izin ini memungkinkan aplikasi menentukan nomor telepon dan ID perangkat, apakah suatu panggilan aktif atau tidak, dan nomor jarak jauh yang terhubung oleh sebuah panggilan."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"membaca identitas dan status telepon dasar"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Memungkinkan aplikasi mengakses fitur telepon dasar perangkat."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"sambungkan panggilan telepon melalui sistem"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Mengizinkan aplikasi menyambungkan panggilan telepon melalui sistem untuk menyempurnakan pengalaman menelepon."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"melihat dan mengontrol panggilan melalui sistem."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Ketuk untuk menghapus model wajah, lalu tambahkan wajah Anda lagi"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Siapkan Face Unlock"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Buka kunci ponsel dengan melihat ke ponsel"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Untuk menggunakan Face Unlock, aktifkan "<b>"Akses kamera"</b>" di Setelan &gt; Privasi"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Siapkan lebih banyak cara untuk membuka kunci"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Ketuk untuk menambahkan sidik jari"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Fingerprint Unlock"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Mengizinkan aplikasi membaca dan menulis konfigurasi status Jangan Ganggu."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"mulai melihat penggunaan izin"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Memungkinkan pemegang memulai penggunaan izin untuk aplikasi. Tidak diperlukan untuk aplikasi normal."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"mulai melihat keputusan izin"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Mengizinkan pemegang memulai layar untuk meninjau keputusan izin. Tidak pernah dibutuhkan untuk aplikasi normal."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"mulai lihat fitur aplikasi"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Memungkinkan pemegang mulai melihat info fitur untuk aplikasi."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"mengakses data sensor pada frekuensi pengambilan sampel yang tinggi"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Pantau upaya pembukaan kunci layar"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Memantau berapa kali sandi yang dimasukkan salah saat ingin membuka kunci layar, dan mengunci tablet atau menghapus semua data tablet jika terjadi terlalu banyak kesalahan memasukkan sandi."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Memantau banyaknya sandi salah yang diketikkan saat membuka kunci layar, dan mengunci perangkat Android TV atau menghapus semua data perangkat Android TV jika terlalu banyak sandi salah diketikkan."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Memantau berapa kali sandi yang dimasukkan salah saat ingin membuka kunci layar, dan mengunci sistem infotainmen atau menghapus semua data sistem infotainmen jika terlalu banyak kesalahan memasukkan sandi."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Memantau berapa kali sandi yang dimasukkan salah saat ingin membuka kunci layar, dan mengunci ponsel atau menghapus semua data ponsel jika terjadi terlalu banyak kesalahan memasukkan sandi."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Memantau berapa kali sandi yang dimasukkan salah saat ingin membuka kunci layar, dan mengunci tablet atau menghapus semua data pengguna ini jika terjadi terlalu banyak kesalahan memasukkan sandi."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Memantau banyaknya sandi salah yang diketikkan saat membuka kunci layar, dan mengunci perangkat Android TV atau menghapus semua data pengguna ini jika terlalu banyak sandi salah diketikkan."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Memantau berapa kali sandi yang dimasukkan salah saat ingin membuka kunci layar, dan mengunci sistem infotainmen atau menghapus semua data profil ini jika terlalu banyak kesalahan memasukkan sandi."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Memantau berapa kali sandi yang dimasukkan salah saat ingin membuka kunci layar, dan mengunci ponsel atau menghapus semua data pengguna ini jika terjadi terlalu banyak kesalahan memasukkan sandi."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Mengubah kunci layar"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Mengubah kunci layar."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Menghapus semua data"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Menghapus data tablet tanpa peringatan dengan mereset ke setelan pabrik."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Menghapus data perangkat Android TV tanpa peringatan dengan melakukan reset ke setelan pabrik."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Menghapus data sistem infotainmen tanpa peringatan dengan melakukan reset ke setelan pabrik."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Menghapus data ponsel tanpa peringatan dengan melakukan reset ke setelan pabrik."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Menghapus data pengguna"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Hapus data profil"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Menghapus data pengguna"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Menghapus data pengguna ini di tablet ini tanpa peringatan."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Menghapus data pengguna ini di perangkat Android TV ini tanpa peringatan."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Menghapus data profil ini di sistem infotainmen ini tanpa peringatan."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Menghapus data pengguna ini di ponsel ini tanpa peringatan."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Setel proxy global perangkat"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Menyetel proxy global perangkat yang akan digunakan jika kebijakan diaktifkan. Hanya pemilik perangkat yang dapat menyetel proxy global."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Menyiapkan <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Memulai aplikasi."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Menyelesaikan boot."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Nonaktifkan layar?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Saat menyiapkan sidik jari, Anda menekan Tombol daya.\n\nTindakan ini biasanya akan menonaktifkan layar."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Nonaktifkan"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Batal"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Lanjutkan penyiapan?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Anda menekan tombol daya; tindakan ini biasanya akan menonaktifkan layar.\n\nCoba ketuk lembut saat menyiapkan sidik jari Anda."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Nonaktifkan layar"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Lanjutkan penyiapan"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Lanjutkan verifikasi sidik jari?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Anda menekan tombol daya; tindakan ini biasanya akan menonaktifkan layar.\n\nCoba ketuk lembut untuk memverifikasi sidik jari Anda."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Nonaktifkan layar"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Lanjutkan"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> sedang berjalan"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Ketuk untuk kembali ke game"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Pilih game"</string>
@@ -1354,7 +1370,7 @@
     <string name="sim_done_button" msgid="6464250841528410598">"Selesai"</string>
     <string name="sim_added_title" msgid="7930779986759414595">"Kartu SIM ditambahkan"</string>
     <string name="sim_added_message" msgid="6602906609509958680">"Mulai ulang perangkat Anda untuk mengakses jaringan selular."</string>
-    <string name="sim_restart_button" msgid="8481803851341190038">"Nyalakan Ulang"</string>
+    <string name="sim_restart_button" msgid="8481803851341190038">"Mulai Ulang"</string>
     <string name="install_carrier_app_notification_title" msgid="5712723402213090102">"Aktifkan layanan seluler"</string>
     <string name="install_carrier_app_notification_text" msgid="2781317581274192728">"Download aplikasi operator untuk mengaktifkan SIM baru"</string>
     <string name="install_carrier_app_notification_text_app_name" msgid="4086877327264106484">"Download aplikasi <xliff:g id="APP_NAME">%1$s</xliff:g> untuk mengaktifkan SIM baru"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Notifikasi aplikasi kustom"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Izinkan <xliff:g id="APP">%1$s</xliff:g> membuat Pengguna baru dengan <xliff:g id="ACCOUNT">%2$s</xliff:g> (Pengguna dengan akun ini sudah ada) ?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Izinkan <xliff:g id="APP">%1$s</xliff:g> membuat Pengguna baru dengan <xliff:g id="ACCOUNT">%2$s</xliff:g> ?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Tambahkan pengguna yang diawasi"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Tambahkan bahasa"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Preferensi wilayah"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Ketik nama bahasa"</string>

@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Колдонмого Android TV түзмөгүңүздүн чалуулар тизмесин, анын ичинде кирүүчү жана чыгуучу чалуулар тууралуу маалыматтарды өзгөртүүгө уруксат берет. Зыянкеч колдонмолор ал уруксатты колдонуп чалуулар тизмеңизди тазалап же өзгөртүп коюшу мүмкүн."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Колдонмого телефонуңуздун чалуулар тизмегин, анын ичинде, чыгыш жана кириш чалууларына тиешелүү берилиштерди өзгөртүү уруксатын берет. Зыяндуу колдонмолор муну колдонуп чалуулар тизмегин өзгөртө же жок кыла алышат."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"дене-бой сенсорлоруна (жүрөктүн кагышын өлчөгүчтөр сыяктуу) уруксат"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Колдонмого жүрөгүңүздүн согушу сыяктуу дене-бой абалыңызды көзөмөлдөгөн сенсорлордогу маалыматтарды көрүп туруу мүмкүнчүлүгүн берет."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Жүрөктүн согушу, температура, кандагы кычкылтектин пайыздык үлүшү ж.б. сыяктуу дене сенсорлорунун маалыматын алуу."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"дене сенсорлорун (жүрөктүн согушун өлчөгүчтөр сыяктуу) фондо алуу"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Жүрөктүн согушу, температура, кандагы кычкылтектин пайыздык үлүшү ж.б. сыяктуу дене сенсорлорунун маалыматын фондо алуу."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Жылнаамадагы иш-чараларды жана алардын чоо-жайын окуу"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Бул колдонмо планшетиңизде сакталган жылнаамадагы иш-чаралардын баарын окуп жана андагы маалыматтарды бөлүшүп же сактай алат."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Бул колдонмо Android TV түзмөгүңүздө сакталган жылнаама иш-чараларынын баарын окуп, ошондой эле жылнаама дайындарын бөлүшүп же сактай алат."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Колдонмого сизди катыштырбай туруп, IMS кызматынын жардамы менен, чалууларды жасоо мүмкүнчүлүгүн берет."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"телефондун абалын жана аныктыгын окуу"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Колдонмого түзмөктүн чалуу мүмкүнчүлүктөрүнө жетки алуу уруксатын берет. Бул уруксат колдонмого, телефондун номурун, түзмөктүн ID-син, чалуунун абалын жана байланышта чыккан номурду аныктоого жол берет."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"негизги телефония статусун окуу жана аныктоо"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Колдонмого түзмөктүн негизги телефония функцияларын колдонууга мүмкүнчүлүк берет."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"чалууларды тутум аркылуу өткөрүү"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Чалуунун сапатын жакшыртуу максатында колдонмого чалууларын тутум аркылуу өткөрүүгө уруксат берет."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"тутум аркылуу чалууларды көрүп, көзөмөлдөө."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Жүзүңүздүн үлгүсүн өчүрүү үчүн басып, жаңы үлгүнү кошуңуз"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Жүзүнөн таанып ачууну жөндөө"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Телефонуңузду карап туруп эле кулпусун ачып алыңыз"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Жүзүнөн таанып ачуу функциясын колдонуу үчүн Жөндөөлөр &gt; Купуялык бөлүмүнө өтүп, "<b>"Камераны колдонууну"</b>" күйгүзүңүз"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Кулпусун ачуунун көбүрөөк жолдорун жөндөңүз"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Манжа изин кошуу үчүн басыңыз"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Кулпуланган түзмөктү манжа изи менен ачуу"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Колдонмого \"Тынчымды алба\" режиминин конфигурациясын окуу жана жазуу мүмкүнчүлүгүн берет."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"уруксаттын колдонулушун көрүп баштоо"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Колдонмонун пайдаланылышына уруксат берүүгө мүмкүнчүлүк берет. Кадимки колдонмолорго эч качан талап кылынбашы керек."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"уруксаттар боюнча кабыл алынган чечимдерди карап чыгуу"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Ээсине уруксаттар боюнча кабыл алынган чечимдерди карап чыгуу үчүн экранды иштетүү мүмкүнчүлүгүн берет. Кадимки колдонмолорго эч качан талап кылынбашы керек."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"колдонмонун функцияларын көрүп баштоо"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Колдонуучуга функциялары тууралуу маалыматты көрүп баштоо мүмкүнчүлүгүн берет."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"үлгүнү жаздыруу ылдамдыгы жогору болгон сенсор дайындарынын үлгүсүнө мүмкүнчүлүк алуу"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Экран кулпусун ачуу аракеттерин көзөмөлдөө"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Экрандын кулпусу ачылып жатканда туура эмес терилген сырсөздөрдүн санын текшерип, эгер алардын саны өтө эле көп болсо, планшетти кулпулаңыз же планшеттеги бардык маалыматтарды тазалап салыңыз."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Экрандын кулпусун ачуу учурунда сырсөздөр канча жолу туура эмес терилгенин тескөө жана сырсөз өтө көп жолу туура эмес терилген болсо, Android TV түзмөгүңүздү кулпулап же Android TV түзмөгүңүздөгү бардык дайын-даректериңизди тазалап салуу."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Экрандын кулпусу ачылып жатканда туура эмес терилген сырсөздөрдүн саны текшерилип, эгер алардын саны өтө эле көп болсо, инфозоок тутуму кулпуланып же инфозоок тутумундагы бардык маалыматтар өчүрүлөт."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Экрандын кулпусу ачылып жатканда туура эмес терилген сырсөздөрдүн санын текшерип, эгер алардын саны өтө эле көп болсо, телефонду кулпулаңыз же телефондогу бардык маалыматтарды тазалап салыңыз."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Экрандын кулпусун ачуу учурунда туура эмес терилген сырсөздөрдү тескөө жана сырсөз өтө көп жолу туура эмес терилген болсо, планшетти кулпулап же бул колдонуучунун бардык дайындарын тазалап салуу."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Экрандын кулпусун ачуу учурунда сырсөздөр канча жолу туура эмес терилгенин тескөө жана сырсөз өтө көп жолу туура эмес терилген болсо, Android TV түзмөгүңүздү кулпулап же колдонуучунун бардык дайындарын тазалап салуу."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Экрандын кулпусун ачуу учурунда туура эмес терилген сырсөздөрдү тескөө жана сырсөз өтө көп жолу туура эмес терилген болсо, инфозоок тутуму кулпуланып же бул профилдин бардык дайындары өчүрүлөт."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Экрандын кулпусун ачуу учурунда туура эмес терилген сырсөздөрдү тескөө жана сырсөз өтө көп жолу туура эмес терилген болсо, телефонду кулпулап же бул колдонуучунун бардык дайындарын тазалап салуу."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Экран кулпусун өзгөртүү"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Экран кулпусун өзгөртөт."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Бардык маалыматты өчүрүү"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Алдын-ала эскертпестен, баштапкы абалга келтирүү функциясы менен планшеттеги бардык маалыматтарды өчүрөт."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Android TV түзмөгүңүздүн дайындарын эскертүүсүз кайра башынан жөндөө аркылуу тазалоо."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Алдын ала эскертпестен, баштапкы абалга келтирүү функциясы менен инфозоок тутумундагы бардык маалыматтар өчүрүлөт."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Алдын-ала эскертпестен, баштапкы абалга келтирүү функциясы менен телефондогу бардык маалыматтарды өчүрөт."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Колдонуучунун дайындарын тазалоо"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Профилдин маалыматын өчүрүү"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Колдонуучунун дайындарын тазалоо"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Бул колдонуучунун ушул планшеттеги дайындарын эскертүүсүз тазалоо."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Бул Android TV түзмөгүндөгү бул колдонуучу дайындарын эскертүүсүз тазалоо."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Алдын ала эскертпестен, бул инфозоок тутумундагы профилдин бардык маалыматтары өчүрүлөт."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Бул колдонуучунун ушул телефондогу дайындарын эскертүүсүз тазалоо."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Түзмөктүн глобалдык проксисин коюу"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Саясат иштетилгенде түзмөктүн глобалдык проксиси колдонулгудай кылып коюңуз. Түзмөк ээси гана глобалдык проксини коё алат."</string>
@@ -1252,7 +1264,7 @@
     <string name="screen_compat_mode_hint" msgid="4032272159093750908">"Муну тутум жөндөөлөрүнөн кайра иштетүү &gt; Колдонмолор &gt; Жүктөлүп алынган."</string>
     <string name="unsupported_display_size_message" msgid="7265211375269394699">"<xliff:g id="APP_NAME">%1$s</xliff:g> колдонмосу көрүнүштүн тандалган өлчөмүн экранда көрсөтө албайт жана туура эмес иштеши мүмкүн."</string>
     <string name="unsupported_display_size_show" msgid="980129850974919375">"Ар дайым көрүнсүн"</string>
-    <string name="unsupported_compile_sdk_message" msgid="7326293500707890537">"<xliff:g id="APP_NAME">%1$s</xliff:g> Android OS тутуму менен иштеген түзмөктүн шайкеш келбеген версиясы үчүн орнотулган колдонмо жана туура эмес иштеши мүмкүн. Колдонмонун жаңыртылган версиясы жеткиликтүү болушу мүмкүн."</string>
+    <string name="unsupported_compile_sdk_message" msgid="7326293500707890537">"<xliff:g id="APP_NAME">%1$s</xliff:g> Android OS тутуму менен иштеген түзмөктүн шайкеш келбеген версиясы үчүн орнотулган колдонмо жана туура эмес иштеши мүмкүн. Колдонмонун жаңырган версиясы жеткиликтүү болушу мүмкүн."</string>
     <string name="unsupported_compile_sdk_show" msgid="1601210057960312248">"Ар дайым көрүнсүн"</string>
     <string name="unsupported_compile_sdk_check_update" msgid="1103639989147664456">"Жаңыртууларды текшерүү"</string>
     <string name="smv_application" msgid="3775183542777792638">"<xliff:g id="APPLICATION">%1$s</xliff:g> колдонмосу (<xliff:g id="PROCESS">%2$s</xliff:g> процесси) өз алдынча иштеткен StrictMode саясатын бузду."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> даярдалууда."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Колдонмолорду иштетип баштоо"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Жүктөлүүдө"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Экран өчүрүлсүнбү?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Манжаңыздын изин жөндөп жатканда күйгүзүү/өчүрүү баскычын басып алдыңыз.\n\nБул адатта экранды өчүрөт."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Өчүрүү"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Жок"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Жөндөөнү улантасызбы?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Кубат баскычын бастыңыз — адатта, бул экранды өчүрөт.\n\nМанжаңыздын изин жөндөп жатканда аны акырын басып көрүңүз."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Экранды өчүрүү"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Жөндөөнү улантуу"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Манжаңыздын изин ырастоону улантасызбы?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Кубат баскычын бастыңыз — адатта, бул экранды өчүрөт.\n\nМанжаңыздын изин ырастоо үчүн аны акырын басып көрүңүз."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Экранды өчүрүү"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Улантуу"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> иштеп жатат"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Оюнга кайтуу үчүн таптаңыз"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Оюн тандоо"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Колдонмонун ыңгайлаштырылган билдирмеси"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g> колдонмосуна <xliff:g id="ACCOUNT">%2$s</xliff:g> аккаунту менен жаңы колдонуучу түзүүгө уруксат бересизби (мындай аккаунту бар колдонуучу мурунтан эле бар)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g> колдонмосуна <xliff:g id="ACCOUNT">%2$s</xliff:g> аккаунту менен жаңы колдонуучу түзүүгө уруксат бересизби?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Көзөмөлдөнгөн колдонуучуну кошуу"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Тил кошуу"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Чөлкөмдүк жөндөөлөр"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Тилди киргизиңиз"</string>

@@ -24,7 +24,7 @@ import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.pm.PackageManager;
-import android.content.pm.SELinuxUtil;
+import com.android.server.pm.pkg.SELinuxUtil;
 import android.content.pm.UserInfo;
 import android.os.CreateAppDataArgs;
 import android.os.Environment;
@@ -74,13 +74,6 @@ final class AppDataHelper {
         mArtManagerService = mInjector.getArtManagerService();
     }
 
-    AppDataHelper(PackageManagerService pm, PackageManagerServiceInjector injector) {
-        mPm = pm;
-        mInjector = injector;
-        mInstaller = injector.getInstaller();
-        mArtManagerService = injector.getArtManagerService();
-    }
-
     /**
      * Prepare app data for the given app just after it was installed or
      * upgraded. This method carefully only touches users that it's installed
@@ -106,6 +99,12 @@ final class AppDataHelper {
         synchronized (mPm.mLock) {
             ps = mPm.mSettings.getPackageLPr(pkg.getPackageName());
             mPm.mSettings.writeKernelMappingLPr(ps);
+        }
+
+        // TODO(b/211761016): should we still create the profile dirs?
+        if (!shouldHaveAppStorage(pkg)) {
+            Slog.w(TAG, "Skipping preparing app data for " + pkg.getPackageName());
+            return;
         }
 
         Installer.Batch batch = new Installer.Batch();
@@ -162,16 +161,22 @@ final class AppDataHelper {
      * </ul>
      */
     private @NonNull CompletableFuture<?> prepareAppData(@NonNull Installer.Batch batch,
-            @Nullable AndroidPackage pkg, int previousAppId, int userId, int flags) {
+            @Nullable AndroidPackage pkg, int previousAppId, int userId,
+            @StorageManager.StorageFlags int flags) {
         if (pkg == null) {
             Slog.wtf(TAG, "Package was null!", new Throwable());
+            return CompletableFuture.completedFuture(null);
+        }
+        if (!shouldHaveAppStorage(pkg)) {
+            Slog.w(TAG, "Skipping preparing app data for " + pkg.getPackageName());
             return CompletableFuture.completedFuture(null);
         }
         return prepareAppDataLeaf(batch, pkg, previousAppId, userId, flags);
     }
 
     private void prepareAppDataAndMigrate(@NonNull Installer.Batch batch,
-            @NonNull AndroidPackage pkg, int userId, int flags, boolean maybeMigrateAppData) {
+            @NonNull AndroidPackage pkg, int userId, @StorageManager.StorageFlags int flags,
+            boolean maybeMigrateAppData) {
         prepareAppData(batch, pkg, Process.INVALID_UID, userId, flags).thenRun(() -> {
             // Note: this code block is executed with the Installer lock
             // already held, since it's invoked as a side-effect of
@@ -291,6 +296,9 @@ final class AppDataHelper {
             String primaryCpuAbi = AndroidPackageUtils.getPrimaryCpuAbi(pkg, pkgSetting);
             if (primaryCpuAbi != null && !VMRuntime.is64BitAbi(primaryCpuAbi)) {
                 final String nativeLibPath = pkg.getNativeLibraryDir();
+                if (!(new File(nativeLibPath).exists())) {
+                    return;
+                }
                 try {
                     mInstaller.linkNativeLibraryDirectory(volumeUuid, packageName,
                             nativeLibPath, userId);
@@ -331,7 +339,8 @@ final class AppDataHelper {
      * correct for all installed apps on all mounted volumes.
      */
     @NonNull
-    public void reconcileAppsData(int userId, int flags, boolean migrateAppsData) {
+    public void reconcileAppsData(int userId, @StorageManager.StorageFlags int flags,
+            boolean migrateAppsData) {
         final StorageManager storage = mInjector.getSystemService(StorageManager.class);
         for (VolumeInfo vol : storage.getWritablePrivateVolumes()) {
             final String volumeUuid = vol.getFsUuid();
@@ -342,7 +351,7 @@ final class AppDataHelper {
     }
 
     @GuardedBy("mPm.mInstallLock")
-    void reconcileAppsDataLI(String volumeUuid, int userId, int flags,
+    void reconcileAppsDataLI(String volumeUuid, int userId, @StorageManager.StorageFlags int flags,
             boolean migrateAppData) {
         reconcileAppsDataLI(volumeUuid, userId, flags, migrateAppData, false /* onlyCoreApps */);
     }
@@ -359,8 +368,8 @@ final class AppDataHelper {
      * @return list of skipped non-core packages (if {@code onlyCoreApps} is true)
      */
     @GuardedBy("mPm.mInstallLock")
-    private List<String> reconcileAppsDataLI(String volumeUuid, int userId, int flags,
-            boolean migrateAppData, boolean onlyCoreApps) {
+    private List<String> reconcileAppsDataLI(String volumeUuid, int userId,
+            @StorageManager.StorageFlags int flags, boolean migrateAppData, boolean onlyCoreApps) {
         Slog.v(TAG, "reconcileAppsData for " + volumeUuid + " u" + userId + " 0x"
                 + Integer.toHexString(flags) + " migrateAppData=" + migrateAppData);
         List<String> result = onlyCoreApps ? new ArrayList<>() : null;
@@ -382,7 +391,7 @@ final class AppDataHelper {
             for (File file : files) {
                 final String packageName = file.getName();
                 try {
-                    assertPackageKnownAndInstalled(volumeUuid, packageName, userId);
+                    assertPackageStorageValid(volumeUuid, packageName, userId);
                 } catch (PackageManagerException e) {
                     logCriticalInfo(Log.WARN, "Destroying " + file + " due to: " + e);
                     try {
@@ -399,7 +408,7 @@ final class AppDataHelper {
             for (File file : files) {
                 final String packageName = file.getName();
                 try {
-                    assertPackageKnownAndInstalled(volumeUuid, packageName, userId);
+                    assertPackageStorageValid(volumeUuid, packageName, userId);
                 } catch (PackageManagerException e) {
                     logCriticalInfo(Log.WARN, "Destroying " + file + " due to: " + e);
                     try {
@@ -447,7 +456,11 @@ final class AppDataHelper {
         return result;
     }
 
-    private void assertPackageKnownAndInstalled(String volumeUuid, String packageName, int userId)
+    /**
+     * Asserts that storage path is valid by checking that {@code packageName} is present,
+     * installed for the given {@code userId} and can have app data.
+     */
+    private void assertPackageStorageValid(String volumeUuid, String packageName, int userId)
             throws PackageManagerException {
         synchronized (mPm.mLock) {
             // Normalize package name to handle renamed packages
@@ -463,6 +476,13 @@ final class AppDataHelper {
             } else if (!ps.getInstalled(userId)) {
                 throw new PackageManagerException(
                         "Package " + packageName + " not installed for user " + userId);
+            } else if (ps.getPkg() == null) {
+                throw new PackageManagerException("Package " + packageName + " is not parsed yet");
+            } else {
+                if (!shouldHaveAppStorage(ps.getPkg())) {
+                    throw new PackageManagerException(
+                            "Package " + packageName + " shouldn't have storage");
+                }
             }
         }
     }
@@ -479,7 +499,7 @@ final class AppDataHelper {
      * can't wait for user to start
      */
     public Future<?> fixAppsDataOnBoot() {
-        final int storageFlags;
+        final @StorageManager.StorageFlags int storageFlags;
         if (StorageManager.isFileEncryptedNativeOrEmulated()) {
             storageFlags = StorageManager.FLAG_STORAGE_DE;
         } else {
@@ -603,5 +623,14 @@ final class AppDataHelper {
         } catch (Installer.InstallerException e) {
             Slog.w(TAG, String.valueOf(e));
         }
+    }
+
+    /**
+     * Returns {@code true} if app's internal storage should be created for this {@code pkg}.
+     */
+    private boolean shouldHaveAppStorage(AndroidPackage pkg) {
+        PackageManager.Property noAppDataProp =
+                pkg.getProperties().get(PackageManager.PROPERTY_NO_APP_DATA_STORAGE);
+        return noAppDataProp == null || !noAppDataProp.getBoolean();
     }
 }

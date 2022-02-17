@@ -64,6 +64,7 @@ import android.util.proto.ProtoOutputStream;
 import android.view.IDisplayWindowRotationCallback;
 import android.view.IWindowManager;
 import android.view.Surface;
+import android.window.TransitionRequestInfo;
 import android.window.WindowContainerTransaction;
 
 import com.android.internal.R;
@@ -354,7 +355,7 @@ public class DisplayRotation {
                 currentUserRes.getBoolean(R.bool.config_allowSeamlessRotationDespiteNavBarMoving);
     }
 
-    void configure(int width, int height, int shortSizeDp, int longSizeDp) {
+    void configure(int width, int height) {
         final Resources res = mContext.getResources();
         if (width > height) {
             mLandscapeRotation = Surface.ROTATION_0;
@@ -569,10 +570,13 @@ public class DisplayRotation {
         mDisplayContent.setLayoutNeeded();
 
         if (useShellTransitions) {
-            final boolean wasInTransition = mDisplayContent.inTransition();
+            final boolean wasCollecting = mDisplayContent.mTransitionController.isCollecting();
+            final TransitionRequestInfo.DisplayChange change = wasCollecting ? null
+                    : new TransitionRequestInfo.DisplayChange(mDisplayContent.getDisplayId(),
+                            oldRotation, mRotation);
             mDisplayContent.requestChangeTransitionIfNeeded(
-                    ActivityInfo.CONFIG_WINDOW_CONFIGURATION);
-            if (wasInTransition) {
+                    ActivityInfo.CONFIG_WINDOW_CONFIGURATION, change);
+            if (wasCollecting) {
                 // Use remote-rotation infra since the transition has already been requested
                 // TODO(shell-transitions): Remove this once lifecycle management can cover all
                 //                          rotation cases.
@@ -656,12 +660,8 @@ public class DisplayRotation {
                 // Go through all tasks and collect them before the rotation
                 // TODO(shell-transitions): move collect() to onConfigurationChange once wallpaper
                 //       handling is synchronized.
-                mDisplayContent.forAllTasks(task -> {
-                    if (task.isVisible()) {
-                        mDisplayContent.mTransitionController.collect(task);
-                    }
-                });
-                mDisplayContent.getInsetsStateController().addProvidersToTransition();
+                mDisplayContent.mTransitionController.collectForDisplayChange(mDisplayContent,
+                        null /* use collecting transition */);
             }
             mService.mAtmService.deferWindowLayout();
             try {

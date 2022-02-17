@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.hardware.radio.V1_5.AccessNetwork;
 import android.hardware.radio.V1_5.RadioAccessNetworks;
@@ -28,6 +29,8 @@ import java.lang.annotation.RetentionPolicy;
  * Contains access network related constants.
  */
 public final class AccessNetworkConstants {
+
+    private static final String TAG = AccessNetworkConstants.class.getSimpleName();
 
     /**
      * Wireless transportation type
@@ -107,6 +110,21 @@ public final class AccessNetworkConstants {
                 case IWLAN: return "IWLAN";
                 case NGRAN: return "NGRAN";
                 default: return Integer.toString(type);
+            }
+        }
+
+        /** @hide */
+        public static @RadioAccessNetworkType int fromString(@NonNull String str) {
+            switch (str.toUpperCase()) {
+                case "GERAN" : return GERAN;
+                case "UTRAN" : return UTRAN;
+                case "EUTRAN" : return EUTRAN;
+                case "CDMA2000" : return CDMA2000;
+                case "IWLAN" : return IWLAN;
+                case "NGRAN" : return NGRAN;
+                default:
+                    Rlog.e(TAG, "Invalid access network type " + str);
+                    return UNKNOWN;
             }
         }
 

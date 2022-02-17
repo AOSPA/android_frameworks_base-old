@@ -1329,6 +1329,11 @@
              dictionary-based word suggestions.  Corresponds to
              {@link android.text.InputType#TYPE_TEXT_FLAG_NO_SUGGESTIONS}. -->
         <flag name="textNoSuggestions" value="0x00080001" />
+        <!-- Can be combined with <var>text</var> and its variations to
+             indicate that if there is extra information, the IME should provide
+             {@link android.view.inputmethod.TextAttribute}.  Corresponds to
+             {@link android.text.InputType#TYPE_TEXT_FLAG_ENABLE_TEXT_CONVERSION_SUGGESTIONS}. -->
+        <flag name="textEnableTextConversionSuggestions" value="0x00100001" />
         <!-- Text that will be used as a URI.  Corresponds to
              {@link android.text.InputType#TYPE_CLASS_TEXT} |
              {@link android.text.InputType#TYPE_TEXT_VARIATION_URI}. -->
@@ -3633,6 +3638,24 @@
              to re-retrieve all resources (including view layouts, drawables, etc)
              to correctly handle any configuration change.-->
         <attr name="configChanges" />
+        <!-- Specifies whether the IME supports Handwriting using stylus. Defaults to false.
+            When IME implements support for stylus handwriting, on every ACTION_DOWN with stylus
+            on an editor,
+            {@link android.inputmethodservice.InputMethodService#onStartStylusHandwriting()}
+            is called.
+            If IME is ready for stylus input, it must return {@code true} for Handwriting sessions
+            to start. IME should attach it's View that renders Ink on screen to stylus handwriting
+            inking window
+            {@link android.inputmethodservice.InputMethodService#getStylusHandwritingWindow()}.
+            IME will then receive Stylus MotionEvent(s) on DecorView i.e. the Inking view
+            {@link android.view.View#onTouchEvent(MotionEvent)} attached by IME to Ink window.
+            Handwriting mode can be finished by calling
+            {@link android.inputmethodservice.InputMethodService#finishStylusHandwriting()} or will
+            be finished by framework on next
+            {@link android.inputmethodservice.InputMethodService#onFinishInput()}.
+        -->
+        <attr name="supportsStylusHandwriting" format="boolean" />
+
     </declare-styleable>
 
     <!-- This is the subtype of InputMethod. Subtype can describe locales (for example, en_US and
@@ -5383,6 +5406,27 @@
             <!-- Standard amount of hyphenation, useful for running text and for
             screens with limited space for text. -->
             <enum name="full" value="2" />
+
+            <!-- Same to hyphenationFrequency="normal" but using faster algorithm for measuring
+            hyphenation break points. To make text rendering faster with hyphenation, this algorithm
+             ignores some hyphen character related typographic features, e.g. kerning. -->
+            <enum name="normalFast" value="3" />
+
+            <!-- Same to hyphenationFrequency="full" but using faster algorithm for measuring
+            hyphenation break points. To make text rendering faster with hyphenation, this algorithm
+             ignores some hyphen character related typographic features, e.g. kerning. -->
+            <enum name="fullFast" value="4" />
+        </attr>
+        <!-- Indicates the line break strategies can be used when calculating the text wrapping. -->
+        <attr name="lineBreakStyle">
+            <!-- No line break style specific. -->
+            <enum name="none" value="0" />
+            <!-- Use the least restrictive rule for line-breaking. -->
+            <enum name="loose" value="1" />
+            <!-- Indicate breaking text with the most comment set of line-breaking rules. -->
+            <enum name="normal" value="2" />
+            <!-- ndicates breaking text with the most strictest line-breaking rules. -->
+            <enum name="strict" value="3" />
         </attr>
         <!-- Specify the type of auto-size. Note that this feature is not supported by EditText,
         works only for TextView. -->
@@ -6851,6 +6895,9 @@
         <!-- Special option for window animations: whether window should have rounded corners.
              @see ScreenDecorationsUtils#getWindowCornerRadius(Resources) -->
         <attr name="hasRoundedCorners" format="boolean" />
+        <!-- Special option for window animations: whether the window's background should be used as
+             a background to the animation. -->
+        <attr name="showBackground" format="boolean" />
     </declare-styleable>
 
     <declare-styleable name="AnimationSet">
@@ -8422,6 +8469,11 @@
         <!-- Component name of an activity that allows the user to modify
              the settings for this dream. -->
         <attr name="settingsActivity" />
+        <!-- A preview, in a drawable resource id, of what the Dream will look like. -->
+        <attr name="previewImage" format="reference" />
+        <!-- Whether to show clock and other complications such as weather in the overlay. Default
+             to true. Note that the overlay on dreams is currently only supported on tablets. -->
+        <attr name="showClockAndComplications" format="boolean" />
     </declare-styleable>
 
     <!--  Use <code>trust-agent</code> as the root tag of the XML resource that
@@ -8758,6 +8810,14 @@
         <!-- The service that provides {@link android.service.voice.HotwordDetectionService}.
              @hide @SystemApi -->
         <attr name="hotwordDetectionService" format="string" />
+    </declare-styleable>
+
+    <!-- Use <code>game-service</code> as the root tag of the XML resource that
+         describes a GameService.
+         Described here are the attributes that can be included in that tag. -->
+    <declare-styleable name="GameService">
+        <!-- The service that hosts active game sessions.  This is required. -->
+        <attr name="gameSessionService" format="string" />
     </declare-styleable>
 
     <!-- Use <code>voice-enrollment-application</code>
@@ -9316,6 +9376,18 @@
         <attr name="canPauseRecording" format="boolean" />
     </declare-styleable>
 
+    <!-- Use <code>tv-iapp</code> as the root tag of the XML resource that describes a
+         {@link android.media.tv.interactive.TvIAppService}, which is referenced from its
+         {@link android.media.tv.interactive.TvIAppService#SERVICE_META_DATA} meta-data entry.
+         Described here are the attributes that can be included in that tag. -->
+    <declare-styleable name="TvIAppService">
+        <!-- The interactive app types that the TV interactive app service supports.
+             Reference to a string array resource that describes the supported types,
+             e.g. HbbTv, Ginga. -->
+        <attr name="supportedTypes" format="reference" />
+    </declare-styleable>
+
+
     <!-- Attributes that can be used with <code>rating-system-definition</code> tags inside of the
          XML resource that describes TV content rating of a {@link android.media.tv.TvInputService},
          which is referenced from its
@@ -9607,4 +9679,11 @@
     <attr name="iconfactoryBadgeSize" format="dimension"/>
     <!-- Perceptual luminance of a color, in accessibility friendly color space. From 0 to 100. -->
     <attr name="lStar" format="float"/>
-</resources>
+
+    <!-- The attributes of the {@code <locale>} tag within {@code <locale-config>}. -->
+    <declare-styleable name="LocaleConfig_Locale">
+        <!-- The <a href="https://www.rfc-editor.org/rfc/bcp/bcp47.txt">IETF BCP47 language tag</a>
+        of the supported locale. {@link android.app.LocaleConfig} -->
+        <attr name="name" />
+    </declare-styleable>
+    </resources>

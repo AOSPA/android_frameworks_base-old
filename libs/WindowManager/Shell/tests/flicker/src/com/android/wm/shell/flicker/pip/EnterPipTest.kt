@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
@@ -26,7 +27,9 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.LAUNCHER_COMPONENT
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.rules.WMFlickerServiceRuleForTestSpec
 import org.junit.FixMethodOrder
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
@@ -55,6 +58,9 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group3
 class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
+    @get:Rule
+    val flickerRule = WMFlickerServiceRuleForTestSpec(testSpec)
+
     /**
      * Defines the transition used to run the test
      */
@@ -64,6 +70,29 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
                 pipApp.clickEnterPipButton(wmHelper)
             }
         }
+
+    @FlakyTest
+    @Test
+    fun runPresubmitAssertion() {
+        flickerRule.checkPresubmitAssertions()
+    }
+
+    @FlakyTest
+    @Test
+    fun runPostsubmitAssertion() {
+        flickerRule.checkPostsubmitAssertions()
+    }
+
+    @FlakyTest
+    @Test
+    fun runFlakyAssertion() {
+        flickerRule.checkFlakyAssertions()
+    }
+
+    /** {@inheritDoc}  */
+    @FlakyTest(bugId = 206753786)
+    @Test
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
     /**
      * Checks [pipApp] window remains visible throughout the animation
@@ -94,8 +123,8 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     @Presubmit
     @Test
     fun pipWindowRemainInsideVisibleBounds() {
-        testSpec.assertWm {
-            coversAtMost(displayBounds, pipApp.component)
+        testSpec.assertWmVisibleRegion(pipApp.component) {
+            coversAtMost(displayBounds)
         }
     }
 
@@ -106,8 +135,8 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     @Presubmit
     @Test
     fun pipLayerRemainInsideVisibleBounds() {
-        testSpec.assertLayers {
-            coversAtMost(displayBounds, pipApp.component)
+        testSpec.assertLayersVisibleRegion(pipApp.component) {
+            coversAtMost(displayBounds)
         }
     }
 
@@ -153,13 +182,14 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     }
 
     /**
-     * Checks the focus doesn't change during the animation
+     * Checks that the focus changes between the [pipApp] window and the launcher when
+     * closing the pip window
      */
-    @FlakyTest
+    @Postsubmit
     @Test
-    fun focusDoesNotChange() {
+    fun focusChanges() {
         testSpec.assertEventLog {
-            this.focusDoesNotChange()
+            this.focusChanges(pipApp.`package`, "NexusLauncherActivity")
         }
     }
 

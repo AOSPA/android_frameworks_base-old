@@ -23,12 +23,52 @@ import com.android.systemui.util.ViewController;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.util.Optional;
+
 /**
  * {@link CommunalSource} defines an interface for working with a source for communal data. Clients
  * may request a communal surface that can be shown within a {@link android.view.SurfaceView}.
  * Callbacks may also be registered to listen to state changes.
  */
 public interface CommunalSource {
+    /**
+     * {@link Connector} defines an interface for {@link CommunalSource} instances to be generated.
+     */
+    interface Connector {
+        Connection connect(Connection.Callback callback);
+    }
+
+    /**
+     * {@link Connection} defines an interface for an entity which holds the necessary components
+     * for establishing and maintaining a connection to the communal source.
+     */
+    interface Connection {
+        /**
+         * {@link Callback} defines an interface for clients to be notified when a source is ready
+         */
+        interface Callback {
+            void onSourceEstablished(Optional<CommunalSource> source);
+            void onDisconnected();
+        }
+
+        void disconnect();
+    }
+
+    /**
+     * The {@link Observer} interface specifies an entity which {@link CommunalSource} listeners
+     * can be informed of changes to the source, which will require updating. Note that this deals
+     * with changes to the source itself, not content which will be updated through the
+     * {@link CommunalSource} interface.
+     */
+    interface Observer {
+        interface Callback {
+            void onSourceChanged();
+        }
+
+        void addCallback(Callback callback);
+        void removeCallback(Callback callback);
+    }
+
     /**
      * {@link CommunalViewResult} is handed back from {@link #requestCommunalView(Context)} and
      * contains the view to be displayed and its associated controller.
@@ -62,29 +102,4 @@ public interface CommunalSource {
      * value will be {@code null} in case of a failure.
      */
     ListenableFuture<CommunalViewResult> requestCommunalView(Context context);
-
-    /**
-     * Adds a {@link Callback} to receive future status updates regarding this
-     * {@link CommunalSource}.
-     *
-     * @param callback The {@link Callback} to be added.
-     */
-    void addCallback(Callback callback);
-
-    /**
-     * Removes a {@link Callback} from receiving future updates.
-     *
-     * @param callback The {@link Callback} to be removed.
-     */
-    void removeCallback(Callback callback);
-
-    /**
-     * An interface for receiving updates on the state of the {@link CommunalSource}.
-     */
-    interface Callback {
-        /**
-         * Invoked when the {@link CommunalSource} is no longer available for use.
-         */
-        void onDisconnected();
-    }
 }

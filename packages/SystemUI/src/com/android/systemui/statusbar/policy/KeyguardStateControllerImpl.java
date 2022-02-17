@@ -128,7 +128,7 @@ public class KeyguardStateControllerImpl implements KeyguardStateController, Dum
                         update(true /* updateAlways */);
                     }
                 }
-            }, filter, null, null);
+            }, filter, null, null, Context.RECEIVER_EXPORTED_UNAUDITED);
         }
     }
 
@@ -171,6 +171,8 @@ public class KeyguardStateControllerImpl implements KeyguardStateController, Dum
         if (mShowing == showing && mOccluded == occluded) return;
         mShowing = showing;
         mOccluded = occluded;
+        Trace.instantForTrack(Trace.TRACE_TAG_APP, "UI Events",
+                "Keyguard showing: " + showing + " occluded: " + occluded);
         notifyKeyguardChanged();
 
         // Update the dismiss amount to the full 0f/1f if we explicitly show or hide the keyguard.

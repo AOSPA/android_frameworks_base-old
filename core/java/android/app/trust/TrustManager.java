@@ -156,7 +156,7 @@ public class TrustManager {
 
                 @Override
                 public void onTrustError(CharSequence message) {
-                    Message m = mHandler.obtainMessage(MSG_TRUST_ERROR);
+                    Message m = mHandler.obtainMessage(MSG_TRUST_ERROR, trustListener);
                     m.getData().putCharSequence(DATA_MESSAGE, message);
                     m.sendToTarget();
                 }
@@ -217,9 +217,9 @@ public class TrustManager {
      * Clears authentication by the specified biometric type for all users.
      */
     @RequiresPermission(Manifest.permission.ACCESS_KEYGUARD_SECURE_STORAGE)
-    public void clearAllBiometricRecognized(BiometricSourceType source) {
+    public void clearAllBiometricRecognized(BiometricSourceType source, int unlockedUser) {
         try {
-            mService.clearAllBiometricRecognized(source);
+            mService.clearAllBiometricRecognized(source, unlockedUser);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

@@ -30,6 +30,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.app.KeyguardManager;
+import android.companion.virtual.IVirtualDevice;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.res.Resources;
@@ -344,6 +345,16 @@ public final class DisplayManager {
      */
     public static final int VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP = 1 << 11;
 
+    /**
+     * Virtual display flags: Indicates that the virtual display should always be unlocked and not
+     * have keyguard displayed on it. Only valid for virtual displays that aren't in the default
+     * display group.
+     *
+     * @see #createVirtualDisplay
+     * @see #VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
+     * @hide
+     */
+    public static final int VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED = 1 << 12;
 
     /** @hide */
     @IntDef(prefix = {"MATCH_CONTENT_FRAMERATE_"}, value = {
@@ -892,8 +903,16 @@ public final class DisplayManager {
             @NonNull VirtualDisplayConfig virtualDisplayConfig,
             @Nullable VirtualDisplay.Callback callback, @Nullable Handler handler,
             @Nullable Context windowContext) {
-        return mGlobal.createVirtualDisplay(mContext, projection, virtualDisplayConfig, callback,
-                handler, windowContext);
+        return mGlobal.createVirtualDisplay(mContext, projection, null /* virtualDevice */,
+                virtualDisplayConfig, callback, handler, windowContext);
+    }
+
+    /** @hide */
+    public VirtualDisplay createVirtualDisplay(@Nullable IVirtualDevice virtualDevice,
+            @NonNull VirtualDisplayConfig virtualDisplayConfig,
+            @Nullable VirtualDisplay.Callback callback, @Nullable Handler handler) {
+        return mGlobal.createVirtualDisplay(mContext, null /* projection */, virtualDevice,
+                virtualDisplayConfig, callback, handler, null);
     }
 
     /**
@@ -1113,41 +1132,48 @@ public final class DisplayManager {
     }
 
     /**
-     * Sets the default display mode, according to the refresh rate and the resolution chosen by the
-     * user.
+     * Sets the global default {@link Display.Mode}.  The display mode includes preference for
+     * resolution and refresh rate. The mode change is applied globally, i.e. to all the connected
+     * displays. If the mode specified is not supported by a connected display, then no mode change
+     * occurs for that display.
      *
+     * @param mode The {@link Display.Mode} to set, which can include resolution and/or
+     * refresh-rate. It is created using {@link Display.Mode.Builder}.
+     *`
      * @hide
      */
     @TestApi
     @RequiresPermission(Manifest.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE)
-    public void setUserPreferredDisplayMode(@NonNull Display.Mode mode) {
+    public void setGlobalUserPreferredDisplayMode(@NonNull Display.Mode mode) {
         // Create a new object containing default values for the unused fields like mode ID and
         // alternative refresh rates.
         Display.Mode preferredMode = new Display.Mode(mode.getPhysicalWidth(),
                 mode.getPhysicalHeight(), mode.getRefreshRate());
-        mGlobal.setUserPreferredDisplayMode(preferredMode);
+        mGlobal.setUserPreferredDisplayMode(Display.INVALID_DISPLAY, preferredMode);
     }
 
     /**
-     * Removes the user preferred display mode.
+     * Removes the global user preferred display mode.
+     * User preferred display mode is cleared for all the connected displays.
      *
      * @hide
      */
     @TestApi
     @RequiresPermission(Manifest.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE)
-    public void clearUserPreferredDisplayMode() {
-        mGlobal.setUserPreferredDisplayMode(null);
+    public void clearGlobalUserPreferredDisplayMode() {
+        mGlobal.setUserPreferredDisplayMode(Display.INVALID_DISPLAY, null);
     }
 
     /**
-     * Returns the user preferred display mode.
+     * Returns the global user preferred display mode.
+     * If no user preferred mode has been set, or it has been cleared, this method returns null.
      *
      * @hide
      */
     @TestApi
     @Nullable
-    public Display.Mode getUserPreferredDisplayMode() {
-        return mGlobal.getUserPreferredDisplayMode();
+    public Display.Mode getGlobalUserPreferredDisplayMode() {
+        return mGlobal.getUserPreferredDisplayMode(Display.INVALID_DISPLAY);
     }
 
     /**
@@ -1184,6 +1210,17 @@ public final class DisplayManager {
     @RequiresPermission(Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE)
     public void setRefreshRateSwitchingType(@SwitchingType int newValue) {
         mGlobal.setRefreshRateSwitchingType(newValue);
+    }
+
+    /**
+     * Returns whether the specified display supports DISPLAY_DECORATION.
+     *
+     * @param displayId The display to query support.
+     *
+     * @hide
+     */
+    public boolean getDisplayDecorationSupport(int displayId) {
+        return mGlobal.getDisplayDecorationSupport(displayId);
     }
 
     /**
@@ -1363,5 +1400,13 @@ public final class DisplayManager {
          * @hide
          */
         String KEY_HIGH_REFRESH_RATE_BLACKLIST = "high_refresh_rate_blacklist";
+
+        /**
+         * Whether to allow the creation of always unlocked virtual displays by apps having the
+         * required permissions.
+         * @hide
+         */
+        String KEY_ALLOW_ALWAYS_UNLOCKED_VIRTUAL_DISPLAYS =
+                "allow_always_unlocked_virtual_displays";
     }
 }

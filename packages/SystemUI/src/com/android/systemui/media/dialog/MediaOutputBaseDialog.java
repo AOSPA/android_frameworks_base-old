@@ -20,6 +20,7 @@ import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowInsets.Type.statusBars;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,6 +45,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
+import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 
 /**
  * Base dialog for media output UI
@@ -52,6 +54,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         MediaOutputController.Callback, Window.Callback {
 
     private static final String TAG = "MediaOutputDialog";
+    private static final String EMPTY_TITLE = " ";
 
     private final Handler mMainThreadHandler = new Handler(Looper.getMainLooper());
     private final RecyclerView.LayoutManager mLayoutManager;
@@ -64,6 +67,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
     private TextView mHeaderTitle;
     private TextView mHeaderSubtitle;
     private ImageView mHeaderIcon;
+    private ImageView mAppResourceIcon;
     private RecyclerView mDevicesRecyclerView;
     private LinearLayout mDeviceListLayout;
     private Button mDoneButton;
@@ -81,9 +85,12 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         }
     };
 
-    public MediaOutputBaseDialog(Context context, MediaOutputController mediaOutputController) {
-        super(context);
-        mContext = context;
+    public MediaOutputBaseDialog(Context context, MediaOutputController mediaOutputController,
+            SystemUIDialogManager dialogManager) {
+        super(context, R.style.Theme_SystemUI_Dialog_Media, dialogManager);
+
+        // Save the context that is wrapped with our theme.
+        mContext = getContext();
         mMediaOutputController = mediaOutputController;
         mLayoutManager = new LinearLayoutManager(mContext);
         mListMaxHeight = context.getResources().getDimensionPixelSize(
@@ -104,6 +111,9 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         lp.setFitInsetsIgnoringVisibility(true);
         window.setAttributes(lp);
         window.setContentView(mDialogView);
+        // Sets window to a blank string to avoid talkback announce app label first when pop up,
+        // which doesn't make sense.
+        window.setTitle(EMPTY_TITLE);
 
         mHeaderTitle = mDialogView.requireViewById(R.id.header_title);
         mHeaderSubtitle = mDialogView.requireViewById(R.id.header_subtitle);
@@ -112,6 +122,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         mDeviceListLayout = mDialogView.requireViewById(R.id.device_list);
         mDoneButton = mDialogView.requireViewById(R.id.done);
         mStopButton = mDialogView.requireViewById(R.id.stop);
+        mAppResourceIcon = mDialogView.requireViewById(R.id.app_source_icon);
 
         mDeviceListLayout.getViewTreeObserver().addOnGlobalLayoutListener(
                 mDeviceListLayoutListener);
@@ -145,6 +156,12 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         // Update header icon
         final int iconRes = getHeaderIconRes();
         final IconCompat iconCompat = getHeaderIcon();
+        final Drawable appSourceDrawable = getAppSourceIcon();
+        if (appSourceDrawable != null) {
+            mAppResourceIcon.setImageDrawable(appSourceDrawable);
+        } else {
+            mAppResourceIcon.setVisibility(View.GONE);
+        }
         if (iconRes != 0) {
             mHeaderIcon.setVisibility(View.VISIBLE);
             mHeaderIcon.setImageResource(iconRes);
@@ -183,6 +200,8 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         mStopButton.setVisibility(getStopButtonVisibility());
     }
 
+    abstract Drawable getAppSourceIcon();
+
     abstract int getHeaderIconRes();
 
     abstract IconCompat getHeaderIcon();
@@ -215,14 +234,6 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
     @Override
     public void dismissDialog() {
         dismiss();
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (!hasFocus && isShowing()) {
-            dismiss();
-        }
     }
 
     void onHeaderIconClick() {

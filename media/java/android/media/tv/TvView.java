@@ -197,6 +197,11 @@ public class TvView extends ViewGroup {
         mCallback = callback;
     }
 
+    /** @hide */
+    public Session getInputSession() {
+        return mSession;
+    }
+
     /**
      * Sets this as the main {@link TvView}.
      *
@@ -473,6 +478,18 @@ public class TvView extends ViewGroup {
             return null;
         }
         return mSession.getSelectedTrack(type);
+    }
+
+    /**
+     * Enables interactive app notification.
+     * @param enabled {@code true} if you want to enable interactive app notifications.
+     *                {@code false} otherwise.
+     * @hide
+     */
+    public void setInteractiveAppNotificationEnabled(boolean enabled) {
+        if (mSession != null) {
+            mSession.setInteractiveAppNotificationEnabled(enabled);
+        }
     }
 
     /**
@@ -1043,6 +1060,34 @@ public class TvView extends ViewGroup {
         public void onTimeShiftStatusChanged(
                 String inputId, @TvInputManager.TimeShiftStatus int status) {
         }
+
+        /**
+         * This is called when the AIT info has been updated.
+         *
+         * @param aitInfo The current AIT info.
+         * @hide
+         */
+        public void onAitInfoUpdated(String inputId, AitInfo aitInfo) {
+        }
+
+        /**
+         * This is called when signal strength is updated.
+         * @param inputId The ID of the TV input bound to this view.
+         * @param strength The current signal strength.
+         *
+         * @hide
+         */
+        public void onSignalStrength(String inputId, @TvInputManager.SignalStrength int strength) {
+        }
+
+        /**
+         * This is called when the session has been tuned to the given channel.
+         *
+         * @param channelUri The URI of a channel.
+         * @hide
+         */
+        public void onTuned(String inputId, Uri channelUri) {
+        }
     }
 
     /**
@@ -1337,6 +1382,48 @@ public class TvView extends ViewGroup {
             }
             if (mTimeShiftPositionCallback != null) {
                 mTimeShiftPositionCallback.onTimeShiftCurrentPositionChanged(mInputId, timeMs);
+            }
+        }
+
+        @Override
+        public void onAitInfoUpdated(Session session, AitInfo aitInfo) {
+            if (DEBUG) {
+                Log.d(TAG, "onAitInfoUpdated(aitInfo=" + aitInfo + ")");
+            }
+            if (this != mSessionCallback) {
+                Log.w(TAG, "onAitInfoUpdated - session not created");
+                return;
+            }
+            if (mCallback != null) {
+                mCallback.onAitInfoUpdated(mInputId, aitInfo);
+            }
+        }
+
+        @Override
+        public void onSignalStrength(Session session, int strength) {
+            if (DEBUG) {
+                Log.d(TAG, "onSignalStrength(strength=" + strength + ")");
+            }
+            if (this != mSessionCallback) {
+                Log.w(TAG, "onSignalStrength - session not created");
+                return;
+            }
+            if (mCallback != null) {
+                mCallback.onSignalStrength(mInputId, strength);
+            }
+        }
+
+        @Override
+        public void onTuned(Session session, Uri channelUri) {
+            if (DEBUG) {
+                Log.d(TAG, "onTuned(channelUri=" + channelUri + ")");
+            }
+            if (this != mSessionCallback) {
+                Log.w(TAG, "onTuned - session not created");
+                return;
+            }
+            if (mCallback != null) {
+                mCallback.onTuned(mInputId, channelUri);
             }
         }
     }

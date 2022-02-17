@@ -16,18 +16,48 @@
 
 package android.media.tv;
 
+import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.os.Parcel;
 import android.os.Parcelable;
 
-import android.annotation.NonNull;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /** @hide */
-public final class BroadcastInfoRequest implements Parcelable {
+public abstract class BroadcastInfoRequest implements Parcelable {
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({REQUEST_OPTION_REPEAT, REQUEST_OPTION_AUTO_UPDATE})
+    public @interface RequestOption {}
+
+    public static final int REQUEST_OPTION_REPEAT = 0;
+    public static final int REQUEST_OPTION_AUTO_UPDATE = 1;
+
     public static final @NonNull Parcelable.Creator<BroadcastInfoRequest> CREATOR =
             new Parcelable.Creator<BroadcastInfoRequest>() {
                 @Override
                 public BroadcastInfoRequest createFromParcel(Parcel source) {
-                    return new BroadcastInfoRequest(source);
+                    @TvInputManager.BroadcastInfoType int type = source.readInt();
+                    switch (type) {
+                        case TvInputManager.BROADCAST_INFO_TYPE_TS:
+                            return TsRequest.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_SECTION:
+                            return SectionRequest.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_PES:
+                            return PesRequest.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_STREAM_EVENT:
+                            return StreamEventRequest.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_DSMCC:
+                            return DsmccRequest.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_COMMAND:
+                            return CommandRequest.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_TIMELINE:
+                            return TimelineRequest.createFromParcelBody(source);
+                        default:
+                            throw new IllegalStateException(
+                                    "Unexpected broadcast info request type (value "
+                                            + type + ") in parcel.");
+                    }
                 }
 
                 @Override
@@ -36,14 +66,33 @@ public final class BroadcastInfoRequest implements Parcelable {
                 }
             };
 
-    int requestId;
+    protected final @TvInputManager.BroadcastInfoType int mType;
+    protected final int mRequestId;
+    protected final @RequestOption int mOption;
 
-    public BroadcastInfoRequest(int requestId) {
-        this.requestId = requestId;
+    protected BroadcastInfoRequest(@TvInputManager.BroadcastInfoType int type,
+            int requestId, @RequestOption int option) {
+        mType = type;
+        mRequestId = requestId;
+        mOption = option;
     }
 
-    private BroadcastInfoRequest(Parcel source) {
-        requestId = source.readInt();
+    protected BroadcastInfoRequest(@TvInputManager.BroadcastInfoType int type, Parcel source) {
+        mType = type;
+        mRequestId = source.readInt();
+        mOption = source.readInt();
+    }
+
+    public @TvInputManager.BroadcastInfoType int getType() {
+        return mType;
+    }
+
+    public int getRequestId() {
+        return mRequestId;
+    }
+
+    public @RequestOption int getOption() {
+        return mOption;
     }
 
     @Override
@@ -53,6 +102,8 @@ public final class BroadcastInfoRequest implements Parcelable {
 
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
-        dest.writeInt(requestId);
+        dest.writeInt(mType);
+        dest.writeInt(mRequestId);
+        dest.writeInt(mOption);
     }
 }

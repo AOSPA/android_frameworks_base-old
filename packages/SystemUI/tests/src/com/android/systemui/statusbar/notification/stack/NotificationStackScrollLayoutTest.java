@@ -22,6 +22,7 @@ import static android.view.View.GONE;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_GENTLE;
 
+import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static junit.framework.Assert.assertEquals;
@@ -30,7 +31,6 @@ import static junit.framework.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
@@ -103,6 +103,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private NotificationSwipeHelper mNotificationSwipeHelper;
     @Mock private NotificationStackScrollLayoutController mStackScrollLayoutController;
     @Mock private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
+    @Mock private NotificationShelf mNotificationShelf;
 
     @Before
     @UiThreadTest
@@ -124,13 +125,13 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mDependency.injectTestDependency(GroupMembershipManager.class, mGroupMembershipManger);
         mDependency.injectTestDependency(GroupExpansionManager.class, mGroupExpansionManager);
         mDependency.injectTestDependency(AmbientState.class, mAmbientState);
+        mDependency.injectTestDependency(NotificationShelf.class, mNotificationShelf);
         mDependency.injectTestDependency(
                 UnlockedScreenOffAnimationController.class, mUnlockedScreenOffAnimationController);
 
         NotificationShelfController notificationShelfController =
                 mock(NotificationShelfController.class);
-        NotificationShelf notificationShelf = mock(NotificationShelf.class);
-        when(notificationShelfController.getView()).thenReturn(notificationShelf);
+        when(notificationShelfController.getView()).thenReturn(mNotificationShelf);
         when(mNotificationSectionsManager.createSectionsForBuckets()).thenReturn(
                 new NotificationSection[]{
                         mNotificationSection
@@ -160,7 +161,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                         anyBoolean());
         doNothing().when(mGroupExpansionManager).collapseGroups();
         doNothing().when(mExpandHelper).cancelImmediately();
-        doNothing().when(notificationShelf).setAnimationsEnabled(anyBoolean());
+        doNothing().when(mNotificationShelf).setAnimationsEnabled(anyBoolean());
     }
 
     @Test
@@ -203,21 +204,43 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
 
     @Test
     @UiThreadTest
-    public void testSetExpandedHeight_blockingHelperManagerReceivedCallbacks() {
-        final float[] expectedHeight = {0f};
-        final float[] expectedAppear = {0f};
+    public void testSetExpandedHeight_listenerReceivedCallbacks() {
+        final float expectedHeight = 0f;
 
         mStackScroller.addOnExpandedHeightChangedListener((height, appear) -> {
-            Assert.assertEquals(expectedHeight[0], height, 0);
-            Assert.assertEquals(expectedAppear[0], appear, .1);
+            Assert.assertEquals(expectedHeight, height, 0);
         });
-        expectedHeight[0] = 1f;
-        expectedAppear[0] = 1f;
-        mStackScroller.setExpandedHeight(expectedHeight[0]);
+        mStackScroller.setExpandedHeight(expectedHeight);
+    }
 
-        expectedHeight[0] = 100f;
-        expectedAppear[0] = 0f;
-        mStackScroller.setExpandedHeight(expectedHeight[0]);
+    @Test
+    public void testAppearFractionCalculation() {
+        // appear start position
+        when(mNotificationShelf.getIntrinsicHeight()).thenReturn(100);
+        // because it's the same as shelf height, appear start position equals shelf height
+        mStackScroller.mStatusBarHeight = 100;
+        // appear end position
+        when(mEmptyShadeView.getHeight()).thenReturn(200);
+
+        assertEquals(0f, mStackScroller.calculateAppearFraction(100));
+        assertEquals(1f, mStackScroller.calculateAppearFraction(200));
+        assertEquals(0.5f, mStackScroller.calculateAppearFraction(150));
+    }
+
+    @Test
+    public void testAppearFractionCalculationIsNotNegativeWhenShelfBecomesSmaller() {
+        // this situation might occur if status bar height is defined in pixels while shelf height
+        // in dp and screen density changes - appear start position
+        // (calculated in NSSL#getMinExpansionHeight) that is adjusting for status bar might
+        // increase and become bigger that end position, which should be prevented
+
+        // appear start position
+        when(mNotificationShelf.getIntrinsicHeight()).thenReturn(80);
+        mStackScroller.mStatusBarHeight = 100;
+        // appear end position
+        when(mEmptyShadeView.getHeight()).thenReturn(90);
+
+        assertThat(mStackScroller.calculateAppearFraction(100)).isAtLeast(0);
     }
 
     @Test
@@ -296,14 +319,10 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         setBarStateForTest(StatusBarState.SHADE);
         mStackScroller.setCurrentUserSetup(true);
 
-        ExpandableNotificationRow row = mock(ExpandableNotificationRow.class);
-        when(row.canViewBeDismissed()).thenReturn(true);
-        when(mStackScroller.getChildCount()).thenReturn(1);
-        when(mStackScroller.getChildAt(anyInt())).thenReturn(row);
         mStackScroller.setIsRemoteInputActive(true);
-        when(mStackScrollLayoutController.hasActiveClearableNotifications(ROWS_ALL))
+        when(mStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
+        when(mStackScrollLayoutController.hasActiveClearableNotifications(eq(ROWS_ALL)))
                 .thenReturn(true);
-        when(mStackScrollLayoutController.hasActiveNotifications()).thenReturn(true);
 
         FooterView view = mock(FooterView.class);
         mStackScroller.setFooterView(view);
@@ -312,14 +331,28 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     }
 
     @Test
+    public void testUpdateFooter_withoutNotifications() {
+        setBarStateForTest(StatusBarState.SHADE);
+        mStackScroller.setCurrentUserSetup(true);
+
+        when(mStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(0);
+        when(mStackScrollLayoutController.hasActiveClearableNotifications(eq(ROWS_ALL)))
+                .thenReturn(false);
+
+        FooterView view = mock(FooterView.class);
+        mStackScroller.setFooterView(view);
+        mStackScroller.updateFooter();
+        verify(mStackScroller).updateFooterView(false, false, true);
+    }
+
+    @Test
     public void testUpdateFooter_oneClearableNotification() {
         setBarStateForTest(StatusBarState.SHADE);
         mStackScroller.setCurrentUserSetup(true);
 
-        when(mEmptyShadeView.getVisibility()).thenReturn(GONE);
-        when(mStackScrollLayoutController.hasActiveClearableNotifications(ROWS_ALL))
+        when(mStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
+        when(mStackScrollLayoutController.hasActiveClearableNotifications(eq(ROWS_ALL)))
                 .thenReturn(true);
-        when(mStackScrollLayoutController.hasActiveNotifications()).thenReturn(true);
 
         FooterView view = mock(FooterView.class);
         mStackScroller.setFooterView(view);
@@ -332,10 +365,9 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         setBarStateForTest(StatusBarState.SHADE);
         mStackScroller.setCurrentUserSetup(false);
 
-        when(mEmptyShadeView.getVisibility()).thenReturn(GONE);
-        when(mStackScrollLayoutController.hasActiveClearableNotifications(ROWS_ALL))
+        when(mStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
+        when(mStackScrollLayoutController.hasActiveClearableNotifications(eq(ROWS_ALL)))
                 .thenReturn(true);
-        when(mStackScrollLayoutController.hasActiveNotifications()).thenReturn(true);
 
         FooterView view = mock(FooterView.class);
         mStackScroller.setFooterView(view);
@@ -348,12 +380,8 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         setBarStateForTest(StatusBarState.SHADE);
         mStackScroller.setCurrentUserSetup(true);
 
-        ExpandableNotificationRow row = mock(ExpandableNotificationRow.class);
-        when(row.canViewBeDismissed()).thenReturn(false);
-        when(mStackScroller.getChildCount()).thenReturn(1);
-        when(mStackScroller.getChildAt(anyInt())).thenReturn(row);
-        when(mStackScrollLayoutController.hasActiveNotifications()).thenReturn(true);
-        when(mStackScrollLayoutController.hasActiveClearableNotifications(ROWS_ALL))
+        when(mStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
+        when(mStackScrollLayoutController.hasActiveClearableNotifications(eq(ROWS_ALL)))
                 .thenReturn(false);
         when(mEmptyShadeView.getVisibility()).thenReturn(GONE);
 
@@ -419,7 +447,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     public void testClearNotifications_All() {
         final int[] numCalls = {0};
         final int[] selected = {-1};
-        mStackScroller.setDismissListener(selectedRows -> {
+        mStackScroller.setClearAllListener(selectedRows -> {
             numCalls[0]++;
             selected[0] = selectedRows;
         });
@@ -433,7 +461,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     public void testClearNotifications_Gentle() {
         final int[] numCalls = {0};
         final int[] selected = {-1};
-        mStackScroller.setDismissListener(selectedRows -> {
+        mStackScroller.setClearAllListener(selectedRows -> {
             numCalls[0]++;
             selected[0] = selectedRows;
         });

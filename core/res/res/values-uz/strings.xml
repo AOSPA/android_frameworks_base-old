@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Ilovaga Android TV qurilmangizdagi chaqiruvlar jurnali, kirish va chiqish chaqiruvlari haqidagi axborotni oʻzgartirish huquqini beradi. Zararli ilovalar undan chaqiruvlar jurnalini oʻzgartirish yoki oʻchirish uchun foydalanishi mumkin."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Ilovaga telefoningizdagi qo‘ng‘iroq jurnallari, kiruvchi va chiquvchi qo‘ng‘rioqlar haqidagi ma’lumotlarni o‘zgartirishga ruxsat beradi. Zararli ilovalar bundan qo‘ng‘iroqlar jurnalini o‘zgartirish yoki o‘chirish uchun foydalanishi mumkin."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"tana sezgichlari (m-n, yurak urishi sensori) ma’lumotlaridan foydalanishga ruxsat"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Ilovaga sezgichlardan olingan jismoniy holatingiz haqidagi ma’lumotlarni, masalan, yurak urishini kuzatish uchun ruxsat beradi."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Yurak urishi, harorat, qondagi kislorod foizi kabi tana sezgilaridan olingan maʼlumotlarga kirish."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"orqa fonda tana sezgilari (m-n, yurak urishi sensori) maʼlumotlariga kirish"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Yurak urishi, harorat, qondagi kislorod foizi kabi tana sezgilaridan olingan maʼlumotlarga orqa fonda kirish."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Taqvim tadbirlari va tafsilotlarini o‘qish"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Bu ilova planshetdagi barcha taqvim tadbirlarini o‘qiy olishi hamda taqvim ma’lumotlarini ulashishi yoki saqlashi mumkin."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Bu ilova Android TV qurilmangizda barcha taqvim tadbirlarini oʻqiy olishi hamda taqvim maʼlumotlarini ulashishi yoki saqlashi mumkin."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Ilovaga sizning ishtirokingizsiz qo‘ng‘iroqlarni amalga oshirish uchun IMS xizmatidan foydalanishga ruxsat beradi."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"telefon holati haqidagi ma’lumotlarni olish"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Ilovaga qurilmangizdagi telefon xususiyatlariga kirishga ruxsat beradi. Bu ruxsat ilovaga telefon raqami va qurilma nomlari, qo‘ng‘iroq faol yoki faolsizligi va masofadagi raqam qo‘ng‘rioq orqali bog‘langanligini aniqlashga imkon beradi."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"oddiy telefoniya holatini oʻqish va aniqlash"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Ilovaga qurilmadagi oddiy telefoniya funksiyalaridan foydalanish imkonini beradi."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"chaqiruvlarni tizim orqali yo‘naltirish"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Ilova aloqa sifatini yaxshilash maqsadida chaqiruvlarni tizim orqali yo‘naltirishi mumkin."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"tizim orqali chaqiruvlarni tekshirish va boshqarish."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Yuz modelini oʻchirish uchun bosing va keyin yana yuzni qoʻshing"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Yuz bilan ochishni sozlash"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Telefoningizni yuz tekshiruvi yordamida qulfdan chiqaring"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Yuz bilan ochish uchun Sozlamalar va maxfiylik orqali "<b>"kameraga kirishga ruxsat bering"</b></string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Qulfdan chiqarishning boshqa usullarini sozlang"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Barmoq izi kiritish uchun bosing"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Barmoq izi bilan ochish"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"“Bezovta qilinmasin” rejimi sozlamalarini ko‘rish va o‘zgartirish."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"foydalaniladigan ruxsatlar axborotini ochish"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Ilova foydalanadigan ruxsatlar axborotini ishga tushirishga ruxsat beradi. Oddiy ilovalar uchun talab qilinmaydi."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"ilova ruxsatlarini tekshirishni boshlash"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Qurilma egasiga ilova ruxsatlarini tekshirishni boshlash imkonini beradi. Oddiy ilovalar uchun talab qilinmaydi."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"ilova funksiyalari axborotini koʻrish"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Qurilma egasiga ilova funksiyalari axborotini koʻrishga ruxsat beradi."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"yuqori diskretlash chastotali sensor axborotiga ruxsat"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Ekranni qulfdan chiqarishga urinishlarni nazorat qilish"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Ekranni qulfini ochishda parolni kiritishga urinishlarni kuzatib boradi va agar parol bir necha marta noto‘g‘ri kiritilsa, planshetni qulflaydi yoki undagi ma’lumotlarni o‘chirib tashlaydi."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Ekran qulfini ochishda kiritilgan xato parollar sonini kuzatib boradi va agar parol juda koʻp marta xato kiritilsa, Android TV qurilmasini qulflaydi yoki undagi barcha maʼlumotlarni oʻchirib tashlaydi."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Ekranni qulfini ochishda parolni kiritishga urinishlarni kuzatib boradi va agar parol bir necha marta xato kiritilsa, axborot-hordiq tizimini qulflaydi yoki undagi maʼlumotlarni oʻchirib tashlaydi."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Ekranni qulfini ochishda parolni kiritishga urinishlarni kuzatib boradi va agar parol bir necha marta noto‘g‘ri kiritilsa, telefonni qulflaydi yoki undagi ma’lumotlarni o‘chirib tashlaydi."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Ekran qulfini ochishda kiritilgan noto‘g‘ri parollar sonini kuzatib boradi va agar parol juda ko‘p marta noto‘g‘ri kiritilsa, planshetni qulflaydi yoki undagi barcha ma’lumotlarni o‘chirib tashlaydi."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Ekran qulfini ochishda kiritilgan xato parollar sonini kuzatib boradi va agar parol juda koʻp marta xato kiritilsa, Android TV qurilmangizni qulflaydi yoki undagi barcha maʼlumotlarni oʻchirib tashlaydi."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Ekran qulfini ochishda parolni kiritishga urinishlarni kuzatib boradi va agar parol bir necha marta xato kiritilsa, axborot-hordiq tizimini qulflaydi yoki undagi barcha profil maʼlumotlarini oʻchirib tashlaydi."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Ekran qulfini ochishda kiritilgan noto‘g‘ri parollar sonini kuzatib boradi va agar parol juda ko‘p marta noto‘g‘ri kiritilsa, telefonni qulflaydi yoki undagi barcha ma’lumotlarni o‘chirib tashlaydi."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Ekran qulfini almashtirish"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Ekran qulfini almashtiradi."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Hamma narsani tozalash"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Planshetdagi hamma narsani tozalab tashlaydi va uning sozlamalarini asliga qaytaradi."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Android TV qurilmangizdagi hamma narsani tozalab tashlaydi va uning sozlamalarini asliga qaytaradi."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Zavod sozlamalarini qayta tiklash orqali axbirot-hordiq tizimi maʼlumotlarini ogohlantirishsiz oʻchirib tashlansin."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Telefondagi hamma narsani tozalab tashlaydi va uning sozlamalarini asliga qaytaradi."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Foydalanuvchi ma’lumotlarini o‘chirish"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Profil maʼlumotlarini tozalash"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Foydalanuvchi ma’lumotlarini o‘chirish"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Ushbu planshetdagi foydalanuvchi ma’lumotlarini ogohlantirishsiz o‘chirib tashlaydi."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Bu Android TV qurilmangizdagi foydalanuvchi maʼlumotlarini ogohlantirishsiz oʻchirib tashlaydi."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Bu profil maʼlumotlari ogohlantirishsiz oʻchirib tashlansin."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Ushbu telefondagi foydalanuvchi ma’lumotlarini ogohlantirishsiz o‘chirib tashlaydi."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Qurilmaga global proksi o‘rnatish"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Qoida faollashtirilgan vaqtda ishlatiladigan qurilmaning global proksi-serverini o‘rnatadi. Faqat qurilma egasi global proksi-serverini o‘rnatishi mumkin."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> tayyorlanmoqda."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Ilovalar ishga tushirilmoqda."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Tizimni yuklashni tugatish."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Ekran oʻchirilsinmi?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Barmoq izini sozlayotganda Quvvat tugmasini bosdingiz.\n\nBunda odatda ekran oʻchib qoladi."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Oʻchirish"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Bekor qilish"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Sozlashni davom ettirasizmi?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Quvvat tugmasini bosdingiz — bu odatda ekranni oʻchiradi.\n\nBarmoq izini qoʻshish vaqtida tugmaga yengilgina tegining."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Ekranni oʻchirish"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Sozlashni davom ettirish"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Barmoq izi tasdiqlashda davom etilsinmi?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Quvvat tugmasini bosdingiz. Bu odatda ekranni oʻchiradi.\n\nBarmoq izingizni tasdiqlash uchun tugmaga yengilgina tegining."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Ekranni oʻchirish"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Davom etish"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> ishlamoqda"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"O‘yinga qaytish uchun bosing"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"O‘yinni tanlang"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Maxsus ilova bildirishnomasi"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g> ilovasiga <xliff:g id="ACCOUNT">%2$s</xliff:g> hisobi bilan yangi foydalanuvchi yaratishiga ruxsat berilsinmi (bunday hisobdagi foydalanuvchi allaqachon mavjud) ?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g> ilovasiga <xliff:g id="ACCOUNT">%2$s</xliff:g> hisobi bilan yangi foydalanuvchi yaratishiga ruxsat berilsinmi ?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Kuzatuvdagi foydalanuvchi qoʻshish"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Til qoʻshish"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Hudud sozlamalari"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Til nomini kiriting"</string>

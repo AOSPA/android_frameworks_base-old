@@ -278,11 +278,11 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void updateViewState_qsExpansionOne_viewHidden() {
+    public void updateViewState_dragProgressOne_viewHidden() {
         mController.onViewAttached();
         updateStateToKeyguard();
 
-        mNotificationPanelViewStateProvider.setQsExpansionFraction(1f);
+        mNotificationPanelViewStateProvider.setLockscreenShadeDragProgress(1f);
 
         mController.updateViewState();
 
@@ -354,8 +354,8 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
         TestNotificationPanelViewStateProvider() {}
 
         private float mPanelViewExpandedHeight = 100f;
-        private float mQsExpansionFraction = 0f;
         private boolean mShouldHeadsUpBeVisible = false;
+        private float mLockscreenShadeDragProgress = 0f;
 
         @Override
         public float getPanelViewExpandedHeight() {
@@ -363,25 +363,25 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
         }
 
         @Override
-        public float getQsExpansionFraction() {
-            return mQsExpansionFraction;
+        public boolean shouldHeadsUpBeVisible() {
+            return mShouldHeadsUpBeVisible;
         }
 
         @Override
-        public boolean shouldHeadsUpBeVisible() {
-            return mShouldHeadsUpBeVisible;
+        public float getLockscreenShadeDragProgress() {
+            return mLockscreenShadeDragProgress;
         }
 
         public void setPanelViewExpandedHeight(float panelViewExpandedHeight) {
             this.mPanelViewExpandedHeight = panelViewExpandedHeight;
         }
 
-        public void setQsExpansionFraction(float qsExpansionFraction) {
-            this.mQsExpansionFraction = qsExpansionFraction;
-        }
-
         public void setShouldHeadsUpBeVisible(boolean shouldHeadsUpBeVisible) {
             this.mShouldHeadsUpBeVisible = shouldHeadsUpBeVisible;
+        }
+
+        public void setLockscreenShadeDragProgress(float lockscreenShadeDragProgress) {
+            this.mLockscreenShadeDragProgress = lockscreenShadeDragProgress;
         }
     }
 }

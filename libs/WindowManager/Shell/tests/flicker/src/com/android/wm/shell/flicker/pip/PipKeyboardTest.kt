@@ -18,6 +18,7 @@ package com.android.wm.shell.flicker.pip
 
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -25,9 +26,11 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.WindowUtils
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.traces.common.FlickerComponentName
 import com.android.wm.shell.flicker.helpers.ImeAppHelper
+import org.junit.Assume.assumeFalse
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -70,15 +73,24 @@ class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) 
             }
         }
 
+    /** {@inheritDoc}  */
+    @FlakyTest(bugId = 206753786)
+    @Test
+    override fun statusBarLayerRotatesScales() {
+        // This test doesn't work in shell transitions because of b/206753786
+        assumeFalse(isShellTransitionsEnabled)
+        super.statusBarLayerRotatesScales()
+    }
+
     /**
      * Ensure the pip window remains visible throughout any keyboard interactions
      */
     @Presubmit
     @Test
     fun pipInVisibleBounds() {
-        testSpec.assertWm {
+        testSpec.assertWmVisibleRegion(pipApp.component) {
             val displayBounds = WindowUtils.getDisplayBounds(testSpec.startRotation)
-            coversAtMost(displayBounds, pipApp.component)
+            coversAtMost(displayBounds)
         }
     }
 

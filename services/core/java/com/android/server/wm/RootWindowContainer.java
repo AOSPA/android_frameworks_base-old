@@ -991,29 +991,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mWmService.checkDrawnWindowsLocked();
         }
 
-        final int N = mWmService.mPendingRemove.size();
-        if (N > 0) {
-            if (mWmService.mPendingRemoveTmp.length < N) {
-                mWmService.mPendingRemoveTmp = new WindowState[N + 10];
-            }
-            mWmService.mPendingRemove.toArray(mWmService.mPendingRemoveTmp);
-            mWmService.mPendingRemove.clear();
-            ArrayList<DisplayContent> displayList = new ArrayList();
-            for (i = 0; i < N; i++) {
-                final WindowState w = mWmService.mPendingRemoveTmp[i];
-                w.removeImmediately();
-                final DisplayContent displayContent = w.getDisplayContent();
-                if (displayContent != null && !displayList.contains(displayContent)) {
-                    displayList.add(displayContent);
-                }
-            }
-
-            for (int j = displayList.size() - 1; j >= 0; --j) {
-                final DisplayContent dc = displayList.get(j);
-                dc.assignWindowLayers(true /*setLayoutNeeded*/);
-            }
-        }
-
         forAllDisplays(dc -> {
             dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
             dc.updateSystemGestureExclusion();
@@ -1825,8 +1802,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final DisplayContent displayContent = getDisplayContent(displayId);
         Configuration config = null;
         if (displayContent != null) {
-            config = displayContent.updateOrientation(
-                    getDisplayOverrideConfiguration(displayId), starting, true /* forceUpdate */);
+            config = displayContent.updateOrientation(starting, true /* forceUpdate */);
         }
         // Visibilities may change so let the starting activity have a chance to report. Can't do it
         // when visibility is changed in each AppWindowToken because it may trigger wrong
@@ -2060,11 +2036,22 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         try {
             final Task task = r.getTask();
-            final Task rootPinnedTask = taskDisplayArea.getRootPinnedTask();
+
+            // Create a transition now to collect the current pinned Task dismiss. Only do the
+            // create here as the Task (trigger) to enter PIP is not ready yet.
+            final TransitionController transitionController = task.mTransitionController;
+            Transition newTransition = null;
+            if (transitionController.isCollecting()) {
+                transitionController.setReady(task, false /* ready */);
+            } else if (transitionController.getTransitionPlayer() != null) {
+                newTransition = transitionController.createTransition(TRANSIT_PIP);
+            }
 
             // This will change the root pinned task's windowing mode to its original mode, ensuring
             // we only have one root task that is in pinned mode.
+            final Task rootPinnedTask = taskDisplayArea.getRootPinnedTask();
             if (rootPinnedTask != null) {
+                transitionController.collect(rootPinnedTask);
                 rootPinnedTask.dismissPip();
             }
 
@@ -2140,7 +2127,13 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // display area, so reparent.
                 rootTask.reparent(taskDisplayArea, true /* onTop */);
             }
-            rootTask.mTransitionController.requestTransitionIfNeeded(TRANSIT_PIP, rootTask);
+
+            // The new PIP Task is ready, start the transition before updating the windowing mode.
+            if (newTransition != null) {
+                transitionController.requestStartTransition(newTransition, rootTask,
+                        null /* remoteTransition */, null /* displayChange */);
+            }
+            transitionController.collect(rootTask);
 
             // Defer the windowing mode change until after the transition to prevent the activity
             // from doing work and changing the activity visuals while animating
@@ -2196,37 +2189,64 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mPerfBoost = new BoostFramework();
         }
         if (mPerfBoost != null) {
-            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                r.packageName, -1, BoostFramework.Launch.BOOST_V1);
-            mPerfSendTapHint = true;
-            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                r.packageName, -1, BoostFramework.Launch.BOOST_V2);
-            if (mWmService.mAtmService != null && r != null && r.info != null
-                && r.info.applicationInfo != null) {
+            int pkgType = mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE,
+                                                     r.packageName);
+            int wpcPid = -1;
+            if (mService != null && r != null && r.info != null && r.info.applicationInfo !=null) {
                 final WindowProcessController wpc =
-                    mWmService.mAtmService.getProcessController(r.processName,
-                        r.info.applicationInfo.uid);
+                        mService.getProcessController(r.processName, r.info.applicationInfo.uid);
                 if (wpc != null && wpc.hasThread()) {
-                    // If target process didn't start yet,
-                    // this operation will be done when app call attach
-                    mPerfBoost.perfHint(
-                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                            r.packageName, wpc.getPid(),
-                            BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+                   //If target process didn't start yet,
+                   // this operation will be done when app call attach
+                   wpcPid = wpc.getPid();
                 }
             }
+            if (mPerfBoost.getPerfHalVersion() >= BoostFramework.PERF_HAL_V23) {
+                mPerfBoost.perfHintAcqRel(-1, BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                    r.packageName, -1, BoostFramework.Launch.BOOST_V1, 2, pkgType, wpcPid);
+                mPerfSendTapHint = true;
+                mPerfBoost.perfHintAcqRel(-1, BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                    r.packageName, -1, BoostFramework.Launch.BOOST_V2, 2, pkgType, wpcPid);
+                if (wpcPid != -1) {
+                    mPerfBoost.perfHintAcqRel(-1,
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, wpcPid,
+                            BoostFramework.Launch.TYPE_ATTACH_APPLICATION, 2, pkgType, wpcPid);
+                }
 
-            if(mPerfBoost.perfGetFeedback(
-                BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) ==
-                    BoostFramework.WorkloadType.GAME)
-            {
-                mPerfHandle = mPerfBoost.perfHint(
-                    BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                        r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+                if (pkgType  == BoostFramework.WorkloadType.GAME)
+                {
+                    mPerfHandle = mPerfBoost.perfHintAcqRel(-1,
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                           r.packageName, -1, BoostFramework.Launch.BOOST_GAME, 2, pkgType, wpcPid);
+                } else {
+                    mPerfHandle = mPerfBoost.perfHintAcqRel(-1,
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, -1, BoostFramework.Launch.BOOST_V3, 2, pkgType, wpcPid);
+                }
             } else {
-                mPerfHandle = mPerfBoost.perfHint(
-                    BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                        r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+                mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName,
+                                    -1, BoostFramework.Launch.BOOST_V1);
+                mPerfSendTapHint = true;
+                mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                    r.packageName, -1, BoostFramework.Launch.BOOST_V2);
+                if (wpcPid != -1) {
+                    mPerfBoost.perfHint(
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, wpcPid,
+                            BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+                }
+
+                if (pkgType  == BoostFramework.WorkloadType.GAME)
+                {
+                    mPerfHandle = mPerfBoost.perfHint(
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+                } else {
+                    mPerfHandle = mPerfBoost.perfHint(
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+                }
             }
             if (mPerfHandle > 0)
                 mIsPerfBoostAcquired = true;
@@ -2577,7 +2597,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // starts. Instead, we expect home activities to be launched when the system is ready
             // (ActivityManagerService#systemReady).
             if (mService.isBooted() || mService.isBooting()) {
-                startSystemDecorations(display.mDisplayContent);
+                startSystemDecorations(display);
             }
             // Drop any cached DisplayInfos associated with this display id - the values are now
             // out of date given this display added event.
@@ -2634,24 +2654,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
         // Store updated lists in DisplayManager. Callers from outside of AM should get them there.
         mDisplayManagerInternal.setDisplayAccessUIDs(mDisplayAccessUIDs);
-    }
-
-    Configuration getDisplayOverrideConfiguration(int displayId) {
-        final DisplayContent displayContent = getDisplayContentOrCreate(displayId);
-        if (displayContent == null) {
-            throw new IllegalArgumentException("No display found with id: " + displayId);
-        }
-
-        return displayContent.getRequestedOverrideConfiguration();
-    }
-
-    void setDisplayOverrideConfiguration(Configuration overrideConfiguration, int displayId) {
-        final DisplayContent displayContent = getDisplayContentOrCreate(displayId);
-        if (displayContent == null) {
-            throw new IllegalArgumentException("No display found with id: " + displayId);
-        }
-
-        displayContent.onRequestedOverrideConfigurationChanged(overrideConfiguration);
     }
 
     void prepareForShutdown() {

@@ -15,7 +15,7 @@
  */
 package com.android.server.pm;
 
-import static android.content.pm.permission.CompatibilityPermissionInfo.COMPAT_PERMS;
+import static com.android.server.pm.permission.CompatibilityPermissionInfo.COMPAT_PERMS;
 
 import static com.google.common.truth.Truth.assertWithMessage;
 
@@ -43,26 +43,6 @@ import android.content.pm.PackageManager.Property;
 import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
 import android.content.pm.SigningDetails;
-import android.content.pm.parsing.ParsingPackage;
-import android.content.pm.parsing.component.ParsedActivity;
-import android.content.pm.parsing.component.ParsedActivityImpl;
-import android.content.pm.parsing.component.ParsedComponent;
-import android.content.pm.parsing.component.ParsedInstrumentation;
-import android.content.pm.parsing.component.ParsedInstrumentationImpl;
-import android.content.pm.parsing.component.ParsedIntentInfo;
-import android.content.pm.parsing.component.ParsedIntentInfoImpl;
-import android.content.pm.parsing.component.ParsedPermission;
-import android.content.pm.parsing.component.ParsedPermissionGroup;
-import android.content.pm.parsing.component.ParsedPermissionGroupImpl;
-import android.content.pm.parsing.component.ParsedPermissionImpl;
-import android.content.pm.parsing.component.ParsedPermissionUtils;
-import android.content.pm.parsing.component.ParsedProvider;
-import android.content.pm.parsing.component.ParsedProviderImpl;
-import android.content.pm.parsing.component.ParsedService;
-import android.content.pm.parsing.component.ParsedServiceImpl;
-import android.content.pm.parsing.component.ParsedUsesPermission;
-import android.content.pm.parsing.component.ParsedUsesPermissionImpl;
-import android.content.pm.permission.CompatibilityPermissionInfo;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -84,7 +64,28 @@ import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
+import com.android.server.pm.permission.CompatibilityPermissionInfo;
 import com.android.server.pm.pkg.PackageUserState;
+import com.android.server.pm.pkg.component.ParsedActivity;
+import com.android.server.pm.pkg.component.ParsedActivityImpl;
+import com.android.server.pm.pkg.component.ParsedApexSystemService;
+import com.android.server.pm.pkg.component.ParsedComponent;
+import com.android.server.pm.pkg.component.ParsedInstrumentation;
+import com.android.server.pm.pkg.component.ParsedInstrumentationImpl;
+import com.android.server.pm.pkg.component.ParsedIntentInfo;
+import com.android.server.pm.pkg.component.ParsedIntentInfoImpl;
+import com.android.server.pm.pkg.component.ParsedPermission;
+import com.android.server.pm.pkg.component.ParsedPermissionGroup;
+import com.android.server.pm.pkg.component.ParsedPermissionGroupImpl;
+import com.android.server.pm.pkg.component.ParsedPermissionImpl;
+import com.android.server.pm.pkg.component.ParsedPermissionUtils;
+import com.android.server.pm.pkg.component.ParsedProvider;
+import com.android.server.pm.pkg.component.ParsedProviderImpl;
+import com.android.server.pm.pkg.component.ParsedService;
+import com.android.server.pm.pkg.component.ParsedServiceImpl;
+import com.android.server.pm.pkg.component.ParsedUsesPermission;
+import com.android.server.pm.pkg.component.ParsedUsesPermissionImpl;
+import com.android.server.pm.pkg.parsing.ParsingPackage;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -526,6 +527,23 @@ public class PackageParserTest {
     }
 
     @Test
+    public void testParseApexSystemService() throws Exception {
+        final File testFile = extractFile(TEST_APP4_APK);
+        try {
+            final ParsedPackage pkg = new TestPackageParser2().parsePackage(testFile, 0, false);
+            final List<ParsedApexSystemService> systemServices = pkg.getApexSystemServices();
+            for (ParsedApexSystemService systemService: systemServices) {
+                assertEquals(PACKAGE_NAME + ".SystemService", systemService.getName());
+                assertEquals("service-test.jar", systemService.getJarPath());
+                assertEquals("30", systemService.getMinSdkVersion());
+                assertEquals("31", systemService.getMaxSdkVersion());
+            }
+        } finally {
+            testFile.delete();
+        }
+    }
+
+    @Test
     public void testParseModernPackageHasNoCompatPermissions() throws Exception {
         final File testFile = extractFile(TEST_APP1_APK);
         try {
@@ -932,11 +950,12 @@ public class PackageParserTest {
                 .addUsesPermission(new ParsedUsesPermissionImpl("foo7", 0))
                 .addImplicitPermission("foo25")
                 .addProtectedBroadcast("foo8")
+                .setSdkLibName("sdk12")
+                .setSdkLibVersionMajor(42)
+                .addUsesSdkLibrary("sdk23", 200, new String[]{"digest2"})
                 .setStaticSharedLibName("foo23")
                 .setStaticSharedLibVersion(100)
-                .addUsesStaticLibrary("foo23")
-                .addUsesStaticLibraryCertDigests(new String[]{"digest"})
-                .addUsesStaticLibraryVersion(100)
+                .addUsesStaticLibrary("foo23", 100, new String[]{"digest"})
                 .addLibraryName("foo10")
                 .addUsesLibrary("foo11")
                 .addUsesOptionalLibrary("foo12")

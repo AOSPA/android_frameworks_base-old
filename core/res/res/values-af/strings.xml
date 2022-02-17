@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Laat die program toe om jou Android TV-toestel se oproeprekord te wysig, insluitend data oor inkomende en uitgaande oproepe. Kwaadwillige programme kan dit gebruik om jou oproeprekord uit te vee of te wysig."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Laat die program toe om jou foon se oproeprekord, insluitende data oor inkomende en uitgaande oproepe, te verander. Kwaadwillige programme kan dit gebruik om jou oproeprekord uit te vee of te verander."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"verkry toegang tot liggaamsensors (soos hartklopmonitors)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Laat die program toe om toegang te verkry tot data van sensors af wat jou fisieke toestand, soos jou polsslag, monitor."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Toegang tot data vanaf liggaamsensors, soos polsslag, temperatuur, bloedsuurstofpersentasie, ens."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"gaan by liggaamsensors in (soos polsslagmonitors) terwyl dit op die agtergrond is"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Toegang tot data vanaf liggaamsensors, soos polsslag, temperatuur, bloedsuurstofpersentasie, ens. terwyl dit op die agtergrond is."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Lees kalendergebeurtenisse en -besonderhede"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Hierdie program kan alle kalendergebeurtenisse lees wat op jou tablet geberg is of jou kalenderdata stoor."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Hierdie program kan alle kalendergeleenthede wat op jou Android TV-toestel geberg is, lees of jou kalenderdata stoor."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Laat die program toe om die kitsboodskapdiens te gebruik om oproepe sonder jou ingryping te maak."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"lees foonstatus en identiteit"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Laat die program toe om toegang tot die foonfunksies van die toestel te verkry. Hierdie toestemming laat die program toe om te bepaal wat die foonnommer en toestel-IDs is, of die oproep aan die gang is, en die afgeleë nommer wat deur \'n oproep verbind word."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"lees basiese telefoniestatus en -identiteit"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Gee die program toegang tot die toestel se basiese telefoniekenmerke."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"roeteer oproepe deur die stelsel"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Laat die program toe om sy oproepe deur die stelsel te stuur om die oproepervaring te verbeter."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"sien en beheer oproepe deur die stelsel."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Tik om jou gesigmodel uit te vee en voeg jou gesig dan weer by"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Stel Gesigslot op"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Ontsluit jou foon deur daarna te kyk"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Skakel "<b>"kameratoegang"</b>" in Instellings &gt; Privaatheid aan om Gesigslot te gebruik"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Stel meer maniere op om te ontsluit"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Tik om \'n vingerafdruk by te voeg"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Vingerafdrukslot"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Laat die program toe om Moenie Steur Nie-opstelling te lees en skryf."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"begin kyk van toestemminggebruik"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Laat die houer toe om die toestemminggebruik vir \'n program te begin. Behoort nooit vir normale programme nodig te wees nie."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"begin Bekyk Toestemmingbesluite"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Laat die houer toe om skerm te begin om toestemmingbesluite na te gaan. Behoort nooit vir normale programme nodig te wees nie."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"begin Bekyk Programkenmerke"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Laat die houer toe om die kenmerke-inligting vir \'n program te begin bekyk."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"kry toegang tot sensordata teen \'n hoë monsternemingkoers"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Monitor pogings om skerm te ontsluit"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Monitor die aantal keer wat \'n verkeerde wagwoorde ingevoer is wanneer die skerm ontsluit word. Sluit die tablet of vee al die data uit as die wagwoord te veel keer verkeerd ingevoer word."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Monitor die aantal verkeerde wagwoorde wat ingetik word wanneer die skerm ontsluit word, en sluit jou Android TV-toestel of vee al jou Android TV-toestel se data uit as te veel verkeerde wagwoorde ingetik word."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Monitor die aantal verkeerde wagwoorde wat ingevoer word wanneer die skerm ontsluit word, en sluit die inligtingvermaakstelsel of vee al die inligtingvermaakstelsel se data uit as te veel verkeerde wagwoorde ingevoer word."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Monitor die aantal keer wat \'n verkeerde wagwoorde ingevoer is wanneer die skerm ontsluit word. Sluit die foon of vee al die data uit as die wagwoord te veel keer verkeerd ingevoer word."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Monitor die aantal verkeerde wagwoorde wat ingevoer word wanneer die skerm ontsluit word, en sluit die tablet of vee al hierdie gebruiker se data uit as te veel verkeerde wagwoorde ingevoer word."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Monitor die aantal verkeerde wagwoorde wat ingetik word wanneer die skerm ontsluit word, en sluit jou Android TV-toestel of vee al hierdie gebruiker se data uit as hulle te veel verkeerde wagwoorde intik."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Monitor die aantal verkeerde wagwoorde wat ingevoer word wanneer die skerm ontsluit word, en sluit die inligtingvermaakstelsel of vee al hierdie profiel se data uit as te veel verkeerde wagwoorde ingevoer word."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Monitor die aantal verkeerde wagwoorde wat ingevoer word wanneer die skerm ontsluit word, en sluit die foon of vee al hierdie gebruiker se data uit as te veel verkeerde wagwoorde ingevoer word."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Om die skermslot te verander"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Verander die skermslot."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Om alle data uit te vee"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Vee die tablet se data uit sonder waarskuwing, deur \'n fabrieksterugstelling uit te voer."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Vee jou Android TV-toestel se data sonder waarskuwing uit deur \'n fabrieksterugstelling uit te voer."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Vee die inligtingvermaakstelsel se data sonder waarskuwing uit deur \'n fabriekterugstelling te doen."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Vee die foon se data uit sonder waarskuwing, deur \'n fabrieksterugstelling uit te voer."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Vee gebruikerdata uit"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Vee profieldata uit"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Vee gebruikerdata uit"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Vee hierdie gebruiker se data in hierdie tablet sonder waarskuwing uit."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Vee hierdie gebruiker se data op hierdie Android TV-toestel sonder waarskuwing uit."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Vee hierdie profiel se data op hierdie inligtingvermaakstelsel sonder waarskuwing uit."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Vee hierdie gebruiker se data in hierdie foon sonder waarskuwing uit."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Stel die toestel se globale instaan"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Stel die toestel se globale instaanbediener wat gebruik moet word terwyl die beleid geaktiveer is. Net die toesteladministrateur kan die globale instaanbediener stel."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Berei tans <xliff:g id="APPNAME">%1$s</xliff:g> voor."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Begin programme."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Voltooi herlaai."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Skakel skerm af?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Jy het die aan/af-skakelaar gedruk terwyl jy jou vingerafdruk gestel het.\n\nDit skakel gewoonlik jou skerm af."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Skakel af"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Kanselleer"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Gaan voort met opstelling?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Jy het die aan/af-skakelaar gedruk – dit skakel gewoonlik die skerm af.\n\nProbeer liggies tik terwyl jy jou vingerafdruk opstel."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Skakel skerm af"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Doen opstelling"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Gaan voort met vingerafdrukverifiëring?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Jy het die aan/af-skakelaar gedruk – dit skakel gewoonlik die skerm af.\n\nProbeer liggies tik om jou vingerafdruk te verifieer."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Skakel skerm af"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Gaan voort"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> loop"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Tik om na die speletjie terug te keer"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Kies speletjie"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Gepasmaakte programkennisgewing"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Laat <xliff:g id="APP">%1$s</xliff:g> toe om \'n nuwe gebruiker met <xliff:g id="ACCOUNT">%2$s</xliff:g> te skep (\'n gebruiker met hierdie rekening bestaan reeds)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Laat <xliff:g id="APP">%1$s</xliff:g> toe om \'n nuwe gebruiker met <xliff:g id="ACCOUNT">%2$s</xliff:g> te skep?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Voeg gebruiker onder toesig by"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Voeg \'n taal by"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Streekvoorkeur"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Voer taalnaam in"</string>

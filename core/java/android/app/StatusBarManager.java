@@ -165,7 +165,7 @@ public class StatusBarManager {
      *
      * @hide
      */
-    public static final int DEFAULT_SETUP_DISABLE2_FLAGS = DISABLE2_ROTATE_SUGGESTIONS;
+    public static final int DEFAULT_SETUP_DISABLE2_FLAGS = DISABLE2_NONE;
 
     /**
      * disable flags to be applied when the device is sim-locked.
@@ -281,6 +281,33 @@ public class StatusBarManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface RequestResult {}
+
+    /**
+     * Constant for {@link #setNavBarModeOverride(int)} indicating the default navbar mode.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int NAV_BAR_MODE_OVERRIDE_NONE = 0;
+
+    /**
+     * Constant for {@link #setNavBarModeOverride(int)} indicating kids navbar mode.
+     *
+     * <p>When used, back and home icons will change drawables and layout, recents will be hidden,
+     * and the navbar will remain visible when apps are in immersive mode.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int NAV_BAR_MODE_OVERRIDE_KIDS = 1;
+
+    /** @hide */
+    @IntDef(prefix = {"NAV_BAR_MODE_OVERRIDE_"}, value = {
+            NAV_BAR_MODE_OVERRIDE_NONE,
+            NAV_BAR_MODE_OVERRIDE_KIDS
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface NavBarModeOverride {}
 
     @UnsupportedAppUsage
     private Context mContext;
@@ -626,6 +653,9 @@ public class StatusBarManager {
      * foreground ({@link ActivityManager.RunningAppProcessInfo#IMPORTANCE_FOREGROUND}
      * and the {@link android.service.quicksettings.TileService} must be exported.
      *
+     * Note: the system can choose to auto-deny a request if the user has denied that specific
+     * request (user, ComponentName) enough times before.
+     *
      * @param tileServiceComponentName {@link ComponentName} of the
      *        {@link android.service.quicksettings.TileService} for the request.
      * @param tileLabel label of the tile to show to the user.
@@ -684,6 +714,52 @@ public class StatusBarManager {
         }
     }
 
+    /**
+     * Sets or removes the navigation bar mode override.
+     *
+     * @param navBarModeOverride the mode of the navigation bar override to be set.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.STATUS_BAR)
+    public void setNavBarModeOverride(@NavBarModeOverride int navBarModeOverride) {
+        if (navBarModeOverride != NAV_BAR_MODE_OVERRIDE_NONE
+                && navBarModeOverride != NAV_BAR_MODE_OVERRIDE_KIDS) {
+            throw new UnsupportedOperationException(
+                    "Supplied navBarModeOverride not supported: " + navBarModeOverride);
+        }
+
+        try {
+            final IStatusBarService svc = getService();
+            if (svc != null) {
+                svc.setNavBarModeOverride(navBarModeOverride);
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Gets the navigation bar mode override. Returns default value if no override is set.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.STATUS_BAR)
+    public @NavBarModeOverride int getNavBarModeOverride() {
+        int navBarModeOverride = NAV_BAR_MODE_OVERRIDE_NONE;
+        try {
+            final IStatusBarService svc = getService();
+            if (svc != null) {
+                navBarModeOverride = svc.getNavBarModeOverride();
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        return navBarModeOverride;
+    }
+
     /** @hide */
     public static String windowStateToString(int state) {
         if (state == WINDOW_STATE_HIDING) return "WINDOW_STATE_HIDING";
@@ -709,6 +785,7 @@ public class StatusBarManager {
         private boolean mSystemIcons;
         private boolean mClock;
         private boolean mNotificationIcons;
+        private boolean mRotationSuggestion;
 
         /** @hide */
         public DisableInfo(int flags1, int flags2) {
@@ -720,6 +797,7 @@ public class StatusBarManager {
             mSystemIcons = (flags1 & DISABLE_SYSTEM_INFO) != 0;
             mClock = (flags1 & DISABLE_CLOCK) != 0;
             mNotificationIcons = (flags1 & DISABLE_NOTIFICATION_ICONS) != 0;
+            mRotationSuggestion = (flags2 & DISABLE2_ROTATE_SUGGESTIONS) != 0;
         }
 
         /** @hide */
@@ -843,14 +921,24 @@ public class StatusBarManager {
         }
 
         /**
-         * @return {@code true} if no components are disabled (default state)
+         * Returns whether the rotation suggestion is disabled.
          *
+         * @hide
+         */
+        @TestApi
+        public boolean isRotationSuggestionDisabled() {
+            return mRotationSuggestion;
+        }
+
+        /**
+         * @return {@code true} if no components are disabled (default state)
          * @hide
          */
         @SystemApi
         public boolean areAllComponentsEnabled() {
             return !mStatusBarExpansion && !mNavigateHome && !mNotificationPeeking && !mRecents
-                    && !mSearch && !mSystemIcons && !mClock && !mNotificationIcons;
+                    && !mSearch && !mSystemIcons && !mClock && !mNotificationIcons
+                    && !mRotationSuggestion;
         }
 
         /** @hide */
@@ -863,6 +951,7 @@ public class StatusBarManager {
             mSystemIcons = false;
             mClock = false;
             mNotificationIcons = false;
+            mRotationSuggestion = false;
         }
 
         /**
@@ -872,7 +961,8 @@ public class StatusBarManager {
          */
         public boolean areAllComponentsDisabled() {
             return mStatusBarExpansion && mNavigateHome && mNotificationPeeking
-                    && mRecents && mSearch && mSystemIcons && mClock && mNotificationIcons;
+                    && mRecents && mSearch && mSystemIcons && mClock && mNotificationIcons
+                    && mRotationSuggestion;
         }
 
         /** @hide */
@@ -885,6 +975,7 @@ public class StatusBarManager {
             mSystemIcons = true;
             mClock = true;
             mNotificationIcons = true;
+            mRotationSuggestion = true;
         }
 
         @NonNull
@@ -901,6 +992,7 @@ public class StatusBarManager {
             sb.append(" mSystemIcons=").append(mSystemIcons ? "disabled" : "enabled");
             sb.append(" mClock=").append(mClock ? "disabled" : "enabled");
             sb.append(" mNotificationIcons=").append(mNotificationIcons ? "disabled" : "enabled");
+            sb.append(" mRotationSuggestion=").append(mRotationSuggestion ? "disabled" : "enabled");
 
             return sb.toString();
 
@@ -924,6 +1016,7 @@ public class StatusBarManager {
             if (mSystemIcons) disable1 |= DISABLE_SYSTEM_INFO;
             if (mClock) disable1 |= DISABLE_CLOCK;
             if (mNotificationIcons) disable1 |= DISABLE_NOTIFICATION_ICONS;
+            if (mRotationSuggestion) disable2 |= DISABLE2_ROTATE_SUGGESTIONS;
 
             return new Pair<Integer, Integer>(disable1, disable2);
         }

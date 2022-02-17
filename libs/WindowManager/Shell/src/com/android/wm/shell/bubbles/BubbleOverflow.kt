@@ -66,7 +66,7 @@ class BubbleOverflow(
         updateResources()
         getExpandedView()?.applyThemeAttrs()
         // Apply inset and new style to fresh icon drawable.
-        getIconView()?.setImageResource(R.drawable.bubble_ic_overflow_button)
+        getIconView()?.setIconImageResource(R.drawable.bubble_ic_overflow_button)
         updateBtnTheme()
     }
 
@@ -89,20 +89,19 @@ class BubbleOverflow(
         dotColor = colorAccent
 
         val shapeColor = res.getColor(android.R.color.system_accent1_1000)
-        overflowBtn?.drawable?.setTint(shapeColor)
+        overflowBtn?.iconDrawable?.setTint(shapeColor)
 
         val iconFactory = BubbleIconFactory(context)
 
         // Update bitmap
-        val fg = InsetDrawable(overflowBtn?.drawable, overflowIconInset)
-        bitmap = iconFactory.createBadgedIconBitmap(AdaptiveIconDrawable(
-                ColorDrawable(colorAccent), fg),
-            null /* user */, true /* shrinkNonAdaptiveIcons */).icon
+        val fg = InsetDrawable(overflowBtn?.iconDrawable, overflowIconInset)
+        bitmap = iconFactory.createBadgedIconBitmap(
+                AdaptiveIconDrawable(ColorDrawable(colorAccent), fg)).icon
 
         // Update dot path
         dotPath = PathParser.createPathFromPathData(
             res.getString(com.android.internal.R.string.config_icon_mask))
-        val scale = iconFactory.normalizer.getScale(iconView!!.drawable,
+        val scale = iconFactory.normalizer.getScale(iconView!!.iconDrawable,
             null /* outBounds */, null /* path */, null /* outMaskShape */)
         val radius = BadgedImageView.DEFAULT_PATH_SIZE / 2f
         val matrix = Matrix()
@@ -139,6 +138,10 @@ class BubbleOverflow(
     }
 
     override fun getAppBadge(): Bitmap? {
+        return null
+    }
+
+    override fun getRawAppBadge(): Bitmap? {
         return null
     }
 

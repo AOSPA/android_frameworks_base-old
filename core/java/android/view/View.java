@@ -8663,12 +8663,31 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mAttachInfo == null) {
             return;
         }
-
         RectF position = mAttachInfo.mTmpTransformRect;
-        position.set(0, 0, mRight - mLeft, mBottom - mTop);
-        mapRectFromViewToScreenCoords(position, clipToParent);
+        getBoundsToScreenInternal(position, clipToParent);
         outRect.set(Math.round(position.left), Math.round(position.top),
                 Math.round(position.right), Math.round(position.bottom));
+    }
+
+    /**
+     * Gets the location of this view in screen coordinates.
+     *
+     * @param outRect The output location
+     * @param clipToParent Whether to clip child bounds to the parent ones.
+     * @hide
+     */
+    public void getBoundsOnScreen(RectF outRect, boolean clipToParent) {
+        if (mAttachInfo == null) {
+            return;
+        }
+        RectF position = mAttachInfo.mTmpTransformRect;
+        getBoundsToScreenInternal(position, clipToParent);
+        outRect.set(position.left, position.top, position.right, position.bottom);
+    }
+
+    private void getBoundsToScreenInternal(RectF position, boolean clipToParent) {
+        position.set(0, 0, mRight - mLeft, mBottom - mTop);
+        mapRectFromViewToScreenCoords(position, clipToParent);
     }
 
     /**
@@ -14248,34 +14267,34 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 hideTooltip();
                 return true;
             }
-        }
-
-        if (action == R.id.accessibilityActionDragDrop) {
-            if (!canAcceptAccessibilityDrop()) {
-                return false;
-            }
-            try {
-                if (mAttachInfo != null && mAttachInfo.mSession != null) {
-                    final int[] location = new int[2];
-                    getLocationInWindow(location);
-                    final int centerX = location[0] + getWidth() / 2;
-                    final int centerY = location[1] + getHeight() / 2;
-                    return mAttachInfo.mSession.dropForAccessibility(mAttachInfo.mWindow,
-                            centerX, centerY);
+            case R.id.accessibilityActionDragDrop: {
+                if (!canAcceptAccessibilityDrop()) {
+                    return false;
                 }
-            } catch (RemoteException e) {
-                Log.e(VIEW_LOG_TAG, "Unable to drop for accessibility", e);
-            }
-            return false;
-        } else if (action == R.id.accessibilityActionDragCancel) {
-            if (!startedSystemDragForAccessibility()) {
+                try {
+                    if (mAttachInfo != null && mAttachInfo.mSession != null) {
+                        final int[] location = new int[2];
+                        getLocationInWindow(location);
+                        final int centerX = location[0] + getWidth() / 2;
+                        final int centerY = location[1] + getHeight() / 2;
+                        return mAttachInfo.mSession.dropForAccessibility(mAttachInfo.mWindow,
+                                centerX, centerY);
+                    }
+                } catch (RemoteException e) {
+                    Log.e(VIEW_LOG_TAG, "Unable to drop for accessibility", e);
+                }
                 return false;
             }
-            if (mAttachInfo != null && mAttachInfo.mDragToken != null) {
-                cancelDragAndDrop();
-                return true;
+            case R.id.accessibilityActionDragCancel: {
+                if (!startedSystemDragForAccessibility()) {
+                    return false;
+                }
+                if (mAttachInfo != null && mAttachInfo.mDragToken != null) {
+                    cancelDragAndDrop();
+                    return true;
+                }
+                return false;
             }
-            return false;
         }
         return false;
     }
@@ -15013,8 +15032,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * @return true if this view and all ancestors are visible as of the last
      * {@link #onVisibilityAggregated(boolean)} call.
+     *
+     * @hide
      */
-    boolean isAggregatedVisible() {
+    public boolean isAggregatedVisible() {
         return (mPrivateFlags3 & PFLAG3_AGGREGATED_VISIBLE) != 0;
     }
 
@@ -15274,7 +15295,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         android.util.SeempLog.record(4);
-        if (KeyEvent.isConfirmKey(keyCode)) {
+        if (event.hasNoModifiers() && KeyEvent.isConfirmKey(keyCode)) {
             if ((mViewFlags & ENABLED_MASK) == DISABLED) {
                 return true;
             }
@@ -15332,7 +15353,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         android.util.SeempLog.record(5);
-        if (KeyEvent.isConfirmKey(keyCode)) {
+        if (event.hasNoModifiers() && KeyEvent.isConfirmKey(keyCode)) {
             if ((mViewFlags & ENABLED_MASK) == DISABLED) {
                 return true;
             }
@@ -26981,44 +27002,38 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Handles drag events sent by the system following a call to
      * {@link android.view.View#startDragAndDrop(ClipData,DragShadowBuilder,Object,int)
      * startDragAndDrop()}.
-     *<p>
-     * When the system calls this method, it passes a
-     * {@link android.view.DragEvent} object. A call to
-     * {@link android.view.DragEvent#getAction()} returns one of the action type constants defined
-     * in DragEvent. The method uses these to determine what is happening in the drag and drop
-     * operation.
-     * </p>
      * <p>
-     * The default implementation returns false, except if an {@link OnReceiveContentListener}
-     * is {@link #setOnReceiveContentListener set} for this view. If an
-     * {@link OnReceiveContentListener} is set, the default implementation...
+     * The system calls this method and passes a {@link DragEvent} object in response to drag and
+     * drop events. This method can then call {@link DragEvent#getAction()} to determine the state
+     * of the drag and drop operation.
+     * <p>
+     * The default implementation returns {@code false} unless an {@link OnReceiveContentListener}
+     * has been set for this view (see {@link #setOnReceiveContentListener}), in which case
+     * the default implementation does the following:
      * <ul>
-     * <li>returns true for an
-     * {@link android.view.DragEvent#ACTION_DRAG_STARTED ACTION_DRAG_STARTED} event
-     * <li>calls {@link #performReceiveContent} for an
-     * {@link android.view.DragEvent#ACTION_DROP ACTION_DROP} event
-     * <li>returns true for an {@link android.view.DragEvent#ACTION_DROP ACTION_DROP} event, if
-     * the listener consumed some or all of the content
+     *   <li>Returns {@code true} for an
+     *     {@link DragEvent#ACTION_DRAG_STARTED ACTION_DRAG_STARTED} event
+     *   <li>Calls {@link #performReceiveContent} for an
+     *     {@link DragEvent#ACTION_DROP ACTION_DROP} event
+     *   <li>Returns {@code true} for an {@link DragEvent#ACTION_DROP ACTION_DROP} event if the
+     *     {@code OnReceiveContentListener} consumed some or all of the content
      * </ul>
-     * </p>
      *
-     * @param event The {@link android.view.DragEvent} sent by the system.
-     * The {@link android.view.DragEvent#getAction()} method returns an action type constant defined
-     * in DragEvent, indicating the type of drag event represented by this object.
-     * @return {@code true} if the method was successful, otherwise {@code false}.
-     * <p>
-     *  The method should return {@code true} in response to an action type of
-     *  {@link android.view.DragEvent#ACTION_DRAG_STARTED} to receive drag events for the current
-     *  operation.
-     * </p>
-     * <p>
-     *  The method should also return {@code true} in response to an action type of
-     *  {@link android.view.DragEvent#ACTION_DROP} if it consumed the drop, or
-     *  {@code false} if it didn't.
-     * </p>
-     * <p>
-     *  For all other events, the return value is ignored.
-     * </p>
+     * @param event The {@link DragEvent} object sent by the system. The
+     *   {@link DragEvent#getAction()} method returns an action type constant that indicates the
+     *   type of drag event represented by this object.
+     * @return {@code true} if the method successfully handled the drag event, otherwise
+     *   {@code false}.
+     *   <p>
+     *     The method must return {@code true} in response to an
+     *     {@link DragEvent#ACTION_DRAG_STARTED ACTION_DRAG_STARTED} action type to continue to
+     *     receive drag events for the current drag and drop operation.
+     *   <p>
+     *     The method should return {@code true} in response to an
+     *     {@link DragEvent#ACTION_DROP ACTION_DROP} action type if the dropped data was consumed
+     *     (at least partially); {@code false}, if none of the data was consumed.
+     *   <p>
+     *     For all other events, the return value is {@code false}.
      */
     public boolean onDragEvent(DragEvent event) {
         if (mListenerInfo == null || mListenerInfo.mOnReceiveContentListener == null) {
@@ -29007,27 +29022,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Interface definition for a callback to be invoked when a drag is being dispatched
-     * to this view.  The callback will be invoked before the hosting view's own
-     * onDrag(event) method.  If the listener wants to fall back to the hosting view's
-     * onDrag(event) behavior, it should return 'false' from this callback.
+     * Interface definition for a listener that's invoked when a drag event is dispatched to this
+     * view. The listener is invoked before the view's own
+     * {@link #onDragEvent(DragEvent)} method. To fall back to the view's
+     * {@code onDragEvent(DragEvent)} behavior, return {@code false} from the listener method.
      *
      * <div class="special reference">
-     * <h3>Developer Guides</h3>
-     * <p>For a guide to implementing drag and drop features, read the
-     * <a href="{@docRoot}guide/topics/ui/drag-drop.html">Drag and Drop</a> developer guide.</p>
+     *   <h3>Developer Guides</h3>
+     *   <p>For a guide to implementing drag and drop features, see the
+     *   <a href="{@docRoot}guide/topics/ui/drag-drop.html">Drag and drop</a> developer guide.</p>
      * </div>
      */
     public interface OnDragListener {
         /**
-         * Called when a drag event is dispatched to a view. This allows listeners
-         * to get a chance to override base View behavior.
+         * Called when a drag event is dispatched to a view. Enables listeners to override the
+         * base behavior provided by {@link #onDragEvent(DragEvent)}.
          *
-         * @param v The View that received the drag event.
-         * @param event The {@link android.view.DragEvent} object for the drag event.
-         * @return {@code true} if the drag event was handled successfully, or {@code false}
-         * if the drag event was not handled. Note that {@code false} will trigger the View
-         * to call its {@link #onDragEvent(DragEvent) onDragEvent()} handler.
+         * @param v The {@code View} that received the drag event.
+         * @param event The event object for the drag event.
+         * @return {@code true} if the drag event was handled successfully; {@code false}, if the
+         *   drag event was not handled. <b>Note:</b> A {@code false} return value triggers the
+         *   view's {@link #onDragEvent(DragEvent)} handler.
          */
         boolean onDrag(View v, DragEvent event);
     }

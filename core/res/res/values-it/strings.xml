@@ -51,8 +51,8 @@
     <string name="needPuk2" msgid="7032612093451537186">"Digita il PUK2 per sbloccare la SIM."</string>
     <string name="enablePin" msgid="2543771964137091212">"Operazione non riuscita; attiva blocco SIM/RUIM."</string>
     <plurals name="pinpuk_attempts" formatted="false" msgid="1619867269012213584">
+      <item quantity="one">You have <xliff:g id="NUMBER_1">%d</xliff:g> remaining attempts before SIM is locked.</item>
       <item quantity="other">Hai ancora <xliff:g id="NUMBER_1">%d</xliff:g> tentativi a disposizione prima che la SIM venga bloccata.</item>
-      <item quantity="one">Hai ancora <xliff:g id="NUMBER_0">%d</xliff:g> tentativo a disposizione prima che la SIM venga bloccata.</item>
     </plurals>
     <string name="imei" msgid="2157082351232630390">"IMEI"</string>
     <string name="meid" msgid="3291227361605924674">"MEID"</string>
@@ -181,8 +181,8 @@
     <string name="low_memory" product="tv" msgid="6663680413790323318">"Lo spazio di archiviazione del dispositivo Android TV è pieno. Elimina alcuni file per liberare spazio."</string>
     <string name="low_memory" product="default" msgid="2539532364144025569">"Spazio di archiviazione del telefono esaurito. Elimina alcuni file per liberare spazio."</string>
     <plurals name="ssl_ca_cert_warning" formatted="false" msgid="2288194355006173029">
+      <item quantity="one">Certificate authorities installed</item>
       <item quantity="other">Autorità di certificazione installate</item>
-      <item quantity="one">Autorità di certificazione installata</item>
     </plurals>
     <string name="ssl_ca_cert_noti_by_unknown" msgid="4961102218216815242">"Da una terza parte sconosciuta"</string>
     <string name="ssl_ca_cert_noti_by_administrator" msgid="4564941950768783879">"Dall\'amministratore del tuo profilo di lavoro"</string>
@@ -257,8 +257,8 @@
     <string name="bugreport_option_full_title" msgid="7681035745950045690">"Report completo"</string>
     <string name="bugreport_option_full_summary" msgid="1975130009258435885">"Utilizza questa opzione per ridurre al minimo l\'interferenza di sistema quando il dispositivo non risponde, è troppo lento oppure quando ti servono tutte le sezioni della segnalazione. Non puoi inserire altri dettagli o acquisire altri screenshot."</string>
     <plurals name="bugreport_countdown" formatted="false" msgid="3906120379260059206">
+      <item quantity="one">Taking screenshot for bug report in <xliff:g id="NUMBER_1">%d</xliff:g> seconds.</item>
       <item quantity="other">Lo screenshot per la segnalazione di bug verrà acquisito tra <xliff:g id="NUMBER_1">%d</xliff:g> secondi.</item>
-      <item quantity="one">Lo screenshot per la segnalazione di bug verrà acquisito tra <xliff:g id="NUMBER_0">%d</xliff:g> secondo.</item>
     </plurals>
     <string name="bugreport_screenshot_success_toast" msgid="7986095104151473745">"Screenshot con segnalazione di bug effettuato correttamente"</string>
     <string name="bugreport_screenshot_failure_toast" msgid="6736320861311294294">"Impossibile acquisire screenshot con segnalazione di bug"</string>
@@ -303,29 +303,29 @@
     <string name="user_owner_label" msgid="8628726904184471211">"Passa al profilo personale"</string>
     <string name="managed_profile_label" msgid="7316778766973512382">"Passa a profilo di lavoro"</string>
     <string name="permgrouplab_contacts" msgid="4254143639307316920">"Contatti"</string>
-    <string name="permgroupdesc_contacts" msgid="9163927941244182567">"accedere ai contatti"</string>
+    <string name="permgroupdesc_contacts" msgid="9163927941244182567">"Possono accedere ai contatti"</string>
     <string name="permgrouplab_location" msgid="1858277002233964394">"Posizione"</string>
-    <string name="permgroupdesc_location" msgid="1995955142118450685">"accedere alla posizione di questo dispositivo"</string>
+    <string name="permgroupdesc_location" msgid="1995955142118450685">"Possono accedere alla posizione di questo dispositivo"</string>
     <string name="permgrouplab_calendar" msgid="6426860926123033230">"Calendario"</string>
-    <string name="permgroupdesc_calendar" msgid="6762751063361489379">"accedere al calendario"</string>
+    <string name="permgroupdesc_calendar" msgid="6762751063361489379">"Possono accedere al calendario"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
-    <string name="permgroupdesc_sms" msgid="5726462398070064542">"inviare e visualizzare SMS"</string>
-    <string name="permgrouplab_storage" msgid="1938416135375282333">"File e contenuti multimediali"</string>
-    <string name="permgroupdesc_storage" msgid="6351503740613026600">"accedere a foto, contenuti multimediali e file sul dispositivo"</string>
+    <string name="permgroupdesc_sms" msgid="5726462398070064542">"Possono inviare e visualizzare SMS"</string>
+    <string name="permgrouplab_storage" msgid="1938416135375282333">"File/contenuti multimediali"</string>
+    <string name="permgroupdesc_storage" msgid="6351503740613026600">"Possono accedere a foto, contenuti multimediali e file sul dispositivo"</string>
     <string name="permgrouplab_microphone" msgid="2480597427667420076">"Microfono"</string>
-    <string name="permgroupdesc_microphone" msgid="1047786732792487722">"registrare audio"</string>
+    <string name="permgroupdesc_microphone" msgid="1047786732792487722">"Possono registrare audio"</string>
     <string name="permgrouplab_activityRecognition" msgid="3324466667921775766">"Attività fisica"</string>
-    <string name="permgroupdesc_activityRecognition" msgid="4725624819457670704">"Consente di accedere all\'attività fisica"</string>
+    <string name="permgroupdesc_activityRecognition" msgid="4725624819457670704">"Possono accedere all\'attività fisica"</string>
     <string name="permgrouplab_camera" msgid="9090413408963547706">"Fotocamera"</string>
-    <string name="permgroupdesc_camera" msgid="7585150538459320326">"scattare foto e registrare video"</string>
+    <string name="permgroupdesc_camera" msgid="7585150538459320326">"Possono scattare foto e registrare video"</string>
     <string name="permgrouplab_nearby_devices" msgid="5529147543651181991">"Dispositivi nelle vicinanze"</string>
     <string name="permgroupdesc_nearby_devices" msgid="3213561597116913508">"Consente di rilevare dispositivi nelle vicinanze e di connettersi a tali dispositivi"</string>
     <string name="permgrouplab_calllog" msgid="7926834372073550288">"Registri chiamate"</string>
-    <string name="permgroupdesc_calllog" msgid="2026996642917801803">"leggere e modificare il registro chiamate del telefono"</string>
+    <string name="permgroupdesc_calllog" msgid="2026996642917801803">"Possono leggere e modificare il registro chiamate del telefono"</string>
     <string name="permgrouplab_phone" msgid="570318944091926620">"Telefono"</string>
-    <string name="permgroupdesc_phone" msgid="270048070781478204">"eseguire e gestire le telefonate"</string>
+    <string name="permgroupdesc_phone" msgid="270048070781478204">"Possono eseguire e gestire le telefonate"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Sensori del corpo"</string>
-    <string name="permgroupdesc_sensors" msgid="2610631290633747752">"accedere ai dati dei sensori relativi ai tuoi parametri vitali"</string>
+    <string name="permgroupdesc_sensors" msgid="2610631290633747752">"Possono accedere ai dati dei sensori relativi ai tuoi parametri vitali"</string>
     <string name="permgrouplab_notifications" msgid="5472972361980668884">"Notifiche"</string>
     <string name="permgroupdesc_notifications" msgid="4608679556801506580">"Visualizzazione di notifiche"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Recuperare contenuti della finestra"</string>
@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Consente all\'app di modificare il registro chiamate del dispositivo Android TV, inclusi i dati relativi alle chiamate in arrivo e in uscita. Le app dannose potrebbero farne uso per cancellare o modificare il registro chiamate."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Consente all\'applicazione di modificare il registro chiamate del telefono, inclusi i dati sulle chiamate in arrivo e in uscita. Le applicazioni dannose potrebbero farne uso per cancellare o modificare il registro chiamate."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"accesso ai sensori (come il cardiofrequenzimetro)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Consente all\'app di accedere ai dati relativi ai sensori che monitorano le tue condizioni fisiche, ad esempio la frequenza cardiaca."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Accedere ai dati dei sensori del corpo, ad esempio a frequenza cardiaca, temperatura, percentuale di ossigeno nel sangue e così via."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"Accesso ai sensori del corpo (come i cardiofrequenzimetri) in background"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Accedere ai dati dei sensori del corpo, ad esempio a frequenza cardiaca, temperatura, percentuale di ossigeno nel sangue e così via in background."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"lettura di eventi di calendario e dettagli"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Questa app può leggere tutti gli eventi di calendario memorizzati sul tablet e condividere o salvare i dati di calendario."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Questa app può leggere tutti gli eventi di calendario memorizzati sul dispositivo Android TV e condividere o salvare i dati di calendario."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Consente all\'app di utilizzare il servizio IMS per fare chiamate senza il tuo intervento."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"lettura stato e identità telefono"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Consente all\'applicazione di accedere alle funzioni telefoniche del dispositivo. Questa autorizzazione consente all\'applicazione di determinare il numero di telefono e gli ID dei dispositivi, se una chiamata è attiva e il numero remoto connesso da una chiamata."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"lettura di identità e stato telefonia"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Consente all\'app di accedere alle funzionalità di telefonia di base del dispositivo."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"indirizzamento delle chiamate tramite il sistema"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Consente all\'app di indirizzare le proprie chiamate tramite il sistema al fine di migliorare l\'esperienza di chiamata."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"visualizzazione e controllo delle chiamate tramite il sistema."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Tocca per eliminare il tuo modello del volto e poi riaggiungi il tuo volto"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Configura lo sblocco con il volto"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Sblocca il telefono guardandolo"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Per utilizzare lo sblocco con il volto, attiva "<b>"l\'accesso alla fotocamera"</b>" in Impostazioni &gt; Privacy"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Configura altri modi per sbloccare"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Tocca per aggiungere un\'impronta"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Sblocco con l\'impronta"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Consente all\'app di leggere e modificare la configurazione della funzione Non disturbare."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"avvio dell\'uso dell\'autorizzazione di visualizzazione"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Consente al titolare di avviare l\'uso delle autorizzazioni per un\'app. Non dovrebbe essere mai necessaria per le normali applicazioni."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"Inizio della visualizzazione delle decisioni relative all\'autorizzazione"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Consente all\'app che ha questa autorizzazione di avviare lo schermo per esaminare le decisioni relative all\'autorizzazione. Non dovrebbe mai essere necessaria per le normali app."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"Inizio della visualizzazione di funzionalità delle app"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Consente all\'app che ha questa autorizzazione di iniziare a visualizzare le informazioni relative alle funzionalità di un\'app."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"Accesso ai dati dei sensori a una frequenza di campionamento elevata"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Monitorare tentativi di sblocco dello schermo"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Monitora il numero di password errate digitate durante lo sblocco dello schermo e blocca il tablet o cancella tutti i dati del tablet se vengono digitate troppe password errate."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Consente di monitorare il numero di password errate digitate durante lo sblocco dello schermo e di bloccare il dispositivo Android TV o cancellare tutti i dati del dispositivo se vengono digitate troppe password errate."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Monitora il numero di password errate digitate durante lo sblocco dello schermo e blocca il sistema di infotainment o cancella tutti i dati del sistema se vengono digitate troppe password errate."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Monitora il numero di password errate digitate durante lo sblocco dello schermo e blocca il telefono o cancella tutti i dati del telefono se vengono digitate troppe password errate."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Monitora il numero di password errate digitate durante lo sblocco dello schermo e blocca il tablet o resetta tutti i dati dell\'utente se è stato raggiunto il limite massimo consentito."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Consente di monitorare il numero di password errate digitate durante lo sblocco dello schermo e di bloccare il dispositivo Android TV o cancellare tutti i dati dell\'utente se vengono digitate troppe password errate."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Monitora il numero di password errate digitate durante lo sblocco dello schermo e blocca il sistema di infotainment o cancella tutti i dati di questo profilo se vengono digitate troppe password errate."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Monitora il numero di password errate digitate durante lo sblocco dello schermo e blocca il telefono o resetta tutti i dati dell\'utente se è stato raggiunto il limite massimo consentito."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Modificare il blocco schermo"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Modifica il blocco schermo."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Cancellare tutti i dati"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Cancella i dati del tablet senza preavviso eseguendo un ripristino dati di fabbrica."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Consente di cancellare i dati del dispositivo Android TV senza preavviso eseguendo un ripristino dei dati di fabbrica."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Cancella i dati del sistema di infotainment senza preavviso eseguendo un ripristino dei dati di fabbrica."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Cancella i dati del telefono senza preavviso eseguendo un ripristino dei dati di fabbrica."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Resettare i dati dell\'utente"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Cancella dati del profilo"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Resettare i dati dell\'utente"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Resetta i dati dell\'utente sul tablet senza preavviso."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Consente di cancellare i dati dell\'utente su questo dispositivo Android TV senza preavviso."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Cancella i dati di questo profilo su questo sistema di infotainment senza preavviso."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Resetta i dati dell\'utente sul telefono senza preavviso."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Impostare il proxy globale del dispositivo"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Imposta il proxy globale del dispositivo in modo da utilizzarlo mentre la norma è attiva. Il proxy globale può essere impostato solo dal proprietario del dispositivo."</string>
@@ -1061,8 +1073,8 @@
     <string name="oneMonthDurationPast" msgid="4538030857114635777">"1 mese fa"</string>
     <string name="beforeOneMonthDurationPast" msgid="8315149541372065392">"Oltre 1 mese fa"</string>
     <plurals name="last_num_days" formatted="false" msgid="687443109145393632">
+      <item quantity="one">Last <xliff:g id="COUNT_1">%d</xliff:g> days</item>
       <item quantity="other">Ultimi <xliff:g id="COUNT_1">%d</xliff:g> giorni</item>
-      <item quantity="one">Ultimo giorno (<xliff:g id="COUNT_0">%d</xliff:g>)</item>
     </plurals>
     <string name="last_month" msgid="1528906781083518683">"Ultimo mese"</string>
     <string name="older" msgid="1645159827884647400">"Precedente"</string>
@@ -1083,68 +1095,68 @@
     <string name="years" msgid="5797714729103773425">"anni"</string>
     <string name="now_string_shortest" msgid="3684914126941650330">"ora"</string>
     <plurals name="duration_minutes_shortest" formatted="false" msgid="7519574894537185135">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>m</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> m</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> m</item>
     </plurals>
     <plurals name="duration_hours_shortest" formatted="false" msgid="2838655994500499651">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>h</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> h</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> h</item>
     </plurals>
     <plurals name="duration_days_shortest" formatted="false" msgid="3686058472983158496">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>d</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> g</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> g</item>
     </plurals>
     <plurals name="duration_years_shortest" formatted="false" msgid="8299112348723640338">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>y</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> a</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> a</item>
     </plurals>
     <plurals name="duration_minutes_shortest_future" formatted="false" msgid="849196137176399440">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g>m</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> m</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> m</item>
     </plurals>
     <plurals name="duration_hours_shortest_future" formatted="false" msgid="5386373597343170388">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g>h</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> h</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> h</item>
     </plurals>
     <plurals name="duration_days_shortest_future" formatted="false" msgid="814754627092787227">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g>d</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> g</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> g</item>
     </plurals>
     <plurals name="duration_years_shortest_future" formatted="false" msgid="7683731800140202145">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g>y</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> a</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> a</item>
     </plurals>
     <plurals name="duration_minutes_relative" formatted="false" msgid="6569851308583028344">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g> minutes ago</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> minuti fa</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> minuto fa</item>
     </plurals>
     <plurals name="duration_hours_relative" formatted="false" msgid="420434788589102019">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g> hours ago</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> ore fa</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> ora fa</item>
     </plurals>
     <plurals name="duration_days_relative" formatted="false" msgid="6056425878237482431">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g> days ago</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> giorni fa</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> giorno fa</item>
     </plurals>
     <plurals name="duration_years_relative" formatted="false" msgid="2179998228861172159">
+      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g> years ago</item>
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> anni fa</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g> anno fa</item>
     </plurals>
     <plurals name="duration_minutes_relative_future" formatted="false" msgid="5759885720917567723">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g> minutes</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> minuti</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> minuto</item>
     </plurals>
     <plurals name="duration_hours_relative_future" formatted="false" msgid="8963511608507707959">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g> hours</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> ore</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> ora</item>
     </plurals>
     <plurals name="duration_days_relative_future" formatted="false" msgid="1964709470979250702">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g> days</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> giorni</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> giorno</item>
     </plurals>
     <plurals name="duration_years_relative_future" formatted="false" msgid="3985129025134896371">
+      <item quantity="one">in <xliff:g id="COUNT_1">%d</xliff:g> years</item>
       <item quantity="other">tra <xliff:g id="COUNT_1">%d</xliff:g> anni</item>
-      <item quantity="one">tra <xliff:g id="COUNT_0">%d</xliff:g> anno</item>
     </plurals>
     <string name="VideoView_error_title" msgid="5750686717225068016">"Problemi video"</string>
     <string name="VideoView_error_text_invalid_progressive_playback" msgid="3782449246085134720">"Questo video non è valido per lo streaming su questo dispositivo."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> in preparazione."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Avvio app."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Conclusione dell\'avvio."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Vuoi disattivare lo schermo?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Durante la configurazione della tua impronta hai premuto il tasto di accensione.\n\nGeneralmente questa azione comporta la disattivazione dello schermo."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Disattiva"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Annulla"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Vuoi continuare la configurazione?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Hai premuto il tasto di accensione; in genere questa azione disattiva lo schermo.\n\nProva a toccare leggermente il tasto di accensione durante la configurazione della tua impronta."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Disattiva lo schermo"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Continua configuraz."</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Vuoi continuare a verificare l\'impronta?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Hai premuto il tasto di accensione; in genere questa azione disattiva lo schermo.\n\nProva a toccare leggermente il tasto di accensione per verificare la tua impronta."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Disattiva lo schermo"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Continua"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> in esecuzione"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Tocca per tornare al gioco"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Scegli gioco"</string>
@@ -1526,8 +1542,8 @@
     <string name="no_matches" msgid="6472699895759164599">"Nessuna corrispondenza"</string>
     <string name="find_on_page" msgid="5400537367077438198">"Trova nella pagina"</string>
     <plurals name="matches_found" formatted="false" msgid="1101758718194295554">
+      <item quantity="one"><xliff:g id="INDEX">%d</xliff:g> of <xliff:g id="TOTAL">%d</xliff:g></item>
       <item quantity="other"><xliff:g id="INDEX">%d</xliff:g> di <xliff:g id="TOTAL">%d</xliff:g></item>
-      <item quantity="one">1 partita</item>
     </plurals>
     <string name="action_mode_done" msgid="2536182504764803222">"Fine"</string>
     <string name="progress_erasing" msgid="6891435992721028004">"Cancellazione archivio condiviso…"</string>
@@ -1659,8 +1675,8 @@
     <string name="kg_wrong_password" msgid="2384677900494439426">"Password sbagliata"</string>
     <string name="kg_wrong_pin" msgid="3680925703673166482">"PIN errato"</string>
     <plurals name="kg_too_many_failed_attempts_countdown" formatted="false" msgid="236717428673283568">
+      <item quantity="one">Try again in <xliff:g id="NUMBER">%d</xliff:g> seconds.</item>
       <item quantity="other">Riprova fra <xliff:g id="NUMBER">%d</xliff:g> secondi.</item>
-      <item quantity="one">Riprova fra 1 secondo.</item>
     </plurals>
     <string name="kg_pattern_instructions" msgid="8366024510502517748">"Inserisci la sequenza"</string>
     <string name="kg_sim_pin_instructions" msgid="6479401489471690359">"Inserisci il PIN della SIM"</string>
@@ -1859,8 +1875,8 @@
     <string name="restr_pin_error_doesnt_match" msgid="7063392698489280556">"I PIN non corrispondono. Riprova."</string>
     <string name="restr_pin_error_too_short" msgid="1547007808237941065">"Il PIN è troppo corto. Deve avere almeno quattro cifre."</string>
     <plurals name="restr_pin_countdown" formatted="false" msgid="4427486903285216153">
+      <item quantity="one">Try again in <xliff:g id="COUNT">%d</xliff:g> seconds</item>
       <item quantity="other">Riprova tra <xliff:g id="COUNT">%d</xliff:g> secondi</item>
-      <item quantity="one">Riprova tra 1 secondo</item>
     </plurals>
     <string name="restr_pin_try_later" msgid="5897719962541636727">"Riprova più tardi"</string>
     <string name="immersive_cling_title" msgid="2307034298721541791">"Visualizzazione a schermo intero"</string>
@@ -1890,36 +1906,36 @@
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Attivare Risparmio dati?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Attiva"</string>
     <plurals name="zen_mode_duration_minutes_summary" formatted="false" msgid="2877101784123058273">
+      <item quantity="one">For %1$d minutes (until <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
       <item quantity="other">Per %1$d minuti (fino alle ore <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="one">Per un minuto (fino alle ore <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
     </plurals>
     <plurals name="zen_mode_duration_minutes_summary_short" formatted="false" msgid="4230730310318858312">
+      <item quantity="one">For %1$d min (until <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
       <item quantity="other">Per %1$d minuti (fino alle ore <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="one">Per 1 minuto (fino alle ore <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
     </plurals>
     <plurals name="zen_mode_duration_hours_summary" formatted="false" msgid="7725354244196466758">
+      <item quantity="one">For %1$d hours (until <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
       <item quantity="other">Per %1$d ore (fino alle ore <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="one">Per 1 ora (fino alle ore <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
     </plurals>
     <plurals name="zen_mode_duration_hours_summary_short" formatted="false" msgid="588719069121765642">
+      <item quantity="one">For %1$d hr (until <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
       <item quantity="other">Per %1$d ore (fino alle ore <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="one">Per 1 ora (fino alle ore <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
     </plurals>
     <plurals name="zen_mode_duration_minutes" formatted="false" msgid="1148568456958944998">
+      <item quantity="one">For %d minutes</item>
       <item quantity="other">Per %d minuti</item>
-      <item quantity="one">Per un minuto</item>
     </plurals>
     <plurals name="zen_mode_duration_minutes_short" formatted="false" msgid="2742377799995454859">
+      <item quantity="one">For %d min</item>
       <item quantity="other">Per %d minuti</item>
-      <item quantity="one">Per 1 minuto</item>
     </plurals>
     <plurals name="zen_mode_duration_hours" formatted="false" msgid="525401855645490022">
+      <item quantity="one">For %d hours</item>
       <item quantity="other">Per %d ore</item>
-      <item quantity="one">Per 1 ora</item>
     </plurals>
     <plurals name="zen_mode_duration_hours_short" formatted="false" msgid="7644653189680911640">
+      <item quantity="one">For %d hr</item>
       <item quantity="other">Per %d ore</item>
-      <item quantity="one">Per 1 ora</item>
     </plurals>
     <string name="zen_mode_until_next_day" msgid="1403042784161725038">"Fino a: <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"Fino a <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
@@ -1968,8 +1984,8 @@
     <string name="call_notification_ongoing_text" msgid="3880832933933020875">"Chiamata in corso"</string>
     <string name="call_notification_screening_text" msgid="8396931408268940208">"Applicazione filtro a chiamata in arrivo"</string>
     <plurals name="selected_count" formatted="false" msgid="3946212171128200491">
+      <item quantity="one"><xliff:g id="COUNT_1">%1$d</xliff:g> selected</item>
       <item quantity="other"><xliff:g id="COUNT_1">%1$d</xliff:g> file selezionati</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%1$d</xliff:g> file selezionato</item>
     </plurals>
     <string name="default_notification_channel_label" msgid="3697928973567217330">"Senza categoria"</string>
     <string name="importance_from_user" msgid="2782756722448800447">"Stabilisci tu l\'importanza di queste notifiche."</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Notifica app personalizzata"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Consentire a <xliff:g id="APP">%1$s</xliff:g> di creare un nuovo utente con l\'account <xliff:g id="ACCOUNT">%2$s</xliff:g> (esiste già un utente con questo account)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Consentire a <xliff:g id="APP">%1$s</xliff:g> di creare un nuovo utente con l\'account <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Aggiungi utente supervisionato"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Aggiungi una lingua"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Area geografica preferita"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Digita nome lingua"</string>
@@ -2036,8 +2053,8 @@
     <string name="autofill_error_cannot_autofill" msgid="6528827648643138596">"Impossibile compilare automaticamente i contenuti"</string>
     <string name="autofill_picker_no_suggestions" msgid="1076022650427481509">"Nessun suggerimento di Compilazione automatica"</string>
     <plurals name="autofill_picker_some_suggestions" formatted="false" msgid="6651883186966959978">
+      <item quantity="one"><xliff:g id="COUNT">%1$s</xliff:g> autofill suggestions</item>
       <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> suggerimenti di Compilazione automatica</item>
-      <item quantity="one">Un suggerimento di Compilazione automatica</item>
     </plurals>
     <string name="autofill_save_title" msgid="7719802414283739775">"Vuoi salvare su "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
     <string name="autofill_save_title_with_type" msgid="3002460014579799605">"Vuoi salvare la <xliff:g id="TYPE">%1$s</xliff:g> su "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
@@ -2140,8 +2157,8 @@
     <string name="bluetooth_airplane_mode_toast" msgid="2066399056595768554">"Il Bluetooth rimane attivo durante l\'uso della modalità aereo"</string>
     <string name="car_loading_profile" msgid="8219978381196748070">"Caricamento"</string>
     <plurals name="file_count" formatted="false" msgid="7063513834724389247">
+      <item quantity="one"><xliff:g id="FILE_NAME_2">%s</xliff:g> + <xliff:g id="COUNT_3">%d</xliff:g> file</item>
       <item quantity="other"><xliff:g id="FILE_NAME_2">%s</xliff:g> + <xliff:g id="COUNT_3">%d</xliff:g> file</item>
-      <item quantity="one"><xliff:g id="FILE_NAME_0">%s</xliff:g> + <xliff:g id="COUNT_1">%d</xliff:g> file</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="1511722103987329028">"Nessuna persona consigliata per la condivisione"</string>
     <string name="chooser_all_apps_button_label" msgid="3230427756238666328">"Elenco di app"</string>

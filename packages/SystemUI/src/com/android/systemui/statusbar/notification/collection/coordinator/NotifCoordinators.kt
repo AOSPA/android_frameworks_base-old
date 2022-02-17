@@ -17,13 +17,12 @@ package com.android.systemui.statusbar.notification.collection.coordinator
 
 import com.android.systemui.Dumpable
 import com.android.systemui.dump.DumpManager
-import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.statusbar.notification.NotifPipelineFlags
 import com.android.systemui.statusbar.notification.collection.NotifPipeline
 import com.android.systemui.statusbar.notification.collection.coordinator.dagger.CoordinatorScope
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifSectioner
 import java.io.FileDescriptor
 import java.io.PrintWriter
-import java.util.ArrayList
 import javax.inject.Inject
 
 /**
@@ -35,7 +34,8 @@ interface NotifCoordinators : Coordinator, Dumpable
 @CoordinatorScope
 class NotifCoordinatorsImpl @Inject constructor(
     dumpManager: DumpManager,
-    featureFlags: FeatureFlags,
+    notifPipelineFlags: NotifPipelineFlags,
+    dataStoreCoordinator: DataStoreCoordinator,
     hideLocallyDismissedNotifsCoordinator: HideLocallyDismissedNotifsCoordinator,
     hideNotifsForOtherUsersCoordinator: HideNotifsForOtherUsersCoordinator,
     keyguardCoordinator: KeyguardCoordinator,
@@ -45,15 +45,19 @@ class NotifCoordinatorsImpl @Inject constructor(
     bubbleCoordinator: BubbleCoordinator,
     headsUpCoordinator: HeadsUpCoordinator,
     gutsCoordinator: GutsCoordinator,
+    communalCoordinator: CommunalCoordinator,
     conversationCoordinator: ConversationCoordinator,
-    preparationCoordinator: PreparationCoordinator,
+    debugModeCoordinator: DebugModeCoordinator,
+    groupCountCoordinator: GroupCountCoordinator,
     mediaCoordinator: MediaCoordinator,
+    preparationCoordinator: PreparationCoordinator,
     remoteInputCoordinator: RemoteInputCoordinator,
+    rowAppearanceCoordinator: RowAppearanceCoordinator,
+    stackCoordinator: StackCoordinator,
     shadeEventCoordinator: ShadeEventCoordinator,
     smartspaceDedupingCoordinator: SmartspaceDedupingCoordinator,
     viewConfigCoordinator: ViewConfigCoordinator,
     visualStabilityCoordinator: VisualStabilityCoordinator,
-    communalCoordinator: CommunalCoordinator,
     sensitiveContentCoordinator: SensitiveContentCoordinator
 ) : NotifCoordinators {
 
@@ -65,6 +69,16 @@ class NotifCoordinatorsImpl @Inject constructor(
      */
     init {
         dumpManager.registerDumpable(TAG, this)
+
+        // TODO(b/208866714): formalize the system by which some coordinators may be required by the
+        //  pipeline, such as this DataStoreCoordinator which cannot be removed, as it's a critical
+        //  glue between the pipeline and parts of SystemUI which depend on pipeline output via the
+        //  NotifLiveDataStore.
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
+            mCoordinators.add(dataStoreCoordinator)
+        }
+
+        // Attach normal coordinators.
         mCoordinators.add(hideLocallyDismissedNotifsCoordinator)
         mCoordinators.add(hideNotifsForOtherUsersCoordinator)
         mCoordinators.add(keyguardCoordinator)
@@ -72,26 +86,30 @@ class NotifCoordinatorsImpl @Inject constructor(
         mCoordinators.add(appOpsCoordinator)
         mCoordinators.add(deviceProvisionedCoordinator)
         mCoordinators.add(bubbleCoordinator)
+        mCoordinators.add(communalCoordinator)
+        mCoordinators.add(debugModeCoordinator)
         mCoordinators.add(conversationCoordinator)
+        mCoordinators.add(groupCountCoordinator)
         mCoordinators.add(mediaCoordinator)
-        mCoordinators.add(remoteInputCoordinator)
+        mCoordinators.add(rowAppearanceCoordinator)
+        mCoordinators.add(stackCoordinator)
         mCoordinators.add(shadeEventCoordinator)
         mCoordinators.add(viewConfigCoordinator)
         mCoordinators.add(visualStabilityCoordinator)
-        mCoordinators.add(communalCoordinator)
         mCoordinators.add(sensitiveContentCoordinator)
-        if (featureFlags.isSmartspaceDedupingEnabled) {
+        if (notifPipelineFlags.isSmartspaceDedupingEnabled()) {
             mCoordinators.add(smartspaceDedupingCoordinator)
         }
-        if (featureFlags.isNewNotifPipelineRenderingEnabled) {
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
             mCoordinators.add(headsUpCoordinator)
             mCoordinators.add(gutsCoordinator)
             mCoordinators.add(preparationCoordinator)
+            mCoordinators.add(remoteInputCoordinator)
         }
 
         // Manually add Ordered Sections
-        // HeadsUp > FGS > People > Alerting > Silent > Unknown/Default
-        if (featureFlags.isNewNotifPipelineRenderingEnabled) {
+        // HeadsUp > FGS > People > Alerting > Silent > Minimized > Unknown/Default
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
             mOrderedSections.add(headsUpCoordinator.sectioner) // HeadsUp
         }
         mOrderedSections.add(appOpsCoordinator.sectioner) // ForegroundService

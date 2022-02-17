@@ -120,8 +120,7 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
     }
 
     /** Called when a TaskFragment is created and organized by this organizer. */
-    public void onTaskFragmentAppeared(
-            @NonNull TaskFragmentAppearedInfo taskFragmentAppearedInfo) {}
+    public void onTaskFragmentAppeared(@NonNull TaskFragmentInfo taskFragmentInfo) {}
 
     /** Called when the status of an organized TaskFragment is changed. */
     public void onTaskFragmentInfoChanged(@NonNull TaskFragmentInfo taskFragmentInfo) {}
@@ -169,7 +168,7 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
 
     private final ITaskFragmentOrganizer mInterface = new ITaskFragmentOrganizer.Stub() {
         @Override
-        public void onTaskFragmentAppeared(@NonNull TaskFragmentAppearedInfo taskFragmentInfo) {
+        public void onTaskFragmentAppeared(@NonNull TaskFragmentInfo taskFragmentInfo) {
             mExecutor.execute(
                     () -> TaskFragmentOrganizer.this.onTaskFragmentAppeared(taskFragmentInfo));
         }
@@ -215,6 +214,19 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
             return getWindowOrganizerController().getTaskFragmentOrganizerController();
         } catch (RemoteException e) {
             return null;
+        }
+    }
+
+    /**
+     * Checks if an activity organized by a {@link android.window.TaskFragmentOrganizer} and
+     * only occupies a portion of Task bounds.
+     * @hide
+     */
+    public boolean isActivityEmbedded(@NonNull IBinder activityToken) {
+        try {
+            return getController().isActivityEmbedded(activityToken);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 }

@@ -41,7 +41,6 @@ import android.os.IThermalEventListener;
 import android.os.IThermalService;
 import android.os.Looper;
 import android.os.Message;
-import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -622,8 +621,8 @@ public class DisplayModeDirector {
             mHbmObserver.dumpLocked(pw);
             mSkinThermalStatusObserver.dumpLocked(pw);
         }
-           //mLock not needed to collect sensor dump
-            mSensorObserver.dumpLocked(pw);
+
+        mSensorObserver.dump(pw);
     }
 
     private void updateVoteLocked(int priority, Vote vote) {
@@ -2245,7 +2244,7 @@ public class DisplayModeDirector {
             }
         }
 
-        void dumpLocked(PrintWriter pw) {
+        void dump(PrintWriter pw) {
             pw.println("  SensorObserver");
                 pw.println("    mIsProxActive=" + mIsProxActive);
                 pw.println("    mDozeStateByDisplay:");

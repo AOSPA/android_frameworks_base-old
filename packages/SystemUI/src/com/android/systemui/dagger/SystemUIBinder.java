@@ -16,6 +16,7 @@
 
 package com.android.systemui.dagger;
 
+import com.android.keyguard.KeyguardBiometricLockoutLogger;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.LatencyTester;
 import com.android.systemui.ScreenDecorations;
@@ -23,8 +24,9 @@ import com.android.systemui.SliceBroadcastRelayHandler;
 import com.android.systemui.accessibility.SystemActions;
 import com.android.systemui.accessibility.WindowMagnification;
 import com.android.systemui.biometrics.AuthController;
+import com.android.systemui.clipboardoverlay.ClipboardListener;
 import com.android.systemui.dreams.DreamOverlayRegistrant;
-import com.android.systemui.dreams.appwidgets.AppWidgetOverlayPrimer;
+import com.android.systemui.dreams.appwidgets.ComplicationPrimer;
 import com.android.systemui.globalactions.GlobalActionsComponent;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
@@ -71,6 +73,12 @@ public abstract class SystemUIBinder {
     @ClassKey(GarbageMonitor.Service.class)
     public abstract CoreStartable bindGarbageMonitorService(GarbageMonitor.Service sysui);
 
+    /** Inject into ClipboardListener. */
+    @Binds
+    @IntoMap
+    @ClassKey(ClipboardListener.class)
+    public abstract CoreStartable bindClipboardListener(ClipboardListener sysui);
+
     /** Inject into GlobalActionsComponent. */
     @Binds
     @IntoMap
@@ -88,6 +96,13 @@ public abstract class SystemUIBinder {
     @IntoMap
     @ClassKey(KeyguardViewMediator.class)
     public abstract CoreStartable bindKeyguardViewMediator(KeyguardViewMediator sysui);
+
+    /** Inject into KeyguardBiometricLockoutLogger. */
+    @Binds
+    @IntoMap
+    @ClassKey(KeyguardBiometricLockoutLogger.class)
+    public abstract CoreStartable bindKeyguardBiometricLockoutLogger(
+            KeyguardBiometricLockoutLogger sysui);
 
     /** Inject into LatencyTests. */
     @Binds
@@ -201,7 +216,7 @@ public abstract class SystemUIBinder {
     /** Inject into AppWidgetOverlayPrimer. */
     @Binds
     @IntoMap
-    @ClassKey(AppWidgetOverlayPrimer.class)
+    @ClassKey(ComplicationPrimer.class)
     public abstract CoreStartable bindAppWidgetOverlayPrimer(
-            AppWidgetOverlayPrimer appWidgetOverlayPrimer);
+            ComplicationPrimer complicationPrimer);
 }

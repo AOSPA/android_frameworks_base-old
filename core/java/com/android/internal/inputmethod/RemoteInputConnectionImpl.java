@@ -25,6 +25,7 @@ import static com.android.internal.inputmethod.InputConnectionProtoDumper.buildG
 
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
+import android.annotation.AnyThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Bundle;
@@ -35,6 +36,7 @@ import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewRootImpl;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.DumpableInputConnection;
@@ -43,6 +45,7 @@ import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputContentInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.TextAttribute;
+import android.view.inputmethod.TextSnapshot;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.infra.AndroidFuture;
@@ -50,6 +53,7 @@ import com.android.internal.view.IInputContext;
 
 import java.lang.annotation.Retention;
 import java.lang.ref.WeakReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -66,6 +70,82 @@ import java.util.function.Supplier;
 public final class RemoteInputConnectionImpl extends IInputContext.Stub {
     private static final String TAG = "RemoteInputConnectionImpl";
     private static final boolean DEBUG = false;
+
+    /**
+     * An upper limit of calling {@link InputConnection#endBatchEdit()}.
+     *
+     * <p>This is a safeguard against broken {@link InputConnection#endBatchEdit()} implementations,
+     * which are real as we've seen in Bug 208941904.  If the retry count reaches to the number
+     * defined here, we fall back into {@link InputMethodManager#restartInput(View)} as a
+     * workaround.</p>
+     */
+    private static final int MAX_END_BATCH_EDIT_RETRY = 16;
+
+    /**
+     * A lightweight per-process type cache to remember classes that never returns {@code false}
+     * from {@link InputConnection#endBatchEdit()}.  The implementation is optimized for simplicity
+     * and speed with accepting false-negatives in {@link #contains(Class)}.
+     */
+    private static final class KnownAlwaysTrueEndBatchEditCache {
+        @Nullable
+        private static volatile Class<?> sElement;
+        @Nullable
+        private static volatile Class<?>[] sArray;
+
+        /**
+         * Query if the specified {@link InputConnection} implementation is known to be broken, with
+         * allowing false-negative results.
+         *
+         * @param klass An implementation class of {@link InputConnection} to be tested.
+         * @return {@code true} if the specified type was passed to {@link #add(Class)}.
+         *         Note that there is a chance that you still receive {@code false} even if you
+         *         called {@link #add(Class)} (false-negative).
+         */
+        @AnyThread
+        static boolean contains(@NonNull Class<? extends InputConnection> klass) {
+            if (klass == sElement) {
+                return true;
+            }
+            final Class<?>[] array = sArray;
+            if (array == null) {
+                return false;
+            }
+            for (Class<?> item : array) {
+                if (item == klass) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Try to remember the specified {@link InputConnection} implementation as a known bad.
+         *
+         * <p>There is a chance that calling this method can accidentally overwrite existing
+         * cache entries. See the document of {@link #contains(Class)} for details.</p>
+         *
+         * @param klass The implementation class of {@link InputConnection} to be remembered.
+         */
+        @AnyThread
+        static void add(@NonNull Class<? extends InputConnection> klass) {
+            if (sElement == null) {
+                // OK to accidentally overwrite an existing element that was set by another thread.
+                sElement = klass;
+                return;
+            }
+
+            final Class<?>[] array = sArray;
+            final int arraySize = array != null ? array.length : 0;
+            final Class<?>[] newArray = new Class<?>[arraySize + 1];
+            for (int i = 0; i < arraySize; ++i) {
+                newArray[i] = array[i];
+            }
+            newArray[arraySize] = klass;
+
+            // OK to accidentally overwrite an existing array that was set by another thread.
+            sArray = newArray;
+        }
+    }
 
     @Retention(SOURCE)
     private @interface Dispatching {
@@ -87,8 +167,8 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
     private final InputMethodManager mParentInputMethodManager;
     private final WeakReference<View> mServedView;
 
-    // TODO(b/203086369): This is to be used when interruption is implemented.
     private final AtomicInteger mCurrentSessionId = new AtomicInteger(0);
+    private final AtomicBoolean mHasPendingInvalidation = new AtomicBoolean();
 
     public RemoteInputConnectionImpl(@NonNull Looper looper,
             @NonNull InputConnection inputConnection,
@@ -111,6 +191,14 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
     }
 
     /**
+     * @return {@code true} if there is a pending {@link InputMethodManager#invalidateInput(View)}
+     * call.
+     */
+    public boolean hasPendingInvalidation() {
+        return mHasPendingInvalidation.get();
+    }
+
+    /**
      * @return {@code true} until the target {@link InputConnection} receives
      * {@link InputConnection#closeConnection()} as a result of {@link #deactivate()}.
      */
@@ -126,6 +214,87 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
 
     public View getServedView() {
         return mServedView.get();
+    }
+
+    /**
+     * Schedule a task to execute
+     * {@link InputMethodManager#doInvalidateInput(RemoteInputConnectionImpl, TextSnapshot, int)}
+     * on the associated Handler if not yet scheduled.
+     *
+     * <p>By calling {@link InputConnection#takeSnapshot()} directly from the message loop, we can
+     * make sure that application code is not modifying text context in a reentrant manner.</p>
+     */
+    public void scheduleInvalidateInput() {
+        if (mHasPendingInvalidation.compareAndSet(false, true)) {
+            final int nextSessionId = mCurrentSessionId.incrementAndGet();
+            // By calling InputConnection#takeSnapshot() directly from the message loop, we can make
+            // sure that application code is not modifying text context in a reentrant manner.
+            // e.g. We may see methods like EditText#setText() in the callstack here.
+            mH.post(() -> {
+                try {
+                    if (isFinished()) {
+                        // This is a stale request, which can happen.  No need to show a warning
+                        // because this situation itself is not an error.
+                        return;
+                    }
+                    final InputConnection ic = getInputConnection();
+                    if (ic == null) {
+                        // This is a stale request, which can happen.  No need to show a warning
+                        // because this situation itself is not an error.
+                        return;
+                    }
+                    final View view = getServedView();
+                    if (view == null) {
+                        // This is a stale request, which can happen.  No need to show a warning
+                        // because this situation itself is not an error.
+                        return;
+                    }
+
+                    final Class<? extends InputConnection> icClass = ic.getClass();
+
+                    boolean alwaysTrueEndBatchEditDetected =
+                            KnownAlwaysTrueEndBatchEditCache.contains(icClass);
+
+                    if (!alwaysTrueEndBatchEditDetected) {
+                        // Clean up composing text and batch edit.
+                        final boolean supportsBatchEdit = ic.beginBatchEdit();
+                        ic.finishComposingText();
+                        if (supportsBatchEdit) {
+                            // Also clean up batch edit.
+                            int retryCount = 0;
+                            while (true) {
+                                if (!ic.endBatchEdit()) {
+                                    break;
+                                }
+                                ++retryCount;
+                                if (retryCount > MAX_END_BATCH_EDIT_RETRY) {
+                                    Log.e(TAG, icClass.getTypeName() + "#endBatchEdit() still"
+                                            + " returns true even after retrying "
+                                            + MAX_END_BATCH_EDIT_RETRY + " times.  Falling back to"
+                                            + " InputMethodManager#restartInput(View)");
+                                    alwaysTrueEndBatchEditDetected = true;
+                                    KnownAlwaysTrueEndBatchEditCache.add(icClass);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!alwaysTrueEndBatchEditDetected) {
+                        final TextSnapshot textSnapshot = ic.takeSnapshot();
+                        if (textSnapshot != null) {
+                            mParentInputMethodManager.doInvalidateInput(this, textSnapshot,
+                                    nextSessionId);
+                            return;
+                        }
+                    }
+
+                    mParentInputMethodManager.restartInput(view);
+                } finally {
+                    mHasPendingInvalidation.set(false);
+                }
+            });
+        }
     }
 
     /**
@@ -182,8 +351,19 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
                     }
                     if (handler.getLooper().isCurrentThread()) {
                         servedView.onInputConnectionClosedInternal();
+                        final ViewRootImpl viewRoot = servedView.getViewRootImpl();
+                        if (viewRoot != null) {
+                            viewRoot.getHandwritingInitiator().onInputConnectionClosed(servedView);
+                        }
                     } else {
                         handler.post(servedView::onInputConnectionClosedInternal);
+                        handler.post(() -> {
+                            final ViewRootImpl viewRoot = servedView.getViewRootImpl();
+                            if (viewRoot != null) {
+                                viewRoot.getHandwritingInitiator()
+                                        .onInputConnectionClosed(servedView);
+                            }
+                        });
                     }
                 }
             }

@@ -24,6 +24,8 @@ import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 
+import static com.android.server.wm.ActivityTaskManagerService.POWER_MODE_REASON_CHANGE_DISPLAY;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -245,7 +247,7 @@ class TransitionController {
             @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger,
             @NonNull WindowContainer readyGroupRef) {
         return requestTransitionIfNeeded(type, flags, trigger, readyGroupRef,
-                null /* remoteTransition */);
+                null /* remoteTransition */, null /* displayChange */);
     }
 
     private static boolean isExistenceType(@WindowManager.TransitionType int type) {
@@ -262,12 +264,16 @@ class TransitionController {
     @Nullable
     Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
             @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger,
-            @NonNull WindowContainer readyGroupRef, @Nullable RemoteTransition remoteTransition) {
+            @NonNull WindowContainer readyGroupRef, @Nullable RemoteTransition remoteTransition,
+            @Nullable TransitionRequestInfo.DisplayChange displayChange) {
         if (mTransitionPlayer == null) {
             return null;
         }
         Transition newTransition = null;
         if (isCollecting()) {
+            if (displayChange != null) {
+                throw new IllegalArgumentException("Provided displayChange for a non-new request");
+            }
             // Make the collecting transition wait until this request is ready.
             mCollectingTransition.setReady(readyGroupRef, false);
             if ((flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY) != 0) {
@@ -276,7 +282,7 @@ class TransitionController {
             }
         } else {
             newTransition = requestStartTransition(createTransition(type, flags),
-                    trigger != null ? trigger.asTask() : null, remoteTransition);
+                    trigger != null ? trigger.asTask() : null, remoteTransition, displayChange);
         }
         if (trigger != null) {
             if (isExistenceType(type)) {
@@ -291,7 +297,8 @@ class TransitionController {
     /** Asks the transition player (shell) to start a created but not yet started transition. */
     @NonNull
     Transition requestStartTransition(@NonNull Transition transition, @Nullable Task startTask,
-            @Nullable RemoteTransition remoteTransition) {
+            @Nullable RemoteTransition remoteTransition,
+            @Nullable TransitionRequestInfo.DisplayChange displayChange) {
         try {
             ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
                     "Requesting StartTransition: %s", transition);
@@ -301,7 +308,7 @@ class TransitionController {
                 startTask.fillTaskInfo(info);
             }
             mTransitionPlayer.requestStartTransition(transition, new TransitionRequestInfo(
-                    transition.mType, info, remoteTransition));
+                    transition.mType, info, remoteTransition, displayChange));
         } catch (RemoteException e) {
             Slog.e(TAG, "Error requesting transition", e);
             transition.start();
@@ -315,7 +322,7 @@ class TransitionController {
         if (wc.isVisibleRequested()) {
             if (!isCollecting()) {
                 requestStartTransition(createTransition(TRANSIT_CLOSE, 0 /* flags */),
-                        wc.asTask(), null /* remoteTransition */);
+                        wc.asTask(), null /* remoteTransition */, null /* displayChange */);
             }
             collectExistenceChange(wc);
         } else {
@@ -335,6 +342,29 @@ class TransitionController {
     void collectExistenceChange(@NonNull WindowContainer wc) {
         if (mCollectingTransition == null) return;
         mCollectingTransition.collectExistenceChange(wc);
+    }
+
+    /**
+     * Collects the window containers which need to be synced with the changing display (e.g.
+     * rotating) to the given transition or the current collecting transition.
+     */
+    void collectForDisplayChange(@NonNull DisplayContent dc, @Nullable Transition incoming) {
+        if (incoming == null) incoming = mCollectingTransition;
+        if (incoming == null) return;
+        final Transition transition = incoming;
+        // Collect all visible tasks.
+        dc.forAllLeafTasks(task -> {
+            if (task.isVisible()) {
+                transition.collect(task);
+            }
+        }, true /* traverseTopToBottom */);
+        // Collect all visible non-app windows which need to be drawn before the animation starts.
+        dc.forAllWindows(w -> {
+            if (w.mActivityRecord == null && w.isVisible() && !inTransition(w.mToken)
+                    && dc.shouldSyncRotationChange(w)) {
+                transition.collect(w.mToken);
+            }
+        }, true /* traverseTopToBottom */);
     }
 
     /** @see Transition#setOverrideAnimation */
@@ -359,6 +389,8 @@ class TransitionController {
     void finishTransition(@NonNull IBinder token) {
         // It is usually a no-op but make sure that the metric consumer is removed.
         mTransitionMetricsReporter.reportAnimationStart(token, 0 /* startTime */);
+        // It is a no-op if the transition did not change the display.
+        mAtm.endLaunchPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
         final Transition record = Transition.fromBinder(token);
         if (record == null || !mPlayingTransitions.contains(record)) {
             Slog.e(TAG, "Trying to finish a non-playing transition " + token);
@@ -428,6 +460,10 @@ class TransitionController {
 
     void registerLegacyListener(WindowManagerInternal.AppTransitionListener listener) {
         mLegacyListeners.add(listener);
+    }
+
+    void unregisterLegacyListener(WindowManagerInternal.AppTransitionListener listener) {
+        mLegacyListeners.remove(listener);
     }
 
     void dispatchLegacyAppTransitionPending() {

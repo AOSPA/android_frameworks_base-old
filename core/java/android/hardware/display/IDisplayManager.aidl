@@ -16,6 +16,7 @@
 
 package android.hardware.display;
 
+import android.companion.virtual.IVirtualDevice;
 import android.content.pm.ParceledListSlice;
 import android.graphics.Point;
 import android.hardware.display.BrightnessConfiguration;
@@ -86,10 +87,10 @@ interface IDisplayManager {
     void requestColorMode(int displayId, int colorMode);
 
     // Requires CAPTURE_VIDEO_OUTPUT, CAPTURE_SECURE_VIDEO_OUTPUT, or an appropriate
-    // MediaProjection token for certain combinations of flags.
+    // MediaProjection token or VirtualDevice for certain combinations of flags.
     int createVirtualDisplay(in VirtualDisplayConfig virtualDisplayConfig,
             in IVirtualDisplayCallback callback, in IMediaProjection projectionToken,
-            String packageName);
+            in IVirtualDevice virtualDevice, String packageName);
 
     // No permissions required, but must be same Uid as the creator.
     void resizeVirtualDisplay(in IVirtualDisplayCallback token,
@@ -165,8 +166,8 @@ interface IDisplayManager {
 
     // Sets the user preferred display mode.
     // Requires MODIFY_USER_PREFERRED_DISPLAY_MODE permission.
-    void setUserPreferredDisplayMode(in Mode mode);
-    Mode getUserPreferredDisplayMode();
+    void setUserPreferredDisplayMode(int displayId, in Mode mode);
+    Mode getUserPreferredDisplayMode(int displayId);
 
     // When enabled the app requested display resolution and refresh rate is always selected
     // in DisplayModeDirector regardless of user settings and policies for low brightness, low
@@ -179,4 +180,7 @@ interface IDisplayManager {
 
     // Returns the refresh rate switching type.
     int getRefreshRateSwitchingType();
+
+    // Query for DISPLAY_DECORATION support.
+    boolean getDisplayDecorationSupport(int displayId);
 }

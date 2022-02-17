@@ -189,6 +189,19 @@ public class DreamService extends Service implements Window.Callback {
      */
     public static final String DREAM_META_DATA = "android.service.dream";
 
+    /**
+     * Extra containing a boolean for whether to show complications on the overlay.
+     * @hide
+     */
+    public static final String EXTRA_SHOW_COMPLICATIONS =
+            "android.service.dreams.SHOW_COMPLICATIONS";
+
+    /**
+     * The default value for whether to show complications on the overlay.
+     * @hide
+     */
+    public static final boolean DEFAULT_SHOW_COMPLICATIONS = true;
+
     private final IDreamManager mDreamManager;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private IBinder mDreamToken;
@@ -333,7 +346,7 @@ public class DreamService extends Service implements Window.Callback {
     public boolean dispatchTouchEvent(MotionEvent event) {
         // TODO: create more flexible version of mInteractive that allows clicks
         // but finish()es on any other kind of activity
-        if (!mInteractive) {
+        if (!mInteractive && event.getActionMasked() == MotionEvent.ACTION_UP) {
             if (mDebug) Slog.v(TAG, "Waking up on touchEvent");
             wakeUp();
             return true;

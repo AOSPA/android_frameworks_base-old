@@ -35,6 +35,8 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.common.ShellExecutor;
+import com.android.wm.shell.compatui.CompatUI;
+import com.android.wm.shell.draganddrop.DragAndDrop;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
@@ -76,7 +78,9 @@ public class WMShellTest extends SysuiTestCase {
     @Mock WakefulnessLifecycle mWakefulnessLifecycle;
     @Mock ProtoTracer mProtoTracer;
     @Mock ShellCommandHandler mShellCommandHandler;
+    @Mock CompatUI mCompatUI;
     @Mock ShellExecutor mSysUiMainExecutor;
+    @Mock DragAndDrop mDragAndDrop;
 
     @Before
     public void setUp() {
@@ -84,10 +88,11 @@ public class WMShellTest extends SysuiTestCase {
 
         mWMShell = new WMShell(mContext, Optional.of(mPip), Optional.of(mLegacySplitScreen),
                 Optional.of(mSplitScreen), Optional.of(mOneHanded), Optional.of(mHideDisplayCutout),
-                Optional.of(mShellCommandHandler), mCommandQueue, mConfigurationController,
-                mKeyguardUpdateMonitor, mNavigationModeController,
-                mScreenLifecycle, mSysUiState, mProtoTracer, mWakefulnessLifecycle,
-                mSysUiMainExecutor);
+                Optional.of(mShellCommandHandler), Optional.of(mCompatUI),
+                Optional.of(mDragAndDrop),
+                mCommandQueue, mConfigurationController, mKeyguardUpdateMonitor,
+                mNavigationModeController, mScreenLifecycle, mSysUiState, mProtoTracer,
+                mWakefulnessLifecycle, mSysUiMainExecutor);
     }
 
     @Test
@@ -128,5 +133,12 @@ public class WMShellTest extends SysuiTestCase {
 
         verify(mConfigurationController).addCallback(
                 any(ConfigurationController.ConfigurationListener.class));
+    }
+
+    @Test
+    public void initCompatUI_registersCallbacks() {
+        mWMShell.initCompatUi(mCompatUI);
+
+        verify(mKeyguardUpdateMonitor).registerCallback(any(KeyguardUpdateMonitorCallback.class));
     }
 }

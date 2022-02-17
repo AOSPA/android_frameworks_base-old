@@ -126,7 +126,7 @@ class OpenImeWindowTest(private val testSpec: FlickerTestParameter) {
     @Test
     fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
-    @Presubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
@@ -138,7 +138,7 @@ class OpenImeWindowTest(private val testSpec: FlickerTestParameter) {
         }
     }
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
         testSpec.assertWm {

@@ -54,6 +54,7 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.model.SysUiState;
@@ -61,6 +62,7 @@ import com.android.systemui.plugins.GlobalActions;
 import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -115,6 +117,8 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
     @Mock private UserContextProvider mUserContextProvider;
     @Mock private StatusBar mStatusBar;
     @Mock private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    @Mock private DialogLaunchAnimator mDialogLaunchAnimator;
+    @Mock private SystemUIDialogManager mDialogManager;
 
     private TestableLooper mTestableLooper;
 
@@ -159,8 +163,9 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
                 mHandler,
                 mPackageManager,
                 Optional.of(mStatusBar),
-                mKeyguardUpdateMonitor
-        );
+                mKeyguardUpdateMonitor,
+                mDialogLaunchAnimator,
+                mDialogManager);
         mGlobalActionsDialogLite.setZeroDialogPressDelayForTesting();
 
         ColorExtractor.GradientColors backdropColors = new ColorExtractor.GradientColors();
@@ -218,7 +223,7 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
         GlobalActionsDialogLite.ActionsDialogLite dialog = mGlobalActionsDialogLite.createDialog();
 
         GestureDetector.SimpleOnGestureListener gestureListener = spy(dialog.mGestureListener);
-        gestureListener.onSingleTapConfirmed(null);
+        gestureListener.onSingleTapUp(null);
         verifyLogPosted(GlobalActionsDialogLite.GlobalActionsEvent.GA_CLOSE_TAP_OUTSIDE);
     }
 
@@ -444,12 +449,12 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
 
         // When entering power menu from lockscreen, with smart lock enabled
         when(mKeyguardUpdateMonitor.getUserHasTrust(anyInt())).thenReturn(true);
-        mGlobalActionsDialogLite.showOrHideDialog(true, true);
+        mGlobalActionsDialogLite.showOrHideDialog(true, true, null /* view */);
 
         // Then smart lock will be disabled
         verify(mLockPatternUtils).requireCredentialEntry(eq(user));
 
         // hide dialog again
-        mGlobalActionsDialogLite.showOrHideDialog(true, true);
+        mGlobalActionsDialogLite.showOrHideDialog(true, true, null /* view */);
     }
 }

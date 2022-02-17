@@ -889,6 +889,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/NonAppWindowAnimationAdapter.java"
     },
+    "-1145384901": {
+      "message": "shouldWaitAnimatingExit: isTransition: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/WindowState.java"
+    },
     "-1142279614": {
       "message": "Looking for focus: %s, flags=%d, canReceive=%b, reason=%s",
       "level": "VERBOSE",
@@ -960,6 +966,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
+    },
+    "-1101551167": {
+      "message": "Auto-PIP allowed, entering PIP mode directly: %s, didAutoPip: %b",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-1089874824": {
       "message": "SURFACE SHOW (performLayout): %s",
@@ -1189,6 +1201,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-846931068": {
+      "message": "Update camera compat control state to %s for taskId=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/TaskOrganizerController.java"
+    },
     "-846078709": {
       "message": "Configuration doesn't matter in finishing %s",
       "level": "VERBOSE",
@@ -1266,6 +1284,12 @@
       "level": "INFO",
       "group": "WM_DEBUG_SCREEN_ON",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "-743856570": {
+      "message": "shouldWaitAnimatingExit: isAnimating: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/WindowState.java"
     },
     "-743431900": {
       "message": "Configuration no differences in %s",
@@ -1782,6 +1806,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_SYNC_ENGINE",
       "at": "com\/android\/server\/wm\/BLASTSyncEngine.java"
+    },
+    "-208825711": {
+      "message": "shouldWaitAnimatingExit: isWallpaperTarget: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/WindowState.java"
     },
     "-198463978": {
       "message": "updateRotationUnchecked: alwaysSendConfiguration=%b forceRelayout=%b",
@@ -2635,12 +2665,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "660908897": {
-      "message": "Auto-PIP allowed, entering PIP mode directly: %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/TaskFragment.java"
-    },
     "662572728": {
       "message": "Attempted to add a toast window with bad token %s.  Aborting.",
       "level": "WARN",
@@ -3000,6 +3024,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/WallpaperAnimationAdapter.java"
+    },
+    "1087494661": {
+      "message": "Clear window stuck on animatingExit status: %s",
+      "level": "WARN",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/WindowState.java"
     },
     "1088929964": {
       "message": "onLockTaskPackagesUpdated: starting new locktask task=%s",
@@ -3678,6 +3708,18 @@
       "level": "INFO",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "1874559932": {
+      "message": "The TaskDisplayArea with %s does not exist.",
+      "level": "WARN",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/DisplayAreaPolicyBuilder.java"
+    },
+    "1884961873": {
+      "message": "Sleep still need to stop %d activities",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/Task.java"
     },
     "1891501279": {
       "message": "cancelAnimation(): reason=%s",

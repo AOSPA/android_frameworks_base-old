@@ -80,6 +80,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
@@ -1507,6 +1508,12 @@ public class Resources {
      * retrieve XML attributes with style and theme information applied.
      */
     public final class Theme {
+        /**
+         * To trace parent themes needs to prevent a cycle situation.
+         * e.x. A's parent is B, B's parent is C, and C's parent is A.
+         */
+        private static final int MAX_NUMBER_OF_TRACING_PARENT_THEME = 100;
+
         private final Object mLock = new Object();
 
         @GuardedBy("mLock")
@@ -1800,6 +1807,13 @@ public class Resources {
             }
         }
 
+        @StyleRes
+        /*package*/ int getParentThemeIdentifier(@StyleRes int resId) {
+            synchronized (mLock) {
+                return mThemeImpl.getParentThemeIdentifier(resId);
+            }
+        }
+
         /**
          * @hide
          */
@@ -1922,6 +1936,54 @@ public class Resources {
                     return stack;
                 }
             }
+        }
+
+        @Override
+        public int hashCode() {
+            return getKey().hashCode();
+        }
+
+        @Override
+        public boolean equals(@Nullable Object o) {
+            if (this == o) {
+                return true;
+            }
+
+            if (o == null || getClass() != o.getClass() || hashCode() != o.hashCode()) {
+                return false;
+            }
+
+            final Theme other = (Theme) o;
+            return getKey().equals(other.getKey());
+        }
+
+        @Override
+        public String toString() {
+            final StringBuilder sb = new StringBuilder();
+            sb.append('{');
+            int themeResId = getAppliedStyleResId();
+            int i = 0;
+            sb.append("InheritanceMap=[");
+            while (themeResId > 0) {
+                if (i > MAX_NUMBER_OF_TRACING_PARENT_THEME) {
+                    sb.append(",...");
+                    break;
+                }
+
+                if (i > 0) {
+                    sb.append(", ");
+                }
+                sb.append("id=0x").append(Integer.toHexString(themeResId));
+                sb.append(getResourcePackageName(themeResId))
+                        .append(":").append(getResourceTypeName(themeResId))
+                        .append("/").append(getResourceEntryName(themeResId));
+
+                i++;
+                themeResId = getParentThemeIdentifier(themeResId);
+            }
+            sb.append("], Themes=").append(Arrays.deepToString(getTheme()));
+            sb.append('}');
+            return sb.toString();
         }
     }
 

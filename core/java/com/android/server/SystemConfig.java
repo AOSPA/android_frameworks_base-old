@@ -56,6 +56,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -94,6 +95,9 @@ public class SystemConfig {
 
     // property for runtime configuration differentiation in vendor
     private static final String VENDOR_SKU_PROPERTY = "ro.boot.product.vendor.sku";
+
+    private static final ArrayMap<String, ArraySet<String>> EMPTY_PERMISSIONS =
+            new ArrayMap<>();
 
     // Group-ids that are given to all packages as read from etc/permissions/*.xml.
     int[] mGlobalGids = EmptyArray.INT;
@@ -281,6 +285,11 @@ public class SystemConfig {
     final ArrayMap<String, ArraySet<String>> mSystemExtPrivAppPermissions = new ArrayMap<>();
     final ArrayMap<String, ArraySet<String>> mSystemExtPrivAppDenyPermissions = new ArrayMap<>();
 
+    final ArrayMap<String, ArrayMap<String, ArraySet<String>>> mApexPrivAppPermissions =
+            new ArrayMap<>();
+    final ArrayMap<String, ArrayMap<String, ArraySet<String>>> mApexPrivAppDenyPermissions =
+            new ArrayMap<>();
+
     final ArrayMap<String, ArrayMap<String, Boolean>> mOemPermissions = new ArrayMap<>();
 
     // Allowed associations between applications.  If there are any entries
@@ -415,6 +424,18 @@ public class SystemConfig {
 
     public ArraySet<String> getPrivAppDenyPermissions(String packageName) {
         return mPrivAppDenyPermissions.get(packageName);
+    }
+
+    /** Get privapp permission allowlist for an apk-in-apex. */
+    public ArraySet<String> getApexPrivAppPermissions(String module, String packageName) {
+        return mApexPrivAppPermissions.getOrDefault(module, EMPTY_PERMISSIONS)
+                .get(packageName);
+    }
+
+    /** Get privapp permissions denylist for an apk-in-apex. */
+    public ArraySet<String> getApexPrivAppDenyPermissions(String module, String packageName) {
+        return mApexPrivAppDenyPermissions.getOrDefault(module, EMPTY_PERMISSIONS)
+                .get(packageName);
     }
 
     public ArraySet<String> getVendorPrivAppPermissions(String packageName) {
@@ -632,8 +653,8 @@ public class SystemConfig {
         if (!isSystemProcess()) {
             return;
         }
-        // Read configuration of features and libs from apex module.
-        int apexPermissionFlag = ALLOW_LIBS | ALLOW_FEATURES;
+        // Read configuration of features, libs and priv-app permissions from apex module.
+        int apexPermissionFlag = ALLOW_LIBS | ALLOW_FEATURES | ALLOW_PRIVAPP_PERMISSIONS;
         // TODO: Use a solid way to filter apex module folders?
         for (File f: FileUtils.listFilesOrEmpty(Environment.getApexDirectory())) {
             if (f.isFile() || f.getPath().contains("@")) {
@@ -828,8 +849,8 @@ public class SystemConfig {
                             XmlUtils.skipCurrentTag(parser);
                         }
                     } break;
-                    case "updatable-library":
-                        // "updatable-library" is meant to behave exactly like "library"
+                    case "apex-library":
+                        // "apex-library" is meant to behave exactly like "library"
                     case "library": {
                         if (allowLibs) {
                             String lname = parser.getAttributeValue(null, "name");
@@ -849,7 +870,8 @@ public class SystemConfig {
                                 boolean allowedMinSdk = minDeviceSdk <= Build.VERSION.SDK_INT;
                                 boolean allowedMaxSdk =
                                         maxDeviceSdk == 0 || maxDeviceSdk >= Build.VERSION.SDK_INT;
-                                if (allowedMinSdk && allowedMaxSdk) {
+                                final boolean exists = new File(lfile).exists();
+                                if (allowedMinSdk && allowedMaxSdk && exists) {
                                     int bcpSince = XmlUtils.readIntAttribute(parser,
                                             "on-bootclasspath-since", 0);
                                     int bcpBefore = XmlUtils.readIntAttribute(parser,
@@ -859,6 +881,19 @@ public class SystemConfig {
                                                     ? new String[0] : ldependency.split(":"),
                                             bcpSince, bcpBefore);
                                     mSharedLibraries.put(lname, entry);
+                                } else {
+                                    final StringBuilder msg = new StringBuilder(
+                                            "Ignore shared library ").append(lname).append(":");
+                                    if (!allowedMinSdk) {
+                                        msg.append(" min-device-sdk=").append(minDeviceSdk);
+                                    }
+                                    if (!allowedMaxSdk) {
+                                        msg.append(" max-device-sdk=").append(maxDeviceSdk);
+                                    }
+                                    if (!exists) {
+                                        msg.append(" ").append(lfile).append(" does not exist");
+                                    }
+                                    Slog.i(TAG, msg.toString());
                                 }
                             }
                         } else {
@@ -1116,10 +1151,10 @@ public class SystemConfig {
                     } break;
                     case "privapp-permissions": {
                         if (allowPrivappPermissions) {
-                            // privapp permissions from system, vendor, product and system_ext
-                            // partitions are stored separately. This is to prevent xml files in
-                            // the vendor partition from granting permissions to priv apps in the
-                            // system partition and vice versa.
+                            // privapp permissions from system, apex, vendor, product and
+                            // system_ext partitions are stored separately. This is to
+                            // prevent xml files in the vendor partition from granting
+                            // permissions to priv apps in the system partition and vice versa.
                             boolean vendor = permFile.toPath().startsWith(
                                     Environment.getVendorDirectory().toPath() + "/")
                                     || permFile.toPath().startsWith(
@@ -1128,6 +1163,8 @@ public class SystemConfig {
                                     Environment.getProductDirectory().toPath() + "/");
                             boolean systemExt = permFile.toPath().startsWith(
                                     Environment.getSystemExtDirectory().toPath() + "/");
+                            boolean apex = permFile.toPath().startsWith(
+                                    Environment.getApexDirectory().toPath() + "/");
                             if (vendor) {
                                 readPrivAppPermissions(parser, mVendorPrivAppPermissions,
                                         mVendorPrivAppDenyPermissions);
@@ -1137,6 +1174,8 @@ public class SystemConfig {
                             } else if (systemExt) {
                                 readPrivAppPermissions(parser, mSystemExtPrivAppPermissions,
                                         mSystemExtPrivAppDenyPermissions);
+                            } else if (apex) {
+                                readApexPrivAppPermissions(parser, permFile);
                             } else {
                                 readPrivAppPermissions(parser, mPrivAppPermissions,
                                         mPrivAppDenyPermissions);
@@ -1690,6 +1729,43 @@ public class SystemConfig {
         } catch (IOException e) {
             Slog.w(TAG, "Failed to read public libraries file " + listFile, e);
         }
+    }
+
+
+    /**
+     * Returns the module name for a file in the apex module's partition.
+     */
+    private String getApexModuleNameFromFilePath(Path path) {
+        final Path apexDirectoryPath = Environment.getApexDirectory().toPath();
+        if (!path.startsWith(apexDirectoryPath)) {
+            throw new IllegalArgumentException("File " + path + " is not part of an APEX.");
+        }
+        // File must be in <apex_directory>/<module_name>/[extra_paths/]<xml_file>
+        if (path.getNameCount() <= (apexDirectoryPath.getNameCount() + 1)) {
+            throw new IllegalArgumentException("File " + path + " is in the APEX partition,"
+                                                + " but not inside a module.");
+        }
+        return path.getName(apexDirectoryPath.getNameCount()).toString();
+    }
+
+    private void readApexPrivAppPermissions(XmlPullParser parser, File permFile)
+            throws IOException, XmlPullParserException {
+        final String moduleName = getApexModuleNameFromFilePath(permFile.toPath());
+        final ArrayMap<String, ArraySet<String>> privAppPermissions;
+        if (mApexPrivAppPermissions.containsKey(moduleName)) {
+            privAppPermissions = mApexPrivAppPermissions.get(moduleName);
+        } else {
+            privAppPermissions = new ArrayMap<>();
+            mApexPrivAppPermissions.put(moduleName, privAppPermissions);
+        }
+        final ArrayMap<String, ArraySet<String>> privAppDenyPermissions;
+        if (mApexPrivAppDenyPermissions.containsKey(moduleName)) {
+            privAppDenyPermissions = mApexPrivAppDenyPermissions.get(moduleName);
+        } else {
+            privAppDenyPermissions = new ArrayMap<>();
+            mApexPrivAppDenyPermissions.put(moduleName, privAppDenyPermissions);
+        }
+        readPrivAppPermissions(parser, privAppPermissions, privAppDenyPermissions);
     }
 
     private static boolean isSystemProcess() {

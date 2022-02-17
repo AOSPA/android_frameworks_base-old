@@ -508,6 +508,16 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
   uses_static_library_action.Action(RequiredAndroidAttribute("certDigest"));
   uses_static_library_action["additional-certificate"];
 
+  xml::XmlNodeAction& sdk_library_action = application_action["sdk-library"];
+  sdk_library_action.Action(RequiredNameIsJavaPackage);
+  sdk_library_action.Action(RequiredAndroidAttribute("versionMajor"));
+
+  xml::XmlNodeAction& uses_sdk_library_action = application_action["uses-sdk-library"];
+  uses_sdk_library_action.Action(RequiredNameIsJavaPackage);
+  uses_sdk_library_action.Action(RequiredAndroidAttribute("versionMajor"));
+  uses_sdk_library_action.Action(RequiredAndroidAttribute("certDigest"));
+  uses_sdk_library_action["additional-certificate"];
+
   xml::XmlNodeAction& uses_package_action = application_action["uses-package"];
   uses_package_action.Action(RequiredNameIsJavaPackage);
   uses_package_action["additional-certificate"];
@@ -534,6 +544,7 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
   application_action["activity-alias"] = component_action;
   application_action["service"] = component_action;
   application_action["receiver"] = component_action;
+  application_action["apex-system-service"] = component_action;
 
   // Provider actions.
   application_action["provider"] = component_action;
@@ -577,10 +588,21 @@ static bool RenameManifestPackage(const StringPiece& package_override, xml::Elem
             child_el->name == "provider" || child_el->name == "receiver" ||
             child_el->name == "service") {
           FullyQualifyClassName(original_package, xml::kSchemaAndroid, "name", child_el);
+          continue;
         }
 
         if (child_el->name == "activity-alias") {
           FullyQualifyClassName(original_package, xml::kSchemaAndroid, "targetActivity", child_el);
+          continue;
+        }
+
+        if (child_el->name == "processes") {
+          for (xml::Element* grand_child_el : child_el->GetChildElements()) {
+            if (grand_child_el->name == "process") {
+              FullyQualifyClassName(original_package, xml::kSchemaAndroid, "name", grand_child_el);
+            }
+          }
+          continue;
         }
       }
     }

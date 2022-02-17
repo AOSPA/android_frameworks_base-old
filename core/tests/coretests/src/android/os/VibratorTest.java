@@ -27,14 +27,22 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import android.content.ContentResolver;
+import android.content.Context;
+import android.content.ContextWrapper;
 import android.hardware.vibrator.IVibrator;
 import android.media.AudioAttributes;
 import android.platform.test.annotations.Presubmit;
 
 import androidx.test.InstrumentationRegistry;
 
+import com.android.internal.util.test.FakeSettingsProvider;
+import com.android.internal.util.test.FakeSettingsProviderRule;
+
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -50,11 +58,19 @@ import org.mockito.junit.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public class VibratorTest {
 
+    @Rule
+    public FakeSettingsProviderRule mSettingsProviderRule = FakeSettingsProvider.rule();
+
+    private Context mContextSpy;
     private Vibrator mVibratorSpy;
 
     @Before
     public void setUp() {
-        mVibratorSpy = spy(InstrumentationRegistry.getContext().getSystemService(Vibrator.class));
+        mContextSpy = spy(new ContextWrapper(InstrumentationRegistry.getContext()));
+
+        ContentResolver contentResolver = mSettingsProviderRule.mockContentResolver(mContextSpy);
+        when(mContextSpy.getContentResolver()).thenReturn(contentResolver);
+        mVibratorSpy = spy(new SystemVibrator(mContextSpy));
     }
 
     @Test
@@ -209,10 +225,21 @@ public class VibratorTest {
     }
 
     @Test
+    public void vibrate_withVibrationAttributes_usesGivenAttributes() {
+        VibrationEffect effect = VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
+        VibrationAttributes attributes = new VibrationAttributes.Builder().setUsage(
+                VibrationAttributes.USAGE_TOUCH).build();
+
+        mVibratorSpy.vibrate(effect, attributes);
+
+        verify(mVibratorSpy).vibrate(anyInt(), anyString(), eq(effect), isNull(), eq(attributes));
+    }
+
+    @Test
     public void vibrate_withAudioAttributes_createsVibrationAttributesWithSameUsage() {
         VibrationEffect effect = VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
         AudioAttributes audioAttributes = new AudioAttributes.Builder().setUsage(
-                AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY).build();
+                AudioAttributes.USAGE_VOICE_COMMUNICATION).build();
 
         mVibratorSpy.vibrate(effect, audioAttributes);
 
@@ -224,32 +251,12 @@ public class VibratorTest {
         assertEquals(VibrationAttributes.USAGE_COMMUNICATION_REQUEST,
                 vibrationAttributes.getUsage());
         // Keeps original AudioAttributes usage to be used by the VibratorService.
-        assertEquals(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY,
+        assertEquals(AudioAttributes.USAGE_VOICE_COMMUNICATION,
                 vibrationAttributes.getAudioUsage());
     }
 
     @Test
-    public void vibrate_withUnknownAudioAttributes_hasTouchUsageFromEffect() {
-        VibrationEffect effect = VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
-        AudioAttributes audioAttributes = new AudioAttributes.Builder().setUsage(
-                AudioAttributes.USAGE_UNKNOWN).build();
-
-        mVibratorSpy.vibrate(effect, audioAttributes);
-
-        ArgumentCaptor<VibrationAttributes> captor = ArgumentCaptor.forClass(
-                VibrationAttributes.class);
-        verify(mVibratorSpy).vibrate(anyInt(), anyString(), eq(effect), isNull(), captor.capture());
-
-        VibrationAttributes vibrationAttributes = captor.getValue();
-        assertEquals(VibrationAttributes.USAGE_TOUCH,
-                vibrationAttributes.getUsage());
-        // Sets AudioAttributes usage based on effect.
-        assertEquals(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
-                vibrationAttributes.getAudioUsage());
-    }
-
-    @Test
-    public void vibrate_withoutAudioAttributes_hasTouchUsageFromEffect() {
+    public void vibrate_withoutAudioAttributes_passesOnDefaultAttributes() {
         mVibratorSpy.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_CLICK));
 
         ArgumentCaptor<VibrationAttributes> captor = ArgumentCaptor.forClass(
@@ -257,22 +264,6 @@ public class VibratorTest {
         verify(mVibratorSpy).vibrate(anyInt(), anyString(), any(), isNull(), captor.capture());
 
         VibrationAttributes vibrationAttributes = captor.getValue();
-        assertEquals(VibrationAttributes.USAGE_TOUCH, vibrationAttributes.getUsage());
-        // Sets AudioAttributes usage based on effect.
-        assertEquals(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
-                vibrationAttributes.getAudioUsage());
-    }
-
-    @Test
-    public void vibrate_withoutAudioAttributesAndLongEffect_hasUnknownUsage() {
-        mVibratorSpy.vibrate(VibrationEffect.createOneShot(10_000, 255));
-
-        ArgumentCaptor<VibrationAttributes> captor = ArgumentCaptor.forClass(
-                VibrationAttributes.class);
-        verify(mVibratorSpy).vibrate(anyInt(), anyString(), any(), isNull(), captor.capture());
-
-        VibrationAttributes vibrationAttributes = captor.getValue();
-        assertEquals(VibrationAttributes.USAGE_UNKNOWN, vibrationAttributes.getUsage());
-        assertEquals(AudioAttributes.USAGE_UNKNOWN, vibrationAttributes.getAudioUsage());
+        assertEquals(new VibrationAttributes.Builder().build(), vibrationAttributes);
     }
 }

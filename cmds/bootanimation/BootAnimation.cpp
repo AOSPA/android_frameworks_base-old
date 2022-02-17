@@ -81,18 +81,18 @@ static constexpr const char* PRODUCT_USERSPACE_REBOOT_ANIMATION_FILE = "/product
 static constexpr const char* OEM_USERSPACE_REBOOT_ANIMATION_FILE = "/oem/media/userspace-reboot.zip";
 static constexpr const char* SYSTEM_USERSPACE_REBOOT_ANIMATION_FILE = "/system/media/userspace-reboot.zip";
 
-static const char SYSTEM_DATA_DIR_PATH[] = "/data/system";
-static const char SYSTEM_TIME_DIR_NAME[] = "time";
-static const char SYSTEM_TIME_DIR_PATH[] = "/data/system/time";
+static const char BOOTANIM_DATA_DIR_PATH[] = "/data/bootanim";
+static const char BOOTANIM_TIME_DIR_NAME[] = "time";
+static const char BOOTANIM_TIME_DIR_PATH[] = "/data/bootanim/time";
 static const char CLOCK_FONT_ASSET[] = "images/clock_font.png";
 static const char CLOCK_FONT_ZIP_NAME[] = "clock_font.png";
 static const char PROGRESS_FONT_ASSET[] = "images/progress_font.png";
 static const char PROGRESS_FONT_ZIP_NAME[] = "progress_font.png";
 static const char LAST_TIME_CHANGED_FILE_NAME[] = "last_time_change";
-static const char LAST_TIME_CHANGED_FILE_PATH[] = "/data/system/time/last_time_change";
+static const char LAST_TIME_CHANGED_FILE_PATH[] = "/data/bootanim/time/last_time_change";
 static const char ACCURATE_TIME_FLAG_FILE_NAME[] = "time_is_accurate";
-static const char ACCURATE_TIME_FLAG_FILE_PATH[] = "/data/system/time/time_is_accurate";
-static const char TIME_FORMAT_12_HOUR_FLAG_FILE_PATH[] = "/data/system/time/time_format_12_hour";
+static const char ACCURATE_TIME_FLAG_FILE_PATH[] = "/data/bootanim/time/time_is_accurate";
+static const char TIME_FORMAT_12_HOUR_FLAG_FILE_PATH[] = "/data/bootanim/time/time_format_12_hour";
 // Java timestamp format. Don't show the clock if the date is before 2000-01-01 00:00:00.
 static const long long ACCURATE_TIME_EPOCH = 946684800000;
 static constexpr char FONT_BEGIN_CHAR = ' ';
@@ -105,6 +105,7 @@ static const int TEXT_MISSING_VALUE = INT_MIN;
 static const char EXIT_PROP_NAME[] = "service.bootanim.exit";
 static const char PROGRESS_PROP_NAME[] = "service.bootanim.progress";
 static const char DISPLAYS_PROP_NAME[] = "persist.service.bootanim.displays";
+static const char CLOCK_ENABLED_PROP_NAME[] = "persist.sys.bootanim.clock.enabled";
 static const int ANIM_ENTRY_NAME_MAX = ANIM_PATH_MAX + 1;
 static constexpr size_t TEXT_POS_LEN_MAX = 16;
 static const int DYNAMIC_COLOR_COUNT = 4;
@@ -1333,6 +1334,8 @@ bool BootAnimation::movie() {
     }
     if (!anyPartHasClock) {
         mClockEnabled = false;
+    } else if (!android::base::GetBoolProperty(CLOCK_ENABLED_PROP_NAME, false)) {
+        mClockEnabled = false;
     }
 
     // Check if npot textures are supported
@@ -1589,7 +1592,7 @@ bool BootAnimation::playAnimation(const Animation& animation) {
                     int err;
                     do {
                         err = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &spec, nullptr);
-                    } while (err<0 && errno == EINTR);
+                    } while (err == EINTR);
                 }
 
                 checkExit();
@@ -1751,7 +1754,7 @@ bool BootAnimation::updateIsTimeAccurate() {
 }
 
 BootAnimation::TimeCheckThread::TimeCheckThread(BootAnimation* bootAnimation) : Thread(false),
-    mInotifyFd(-1), mSystemWd(-1), mTimeWd(-1), mBootAnimation(bootAnimation) {}
+    mInotifyFd(-1), mBootAnimWd(-1), mTimeWd(-1), mBootAnimation(bootAnimation) {}
 
 BootAnimation::TimeCheckThread::~TimeCheckThread() {
     // mInotifyFd may be -1 but that's ok since we're not at risk of attempting to close a valid FD.
@@ -1794,7 +1797,7 @@ bool BootAnimation::TimeCheckThread::doThreadLoop() {
     const struct inotify_event *event;
     for (char* ptr = buff; ptr < buff + length; ptr += sizeof(struct inotify_event) + event->len) {
         event = (const struct inotify_event *) ptr;
-        if (event->wd == mSystemWd && strcmp(SYSTEM_TIME_DIR_NAME, event->name) == 0) {
+        if (event->wd == mBootAnimWd && strcmp(BOOTANIM_TIME_DIR_NAME, event->name) == 0) {
             addTimeDirWatch();
         } else if (event->wd == mTimeWd && (strcmp(LAST_TIME_CHANGED_FILE_NAME, event->name) == 0
                 || strcmp(ACCURATE_TIME_FLAG_FILE_NAME, event->name) == 0)) {
@@ -1806,12 +1809,12 @@ bool BootAnimation::TimeCheckThread::doThreadLoop() {
 }
 
 void BootAnimation::TimeCheckThread::addTimeDirWatch() {
-        mTimeWd = inotify_add_watch(mInotifyFd, SYSTEM_TIME_DIR_PATH,
+        mTimeWd = inotify_add_watch(mInotifyFd, BOOTANIM_TIME_DIR_PATH,
                 IN_CLOSE_WRITE | IN_MOVED_TO | IN_ATTRIB);
         if (mTimeWd > 0) {
             // No need to watch for the time directory to be created if it already exists
-            inotify_rm_watch(mInotifyFd, mSystemWd);
-            mSystemWd = -1;
+            inotify_rm_watch(mInotifyFd, mBootAnimWd);
+            mBootAnimWd = -1;
         }
 }
 
@@ -1822,11 +1825,11 @@ status_t BootAnimation::TimeCheckThread::readyToRun() {
         return NO_INIT;
     }
 
-    mSystemWd = inotify_add_watch(mInotifyFd, SYSTEM_DATA_DIR_PATH, IN_CREATE | IN_ATTRIB);
-    if (mSystemWd < 0) {
+    mBootAnimWd = inotify_add_watch(mInotifyFd, BOOTANIM_DATA_DIR_PATH, IN_CREATE | IN_ATTRIB);
+    if (mBootAnimWd < 0) {
         close(mInotifyFd);
         mInotifyFd = -1;
-        SLOGE("Could not add watch for %s: %s", SYSTEM_DATA_DIR_PATH, strerror(errno));
+        SLOGE("Could not add watch for %s: %s", BOOTANIM_DATA_DIR_PATH, strerror(errno));
         return NO_INIT;
     }
 

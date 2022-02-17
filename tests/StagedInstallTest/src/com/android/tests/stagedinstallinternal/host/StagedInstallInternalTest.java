@@ -112,6 +112,10 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
      * @param files the paths of files which might contain wildcards
      */
     private void deleteFiles(String... files) throws Exception {
+        if (!getDevice().isAdbRoot()) {
+            getDevice().enableAdbRoot();
+        }
+
         boolean found = false;
         for (String file : files) {
             CommandResult result = getDevice().executeShellV2Command("ls " + file);
@@ -122,9 +126,6 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
         }
 
         if (found) {
-            if (!getDevice().isAdbRoot()) {
-                getDevice().enableAdbRoot();
-            }
             getDevice().remountSystemWritable();
             for (String file : files) {
                 getDevice().executeShellCommand("rm -rf " + file);
@@ -293,6 +294,18 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
     public void testStagedSessionShouldCleanUpOnOnSuccess() throws Exception {
         List<String> before = getStagingDirectories();
         runPhase("testStagedSessionShouldCleanUpOnOnSuccess_Commit");
+        assertThat(getStagingDirectories()).isNotEqualTo(before);
+        getDevice().reboot();
+        runPhase("testStagedSessionShouldCleanUpOnOnSuccess_Verify");
+        List<String> after = getStagingDirectories();
+        assertThat(after).isEqualTo(before);
+    }
+
+    @Test
+    @LargeTest
+    public void testStagedSessionShouldCleanUpOnOnSuccessMultiPackage() throws Exception {
+        List<String> before = getStagingDirectories();
+        runPhase("testStagedSessionShouldCleanUpOnOnSuccessMultiPackage_Commit");
         assertThat(getStagingDirectories()).isNotEqualTo(before);
         getDevice().reboot();
         runPhase("testStagedSessionShouldCleanUpOnOnSuccess_Verify");

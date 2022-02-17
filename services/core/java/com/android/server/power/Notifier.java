@@ -24,8 +24,8 @@ import android.app.trust.TrustManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManagerInternal;
-import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
@@ -41,6 +41,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.WorkSource;
@@ -109,9 +110,8 @@ public class Notifier {
     private static final VibrationEffect CHARGING_VIBRATION_EFFECT =
             VibrationEffect.createWaveform(CHARGING_VIBRATION_TIME, CHARGING_VIBRATION_AMPLITUDE,
                     -1);
-    private static final AudioAttributes VIBRATION_ATTRIBUTES = new AudioAttributes.Builder()
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build();
+    private static final VibrationAttributes HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES =
+            VibrationAttributes.createForUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK);
 
     private final Object mLock = new Object();
 
@@ -129,6 +129,7 @@ public class Notifier {
     private final TrustManager mTrustManager;
     private final Vibrator mVibrator;
     private final WakeLockLog mWakeLockLog;
+    private final DisplayManagerInternal mDisplayManagerInternal;
 
     private final NotifierHandler mHandler;
     private final Intent mScreenOnIntent;
@@ -181,6 +182,7 @@ public class Notifier {
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mInputMethodManagerInternal = LocalServices.getService(InputMethodManagerInternal.class);
         mStatusBarManagerInternal = LocalServices.getService(StatusBarManagerInternal.class);
+        mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
         mTrustManager = mContext.getSystemService(TrustManager.class);
         mVibrator = mContext.getSystemService(Vibrator.class);
 
@@ -460,7 +462,10 @@ public class Notifier {
         synchronized (mLock) {
             if (mInteractive) {
                 // Waking up...
-                mHandler.post(() -> mPolicy.startedWakingUp(mInteractiveChangeReason));
+                mHandler.post(() -> {
+                    mPolicy.startedWakingUp(mInteractiveChangeReason);
+                    mDisplayManagerInternal.onEarlyInteractivityChange(true /*isInteractive*/);
+                });
 
                 // Send interactive broadcast.
                 mPendingInteractiveState = INTERACTIVE_STATE_AWAKE;
@@ -469,7 +474,10 @@ public class Notifier {
             } else {
                 // Going to sleep...
                 // Tell the policy that we started going to sleep.
-                mHandler.post(() -> mPolicy.startedGoingToSleep(mInteractiveChangeReason));
+                mHandler.post(() -> {
+                    mPolicy.startedGoingToSleep(mInteractiveChangeReason);
+                    mDisplayManagerInternal.onEarlyInteractivityChange(false /*isInteractive*/);
+                });
             }
         }
     }
@@ -537,7 +545,7 @@ public class Notifier {
     /**
      * Called when there has been user activity.
      */
-    public void onUserActivity(int event, int uid) {
+    public void onUserActivity(int displayGroupId, int event, int uid) {
         if (DEBUG) {
             Slog.d(TAG, "onUserActivity: event=" + event + ", uid=" + uid);
         }
@@ -552,7 +560,8 @@ public class Notifier {
             if (!mUserActivityPending) {
                 mUserActivityPending = true;
                 Message msg = mHandler.obtainMessage(MSG_USER_ACTIVITY);
-                msg.arg1 = event;
+                msg.arg1 = displayGroupId;
+                msg.arg2 = event;
                 msg.setAsynchronous(true);
                 mHandler.sendMessage(msg);
             }
@@ -625,14 +634,15 @@ public class Notifier {
     /**
      * Called when the screen policy changes.
      */
-    public void onScreenPolicyUpdate(int newPolicy) {
+    public void onScreenPolicyUpdate(int displayGroupId, int newPolicy) {
         if (DEBUG) {
             Slog.d(TAG, "onScreenPolicyUpdate: newPolicy=" + newPolicy);
         }
 
         synchronized (mLock) {
             Message msg = mHandler.obtainMessage(MSG_SCREEN_POLICY);
-            msg.arg1 = newPolicy;
+            msg.arg1 = displayGroupId;
+            msg.arg2 = newPolicy;
             msg.setAsynchronous(true);
             mHandler.sendMessage(msg);
         }
@@ -667,7 +677,7 @@ public class Notifier {
         mSuspendBlocker.release();
     }
 
-    private void sendUserActivity(int event) {
+    private void sendUserActivity(int displayGroupId, int event) {
         synchronized (mLock) {
             if (!mUserActivityPending) {
                 return;
@@ -678,7 +688,7 @@ public class Notifier {
         tm.notifyUserActivity();
         mPolicy.userActivity();
         mFaceDownDetector.userActivity(event);
-        mScreenUndimDetector.userActivity();
+        mScreenUndimDetector.userActivity(displayGroupId);
     }
 
     void postEnhancedDischargePredictionBroadcast(long delayMs) {
@@ -799,7 +809,7 @@ public class Notifier {
         final boolean vibrate = Settings.Secure.getIntForUser(mContext.getContentResolver(),
                 Settings.Secure.CHARGING_VIBRATION_ENABLED, 1, userId) != 0;
         if (vibrate) {
-            mVibrator.vibrate(CHARGING_VIBRATION_EFFECT, VIBRATION_ATTRIBUTES);
+            mVibrator.vibrate(CHARGING_VIBRATION_EFFECT, HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES);
         }
 
         // play sound
@@ -832,8 +842,8 @@ public class Notifier {
         mSuspendBlocker.release();
     }
 
-    private void screenPolicyChanging(int screenPolicy) {
-        mScreenUndimDetector.recordScreenPolicy(screenPolicy);
+    private void screenPolicyChanging(int displayGroupId, int screenPolicy) {
+        mScreenUndimDetector.recordScreenPolicy(displayGroupId, screenPolicy);
     }
 
     private void lockProfile(@UserIdInt int userId) {
@@ -858,7 +868,7 @@ public class Notifier {
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_USER_ACTIVITY:
-                    sendUserActivity(msg.arg1);
+                    sendUserActivity(msg.arg1, msg.arg2);
                     break;
                 case MSG_BROADCAST:
                     sendNextBroadcast();
@@ -877,7 +887,7 @@ public class Notifier {
                     showWiredChargingStarted(msg.arg1);
                     break;
                 case MSG_SCREEN_POLICY:
-                    screenPolicyChanging(msg.arg1);
+                    screenPolicyChanging(msg.arg1, msg.arg2);
                     break;
             }
         }

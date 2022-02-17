@@ -227,6 +227,7 @@ public class AudioDeviceInventory {
         public final String mAddress;
         public final String mName;
         public final String mCaller;
+        public boolean mForTest = false;
 
         /*package*/ WiredDeviceConnectionState(int type, @AudioService.ConnectionState int state,
                                                String address, String name, String caller) {
@@ -240,6 +241,9 @@ public class AudioDeviceInventory {
 
     //------------------------------------------------------------
     /*package*/ void dump(PrintWriter pw, String prefix) {
+        pw.println("\n" + prefix + "BECOMING_NOISY_INTENT_DEVICES_SET=");
+        BECOMING_NOISY_INTENT_DEVICES_SET.forEach(device -> {
+            pw.print(" 0x" +  Integer.toHexString(device)); });
         pw.println("\n" + prefix + "Preferred devices for strategy:");
         mPreferredDevices.forEach((strategy, device) -> {
             pw.println("  " + prefix + "strategy:" + strategy + " device:" + device); });
@@ -531,7 +535,7 @@ public class AudioDeviceInventory {
             }
 
             if (!handleDeviceConnection(wdcs.mState == AudioService.CONNECTION_STATE_CONNECTED,
-                    wdcs.mType, wdcs.mAddress, wdcs.mName)) {
+                    wdcs.mType, wdcs.mAddress, wdcs.mName, wdcs.mForTest)) {
                 // change of connection state failed, bailout
                 mmi.set(MediaMetrics.Property.EARLY_RETURN, "change of connection state failed")
                         .record();
@@ -603,7 +607,7 @@ public class AudioDeviceInventory {
     }
 
     //------------------------------------------------------------
-    //
+    // preferred device(s)
 
     /*package*/ int setPreferredDevicesForStrategySync(int strategy,
             @NonNull List<AudioDeviceAttributes> devices) {
@@ -684,16 +688,34 @@ public class AudioDeviceInventory {
         mDevRoleCapturePresetDispatchers.unregister(dispatcher);
     }
 
+    //-----------------------------------------------------------------------
+
+    /**
+     * Check if a device is in the list of connected devices
+     * @param device the device whose connection state is queried
+     * @return true if connected
+     */
+    // called with AudioDeviceBroker.mDeviceStateLock lock held
+    public boolean isDeviceConnected(@NonNull AudioDeviceAttributes device) {
+        final String key = DeviceInfo.makeDeviceListKey(device.getInternalType(),
+                device.getAddress());
+        synchronized (mDevicesLock) {
+            return (mConnectedDevices.get(key) != null);
+        }
+    }
+
     /**
      * Implements the communication with AudioSystem to (dis)connect a device in the native layers
      * @param connect true if connection
      * @param device the device type
      * @param address the address of the device
      * @param deviceName human-readable name of device
+     * @param isForTesting if true, not calling AudioSystem for the connection as this is
+     *                    just for testing
      * @return false if an error was reported by AudioSystem
      */
     /*package*/ boolean handleDeviceConnection(boolean connect, int device, String address,
-            String deviceName) {
+            String deviceName, boolean isForTesting) {
         if (AudioService.DEBUG_DEVICES) {
             Slog.i(TAG, "handleDeviceConnection(" + connect + " dev:"
                     + Integer.toHexString(device) + " address:" + address
@@ -716,9 +738,14 @@ public class AudioDeviceInventory {
                 Slog.i(TAG, "deviceInfo:" + di + " is(already)Connected:" + isConnected);
             }
             if (connect && !isConnected) {
-                final int res = mAudioSystem.setDeviceConnectionState(device,
-                        AudioSystem.DEVICE_STATE_AVAILABLE, address, deviceName,
-                        AudioSystem.AUDIO_FORMAT_DEFAULT);
+                final int res;
+                if (isForTesting) {
+                    res = AudioSystem.AUDIO_STATUS_OK;
+                } else {
+                    res = mAudioSystem.setDeviceConnectionState(device,
+                            AudioSystem.DEVICE_STATE_AVAILABLE, address, deviceName,
+                            AudioSystem.AUDIO_FORMAT_DEFAULT);
+                }
                 if (res != AudioSystem.AUDIO_STATUS_OK) {
                     final String reason = "not connecting device 0x" + Integer.toHexString(device)
                             + " due to command error " + res;
@@ -991,6 +1018,15 @@ public class AudioDeviceInventory {
         }
     }
 
+    /*package*/ void setTestDeviceConnectionState(@NonNull AudioDeviceAttributes device,
+            @AudioService.ConnectionState int state) {
+        final WiredDeviceConnectionState connection = new WiredDeviceConnectionState(
+                device.getInternalType(), state, device.getAddress(),
+                "test device", "com.android.server.audio");
+        connection.mForTest = true;
+        onSetWiredDeviceConnectionState(connection);
+    }
+
     //-------------------------------------------------------------------
     // Internal utilities
 
@@ -1171,6 +1207,12 @@ public class AudioDeviceInventory {
     private void makeLeAudioDeviceAvailable(String address, String name, int streamType, int device,
             String eventSource) {
         if (device != AudioSystem.DEVICE_NONE) {
+
+            /* Audio Policy sees Le Audio similar to A2DP. Let's make sure
+             * AUDIO_POLICY_FORCE_NO_BT_A2DP is not set
+             */
+            mDeviceBroker.setBluetoothA2dpOnInt(true, false /*fromA2dp*/, eventSource);
+
             AudioSystem.setDeviceConnectionState(device, AudioSystem.DEVICE_STATE_AVAILABLE,
                     address, name, AudioSystem.AUDIO_FORMAT_DEFAULT);
             mConnectedDevices.put(DeviceInfo.makeDeviceListKey(device, address),
@@ -1254,10 +1296,13 @@ public class AudioDeviceInventory {
                         state == AudioService.CONNECTION_STATE_CONNECTED
                                 ? MediaMetrics.Value.CONNECTED : MediaMetrics.Value.DISCONNECTED);
         if (state != AudioService.CONNECTION_STATE_DISCONNECTED) {
+            Log.i(TAG, "not sending NOISY: state=" + state);
             mmi.set(MediaMetrics.Property.DELAY_MS, 0).record(); // OK to return
             return 0;
         }
         if (!BECOMING_NOISY_INTENT_DEVICES_SET.contains(device)) {
+            Log.i(TAG, "not sending NOISY: device=0x" + Integer.toHexString(device)
+                    + " not in set " + BECOMING_NOISY_INTENT_DEVICES_SET);
             mmi.set(MediaMetrics.Property.DELAY_MS, 0).record(); // OK to return
             return 0;
         }
@@ -1267,18 +1312,24 @@ public class AudioDeviceInventory {
             if (((di.mDeviceType & AudioSystem.DEVICE_BIT_IN) == 0)
                     && BECOMING_NOISY_INTENT_DEVICES_SET.contains(di.mDeviceType)) {
                 devices.add(di.mDeviceType);
+                Log.i(TAG, "NOISY: adding 0x" + Integer.toHexString(di.mDeviceType));
             }
         }
         if (musicDevice == AudioSystem.DEVICE_NONE) {
             musicDevice = mDeviceBroker.getDeviceForStream(AudioSystem.STREAM_MUSIC);
+            Log.i(TAG, "NOISY: musicDevice changing from NONE to 0x"
+                    + Integer.toHexString(musicDevice));
         }
 
         // always ignore condition on device being actually used for music when in communication
         // because music routing is altered in this case.
         // also checks whether media routing if affected by a dynamic policy or mirroring
-        if (((device == musicDevice) || mDeviceBroker.isInCommunication())
-                && AudioSystem.isSingleAudioDeviceType(devices, device)
-                && !mDeviceBroker.hasMediaDynamicPolicy()
+        final boolean inCommunication = mDeviceBroker.isInCommunication();
+        final boolean singleAudioDeviceType = AudioSystem.isSingleAudioDeviceType(devices, device);
+        final boolean hasMediaDynamicPolicy = mDeviceBroker.hasMediaDynamicPolicy();
+        if (((device == musicDevice) || inCommunication)
+                && singleAudioDeviceType
+                && !hasMediaDynamicPolicy
                 && (musicDevice != AudioSystem.DEVICE_OUT_REMOTE_SUBMIX)) {
             if (!mAudioSystem.isStreamActive(AudioSystem.STREAM_MUSIC, 0 /*not looking in past*/)
                     && !mDeviceBroker.hasAudioFocusUsers()) {
@@ -1291,6 +1342,12 @@ public class AudioDeviceInventory {
             }
             mDeviceBroker.postBroadcastBecomingNoisy();
             delay = SystemProperties.getInt("audio.sys.noisy.broadcast.delay", 700);
+        } else {
+            Log.i(TAG, "not sending NOISY: device:0x" + Integer.toHexString(device)
+                    + " musicDevice:0x" + Integer.toHexString(musicDevice)
+                    + " inComm:" + inCommunication
+                    + " mediaPolicy:" + hasMediaDynamicPolicy
+                    + " singleDevice:" + singleAudioDeviceType);
         }
 
         mmi.set(MediaMetrics.Property.DELAY_MS, delay).record();

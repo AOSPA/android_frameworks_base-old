@@ -27,8 +27,8 @@ import android.os.Build;
 import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.AttributeSet;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
-import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -45,6 +45,8 @@ import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.TransformableView;
+import com.android.systemui.statusbar.notification.FeedbackIcon;
+import com.android.systemui.statusbar.notification.NotificationFadeAware;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManager;
@@ -59,6 +61,7 @@ import com.android.systemui.statusbar.policy.SmartReplyConstants;
 import com.android.systemui.statusbar.policy.SmartReplyStateInflaterKt;
 import com.android.systemui.statusbar.policy.SmartReplyView;
 import com.android.systemui.statusbar.policy.dagger.RemoteInputViewSubcomponent;
+import com.android.systemui.util.Compile;
 import com.android.systemui.wmshell.BubblesManager;
 
 import java.io.FileDescriptor;
@@ -72,10 +75,10 @@ import java.util.List;
  * expanded and heads up layout. This class is responsible for clipping the content and and
  * switching between the expanded, contracted and the heads up view depending on its clipped size.
  */
-public class NotificationContentView extends FrameLayout {
+public class NotificationContentView extends FrameLayout implements NotificationFadeAware {
 
     private static final String TAG = "NotificationContentView";
-    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean DEBUG = Compile.IS_DEBUG && Log.isLoggable(TAG, Log.DEBUG);
     public static final int VISIBLE_TYPE_CONTRACTED = 0;
     public static final int VISIBLE_TYPE_EXPANDED = 1;
     public static final int VISIBLE_TYPE_HEADSUP = 2;
@@ -1654,15 +1657,16 @@ public class NotificationContentView extends FrameLayout {
         return null;
     }
 
-    public void showFeedbackIcon(boolean show, Pair<Integer, Integer> resIds) {
+    /** Shows the given feedback icon, or hides the icon if null. */
+    public void setFeedbackIcon(@Nullable FeedbackIcon icon) {
         if (mContractedChild != null) {
-            mContractedWrapper.showFeedbackIcon(show, resIds);
+            mContractedWrapper.setFeedbackIcon(icon);
         }
         if (mExpandedChild != null) {
-            mExpandedWrapper.showFeedbackIcon(show, resIds);
+            mExpandedWrapper.setFeedbackIcon(icon);
         }
         if (mHeadsUpChild != null) {
-            mHeadsUpWrapper.showFeedbackIcon(show, resIds);
+            mHeadsUpWrapper.setFeedbackIcon(icon);
         }
     }
 
@@ -2005,6 +2009,22 @@ public class NotificationContentView extends FrameLayout {
         pw.println();
     }
 
+    /** Add any existing SmartReplyView to the dump */
+    public void dumpSmartReplies(IndentingPrintWriter pw) {
+        if (mHeadsUpSmartReplyView != null) {
+            pw.println("HeadsUp SmartReplyView:");
+            pw.increaseIndent();
+            mHeadsUpSmartReplyView.dump(pw);
+            pw.decreaseIndent();
+        }
+        if (mExpandedSmartReplyView != null) {
+            pw.println("Expanded SmartReplyView:");
+            pw.increaseIndent();
+            mExpandedSmartReplyView.dump(pw);
+            pw.decreaseIndent();
+        }
+    }
+
     public RemoteInputView getExpandedRemoteInput() {
         return mExpandedRemoteInput;
     }
@@ -2026,6 +2046,41 @@ public class NotificationContentView extends FrameLayout {
             return visibleWrapper.getOriginalIconColor();
         }
         return Notification.COLOR_INVALID;
+    }
+
+    /**
+     * Delegate the faded state to the notification content views which actually
+     * need to have overlapping contents render precisely.
+     */
+    @Override
+    public void setNotificationFaded(boolean faded) {
+        if (mContractedWrapper != null) {
+            mContractedWrapper.setNotificationFaded(faded);
+        }
+        if (mHeadsUpWrapper != null) {
+            mHeadsUpWrapper.setNotificationFaded(faded);
+        }
+        if (mExpandedWrapper != null) {
+            mExpandedWrapper.setNotificationFaded(faded);
+        }
+        if (mSingleLineView != null) {
+            mSingleLineView.setNotificationFaded(faded);
+        }
+    }
+
+    /**
+     * @return true if a visible view has a remote input active, as this requires that the entire
+     * row report that it has overlapping rendering.
+     */
+    public boolean requireRowToHaveOverlappingRendering() {
+        // This inexpensive check is done on both states to avoid state invalidating the result.
+        if (mHeadsUpRemoteInput != null && mHeadsUpRemoteInput.isActive()) {
+            return true;
+        }
+        if (mExpandedRemoteInput != null && mExpandedRemoteInput.isActive()) {
+            return true;
+        }
+        return false;
     }
 
     public void setRemoteInputViewSubcomponentFactory(RemoteInputViewSubcomponent.Factory factory) {

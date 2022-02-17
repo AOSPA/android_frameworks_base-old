@@ -586,8 +586,10 @@ public final class DisplayCutout {
      * Returns a list of {@code Rect}s, each of which is the bounding rectangle for a non-functional
      * area on the display.
      *
-     * There will be at most one non-functional area per short edge of the device, and none on
-     * the long edges.
+     * There will be at most one non-functional area per edge of the device.
+     *
+     * <p>Note that there is no bounding rectangle for waterfall cutout since it just represents the
+     * curved areas of the display but not the non-functional areas.</p>
      *
      * @return a list of bounding {@code Rect}s, one for each display cutout area. No empty Rect is
      * returned.
@@ -608,8 +610,10 @@ public final class DisplayCutout {
      * functional area on the display. Ordinal value of BoundPosition is used as an index of
      * the array.
      *
-     * There will be at most one non-functional area per short edge of the device, and none on
-     * the long edges.
+     * There will be at most one non-functional area per edge of the device.
+     *
+     * <p>Note that there is no bounding rectangle for waterfall cutout since it just represents the
+     * curved areas of the display but not the non-functional areas.</p>
      *
      * @return an array of bounding {@code Rect}s, one for each display cutout area. This might
      * contain ZERO_RECT, which means there is no cutout area at the position.
@@ -1248,6 +1252,121 @@ public final class DisplayCutout {
         @Override
         public String toString() {
             return String.valueOf(mInner);
+        }
+    }
+
+    /**
+     * A Builder class to construct a DisplayCutout instance.
+     *
+     * <p>Note that this is only for tests purpose. For production code, developers should always
+     * use a {@link DisplayCutout} obtained from the system.</p>
+     */
+    public static final class Builder {
+        private Insets mSafeInsets = Insets.NONE;
+        private Insets mWaterfallInsets = Insets.NONE;
+        private Path mCutoutPath;
+        private final Rect mBoundingRectLeft = new Rect();
+        private final Rect mBoundingRectTop = new Rect();
+        private final Rect mBoundingRectRight = new Rect();
+        private final Rect mBoundingRectBottom = new Rect();
+
+        /**
+         * Begin building a DisplayCutout.
+         */
+        public Builder() {
+        }
+
+        /**
+         * Construct a new {@link DisplayCutout} with the set parameters.
+         */
+        @NonNull
+        public DisplayCutout build() {
+            final CutoutPathParserInfo info;
+            if (mCutoutPath != null) {
+                // Create a fake CutoutPathParserInfo and set it to sCachedCutoutPathParserInfo so
+                // that when getCutoutPath() is called, it will return the cached Path.
+                info = new CutoutPathParserInfo(0, 0, 0, "test", 0, 1f);
+                synchronized (CACHE_LOCK) {
+                    DisplayCutout.sCachedCutoutPathParserInfo = info;
+                    DisplayCutout.sCachedCutoutPath = mCutoutPath;
+                }
+            } else {
+                info = null;
+            }
+            return new DisplayCutout(mSafeInsets.toRect(), mWaterfallInsets, mBoundingRectLeft,
+                    mBoundingRectTop, mBoundingRectRight, mBoundingRectBottom, info, false);
+        }
+
+        /**
+         * Set the safe insets. If not set, the default value is {@link Insets#NONE}.
+         */
+        @SuppressWarnings("MissingGetterMatchingBuilder")
+        @NonNull
+        public Builder setSafeInsets(@NonNull Insets safeInsets) {
+            mSafeInsets = safeInsets;
+            return this;
+        }
+
+        /**
+         * Set the waterfall insets of the DisplayCutout. If not set, the default value is
+         * {@link Insets#NONE}
+         */
+        @NonNull
+        public Builder setWaterfallInsets(@NonNull Insets waterfallInsets) {
+            mWaterfallInsets = waterfallInsets;
+            return this;
+        }
+
+        /**
+         * Set a bounding rectangle for a non-functional area on the display which is located on
+         * the left of the screen. If not set, the default value is an empty rectangle.
+         */
+        @NonNull
+        public Builder setBoundingRectLeft(@NonNull Rect boundingRectLeft) {
+            mBoundingRectLeft.set(boundingRectLeft);
+            return this;
+        }
+
+        /**
+         * Set a bounding rectangle for a non-functional area on the display which is located on
+         * the top of the screen. If not set, the default value is an empty rectangle.
+         */
+        @NonNull
+        public Builder setBoundingRectTop(@NonNull Rect boundingRectTop) {
+            mBoundingRectTop.set(boundingRectTop);
+            return this;
+        }
+
+        /**
+         * Set a bounding rectangle for a non-functional area on the display which is located on
+         * the right of the screen. If not set, the default value is an empty rectangle.
+         */
+        @NonNull
+        public Builder setBoundingRectRight(@NonNull Rect boundingRectRight) {
+            mBoundingRectRight.set(boundingRectRight);
+            return this;
+        }
+
+        /**
+         * Set a bounding rectangle for a non-functional area on the display which is located on
+         * the bottom of the screen. If not set, the default value is an empty rectangle.
+         */
+        @NonNull
+        public Builder setBoundingRectBottom(@NonNull Rect boundingRectBottom) {
+            mBoundingRectBottom.set(boundingRectBottom);
+            return this;
+        }
+
+        /**
+         * Set the cutout {@link Path}.
+         *
+         * Note that not support creating/testing multiple display cutouts with setCutoutPath() in
+         * parallel.
+         */
+        @NonNull
+        public Builder setCutoutPath(@NonNull Path cutoutPath) {
+            mCutoutPath = cutoutPath;
+            return this;
         }
     }
 }

@@ -113,7 +113,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PermissionInfo;
 import android.content.pm.UserInfo;
-import android.content.pm.parsing.component.ParsedAttribution;
+import com.android.server.pm.pkg.component.ParsedAttribution;
 import android.database.ContentObserver;
 import android.hardware.camera2.CameraDevice.CAMERA_AUDIO_RESTRICTION;
 import android.net.Uri;
@@ -1314,6 +1314,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                                     event.getAttributionFlags(), event.getAttributionChainId());
                         }
 
+                        events = isRunning ? mInProgressEvents : mPausedInProgressEvents;
                         InProgressStartOpEvent newEvent = events.get(binders.get(i));
                         if (newEvent != null) {
                             newEvent.numUnfinishedStarts += numPreviousUnfinishedStarts - 1;

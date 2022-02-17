@@ -118,11 +118,9 @@ public class ApnSetting implements Parcelable {
     public static final int TYPE_VSIM = 1 << 12;  // TODO: Refer to ApnTypes.VSIM
     /** APN type for BIP. */
     public static final int TYPE_BIP = 1 << 13;   // TODO: Refer to ApnTypes.BIP
-    /**
-     * APN type for ENTERPRISE.
-     * @hide
-     */
-    public static final int TYPE_ENTERPRISE = TYPE_BIP << 1;
+    /** APN type for ENTERPRISE. */
+    public static final int TYPE_ENTERPRISE = 1 << 14; //TODO: In future should be referenced from
+    // hardware.interfaces.radio.data.ApnTypes
 
     /** @hide */
     @IntDef(flag = true, prefix = {"TYPE_"}, value = {
@@ -328,8 +326,6 @@ public class ApnSetting implements Parcelable {
     @SystemApi
     public static final String TYPE_XCAP_STRING = "xcap";
 
-
-
     /**
      * APN type for Virtual SIM service.
      *
@@ -357,6 +353,7 @@ public class ApnSetting implements Parcelable {
      * modem components or carriers. Non-system apps should use the integer variants instead.
      * @hide
      */
+    @SystemApi
     public static final String TYPE_ENTERPRISE_STRING = "enterprise";
 
 
@@ -506,34 +503,28 @@ public class ApnSetting implements Parcelable {
     private final int mRoamingProtocol;
     private final int mMtuV4;
     private final int mMtuV6;
-
     private final boolean mCarrierEnabled;
-
-    private final int mNetworkTypeBitmask;
-
+    private final @TelephonyManager.NetworkTypeBitMask int mNetworkTypeBitmask;
+    private final @TelephonyManager.NetworkTypeBitMask long mLingeringNetworkTypeBitmask;
     private final int mProfileId;
-
     private final boolean mPersistent;
     private final int mMaxConns;
     private final int mWaitTime;
     private final int mMaxConnsTime;
-
     private final int mMvnoType;
     private final String mMvnoMatchData;
-
     private final int mApnSetId;
-
     private boolean mPermanentFailed = false;
     private final int mCarrierId;
-
     private final int mSkip464Xlat;
+    private final boolean mAlwaysOn;
 
     /**
-     * Returns the MTU size of the IPv4 mobile interface to which the APN connected. Note this value
-     * is used only if MTU size is not provided in {@link DataCallResponse}.
+     * Returns the default MTU (Maximum Transmission Unit) size in bytes of the IPv4 routes brought
+     * up by this APN setting. Note this value will only be used when MTU size is not provided
+     * in {@link DataCallResponse#getMtuV4()} during network bring up.
      *
-     * @return the MTU size of the APN
-     * @hide
+     * @return the MTU size in bytes of the route.
      */
     public int getMtuV4() {
         return mMtuV4;
@@ -541,10 +532,10 @@ public class ApnSetting implements Parcelable {
 
     /**
      * Returns the MTU size of the IPv6 mobile interface to which the APN connected. Note this value
-     * is used only if MTU size is not provided in {@link DataCallResponse}.
+     * will only be used when MTU size is not provided in {@link DataCallResponse#getMtuV6()}
+     * during network bring up.
      *
-     * @return the MTU size of the APN
-     * @hide
+     * @return the MTU size in bytes of the route.
      */
     public int getMtuV6() {
         return mMtuV6;
@@ -843,17 +834,34 @@ public class ApnSetting implements Parcelable {
     }
 
     /**
-     * Returns a bitmask describing the Radio Technologies(Network Types) which this APN may use.
+     * Returns a bitmask describing the Radio Technologies (Network Types) which this APN may use.
      *
      * NetworkType bitmask is calculated from NETWORK_TYPE defined in {@link TelephonyManager}.
      *
      * Examples of Network Types include {@link TelephonyManager#NETWORK_TYPE_UNKNOWN},
      * {@link TelephonyManager#NETWORK_TYPE_GPRS}, {@link TelephonyManager#NETWORK_TYPE_EDGE}.
      *
-     * @return a bitmask describing the Radio Technologies(Network Types)
+     * @return a bitmask describing the Radio Technologies (Network Types) or 0 if it is undefined.
      */
     public int getNetworkTypeBitmask() {
         return mNetworkTypeBitmask;
+    }
+
+    /**
+     * Returns a bitmask describing the Radio Technologies (Network Types) that should not be torn
+     * down if it exists or brought up if it already exists for this APN.
+     *
+     * NetworkType bitmask is calculated from NETWORK_TYPE defined in {@link TelephonyManager}.
+     *
+     * Examples of Network Types include {@link TelephonyManager#NETWORK_TYPE_UNKNOWN},
+     * {@link TelephonyManager#NETWORK_TYPE_GPRS}, {@link TelephonyManager#NETWORK_TYPE_EDGE}.
+     *
+     * @return a bitmask describing the Radio Technologies (Network Types) that should linger
+     *         or 0 if it is undefined.
+     * @hide
+     */
+    public @TelephonyManager.NetworkTypeBitMask long getLingeringNetworkTypeBitmask() {
+        return mLingeringNetworkTypeBitmask;
     }
 
     /**
@@ -888,6 +896,18 @@ public class ApnSetting implements Parcelable {
         return mSkip464Xlat;
     }
 
+    /**
+     * Returns whether User Plane resources have to be activated during every transition from
+     * CM-IDLE mode to CM-CONNECTED state for this APN
+     * See 3GPP TS 23.501 section 5.6.13
+     *
+     * @return True if the PDU session for this APN should always be on and false otherwise
+     * @hide
+     */
+    public boolean isAlwaysOn() {
+        return mAlwaysOn;
+    }
+
     private ApnSetting(Builder builder) {
         this.mEntryName = builder.mEntryName;
         this.mApnName = builder.mApnName;
@@ -912,6 +932,7 @@ public class ApnSetting implements Parcelable {
         this.mMtuV6 = builder.mMtuV6;
         this.mCarrierEnabled = builder.mCarrierEnabled;
         this.mNetworkTypeBitmask = builder.mNetworkTypeBitmask;
+        this.mLingeringNetworkTypeBitmask = builder.mLingeringNetworkTypeBitmask;
         this.mProfileId = builder.mProfileId;
         this.mPersistent = builder.mModemCognitive;
         this.mMaxConns = builder.mMaxConns;
@@ -922,6 +943,7 @@ public class ApnSetting implements Parcelable {
         this.mApnSetId = builder.mApnSetId;
         this.mCarrierId = builder.mCarrierId;
         this.mSkip464Xlat = builder.mSkip464Xlat;
+        this.mAlwaysOn = builder.mAlwaysOn;
     }
 
     /**
@@ -937,6 +959,10 @@ public class ApnSetting implements Parcelable {
                     Telephony.Carriers.BEARER_BITMASK));
             networkTypeBitmask =
                 ServiceState.convertBearerBitmaskToNetworkTypeBitmask(bearerBitmask);
+        }
+        int mtuV4 = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Carriers.MTU_V4));
+        if (mtuV4 == -1) {
+            mtuV4 = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Carriers.MTU));
         }
 
         return new Builder()
@@ -972,6 +998,8 @@ public class ApnSetting implements Parcelable {
                 .setCarrierEnabled(cursor.getInt(cursor.getColumnIndexOrThrow(
                         Telephony.Carriers.CARRIER_ENABLED)) == 1)
                 .setNetworkTypeBitmask(networkTypeBitmask)
+                .setLingeringNetworkTypeBitmask(cursor.getInt(cursor.getColumnIndexOrThrow(
+                        Carriers.LINGERING_NETWORK_TYPE_BITMASK)))
                 .setProfileId(cursor.getInt(
                         cursor.getColumnIndexOrThrow(Telephony.Carriers.PROFILE_ID)))
                 .setModemCognitive(cursor.getInt(cursor.getColumnIndexOrThrow(
@@ -982,8 +1010,8 @@ public class ApnSetting implements Parcelable {
                         cursor.getColumnIndexOrThrow(Telephony.Carriers.WAIT_TIME_RETRY)))
                 .setMaxConnsTime(cursor.getInt(cursor.getColumnIndexOrThrow(
                         Telephony.Carriers.TIME_LIMIT_FOR_MAX_CONNECTIONS)))
-                .setMtuV4(cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Carriers.MTU)))
-                .setMtuV6(UNSET_MTU) // TODO: Add corresponding support in telephony provider
+                .setMtuV4(mtuV4)
+                .setMtuV6(cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Carriers.MTU_V6)))
                 .setMvnoType(getMvnoTypeIntFromString(
                         cursor.getString(cursor.getColumnIndexOrThrow(
                                 Telephony.Carriers.MVNO_TYPE))))
@@ -994,6 +1022,7 @@ public class ApnSetting implements Parcelable {
                 .setCarrierId(cursor.getInt(
                         cursor.getColumnIndexOrThrow(Telephony.Carriers.CARRIER_ID)))
                 .setSkip464Xlat(cursor.getInt(cursor.getColumnIndexOrThrow(Carriers.SKIP_464XLAT)))
+                .setAlwaysOn(cursor.getInt(cursor.getColumnIndexOrThrow(Carriers.ALWAYS_ON)) == 1)
                 .buildWithoutCheck();
     }
 
@@ -1019,6 +1048,7 @@ public class ApnSetting implements Parcelable {
                 .setRoamingProtocol(apn.mRoamingProtocol)
                 .setCarrierEnabled(apn.mCarrierEnabled)
                 .setNetworkTypeBitmask(apn.mNetworkTypeBitmask)
+                .setLingeringNetworkTypeBitmask(apn.mLingeringNetworkTypeBitmask)
                 .setProfileId(apn.mProfileId)
                 .setModemCognitive(apn.mPersistent)
                 .setMaxConns(apn.mMaxConns)
@@ -1031,6 +1061,7 @@ public class ApnSetting implements Parcelable {
                 .setApnSetId(apn.mApnSetId)
                 .setCarrierId(apn.mCarrierId)
                 .setSkip464Xlat(apn.mSkip464Xlat)
+                .setAlwaysOn(apn.mAlwaysOn)
                 .buildWithoutCheck();
     }
 
@@ -1069,9 +1100,11 @@ public class ApnSetting implements Parcelable {
         sb.append(", ").append(mMvnoMatchData);
         sb.append(", ").append(mPermanentFailed);
         sb.append(", ").append(mNetworkTypeBitmask);
+        sb.append(", ").append(mLingeringNetworkTypeBitmask);
         sb.append(", ").append(mApnSetId);
         sb.append(", ").append(mCarrierId);
         sb.append(", ").append(mSkip464Xlat);
+        sb.append(", ").append(mAlwaysOn);
         return sb.toString();
     }
 
@@ -1136,8 +1169,9 @@ public class ApnSetting implements Parcelable {
         return Objects.hash(mApnName, mProxyAddress, mProxyPort, mMmsc, mMmsProxyAddress,
                 mMmsProxyPort, mUser, mPassword, mAuthType, mApnTypeBitmask, mId, mOperatorNumeric,
                 mProtocol, mRoamingProtocol, mMtuV4, mMtuV6, mCarrierEnabled, mNetworkTypeBitmask,
-                mProfileId, mPersistent, mMaxConns, mWaitTime, mMaxConnsTime, mMvnoType,
-                mMvnoMatchData, mApnSetId, mCarrierId, mSkip464Xlat);
+                mLingeringNetworkTypeBitmask, mProfileId, mPersistent, mMaxConns, mWaitTime,
+                mMaxConnsTime, mMvnoType, mMvnoMatchData, mApnSetId, mCarrierId, mSkip464Xlat,
+                mAlwaysOn);
     }
 
     @Override
@@ -1174,9 +1208,11 @@ public class ApnSetting implements Parcelable {
                 && Objects.equals(mMvnoType, other.mMvnoType)
                 && Objects.equals(mMvnoMatchData, other.mMvnoMatchData)
                 && Objects.equals(mNetworkTypeBitmask, other.mNetworkTypeBitmask)
+                && Objects.equals(mLingeringNetworkTypeBitmask, other.mLingeringNetworkTypeBitmask)
                 && Objects.equals(mApnSetId, other.mApnSetId)
                 && Objects.equals(mCarrierId, other.mCarrierId)
-                && Objects.equals(mSkip464Xlat, other.mSkip464Xlat);
+                && Objects.equals(mSkip464Xlat, other.mSkip464Xlat)
+                && Objects.equals(mAlwaysOn, other.mAlwaysOn);
     }
 
     /**
@@ -1210,6 +1246,7 @@ public class ApnSetting implements Parcelable {
                 && Objects.equals(mPassword, other.mPassword)
                 && Objects.equals(mAuthType, other.mAuthType)
                 && Objects.equals(mApnTypeBitmask, other.mApnTypeBitmask)
+                && Objects.equals(mLingeringNetworkTypeBitmask, other.mLingeringNetworkTypeBitmask)
                 && (isDataRoaming || Objects.equals(mProtocol, other.mProtocol))
                 && (!isDataRoaming || Objects.equals(mRoamingProtocol, other.mRoamingProtocol))
                 && Objects.equals(mCarrierEnabled, other.mCarrierEnabled)
@@ -1224,7 +1261,8 @@ public class ApnSetting implements Parcelable {
                 && Objects.equals(mMvnoMatchData, other.mMvnoMatchData)
                 && Objects.equals(mApnSetId, other.mApnSetId)
                 && Objects.equals(mCarrierId, other.mCarrierId)
-                && Objects.equals(mSkip464Xlat, other.mSkip464Xlat);
+                && Objects.equals(mSkip464Xlat, other.mSkip464Xlat)
+                && Objects.equals(mAlwaysOn, other.mAlwaysOn);
     }
 
     /**
@@ -1304,9 +1342,13 @@ public class ApnSetting implements Parcelable {
         apnValue.put(Telephony.Carriers.CARRIER_ENABLED, mCarrierEnabled);
         apnValue.put(Telephony.Carriers.MVNO_TYPE, getMvnoTypeStringFromInt(mMvnoType));
         apnValue.put(Telephony.Carriers.NETWORK_TYPE_BITMASK, mNetworkTypeBitmask);
+        apnValue.put(Telephony.Carriers.LINGERING_NETWORK_TYPE_BITMASK,
+                mLingeringNetworkTypeBitmask);
+        apnValue.put(Telephony.Carriers.MTU_V4, mMtuV4);
+        apnValue.put(Telephony.Carriers.MTU_V6, mMtuV6);
         apnValue.put(Telephony.Carriers.CARRIER_ID, mCarrierId);
         apnValue.put(Telephony.Carriers.SKIP_464XLAT, mSkip464Xlat);
-
+        apnValue.put(Telephony.Carriers.ALWAYS_ON, mAlwaysOn);
         return apnValue;
     }
 
@@ -1510,6 +1552,31 @@ public class ApnSetting implements Parcelable {
         return ServiceState.bitmaskHasTech(mNetworkTypeBitmask, networkType);
     }
 
+    /**
+     * Check if this APN setting can support the given lingering network
+     *
+     * @param networkType The lingering network type
+     * @return {@code true} if this APN setting can support the given lingering network.
+     *
+     * @hide
+     */
+    public boolean canSupportLingeringNetworkType(@NetworkType int networkType) {
+        if (networkType == 0) {
+            return canSupportNetworkType(networkType);
+        }
+        // Do a special checking for GSM. In reality, GSM is a voice only network type and can never
+        // be used for data. We allow it here because in some DSDS corner cases, on the non-DDS
+        // sub, modem reports data rat unknown. In that case if voice is GSM and this APN supports
+        // GPRS or EDGE, this APN setting should be selected.
+        if (networkType == TelephonyManager.NETWORK_TYPE_GSM
+                && (mLingeringNetworkTypeBitmask & (TelephonyManager.NETWORK_TYPE_BITMASK_GPRS
+                | TelephonyManager.NETWORK_TYPE_BITMASK_EDGE)) != 0) {
+            return true;
+        }
+
+        return ServiceState.bitmaskHasTech((int) mLingeringNetworkTypeBitmask, networkType);
+    }
+
     // Implement Parcelable.
     @Override
     /** @hide */
@@ -1537,6 +1604,7 @@ public class ApnSetting implements Parcelable {
         dest.writeInt(mRoamingProtocol);
         dest.writeBoolean(mCarrierEnabled);
         dest.writeInt(mNetworkTypeBitmask);
+        dest.writeLong(mLingeringNetworkTypeBitmask);
         dest.writeInt(mProfileId);
         dest.writeBoolean(mPersistent);
         dest.writeInt(mMaxConns);
@@ -1549,6 +1617,7 @@ public class ApnSetting implements Parcelable {
         dest.writeInt(mApnSetId);
         dest.writeInt(mCarrierId);
         dest.writeInt(mSkip464Xlat);
+        dest.writeBoolean(mAlwaysOn);
     }
 
     private static ApnSetting readFromParcel(Parcel in) {
@@ -1570,6 +1639,7 @@ public class ApnSetting implements Parcelable {
                 .setRoamingProtocol(in.readInt())
                 .setCarrierEnabled(in.readBoolean())
                 .setNetworkTypeBitmask(in.readInt())
+                .setLingeringNetworkTypeBitmask(in.readLong())
                 .setProfileId(in.readInt())
                 .setModemCognitive(in.readBoolean())
                 .setMaxConns(in.readInt())
@@ -1582,6 +1652,7 @@ public class ApnSetting implements Parcelable {
                 .setApnSetId(in.readInt())
                 .setCarrierId(in.readInt())
                 .setSkip464Xlat(in.readInt())
+                .setAlwaysOn(in.readBoolean())
                 .buildWithoutCheck();
     }
 
@@ -1649,7 +1720,8 @@ public class ApnSetting implements Parcelable {
         private int mRoamingProtocol = UNSPECIFIED_INT;
         private int mMtuV4;
         private int mMtuV6;
-        private int mNetworkTypeBitmask;
+        private @TelephonyManager.NetworkTypeBitMask int mNetworkTypeBitmask;
+        private @TelephonyManager.NetworkTypeBitMask long mLingeringNetworkTypeBitmask;
         private boolean mCarrierEnabled;
         private int mProfileId;
         private boolean mModemCognitive;
@@ -1661,6 +1733,7 @@ public class ApnSetting implements Parcelable {
         private int mApnSetId;
         private int mCarrierId = TelephonyManager.UNKNOWN_CARRIER_ID;
         private int mSkip464Xlat = Carriers.SKIP_464XLAT_DEFAULT;
+        private boolean mAlwaysOn;
 
         /**
          * Default constructor for Builder.
@@ -1679,25 +1752,25 @@ public class ApnSetting implements Parcelable {
         }
 
         /**
-         * Set the MTU size of the IPv4 mobile interface to which the APN connected. Note this value
-         * is used only if MTU size is not provided in {@link DataCallResponse}.
+         * Set the default MTU (Maximum Transmission Unit) size in bytes of the IPv4 routes brought
+         * up by this APN setting. Note this value will only be used when MTU size is not provided
+         * in {@link DataCallResponse#getMtuV4()} during network bring up.
          *
-         * @param mtuV4 the MTU size to set for the APN
-         * @hide
+         * @param mtuV4 the MTU size in bytes of the route.
          */
-        public Builder setMtuV4(int mtuV4) {
+        public @NonNull Builder setMtuV4(int mtuV4) {
             this.mMtuV4 = mtuV4;
             return this;
         }
 
         /**
-         * Set the MTU size of the IPv6 mobile interface to which the APN connected. Note this value
-         * is used only if MTU size is not provided in {@link DataCallResponse}.
+         * Set the default MTU (Maximum Transmission Unit) size in bytes of the IPv6 routes brought
+         * up by this APN setting. Note this value will only be used when MTU size is not provided
+         * in {@link DataCallResponse#getMtuV6()} during network bring up.
          *
-         * @param mtuV6 the MTU size to set for the APN
-         * @hide
+         * @param mtuV6 the MTU size in bytes of the route.
          */
-        public Builder setMtuV6(int mtuV6) {
+        public @NonNull Builder setMtuV6(int mtuV6) {
             this.mMtuV6 = mtuV6;
             return this;
         }
@@ -1705,12 +1778,22 @@ public class ApnSetting implements Parcelable {
         /**
          * Sets the profile id to which the APN saved in modem.
          *
-         * @param profileId the profile id to set for the APN
-         * @hide
+         * @param profileId the profile id to set for the APN.
          */
-        public Builder setProfileId(int profileId) {
+        public @NonNull Builder setProfileId(int profileId) {
             this.mProfileId = profileId;
             return this;
+        }
+
+        /**
+         * Set if the APN setting should be persistent/non-persistent in modem.
+         *
+         * @param isPersistent {@code true} if this APN setting should be persistent/non-persistent
+         * in modem.
+         * @return The same instance of the builder.
+         */
+        public @NonNull Builder setPersistent(boolean isPersistent) {
+            return setModemCognitive(isPersistent);
         }
 
         /**
@@ -2012,6 +2095,19 @@ public class ApnSetting implements Parcelable {
         }
 
         /**
+         * Sets lingering Radio Technology (Network Type) for this APN.
+         *
+         * @param lingeringNetworkTypeBitmask the Radio Technology (Network Type) that should linger
+         * @hide
+         */
+        @NonNull
+        public Builder setLingeringNetworkTypeBitmask(@TelephonyManager.NetworkTypeBitMask
+                long lingeringNetworkTypeBitmask) {
+            this.mLingeringNetworkTypeBitmask = lingeringNetworkTypeBitmask;
+            return this;
+        }
+
+        /**
          * Sets the MVNO match type for this APN.
          *
          * @param mvnoType the MVNO match type to set for this APN
@@ -2044,6 +2140,18 @@ public class ApnSetting implements Parcelable {
          */
         public Builder setSkip464Xlat(@Skip464XlatStatus int skip464xlat) {
             this.mSkip464Xlat = skip464xlat;
+            return this;
+        }
+
+        /**
+         * Sets whether the PDU session brought up by this APN should always be on.
+         * See 3GPP TS 23.501 section 5.6.13
+         *
+         * @param alwaysOn the always on status to set for this APN
+         * @hide
+         */
+        public Builder setAlwaysOn(boolean alwaysOn) {
+            this.mAlwaysOn = alwaysOn;
             return this;
         }
 

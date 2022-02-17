@@ -19,6 +19,7 @@ package com.android.server.vibrator;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -118,8 +119,7 @@ public class VibratorManagerServiceTest {
     private static final VibrationAttributes ALARM_ATTRS =
             new VibrationAttributes.Builder().setUsage(VibrationAttributes.USAGE_ALARM).build();
     private static final VibrationAttributes HAPTIC_FEEDBACK_ATTRS =
-            new VibrationAttributes.Builder().setUsage(
-                    VibrationAttributes.USAGE_TOUCH).build();
+            new VibrationAttributes.Builder().setUsage(VibrationAttributes.USAGE_TOUCH).build();
     private static final VibrationAttributes NOTIFICATION_ATTRS =
             new VibrationAttributes.Builder().setUsage(
                     VibrationAttributes.USAGE_NOTIFICATION).build();
@@ -127,15 +127,23 @@ public class VibratorManagerServiceTest {
             new VibrationAttributes.Builder().setUsage(
                     VibrationAttributes.USAGE_RINGTONE).build();
 
-    @Rule public MockitoRule rule = MockitoJUnit.rule();
-    @Rule public FakeSettingsProviderRule mSettingsProviderRule = FakeSettingsProvider.rule();
+    @Rule
+    public MockitoRule rule = MockitoJUnit.rule();
+    @Rule
+    public FakeSettingsProviderRule mSettingsProviderRule = FakeSettingsProvider.rule();
 
-    @Mock private VibratorManagerService.NativeWrapper mNativeWrapperMock;
-    @Mock private PackageManagerInternal mPackageManagerInternalMock;
-    @Mock private PowerManagerInternal mPowerManagerInternalMock;
-    @Mock private PowerSaveState mPowerSaveStateMock;
-    @Mock private AppOpsManager mAppOpsManagerMock;
-    @Mock private IInputManager mIInputManagerMock;
+    @Mock
+    private VibratorManagerService.NativeWrapper mNativeWrapperMock;
+    @Mock
+    private PackageManagerInternal mPackageManagerInternalMock;
+    @Mock
+    private PowerManagerInternal mPowerManagerInternalMock;
+    @Mock
+    private PowerSaveState mPowerSaveStateMock;
+    @Mock
+    private AppOpsManager mAppOpsManagerMock;
+    @Mock
+    private IInputManager mIInputManagerMock;
 
     private final Map<Integer, FakeVibratorControllerProvider> mVibratorProviders = new HashMap<>();
 
@@ -148,12 +156,13 @@ public class VibratorManagerServiceTest {
     @Before
     public void setUp() throws Exception {
         mTestLooper = new TestLooper();
-        mVibrator = new FakeVibrator();
         mContextSpy = spy(new ContextWrapper(InstrumentationRegistry.getContext()));
         InputManager inputManager = InputManager.resetInstance(mIInputManagerMock);
 
         ContentResolver contentResolver = mSettingsProviderRule.mockContentResolver(mContextSpy);
         when(mContextSpy.getContentResolver()).thenReturn(contentResolver);
+
+        mVibrator = new FakeVibrator(mContextSpy);
         when(mContextSpy.getSystemService(eq(Context.VIBRATOR_SERVICE))).thenReturn(mVibrator);
         when(mContextSpy.getSystemService(eq(Context.INPUT_SERVICE))).thenReturn(inputManager);
         when(mContextSpy.getSystemService(Context.APP_OPS_SERVICE)).thenReturn(mAppOpsManagerMock);
@@ -168,7 +177,12 @@ public class VibratorManagerServiceTest {
         }).when(mPowerManagerInternalMock).registerLowPowerModeObserver(any());
 
         setUserSetting(Settings.System.VIBRATE_WHEN_RINGING, 1);
+        setUserSetting(Settings.System.HAPTIC_FEEDBACK_ENABLED, 1);
+        setUserSetting(Settings.System.ALARM_VIBRATION_INTENSITY,
+                Vibrator.VIBRATION_INTENSITY_MEDIUM);
         setUserSetting(Settings.System.NOTIFICATION_VIBRATION_INTENSITY,
+                Vibrator.VIBRATION_INTENSITY_MEDIUM);
+        setUserSetting(Settings.System.MEDIA_VIBRATION_INTENSITY,
                 Vibrator.VIBRATION_INTENSITY_MEDIUM);
         setUserSetting(Settings.System.RING_VIBRATION_INTENSITY,
                 Vibrator.VIBRATION_INTENSITY_MEDIUM);
@@ -398,6 +412,7 @@ public class VibratorManagerServiceTest {
     @Test
     public void registerVibratorStateListener_multipleVibratorsAreTriggered() throws Exception {
         mockVibrators(0, 1, 2);
+        mVibratorProviders.get(1).setSupportedEffects(VibrationEffect.EFFECT_CLICK);
         VibratorManagerService service = createSystemReadyService();
         IVibratorStateListener[] listeners = new IVibratorStateListener[3];
         for (int i = 0; i < 3; i++) {
@@ -429,7 +444,7 @@ public class VibratorManagerServiceTest {
                 UID, PACKAGE_NAME, 1, effect, ALARM_ATTRS));
 
         PrebakedSegment expected = new PrebakedSegment(
-                VibrationEffect.EFFECT_CLICK, false, VibrationEffect.EFFECT_STRENGTH_STRONG);
+                VibrationEffect.EFFECT_CLICK, false, VibrationEffect.EFFECT_STRENGTH_MEDIUM);
 
         // Only vibrators 1 and 3 have always-on capabilities.
         assertEquals(mVibratorProviders.get(1).getAlwaysOnEffect(1), expected);
@@ -453,10 +468,10 @@ public class VibratorManagerServiceTest {
                 UID, PACKAGE_NAME, 1, effect, ALARM_ATTRS));
 
         PrebakedSegment expectedClick = new PrebakedSegment(
-                VibrationEffect.EFFECT_CLICK, false, VibrationEffect.EFFECT_STRENGTH_STRONG);
+                VibrationEffect.EFFECT_CLICK, false, VibrationEffect.EFFECT_STRENGTH_MEDIUM);
 
         PrebakedSegment expectedTick = new PrebakedSegment(
-                VibrationEffect.EFFECT_TICK, false, VibrationEffect.EFFECT_STRENGTH_STRONG);
+                VibrationEffect.EFFECT_TICK, false, VibrationEffect.EFFECT_STRENGTH_MEDIUM);
 
         // Enables click on vibrator 1 and tick on vibrator 2 only.
         assertEquals(mVibratorProviders.get(1).getAlwaysOnEffect(1), expectedClick);
@@ -531,13 +546,12 @@ public class VibratorManagerServiceTest {
     public void vibrate_withRingtone_usesRingtoneSettings() throws Exception {
         mockVibrators(1);
         FakeVibratorControllerProvider fakeVibrator = mVibratorProviders.get(1);
-        mVibrator.setDefaultRingVibrationIntensity(Vibrator.VIBRATION_INTENSITY_MEDIUM);
         fakeVibrator.setSupportedEffects(VibrationEffect.EFFECT_CLICK,
                 VibrationEffect.EFFECT_HEAVY_CLICK, VibrationEffect.EFFECT_DOUBLE_CLICK);
 
         setRingerMode(AudioManager.RINGER_MODE_NORMAL);
         setUserSetting(Settings.System.VIBRATE_WHEN_RINGING, 0);
-        setGlobalSetting(Settings.Global.APPLY_RAMPING_RINGER, 0);
+        setUserSetting(Settings.System.APPLY_RAMPING_RINGER, 0);
         VibratorManagerService service = createSystemReadyService();
         vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_CLICK), RINGTONE_ATTRS);
         // Wait before checking it never played.
@@ -545,14 +559,14 @@ public class VibratorManagerServiceTest {
                 service, /* timeout= */ 50));
 
         setUserSetting(Settings.System.VIBRATE_WHEN_RINGING, 0);
-        setGlobalSetting(Settings.Global.APPLY_RAMPING_RINGER, 1);
+        setUserSetting(Settings.System.APPLY_RAMPING_RINGER, 1);
         service = createSystemReadyService();
         vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_HEAVY_CLICK), RINGTONE_ATTRS);
         assertTrue(waitUntil(s -> fakeVibrator.getEffectSegments().size() == 1,
                 service, TEST_TIMEOUT_MILLIS));
 
         setUserSetting(Settings.System.VIBRATE_WHEN_RINGING, 1);
-        setGlobalSetting(Settings.Global.APPLY_RAMPING_RINGER, 0);
+        setUserSetting(Settings.System.APPLY_RAMPING_RINGER, 0);
         service = createSystemReadyService();
         vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_DOUBLE_CLICK), RINGTONE_ATTRS);
         assertTrue(waitUntil(s -> fakeVibrator.getEffectSegments().size() == 2,
@@ -602,8 +616,8 @@ public class VibratorManagerServiceTest {
         VibrationEffect effect = VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY).build();
-        VibrationAttributes vibrationAttributes = new VibrationAttributes.Builder(
-                audioAttributes, effect).build();
+        VibrationAttributes vibrationAttributes =
+                new VibrationAttributes.Builder(audioAttributes).build();
 
         vibrate(service, effect, vibrationAttributes);
 
@@ -622,7 +636,7 @@ public class VibratorManagerServiceTest {
         vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_CLICK),
                 new VibrationAttributes.Builder().setUsage(
                         VibrationAttributes.USAGE_COMMUNICATION_REQUEST).build());
-        vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_TICK),
+        vibrate(service, VibrationEffect.createOneShot(2000, 200),
                 new VibrationAttributes.Builder().setUsage(
                         VibrationAttributes.USAGE_UNKNOWN).build());
 
@@ -636,10 +650,64 @@ public class VibratorManagerServiceTest {
         inOrderVerifier.verify(mAppOpsManagerMock).checkAudioOpNoThrow(eq(AppOpsManager.OP_VIBRATE),
                 eq(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION), anyInt(), anyString());
         inOrderVerifier.verify(mAppOpsManagerMock).checkAudioOpNoThrow(eq(AppOpsManager.OP_VIBRATE),
-                eq(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST),
+                eq(AudioAttributes.USAGE_VOICE_COMMUNICATION),
                 anyInt(), anyString());
         inOrderVerifier.verify(mAppOpsManagerMock).checkAudioOpNoThrow(eq(AppOpsManager.OP_VIBRATE),
                 eq(AudioAttributes.USAGE_UNKNOWN), anyInt(), anyString());
+    }
+
+    @Test
+    public void vibrate_withAttributesUnknownUsage_usesEffectToIdentifyTouchUsage() {
+        VibratorManagerService service = createSystemReadyService();
+
+        VibrationAttributes unknownAttributes = VibrationAttributes.createForUsage(
+                VibrationAttributes.USAGE_UNKNOWN);
+        vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_CLICK), unknownAttributes);
+        vibrate(service, VibrationEffect.createOneShot(200, 200), unknownAttributes);
+        vibrate(service, VibrationEffect.createWaveform(
+                new long[] { 100, 200, 300 }, new int[] {1, 2, 3}, -1), unknownAttributes);
+        vibrate(service,
+                VibrationEffect.startComposition()
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE)
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_FALL)
+                        .compose(),
+                unknownAttributes);
+
+        verify(mAppOpsManagerMock, times(4))
+                .checkAudioOpNoThrow(eq(AppOpsManager.OP_VIBRATE),
+                        eq(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION), anyInt(), anyString());
+        verify(mAppOpsManagerMock, never())
+                .checkAudioOpNoThrow(eq(AppOpsManager.OP_VIBRATE),
+                        eq(AudioAttributes.USAGE_UNKNOWN), anyInt(), anyString());
+    }
+
+    @Test
+    public void vibrate_withAttributesUnknownUsage_ignoresEffectIfNotHapticFeedbackCandidate() {
+        VibratorManagerService service = createSystemReadyService();
+
+        VibrationAttributes unknownAttributes = VibrationAttributes.createForUsage(
+                VibrationAttributes.USAGE_UNKNOWN);
+        vibrate(service, VibrationEffect.get(VibrationEffect.RINGTONES[0]), unknownAttributes);
+        vibrate(service, VibrationEffect.createOneShot(2000, 200), unknownAttributes);
+        vibrate(service, VibrationEffect.createWaveform(
+                new long[] { 100, 200, 300 }, new int[] {1, 2, 3}, 0), unknownAttributes);
+        vibrate(service,
+                VibrationEffect.startComposition()
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE)
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_FALL)
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_SPIN)
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD)
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK)
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK)
+                        .compose(),
+                unknownAttributes);
+
+        verify(mAppOpsManagerMock, never())
+                .checkAudioOpNoThrow(eq(AppOpsManager.OP_VIBRATE),
+                        eq(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION), anyInt(), anyString());
+        verify(mAppOpsManagerMock, times(4))
+                .checkAudioOpNoThrow(eq(AppOpsManager.OP_VIBRATE),
+                        eq(AudioAttributes.USAGE_UNKNOWN), anyInt(), anyString());
     }
 
     @Test
@@ -658,8 +726,7 @@ public class VibratorManagerServiceTest {
                 service, TEST_TIMEOUT_MILLIS));
 
         vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_CLICK),
-                new VibrationAttributes.Builder().setUsage(
-                        VibrationAttributes.USAGE_TOUCH).build());
+                HAPTIC_FEEDBACK_ATTRS);
 
         // Wait before checking it never played a second effect.
         assertFalse(waitUntil(s -> mVibratorProviders.get(1).getEffectSegments().size() > 1,
@@ -682,8 +749,7 @@ public class VibratorManagerServiceTest {
                 service, TEST_TIMEOUT_MILLIS));
 
         vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_CLICK),
-                new VibrationAttributes.Builder().setUsage(
-                        VibrationAttributes.USAGE_TOUCH).build());
+                HAPTIC_FEEDBACK_ATTRS);
 
         // Wait before checking it never played a second effect.
         assertFalse(waitUntil(s -> mVibratorProviders.get(1).getEffectSegments().size() > 1,
@@ -872,55 +938,67 @@ public class VibratorManagerServiceTest {
 
     @Test
     public void vibrate_withIntensitySettings_appliesSettingsToScaleVibrations() throws Exception {
-        mVibrator.setDefaultNotificationVibrationIntensity(Vibrator.VIBRATION_INTENSITY_LOW);
+        int defaultNotificationIntensity =
+                mVibrator.getDefaultVibrationIntensity(VibrationAttributes.USAGE_NOTIFICATION);
         setUserSetting(Settings.System.NOTIFICATION_VIBRATION_INTENSITY,
-                Vibrator.VIBRATION_INTENSITY_HIGH);
+                defaultNotificationIntensity < Vibrator.VIBRATION_INTENSITY_HIGH
+                        ? defaultNotificationIntensity + 1
+                        : defaultNotificationIntensity);
+
+        int defaultTouchIntensity =
+                mVibrator.getDefaultVibrationIntensity(VibrationAttributes.USAGE_TOUCH);
         setUserSetting(Settings.System.HAPTIC_FEEDBACK_INTENSITY,
-                Vibrator.VIBRATION_INTENSITY_LOW);
-        setUserSetting(Settings.System.RING_VIBRATION_INTENSITY,
-                Vibrator.VIBRATION_INTENSITY_OFF);
+                defaultTouchIntensity > Vibrator.VIBRATION_INTENSITY_LOW
+                        ? defaultTouchIntensity - 1
+                        : defaultTouchIntensity);
+
+        setUserSetting(Settings.System.ALARM_VIBRATION_INTENSITY,
+                mVibrator.getDefaultVibrationIntensity(VibrationAttributes.USAGE_ALARM));
+        setUserSetting(Settings.System.MEDIA_VIBRATION_INTENSITY,
+                Vibrator.VIBRATION_INTENSITY_HIGH);
+        setUserSetting(Settings.System.RING_VIBRATION_INTENSITY, Vibrator.VIBRATION_INTENSITY_OFF);
 
         mockVibrators(1);
         FakeVibratorControllerProvider fakeVibrator = mVibratorProviders.get(1);
         fakeVibrator.setCapabilities(IVibrator.CAP_AMPLITUDE_CONTROL,
                 IVibrator.CAP_COMPOSE_EFFECTS);
-        fakeVibrator.setSupportedEffects(VibrationEffect.EFFECT_CLICK);
         VibratorManagerService service = createSystemReadyService();
 
         vibrate(service, CombinedVibration.startSequential()
-                .addNext(1, VibrationEffect.createOneShot(20, 100))
+                .addNext(1, VibrationEffect.createOneShot(100, 125))
                 .combine(), NOTIFICATION_ATTRS);
         assertTrue(waitUntil(s -> fakeVibrator.getEffectSegments().size() == 1,
                 service, TEST_TIMEOUT_MILLIS));
 
         vibrate(service, VibrationEffect.startComposition()
-                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 1f)
                 .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 0.5f)
                 .compose(), HAPTIC_FEEDBACK_ATTRS);
+        assertTrue(waitUntil(s -> fakeVibrator.getEffectSegments().size() == 2,
+                service, TEST_TIMEOUT_MILLIS));
+
+        vibrate(service, VibrationEffect.startComposition()
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 1f)
+                .compose(), ALARM_ATTRS);
         assertTrue(waitUntil(s -> fakeVibrator.getEffectSegments().size() == 3,
                 service, TEST_TIMEOUT_MILLIS));
 
-        vibrate(service, CombinedVibration.startParallel()
-                .addVibrator(1, VibrationEffect.get(VibrationEffect.EFFECT_CLICK))
-                .combine(), ALARM_ATTRS);
-        assertTrue(waitUntil(s -> fakeVibrator.getEffectSegments().size() == 4,
+        vibrate(service, VibrationEffect.createOneShot(100, 125), RINGTONE_ATTRS);
+        assertFalse(waitUntil(s -> fakeVibrator.getEffectSegments().size() > 3,
                 service, TEST_TIMEOUT_MILLIS));
 
-        vibrate(service, VibrationEffect.get(VibrationEffect.EFFECT_CLICK), RINGTONE_ATTRS);
+        assertEquals(3, fakeVibrator.getEffectSegments().size());
 
-        assertEquals(4, fakeVibrator.getEffectSegments().size());
+        // Notification vibrations will be scaled with SCALE_HIGH or none if default is high.
+        assertEquals(defaultNotificationIntensity < Vibrator.VIBRATION_INTENSITY_HIGH,
+                0.6 < fakeVibrator.getAmplitudes().get(0));
 
-        // Notification vibrations will be scaled with SCALE_VERY_HIGH.
-        assertTrue(0.6 < fakeVibrator.getAmplitudes().get(0));
+        // Haptic feedback vibrations will be scaled with SCALE_LOW or none if default is low.
+        assertEquals(defaultTouchIntensity > Vibrator.VIBRATION_INTENSITY_LOW,
+                0.5 > ((PrimitiveSegment) fakeVibrator.getEffectSegments().get(1)).getScale());
 
-        // Haptic feedback vibrations will be scaled with SCALE_LOW.
-        assertTrue(0.5 < ((PrimitiveSegment) fakeVibrator.getEffectSegments().get(1)).getScale());
-        assertTrue(0.5 > ((PrimitiveSegment) fakeVibrator.getEffectSegments().get(2)).getScale());
-
-        // Alarm vibration is always VIBRATION_INTENSITY_HIGH.
-        PrebakedSegment expected = new PrebakedSegment(
-                VibrationEffect.EFFECT_CLICK, false, VibrationEffect.EFFECT_STRENGTH_STRONG);
-        assertEquals(expected, fakeVibrator.getEffectSegments().get(3));
+        // Alarm vibration will be scaled with SCALE_NONE.
+        assertEquals(1f,
+                ((PrimitiveSegment) fakeVibrator.getEffectSegments().get(2)).getScale(), 1e-5);
 
         // Ring vibrations have intensity OFF and are not played.
     }
@@ -1040,7 +1118,7 @@ public class VibratorManagerServiceTest {
         int scale = mExternalVibratorService.onExternalVibrationStart(externalVibration);
         mExternalVibratorService.onExternalVibrationStop(externalVibration);
 
-        assertEquals(IExternalVibratorService.SCALE_NONE, scale);
+        assertNotEquals(IExternalVibratorService.SCALE_MUTE, scale);
         assertEquals(Arrays.asList(false, true, false),
                 mVibratorProviders.get(1).getExternalControlStates());
     }
@@ -1067,8 +1145,8 @@ public class VibratorManagerServiceTest {
                 ringtoneAudioAttrs, secondController);
         int secondScale = mExternalVibratorService.onExternalVibrationStart(secondVibration);
 
-        assertEquals(IExternalVibratorService.SCALE_NONE, firstScale);
-        assertEquals(IExternalVibratorService.SCALE_NONE, secondScale);
+        assertNotEquals(IExternalVibratorService.SCALE_MUTE, firstScale);
+        assertNotEquals(IExternalVibratorService.SCALE_MUTE, secondScale);
         verify(firstController).mute();
         verify(secondController, never()).mute();
         // Set external control called only once.
@@ -1091,7 +1169,7 @@ public class VibratorManagerServiceTest {
         ExternalVibration externalVibration = new ExternalVibration(UID, PACKAGE_NAME, AUDIO_ATTRS,
                 mock(IExternalVibrationController.class));
         int scale = mExternalVibratorService.onExternalVibrationStart(externalVibration);
-        assertEquals(IExternalVibratorService.SCALE_NONE, scale);
+        assertNotEquals(IExternalVibratorService.SCALE_MUTE, scale);
 
         // Vibration is cancelled.
         assertTrue(waitUntil(s -> !s.isVibrating(1), service, TEST_TIMEOUT_MILLIS));
@@ -1103,7 +1181,6 @@ public class VibratorManagerServiceTest {
     public void onExternalVibration_withRingtone_usesRingerModeSettings() {
         mockVibrators(1);
         mVibratorProviders.get(1).setCapabilities(IVibrator.CAP_EXTERNAL_CONTROL);
-        mVibrator.setDefaultRingVibrationIntensity(Vibrator.VIBRATION_INTENSITY_MEDIUM);
         AudioAttributes audioAttrs = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                 .build();
@@ -1112,22 +1189,49 @@ public class VibratorManagerServiceTest {
 
         setRingerMode(AudioManager.RINGER_MODE_NORMAL);
         setUserSetting(Settings.System.VIBRATE_WHEN_RINGING, 0);
-        setGlobalSetting(Settings.Global.APPLY_RAMPING_RINGER, 0);
+        setUserSetting(Settings.System.APPLY_RAMPING_RINGER, 0);
         createSystemReadyService();
         int scale = mExternalVibratorService.onExternalVibrationStart(externalVibration);
         assertEquals(IExternalVibratorService.SCALE_MUTE, scale);
 
         setUserSetting(Settings.System.VIBRATE_WHEN_RINGING, 0);
-        setGlobalSetting(Settings.Global.APPLY_RAMPING_RINGER, 1);
+        setUserSetting(Settings.System.APPLY_RAMPING_RINGER, 1);
         createSystemReadyService();
         scale = mExternalVibratorService.onExternalVibrationStart(externalVibration);
-        assertEquals(IExternalVibratorService.SCALE_NONE, scale);
+        assertNotEquals(IExternalVibratorService.SCALE_MUTE, scale);
 
         setUserSetting(Settings.System.VIBRATE_WHEN_RINGING, 1);
-        setGlobalSetting(Settings.Global.APPLY_RAMPING_RINGER, 0);
+        setUserSetting(Settings.System.APPLY_RAMPING_RINGER, 0);
         createSystemReadyService();
         scale = mExternalVibratorService.onExternalVibrationStart(externalVibration);
-        assertEquals(IExternalVibratorService.SCALE_NONE, scale);
+        assertNotEquals(IExternalVibratorService.SCALE_MUTE, scale);
+    }
+
+    @Test
+    public void onExternalVibration_withBypassMuteAudioFlag_ignoresUserSettings() {
+        mockVibrators(1);
+        mVibratorProviders.get(1).setCapabilities(IVibrator.CAP_EXTERNAL_CONTROL);
+        setUserSetting(Settings.System.ALARM_VIBRATION_INTENSITY,
+                Vibrator.VIBRATION_INTENSITY_OFF);
+        AudioAttributes audioAttrs = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .build();
+        AudioAttributes flaggedAudioAttrs = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setFlags(AudioAttributes.FLAG_BYPASS_MUTE)
+                .build();
+        createSystemReadyService();
+
+        int scale = mExternalVibratorService.onExternalVibrationStart(
+                new ExternalVibration(UID, PACKAGE_NAME, audioAttrs,
+                        mock(IExternalVibrationController.class)));
+        assertEquals(IExternalVibratorService.SCALE_MUTE, scale);
+
+        createSystemReadyService();
+        scale = mExternalVibratorService.onExternalVibrationStart(
+                new ExternalVibration(UID, PACKAGE_NAME, flaggedAudioAttrs,
+                        mock(IExternalVibrationController.class)));
+        assertNotEquals(IExternalVibratorService.SCALE_MUTE, scale);
     }
 
     private VibrationEffectSegment expectedPrebaked(int effectId) {
@@ -1173,10 +1277,6 @@ public class VibratorManagerServiceTest {
     private void setUserSetting(String settingName, int value) {
         Settings.System.putIntForUser(
                 mContextSpy.getContentResolver(), settingName, value, UserHandle.USER_CURRENT);
-    }
-
-    private void setGlobalSetting(String settingName, int value) {
-        Settings.Global.putInt(mContextSpy.getContentResolver(), settingName, value);
     }
 
     private void vibrate(VibratorManagerService service, VibrationEffect effect,

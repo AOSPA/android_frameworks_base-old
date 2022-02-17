@@ -44,6 +44,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.android.cts.install.lib.Install;
 import com.android.cts.install.lib.InstallUtils;
 import com.android.cts.install.lib.TestApp;
+import com.android.cts.install.lib.Uninstall;
 
 import org.junit.After;
 import org.junit.Before;
@@ -108,6 +109,7 @@ public class StagedInstallInternalTest {
     @Test
     public void cleanUp() throws Exception {
         Files.deleteIfExists(mTestStateFile.toPath());
+        Uninstall.packages(TestApp.A, TestApp.B);
     }
 
     @Test
@@ -157,8 +159,18 @@ public class StagedInstallInternalTest {
 
     @Test
     public void testStagedSessionShouldCleanUpOnVerificationFailure() throws Exception {
+        // APEX verification
         InstallUtils.commitExpectingFailure(AssertionError.class, "apexd verification failed",
                 Install.single(APEX_WRONG_SHA_V2).setStaged());
+        InstallUtils.commitExpectingFailure(AssertionError.class, "apexd verification failed",
+                Install.multi(APEX_WRONG_SHA_V2, TestApp.A1).setStaged());
+        // APK verification
+        Install.single(TestApp.A2).commit();
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(2);
+        InstallUtils.commitExpectingFailure(AssertionError.class, "Downgrade detected",
+                Install.single(TestApp.A1).setStaged());
+        InstallUtils.commitExpectingFailure(AssertionError.class, "Downgrade detected",
+                Install.multi(TestApp.A1, TestApp.B1).setStaged());
     }
 
     @Test
@@ -173,6 +185,12 @@ public class StagedInstallInternalTest {
         PackageInstaller.SessionInfo info = InstallUtils.getStagedSessionInfo(sessionId);
         assertThat(info).isNotNull();
         assertThat(info.isStagedSessionApplied()).isTrue();
+    }
+
+    @Test
+    public void testStagedSessionShouldCleanUpOnOnSuccessMultiPackage_Commit() throws Exception {
+        int sessionId = Install.multi(TestApp.A1, TestApp.Apex2).setStaged().commit();
+        storeSessionId(sessionId);
     }
 
     @Test
@@ -285,11 +303,14 @@ public class StagedInstallInternalTest {
         assertThat(InstallUtils.getInstalledVersion("test.apex.rebootless")).isEqualTo(1);
         TestApp apex = new TestApp("apex", "test.apex.rebootless", 2,
                 /* isApex= */ true, "test.rebootless_apex_v2.apex");
+        String expectedFailMessage = "Update of APEX package test.apex.rebootless is not allowed "
+                + "for com.android.tests.stagedinstallinternal";
         InstallUtils.commitExpectingFailure(
-                AssertionError.class,
-                "Update of APEX package test.apex.rebootless is not allowed "
-                        + "for com.android.tests.stagedinstallinternal",
+                AssertionError.class, expectedFailMessage,
                 Install.single(apex).setBypassAllowedApexUpdateCheck(false).setStaged());
+        InstallUtils.commitExpectingFailure(
+                AssertionError.class, expectedFailMessage,
+                Install.multi(apex).setBypassAllowedApexUpdateCheck(false).setStaged());
     }
 
     @Test
@@ -297,11 +318,14 @@ public class StagedInstallInternalTest {
         assertThat(InstallUtils.getInstalledVersion("test.apex.rebootless")).isEqualTo(1);
         TestApp apex = new TestApp("apex", "test.apex.rebootless", 2,
                 /* isApex= */ true, "test.rebootless_apex_v2.apex");
+        String expectedFailMessage = "Update of APEX package test.apex.rebootless is not allowed "
+                + "for com.android.tests.stagedinstallinternal";
         InstallUtils.commitExpectingFailure(
-                AssertionError.class,
-                "Update of APEX package test.apex.rebootless is not allowed "
-                        + "for com.android.tests.stagedinstallinternal",
+                AssertionError.class, expectedFailMessage,
                 Install.single(apex).setBypassAllowedApexUpdateCheck(false));
+        InstallUtils.commitExpectingFailure(
+                AssertionError.class, expectedFailMessage,
+                Install.multi(apex).setBypassAllowedApexUpdateCheck(false));
     }
 
     @Test
@@ -309,11 +333,14 @@ public class StagedInstallInternalTest {
         assertThat(InstallUtils.getInstalledVersion("test.apex.rebootless")).isEqualTo(1);
         TestApp apex = new TestApp("apex", "test.apex.rebootless", 2,
                 /* isApex= */ true, "test.rebootless_apex_v2.apex");
+        String expectedFailMessage = "Update of APEX package test.apex.rebootless is not allowed "
+                + "for com.android.tests.stagedinstallinternal";
         InstallUtils.commitExpectingFailure(
-                AssertionError.class,
-                "Update of APEX package test.apex.rebootless is not allowed "
-                        + "for com.android.tests.stagedinstallinternal",
+                AssertionError.class, expectedFailMessage,
                 Install.single(apex).setBypassAllowedApexUpdateCheck(false).setStaged());
+        InstallUtils.commitExpectingFailure(
+                AssertionError.class, expectedFailMessage,
+                Install.multi(apex).setBypassAllowedApexUpdateCheck(false).setStaged());
     }
 
     @Test
@@ -321,11 +348,14 @@ public class StagedInstallInternalTest {
         assertThat(InstallUtils.getInstalledVersion("test.apex.rebootless")).isEqualTo(1);
         TestApp apex = new TestApp("apex", "test.apex.rebootless", 2,
                 /* isApex= */ true, "test.rebootless_apex_v2.apex");
+        String expectedFailMessage = "Update of APEX package test.apex.rebootless is not allowed "
+                + "for com.android.tests.stagedinstallinternal";
         InstallUtils.commitExpectingFailure(
-                AssertionError.class,
-                "Update of APEX package test.apex.rebootless is not allowed "
-                        + "for com.android.tests.stagedinstallinternal",
+                AssertionError.class, expectedFailMessage,
                 Install.single(apex).setBypassAllowedApexUpdateCheck(false));
+        InstallUtils.commitExpectingFailure(
+                AssertionError.class, expectedFailMessage,
+                Install.multi(apex).setBypassAllowedApexUpdateCheck(false));
     }
 
     @Test
@@ -449,8 +479,7 @@ public class StagedInstallInternalTest {
         // Query proper module name
         result = getPackageManagerNative().getStagedApexInfo(TEST_APEX_PACKAGE_NAME);
         assertThat(result.moduleName).isEqualTo(TEST_APEX_PACKAGE_NAME);
-        assertThat(result.hasBootClassPathJars).isTrue();
-        assertThat(result.hasSystemServerClassPathJars).isTrue();
+        assertThat(result.hasClassPathJars).isTrue();
         InstallUtils.openPackageInstallerSession(sessionId).abandon();
     }
 

@@ -103,6 +103,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -166,12 +167,22 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      */
     int mMinHeight;
 
+    Dimmer mDimmer = new Dimmer(this);
+
     /** This task fragment will be removed when the cleanup of its children are done. */
     private boolean mIsRemovalRequested;
 
     /** The TaskFragment that is adjacent to this one. */
     @Nullable
     private TaskFragment mAdjacentTaskFragment;
+
+    /**
+     * Whether to move adjacent task fragment together when re-positioning.
+     *
+     * @see #mAdjacentTaskFragment
+     */
+    // TODO(b/207185041): Remove this once having a single-top root for split screen.
+    boolean mMoveAdjacentTogether;
 
     /**
      * Prevents duplicate calls to onTaskAppeared.
@@ -237,7 +248,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     /**
      * Whether to delay the last activity of TaskFragment being immediately removed while finishing.
      * This should only be set on a embedded TaskFragment, where the organizer can have the
-     * opportunity to perform other actions or animations.
+     * opportunity to perform animations and finishing the adjacent TaskFragment.
      */
     private boolean mDelayLastActivityRemoval;
 
@@ -315,14 +326,15 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return service.mWindowOrganizerController.getTaskFragment(token);
     }
 
-    void setAdjacentTaskFragment(@Nullable TaskFragment taskFragment) {
+    void setAdjacentTaskFragment(@Nullable TaskFragment taskFragment, boolean moveTogether) {
         if (mAdjacentTaskFragment == taskFragment) {
             return;
         }
         resetAdjacentTaskFragment();
         if (taskFragment != null) {
             mAdjacentTaskFragment = taskFragment;
-            taskFragment.setAdjacentTaskFragment(this);
+            mMoveAdjacentTogether = moveTogether;
+            taskFragment.setAdjacentTaskFragment(this, moveTogether);
         }
     }
 
@@ -331,9 +343,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (mAdjacentTaskFragment != null && mAdjacentTaskFragment.mAdjacentTaskFragment == this) {
             mAdjacentTaskFragment.mAdjacentTaskFragment = null;
             mAdjacentTaskFragment.mDelayLastActivityRemoval = false;
+            mAdjacentTaskFragment.mMoveAdjacentTogether = false;
         }
         mAdjacentTaskFragment = null;
         mDelayLastActivityRemoval = false;
+        mMoveAdjacentTogether = false;
     }
 
     void setTaskFragmentOrganizer(@NonNull TaskFragmentOrganizerToken organizer, int uid,
@@ -390,8 +404,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             Slog.d(TAG, "setResumedActivity taskFrag:" + this + " + from: "
                     + mResumedActivity + " to:" + r + " reason:" + reason);
         }
+        final ActivityRecord prevR = mResumedActivity;
         mResumedActivity = r;
         mTaskSupervisor.updateTopResumedActivityIfNeeded();
+        if (r == null && prevR.mDisplayContent != null
+                && prevR.mDisplayContent.getFocusedRootTask() == null) {
+            // Only need to notify DWPC when no activity will resume.
+            prevR.mDisplayContent.onRunningActivityChanged();
+        } else if (r != null) {
+            r.mDisplayContent.onRunningActivityChanged();
+        }
     }
 
     @VisibleForTesting
@@ -1369,6 +1391,17 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return getVisibility(starting) != TASK_FRAGMENT_VISIBILITY_INVISIBLE;
     }
 
+    /**
+     * Returns {@code true} is the activity in this TaskFragment can be resumed.
+     *
+     * @param starting The currently starting activity or {@code null} if there is none.
+     */
+    boolean canBeResumed(@Nullable ActivityRecord starting) {
+        // No need to resume activity in TaskFragment that is not visible.
+        return isTopActivityFocusable()
+                && getVisibility(starting) == TASK_FRAGMENT_VISIBILITY_VISIBLE;
+    }
+
     boolean isFocusableAndVisible() {
         return isTopActivityFocusable() && shouldBeVisible(null /* starting */);
     }
@@ -1439,29 +1472,29 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         boolean pauseImmediately = false;
         boolean shouldAutoPip = false;
-        if (resuming != null && (resuming.info.flags & FLAG_RESUME_WHILE_PAUSING) != 0) {
-            // If the flag RESUME_WHILE_PAUSING is set, then continue to schedule the previous
-            // activity to be paused, while at the same time resuming the new resume activity
-            // only if the previous activity can't go into Pip since we want to give Pip
-            // activities a chance to enter Pip before resuming the next activity.
-            final boolean lastResumedCanPip = prev != null && prev.checkEnterPictureInPictureState(
-                    "shouldResumeWhilePausing", userLeaving);
+        if (resuming != null) {
+            // Resuming the new resume activity only if the previous activity can't go into Pip
+            // since we want to give Pip activities a chance to enter Pip before resuming the
+            // next activity.
+            final boolean lastResumedCanPip = prev.checkEnterPictureInPictureState(
+                    "shouldAutoPipWhilePausing", userLeaving);
             if (lastResumedCanPip && prev.pictureInPictureArgs.isAutoEnterEnabled()) {
                 shouldAutoPip = true;
             } else if (!lastResumedCanPip) {
-                pauseImmediately = true;
+                // If the flag RESUME_WHILE_PAUSING is set, then continue to schedule the previous
+                // activity to be paused.
+                pauseImmediately = (resuming.info.flags & FLAG_RESUME_WHILE_PAUSING) != 0;
             } else {
                 // The previous activity may still enter PIP even though it did not allow auto-PIP.
             }
         }
 
-        boolean didAutoPip = false;
         if (prev.attachedToProcess()) {
             if (shouldAutoPip) {
+                boolean didAutoPip = mAtmService.enterPictureInPictureMode(
+                        prev, prev.pictureInPictureArgs);
                 ProtoLog.d(WM_DEBUG_STATES, "Auto-PIP allowed, entering PIP mode "
-                        + "directly: %s", prev);
-
-                didAutoPip = mAtmService.enterPictureInPictureMode(prev, prev.pictureInPictureArgs);
+                        + "directly: %s, didAutoPip: %b", prev, didAutoPip);
             } else {
                 schedulePauseActivity(prev, userLeaving, pauseImmediately, reason);
             }
@@ -1681,8 +1714,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         boolean isAddingActivity = child.asActivityRecord() != null;
         final Task task = isAddingActivity ? getTask() : null;
 
-        // If this task had any child before we added this one.
-        boolean taskHadChild = task != null && task.hasChild();
+        // If this task had any activity before we added this one.
+        boolean taskHadActivity = task != null && task.getActivity(Objects::nonNull) != null;
         // getActivityType() looks at the top child, so we need to read the type before adding
         // a new child in case the new child is on top and UNDEFINED.
         final int activityType = task != null ? task.getActivityType() : ACTIVITY_TYPE_UNDEFINED;
@@ -1691,7 +1724,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         if (isAddingActivity && task != null) {
             child.asActivityRecord().inHistory = true;
-            task.onDescendantActivityAdded(taskHadChild, activityType, child.asActivityRecord());
+            task.onDescendantActivityAdded(taskHadActivity, activityType, child.asActivityRecord());
         }
     }
 
@@ -1968,7 +2001,15 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             if (inOutConfig.smallestScreenWidthDp
                     == Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED) {
-                if (WindowConfiguration.isFloating(windowingMode)) {
+                // When entering to or exiting from Pip, the PipTaskOrganizer will set the
+                // windowing mode of the activity in the task to WINDOWING_MODE_FULLSCREEN and
+                // temporarily set the bounds of the task to fullscreen size for transitioning.
+                // It will get the wrong value if the calculation is based on this temporary
+                // fullscreen bounds.
+                // We should just inherit the value from parent for this temporary state.
+                final boolean inPipTransition = windowingMode == WINDOWING_MODE_PINNED
+                        && !mTmpFullBounds.isEmpty() && mTmpFullBounds.equals(parentBounds);
+                if (WindowConfiguration.isFloating(windowingMode) && !inPipTransition) {
                     // For floating tasks, calculate the smallest width from the bounds of the task
                     inOutConfig.smallestScreenWidthDp = (int) (
                             Math.min(mTmpFullBounds.width(), mTmpFullBounds.height()) / density);
@@ -2147,13 +2188,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     /** Whether we should prepare a transition for this {@link TaskFragment} bounds change. */
     private boolean shouldStartChangeTransition(Rect startBounds) {
-        if (mWmService.mDisableTransitionAnimation
-                || mDisplayContent == null
-                || mTaskFragmentOrganizer == null
-                || getSurfaceControl() == null
-                // The change transition will be covered by display.
-                || mDisplayContent.inTransition()
-                || !isVisible()) {
+        if (mTaskFragmentOrganizer == null || !canStartChangeTransition()) {
             return false;
         }
 
@@ -2199,14 +2234,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     TaskFragmentInfo getTaskFragmentInfo() {
         List<IBinder> childActivities = new ArrayList<>();
         for (int i = 0; i < getChildCount(); i++) {
-            WindowContainer wc = getChildAt(i);
-            if (mTaskFragmentOrganizerUid != INVALID_UID
-                    && wc.asActivityRecord() != null
-                    && wc.asActivityRecord().info.processName.equals(
-                            mTaskFragmentOrganizerProcessName)
-                    && wc.asActivityRecord().getUid() == mTaskFragmentOrganizerUid) {
+            final WindowContainer wc = getChildAt(i);
+            final ActivityRecord ar = wc.asActivityRecord();
+            if (mTaskFragmentOrganizerUid != INVALID_UID && ar != null
+                    && ar.info.processName.equals(mTaskFragmentOrganizerProcessName)
+                    && ar.getUid() == mTaskFragmentOrganizerUid && !ar.finishing) {
                 // Only includes Activities that belong to the organizer process for security.
-                childActivities.add(wc.asActivityRecord().token);
+                childActivities.add(ar.token);
             }
         }
         final Point positionInParent = new Point();
@@ -2351,8 +2385,44 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     @Override
+    Dimmer getDimmer() {
+        // If the window is in an embedded TaskFragment, we want to dim at the TaskFragment.
+        if (asTask() == null) {
+            return mDimmer;
+        }
+
+        return super.getDimmer();
+    }
+
+    @Override
+    void prepareSurfaces() {
+        if (asTask() != null) {
+            super.prepareSurfaces();
+            return;
+        }
+
+        mDimmer.resetDimStates();
+        super.prepareSurfaces();
+
+        // Bounds need to be relative, as the dim layer is a child.
+        final Rect dimBounds = getBounds();
+        dimBounds.offsetTo(0 /* newLeft */, 0 /* newTop */);
+        if (mDimmer.updateDims(getPendingTransaction(), dimBounds)) {
+            scheduleAnimation();
+        }
+    }
+
+    @Override
     boolean canBeAnimationTarget() {
         return true;
+    }
+
+    @Override
+    boolean fillsParent() {
+        // From the perspective of policy, we still want to report that this task fills parent
+        // in fullscreen windowing mode even it doesn't match parent bounds because there will be
+        // letterbox around its real content.
+        return getWindowingMode() == WINDOWING_MODE_FULLSCREEN || matchParentBounds();
     }
 
     boolean dump(String prefix, FileDescriptor fd, PrintWriter pw, boolean dumpAll,

@@ -23,12 +23,12 @@ import android.content.pm.PackageManager;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.VersionedPackage;
 import android.content.pm.dex.DexMetadataHelper;
-import android.content.pm.parsing.ParsingPackageRead;
-import android.content.pm.parsing.ParsingPackageUtils;
-import android.content.pm.parsing.component.ParsedActivity;
-import android.content.pm.parsing.component.ParsedInstrumentation;
-import android.content.pm.parsing.component.ParsedProvider;
-import android.content.pm.parsing.component.ParsedService;
+import com.android.server.pm.pkg.parsing.ParsingPackageRead;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
+import com.android.server.pm.pkg.component.ParsedActivity;
+import com.android.server.pm.pkg.component.ParsedInstrumentation;
+import com.android.server.pm.pkg.component.ParsedProvider;
+import com.android.server.pm.pkg.component.ParsedService;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.os.incremental.IncrementalManager;
@@ -85,6 +85,17 @@ public class AndroidPackageUtils {
             Collections.addAll(paths, splitCodePaths);
         }
         return paths;
+    }
+
+    public static SharedLibraryInfo createSharedLibraryForSdk(AndroidPackage pkg) {
+        return new SharedLibraryInfo(null, pkg.getPackageName(),
+                AndroidPackageUtils.getAllCodePaths(pkg),
+                pkg.getSdkLibName(),
+                pkg.getSdkLibVersionMajor(),
+                SharedLibraryInfo.TYPE_SDK,
+                new VersionedPackage(pkg.getManifestPackageName(),
+                        pkg.getLongVersionCode()),
+                null, null, false /* isNative */);
     }
 
     public static SharedLibraryInfo createSharedLibraryForStatic(AndroidPackage pkg) {
@@ -218,7 +229,8 @@ public class AndroidPackageUtils {
 
     public static boolean isLibrary(AndroidPackage pkg) {
         // TODO(b/135203078): Can parsing just enforce these always match?
-        return pkg.getStaticSharedLibName() != null || !pkg.getLibraryNames().isEmpty();
+        return pkg.getSdkLibName() != null || pkg.getStaticSharedLibName() != null
+                || !pkg.getLibraryNames().isEmpty();
     }
 
     public static int getHiddenApiEnforcementPolicy(AndroidPackage pkg,
@@ -256,7 +268,7 @@ public class AndroidPackageUtils {
      * Returns false iff the provided flags include the {@link PackageManager#MATCH_SYSTEM_ONLY}
      * flag and the provided package is not a system package. Otherwise returns {@code true}.
      */
-    public static boolean isMatchForSystemOnly(AndroidPackage pkg, int flags) {
+    public static boolean isMatchForSystemOnly(AndroidPackage pkg, long flags) {
         if ((flags & PackageManager.MATCH_SYSTEM_ONLY) != 0) {
             return pkg.isSystem();
         }

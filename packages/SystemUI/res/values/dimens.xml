@@ -287,6 +287,7 @@
     <dimen name="screenshot_action_chip_text_size">14sp</dimen>
     <dimen name="screenshot_dismissal_height_delta">80dp</dimen>
     <dimen name="screenshot_crop_handle_thickness">3dp</dimen>
+    <dimen name="long_screenshot_action_bar_top_margin">8dp</dimen>
 
 
     <!-- The width of the view containing navigation buttons -->
@@ -601,7 +602,7 @@
     <!-- When large clock is showing, offset the smartspace by this amount -->
     <dimen name="keyguard_smartspace_top_offset">12dp</dimen>
     <!-- With the large clock, move up slightly from the center -->
-    <dimen name="keyguard_large_clock_top_margin">-52dp</dimen>
+    <dimen name="keyguard_large_clock_top_margin">-60dp</dimen>
 
     <!-- Default line spacing multiplier between hours and minutes of the keyguard clock -->
     <item name="keyguard_clock_line_spacing_scale" type="dimen" format="float">.7</item>
@@ -677,25 +678,6 @@
     <!-- Additional translation (downwards) for appearing notifications when going to the full shade
          from Keyguard. -->
     <dimen name="go_to_full_shade_appearing_translation">200dp</dimen>
-
-    <!-- The diameter of the search panel circle. -->
-    <dimen name="assist_orb_size">144dp</dimen>
-
-    <!-- The margin to the edge of the screen from where the orb starts to appear -->
-    <dimen name="assist_orb_base_margin">22dp</dimen>
-
-    <!-- The amount the orb translates when appearing -->
-    <dimen name="assist_orb_travel_distance">26dp</dimen>
-
-    <!-- The elevation of the orb -->
-    <dimen name="assist_orb_elevation">12dp</dimen>
-
-    <!-- The height of the scrim behind the orb. -->
-    <dimen name="assist_orb_scrim_height">250dp</dimen>
-
-    <!-- The height of the scrim behind the search panel circle. Should be navigation_bar_height
-         + 8dp. -->
-    <dimen name="assist_orb_navbar_scrim_height">56dp</dimen>
 
     <!-- The width/height of the keyguard bottom area icon view on keyguard. -->
     <dimen name="keyguard_affordance_height">48dp</dimen>
@@ -987,6 +969,10 @@
     <dimen name="qs_media_enabled_seekbar_vertical_padding">28dp</dimen>
     <dimen name="qs_media_disabled_seekbar_vertical_padding">29dp</dimen>
 
+    <!-- Sizes for alternate session-based layout -->
+    <dimen name="qs_media_session_enabled_seekbar_vertical_padding">15dp</dimen>
+    <dimen name="qs_media_session_disabled_seekbar_vertical_padding">16dp</dimen>
+
     <!-- Size of Smartspace media recommendations cards in the QSPanel carousel -->
     <dimen name="qs_aa_media_rec_album_size_collapsed">72dp</dimen>
     <dimen name="qs_aa_media_rec_album_size_expanded">76dp</dimen>
@@ -994,6 +980,18 @@
     <dimen name="qs_aa_media_rec_album_margin">8dp</dimen>
     <dimen name="qs_aa_media_rec_album_margin_vert">4dp</dimen>
     <dimen name="qq_aa_media_rec_header_text_size">16sp</dimen>
+
+    <!-- Media tap-to-transfer chip for sender device -->
+    <dimen name="media_ttt_chip_outer_padding">16dp</dimen>
+    <dimen name="media_ttt_text_size">16sp</dimen>
+    <dimen name="media_ttt_icon_size">24dp</dimen>
+    <dimen name="media_ttt_loading_size">20dp</dimen>
+    <dimen name="media_ttt_undo_button_vertical_padding">8dp</dimen>
+    <dimen name="media_ttt_undo_button_vertical_negative_margin">-8dp</dimen>
+
+    <!-- Media tap-to-transfer chip for receiver device -->
+    <dimen name="media_ttt_chip_size_receiver">100dp</dimen>
+    <dimen name="media_ttt_icon_size_receiver">95dp</dimen>
 
     <!-- Window magnification -->
     <dimen name="magnification_border_drag_size">35dp</dimen>
@@ -1104,10 +1102,10 @@
     <!-- Output switcher panel related dimensions -->
     <dimen name="media_output_dialog_list_margin">12dp</dimen>
     <dimen name="media_output_dialog_list_max_height">364dp</dimen>
-    <dimen name="media_output_dialog_header_album_icon_size">48dp</dimen>
+    <dimen name="media_output_dialog_header_album_icon_size">72dp</dimen>
     <dimen name="media_output_dialog_header_back_icon_size">32dp</dimen>
     <dimen name="media_output_dialog_header_icon_padding">16dp</dimen>
-    <dimen name="media_output_dialog_icon_corner_radius">8dp</dimen>
+    <dimen name="media_output_dialog_icon_corner_radius">16dp</dimen>
     <dimen name="media_output_dialog_title_anim_y_delta">12.5dp</dimen>
 
     <!-- Distance that the full shade transition takes in order for qs to fully transition to the
@@ -1259,6 +1257,8 @@
 
     <!-- Internet panel related dimensions -->
     <dimen name="internet_dialog_list_max_height">662dp</dimen>
+    <!-- The height of the WiFi network in Internet panel. -->
+    <dimen name="internet_dialog_wifi_network_height">72dp</dimen>
 
     <!-- The width of large/content heavy dialogs (e.g. Internet, Media output, etc) -->
     <dimen name="large_dialog_width">@dimen/match_parent</dimen>
@@ -1268,6 +1268,8 @@
 
     <!-- Internet dialog related dimensions -->
     <dimen name="internet_dialog_corner_radius">24dp</dimen>
+    <!-- Width of progress bar -->
+    <dimen name="internet_dialog_progress_bar_width">152dp</dimen>
     <!-- End margin of network layout -->
     <dimen name="internet_dialog_network_layout_margin">16dp</dimen>
     <!-- Size of switch bar in internet dialog -->
@@ -1295,10 +1297,29 @@
     <dimen name="qs_tile_service_request_tile_width">192dp</dimen>
     <dimen name="qs_tile_service_request_content_space">24dp</dimen>
 
-    <dimen name="qs_dialog_button_horizontal_padding">16dp</dimen>
-    <dimen name="qs_dialog_button_vertical_padding">8dp</dimen>
+    <!-- Dimensions for unified SystemUI dialogs styling. Used by Theme.SystemUI.Dialog and
+         alert_dialog_systemui.xml
+      -->
+    <dimen name="dialog_button_horizontal_padding">16dp</dimen>
+    <dimen name="dialog_button_vertical_padding">8dp</dimen>
     <!-- The button will be 48dp tall, but the background needs to be 36dp tall -->
-    <dimen name="qs_dialog_button_vertical_inset">6dp</dimen>
+    <dimen name="dialog_button_vertical_inset">6dp</dimen>
+    <dimen name="dialog_top_padding">24dp</dimen>
+    <dimen name="dialog_bottom_padding">18dp</dimen>
+    <dimen name="dialog_side_padding">24dp</dimen>
+    <dimen name="dialog_button_bar_top_padding">32dp</dimen>
+
+    <!-- ************************************************************************* -->
 
     <dimen name="keyguard_unfold_translation_x">16dp</dimen>
+
+    <dimen name="fgs_manager_min_width_minor">100%</dimen>
+
+    <!-- Dream overlay related dimensions -->
+    <dimen name="dream_overlay_status_bar_height">80dp</dimen>
+    <dimen name="dream_overlay_status_bar_margin">40dp</dimen>
+    <dimen name="dream_overlay_status_icon_margin">8dp</dimen>
+    <!-- Height of the area at the top of the dream overlay to allow dragging down the notifications
+         shade. -->
+    <dimen name="dream_overlay_notifications_drag_area_height">100dp</dimen>
 </resources>

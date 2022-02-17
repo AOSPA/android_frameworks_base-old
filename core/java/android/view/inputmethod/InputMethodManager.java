@@ -86,6 +86,7 @@ import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.autofill.AutofillManager;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.inputmethod.DirectBootAwareness;
 import com.android.internal.inputmethod.ImeTracing;
 import com.android.internal.inputmethod.InputBindResult;
 import com.android.internal.inputmethod.InputMethodDebug;
@@ -1234,6 +1235,26 @@ public final class InputMethodManager {
     }
 
     /**
+     * Returns the list of installed input methods for the specified user.
+     *
+     * @param userId user ID to query
+     * @param directBootAwareness {@code true} if caller want to query installed input methods list
+     * on user locked state.
+     * @return {@link List} of {@link InputMethodInfo}.
+     * @hide
+     */
+    @RequiresPermission(INTERACT_ACROSS_USERS_FULL)
+    @NonNull
+    public List<InputMethodInfo> getInputMethodListAsUser(@UserIdInt int userId,
+            @DirectBootAwareness int directBootAwareness) {
+        try {
+            return mService.getAwareLockedInputMethodList(userId, directBootAwareness);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns the list of enabled input methods.
      *
      * <p>On multi user environment, this API returns a result for the calling process user.</p>
@@ -1740,6 +1761,50 @@ public final class InputMethodManager {
     }
 
     /**
+     * Start stylus handwriting session.
+     *
+     * If supported by the current input method, a stylus handwriting session is started on the
+     * given View, capturing all stylus input and converting it to InputConnection commands.
+     *
+     * If handwriting mode is started successfully by the IME, any currently dispatched stylus
+     * pointers will be {@code android.view.MotionEvent#FLAG_CANCELED} cancelled.
+     *
+     * If Stylus handwriting mode is not supported or cannot be fulfilled for any reason by IME,
+     * request will be ignored and Stylus touch will continue as normal touch input.
+     *
+     * @param view the View for which stylus handwriting is requested. It and
+     * {@link View#hasWindowFocus its window} must be {@link View#hasFocus focused}.
+     */
+    public void startStylusHandwriting(@NonNull View view) {
+        // Re-dispatch if there is a context mismatch.
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.startStylusHandwriting(view);
+        }
+
+        checkFocus();
+        synchronized (mH) {
+            if (view == null || !hasServedByInputMethodLocked(view)) {
+                Log.w(TAG,
+                        "Ignoring startStylusHandwriting() as view=" + view + " is not served.");
+                return;
+            }
+            if (view.getViewRootImpl() != mCurRootView) {
+                Log.w(TAG, "Ignoring startStylusHandwriting: View's window does not have focus.");
+                return;
+            }
+
+            try {
+                mService.startStylusHandwriting(mClient);
+                // TODO(b/210039666): do we need any extra work for supporting non-native
+                //   UI toolkits?
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
      * This method toggles the input method window display.
      * If the input window is already displayed, it gets hidden.
      * If not the input window will be displayed.
@@ -1838,6 +1903,69 @@ public final class InputMethodManager {
     }
 
     /**
+     * Sends an async signal to the IME to reset the currently served {@link InputConnection}.
+     *
+     * @param inputConnection the connection to be invalidated.
+     * @param textSnapshot {@link TextSnapshot} to be used to update {@link EditorInfo}.
+     * @param sessionId the session ID to be sent.
+     * @hide
+     */
+    public void doInvalidateInput(@NonNull RemoteInputConnectionImpl inputConnection,
+            @NonNull TextSnapshot textSnapshot, int sessionId) {
+        synchronized (mH) {
+            if (mServedInputConnection != inputConnection || mCurrentTextBoxAttribute == null) {
+                // OK to ignore because the calling InputConnection is already abandoned.
+                return;
+            }
+            final EditorInfo editorInfo = mCurrentTextBoxAttribute.createCopyInternal();
+            editorInfo.initialSelStart = mCursorSelStart = textSnapshot.getSelectionStart();
+            editorInfo.initialSelEnd = mCursorSelEnd = textSnapshot.getSelectionEnd();
+            mCursorCandStart = textSnapshot.getCompositionStart();
+            mCursorCandEnd = textSnapshot.getCompositionEnd();
+            editorInfo.initialCapsMode = textSnapshot.getCursorCapsMode();
+            editorInfo.setInitialSurroundingTextInternal(textSnapshot.getSurroundingText());
+            mCurrentInputMethodSession.invalidateInput(editorInfo, mServedInputConnection,
+                    sessionId);
+        }
+    }
+
+    /**
+     * Gives a hint to the system that the text associated with {@code view} is updated by something
+     * that is not an input method editor (IME), so that the system can cancel any pending text
+     * editing requests from the IME until it receives the new editing context such as surrounding
+     * text provided by {@link InputConnection#takeSnapshot()}.
+     *
+     * <p>When {@code view} does not support {@link InputConnection#takeSnapshot()} protocol,
+     * calling this method may trigger {@link View#onCreateInputConnection(EditorInfo)}.</p>
+     *
+     * <p>Unlike {@link #restartInput(View)}, this API does not immediately interact with
+     * {@link InputConnection}.  Instead, the application may later receive
+     * {@link InputConnection#takeSnapshot()} as needed so that the system can capture new editing
+     * context for the IME.  For instance, successive invocations of this API can be coerced into a
+     * single (or zero) callback of {@link InputConnection#takeSnapshot()}.</p>
+     *
+     * @param view The view whose text has changed.
+     * @see #restartInput(View)
+     */
+    public void invalidateInput(@NonNull View view) {
+        Objects.requireNonNull(view);
+
+        // Re-dispatch if there is a context mismatch.
+        final InputMethodManager fallbackImm = getFallbackInputMethodManagerIfNecessary(view);
+        if (fallbackImm != null) {
+            fallbackImm.invalidateInput(view);
+            return;
+        }
+
+        synchronized (mH) {
+            if (mServedInputConnection == null || getServedViewLocked() != view) {
+                return;
+            }
+            mServedInputConnection.scheduleInvalidateInput();
+        }
+    }
+
+    /**
      * Called when {@link DelegateImpl#startInput}, {@link #restartInput(View)},
      * {@link #MSG_BIND} or {@link #MSG_UNBIND}.
      * Note that this method should *NOT* be called inside of {@code mH} lock to prevent start input
@@ -1929,7 +2057,7 @@ public final class InputMethodManager {
             }
 
             // Hook 'em up and let 'er rip.
-            mCurrentTextBoxAttribute = tba;
+            mCurrentTextBoxAttribute = tba.createCopyInternal();
 
             mServedConnecting = false;
             if (mServedInputConnection != null) {
@@ -2009,6 +2137,10 @@ public final class InputMethodManager {
                         + ", ic=" + ic + ", tba=" + tba + ", handler=" + icHandler);
             }
             view.onInputConnectionOpenedInternal(ic, tba, icHandler);
+            final ViewRootImpl viewRoot = view.getViewRootImpl();
+            if (viewRoot != null) {
+                viewRoot.getHandwritingInitiator().onInputConnectionCreated(view, tba);
+            }
         }
 
         return true;
@@ -2199,6 +2331,10 @@ public final class InputMethodManager {
         synchronized (mH) {
             if (!hasServedByInputMethodLocked(view) || mCurrentTextBoxAttribute == null
                     || mCurrentInputMethodSession == null) {
+                return;
+            }
+
+            if (mServedInputConnection != null && mServedInputConnection.hasPendingInvalidation()) {
                 return;
             }
 

@@ -20,20 +20,24 @@ import android.service.notification.StatusBarNotification
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.people.widget.PeopleSpaceWidgetManager
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption
-import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.statusbar.NotificationListener
 import com.android.systemui.statusbar.NotificationPresenter
 import com.android.systemui.statusbar.notification.AnimatedImageNotificationManager
+import com.android.systemui.statusbar.notification.NotifPipelineFlags
 import com.android.systemui.statusbar.notification.NotificationActivityStarter
 import com.android.systemui.statusbar.notification.NotificationClicker
 import com.android.systemui.statusbar.notification.NotificationEntryManager
 import com.android.systemui.statusbar.notification.NotificationListController
+import com.android.systemui.statusbar.notification.collection.NotifLiveDataStore
 import com.android.systemui.statusbar.notification.collection.NotifPipeline
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager
 import com.android.systemui.statusbar.notification.collection.TargetSdkResolver
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl
 import com.android.systemui.statusbar.notification.collection.init.NotifPipelineInitializer
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy
+import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection
+import com.android.systemui.statusbar.notification.collection.provider.DebugModeFilterProvider
+import com.android.systemui.statusbar.notification.collection.render.NotifStackController
 import com.android.systemui.statusbar.notification.interruption.HeadsUpController
 import com.android.systemui.statusbar.notification.interruption.HeadsUpViewBinder
 import com.android.systemui.statusbar.notification.row.NotifBindPipelineInitializer
@@ -59,13 +63,16 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class NotificationsControllerImpl @Inject constructor(
-    private val featureFlags: FeatureFlags,
+    private val notifPipelineFlags: NotifPipelineFlags,
     private val notificationListener: NotificationListener,
     private val entryManager: NotificationEntryManager,
+    private val debugModeFilterProvider: DebugModeFilterProvider,
     private val legacyRanker: NotificationRankingManager,
+    private val commonNotifCollection: Lazy<CommonNotifCollection>,
     private val notifPipeline: Lazy<NotifPipeline>,
+    private val notifLiveDataStore: NotifLiveDataStore,
     private val targetSdkResolver: TargetSdkResolver,
-    private val newNotifPipeline: Lazy<NotifPipelineInitializer>,
+    private val newNotifPipelineInitializer: Lazy<NotifPipelineInitializer>,
     private val notifBindPipelineInitializer: NotifBindPipelineInitializer,
     private val deviceProvisionedController: DeviceProvisionedController,
     private val notificationRowBinder: NotificationRowBinderImpl,
@@ -85,6 +92,7 @@ class NotificationsControllerImpl @Inject constructor(
         bubblesOptional: Optional<Bubbles>,
         presenter: NotificationPresenter,
         listContainer: NotificationListContainer,
+        stackController: NotifStackController,
         notificationActivityStarter: NotificationActivityStarter,
         bindRowCallback: NotificationRowBinderImpl.BindRowCallback
     ) {
@@ -109,13 +117,14 @@ class NotificationsControllerImpl @Inject constructor(
         animatedImageNotificationManager.bind()
 
         if (INITIALIZE_NEW_PIPELINE) {
-            newNotifPipeline.get().initialize(
+            newNotifPipelineInitializer.get().initialize(
                     notificationListener,
                     notificationRowBinder,
-                    listContainer)
+                    listContainer,
+                    stackController)
         }
 
-        if (featureFlags.isNewNotifPipelineRenderingEnabled) {
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
             targetSdkResolver.initialize(notifPipeline.get())
             // TODO
         } else {
@@ -127,6 +136,9 @@ class NotificationsControllerImpl @Inject constructor(
             headsUpController.attach(entryManager, headsUpManager)
             groupManagerLegacy.get().setHeadsUpManager(headsUpManager)
             groupAlertTransferHelper.setHeadsUpManager(headsUpManager)
+            debugModeFilterProvider.registerInvalidationListener {
+                entryManager.updateNotifications("debug mode filter changed")
+            }
 
             entryManager.initialize(notificationListener, legacyRanker)
         }
@@ -152,7 +164,9 @@ class NotificationsControllerImpl @Inject constructor(
     }
 
     override fun resetUserExpandedStates() {
-        for (entry in entryManager.visibleNotifications) {
+        // TODO: this is a view thing that should be done through the views, but that means doing it
+        //  both when this event is fired and any time a row is attached.
+        for (entry in commonNotifCollection.get().allNotifs) {
             entry.resetUserExpansion()
         }
     }
@@ -167,9 +181,8 @@ class NotificationsControllerImpl @Inject constructor(
         }
     }
 
-    override fun getActiveNotificationsCount(): Int {
-        return entryManager.activeNotificationsCount
-    }
+    override fun getActiveNotificationsCount(): Int =
+        notifLiveDataStore.activeNotifCount.value
 
     companion object {
         // NOTE: The new pipeline is always active, even if the old pipeline is *rendering*.

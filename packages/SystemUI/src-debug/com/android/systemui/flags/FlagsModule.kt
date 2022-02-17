@@ -20,16 +20,28 @@ import android.content.Context
 import android.os.Handler
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.util.settings.SettingsUtilModule
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
+import java.util.function.Supplier
 
 @Module(includes = [
     SettingsUtilModule::class
 ])
-object FlagsModule {
-    @JvmStatic
-    @Provides
-    fun provideFlagManager(context: Context, @Main handler: Handler): FlagManager {
-        return FlagManager(context, handler)
+abstract class FlagsModule {
+    @Binds
+    abstract fun bindsFeatureFlagDebug(impl: FeatureFlagsDebug): FeatureFlags
+
+    @Module
+    companion object {
+        @JvmStatic
+        @Provides
+        fun provideFlagManager(context: Context, @Main handler: Handler): FlagManager {
+            return FlagManager(context, handler)
+        }
+
+        @JvmStatic
+        @Provides
+        fun providesFlagCollector(): Supplier<Map<Int, Flag<*>>>? = null
     }
 }

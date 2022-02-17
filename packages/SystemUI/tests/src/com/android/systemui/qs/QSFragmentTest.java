@@ -42,7 +42,6 @@ import com.android.systemui.Dependency;
 import com.android.systemui.SysuiBaseFragmentTest;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.media.MediaHost;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -99,8 +98,6 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
     private TileServiceRequestController.Builder mTileServiceRequestControllerBuilder;
     @Mock
     private TileServiceRequestController mTileServiceRequestController;
-    @Mock
-    private FeatureFlags mFeatureFlags;
 
     public QSFragmentTest() {
         super(QSFragment.class);
@@ -146,7 +143,7 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
                 mock(BroadcastDispatcher.class), Optional.of(mock(StatusBar.class)),
                 mock(QSLogger.class), mock(UiEventLogger.class), mock(UserTracker.class),
                 mock(SecureSettings.class), mock(CustomTileStatePersister.class),
-                mTileServiceRequestControllerBuilder, mFeatureFlags);
+                mTileServiceRequestControllerBuilder);
         qs.setHost(host);
 
         qs.setListening(true);
@@ -182,8 +179,8 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
     protected Fragment instantiate(Context context, String className, Bundle arguments) {
         CommandQueue commandQueue = new CommandQueue(context);
         return new QSFragment(
-                new RemoteInputQuickSettingsDisabler(context, mock(ConfigurationController.class),
-                        commandQueue),
+                new RemoteInputQuickSettingsDisabler(context, commandQueue,
+                        mock(ConfigurationController.class)),
                 mock(QSTileHost.class),
                 mock(StatusBarStateController.class),
                 commandQueue,

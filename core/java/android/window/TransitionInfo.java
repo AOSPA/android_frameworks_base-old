@@ -18,6 +18,7 @@ package android.window;
 
 import static android.app.ActivityOptions.ANIM_CLIP_REVEAL;
 import static android.app.ActivityOptions.ANIM_CUSTOM;
+import static android.app.ActivityOptions.ANIM_FROM_STYLE;
 import static android.app.ActivityOptions.ANIM_OPEN_CROSS_PROFILE_APPS;
 import static android.app.ActivityOptions.ANIM_SCALE_UP;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_SCALE_DOWN;
@@ -35,6 +36,7 @@ import static android.view.WindowManager.TransitionFlags;
 import static android.view.WindowManager.TransitionType;
 import static android.view.WindowManager.transitTypeToString;
 
+import android.annotation.ColorInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -46,6 +48,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.view.WindowManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -364,6 +367,7 @@ public final class TransitionInfo implements Parcelable {
         private int mStartRotation = ROTATION_UNDEFINED;
         private int mEndRotation = ROTATION_UNDEFINED;
         private int mRotationAnimation = ROTATION_ANIMATION_UNSPECIFIED;
+        private @ColorInt int mBackgroundColor;
 
         public Change(@Nullable WindowContainerToken container, @NonNull SurfaceControl leash) {
             mContainer = container;
@@ -385,6 +389,7 @@ public final class TransitionInfo implements Parcelable {
             mStartRotation = in.readInt();
             mEndRotation = in.readInt();
             mRotationAnimation = in.readInt();
+            mBackgroundColor = in.readInt();
         }
 
         /** Sets the parent of this change's container. The parent must be a participant or null. */
@@ -442,6 +447,11 @@ public final class TransitionInfo implements Parcelable {
          */
         public void setRotationAnimation(int anim) {
             mRotationAnimation = anim;
+        }
+
+        /** Sets the background color of this change's container. */
+        public void setBackgroundColor(@ColorInt int backgroundColor) {
+            mBackgroundColor = backgroundColor;
         }
 
         /** @return the container that is changing. May be null if non-remotable (eg. activity) */
@@ -524,6 +534,12 @@ public final class TransitionInfo implements Parcelable {
             return mRotationAnimation;
         }
 
+        /** @return get the background color of this change's container. */
+        @ColorInt
+        public int getBackgroundColor() {
+            return mBackgroundColor;
+        }
+
         /** @hide */
         @Override
         public void writeToParcel(@NonNull Parcel dest, int flags) {
@@ -540,6 +556,7 @@ public final class TransitionInfo implements Parcelable {
             dest.writeInt(mStartRotation);
             dest.writeInt(mEndRotation);
             dest.writeInt(mRotationAnimation);
+            dest.writeInt(mBackgroundColor);
         }
 
         @NonNull
@@ -581,6 +598,7 @@ public final class TransitionInfo implements Parcelable {
         private String mPackageName;
         private final Rect mTransitionBounds = new Rect();
         private HardwareBuffer mThumbnail;
+        private int mAnimations;
 
         private AnimationOptions(int type) {
             mType = type;
@@ -594,6 +612,15 @@ public final class TransitionInfo implements Parcelable {
             mPackageName = in.readString();
             mTransitionBounds.readFromParcel(in);
             mThumbnail = in.readTypedObject(HardwareBuffer.CREATOR);
+            mAnimations = in.readInt();
+        }
+
+        public static AnimationOptions makeAnimOptionsFromLayoutParameters(
+                WindowManager.LayoutParams lp) {
+            AnimationOptions options = new AnimationOptions(ANIM_FROM_STYLE);
+            options.mPackageName = lp.packageName;
+            options.mAnimations = lp.windowAnimations;
+            return options;
         }
 
         public static AnimationOptions makeCustomAnimOptions(String packageName, int enterResId,
@@ -662,6 +689,10 @@ public final class TransitionInfo implements Parcelable {
             return mThumbnail;
         }
 
+        public int getAnimations() {
+            return mAnimations;
+        }
+
         @Override
         public void writeToParcel(Parcel dest, int flags) {
             dest.writeInt(mType);
@@ -671,6 +702,7 @@ public final class TransitionInfo implements Parcelable {
             dest.writeString(mPackageName);
             mTransitionBounds.writeToParcel(dest, flags);
             dest.writeTypedObject(mThumbnail, flags);
+            dest.writeInt(mAnimations);
         }
 
         @NonNull

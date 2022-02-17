@@ -36,6 +36,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
+import org.mockito.Mockito.`when` as whenever
 import javax.inject.Provider
 
 private val DATA = MediaData(
@@ -74,6 +75,7 @@ class MediaCarouselControllerTest : SysuiTestCase() {
     @Mock lateinit var falsingCollector: FalsingCollector
     @Mock lateinit var falsingManager: FalsingManager
     @Mock lateinit var dumpManager: DumpManager
+    @Mock lateinit var mediaFlags: MediaFlags
 
     private val clock = FakeSystemClock()
     private lateinit var mediaCarouselController: MediaCarouselController
@@ -81,7 +83,7 @@ class MediaCarouselControllerTest : SysuiTestCase() {
     @Before
     fun setup() {
         MockitoAnnotations.initMocks(this)
-
+        whenever(mediaFlags.areMediaSessionActionsEnabled()).thenReturn(true)
         mediaCarouselController = MediaCarouselController(
             context,
             mediaControlPanelFactory,
@@ -94,7 +96,8 @@ class MediaCarouselControllerTest : SysuiTestCase() {
             configurationController,
             falsingCollector,
             falsingManager,
-            dumpManager
+            dumpManager,
+            mediaFlags
         )
 
         MediaPlayerData.clear()
@@ -104,37 +107,54 @@ class MediaCarouselControllerTest : SysuiTestCase() {
     fun testPlayerOrdering() {
         // Test values: key, data, last active time
         val playingLocal = Triple("playing local",
-            DATA.copy(active = true, isPlaying = true, isLocalSession = true, resumption = false),
+            DATA.copy(active = true, isPlaying = true,
+                    playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = false),
             4500L)
 
-        val playingRemote = Triple("playing remote",
-            DATA.copy(active = true, isPlaying = true, isLocalSession = false, resumption = false),
+        val playingCast = Triple("playing cast",
+            DATA.copy(active = true, isPlaying = true,
+                    playbackLocation = MediaData.PLAYBACK_CAST_LOCAL, resumption = false),
             5000L)
 
         val pausedLocal = Triple("paused local",
-            DATA.copy(active = true, isPlaying = false, isLocalSession = true, resumption = false),
+            DATA.copy(active = true, isPlaying = false,
+                    playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = false),
             1000L)
 
-        val pausedRemote = Triple("paused remote",
-            DATA.copy(active = true, isPlaying = false, isLocalSession = false, resumption = false),
+        val pausedCast = Triple("paused cast",
+            DATA.copy(active = true, isPlaying = false,
+                    playbackLocation = MediaData.PLAYBACK_CAST_LOCAL, resumption = false),
             2000L)
 
+        val playingRcn = Triple("playing RCN",
+            DATA.copy(active = true, isPlaying = true,
+                    playbackLocation = MediaData.PLAYBACK_CAST_REMOTE, resumption = false),
+            5000L)
+
+        val pausedRcn = Triple("paused RCN",
+                DATA.copy(active = true, isPlaying = false,
+                        playbackLocation = MediaData.PLAYBACK_CAST_REMOTE, resumption = false),
+                5000L)
+
         val resume1 = Triple("resume 1",
-            DATA.copy(active = false, isPlaying = false, isLocalSession = true, resumption = true),
+            DATA.copy(active = false, isPlaying = false,
+                    playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = true),
             500L)
 
         val resume2 = Triple("resume 2",
-            DATA.copy(active = false, isPlaying = false, isLocalSession = true, resumption = true),
+            DATA.copy(active = false, isPlaying = false,
+                    playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = true),
             1000L)
 
         // Expected ordering for media players:
         // Actively playing local sessions
-        // Actively playing remote sessions
-        // Paused sessions, by last active
+        // Actively playing cast sessions
+        // Paused local and cast sessions, by last active
+        // RCNs
         // Resume controls, by last active
 
-        val expected = listOf(playingLocal, playingRemote, pausedRemote, pausedLocal, resume2,
-            resume1)
+        val expected = listOf(playingLocal, playingCast, pausedCast, pausedLocal, playingRcn,
+                pausedRcn, resume2, resume1)
 
         expected.forEach {
             clock.setCurrentTimeMillis(it.third)

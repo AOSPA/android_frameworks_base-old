@@ -19,9 +19,12 @@ package com.android.systemui.statusbar.notification.collection.coordinator;
 import static com.android.systemui.statusbar.NotificationRemoteInputManager.FORCE_REMOTE_INPUT_HISTORY;
 import static com.android.systemui.statusbar.notification.interruption.HeadsUpController.alertAgain;
 
+import android.util.ArraySet;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.notification.collection.ListEntry;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
@@ -38,8 +41,7 @@ import com.android.systemui.statusbar.notification.interruption.NotificationInte
 import com.android.systemui.statusbar.notification.stack.NotificationPriorityBucketKt;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
-
-import java.util.Objects;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import javax.inject.Inject;
 
@@ -66,12 +68,11 @@ public class HeadsUpCoordinator implements Coordinator {
     private final NotificationInterruptStateProvider mNotificationInterruptStateProvider;
     private final NotificationRemoteInputManager mRemoteInputManager;
     private final NodeController mIncomingHeaderController;
-
-    // tracks the current HeadUpNotification reported by HeadsUpManager
-    private @Nullable NotificationEntry mCurrentHun;
+    private final DelayableExecutor mExecutor;
 
     private NotifLifetimeExtender.OnEndLifetimeExtensionCallback mEndLifetimeExtension;
-    private NotificationEntry mNotifExtendingLifetime; // notif we've extended the lifetime for
+    // notifs we've extended the lifetime for
+    private final ArraySet<NotificationEntry> mNotifsExtendingLifetime = new ArraySet<>();
 
     @Inject
     public HeadsUpCoordinator(
@@ -79,12 +80,14 @@ public class HeadsUpCoordinator implements Coordinator {
             HeadsUpViewBinder headsUpViewBinder,
             NotificationInterruptStateProvider notificationInterruptStateProvider,
             NotificationRemoteInputManager remoteInputManager,
-            @IncomingHeader NodeController incomingHeaderController) {
+            @IncomingHeader NodeController incomingHeaderController,
+            @Main DelayableExecutor executor) {
         mHeadsUpManager = headsUpManager;
         mHeadsUpViewBinder = headsUpViewBinder;
         mNotificationInterruptStateProvider = notificationInterruptStateProvider;
         mRemoteInputManager = remoteInputManager;
         mIncomingHeaderController = incomingHeaderController;
+        mExecutor = executor;
     }
 
     @Override
@@ -175,19 +178,32 @@ public class HeadsUpCoordinator implements Coordinator {
         }
 
         @Override
-        public boolean shouldExtendLifetime(@NonNull NotificationEntry entry, int reason) {
-            boolean isShowingHun = isCurrentlyShowingHun(entry);
-            if (isShowingHun) {
-                mNotifExtendingLifetime = entry;
+        public boolean maybeExtendLifetime(@NonNull NotificationEntry entry, int reason) {
+            boolean extend = !mHeadsUpManager.canRemoveImmediately(entry.getKey());
+            if (extend) {
+                if (isSticky(entry)) {
+                    long removeAfterMillis = mHeadsUpManager.getEarliestRemovalTime(entry.getKey());
+                    mExecutor.executeDelayed(() -> {
+                        if (mNotifsExtendingLifetime.contains(entry)
+                                && mHeadsUpManager.canRemoveImmediately(entry.getKey())) {
+                            mHeadsUpManager.removeNotification(
+                                    entry.getKey(), /* releaseImmediately */  true);
+                        }
+                    }, removeAfterMillis);
+                } else {
+                    // remove as early as possible
+                    mExecutor.execute(
+                            () -> mHeadsUpManager.removeNotification(
+                                    entry.getKey(), /* releaseImmediately */  false));
+                }
+                mNotifsExtendingLifetime.add(entry);
             }
-            return isShowingHun;
+            return extend;
         }
 
         @Override
         public void cancelLifetimeExtension(@NonNull NotificationEntry entry) {
-            if (Objects.equals(mNotifExtendingLifetime, entry)) {
-                mNotifExtendingLifetime = null;
-            }
+            mNotifsExtendingLifetime.remove(entry);
         }
     };
 
@@ -220,27 +236,24 @@ public class HeadsUpCoordinator implements Coordinator {
             new OnHeadsUpChangedListener() {
         @Override
         public void onHeadsUpStateChanged(NotificationEntry entry, boolean isHeadsUp) {
-            NotificationEntry newHUN = mHeadsUpManager.getTopEntry();
-            if (!Objects.equals(mCurrentHun, newHUN)) {
-                mCurrentHun = newHUN;
-                endNotifLifetimeExtension();
-            }
             if (!isHeadsUp) {
                 mHeadsUpViewBinder.unbindHeadsUpView(entry);
+                endNotifLifetimeExtensionIfExtended(entry);
             }
         }
     };
 
-    private boolean isCurrentlyShowingHun(ListEntry entry) {
-        return mCurrentHun == entry.getRepresentativeEntry();
+    private boolean isSticky(NotificationEntry entry) {
+        return mHeadsUpManager.isSticky(entry.getKey());
     }
 
-    private void endNotifLifetimeExtension() {
-        if (mNotifExtendingLifetime != null) {
-            mEndLifetimeExtension.onEndLifetimeExtension(
-                    mLifetimeExtender,
-                    mNotifExtendingLifetime);
-            mNotifExtendingLifetime = null;
+    private boolean isCurrentlyShowingHun(ListEntry entry) {
+        return mHeadsUpManager.isAlerting(entry.getKey());
+    }
+
+    private void endNotifLifetimeExtensionIfExtended(NotificationEntry entry) {
+        if (mNotifsExtendingLifetime.remove(entry)) {
+            mEndLifetimeExtension.onEndLifetimeExtension(mLifetimeExtender, entry);
         }
     }
 }

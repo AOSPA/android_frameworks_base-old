@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -578,7 +579,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
         }
 
         @Override
-        public void verifyCallingPackage(String callingPackage) {
+        public void verifyCallingPackage(String callingPackage, int callerUid) {
             // SKIP
         }
 
@@ -1499,6 +1500,20 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
                 makeIntent(Intent.ACTION_VIEW, ShortcutActivity.class), /* rank =*/ 0);
     }
 
+    /**
+     * Make a hidden shortcut with an ID.
+     */
+    protected ShortcutInfo makeShortcutExcludedFromLauncher(String id) {
+        final ShortcutInfo.Builder  b = new ShortcutInfo.Builder(mClientContext, id)
+                .setActivity(new ComponentName(mClientContext.getPackageName(), "main"))
+                .setShortLabel("Title-" + id)
+                .setIntent(makeIntent(Intent.ACTION_VIEW, ShortcutActivity.class))
+                .setExcludedFromSurfaces(ShortcutInfo.SURFACE_LAUNCHER);
+        final ShortcutInfo s = b.build();
+        s.setTimestamp(mInjectedCurrentTimeMillis);
+        return s;
+    }
+
     @Deprecated // Title was renamed to short label.
     protected ShortcutInfo makeShortcutWithTitle(String id, String title) {
         return makeShortcut(
@@ -1881,6 +1896,18 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
         try {
             mLauncherApps.startShortcut(packageName, shortcutId, null, null,
                     UserHandle.of(userId));
+        } catch (Exception e) {
+            thrown = e;
+        }
+        assertNotNull("Exception was not thrown", thrown);
+        assertEquals("Exception type different", expectedException, thrown.getClass());
+    }
+
+    protected void assertThrown(@NonNull final Class<?> expectedException,
+            @NonNull final Runnable fn) {
+        Exception thrown = null;
+        try {
+            fn.run();
         } catch (Exception e) {
             thrown = e;
         }
@@ -2357,7 +2384,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
 
     protected void prepareIntentActivities(ComponentName cn) {
         when(mMockPackageManagerInternal.queryIntentActivities(
-                anyOrNull(Intent.class), anyStringOrNull(), anyInt(), anyInt(), anyInt()))
+                anyOrNull(Intent.class), anyStringOrNull(), anyLong(), anyInt(), anyInt()))
                 .thenReturn(Collections.singletonList(
                         ri(cn.getPackageName(), cn.getClassName(), false, 0)));
     }

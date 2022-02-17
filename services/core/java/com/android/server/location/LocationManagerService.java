@@ -39,6 +39,7 @@ import android.Manifest;
 import android.Manifest.permission;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
@@ -111,7 +112,6 @@ import com.android.server.location.injector.DeviceIdleHelper;
 import com.android.server.location.injector.DeviceStationaryHelper;
 import com.android.server.location.injector.EmergencyHelper;
 import com.android.server.location.injector.Injector;
-import com.android.server.location.injector.LocationAttributionHelper;
 import com.android.server.location.injector.LocationPermissionsHelper;
 import com.android.server.location.injector.LocationPowerSaveModeHelper;
 import com.android.server.location.injector.LocationUsageLogger;
@@ -1251,6 +1251,32 @@ public class LocationManagerService extends ILocationManager.Stub implements
     }
 
     @Override
+    @RequiresPermission(android.Manifest.permission.AUTOMOTIVE_GNSS_CONTROLS)
+    public void setAutoGnssSuspended(boolean suspended) {
+        mContext.enforceCallingPermission(permission.AUTOMOTIVE_GNSS_CONTROLS, null);
+
+        if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
+            throw new IllegalStateException(
+                    "setAutoGnssSuspended only allowed on automotive devices");
+        }
+
+        mGnssManagerService.setAutoGnssSuspended(suspended);
+    }
+
+    @Override
+    @RequiresPermission(android.Manifest.permission.AUTOMOTIVE_GNSS_CONTROLS)
+    public boolean isAutoGnssSuspended() {
+        mContext.enforceCallingPermission(permission.AUTOMOTIVE_GNSS_CONTROLS, null);
+
+        if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
+            throw new IllegalStateException(
+                    "isAutoGnssSuspended only allowed on automotive devices");
+        }
+
+        return mGnssManagerService.isAutoGnssSuspended();
+    }
+
+    @Override
     public boolean geocoderIsPresent() {
         return mGeocodeProvider != null;
     }
@@ -1690,7 +1716,6 @@ public class LocationManagerService extends ILocationManager.Stub implements
         private final SystemScreenInteractiveHelper mScreenInteractiveHelper;
         private final SystemDeviceStationaryHelper mDeviceStationaryHelper;
         private final SystemDeviceIdleHelper mDeviceIdleHelper;
-        private final LocationAttributionHelper mLocationAttributionHelper;
         private final LocationUsageLogger mLocationUsageLogger;
 
         // lazily instantiated since they may not always be used
@@ -1716,7 +1741,6 @@ public class LocationManagerService extends ILocationManager.Stub implements
             mScreenInteractiveHelper = new SystemScreenInteractiveHelper(context);
             mDeviceStationaryHelper = new SystemDeviceStationaryHelper();
             mDeviceIdleHelper = new SystemDeviceIdleHelper(context);
-            mLocationAttributionHelper = new LocationAttributionHelper(mAppOpsHelper);
             mLocationUsageLogger = new LocationUsageLogger();
         }
 
@@ -1790,11 +1814,6 @@ public class LocationManagerService extends ILocationManager.Stub implements
         @Override
         public DeviceIdleHelper getDeviceIdleHelper() {
             return mDeviceIdleHelper;
-        }
-
-        @Override
-        public LocationAttributionHelper getLocationAttributionHelper() {
-            return mLocationAttributionHelper;
         }
 
         @Override

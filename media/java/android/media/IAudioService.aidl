@@ -32,6 +32,7 @@ import android.media.IAudioRoutesObserver;
 import android.media.IAudioServerStateDispatcher;
 import android.media.ICapturePresetDevicesRoleDispatcher;
 import android.media.ICommunicationDeviceDispatcher;
+import android.media.IMuteAwaitConnectionCallback;
 import android.media.IPlaybackConfigDispatcher;
 import android.media.IRecordingConfigDispatcher;
 import android.media.IRingtonePlayer;
@@ -310,6 +311,8 @@ interface IAudioService {
 
     List<AudioDeviceAttributes> getDevicesForAttributes(in AudioAttributes attributes);
 
+    List<AudioDeviceAttributes> getDevicesForAttributesUnprotected(in AudioAttributes attributes);
+
     int setAllowedCapturePolicy(in int capturePolicy);
 
     int getAllowedCapturePolicy();
@@ -388,7 +391,7 @@ interface IAudioService {
 
     int requestAudioFocusForTest(in AudioAttributes aa, int durationHint, IBinder cb,
             in IAudioFocusDispatcher fd, in String clientId, in String callingPackageName,
-            int uid, int sdk);
+            int flags, int uid, int sdk);
 
     int abandonAudioFocusForTest(in IAudioFocusDispatcher fd, in String clientId,
             in AudioAttributes aa, in String callingPackageName);
@@ -450,4 +453,22 @@ interface IAudioService {
     void unregisterSpatializerOutputCallback(in ISpatializerOutputCallback cb);
 
     boolean isVolumeFixed();
+
+    boolean isPstnCallAudioInterceptable();
+
+    oneway void muteAwaitConnection(in int[] usagesToMute, in AudioDeviceAttributes dev,
+            long timeOutMs);
+
+    oneway void cancelMuteAwaitConnection(in AudioDeviceAttributes dev);
+
+    AudioDeviceAttributes getMutingExpectedDevice();
+
+    void registerMuteAwaitConnectionDispatcher(in IMuteAwaitConnectionCallback cb,
+            boolean register);
+
+    void setTestDeviceConnectionState(in AudioDeviceAttributes device, boolean connected);
+
+    List<AudioFocusInfo> getFocusStack();
+
+    boolean sendFocusLoss(in AudioFocusInfo focusLoser, in IAudioPolicyCallback apcb);
 }

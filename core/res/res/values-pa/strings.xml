@@ -174,7 +174,7 @@
     <string name="httpErrorTooManyRequests" msgid="2149677715552037198">"ਬਹੁਤ ਜ਼ਿਆਦਾ ਬੇਨਤੀਆਂ ਦੀ ਪ੍ਰਕਿਰਿਆ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ। ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
     <string name="notification_title" msgid="5783748077084481121">"<xliff:g id="ACCOUNT">%1$s</xliff:g> ਲਈ ਸਾਈਨਇਨ ਅਸ਼ੁੱਧੀ"</string>
     <string name="contentServiceSync" msgid="2341041749565687871">"ਸਿੰਕ ਕਰੋ"</string>
-    <string name="contentServiceSyncNotificationTitle" msgid="5766411446676388623">"ਸਮਕਾਲੀਕਿਰਤ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ"</string>
+    <string name="contentServiceSyncNotificationTitle" msgid="5766411446676388623">"ਸਿੰਕ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ"</string>
     <string name="contentServiceTooManyDeletesNotificationDesc" msgid="4562226280528716090">"ਬਹੁਤ ਸਾਰੀਆਂ <xliff:g id="CONTENT_TYPE">%s</xliff:g> ਨੂੰ ਮਿਟਾਉਣ ਦੀ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ ਗਈ।"</string>
     <string name="low_memory" product="tablet" msgid="5557552311566179924">"ਟੈਬਲੈੱਟ ਸਟੋਰੇਜ ਪੂਰੀ ਭਰੀ ਹੈ। ਜਗ੍ਹਾ ਖਾਲੀ ਕਰਨ ਲਈ ਕੁਝ ਫ਼ਾਈਲਾਂ ਮਿਟਾਓ।"</string>
     <string name="low_memory" product="watch" msgid="3479447988234030194">"ਘੜੀ ਸਟੋਰੇਜ ਪੂਰੀ ਭਰੀ ਹੈ। ਜਗ੍ਹਾ ਖਾਲੀ ਕਰਨ ਲਈ ਕੁਝ ਫ਼ਾਈਲਾਂ ਮਿਟਾਓ।"</string>
@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"ਐਪ ਨੂੰ ਤੁਹਾਡੇ Android TV ਡੀਵਾਈਸ ਦਾ ਕਾਲ ਲੌਗ ਸੋਧਣ ਦਿੰਦੀ ਹੈ, ਇਸ ਵਿੱਚ ਇਨਕਮਿੰਗ ਅਤੇ ਆਊਟਗੋਇੰਗ ਕਾਲਾਂ ਬਾਰੇ ਡਾਟਾ ਵੀ ਸ਼ਾਮਲ ਹੈ। ਭੈੜੀਆਂ ਐਪਾਂ ਤੁਹਾਡੀ ਜਾਣਕਾਰੀ ਤੋਂ ਬਿਨਾਂ ਕਾਲ ਲੌਗ ਡਾਟਾ ਮਿਟਾ ਜਾਂ ਸੋਧ ਸਕਦੀਆਂ ਹਨ।"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"ਐਪ ਨੂੰ ਤੁਹਾਡੇ ਫ਼ੋਨ ਦਾ ਕਾਲ ਲੌਗ ਸੰਸ਼ੋਧਿਤ ਕਰਨ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ, ਇਨਕਮਿੰਗ ਅਤੇ ਆਊਟਗੋਇੰਗ ਕਾਲਾਂ ਬਾਰੇ ਡਾਟਾ ਸਮੇਤ। ਖਰਾਬ ਐਪਾਂ ਇਸਦੀ ਵਰਤੋਂ ਤੁਹਾਡੇ ਕਾਲ ਲੌਗ ਨੂੰ ਮਿਟਾਉਣ ਜਾਂ ਸੰਸ਼ੋਧਿਤ ਕਰਨ ਲਈ ਕਰ ਸਕਦੀਆਂ ਹਨ।"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"ਸਰੀਰ ਸੰਵੇਦਕਾਂ \'ਤੇ ਪਹੁੰਚ ਕਰੋ (ਜਿਵੇਂ ਦਿਲ ਦੀ ਧੜਕਣ ਦੇ ਨਿਰੀਖਕ)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"ਐਪ ਨੂੰ ਉਹਨਾਂ ਸੰਵੇਦਕਾਂ ਦੇ ਡਾਟਾ ਤੱਕ ਪਹੁੰਚ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ ਜੋ ਤੁਹਾਡੀ ਸਰੀਰਕ ਸਥਿਤੀ ਦਾ ਨਿਰੀਖਣ ਕਰ ਸਕਦੇ ਹਨ, ਜਿਵੇਂ ਤੁਹਾਡੇ ਦਿਲ ਦੀ ਧੜਕਣ।"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"ਸਰੀਰ ਸੰਬੰਧੀ ਸੈਂਸਰਾਂ ਜਿਵੇਂ ਕਿ ਦਿਲ ਦੀ ਧੜਕਣ, ਤਾਪਮਾਨ, ਖੂਨ ਵਿੱਚ ਮੌਜੂਦ ਆਕਸੀਜਨ ਦੀ ਫ਼ੀਸਦ ਆਦਿ ਤੋਂ ਡਾਟੇ ਤੱਕ ਪਹੁੰਚ ਕਰੋ।"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਰਹਿੰਦੇ ਹੋਏ (ਜਿਵੇਂ ਕਿ ਦਿਲ ਦੀ ਧੜਕਣ ਮਾਪਣ ਵਾਲੇ ਮਾਨੀਟਰ) ਸਰੀਰ ਸੰਬੰਧੀ ਸੈਂਸਰਾਂ ਤੱਕ ਪਹੁੰਚ ਕਰੋ"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਰਹਿੰਦੇ ਹੋਏ ਸਰੀਰ ਸੰਬੰਧੀ ਸੈਂਸਰਾਂ ਜਿਵੇਂ ਕਿ ਦਿਲ ਦੀ ਧੜਕਣ, ਤਾਪਮਾਨ, ਖੂਨ ਵਿੱਚ ਮੌਜੂਦ ਆਕਸੀਜਨ ਦੀ ਫ਼ੀਸਦ ਆਦਿ ਤੋਂ ਡਾਟੇ ਤੱਕ ਪਹੁੰਚ ਕਰੋ।"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"ਕੈਲੰਡਰ ਵਰਤਾਰਿਆਂ ਅਤੇ ਵੇਰਵਿਆਂ ਨੂੰ ਪੜ੍ਹੋ"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"ਇਹ ਐਪ ਤੁਹਾਡੇ ਟੈਬਲੈੱਟ \'ਤੇ ਸਟੋਰ ਕੀਤੇ ਸਾਰੇ ਕੈਲੰਡਰ ਇਵੈਂਟਾਂ ਨੂੰ ਪੜ੍ਹ ਸਕਦੀ ਹੈ ਅਤੇ ਤੁਹਾਡੇ ਕੈਲੰਡਰ ਡਾਟੇ ਨੂੰ ਸਾਂਝਾ ਜਾਂ ਰੱਖਿਅਤ ਕਰ ਸਕਦੀ ਹੈ।"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"ਇਹ ਐਪ ਤੁਹਾਡੇ Android TV ਡੀਵਾਈਸ \'ਤੇ ਸਟੋਰ ਕੀਤੇ ਸਾਰੇ ਕੈਲੰਡਰ ਇਵੈਂਟਾਂ ਨੂੰ ਪੜ੍ਹ ਸਕਦੀ ਹੈ ਅਤੇ ਤੁਹਾਡੇ ਕੈਲੰਡਰ ਡਾਟੇ ਨੂੰ ਸਾਂਝਾ ਜਾਂ ਰੱਖਿਅਤ ਕਰ ਸਕਦੀ ਹੈ।"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"ਐਪ ਨੂੰ ਤੁਹਾਡੇ ਦਖ਼ਲ ਤੋਂ ਬਿਨਾਂ ਕਾਲਾਂ ਕਰਨ ਲਈ IMS ਸੇਵਾ ਵਰਤਣ ਦੀ ਆਗਿਆ ਦਿੰਦੀ ਹੈ।"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"ਫ਼ੋਨ ਸਥਿਤੀ ਅਤੇ ਪਛਾਣ ਪੜ੍ਹੋ"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"ਐਪ ਨੂੰ ਡੀਵਾਈਸ ਦੀਆਂ ਫ਼ੋਨ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਤੱਕ ਪਹੁੰਚ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ। ਇਹ ਇਜਾਜ਼ਤ ਐਪ ਨੂੰ ਫ਼ੋਨ ਨੰਬਰ ਅਤੇ ਡੀਵਾਈਸ ਆਈ.ਡੀ. ਨਿਰਧਾਰਤ ਕਰਨ ਦੀ ਆਗਿਆ ਦਿੰਦੀ ਹੈ, ਇੱਕ ਕਾਲ ਕਿਰਿਆਸ਼ੀਲ ਹੈ ਜਾਂ ਨਹੀਂ ਅਤੇ ਰਿਮੋਟ ਨੰਬਰ ਇੱਕ ਕਾਲ ਨਾਲ ਕਨੈਕਟ ਹੈ ਜਾਂ ਨਹੀਂ।"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"ਮੂਲ ਟੈਲੀਫ਼ੋਨੀ ਸਥਿਤੀ ਅਤੇ ਪਛਾਣ ਨੂੰ ਪੜ੍ਹੋ"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"ਐਪ ਨੂੰ ਡੀਵਾਈਸ \'ਤੇ ਮੂਲ ਟੈਲੀਫ਼ੋਨੀ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਤੱਕ ਪਹੁੰਚ ਕਰਨ ਦਿੰਦੀ ਹੈ।"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"ਸਿਸਟਮ ਰਾਹੀਂ ਕਾਲਾਂ ਰੂਟ ਕਰੋ"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"ਕਾਲ ਕਰਨ ਦੇ ਅਨੁਭਵ ਨੂੰ ਬਿਹਤਰ ਬਣਾਉਣ ਲਈ ਐਪ ਨੂੰ ਇਸਦੀਆਂ ਕਾਲਾਂ ਨੂੰ ਸਿਸਟਮ ਰਾਹੀਂ ਰੂਟ ਕਰਨ ਦੀ ਇਜਾਜ਼ਤ ਦਿੰਦੀ ਹੈ।"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"ਸਿਸਟਮ ਰਾਹੀਂ ਕਾਲਾਂ ਦੇਖੋ ਅਤੇ ਕੰਟਰੋਲ ਕਰੋ।"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"ਆਪਣੇ ਚਿਹਰੇ ਦਾ ਮਾਡਲ ਮਿਟਾਉਣ ਲਈ ਟੈਪ ਕਰੋ, ਫਿਰ ਆਪਣਾ ਚਿਹਰਾ ਦੁਬਾਰਾ ਸ਼ਾਮਲ ਕਰੋ"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"ਫ਼ੇਸ ਅਣਲਾਕ ਦਾ ਸੈੱਟਅੱਪ ਕਰੋ"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"ਆਪਣੇ ਫ਼ੋਨ ਵੱਲ ਦੇਖ ਕੇ ਇਸਨੂੰ ਅਣਲਾਕ ਕਰੋ"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"ਫ਼ੇਸ ਅਣਲਾਕ ਨੂੰ ਵਰਤਣ ਲਈ, ਸੈਟਿੰਗਾਂ &gt; ਪਰਦੇਦਾਰੀ ਵਿੱਚ ਜਾ ਕੇ "<b>"ਕੈਮਰਾ ਪਹੁੰਚ"</b>" ਨੂੰ ਚਾਲੂ ਕਰੋ"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"ਅਣਲਾਕ ਕਰਨ ਦੇ ਹੋਰ ਤਰੀਕਿਆਂ ਦਾ ਸੈੱਟਅੱਪ ਕਰੋ"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"ਫਿੰਗਰਪ੍ਰਿੰਟ ਸ਼ਾਮਲ ਕਰਨ ਲਈ ਟੈਪ ਕਰੋ"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"ਫਿੰਗਰਪ੍ਰਿੰਟ ਅਣਲਾਕ"</string>
@@ -671,11 +676,11 @@
     <string name="face_error_vendor_unknown" msgid="7387005932083302070">"ਕੋਈ ਗੜਬੜ ਹੋ ਗਈ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"ਚਿਹਰਾ ਪ੍ਰਤੀਕ"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"ਸਿੰਕ ਸੈਟਿੰਗਾਂ ਪੜ੍ਹੋ"</string>
-    <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"ਐਪ ਨੂੰ ਕਿਸੇ ਖਾਤੇ ਲਈ ਸਮਕਾਲੀਕਰਨ ਸੈਟਿੰਗਾਂ ਪੜ੍ਹਨ ਦੇ ਯੋਗ ਬਣਾਉਂਦਾ ਹੈ। ਉਦਾਹਰਨ ਲਈ, ਇਹ ਪਤਾ ਕਰ ਸਕਦਾ ਹੈ ਕਿ People ਐਪ ਦਾ ਕਿਸੇ ਖਾਤੇ ਨਾਲ ਸਮਕਾਲੀਕਿਰਤ ਕੀਤਾ ਗਿਆ ਹੈ ਜਾਂ ਨਹੀਂ।"</string>
-    <string name="permlab_writeSyncSettings" msgid="6583154300780427399">"ਸਮਕਾਲੀਕਰਨ ਚਾਲੂ ਅਤੇ ਬੰਦ ਨੂੰ ਟੌਗਲ ਕਰੋ"</string>
-    <string name="permdesc_writeSyncSettings" msgid="6029151549667182687">"ਐਪ ਨੂੰ ਇੱਕ ਖਾਤੇ ਲਈ ਸਮਕਾਲੀਕਰਨ ਸੈਟਿੰਗਾਂ ਸੋਧਣ ਦੇ ਯੋਗ ਬਣਾਉਂਦਾ ਹੈ। ਉਦਾਹਰਨ ਲਈ, ਇਸਦੀ ਵਰਤੋਂ ਕਿਸੇ ਖਾਤੇ ਨਾਲ People ਐਪ ਦਾ ਸਮਕਾਲੀਕਰਨ ਚਾਲੂ ਕਰਨ ਲਈ ਕੀਤੀ ਜਾ ਸਕਦੀ ਹੈ।"</string>
+    <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"ਐਪ ਨੂੰ ਕਿਸੇ ਖਾਤੇ ਲਈ ਸਿੰਕ ਸੈਟਿੰਗਾਂ ਪੜ੍ਹਨ ਦੇ ਯੋਗ ਬਣਾਉਂਦਾ ਹੈ। ਉਦਾਹਰਨ ਲਈ, ਇਹ ਪਤਾ ਕਰ ਸਕਦਾ ਹੈ ਕਿ People ਐਪ ਨੂੰ ਕਿਸੇ ਖਾਤੇ ਨਾਲ ਸਿੰਕ ਕੀਤਾ ਗਿਆ ਹੈ ਜਾਂ ਨਹੀਂ।"</string>
+    <string name="permlab_writeSyncSettings" msgid="6583154300780427399">"ਸਿੰਕ ਚਾਲੂ ਅਤੇ ਬੰਦ ਨੂੰ ਟੌਗਲ ਕਰੋ"</string>
+    <string name="permdesc_writeSyncSettings" msgid="6029151549667182687">"ਐਪ ਨੂੰ ਇੱਕ ਖਾਤੇ ਲਈ ਸਿੰਕ ਸੈਟਿੰਗਾਂ ਸੋਧਣ ਦੇ ਯੋਗ ਬਣਾਉਂਦਾ ਹੈ। ਉਦਾਹਰਨ ਲਈ, ਇਸਦੀ ਵਰਤੋਂ ਕਿਸੇ ਖਾਤੇ ਨਾਲ People ਐਪ ਦਾ ਸਿੰਕ ਚਾਲੂ ਕਰਨ ਲਈ ਕੀਤੀ ਜਾ ਸਕਦੀ ਹੈ।"</string>
     <string name="permlab_readSyncStats" msgid="3747407238320105332">"ਸਿੰਕ ਅੰਕੜੇ ਪੜ੍ਹੋ"</string>
-    <string name="permdesc_readSyncStats" msgid="3867809926567379434">"ਐਪ ਨੂੰ ਇੱਕ ਖਾਤੇ ਲਈ ਸਮਕਾਲੀਕਰਨ ਸਥਿਤੀ ਪੜ੍ਹਨ ਦੇ ਯੋਗ ਬਣਾਉਂਦਾ ਹੈ, ਇਸ ਵਿੱਚ ਸਮਕਾਲੀਕਰਨ ਵਰਤਾਰਿਆਂ ਦਾ ਇਤਿਹਾਸ ਅਤੇ ਕਿੰਨੇ ਡਾਟਾ ਦਾ ਸਮਕਾਲੀਕਿਰਤ ਕੀਤਾ ਜਾਂਦਾ ਹੈ, ਵੀ ਸ਼ਾਮਲ ਹੈ।"</string>
+    <string name="permdesc_readSyncStats" msgid="3867809926567379434">"ਐਪ ਨੂੰ ਇੱਕ ਖਾਤੇ ਲਈ ਸਿੰਕ ਸਥਿਤੀ ਪੜ੍ਹਨ ਦੇ ਯੋਗ ਬਣਾਉਂਦਾ ਹੈ, ਇਸ ਵਿੱਚ ਸਿੰਕ ਇਵੈਂਟਾਂ ਦਾ ਇਤਿਹਾਸ ਅਤੇ ਕਿੰਨਾ ਡਾਟਾ ਸਿੰਕ ਕੀਤਾ ਜਾਂਦਾ ਹੈ, ਇਹ ਵੀ ਸ਼ਾਮਲ ਹੈ।"</string>
     <string name="permlab_sdcardRead" msgid="5791467020950064920">"ਸਮੱਗਰੀਆਂ ਪੜ੍ਹੋ"</string>
     <string name="permdesc_sdcardRead" msgid="6872973242228240382">"ਐਪ ਨੂੰ ਸਮੱਗਰੀਆਂ ਪੜ੍ਹਨ ਦਿੰਦੀ ਹੈ।"</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"ਸਮੱਗਰੀਆਂ ਦਾ ਸੰਸ਼ੋਧਨ ਕਰੋ ਜਾਂ ਮਿਟਾਓ"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"ਐਪ ਨੂੰ ਪਰੇਸ਼ਾਨ ਨਾ ਕਰੋ ਕੌਂਫਿਗਰੇਸ਼ਨ ਨੂੰ ਪੜ੍ਹਨ ਅਤੇ ਲਿਖਣ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ।"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"ਇਜਾਜ਼ਤ ਵਰਤੋਂ ਦੇਖਣਾ ਸ਼ੁਰੂ ਕਰੋ"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"ਧਾਰਕ ਨੂੰ ਕਿਸੇ ਹੋਰ ਐਪ ਲਈ ਇਜਾਜ਼ਤ ਵਰਤੋਂ ਨੂੰ ਸ਼ੁਰੂ ਕਰਨ ਦਿੰਦਾ ਹੈ। ਸਧਾਰਨ ਐਪਾਂ ਲਈ ਕਦੇ ਵੀ ਲੋੜੀਂਦਾ ਨਹੀਂ ਹੋਵੇਗਾ।"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"ਇਜਾਜ਼ਤ ਸੰਬੰਧੀ ਫ਼ੈਸਲਿਆਂ ਨੂੰ ਦੇਖਣਾ ਸ਼ੁਰੂ ਕਰੋ"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"ਇਜਾਜ਼ਤ ਸੰਬੰਧੀ ਫ਼ੈਸਲਿਆਂ ਦੀ ਸਮੀਖਿਆ ਕਰਨ ਲਈ ਹੋਲਡਰ ਨੂੰ ਸਕ੍ਰੀਨ ਨੂੰ ਸ਼ੁਰੂ ਕਰਨ ਦੀ ਆਗਿਆ ਦਿੰਦੀ ਹੈ। ਸਧਾਰਨ ਐਪਾਂ ਲਈ ਕਦੇ ਵੀ ਲੋੜੀਂਦੀ ਨਹੀਂ ਹੋਵੇਗੀ।"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"ਐਪ ਦੀਆਂ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਦੇਖਣਾ ਸ਼ੁਰੂ ਕਰੋ"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"ਇਸ ਨਾਲ ਹੋਲਡਰ ਨੂੰ ਕਿਸੇ ਐਪ ਦੀਆਂ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਬਾਰੇ ਜਾਣਕਾਰੀ ਦੇਖਣ ਦੀ ਆਗਿਆ ਮਿਲਦੀ ਹੈ।"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"ਉੱਚ ਸੈਂਪਲਿੰਗ ਰੇਟ \'ਤੇ ਸੈਂਸਰ ਡਾਟਾ ਤੱਕ ਪਹੁੰਚ ਕਰੋ"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"ਸਕ੍ਰੀਨ ਅਣਲਾਕ ਕਰਨ ਦੀਆਂ ਕੋਸ਼ਿਸ਼ਾਂ \'ਤੇ ਨਿਗਰਾਨੀ ਰੱਖੋ"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਹੋਏ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦਾ ਨਿਰੀਖਣ ਕਰੋ ਅਤੇ ਟੈਬਲੈੱਟ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਟੈਬਲੈੱਟ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ, ਜੇਕਰ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ।"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਹੋਏ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦਾ ਨਿਰੀਖਣ ਕਰੋ ਅਤੇ ਆਪਣੇ Android TV ਡੀਵਾਈਸ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਆਪਣੇ Android TV ਡੀਵਾਈਸ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ, ਜੇ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ।"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਸਮੇਂ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦੀ ਨਿਗਰਾਨੀ ਕਰੋ ਅਤੇ ਜੇ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ, ਤਾਂ ਵਾਹਨ ਆਡੀਓ ਸਿਸਟਮ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਵਾਹਨ ਆਡੀਓ ਸਿਸਟਮ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਸਮੇਂ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦਾ ਨਿਰੀਖਣ ਕਰੋ ਅਤੇ ਫ਼ੋਨ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਫ਼ੋਨ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ ਜੇਕਰ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਹੋਏ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦਾ ਨਿਰੀਖਣ ਕਰੋ ਅਤੇ ਟੈਬਲੈੱਟ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਟੈਬਲੈੱਟ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ, ਜੇਕਰ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਹੋਏ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦਾ ਨਿਰੀਖਣ ਕਰੋ ਅਤੇ ਆਪਣੇ Android TV ਡੀਵਾਈਸ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਇਸ ਵਰਤੋਂਕਾਰ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ, ਜੇ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ।"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਸਮੇਂ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦੀ ਨਿਗਰਾਨੀ ਕਰੋ ਅਤੇ ਜੇ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ, ਤਾਂ ਵਾਹਨ ਆਡੀਓ ਸਿਸਟਮ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਇਸ ਪ੍ਰੋਫਾਈਲ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"ਸਕ੍ਰੀਨ ਨੂੰ ਅਣਲਾਕ ਕਰਦੇ ਸਮੇਂ ਟਾਈਪ ਕੀਤੇ ਗਲਤ ਪਾਸਵਰਡਾਂ ਦੀ ਸੰਖਿਆ ਦਾ ਨਿਰੀਖਣ ਕਰੋ ਅਤੇ ਫ਼ੋਨ ਨੂੰ ਲਾਕ ਕਰੋ ਜਾਂ ਫ਼ੋਨ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ ਜੇਕਰ ਬਹੁਤ ਜ਼ਿਆਦਾ ਗਲਤ ਪਾਸਵਰਡ ਟਾਈਪ ਕੀਤੇ ਹਨ।"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"ਸਕ੍ਰੀਨ ਲਾਕ ਬਦਲੋ"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"ਸਕ੍ਰੀਨ ਲਾਕ ਬਦਲੋ।"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"ਇੱਕ ਫੈਕਟਰੀ ਡਾਟਾ ਰੀਸੈੱਟ ਕਰਕੇ ਚਿਤਾਵਨੀ ਤੋਂ ਬਿਨਾਂ ਟੈਬਲੈੱਟ ਦਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"ਫੈਕਟਰੀ ਡਾਟਾ ਰੀਸੈੱਟ ਕਰਕੇ ਬਿਨਾਂ ਚਿਤਾਵਨੀ ਦੇ ਤੁਹਾਡੇ Android TV ਡੀਵਾਈਸ ਦਾ ਡਾਟਾ ਮਿਟਾ ਦਿੱਤਾ ਜਾਂਦਾ ਹੈ।"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"ਫੈਕਟਰੀ ਡਾਟਾ ਰੀਸੈੱਟ ਕਰਕੇ ਚਿਤਾਵਨੀ ਤੋਂ ਬਿਨਾਂ ਵਾਹਨ ਆਡੀਓ ਸਿਸਟਮ ਦਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"ਇੱਕ ਫੈਕਟਰੀ ਡਾਟਾ ਰੀਸੈੱਟ ਕਰਕੇ ਚਿਤਾਵਨੀ ਤੋਂ ਬਿਨਾਂ ਫ਼ੋਨ ਦਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"ਉਪਭੋਗਤਾ  ਡਾਟਾ  ਮਿਟਾਓ"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"ਪ੍ਰੋਫਾਈਲ ਡਾਟਾ ਮਿਟਾਓ"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"ਉਪਭੋਗਤਾ  ਡਾਟਾ  ਮਿਟਾਓ"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"ਬਿਨਾਂ ਚਿਤਾਵਨੀ ਦੇ ਇਸ ਟੈਬਲੈੱਟ ਤੇ ਮੌਜੂਦ ਇਸ ਵਰਤੋਂਕਾਰ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"ਬਿਨਾਂ ਚਿਤਾਵਨੀ ਦੇ ਇਸ Android TV ਡੀਵਾਈਸ \'ਤੇ ਮੌਜੂਦ ਇਸ ਵਰਤੋਂਕਾਰ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"ਇਸ ਵਾਹਨ ਆਡੀਓ ਸਿਸਟਮ \'ਤੇ ਚਿਤਾਵਨੀ ਤੋਂ ਬਿਨਾਂ ਇਸ ਪ੍ਰੋਫਾਈਲ ਦਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"ਬਿਨਾਂ ਚਿਤਾਵਨੀ ਦੇ ਇਸ ਫ਼ੋਨ ਤੇ ਮੌਜੂਦ ਇਸ ਵਰਤੋਂਕਾਰ ਦਾ ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਓ।"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"ਡੀਵਾਈਸ ਗਲੋਬਲ ਪ੍ਰੌਕਸੀ ਸੈੱਟ ਕਰੋ"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"ਜਦੋਂ ਨੀਤੀ ਚਾਲੂ ਹੋਵੇ ਤਾਂ ਵਰਤੇ ਜਾਣ ਲਈ ਡੀਵਾਈਸ ਗਲੋਬਲ ਪ੍ਰੌਕਸੀ ਸੈੱਟ ਕਰੋ। ਕੇਵਲ ਡੀਵਾਈਸ ਮਾਲਕ ਗਲੋਬਲ ਪ੍ਰੌਕਸੀ ਸੈੱਟ ਕਰ ਸਕਦਾ ਹੈ।"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> ਤਿਆਰ ਕਰ ਰਿਹਾ ਹੈ।"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"ਐਪਸ ਚਾਲੂ ਕਰ ਰਿਹਾ ਹੈ।"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"ਬੂਟ ਪੂਰਾ ਕਰ ਰਿਹਾ ਹੈ।"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"ਕੀ ਸਕ੍ਰੀਨ ਬੰਦ ਕਰਨੀ ਹੈ?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"ਆਪਣੇ ਫਿੰਗਰਪ੍ਰਿੰਟ ਦਾ ਸੈੱਟਅੱਪ ਕਰਨ ਵੇਲੇ, ਤੁਸੀਂ ਪਾਵਰ ਬਟਨ ਨੂੰ ਦਬਾਇਆ ਹੈ।\n\nਇਹ ਆਮ ਤੌਰ \'ਤੇ ਤੁਹਾਡੀ ਸਕ੍ਰੀਨ ਨੂੰ ਬੰਦ ਕਰ ਦਿੰਦਾ ਹੈ।"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"ਬੰਦ ਕਰੋ"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"ਰੱਦ ਕਰੋ"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"ਕੀ ਸੈੱਟਅੱਪ ਜਾਰੀ ਰੱਖਣਾ ਹੈ?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"ਤੁਸੀਂ ਪਾਵਰ ਬਟਨ ਨੂੰ ਦਬਾਇਆ ਹੈ — ਇਹ ਆਮ ਤੌਰ \'ਤੇ ਸਕ੍ਰੀਨ ਨੂੰ ਬੰਦ ਕਰ ਦਿੰਦਾ ਹੈ।\n\nਆਪਣੇ ਫਿੰਗਰਪ੍ਰਿੰਟ ਦਾ ਸੈੱਟਅੱਪ ਕਰਦੇ ਸਮੇਂ ਹਲਕਾ ਜਿਹਾ ਟੈਪ ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"ਸਕ੍ਰੀਨ ਬੰਦ ਕਰੋ"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"ਸੈੱਟਅੱਪ ਜਾਰੀ ਰੱਖੋ"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"ਕੀ ਆਪਣੇ ਫਿੰਗਰਪ੍ਰਿੰਟ ਦੀ ਪੁਸ਼ਟੀ ਕਰਨਾ ਜਾਰੀ ਰੱਖਣਾ ਹੈ?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"ਤੁਸੀਂ ਪਾਵਰ ਬਟਨ ਨੂੰ ਦਬਾਇਆ ਹੈ — ਇਹ ਆਮ ਤੌਰ \'ਤੇ ਸਕ੍ਰੀਨ ਨੂੰ ਬੰਦ ਕਰ ਦਿੰਦਾ ਹੈ।\n\nਆਪਣੇ ਫਿੰਗਰਪ੍ਰਿੰਟ ਦੀ ਪੁਸ਼ਟੀ ਕਰਨ ਲਈ ਹਲਕਾ ਜਿਹਾ ਟੈਪ ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"ਸਕ੍ਰੀਨ ਬੰਦ ਕਰੋ"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"ਜਾਰੀ ਰੱਖੋ"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> ਚੱਲ ਰਿਹਾ ਹੈ"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"ਗੇਮ \'ਤੇ ਵਾਪਸ ਜਾਣ ਲਈ ਟੈਪ ਕਰੋ"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"ਗੇਮ ਚੁਣੋ"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"ਵਿਉਂਤੀ ਐਪ ਸੂਚਨਾ"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"ਕੀ <xliff:g id="APP">%1$s</xliff:g> ਨੂੰ <xliff:g id="ACCOUNT">%2$s</xliff:g> ਨਾਲ ਨਵਾਂ ਵਰਤੋਂਕਾਰ ਬਣਾਉਣ ਦੀ ਇਜਾਜ਼ਤ ਦੇਣੀ ਹੈ (ਇਸ ਖਾਤੇ ਨਾਲ ਇੱਕ ਵਰਤੋਂਕਾਰ ਪਹਿਲਾਂ ਤੋਂ ਹੀ ਮੌਜੂਦ ਹੈ)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"ਕੀ <xliff:g id="APP">%1$s</xliff:g> ਨੂੰ <xliff:g id="ACCOUNT">%2$s</xliff:g> ਨਾਲ ਨਵਾਂ ਵਰਤੋਂਕਾਰ ਬਣਾਉਣ ਦੀ ਇਜਾਜ਼ਤ ਦੇਣੀ ਹੈ?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"ਨਿਗਰਾਨੀ ਕੀਤਾ ਵਰਤੋਂਕਾਰ ਸ਼ਾਮਲ ਕਰੋ"</string>
     <string name="language_selection_title" msgid="52674936078683285">"ਇੱਕ ਭਾਸ਼ਾ ਸ਼ਾਮਲ ਕਰੋ"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"ਖੇਤਰ ਤਰਜੀਹ"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"ਭਾਸ਼ਾ ਦਾ ਨਾਮ ਟਾਈਪ ਕਰੋ"</string>

@@ -437,7 +437,10 @@ public class UiTranslationController {
                     if (view.getViewTranslationResponse() != null
                             && view.getViewTranslationResponse().equals(response)) {
                         if (callback instanceof TextViewTranslationCallback) {
-                            if (((TextViewTranslationCallback) callback).isShowingTranslation()) {
+                            TextViewTranslationCallback textViewCallback =
+                                    (TextViewTranslationCallback) callback;
+                            if (textViewCallback.isShowingTranslation()
+                                    || textViewCallback.isAnimationRunning()) {
                                 if (DEBUG) {
                                     Log.d(TAG, "Duplicate ViewTranslationResponse for " + autofillId
                                             + ". Ignoring.");
@@ -623,7 +626,7 @@ public class UiTranslationController {
 
     private void addViewIfNeeded(IntArray sourceViewIds, View view) {
         final AutofillId autofillId = view.getAutofillId();
-        if ((sourceViewIds.indexOf(autofillId.getViewId()) >= 0)
+        if (autofillId != null && (sourceViewIds.indexOf(autofillId.getViewId()) >= 0)
                 && !mViews.containsKey(autofillId)) {
             mViews.put(autofillId, new WeakReference<>(view));
         }
@@ -663,8 +666,13 @@ public class UiTranslationController {
             Log.e(TAG, "Can not find TranslationManager when trying to create translator.");
             return null;
         }
-        final TranslationContext translationContext = new TranslationContext(sourceSpec,
-                targetSpec, /* translationFlags= */ 0);
+        final TranslationContext translationContext =
+                new TranslationContext.Builder(sourceSpec, targetSpec)
+                        .setActivityId(
+                                new ActivityId(
+                                        mActivity.getTaskId(),
+                                        mActivity.getShareableActivityToken()))
+                        .build();
         final Translator translator = tm.createTranslator(translationContext);
         if (translator != null) {
             final Pair<TranslationSpec, TranslationSpec> specs = new Pair<>(sourceSpec, targetSpec);

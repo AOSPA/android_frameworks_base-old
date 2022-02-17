@@ -30,6 +30,7 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
+import android.window.DisplayWindowPolicyController;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -370,6 +371,21 @@ public abstract class DisplayManagerInternal {
      * For now, only used for mirroring started from MediaProjection.
      */
     public abstract Point getDisplaySurfaceDefaultSize(int displayId);
+
+    /**
+     * Receives early interactivity changes from power manager.
+     *
+     * @param interactive The interactive state that the device is moving into.
+     */
+    public abstract void onEarlyInteractivityChange(boolean interactive);
+
+    /**
+     * Get {@link DisplayWindowPolicyController} associated to the {@link DisplayInfo#displayId}
+     *
+     * @param displayId The id of the display.
+     * @return The associated {@link DisplayWindowPolicyController}.
+     */
+    public abstract DisplayWindowPolicyController getDisplayWindowPolicyController(int displayId);
 
     /**
      * Describes the requested power state of the display.

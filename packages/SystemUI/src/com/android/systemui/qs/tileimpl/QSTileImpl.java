@@ -116,6 +116,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
     private boolean mAnnounceNextStateChange;
 
     private String mTileSpec;
+    @Nullable
     private EnforcedAdmin mEnforcedAdmin;
     private boolean mShowingDetail;
     private int mIsFullQs;
@@ -156,8 +157,14 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
      *
      * Categories are defined in {@link com.android.internal.logging.nano.MetricsProto.MetricsEvent}
      * by editing frameworks/base/proto/src/metrics_constants.proto.
+     *
+     * @deprecated Not needed as this logging is deprecated. Logging tiles is done using
+     * {@link QSTile#getMetricsSpec}
      */
-    abstract public int getMetricsCategory();
+    @Deprecated
+    public int getMetricsCategory() {
+        return 0;
+    }
 
     /**
      * Performs initialization of the tile
@@ -254,6 +261,8 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         return new QSIconViewImpl(context);
     }
 
+    /** Returns corresponding DetailAdapter. */
+    @Nullable
     public DetailAdapter getDetailAdapter() {
         return null; // optional
     }
@@ -336,7 +345,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         refreshState(null);
     }
 
-    protected final void refreshState(Object arg) {
+    protected final void refreshState(@Nullable Object arg) {
         mHandler.obtainMessage(H.REFRESH_STATE, arg).sendToTarget();
     }
 
@@ -426,9 +435,10 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
      *
      * @return the intent to launch
      */
+    @Nullable
     public abstract Intent getLongClickIntent();
 
-    protected void handleRefreshState(Object arg) {
+    protected void handleRefreshState(@Nullable Object arg) {
         handleUpdateState(mTmpState, arg);
         boolean changed = mTmpState.copyTo(mState);
         if (mReadyState == READY_STATE_READYING) {
@@ -445,27 +455,11 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
     }
 
     private void handleStateChanged() {
-        boolean delayAnnouncement = shouldAnnouncementBeDelayed();
         if (mCallbacks.size() != 0) {
             for (int i = 0; i < mCallbacks.size(); i++) {
                 mCallbacks.get(i).onStateChanged(mState);
             }
-            if (mAnnounceNextStateChange && !delayAnnouncement) {
-                String announcement = composeChangeAnnouncement();
-                if (announcement != null) {
-                    mCallbacks.get(0).onAnnouncementRequested(announcement);
-                }
-            }
         }
-        mAnnounceNextStateChange = mAnnounceNextStateChange && delayAnnouncement;
-    }
-
-    protected boolean shouldAnnouncementBeDelayed() {
-        return false;
-    }
-
-    protected String composeChangeAnnouncement() {
-        return null;
     }
 
     private void handleShowDetail(boolean show) {

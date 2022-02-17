@@ -23,15 +23,23 @@ import com.android.systemui.InitController;
 import com.android.systemui.SystemUIAppComponentFactory;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardSliceProvider;
+import com.android.systemui.media.taptotransfer.MediaTttCommandLineHelper;
+import com.android.systemui.media.taptotransfer.receiver.MediaTttChipControllerReceiver;
+import com.android.systemui.media.taptotransfer.sender.MediaTttChipControllerSender;
 import com.android.systemui.people.PeopleProvider;
 import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.unfold.FoldStateLogger;
+import com.android.systemui.unfold.FoldStateLoggingProvider;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
+import com.android.systemui.unfold.UnfoldLatencyTracker;
 import com.android.systemui.unfold.util.NaturalRotationUnfoldProgressProvider;
 import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.bubbles.Bubbles;
+import com.android.wm.shell.compatui.CompatUI;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelper;
+import com.android.wm.shell.draganddrop.DragAndDrop;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
@@ -107,6 +115,12 @@ public interface SysUIComponent {
         @BindsInstance
         Builder setRecentTasks(Optional<RecentTasks> r);
 
+        @BindsInstance
+        Builder setCompatUI(Optional<CompatUI> s);
+
+        @BindsInstance
+        Builder setDragAndDrop(Optional<DragAndDrop> d);
+
         SysUIComponent build();
     }
 
@@ -122,6 +136,13 @@ public interface SysUIComponent {
             c.getUnfoldTransitionWallpaperController().init();
         });
         getNaturalRotationUnfoldProgressProvider().ifPresent(o -> o.init());
+        // No init method needed, just needs to be gotten so that it's created.
+        getMediaTttChipControllerSender();
+        getMediaTttChipControllerReceiver();
+        getMediaTttCommandLineHelper();
+        getUnfoldLatencyTracker().init();
+        getFoldStateLoggingProvider().ifPresent(FoldStateLoggingProvider::init);
+        getFoldStateLogger().ifPresent(FoldStateLogger::init);
     }
 
     /**
@@ -141,6 +162,24 @@ public interface SysUIComponent {
      */
     @SysUISingleton
     ContextComponentHelper getContextComponentHelper();
+
+    /**
+     * Creates a UnfoldLatencyTracker.
+     */
+    @SysUISingleton
+    UnfoldLatencyTracker getUnfoldLatencyTracker();
+
+    /**
+     * Creates a FoldStateLoggingProvider.
+     */
+    @SysUISingleton
+    Optional<FoldStateLoggingProvider> getFoldStateLoggingProvider();
+
+    /**
+     * Creates a FoldStateLogger.
+     */
+    @SysUISingleton
+    Optional<FoldStateLogger> getFoldStateLogger();
 
     /**
      * Main dependency providing module.
@@ -167,6 +206,15 @@ public interface SysUIComponent {
      * For devices with a hinge: the rotation animation
      */
     Optional<NaturalRotationUnfoldProgressProvider> getNaturalRotationUnfoldProgressProvider();
+
+    /** */
+    Optional<MediaTttChipControllerSender> getMediaTttChipControllerSender();
+
+    /** */
+    Optional<MediaTttChipControllerReceiver> getMediaTttChipControllerReceiver();
+
+    /** */
+    Optional<MediaTttCommandLineHelper> getMediaTttCommandLineHelper();
 
     /**
      * Member injection into the supplied argument.

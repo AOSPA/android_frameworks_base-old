@@ -17,20 +17,21 @@
 package android.os;
 
 import android.annotation.CallbackExecutor;
-import android.annotation.FloatRange;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
+import android.content.res.Resources;
 import android.hardware.vibrator.IVibrator;
 import android.media.AudioAttributes;
+import android.os.vibrator.VibrationConfig;
 import android.util.Log;
-import android.util.Range;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -51,6 +52,7 @@ public abstract class Vibrator {
      *
      * @hide
      */
+    @TestApi
     public static final int VIBRATION_INTENSITY_OFF = 0;
 
     /**
@@ -58,6 +60,7 @@ public abstract class Vibrator {
      *
      * @hide
      */
+    @TestApi
     public static final int VIBRATION_INTENSITY_LOW = 1;
 
     /**
@@ -65,6 +68,7 @@ public abstract class Vibrator {
      *
      * @hide
      */
+    @TestApi
     public static final int VIBRATION_INTENSITY_MEDIUM = 2;
 
     /**
@@ -72,6 +76,7 @@ public abstract class Vibrator {
      *
      * @hide
      */
+    @TestApi
     public static final int VIBRATION_INTENSITY_HIGH = 3;
 
     /**
@@ -117,16 +122,12 @@ public abstract class Vibrator {
     }
 
     private final String mPackageName;
-    // The default vibration intensity level for haptic feedback.
-    @VibrationIntensity
-    private int mDefaultHapticFeedbackIntensity;
-    // The default vibration intensity level for notifications.
-    @VibrationIntensity
-    private int mDefaultNotificationVibrationIntensity;
-    // The default vibration intensity level for ringtones.
-    @VibrationIntensity
-    private int mDefaultRingVibrationIntensity;
-    private float mHapticChannelMaxVibrationAmplitude;
+    @Nullable
+    private final Resources mResources;
+
+    // This is lazily loaded only for the few clients that need this (e. Settings app).
+    @Nullable
+    private volatile VibrationConfig mVibrationConfig;
 
     /**
      * @hide to prevent subclassing from outside of the framework
@@ -134,8 +135,7 @@ public abstract class Vibrator {
     @UnsupportedAppUsage
     public Vibrator() {
         mPackageName = ActivityThread.currentPackageName();
-        final Context ctx = ActivityThread.currentActivityThread().getSystemContext();
-        loadVibrationConfig(ctx);
+        mResources = null;
     }
 
     /**
@@ -143,26 +143,7 @@ public abstract class Vibrator {
      */
     protected Vibrator(Context context) {
         mPackageName = context.getOpPackageName();
-        loadVibrationConfig(context);
-    }
-
-    private void loadVibrationConfig(Context context) {
-        mDefaultHapticFeedbackIntensity = loadDefaultIntensity(context,
-                com.android.internal.R.integer.config_defaultHapticFeedbackIntensity);
-        mDefaultNotificationVibrationIntensity = loadDefaultIntensity(context,
-                com.android.internal.R.integer.config_defaultNotificationVibrationIntensity);
-        mDefaultRingVibrationIntensity = loadDefaultIntensity(context,
-                com.android.internal.R.integer.config_defaultRingVibrationIntensity);
-        mHapticChannelMaxVibrationAmplitude = loadFloat(context,
-                com.android.internal.R.dimen.config_hapticChannelMaxVibrationAmplitude, 0);
-    }
-
-    private int loadDefaultIntensity(Context ctx, int resId) {
-        return ctx != null ? ctx.getResources().getInteger(resId) : VIBRATION_INTENSITY_MEDIUM;
-    }
-
-    private float loadFloat(Context ctx, int resId, float defaultValue) {
-        return ctx != null ? ctx.getResources().getFloat(resId) : defaultValue;
+        mResources = context.getResources();
     }
 
     /**
@@ -174,31 +155,30 @@ public abstract class Vibrator {
         return VibratorInfo.EMPTY_VIBRATOR_INFO;
     }
 
-    /**
-     * Get the default vibration intensity for haptic feedback.
-     *
-     * @hide
-     */
-    public int getDefaultHapticFeedbackIntensity() {
-        return mDefaultHapticFeedbackIntensity;
+    /** Get the static vibrator configuration from config.xml. */
+    private VibrationConfig getConfig() {
+        if (mVibrationConfig == null) {
+            Resources resources = mResources;
+            if (resources == null) {
+                final Context ctx = ActivityThread.currentActivityThread().getSystemContext();
+                resources = ctx != null ? ctx.getResources() : null;
+            }
+            // This might be constructed more than once, but it only loads static config data from a
+            // xml file, so it would be ok.
+            mVibrationConfig = new VibrationConfig(resources);
+        }
+        return mVibrationConfig;
     }
 
     /**
-     * Get the default vibration intensity for notifications.
+     * Get the default vibration intensity for given usage.
      *
      * @hide
      */
-    public int getDefaultNotificationVibrationIntensity() {
-        return mDefaultNotificationVibrationIntensity;
-    }
-
-    /**
-     * Get the default vibration intensity for ringtones.
-     *
-     * @hide
-     */
-    public int getDefaultRingVibrationIntensity() {
-        return mDefaultRingVibrationIntensity;
+    @TestApi
+    @VibrationIntensity
+    public int getDefaultVibrationIntensity(@VibrationAttributes.Usage int usage) {
+        return getConfig().getDefaultVibrationIntensity(usage);
     }
 
     /**
@@ -271,43 +251,6 @@ public abstract class Vibrator {
     }
 
     /**
-     * Return a range of relative frequency values supported by the vibrator.
-     *
-     * <p>These values can be used to create waveforms that controls the vibration frequency via
-     * {@link VibrationEffect.WaveformBuilder}.
-     *
-     * @return A range of relative frequency values supported. The range will always contain the
-     * value 0, representing the device resonant frequency. Devices without frequency control will
-     * return the range [0,0]. Devices with frequency control will always return a range containing
-     * the safe range [-1, 1].
-     * @hide
-     */
-    public Range<Float> getRelativeFrequencyRange() {
-        return getInfo().getFrequencyRange();
-    }
-
-    /**
-     * Return the maximum amplitude the vibrator can play at given relative frequency.
-     *
-     * <p>Devices without frequency control will return 1 for the input zero (resonant frequency),
-     * and 0 to any other input.
-     *
-     * <p>Devices with frequency control will return the supported value, for input in
-     * {@link #getRelativeFrequencyRange()}, and 0 for any other input.
-     *
-     * <p>These values can be used to create waveforms that plays vibrations outside the resonant
-     * frequency via {@link VibrationEffect.WaveformBuilder}.
-     *
-     * @return a value in [0,1] representing the maximum amplitude the device can play at given
-     * relative frequency.
-     * @hide
-     */
-    @FloatRange(from = 0, to = 1)
-    public float getMaximumAmplitude(float relativeFrequency) {
-        return getInfo().getMaxAmplitude(relativeFrequency);
-    }
-
-    /**
      * Return the maximum amplitude the vibrator can play using the audio haptic channels.
      *
      * <p>This is a positive value, or {@link Float#NaN NaN} if it's unknown. If this returns a
@@ -319,10 +262,7 @@ public abstract class Vibrator {
      * @hide
      */
     public float getHapticChannelMaximumAmplitude() {
-        if (mHapticChannelMaxVibrationAmplitude <= 0) {
-            return Float.NaN;
-        }
-        return mHapticChannelMaxVibrationAmplitude;
+        return getConfig().getHapticChannelMaximumAmplitude();
     }
 
     /**
@@ -330,16 +270,15 @@ public abstract class Vibrator {
      *
      * @param alwaysOnId The board-specific always-on ID to configure.
      * @param effect     Vibration effect to assign to always-on id. Passing null will disable it.
-     * @param attributes {@link AudioAttributes} corresponding to the vibration. For example,
-     *                   specify {@link AudioAttributes#USAGE_ALARM} for alarm vibrations or
-     *                   {@link AudioAttributes#USAGE_NOTIFICATION_RINGTONE} for
-     *                   vibrations associated with incoming calls. May only be null when effect is
-     *                   null.
+     * @param attributes {@link VibrationAttributes} corresponding to the vibration. For example,
+     *                   specify {@link VibrationAttributes#USAGE_ALARM} for alarm vibrations or
+     *                   {@link VibrationAttributes#USAGE_RINGTONE} for vibrations associated with
+     *                   incoming calls. May only be null when effect is null.
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.VIBRATE_ALWAYS_ON)
     public boolean setAlwaysOnEffect(int alwaysOnId, @Nullable VibrationEffect effect,
-            @Nullable AudioAttributes attributes) {
+            @Nullable VibrationAttributes attributes) {
         return setAlwaysOnEffect(Process.myUid(), mPackageName, alwaysOnId, effect, attributes);
     }
 
@@ -348,7 +287,7 @@ public abstract class Vibrator {
      */
     @RequiresPermission(android.Manifest.permission.VIBRATE_ALWAYS_ON)
     public boolean setAlwaysOnEffect(int uid, String opPkg, int alwaysOnId,
-            @Nullable VibrationEffect effect, @Nullable AudioAttributes attributes) {
+            @Nullable VibrationEffect effect, @Nullable VibrationAttributes attributes) {
         Log.w(TAG, "Always-on effects aren't supported");
         return false;
     }
@@ -378,7 +317,7 @@ public abstract class Vibrator {
      *                     specify {@link AudioAttributes#USAGE_ALARM} for alarm vibrations or
      *                     {@link AudioAttributes#USAGE_NOTIFICATION_RINGTONE} for
      *                     vibrations associated with incoming calls.
-     * @deprecated Use {@link #vibrate(VibrationEffect, AudioAttributes)} instead.
+     * @deprecated Use {@link #vibrate(VibrationEffect, VibrationAttributes)} instead.
      */
     @Deprecated
     @RequiresPermission(android.Manifest.permission.VIBRATE)
@@ -444,7 +383,7 @@ public abstract class Vibrator {
      *                   specify {@link AudioAttributes#USAGE_ALARM} for alarm vibrations or
      *                   {@link AudioAttributes#USAGE_NOTIFICATION_RINGTONE} for
      *                   vibrations associated with incoming calls.
-     * @deprecated Use {@link #vibrate(VibrationEffect, AudioAttributes)} instead.
+     * @deprecated Use {@link #vibrate(VibrationEffect, VibrationAttributes)} instead.
      */
     @Deprecated
     @RequiresPermission(android.Manifest.permission.VIBRATE)
@@ -473,7 +412,7 @@ public abstract class Vibrator {
      */
     @RequiresPermission(android.Manifest.permission.VIBRATE)
     public void vibrate(VibrationEffect vibe) {
-        vibrate(vibe, null);
+        vibrate(vibe, new VibrationAttributes.Builder().build());
     }
 
     /**
@@ -487,31 +426,36 @@ public abstract class Vibrator {
      *                   specify {@link AudioAttributes#USAGE_ALARM} for alarm vibrations or
      *                   {@link AudioAttributes#USAGE_NOTIFICATION_RINGTONE} for
      *                   vibrations associated with incoming calls.
+     * @deprecated Use {@link #vibrate(VibrationEffect, VibrationAttributes)} instead.
      */
     @RequiresPermission(android.Manifest.permission.VIBRATE)
     public void vibrate(VibrationEffect vibe, AudioAttributes attributes) {
+        vibrate(vibe,
+                attributes == null
+                        ? new VibrationAttributes.Builder().build()
+                        : new VibrationAttributes.Builder(attributes).build());
+    }
+
+    /**
+     * Vibrate with a given effect.
+     *
+     * <p>The app should be in foreground for the vibration to happen. Background apps should
+     * specify a ringtone, notification or alarm usage in order to vibrate.</p>
+     *
+     * @param vibe       {@link VibrationEffect} describing the vibration to be performed.
+     * @param attributes {@link VibrationAttributes} corresponding to the vibration. For example,
+     *                   specify {@link VibrationAttributes#USAGE_ALARM} for alarm vibrations or
+     *                   {@link VibrationAttributes#USAGE_RINGTONE} for vibrations associated with
+     *                   incoming calls.
+     */
+    @RequiresPermission(android.Manifest.permission.VIBRATE)
+    public void vibrate(@NonNull VibrationEffect vibe, @NonNull VibrationAttributes attributes) {
         vibrate(Process.myUid(), mPackageName, vibe, null, attributes);
     }
 
     /**
-     * Like {@link #vibrate(VibrationEffect, AudioAttributes)}, but allows the
+     * Like {@link #vibrate(VibrationEffect, VibrationAttributes)}, but allows the
      * caller to specify the vibration is owned by someone else and set reason for vibration.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.VIBRATE)
-    public final void vibrate(int uid, String opPkg, VibrationEffect vibe,
-            String reason, AudioAttributes attributes) {
-        if (attributes == null) {
-            attributes = new AudioAttributes.Builder().build();
-        }
-        VibrationAttributes attr = new VibrationAttributes.Builder(attributes, vibe).build();
-        vibrate(uid, opPkg, vibe, reason, attr);
-    }
-
-    /**
-     * Like {@link #vibrate(int, String, VibrationEffect, String, AudioAttributes)}, but allows the
-     * caller to specify {@link VibrationAttributes} instead of {@link AudioAttributes}.
      *
      * @hide
      */

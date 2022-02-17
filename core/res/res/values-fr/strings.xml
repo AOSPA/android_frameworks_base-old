@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Permet à l\'application de lire le journal d\'appels de votre appareil Android TV, y compris les données sur les appels entrants et sortants. Des applications malveillantes peuvent utiliser cette fonctionnalité pour effacer ou modifier votre journal d\'appels."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Permet à l\'application de lire le journal d\'appels de votre téléphone, y compris les données relatives aux appels entrants et sortants. Des applications malveillantes peuvent utiliser cette fonctionnalité pour effacer ou modifier votre journal d\'appels."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"accéder capteurs corp. (ex : cardiofréquencemètres)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Permet à l\'application d\'accéder aux données des capteurs qui contrôlent votre condition physique, comme votre rythme cardiaque."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Accès aux données des capteurs corporels mesurant la fréquence cardiaque, la température, le pourcentage d\'oxygène dans le sang, etc."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"accéder en arrière-plan aux capteurs corporels (par ex., cardiofréquencemètres)"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Accès en arrière-plan aux données des capteurs corporels mesurant la fréquence cardiaque, la température, le pourcentage d\'oxygène dans le sang, etc."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Lire les événements d\'agenda et les détails associés"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Cette application peut lire tous les événements d\'agenda enregistrés sur votre tablette et partager ou enregistrer vos données d\'agenda."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Cette application peut lire tous les événements de l\'agenda enregistrés sur votre appareil Android TV, et partager ou enregistrer les données de votre agenda."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Permet à l\'application d\'utiliser le service IMS pour passer des appels sans votre intervention."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"Voir l\'état et l\'identité du téléphone"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Permet à l\'application d\'accéder aux fonctionnalités téléphoniques de l\'appareil. Cette autorisation permet à l\'application de déterminer le numéro de téléphone et les identifiants de l\'appareil, si un appel est actif et le numéro distant connecté par un appel."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"lire l\'état et l\'identité de téléphonie de base"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Autorise l\'appli à accéder aux fonctionnalités de téléphonie de base de l\'appareil."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"acheminer les appels via le système"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Autorise l\'application à acheminer les appels via le système afin d\'optimiser le confort d\'utilisation."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"voir et contrôler les appels via le système."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Appuyez pour supprimer votre empreinte faciale, puis ajoutez de nouveau votre visage"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Configurer le déverrouillage par reconnaissance faciale"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Déverrouillez votre téléphone en le regardant"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Pour utiliser Face Unlock, activez "<b>"Accès à l\'appareil photo"</b>" dans Paramètres &gt; Confidentialité"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Configurer d\'autres méthodes de déverrouillage"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Appuyez pour ajouter une empreinte digitale"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Déverrouillage par empreinte digitale"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Permet à l\'application de consulter et de modifier la configuration du mode Ne pas déranger."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"activer l\'utilisation de l\'autorisation d\'affichage"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Permet à l\'application autorisée d\'activer l\'utilisation de l\'autorisation pour une application. Cette fonctionnalité ne devrait pas être nécessaire pour les applications standards."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"activer l\'affichage des décisions liées aux autorisations"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Permet à l\'appli autorisée de lancer un écran pour examiner les décisions liées aux autorisations. Ne devrait jamais être nécessaire pour les applis standards."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"commencer à voir les fonctionnalités d\'une appli"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Permet à l\'appli autorisée de commencer à voir les infos sur les fonctionnalités d\'une appli."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"accéder aux données des capteurs à un taux d\'échantillonnage élevé"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Gérer les tentatives de déverrouillage de l\'écran"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Contrôler le nombre de mots de passe incorrects saisis pour le déverrouillage de l\'écran, puis verrouiller la tablette ou effacer toutes ses données si le nombre maximal de tentatives de saisie du mot de passe est atteint"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Contrôle le nombre de fois qu\'un mot de passe incorrect est saisi lors du déverrouillage de l\'écran, et verrouille votre appareil Android TV ou en efface toutes les données si le nombre maximal de mots de passe incorrects autorisé est dépassé."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Contrôler le nombre de mots de passe incorrects saisis pour le déverrouillage de l\'écran, puis verrouiller le système d\'infoloisirs ou effacer toutes ses données si le nombre maximal de tentatives de saisie du mot de passe est atteint."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Contrôler le nombre de mots de passe incorrects saisis pour le déverrouillage de l\'écran, puis verrouiller le téléphone ou effacer toutes ses données si le nombre maximal de tentatives de saisie du mot de passe est atteint"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Contrôlez le nombre de fois qu\'un mot de passe incorrect est saisi lors du déverrouillage de l\'écran, et verrouillez la tablette ou effacez toutes les informations sur l\'utilisateur si le nombre maximal de mots de passe incorrects autorisés est dépassé."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Contrôle le nombre de fois qu\'un mot de passe incorrect est saisi lors du déverrouillage de l\'écran, et verrouille votre appareil Android TV ou efface toutes les données de cet utilisateur si le nombre maximal de mots de passe incorrects autorisé est dépassé."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Contrôler le nombre de mots de passe incorrects saisis pour le déverrouillage de l\'écran, puis verrouiller le système d\'infoloisirs ou effacer toutes les données de ce profil si le nombre maximal de tentatives de saisie du mot de passe est atteint."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Contrôlez le nombre de fois qu\'un mot de passe incorrect est saisi lors du déverrouillage de l\'écran, et verrouillez le téléphone ou effacez toutes les informations sur l\'utilisateur si le nombre maximal de mots de passe incorrects autorisés est dépassé."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Modifier le verrouillage de l\'écran"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Modifier le verrouillage de l\'écran"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Effacer toutes les données"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Effacer les données de la tablette sans avertissement, en rétablissant la configuration d\'usine"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Efface les données de votre appareil Android TV sans avertissement en rétablissant la configuration d\'usine."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Effacer les données du système d\'infoloisirs sans avertissement en rétablissant la configuration d\'usine."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Effacer les données du téléphone sans avertissement, en rétablissant la configuration d\'usine"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Effacer les informations sur l\'utilisateur"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Effacer les données du profil"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Effacer les informations sur l\'utilisateur"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Effacer les informations sur cet utilisateur de cette tablette sans avertissement"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Efface les données concernant cet utilisateur de cet appareil Android TV sans avertissement."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Effacer les données de ce profil sur ce système d\'infoloisirs sans avertissement."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Effacer les informations sur cet utilisateur de ce téléphone sans avertissement"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Définir le proxy global du mobile"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Indiquer le proxy global à utiliser pour l\'appareil lorsque la règle est activée. Seul le propriétaire de l\'appareil peut définir le proxy global."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Préparation de <xliff:g id="APPNAME">%1$s</xliff:g> en cours…"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Lancement des applications…"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Finalisation de la mise à jour."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Éteindre l\'écran ?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Vous avez appuyé sur le bouton Marche/Arrêt pendant la configuration de votre empreinte digitale.\n\nCela éteint généralement l\'écran."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Éteindre"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Annuler"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Poursuivre la configuration ?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Vous avez appuyé sur le bouton Marche/Arrêt, ce qui éteint généralement l\'écran.\n\nEssayez d\'appuyer doucement pendant la configuration de votre empreinte digitale."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Éteindre l\'écran"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Poursuivre"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Continuer de valider votre empreinte ?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Vous avez appuyé sur le bouton Marche/Arrêt, ce qui éteint généralement l\'écran.\n\nPour valider votre empreinte digitale, appuyez plus doucement."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Éteindre l\'écran"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Continuer"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> en cours d\'exécution"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Appuyez pour revenir au jeu"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Choisir un jeu"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Notification d\'application personnalisée"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Autoriser <xliff:g id="APP">%1$s</xliff:g> à créer un profil utilisateur avec le compte <xliff:g id="ACCOUNT">%2$s</xliff:g> (un utilisateur associé à ce compte existe déjà) ?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Autoriser <xliff:g id="APP">%1$s</xliff:g> à créer un profil utilisateur avec le compte <xliff:g id="ACCOUNT">%2$s</xliff:g> ?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Ajouter un utilisateur supervisé"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Ajouter une langue"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Préférences régionales"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Saisissez la langue"</string>

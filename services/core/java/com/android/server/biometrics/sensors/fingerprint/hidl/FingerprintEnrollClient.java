@@ -55,7 +55,7 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
 
     FingerprintEnrollClient(@NonNull Context context,
             @NonNull LazyDaemon<IBiometricsFingerprint> lazyDaemon, @NonNull IBinder token,
-            @NonNull ClientMonitorCallbackConverter listener, int userId,
+            long requestId, @NonNull ClientMonitorCallbackConverter listener, int userId,
             @NonNull byte[] hardwareAuthToken, @NonNull String owner,
             @NonNull BiometricUtils<Fingerprint> utils, int timeoutSec, int sensorId,
             @Nullable IUdfpsOverlayController udfpsOverlayController,
@@ -64,18 +64,20 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
         super(context, lazyDaemon, token, listener, userId, hardwareAuthToken, owner, utils,
                 timeoutSec, BiometricsProtoEnums.MODALITY_FINGERPRINT, sensorId,
                 true /* shouldVibrate */);
+        setRequestId(requestId);
         mSensorOverlays = new SensorOverlays(udfpsOverlayController, sidefpsController);
 
         mEnrollReason = enrollReason;
         if (enrollReason == FingerprintManager.ENROLL_FIND_SENSOR) {
-            setShouldLog(false);
+            getLogger().disableMetrics();
         }
     }
 
     @NonNull
     @Override
     protected Callback wrapCallbackForStart(@NonNull Callback callback) {
-        return new CompositeCallback(createALSCallback(true /* startWithClient */), callback);
+        return new CompositeCallback(
+                getLogger().createALSCallback(true /* startWithClient */), callback);
     }
 
     @Override

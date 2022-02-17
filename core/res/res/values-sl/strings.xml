@@ -223,7 +223,7 @@
     <string name="turn_on_radio" msgid="2961717788170634233">"Vklopi brezžično omrežje"</string>
     <string name="turn_off_radio" msgid="7222573978109933360">"Izklopi brezžično omrežje"</string>
     <string name="screen_lock" msgid="2072642720826409809">"Zaklep zaslona"</string>
-    <string name="power_off" msgid="4111692782492232778">"Izklopi"</string>
+    <string name="power_off" msgid="4111692782492232778">"Izklop"</string>
     <string name="silent_mode_silent" msgid="5079789070221150912">"Izklopi zvonjenje"</string>
     <string name="silent_mode_vibrate" msgid="8821830448369552678">"Zvonjenje z vibriranjem"</string>
     <string name="silent_mode_ring" msgid="6039011004781526678">"Vklopi zvonjenje"</string>
@@ -433,7 +433,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Aplikaciji dovoljuje spreminjanje dnevnika klicev v napravi Android TV, vključno s podatki o dohodnih in odhodnih klicih. Zlonamerne aplikacije lahko tako izbrišejo ali spreminjajo vaš dnevnik klicev."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Aplikaciji dovoli spreminjanje dnevnika klicev v telefonu, vključno s podatki o dohodnih in odhodnih klicih. Zlonamerne aplikacije lahko tako izbrišejo ali spreminjajo vaš dnevnik klicev."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"dostop do tipal telesnih funkcij (npr. merilnikov srčnega utripa)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Aplikaciji omogoča dostop do podatkov tipal, ki nadzirajo vaše fizično stanje, med drugim vaš srčni utrip."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Dostop do podatkov iz tipal telesnih funkcij, kot so srčni utrip, temperatura, odstotek kisika v krvi itd."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"dostop do tipal telesnih funkcij (npr. merilnika srčnega utripa) v ozadju"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Dostop do podatkov iz tipal telesnih funkcij, kot so srčni utrip, temperatura, odstotek kisika v krvi itd., med delovanjem v ozadju."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Branje dogodkov v koledarjih in podrobnosti koledarjev"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Ta aplikacija lahko prebere vse dogodke v koledarju, ki so shranjeni v tabličnem računalniku, ter shrani podatke koledarja ali jih deli z drugimi."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Ta aplikacija lahko prebere vse dogodke v koledarju, ki so shranjeni v napravi Android TV, ter shrani podatke koledarja ali jih deli z drugimi."</string>
@@ -477,6 +479,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Aplikaciji dovoljuje uporabo storitev IMS za opravljanje klicev brez vašega posredovanja."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"branje stanja in identitete telefona"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Aplikaciji omogoča dostop do funkcij telefona v napravi. S tem dovoljenjem lahko aplikacija določi telefonsko številko in ID-je naprave, določi lahko tudi, ali je klic aktiven, in oddaljeno številko, s katero je klic povezan."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"branje stanja osnovne telefonije in identitete"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Aplikaciji omogoča dostop do osnovnih funkcij telefonije v napravi."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"Usmeri klice prek sistema"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Dovoli, da aplikacija usmeri klice prek sistema, da se tako izboljša izkušnja klicanja."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"ogled in nadzor klicev prek sistema."</string>
@@ -628,6 +632,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Dotaknite se, da izbrišete model obraza, in nato znova dodajte obraz."</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Nastavitev odklepanja z obrazom"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Odklenite telefon tako, da ga pogledate."</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Če želite uporabljati odklepanje z obrazom, v meniju »Nastavitve« &gt; »Zasebnost« vklopite možnost "<b>"Dostop do fotoaparata"</b>"."</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Nastavite več načinov odklepanja"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Dotaknite se, da dodate prstni odtis."</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Odklepanje s prstnim odtisom"</string>
@@ -734,6 +739,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Aplikaciji omogoča branje in pisanje konfiguracije načina »ne moti«."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"začetek uporabe dovoljenja za ogledovanje"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Imetniku omogoča začetek uporabe dovoljenj za aplikacijo. Nikoli ni potrebno za navadne aplikacije."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"prikaz odločitev o dovoljenjih"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Imetniku omogoča prikaz zaslona za pregled odločitev o dovoljenjih. Tega ni treba nikoli uporabiti za navadne aplikacije."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"začetek ogledovanja funkcij aplikacije"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Imetniku omogoča začetek ogledovanja informacij o funkcijah poljubne aplikacije."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"dostop do podatkov tipal z večjo hitrostjo vzorčenja"</string>
@@ -743,9 +750,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Nadzor nad poskusi odklepanja zaslona"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Nadzoruje število nepravilno vnesenih gesel pri odklepanju zaslona in zaklene tablični računalnik ali izbriše vse podatke v njem, če je vnesenih preveč nepravilnih gesel."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Nadzira število vnesenih nepravilnih gesel pri odklepanju zaslona in zaklene napravo Android TV ali izbriše vse podatke v napravi Android TV, če je vnesenih preveč nepravilnih gesel."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Spremljanje števila nepravilno vnesenih gesel pri odklepanju zaslona in zaklenitev informativno-razvedrilnega sistema ali izbris vseh podatkov v njem v primeru preveč vnosov nepravilnih gesel"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Spremljajte število vnesenih napačnih gesel, s katerimi želite odkleniti zaslon. Če je teh vnosov preveč, zaklenite telefon ali izbrišite vse podatke v njem."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Nadzira število vnesenih nepravilnih gesel pri odklepanju zaslona in zaklene tablični računalnik ali izbriše vse podatke lastnika, če je vnesenih preveč nepravilnih gesel."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Nadzira število vnesenih nepravilnih gesel pri odklepanju zaslona in zaklene napravo Android TV ali izbriše vse podatke tega uporabnika, če je vnesenih preveč nepravilnih gesel."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Spremljanje števila nepravilno vnesenih gesel pri odklepanju zaslona in zaklenitev informativno-razvedrilnega sistema ali izbris vseh podatkov tega profila v primeru preveč vnosov nepravilnih gesel"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Nadzira število vnesenih nepravilnih gesel pri odklepanju zaslona in zaklene telefon ali izbriše vse podatke lastnika, če je vnesenih preveč nepravilnih gesel."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Spreminjanje zaklepanja zaslona"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Spremeni zaklepanje zaslona."</string>
@@ -754,10 +763,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Brisanje vseh podatkov"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Izbris podatkov v tabličnem računalniku brez opozorila s ponastavitvijo na tovarniške nastavitve"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Brisanje podatkov v napravi Android TV z izvedbo ponastavitve na privzete tovarniške nastavitve brez opozorila."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Izbris podatkov informativno-razvedrilnega sistema brez opozorila s ponastavitvijo na tovarniške nastavitve"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Izbris podatkov v telefonu brez opozorila s ponastavitvijo na tovarniške nastavitve."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Izbris podatkov uporabnika"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Izbris podatkov profila"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Izbris podatkov uporabnika"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Izbris podatkov uporabnika v tem tabličnem računalniku brez opozorila."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Izbris podatkov uporabnika v tej napravi Android TV brez opozorila."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Izbris podatkov tega profila v informativno-razvedrilnem sistemu brez opozorila"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Izbris podatkov uporabnika v tem telefonu brez opozorila."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Nastavitev globalnega strežnika proxy za napravo"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Nastavitev globalnega strežnika proxy naprave, ki bo v uporabi, ko je pravilnik omogočen. Samo lastnik naprave lahko nastavi globalni strežnik proxy."</string>
@@ -1311,10 +1323,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Pripravljanje aplikacije <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Zagon aplikacij."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Dokončevanje zagona."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Želite izklopiti zaslon?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Pri nastavljanju prstnega odtisa ste pritisnili gumb za vklop.\n\nS tem običajno izklopite zaslon."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Izklopi"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Prekliči"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Ali želite nadaljevati nastavitev?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Pritisnili ste gumb za vklop, s čimer običajno izklopite zaslon.\n\nPoskusite se narahlo dotakniti med nastavljanjem prstnega odtisa."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Izklopi zaslon"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Nadaljuj nastavitev"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Želite nadaljevati preverjanje prstnega odtisa?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Pritisnili ste gumb za vklop, s čimer običajno izklopite zaslon.\n\nZa preverjanje prstnega odtisa se poskusite narahlo dotakniti."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Izklopi zaslon"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Nadaljuj"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> se izvaja"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Dotaknite se za vrnitev v igro"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Izberite igro"</string>
@@ -2041,6 +2057,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Obvestilo po meri iz aplikacije"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Ali aplikaciji <xliff:g id="APP">%1$s</xliff:g> dovolite, da ustvari novega uporabnika za račun <xliff:g id="ACCOUNT">%2$s</xliff:g> (uporabnik s tem računom že obstaja)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Ali aplikaciji <xliff:g id="APP">%1$s</xliff:g> dovolite, da ustvari novega uporabnika za račun <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Dodaj nadzorovanega uporabnika"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Dodajanje jezika"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Nastavitev območja"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Vnesite ime jezika"</string>

@@ -14,8 +14,8 @@
      limitations under the License.
 -->
 
-<resources xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- NOTE: Adding the androidprv: namespace to this file will break the studio build. -->
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+           xmlns:androidprv="http://schemas.android.com/apk/prv/res/android">
 
     <!-- HybridNotification themes and styles -->
 
@@ -351,11 +351,19 @@
         <item name="android:windowIsFloating">true</item>
     </style>
 
-    <style name="Theme.SystemUI.Dialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog">
+    <style name="Theme.SystemUI.DayNightDialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog"/>
+
+    <style name="Theme.SystemUI.Dialog" parent="@style/Theme.SystemUI.DayNightDialog">
         <item name="android:buttonCornerRadius">28dp</item>
-        <item name="android:buttonBarPositiveButtonStyle">@style/Widget.QSDialog.Button</item>
-        <item name="android:buttonBarNegativeButtonStyle">@style/Widget.QSDialog.Button.BorderButton</item>
-        <item name="android:buttonBarNeutralButtonStyle">@style/Widget.QSDialog.Button.BorderButton</item>
+        <item name="android:buttonBarPositiveButtonStyle">@style/Widget.Dialog.Button</item>
+        <item name="android:buttonBarNegativeButtonStyle">@style/Widget.Dialog.Button.BorderButton</item>
+        <item name="android:buttonBarNeutralButtonStyle">@style/Widget.Dialog.Button.BorderButton</item>
+        <item name="android:colorBackground">?androidprv:attr/colorSurface</item>
+        <item name="android:alertDialogStyle">@style/AlertDialogStyle</item>
+    </style>
+
+    <style name="AlertDialogStyle" parent="@androidprv:style/AlertDialog.DeviceDefault">
+        <item name="android:layout">@layout/alert_dialog_systemui</item>
     </style>
 
     <style name="Theme.SystemUI.Dialog.Alert" parent="@*android:style/Theme.DeviceDefault.Light.Dialog.Alert" />
@@ -365,11 +373,11 @@
         <item name="android:windowIsFloating">true</item>
     </style>
 
-    <style name="Theme.SystemUI.Dialog.GlobalActionsLite" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar.Fullscreen">
-        <item name="android:windowIsFloating">true</item>
+    <style name="Theme.SystemUI.Dialog.GlobalActionsLite" parent="Theme.SystemUI.Dialog">
+        <!-- Settings windowFullscreen: true is necessary to be able to intercept touch events -->
+        <!-- that would otherwise be intercepted by the Shade. -->
+        <item name="android:windowFullscreen">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:windowCloseOnTouchOutside">true</item>
     </style>
 
     <style name="QSBorderlessButton">
@@ -442,8 +450,13 @@
         <item name="android:background">@drawable/btn_borderless_rect</item>
     </style>
 
-    <style name="MediaOutputRoundedOutlinedButton" parent="@android:style/Widget.Material.Button">
-        <item name="android:background">@drawable/media_output_dialog_button_background</item>
+    <style name="Theme.SystemUI.Dialog.Media" parent="Theme.SystemUI.Dialog">
+        <item name="android:colorBackground">@color/media_dialog_background</item>
+    </style>
+
+    <style name="MediaOutputItemInactiveTitle">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/media_dialog_inactive_item_main_content</item>
     </style>
 
     <style name="TunerSettings" parent="@android:style/Theme.DeviceDefault.Settings">
@@ -568,6 +581,23 @@
         <item name="android:scaleType">centerInside</item>
     </style>
 
+    <style name="MediaPlayer.SessionAction"
+           parent="@android:style/Widget.Material.Button.Borderless.Small">
+        <item name="android:background">@drawable/qs_media_light_source</item>
+        <item name="android:tint">?android:attr/textColorPrimary</item>
+        <item name="android:stateListAnimator">@anim/media_button_state_list_animator</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:scaleType">centerInside</item>
+    </style>
+
+    <style name="MediaPlayer.SessionAction.Primary" parent="MediaPlayer.SessionAction">
+        <item name="android:background">@drawable/qs_media_round_button_background</item>
+        <item name="android:backgroundTint">@color/media_player_solid_button_bg</item>
+    </style>
+
     <style name="MediaPlayer.OutlineButton">
         <item name="android:background">@drawable/qs_media_button_background</item>
         <item name="android:textColor">?android:attr/textColorPrimary</item>
@@ -636,20 +666,18 @@
 
     <style name="Screenshot" parent="@android:style/Theme.DeviceDefault.DayNight"/>
 
+    <!-- Clipboard overlay's edit text activity. -->
+    <style name="EditTextActivity" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:navigationBarColor">?android:attr/colorBackgroundFloating</item>
+    </style>
+
     <!-- Privacy dialog -->
     <style name="PrivacyDialog" parent="Theme.SystemUI.QuickSettings.Dialog">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowIsFloating">true</item>
-        <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:windowCloseOnTouchOutside">true</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
-    </style>
-
-    <!-- TileService request dialog -->
-    <style name="TileRequestDialog" parent="Theme.SystemUI.QuickSettings.Dialog">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@drawable/qs_dialog_bg</item>
         <item name="android:windowIsFloating">true</item>
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
@@ -839,7 +867,6 @@
     <style name="Widget.SliceView.Panel">
         <item name="titleSize">16sp</item>
         <item name="rowStyle">@style/SliceRow</item>
-        <item name="android:background">?android:attr/colorBackgroundFloating</item>
     </style>
 
     <style name="SliceRow">
@@ -863,24 +890,42 @@
         <item name="actionDividerHeight">32dp</item>
     </style>
 
-    <style name="TextAppearance.QSDialog.Title" parent="Theme.SystemUI.Dialog">
+    <style name="TextAppearance.Dialog.Title" parent="@android:style/TextAppearance.DeviceDefault.Large">
         <item name="android:textColor">?android:attr/textColorPrimary</item>
         <item name="android:textSize">24sp</item>
         <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
         <item name="android:lineHeight">32sp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAlignment">center</item>
     </style>
 
-    <style name="Widget.QSDialog.Button" parent = "Theme.SystemUI.Dialog">
+    <style name="TextAppearance.Dialog.Body" parent="@android:style/TextAppearance.DeviceDefault.Medium">
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:lineHeight">20sp</item>
+    </style>
+
+    <style name="TextAppearance.Dialog.Body.Message">
+        <item name="android:gravity">center</item>
+        <item name="android:textAlignment">center</item>
+    </style>
+
+
+    <style name="Widget" />
+    <style name="Widget.Dialog" />
+    <style name="Widget.Dialog.Button">
+        <item name="android:buttonCornerRadius">28dp</item>
         <item name="android:background">@drawable/qs_dialog_btn_filled</item>
-        <item name="android:textColor">@color/prv_text_color_on_accent</item>
+        <item name="android:textColor">?androidprv:attr/textColorOnAccent</item>
         <item name="android:textSize">14sp</item>
         <item name="android:lineHeight">20sp</item>
-        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
         <item name="android:stateListAnimator">@null</item>
-        <item name="android:layout_marginHorizontal">4dp</item>
+        <item name="android:minWidth">0dp</item>
     </style>
 
-    <style name="Widget.QSDialog.Button.BorderButton">
+    <style name="Widget.Dialog.Button.BorderButton">
         <item name="android:background">@drawable/qs_dialog_btn_outline</item>
         <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
@@ -931,8 +976,9 @@
     </style>
 
     <style name="InternetDialog.NetworkSummary">
-        <item name="android:layout_marginEnd">34dp</item>
+        <item name="android:layout_marginEnd">7dp</item>
         <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">2</item>
         <item name="android:textAppearance">@style/TextAppearance.InternetDialog.Secondary</item>
     </style>
 
@@ -957,4 +1003,20 @@
 
     <style name="TextAppearance.InternetDialog.Secondary.Active"/>
 
+    <style name="InternetDialog.Divider">
+        <item name="android:background">?android:attr/textColorSecondary</item>
+    </style>
+
+    <style name="InternetDialog.Divider.Active"/>
+
+    <style name="FgsManagerDialogTitle">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textDirection">locale</item>
+    </style>
+
+    <style name="FgsManagerAppDuration">
+        <item name="android:fontFamily">?android:attr/textAppearanceSmall</item>
+        <item name="android:textDirection">locale</item>
+    </style>
 </resources>

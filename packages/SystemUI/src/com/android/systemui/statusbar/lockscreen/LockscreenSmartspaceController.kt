@@ -44,6 +44,7 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.flags.Flags
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.DeviceProvisionedController
 import com.android.systemui.util.concurrency.Execution
@@ -158,7 +159,7 @@ class LockscreenSmartspaceController @Inject constructor(
     fun isEnabled(): Boolean {
         execution.assertIsMainThread()
 
-        return featureFlags.isSmartspaceEnabled && plugin != null
+        return featureFlags.isEnabled(Flags.SMARTSPACE) && plugin != null
     }
 
     /**
@@ -240,6 +241,10 @@ class LockscreenSmartspaceController @Inject constructor(
         configurationController.addCallback(configChangeListener)
         statusBarStateController.addCallback(statusBarStateListener)
 
+        plugin.registerSmartspaceEventNotifier {
+                e -> session?.notifySmartspaceEvent(e)
+        }
+
         reloadSmartspace()
     }
 
@@ -265,6 +270,7 @@ class LockscreenSmartspaceController @Inject constructor(
         statusBarStateController.removeCallback(statusBarStateListener)
         session = null
 
+        plugin?.registerSmartspaceEventNotifier(null)
         plugin?.onTargetsAvailable(emptyList())
         Log.d(TAG, "Ending smartspace session for lockscreen")
     }

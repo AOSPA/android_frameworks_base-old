@@ -60,12 +60,12 @@ import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dumpable;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
+import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.NotificationChannelHelper;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -74,6 +74,7 @@ import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.coordinator.BubbleCoordinator;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
+import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
@@ -88,6 +89,7 @@ import com.android.wm.shell.bubbles.Bubbles;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
@@ -111,8 +113,10 @@ public class BubblesManager implements Dumpable {
     private final INotificationManager mNotificationManager;
     private final NotificationVisibilityProvider mVisibilityProvider;
     private final NotificationInterruptStateProvider mNotificationInterruptStateProvider;
+    private final NotificationLockscreenUserManager mNotifUserManager;
     private final NotificationGroupManagerLegacy mNotificationGroupManager;
     private final NotificationEntryManager mNotificationEntryManager;
+    private final CommonNotifCollection mCommonNotifCollection;
     private final NotifPipeline mNotifPipeline;
     private final Executor mSysuiMainExecutor;
 
@@ -139,9 +143,10 @@ public class BubblesManager implements Dumpable {
             NotificationLockscreenUserManager notifUserManager,
             NotificationGroupManagerLegacy groupManager,
             NotificationEntryManager entryManager,
+            CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
-            FeatureFlags featureFlags,
+            NotifPipelineFlags notifPipelineFlags,
             DumpManager dumpManager,
             Executor sysuiMainExecutor) {
         if (bubblesOptional.isPresent()) {
@@ -150,8 +155,8 @@ public class BubblesManager implements Dumpable {
                     configurationController, statusBarService, notificationManager,
                     visibilityProvider,
                     interruptionStateProvider, zenModeController, notifUserManager,
-                    groupManager, entryManager, notifPipeline, sysUiState, featureFlags,
-                    dumpManager, sysuiMainExecutor);
+                    groupManager, entryManager, notifCollection, notifPipeline, sysUiState,
+                    notifPipelineFlags, dumpManager, sysuiMainExecutor);
         } else {
             return null;
         }
@@ -172,9 +177,10 @@ public class BubblesManager implements Dumpable {
             NotificationLockscreenUserManager notifUserManager,
             NotificationGroupManagerLegacy groupManager,
             NotificationEntryManager entryManager,
+            CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
-            FeatureFlags featureFlags,
+            NotifPipelineFlags notifPipelineFlags,
             DumpManager dumpManager,
             Executor sysuiMainExecutor) {
         mContext = context;
@@ -184,8 +190,10 @@ public class BubblesManager implements Dumpable {
         mNotificationManager = notificationManager;
         mVisibilityProvider = visibilityProvider;
         mNotificationInterruptStateProvider = interruptionStateProvider;
+        mNotifUserManager = notifUserManager;
         mNotificationGroupManager = groupManager;
         mNotificationEntryManager = entryManager;
+        mCommonNotifCollection = notifCollection;
         mNotifPipeline = notifPipeline;
         mSysuiMainExecutor = sysuiMainExecutor;
 
@@ -194,7 +202,7 @@ public class BubblesManager implements Dumpable {
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE))
                 : statusBarService;
 
-        if (featureFlags.isNewNotifPipelineRenderingEnabled()) {
+        if (notifPipelineFlags.isNewPipelineEnabled()) {
             setupNotifPipeline();
         } else {
             setupNEM();
@@ -264,8 +272,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void getPendingOrActiveEntry(String key, Consumer<BubbleEntry> callback) {
                 sysuiMainExecutor.execute(() -> {
-                    NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     callback.accept(entry == null ? null : notifToBubbleEntry(entry));
                 });
             }
@@ -275,11 +282,11 @@ public class BubblesManager implements Dumpable {
                     Consumer<List<BubbleEntry>> callback) {
                 sysuiMainExecutor.execute(() -> {
                     List<BubbleEntry> result = new ArrayList<>();
-                    List<NotificationEntry> activeEntries =
-                            mNotificationEntryManager.getActiveNotificationsForCurrentUser();
-                    for (int i = 0; i < activeEntries.size(); i++) {
-                        NotificationEntry entry = activeEntries.get(i);
-                        if (savedBubbleKeys.contains(entry.getKey())
+                    final Collection<NotificationEntry> activeEntries =
+                            mCommonNotifCollection.getAllNotifs();
+                    for (NotificationEntry entry : activeEntries) {
+                        if (mNotifUserManager.isCurrentProfile(entry.getSbn().getUserId())
+                                && savedBubbleKeys.contains(entry.getKey())
                                 && mNotificationInterruptStateProvider.shouldBubbleUp(entry)
                                 && entry.isBubble()) {
                             result.add(notifToBubbleEntry(entry));
@@ -292,8 +299,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void setNotificationInterruption(String key) {
                 sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null
                             && entry.getImportance() >= NotificationManager.IMPORTANCE_HIGH) {
                         entry.setInterruption();
@@ -311,8 +317,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void notifyRemoveNotification(String key, int reason) {
                 sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null) {
                         for (NotifCallback cb : mCallbacks) {
                             cb.removeNotification(entry, getDismissedByUserStats(entry, true),
@@ -334,8 +339,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void notifyMaybeCancelSummary(String key) {
                 sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null) {
                         for (NotifCallback cb : mCallbacks) {
                             cb.maybeCancelSummary(entry);
@@ -347,8 +351,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void removeNotificationEntry(String key) {
                 sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null) {
                         mNotificationGroupManager.onEntryRemoved(entry);
                     }
@@ -358,8 +361,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void updateNotificationBubbleButton(String key) {
                 sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null && entry.getRow() != null) {
                         entry.getRow().updateBubbleButton();
                     }
@@ -369,8 +371,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void updateNotificationSuppression(String key) {
                 sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null) {
                         mNotificationGroupManager.updateSuppression(entry);
                     }
@@ -402,8 +403,7 @@ public class BubblesManager implements Dumpable {
             @Override
             public void onUnbubbleConversation(String key) {
                 sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry =
-                            mNotificationEntryManager.getPendingOrActiveNotif(key);
+                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null) {
                         onUserChangedBubble(entry, false /* shouldBubble */);
                     }
@@ -580,7 +580,7 @@ public class BubblesManager implements Dumpable {
         HashMap<String, Pair<BubbleEntry, Boolean>> pendingOrActiveNotif = new HashMap<>();
         for (int i = 0; i < orderedKeys.length; i++) {
             String key = orderedKeys[i];
-            NotificationEntry entry = mNotificationEntryManager.getPendingOrActiveNotif(key);
+            final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
             BubbleEntry bubbleEntry = entry != null
                     ? notifToBubbleEntry(entry)
                     : null;
@@ -761,7 +761,7 @@ public class BubblesManager implements Dumpable {
     }
 
     static BubbleEntry notifToBubbleEntry(NotificationEntry e) {
-        return new BubbleEntry(e.getSbn(), e.getRanking(), e.isClearable(),
+        return new BubbleEntry(e.getSbn(), e.getRanking(), e.isDismissable(),
                 e.shouldSuppressNotificationDot(), e.shouldSuppressNotificationList(),
                 e.shouldSuppressPeek());
     }

@@ -912,13 +912,14 @@ public class OomAdjuster {
         updateUidsLSP(activeUids, nowElapsed);
 
         synchronized (mService.mProcessStats.mLock) {
-            if (mService.mProcessStats.shouldWriteNowLocked(now)) {
+            final long nowUptime = SystemClock.uptimeMillis();
+            if (mService.mProcessStats.shouldWriteNowLocked(nowUptime)) {
                 mService.mHandler.post(new ActivityManagerService.ProcStatsRunnable(mService,
                         mService.mProcessStats));
             }
 
             // Run this after making sure all procstates are updated.
-            mService.mProcessStats.updateTrackingAssociationsLocked(mAdjSeq, now);
+            mService.mProcessStats.updateTrackingAssociationsLocked(mAdjSeq, nowUptime);
         }
 
         if (DEBUG_OOM_ADJ) {
@@ -1577,7 +1578,7 @@ public class OomAdjuster {
         int schedGroup;
         int procState;
         int cachedAdjSeq;
-        int capability = 0;
+        int capability = cycleReEval ? app.mState.getCurCapability() : 0;
 
         boolean foregroundActivities = false;
         boolean hasVisibleActivities = false;
@@ -1987,10 +1988,6 @@ public class OomAdjuster {
                     }
 
                     if ((cr.flags & Context.BIND_WAIVE_PRIORITY) == 0) {
-                        if (shouldSkipDueToCycle(app, cstate, procState, adj, cycleReEval)) {
-                            continue;
-                        }
-
                         if (cr.hasFlag(Context.BIND_INCLUDE_CAPABILITIES)) {
                             capability |= cstate.getCurCapability();
                         }
@@ -2009,6 +2006,10 @@ public class OomAdjuster {
                             } else {
                                 capability |= PROCESS_CAPABILITY_NETWORK;
                             }
+                        }
+
+                        if (shouldSkipDueToCycle(app, cstate, procState, adj, cycleReEval)) {
+                            continue;
                         }
 
                         if (clientProcState >= PROCESS_STATE_CACHED_ACTIVITY) {
@@ -2075,7 +2076,7 @@ public class OomAdjuster {
                                         newAdj = ProcessList.PERSISTENT_SERVICE_ADJ;
                                         schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
                                         procState = ActivityManager.PROCESS_STATE_PERSISTENT;
-                                        cr.trackProcState(procState, mAdjSeq, now);
+                                        cr.trackProcState(procState, mAdjSeq);
                                         trackedProcState = true;
                                     }
                                 } else if ((cr.flags & Context.BIND_NOT_PERCEPTIBLE) != 0
@@ -2182,7 +2183,7 @@ public class OomAdjuster {
                         }
 
                         if (!trackedProcState) {
-                            cr.trackProcState(clientProcState, mAdjSeq, now);
+                            cr.trackProcState(clientProcState, mAdjSeq);
                         }
 
                         if (procState > clientProcState) {
@@ -2330,7 +2331,7 @@ public class OomAdjuster {
                     }
                 }
 
-                conn.trackProcState(clientProcState, mAdjSeq, now);
+                conn.trackProcState(clientProcState, mAdjSeq);
                 if (procState > clientProcState) {
                     procState = clientProcState;
                     state.setCurRawProcState(procState);
@@ -2582,18 +2583,9 @@ public class OomAdjuster {
         // don't compact during bootup
         if (mCachedAppOptimizer.useCompaction() && mService.mBooted) {
             // Cached and prev/home compaction
+            // reminder: here, setAdj is previous state, curAdj is upcoming state
             if (state.getCurAdj() != state.getSetAdj()) {
-                // Perform a minor compaction when a perceptible app becomes the prev/home app
-                // Perform a major compaction when any app enters cached
-                // reminder: here, setAdj is previous state, curAdj is upcoming state
-                if (state.getSetAdj() <= ProcessList.PERCEPTIBLE_APP_ADJ
-                        && (state.getCurAdj() == ProcessList.PREVIOUS_APP_ADJ
-                            || state.getCurAdj() == ProcessList.HOME_APP_ADJ)) {
-                    mCachedAppOptimizer.compactAppSome(app);
-                } else if (state.getCurAdj() >= ProcessList.CACHED_APP_MIN_ADJ
-                        && state.getCurAdj() <= ProcessList.CACHED_APP_MAX_ADJ) {
-                    mCachedAppOptimizer.compactAppFull(app);
-                }
+                mCachedAppOptimizer.onOomAdjustChanged(state.getSetAdj(), state.getCurAdj(), app);
             } else if (mService.mWakefulness.get() != PowerManagerInternal.WAKEFULNESS_AWAKE
                     && state.getSetAdj() < ProcessList.FOREGROUND_APP_ADJ
                     // Because these can fire independent of oom_adj/procstate changes, we need
@@ -2817,7 +2809,7 @@ public class OomAdjuster {
             if (!doingAll) {
                 synchronized (mService.mProcessStats.mLock) {
                     mService.setProcessTrackerStateLOSP(app,
-                            mService.mProcessStats.getMemFactorLocked(), now);
+                            mService.mProcessStats.getMemFactorLocked());
                 }
             } else {
                 state.setProcStateChanged(true);
@@ -2903,29 +2895,18 @@ public class OomAdjuster {
     void setAttachingSchedGroupLSP(ProcessRecord app) {
         int initialSchedGroup = ProcessList.SCHED_GROUP_DEFAULT;
         final ProcessStateRecord state = app.mState;
-        // If the process has been marked as foreground via Zygote.START_FLAG_USE_TOP_APP_PRIORITY,
-        // then verify that the top priority is actually is applied.
+        // If the process has been marked as foreground, it is starting as the top app (with
+        // Zygote#START_AS_TOP_APP_ARG), so boost the thread priority of its default UI thread.
         if (state.hasForegroundActivities()) {
-            String fallbackReason = null;
             try {
                 // The priority must be the same as how does {@link #applyOomAdjLSP} set for
                 // {@link ProcessList.SCHED_GROUP_TOP_APP}. We don't check render thread because it
                 // is not ready when attaching.
-                if (Process.getProcessGroup(app.getPid()) == THREAD_GROUP_TOP_APP) {
-                    app.getWindowProcessController().onTopProcChanged();
-                    setThreadPriority(app.getPid(), THREAD_PRIORITY_TOP_APP_BOOST);
-                } else {
-                    fallbackReason = "not expected top priority";
-                }
-            } catch (Exception e) {
-                fallbackReason = e.toString();
-            }
-            if (fallbackReason == null) {
+                app.getWindowProcessController().onTopProcChanged();
+                setThreadPriority(app.getPid(), THREAD_PRIORITY_TOP_APP_BOOST);
                 initialSchedGroup = ProcessList.SCHED_GROUP_TOP_APP;
-            } else {
-                // The real scheduling group will depend on if there is any component of the process
-                // did something during attaching.
-                Slog.w(TAG, "Fallback pre-set sched group to default: " + fallbackReason);
+            } catch (Exception e) {
+                Slog.w(TAG, "Failed to pre-set top priority to " + app + " " + e);
             }
         }
 

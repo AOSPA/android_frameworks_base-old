@@ -98,7 +98,7 @@ public class DataSaverTile extends QSTileImpl<BooleanState> implements
                         toggleDataSaver();
                         Prefs.putBoolean(mContext, Prefs.Key.QS_DATA_SAVER_DIALOG_SHOWN, true);
                     });
-            dialog.setNegativeButton(com.android.internal.R.string.cancel, null);
+            dialog.setNeutralButton(com.android.internal.R.string.cancel, null);
             dialog.setShowForAllUsers(true);
 
             if (view != null) {
@@ -135,15 +135,6 @@ public class DataSaverTile extends QSTileImpl<BooleanState> implements
     @Override
     public int getMetricsCategory() {
         return MetricsEvent.QS_DATA_SAVER;
-    }
-
-    @Override
-    protected String composeChangeAnnouncement() {
-        if (mState.value) {
-            return mContext.getString(R.string.accessibility_quick_settings_data_saver_changed_on);
-        } else {
-            return mContext.getString(R.string.accessibility_quick_settings_data_saver_changed_off);
-        }
     }
 
     @Override

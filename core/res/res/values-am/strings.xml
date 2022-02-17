@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"መተግበሪያው ስለገቢ እና ወጪ ጥሪዎች ያለ ውሂብም ጨምሮ የእርስዎ Android TV መሣሪያ ምዝግብ ማስታወሻ እንዲቀይር ያስችለዋል። ተንኮል-አዘል መተግበሪያዎች ይህን ተጠቅመው የስልክዎን ምዝግብ ማስታወሻ ሊደመስሱ ወይም ሊቀይሩ ይችላሉ።"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"ስለ ገቢ እና ወጪ ጥሪዎችን ውሂብ ጨምሮ፣ የስልክህን ምዝግብ ማስታወሻ ለመቀየር ለመተግበሪያው ይፈቅዳል። ይሄንን ተንኮል አዘል መተግበሪያዎች የስልክህን ምዝግብ ማስታወሻ ለመሰረዝ ወይም ለመለወጥ ሊጠቀሙበት ይችላሉ።"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"የሰውነት ዳሳሾችን መድረስ (እንደ የልብ ምት መከታተያዎች ያሉ)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"እንደ የእርስዎ የልብ ምት የመሳሰሉ ያሉበትን አካላዊ ሁኔታ ከሚቆጣጠሩ ሰውነት ዳሳሾች ውሂብ ላይ እንዲደርስ ለመተግበሪያው ይፈቅደለታል።"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"እንደ የልብ ምት፣ የሙቀት መጠን፣ የደም ኦክሲጅን መቶኛ፣ ወዘተ ያሉ የሰውነት ዳሳሾች ውሂብን መድረስ።"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"ከበስተጀርባ እያለ የሰውነት ዳሳሾችን (እንደ የልብ ምት መቆጣጠሪያዎች) መድረስ"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"ከበስተጀርባ እያለ እንደ የልብ ምት፣ የሙቀት መጠን፣ የደም ኦክሲጅን መቶኛ፣ ወዘተ ያሉ የሰውነት ዳሳሾች ውሂብን መድረስ።"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"የቀን መቁጠሪያ ክስተቶችን እና ዝርዝሮችን አንብብ"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"ይህ መተግበሪያ ሁሉንም በእርስዎ ጡባዊ ላይ የተከማቹ የቀን መቁጠሪያ ክስተቶችን ማንበብ ወይም የእርስዎን የቀን መቁጠሪያ ውሂብ ማስቀመጥ ይችላል።"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"ይህ መተግበሪያ ሁሉንም በእርስዎ Android TV መሣሪያ ላይ የተከማቹ የቀን መቁጠሪያ ክስተቶችን ማንበብ ወይም የእርስዎን የቀን መቁጠሪያ ውሂብ ማስቀመጥ ይችላል።"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"መተግበሪያው ያለእርስዎ ጣልቃ ገብነት ጥሪዎችን ለማድረግ የአይኤምኤስ አገልግሎቱን እንዲጠቀም ያስችለዋል።"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"የስልክ ሁኔታና ማንነት አንብብ"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"መተግበሪያው የመሳሪያውን የስልክ ባህሪያት ላይ እንዲደርስ ይፈቅድለታል። ይህ ፈቃድ መተግበሪያው የስልክ ቁጥሩን እና የመሳሪያውን መታወቂያዎች፣ ጥሪ የነቃ እንደሆነ፣ እና በጥሪ የተገናኘውን የሩቅ ቁጥር እንዲወስን ይፈቅድለታል።"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"መሠረታዊ የቴሌፎኒ ሁኔታ እና ማንነት ያንብቡ"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"መተግበሪያው የመሣሪያውን መሠረታዊ የቴሌፎኒ ባህሪያት እንዲደርስ ይፈቅድለታል።"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"ጥሪዎችን በስርዓቱ በኩል አዙር"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"መተግበሪያው የጥሪ ተሞክሮን እንዲያሻሽል ጥሪዎቹን በስርዓቱ በኩል እንዲያዞር ያስችለዋል።"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"በሥርዓቱ በኩል ጥሪዎችን ይመልከቱ እና ይቆጣጠሩ።"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"የእርስዎ የመልክ ሞዴል ለመሰረዝ መታ ያድርጉ፣ ከዚያ መልክዎን እንደገና ያክሉ"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"በመልክ መክፈትን ያዋቅሩ"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"ስልክዎን በመመልከት ያስከፍቱት"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"በመልክ መክፈትን ለመጠቀም "<b>"የካሜራ መዳረሻ"</b>"ን በቅንብሮች እና ግላዊነት ውስጥ ያብሩ"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"የሚከፍቱባቸው ተጨማሪ መንገዶችን ያቀናብሩ"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"የጣት አሻራን ለማከል መታ ያድርጉ"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"በጣት አሻራ መክፈቻ"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"መተግበሪያው የአትረብሽ ውቅረትን እንዲያነብብ እና እንዲጸፍ ይፈቅዳል።"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"የእይታ ፈቃድ መጠቀምን መጀመር"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"ያዢው ለአንድ መተግበሪያ የፈቃድ አጠቃቀሙን እንዲያስጀምር ያስችለዋል። ለመደበኛ መተግበሪያዎች በጭራሽ ሊያስፈልግ አይገባም።"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"የእይታ ፈቃድ ውሳኔዎችን ይጀምሩ"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"ያዢው የፈቃድ ውሳኔዎችን ለመገምገም ማያ ገጽ እንዲጀምሩ ያስችላቸዋል። ለመደበኛ መተግበሪያዎች በጭራሽ ሊያስፈልግ አይገባም።"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"የመተግበሪያ ባህሪያትን ማየት መጀመር"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"ያዢው የአንድ መተግበሪያ የባህሪያት መረጃን ማየት እንዲጀምር ያስችለዋል።"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"የዳሳሽ ውሂቡን በከፍተኛ የናሙና ብዛት ላይ ይድረሱበት"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"የማሳያ-ክፈት ሙከራዎችን ክትትል ያድርጉባቸው"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"ማሳያውን በምትከፍትበት ጊዜ በስህተት የተተየቡ የይለፍ ቃሎችን ቁጥር ተቆጣጠር፤ እና ጡባዊ ተኮውን ቆልፍ  ወይም በጣም ብዙ የተሳሳቱ የይለፍ ቃሎች ከተተየቡ የጡባዊ ተኮን ውሂብ አጥፋ፡፡"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"ማያ ገጹን ሲከፍቱ በትክክል ያልተተየቡ የይለፍ ቃላት ብዛት ተከታተል፣ እና በጣም ብዙ ትክክል ያልሆኑ የይለፍ ቃላት ከተተየቡ የእርስዎን Android TV ን ቆልፍ ወይም ሁሉንም የእርስዎን Android TV ደምስስ።"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"ማያ ገጹን ሲያስከፍቱ በትክክል ያልተተየቡ የይለፍ ቃላት ብዛት ተከታተል፣ እና በጣም ብዙ ትክክል ያልሆኑ የይለፍ ቃላት ከተተየቡ የኢንፎቴይንመንት ስርዓቱን ቆልፍ ወይም ሁሉንም የኢንፎቴይንመንት ስርዓት ውሂብ ደምስስ።"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"የተተየቡ ልክ ያልሆኑ የይለፍ ቃሎችን ቁጥር ተቆጣጠር፡፡ማሳያውን በምትከፍትበት ጊዜ፤ እና በጣም ብዙ ልክ ያልሆኑ የይለፍ ቃሎች ከተተየቡ ስልኩን ቆልፈው ወይም ሁሉንም የስልኩን ውሂብ ደምስሰው፡፡"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"ማያ ገጹን ሲያስከፍቱ በትክክል ያልተተየቡ የይለፍ ቃላት ብዛት ተከታተል፣ እና በጣም ብዙ ትክክል ያልሆኑ የይለፍ ቃላት ከተተየቡ ጡባዊውን ቆልፍ ወይም ሁሉንም የዚህን ተጠቃሚ ውሂብ ደምስስ።."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"ማያ ገጹን ሲያስከፍቱ በትክክል ያልተተየቡ የይለፍ ቃላት ብዛት ተከታተል፣ እና በጣም ብዙ ትክክል ያልሆኑ የይለፍ ቃላት ከተተየቡ የእርስዎ Android TV መሣሪያን ቆልፍ ወይም ሁሉንም የዚህን ተጠቃሚ ውሂብ ደምስስ።"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"ማያ ገጹን ሲያስከፍቱ በትክክል ያልተተየቡ የይለፍ ቃላት ብዛት ተከታተል፣ እና በጣም ብዙ ትክክል ያልሆኑ የይለፍ ቃላት ከተተየቡ የኢንፎቴይንመንት ስርዓቱን ቆልፍ ወይም ሁሉንም የዚህን ተጠቃሚ ውሂብ ደምስስ።"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"ማያ ገጹን ሲያስከፍቱ በትክክል ያልተተየቡ የይለፍ ቃላት ብዛት ተከታተል፣ እና በጣም ብዙ ትክክል ያልሆኑ የይለፍ ቃላት ከተተየቡ ስልኩን ቆልፍ ወይም ሁሉንም የዚህን ተጠቃሚ ውሂብ ደምስስ።"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"የማያ ገጹን መቆለፊያ መለወጥ"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"የማያ ገጽ መቆለፊያውን ለውጥ።"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"ሁሉንም ውሂብ መሰረዝ"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"የፋብሪካው ውሂብ ዳግም አስጀምርን በማከናወን፣ያለ ማስጠንቀቂያ የጡባዊውን ውሂብ አጥፋ።"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"የፋብሪካ ውሂብ ዳግም ቅንብርን ያለ ማስጠንቀቂያ በማከናወን የእርስዎን Android TV መሣሪያ ውሂብን ደምስስ።"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"የፋብሪካ ውሂብ ዳግም ማስጀመር በማከናወን ያለማስጠንቀቂያ የኢንፎቴይንመንት ስርዓትን ውሂብ ደምስስ።"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"የፋብሪካ ውሂብ ድጋሚ አስጀምር በማከናወን ያለ ማሰጠንቀቂያ የስልኩን ውሂብ ደምስስ።"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"የተጠቃሚ ውሂብ ደምስስ"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"የመገለጫ ውሂብ ደምስስ"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"የተጠቃሚ ውሂብ ደምስስ"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"ያለምንም ማስጠንቀቂያ የዚህን ጡባዊ የተጠቃሚ ውሂብ ደምስስ።"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"በዚህ Android TV መሣሪያ ላይ ያለ ማስጠንቀቂያ የዚህን ተጠቃሚ ውሂብ ደምስስ።"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"በዚህ የኢንፎቴይንመንት ሥርዓት ላይ ያለ ማስጠንቀቂያ የዚህን መገለጫ ውሂብ ደምስስ።"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"ያለምንም ማስጠንቀቂያ የዚህን ስልክ የተጠቃሚ ውሂብ ደምስስ።"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"የመሣሪያውን ሁሉንም ፕሮክሲ አዘጋጅ"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"መመሪያ ነቅቶ እያለ ጥቅም ላይ ሊውል የሚችለውን የመሣሪያውን ሁሉንተናዊ ተኪ አዘጋጅ። የመሣሪያ ባለቤት ብቻ የሁሉንተናዊ ተኪውን ማዘጋጀት ይችላል።"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g>ን ማዘጋጀት።"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"መተግበሪያዎችን በማስጀመር ላይ፡፡"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"አጨራረስ ማስነሻ፡፡"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"ማያ ገጽ ይጥፋ?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"የጣት አሻራዎን ሲያዋቅሩ የኃይል አዝራሩን ተጫንተውታል። \n\n ይህ አብዛኛው ጊዜ ማያ ገጽዎን ያጠፈዋል።"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"አጥፋ"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"ይቅር"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"ማዋቀር ይቀጥሉ?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"የማብሪያ/ማጥፊያ ቁልፉን ተጭነዋል — ይህ ብዙውን ጊዜ ማያ ገጹን ያጠፋል።\n\nየጣት አሻራዎን በሚያዋቅሩበት ጊዜ በትንሹ መታ ለማድረግ ይሞክሩ።"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"ማያ ገጽን አጥፋ"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"ማዋቀር ቀጥል"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"የጣት አሻራዎን ማረጋገጥ ይቀጥሉ?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"የማብሪያ/ማጥፊያ ቁልፉን ተጭነዋል - ይህ ብዙውን ጊዜ ማያ ገጹን ያጠፋል። \n\n የጣት አሻራዎን ለማረጋገጥ በትንሹ መታ ለማድረግ ይሞክሩ።"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"ማያ ገጽን አጥፋ"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"ቀጥል"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> አሂድ"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"ወደ ጨዋታ ለመመለስ መታ ያድርጉ"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"ጨዋታ ይምረጡ"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"ብጁ የመተግበሪያ ማሳወቂያ"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g> በ<xliff:g id="ACCOUNT">%2$s</xliff:g> አዲስ ተጠቃሚ እንዲፈጥር ይፈቀድለት (ይህ መለያ ያለው ተጠቃሚ አስቀድሞ አለ)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g> አዲስ ተጠቃሚ ከ <xliff:g id="ACCOUNT">%2$s</xliff:g> ጋር መፍጠር እንዲችል ይፍቀዱ?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"ክትትል የሚደረግበት ተጠቃሚን አክል"</string>
     <string name="language_selection_title" msgid="52674936078683285">"ቋንቋ ያክሉ"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"የክልል ምርጫ"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"የቋንቋ ስም ይተይቡ"</string>

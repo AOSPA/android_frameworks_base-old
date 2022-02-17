@@ -29,6 +29,7 @@ import android.content.pm.InstallSourceInfo;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.KeySet;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.ProcessInfo;
 import android.content.pm.ProviderInfo;
@@ -45,8 +46,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageState;
 import com.android.server.pm.pkg.PackageStateInternal;
-import com.android.server.utils.WatchedArrayMap;
-import com.android.server.utils.WatchedLongSparseArray;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -89,7 +88,7 @@ public final class ComputerLocked extends ComputerEngine {
         }
     }
     public @NonNull QueryIntentActivitiesResult queryIntentActivitiesInternalBody(
-            Intent intent, String resolvedType, int flags, int filterCallingUid, int userId,
+            Intent intent, String resolvedType, long flags, int filterCallingUid, int userId,
             boolean resolveForStart, boolean allowDynamicSplits, String pkgName,
             String instantAppPkgName) {
         synchronized (mLock) {
@@ -268,14 +267,6 @@ public final class ComputerLocked extends ComputerEngine {
 
     @NonNull
     @Override
-    public WatchedArrayMap<String, WatchedLongSparseArray<SharedLibraryInfo>> getSharedLibraries() {
-        synchronized (mLock) {
-            return super.getSharedLibraries();
-        }
-    }
-
-    @NonNull
-    @Override
     public ArraySet<String> getNotifyPackagesForReplacedReceived(@NonNull String[] packages) {
         synchronized (mLock) {
             return super.getNotifyPackagesForReplacedReceived(packages);
@@ -312,7 +303,8 @@ public final class ComputerLocked extends ComputerEngine {
     }
 
     @Override
-    public int[] getPackageGids(@NonNull String packageName, int flags, @UserIdInt int userId) {
+    public int[] getPackageGids(@NonNull String packageName,
+            @PackageManager.PackageInfoFlagsBits long flags, @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getPackageGids(packageName, flags, userId);
         }
@@ -336,8 +328,8 @@ public final class ComputerLocked extends ComputerEngine {
 
     @Nullable
     @Override
-    public ActivityInfo getReceiverInfo(@NonNull ComponentName component, int flags,
-            @UserIdInt int userId) {
+    public ActivityInfo getReceiverInfo(@NonNull ComponentName component,
+            @PackageManager.ComponentInfoFlagsBits long flags, @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getReceiverInfo(component, flags, userId);
         }
@@ -346,7 +338,7 @@ public final class ComputerLocked extends ComputerEngine {
     @Nullable
     @Override
     public ParceledListSlice<SharedLibraryInfo> getSharedLibraries(@NonNull String packageName,
-            int flags, @UserIdInt int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getSharedLibraries(packageName, flags, userId);
         }
@@ -363,7 +355,8 @@ public final class ComputerLocked extends ComputerEngine {
 
     @Override
     public List<VersionedPackage> getPackagesUsingSharedLibrary(@NonNull SharedLibraryInfo libInfo,
-            int flags, int callingUid, @UserIdInt int userId) {
+            @PackageManager.PackageInfoFlagsBits long flags, int callingUid,
+            @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getPackagesUsingSharedLibrary(libInfo, flags, callingUid, userId);
         }
@@ -372,7 +365,8 @@ public final class ComputerLocked extends ComputerEngine {
     @Nullable
     @Override
     public ParceledListSlice<SharedLibraryInfo> getDeclaredSharedLibraries(
-            @NonNull String packageName, int flags, @UserIdInt int userId) {
+            @NonNull String packageName, @PackageManager.PackageInfoFlagsBits long flags,
+            @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getDeclaredSharedLibraries(packageName, flags, userId);
         }
@@ -380,8 +374,8 @@ public final class ComputerLocked extends ComputerEngine {
 
     @Nullable
     @Override
-    public ProviderInfo getProviderInfo(@NonNull ComponentName component, int flags,
-            @UserIdInt int userId) {
+    public ProviderInfo getProviderInfo(@NonNull ComponentName component,
+            @PackageManager.ComponentInfoFlagsBits long flags, @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getProviderInfo(component, flags, userId);
         }
@@ -495,7 +489,8 @@ public final class ComputerLocked extends ComputerEngine {
     @NonNull
     @Override
     public ParceledListSlice<PackageInfo> getPackagesHoldingPermissions(
-            @NonNull String[] permissions, int flags, @UserIdInt int userId) {
+            @NonNull String[] permissions, @PackageManager.PackageInfoFlagsBits long flags,
+            @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getPackagesHoldingPermissions(permissions, flags, userId);
         }
@@ -503,7 +498,8 @@ public final class ComputerLocked extends ComputerEngine {
 
     @NonNull
     @Override
-    public List<ApplicationInfo> getInstalledApplications(int flags, @UserIdInt int userId,
+    public List<ApplicationInfo> getInstalledApplications(
+            @PackageManager.ApplicationInfoFlagsBits long flags, @UserIdInt int userId,
             int callingUid) {
         synchronized (mLock) {
             return super.getInstalledApplications(flags, userId, callingUid);
@@ -512,8 +508,9 @@ public final class ComputerLocked extends ComputerEngine {
 
     @Nullable
     @Override
-    public ProviderInfo resolveContentProvider(@NonNull String name, int flags,
-            @UserIdInt int userId, int callingUid) {
+    public ProviderInfo resolveContentProvider(@NonNull String name,
+            @PackageManager.ResolveInfoFlagsBits long flags, @UserIdInt int userId,
+            int callingUid) {
         synchronized (mLock) {
             return super.resolveContentProvider(name, flags, userId, callingUid);
         }
@@ -539,7 +536,8 @@ public final class ComputerLocked extends ComputerEngine {
     @NonNull
     @Override
     public ParceledListSlice<ProviderInfo> queryContentProviders(@Nullable String processName,
-            int uid, int flags, @Nullable String metaDataKey) {
+            int uid, @PackageManager.ComponentInfoFlagsBits long flags,
+            @Nullable String metaDataKey) {
         synchronized (mLock) {
             return super.queryContentProviders(processName, uid, flags, metaDataKey);
         }
@@ -650,6 +648,14 @@ public final class ComputerLocked extends ComputerEngine {
     }
 
     @Override
+    public int getComponentEnabledSettingInternal(@NonNull ComponentName component, int callingUid,
+            @UserIdInt int userId) {
+        synchronized (mLock) {
+            return super.getComponentEnabledSettingInternal(component, callingUid, userId);
+        }
+    }
+
+    @Override
     public boolean isComponentEffectivelyEnabled(@NonNull ComponentInfo componentInfo,
             @UserIdInt int userId) {
         synchronized (mLock) {
@@ -703,7 +709,8 @@ public final class ComputerLocked extends ComputerEngine {
     }
 
     @Override
-    public int getPackageUid(@NonNull String packageName, int flags, @UserIdInt int userId) {
+    public int getPackageUid(@NonNull String packageName,
+            @PackageManager.PackageInfoFlagsBits long flags, @UserIdInt int userId) {
         synchronized (mLock) {
             return super.getPackageUid(packageName, flags, userId);
         }

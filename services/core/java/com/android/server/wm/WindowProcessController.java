@@ -512,19 +512,19 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      */
     @HotPath(caller = HotPath.START_SERVICE)
     public boolean areBackgroundFgsStartsAllowed() {
-        return areBackgroundActivityStartsAllowed(mAtm.getBalAppSwitchesAllowed(),
+        return areBackgroundActivityStartsAllowed(mAtm.getBalAppSwitchesState(),
                 true /* isCheckingForFgsStart */);
     }
 
-    boolean areBackgroundActivityStartsAllowed(boolean appSwitchAllowed) {
-        return areBackgroundActivityStartsAllowed(appSwitchAllowed,
+    boolean areBackgroundActivityStartsAllowed(int appSwitchState) {
+        return areBackgroundActivityStartsAllowed(appSwitchState,
                 false /* isCheckingForFgsStart */);
     }
 
-    private boolean areBackgroundActivityStartsAllowed(boolean appSwitchAllowed,
+    private boolean areBackgroundActivityStartsAllowed(int appSwitchState,
             boolean isCheckingForFgsStart) {
         return mBgLaunchController.areBackgroundActivityStartsAllowed(mPid, mUid, mInfo.packageName,
-                appSwitchAllowed, isCheckingForFgsStart, hasActivityInVisibleTask(),
+                appSwitchState, isCheckingForFgsStart, hasActivityInVisibleTask(),
                 mInstrumentingWithBackgroundActivityStartPrivileges,
                 mAtm.getLastStopAppSwitchesTime(),
                 mLastActivityLaunchTime, mLastActivityFinishTime);

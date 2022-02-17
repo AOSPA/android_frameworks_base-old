@@ -104,7 +104,7 @@ class CloseImeWindowToHomeTest(private val testSpec: FlickerTestParameter) {
     @Test
     fun imeWindowBecomesInvisible() = testSpec.imeWindowBecomesInvisible()
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun imeAppWindowBecomesInvisible() {
         testSpec.assertWm {
@@ -144,7 +144,7 @@ class CloseImeWindowToHomeTest(private val testSpec: FlickerTestParameter) {
     @Test
     fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
-    @Presubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 

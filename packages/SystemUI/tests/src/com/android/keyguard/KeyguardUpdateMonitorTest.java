@@ -19,6 +19,7 @@ package com.android.keyguard;
 import static android.telephony.SubscriptionManager.DATA_ROAMING_DISABLE;
 import static android.telephony.SubscriptionManager.NAME_SOURCE_CARRIER_ID;
 
+import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.SOME_AUTH_REQUIRED_AFTER_USER_REQUEST;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -87,6 +88,7 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -172,6 +174,8 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     private InteractionJankMonitor mInteractionJankMonitor;
     @Mock
     private LatencyTracker mLatencyTracker;
+    @Mock
+    private FeatureFlags mFeatureFlags;
     @Captor
     private ArgumentCaptor<StatusBarStateController.StateListener> mStatusBarStateListenerCaptor;
     // Direct executor
@@ -668,7 +672,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mKeyguardUpdateMonitor.mFingerprintAuthenticationCallback
                 .onAuthenticationError(FingerprintManager.FINGERPRINT_ERROR_LOCKOUT_PERMANENT, "");
 
-        verify(mLockPatternUtils, never()).requireStrongAuth(anyInt(), anyInt());
+        verify(mLockPatternUtils).requireStrongAuth(anyInt(), anyInt());
     }
 
 
@@ -939,6 +943,19 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     }
 
     @Test
+    public void testStartUdfpsServiceStrongAuthRequiredAfterTimeout() {
+        // GIVEN status bar state is on the keyguard
+        mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
+
+        // WHEN user loses smart unlock trust
+        when(mStrongAuthTracker.getStrongAuthForUser(KeyguardUpdateMonitor.getCurrentUser()))
+                .thenReturn(SOME_AUTH_REQUIRED_AFTER_USER_REQUEST);
+
+        // THEN we should still listen for udfps
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(true)).isEqualTo(true);
+    }
+
+    @Test
     public void testShouldNotListenForUdfps_whenTrustEnabled() {
         // GIVEN a "we should listen for udfps" state
         mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
@@ -1020,6 +1037,16 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         verify(callback, atLeastOnce()).onRequireUnlockForNfc();
     }
 
+    @Test
+    public void testFaceDoesNotAuth_afterPinAttempt() {
+        mTestableLooper.processAllMessages();
+        mKeyguardUpdateMonitor.setCredentialAttempted();
+        verify(mFingerprintManager, never()).authenticate(any(), any(), any(),
+                any(), anyInt());
+        verify(mFaceManager, never()).authenticate(any(), any(), any(), any(), anyInt(),
+                anyBoolean());
+    }
+
     private void setKeyguardBouncerVisibility(boolean isVisible) {
         mKeyguardUpdateMonitor.sendKeyguardBouncerChanged(isVisible);
         mTestableLooper.processAllMessages();
@@ -1059,7 +1086,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
                     mRingerModeTracker, mBackgroundExecutor, mMainExecutor,
                     mStatusBarStateController, mLockPatternUtils,
                     mAuthController, mTelephonyListenerManager,
-                    mInteractionJankMonitor, mLatencyTracker);
+                    mInteractionJankMonitor, mLatencyTracker, mFeatureFlags);
             setStrongAuthTracker(KeyguardUpdateMonitorTest.this.mStrongAuthTracker);
         }
 

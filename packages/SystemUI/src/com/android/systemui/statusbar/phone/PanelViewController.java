@@ -53,6 +53,8 @@ import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.classifier.Classifier;
 import com.android.systemui.doze.DozeLog;
+import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
@@ -190,6 +192,7 @@ public abstract class PanelViewController {
     protected final LockscreenGestureLogger mLockscreenGestureLogger;
     private final PanelExpansionStateManager mPanelExpansionStateManager;
     private final TouchHandler mTouchHandler;
+    private final InteractionJankMonitor mInteractionJankMonitor;
 
     protected abstract void onExpandingFinished();
 
@@ -217,6 +220,7 @@ public abstract class PanelViewController {
 
     public PanelViewController(
             PanelView view,
+            FeatureFlags featureFlags,
             FalsingManager falsingManager,
             DozeLog dozeLog,
             KeyguardStateController keyguardStateController,
@@ -228,7 +232,8 @@ public abstract class PanelViewController {
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
             LockscreenGestureLogger lockscreenGestureLogger,
             PanelExpansionStateManager panelExpansionStateManager,
-            AmbientState ambientState) {
+            AmbientState ambientState,
+            InteractionJankMonitor interactionJankMonitor) {
         mAmbientState = ambientState;
         mView = view;
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
@@ -274,11 +279,11 @@ public abstract class PanelViewController {
         mBounceInterpolator = new BounceInterpolator();
         mFalsingManager = falsingManager;
         mDozeLog = dozeLog;
-        mNotificationsDragEnabled = mResources.getBoolean(
-                R.bool.config_enableNotificationShadeDrag);
+        mNotificationsDragEnabled = featureFlags.isEnabled(Flags.NOTIFICATION_SHADE_DRAG);
         mVibratorHelper = vibratorHelper;
         mVibrateOnOpening = mResources.getBoolean(R.bool.config_vibrateOnIconAnimation);
         mStatusBarTouchableRegionManager = statusBarTouchableRegionManager;
+        mInteractionJankMonitor = interactionJankMonitor;
 
         mPerf = new BoostFramework();
     }
@@ -946,7 +951,6 @@ public abstract class PanelViewController {
 
     private void abortAnimations() {
         cancelHeightAnimator();
-        mView.removeCallbacks(mPostCollapseRunnable);
         mView.removeCallbacks(mFlingCollapseRunnable);
     }
 
@@ -1122,13 +1126,6 @@ public abstract class PanelViewController {
         }
         return onMiddleClicked();
     }
-
-    protected final Runnable mPostCollapseRunnable = new Runnable() {
-        @Override
-        public void run() {
-            collapse(false /* delayed */, 1.0f /* speedUpFactor */);
-        }
-    };
 
     protected abstract boolean onMiddleClicked();
 
@@ -1429,17 +1426,26 @@ public abstract class PanelViewController {
     }
 
     private void beginJankMonitoring(int cuj) {
+        if (mInteractionJankMonitor == null) {
+            return;
+        }
         InteractionJankMonitor.Configuration.Builder builder =
                 InteractionJankMonitor.Configuration.Builder.withView(cuj, mView)
                         .setTag(isFullyCollapsed() ? "Expand" : "Collapse");
-        InteractionJankMonitor.getInstance().begin(builder);
+        mInteractionJankMonitor.begin(builder);
     }
 
     private void endJankMonitoring(int cuj) {
+        if (mInteractionJankMonitor == null) {
+            return;
+        }
         InteractionJankMonitor.getInstance().end(cuj);
     }
 
     private void cancelJankMonitoring(int cuj) {
+        if (mInteractionJankMonitor == null) {
+            return;
+        }
         InteractionJankMonitor.getInstance().cancel(cuj);
     }
 

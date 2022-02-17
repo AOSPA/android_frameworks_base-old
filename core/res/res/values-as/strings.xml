@@ -176,10 +176,10 @@
     <string name="contentServiceSync" msgid="2341041749565687871">"ছিংক ত্ৰুটি"</string>
     <string name="contentServiceSyncNotificationTitle" msgid="5766411446676388623">"ছিংক কৰিব নোৱাৰি"</string>
     <string name="contentServiceTooManyDeletesNotificationDesc" msgid="4562226280528716090">"একেলগে বহুত <xliff:g id="CONTENT_TYPE">%s</xliff:g> মচিবলৈ চেষ্টা কৰা হৈছে"</string>
-    <string name="low_memory" product="tablet" msgid="5557552311566179924">"টেবলেটৰ সঞ্চয়াগাৰত খালী ঠাই নাই। ঠাই খালী কৰিবলৈ কিছুমান ফাইল মচক।"</string>
-    <string name="low_memory" product="watch" msgid="3479447988234030194">"ঘড়ীৰ সঞ্চয়াগাৰ ভৰি পৰিছে। খালী স্থান উলিয়াবলৈ কিছুমান ফাইল মচক।"</string>
+    <string name="low_memory" product="tablet" msgid="5557552311566179924">"টেবলেটৰ ষ্ট’ৰেজত খালী ঠাই নাই। ঠাই খালী কৰিবলৈ কিছুমান ফাইল মচক।"</string>
+    <string name="low_memory" product="watch" msgid="3479447988234030194">"ঘড়ীৰ ষ্ট’ৰেজ ভৰি পৰিছে। খালী স্থান উলিয়াবলৈ কিছুমান ফাইল মচক।"</string>
     <string name="low_memory" product="tv" msgid="6663680413790323318">"Android TV ডিভাইচৰ ষ্ট’ৰেজ ভৰি পৰিছে। খালী ঠাই উলিয়াবলৈ কিছুমান ফাইল মচক।"</string>
-    <string name="low_memory" product="default" msgid="2539532364144025569">"ফ\'নৰ সঞ্চয়াগাৰত খালী ঠাই নাই। ঠাই খালী কৰিবলৈ কিছুমান ফাইল মচক।"</string>
+    <string name="low_memory" product="default" msgid="2539532364144025569">"ফ\'নৰ ষ্ট’ৰেজত খালী ঠাই নাই। ঠাই খালী কৰিবলৈ কিছুমান ফাইল মচক।"</string>
     <plurals name="ssl_ca_cert_warning" formatted="false" msgid="2288194355006173029">
       <item quantity="one">প্ৰমাণপত্ৰ প্ৰদানকাৰী কৰ্তৃপক্ষ ইনষ্টল কৰা হ’ল</item>
       <item quantity="other">প্ৰমাণপত্ৰ প্ৰদানকাৰী কৰ্তৃপক্ষ ইনষ্টল কৰা হ’ল</item>
@@ -400,7 +400,7 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"মেম\'ৰিত নিজৰ বাবে প্ৰয়োজনীয় ঠাই পৃথক কৰিবলৈ এপক অনুমতি দিয়ে। এই কার্যই ফ\'নৰ কার্যক লেহেমীয়া কৰি অন্য এপবোৰৰ বাবে উপলব্ধ মেম\'ৰিক সীমাবদ্ধ কৰে।"</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"অগ্ৰভূমিৰ সেৱা চলাব পাৰে"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"এপটোক অগ্ৰভূমি সেৱাসমূহ ব্যৱহাৰ কৰিবলৈ অনুমতি দিয়ে।"</string>
-    <string name="permlab_getPackageSize" msgid="375391550792886641">"এপৰ সঞ্চয়াগাৰৰ খালী ঠাই হিচাপ কৰক"</string>
+    <string name="permlab_getPackageSize" msgid="375391550792886641">"এপৰ ষ্ট’ৰেজৰ খালী ঠাই হিচাপ কৰক"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"এপটোক ইয়াৰ ক\'ড, ডেটা আৰু কেশ্বৰ আকাৰ বিচাৰি উলিয়াবলৈ অনুমতি দিয়ে"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"ছিষ্টেম ছেটিংহ সংশোধন কৰক"</string>
     <string name="permdesc_writeSettings" msgid="8293047411196067188">"এপ্‌টোক ছিষ্টেমৰ ছেটিঙৰ ডেটা সংশোধন কৰিবলৈ অনুমতি দিয়ে৷ ক্ষতিকাৰক এপ্‌সমূহে আপোনাৰ ছিষ্টেম কনফিগাৰেশ্বনক ক্ষতিগ্ৰস্ত কৰিব পাৰে৷"</string>
@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"এপ্‌টোৱে অন্তৰ্গামী আৰু বহিৰ্গামী কলৰ ডেটাকে ধৰি আপোনাৰ Android TV ডিভাইচৰ কল লগ সংশোধন কৰিবলৈ অনুমতি দিয়ে। ক্ষতিকাৰক এপ্‌সমূহে আপোনাৰ কল লগ মচিবলৈ বা সংশোধন কৰিবলৈ এইটো ব্যৱহাৰ কৰিব পাৰে।"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"অন্তৰ্গামী আৰু বহিৰ্গামী কলৰ ডেটাকে ধৰি আপোনাৰ ফ\'নৰ কল লগ সংশোধন কৰিবলৈ এপক অনুমতি দিয়ে। ক্ষতিকাৰক এপবোৰে আপোনাৰ কল লগ মচিবলৈ বা সংশোধন কৰিবলৈ ইয়াক ব্যৱহাৰ কৰিব পাৰে।"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"শৰীৰৰ ছেন্সৰসমূহ (যেনে হৃদপিণ্ডৰ গতিৰ হাৰ নিৰীক্ষক) ব্যৱহাৰ কৰিব পাৰে"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"আপোনাৰ হৃদস্পন্দনৰ দৰে শাৰীৰিক অৱস্থাক নিৰীক্ষণ কৰা ছেন্সৰৰ পৰা ডেটা লাভ কৰিবলৈ এপক অনুমতি দিয়ে।"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"শৰীৰৰ ছেন্সৰৰ পৰা হৃদস্পন্দনৰ হাৰ, উষ্ণতা, তেজত অক্সিজেনৰ শতকৰা হাৰ ইত্যাদিৰ দৰে ডেটাৰ এক্সেছ পাওক।"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"নেপথ্যত থকাৰ সময়ত শৰীৰৰ ছেন্সৰ (উদাহৰণস্বৰূপে, হৃদস্পন্দনৰ হাৰ নিৰীক্ষক)"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"নেপথ্যত থকাৰ সময়ত শৰীৰৰ ছেন্সৰৰ পৰা হৃদস্পন্দনৰ হাৰ, উষ্ণতা, তেজত অক্সিজেনৰ শতকৰা হাৰ ইত্যাদিৰ দৰে ডেটাৰ এক্সেছ পাওক।"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"কেলেণ্ডাৰৰ কাৰ্যক্ৰম আৰু সবিশেষ পঢ়িব পাৰে"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"এই এপ্‌টোৱে আপোনাৰ টেবলেটটোত সংৰক্ষিত আটাইবোৰ কেলেণ্ডাৰ কাৰ্যক্ৰম পঢ়িব পাৰে আৰু আপোনাৰ কেলেণ্ডাৰৰ ডেটা শ্বেয়াৰ বা ছেভ কৰিব পাৰে।"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"এই এপ্‌টোৱে আপোনাৰ Android TV ডিভাইচটোত ষ্ট’ৰ কৰি ৰখা আটাইবোৰ কেলেণ্ডাৰৰ অনুষ্ঠান পঢ়িব পাৰে আৰু আপোনাৰ কেলেণ্ডাৰৰ ডেটা শ্বেয়াৰ অথবা ছেভ কৰিব পাৰে।"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"আপোনাৰ হস্তক্ষেপৰ অবিহনে আইএমএছ সেৱা ব্যৱহাৰ কৰি কল কৰিবলৈ এপক অনুমতি দিয়ে।"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"ফ\'নৰ স্থিতি আৰু পৰিচয় পঢ়ক"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"ডিভাইচত থকা ফ\'নৰ সুবিধাসমূহ ব্য়ৱহাৰ কৰিবলৈ এপটোক অনুমতি দিয়ে৷ এই অনুমতিয়ে কোনো কল সক্ৰিয় হৈ থাককেই বা নাথাকক আৰু দূৰবৰ্তী নম্বৰটো কলৰ দ্বাৰা সংযোজিত হওকেই বা নহওক এপটোক ফ\'ন নম্বৰ আৰু ডিভাইচৰ পৰিচয় নিৰ্ধাৰণ কৰিবলৈ অনুমতি দিয়ে৷"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"প্ৰাথমিক টেলিফ\'নী স্থিতি আৰু পৰিচয় পঢ়ক"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"এপ্‌টোক ডিভাইচটোৰ প্ৰাথমিক টেলিফ’নী সুবিধাসমূহ এক্সেছ কৰাৰ অনুমতি দিয়ে।"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"ছিষ্টেমৰ জৰিয়তে কল কৰিব পাৰে"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"কল কৰাৰ অভিজ্ঞতাক উন্নত কৰিবলৈ এপটোক ছিষ্টেমৰ জৰিয়তে কলসমূহ কৰিবলৈ দিয়ে।"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"ছিষ্টেমৰ জৰিয়তে কলবোৰ চোৱা আৰু নিয়ন্ত্ৰণ কৰা।"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"আপোনাৰ মুখাৱয়বৰ মডেলটো মচিবলৈ টিপক, তাৰ পাছত পুনৰ আপোনাৰ মুখাৱয়ব যোগ দিয়ক"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"ফেচ আনলক সুবিধাটো ছেট আপ কৰক"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"আপোনাৰ ফ’নটোলৈ চাই সেইটো আনলক কৰক"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"ফেচ আনলক সুবিধাটো ব্যৱহাৰ কৰিবলৈ ছেটিং &gt; গোপনীয়তাত "<b>"কেমেৰাৰ এক্সেছ"</b>" অন কৰক"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"আনলক কৰাৰ অধিক উপায় ছেট আপ কৰক"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"এটা ফিংগাৰপ্ৰিণ্ট যোগ দিবলৈ টিপক"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"ফিংগাৰপ্ৰিন্ট আনলক"</string>
@@ -676,10 +681,10 @@
     <string name="permdesc_writeSyncSettings" msgid="6029151549667182687">"এপটোক কোনো একাউণ্টৰ ছিংক সম্পৰ্কীয় ছেটিংসমূহ সংশোধন কৰিবলৈ অনুমতি দিয়ে৷ উদাহৰণস্বৰূপে, এই কাৰ্যক কোনো একাউণ্টৰ জৰিয়তে People এপটোৰ ছিংক সক্ষম কৰিবলৈ ব্যৱহাৰ কৰিব পাৰি৷"</string>
     <string name="permlab_readSyncStats" msgid="3747407238320105332">"ছিংকৰ পৰিসংখ্যা পঢ়ক"</string>
     <string name="permdesc_readSyncStats" msgid="3867809926567379434">"ছিংকৰ কাৰ্যক্ৰমসমূহৰ ইতিহাস আৰু ছিংক কৰা ডেটাৰ পৰিমাণসহ কোনো একাউণ্টৰ ছিংকৰ তথ্য পঢ়িবলৈ এপক অনুমতি দিয়ে।"</string>
-    <string name="permlab_sdcardRead" msgid="5791467020950064920">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা সঞ্চয়াগাৰৰ সমল পঢ়িব পাৰে"</string>
-    <string name="permdesc_sdcardRead" msgid="6872973242228240382">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা সঞ্চয়াগাৰৰ সমল পঢ়িবলৈ এপটোক অনুমতি দিয়ে।"</string>
-    <string name="permlab_sdcardWrite" msgid="4863021819671416668">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা সঞ্চয়াগাৰৰ সমল সংশোধন কৰিব বা মচিব পাৰে"</string>
-    <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা সঞ্চয়াগাৰৰ সমল লিখিবলৈ এপটোক অনুমতি দিয়ে।"</string>
+    <string name="permlab_sdcardRead" msgid="5791467020950064920">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা ষ্ট’ৰেজৰ সমল পঢ়িব পাৰে"</string>
+    <string name="permdesc_sdcardRead" msgid="6872973242228240382">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা ষ্ট’ৰেজৰ সমল পঢ়িবলৈ এপ্‌টোক অনুমতি দিয়ে।"</string>
+    <string name="permlab_sdcardWrite" msgid="4863021819671416668">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা ষ্ট’ৰেজৰ সমল সংশোধন কৰিব বা মচিব পাৰে"</string>
+    <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"আপোনাৰ শ্বেয়াৰ কৰি ৰখা ষ্ট’ৰেজৰ সমল লিখিবলৈ এপ্‌টোক অনুমতি দিয়ে।"</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"SIP কল কৰা/পোৱা"</string>
     <string name="permdesc_use_sip" msgid="3590270893253204451">"এপটোক SIP কলসমূহ কৰিবলৈ আৰু পাবলৈ অনুমতি দিয়ে।"</string>
     <string name="permlab_register_sim_subscription" msgid="1653054249287576161">"নতুন টেলিকম ছিম সংযোগসমূহ পঞ্জীয়ন কৰা"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"অসুবিধা নিদিবৰ কনফিগাৰেশ্বনক পঢ়িবলৈ আৰু সালসলনি কৰিবলৈ এপটোক অনুমতি দিয়ে।"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"চোৱাৰ অনুমতিৰ ব্যৱহাৰ আৰম্ভ কৰক"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"ধাৰকক কোনো এপৰ বাবে অনুমতিৰ ব্যৱহাৰ আৰম্ভ কৰিবলৈ দিয়ে। সাধাৰণ এপ্‌সমূহৰ বাবে কেতিয়াও প্ৰয়োজন হ’ব নালাগে।"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"অনুমতিৰ সিদ্ধান্তসমূহ চোৱা আৰম্ভ কৰক"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"ধাৰকক অনুমতিৰ সিদ্ধান্তসমূহ পৰ্যালোচনা কৰিবলৈ স্ক্ৰীন আৰম্ভ কৰিবলৈ দিয়ে। সাধাৰণ এপ্‌সমূহৰ বাবে কেতিয়াও প্ৰয়োজন হ’ব নালাগে।"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"এপৰ সুবিধাসমূহৰ সম্পর্কীয় তথ্য চোৱাটো আৰম্ভ কৰক"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"ধাৰকক কোনো এপৰ সুবিধাসমূহৰ সম্পর্কীয় তথ্য চোৱাটো আৰম্ভ কৰিবলৈ দিয়ে।"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"এটা উচ্চ ছেম্পলিঙৰ হাৰত ছেন্সৰৰ ডেটা এক্সেছ কৰে"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"স্ক্ৰীন আনলক কৰা প্ৰয়াসবোৰ নিৰীক্ষণ কৰক"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"স্ক্ৰীন আনলক কৰোঁতে টাইপ কৰা অশুদ্ধ পাছৱৰ্ডৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যাধিকবাৰ অশুদ্ধ পাছৱৰ্ড টাইপ কৰা হয়, তেন্তে টেবলেটটো লক কৰক বা টেবলেটটোৰ আটাইখিনি ডেটা মচক।"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"স্ক্ৰীন আনলক কৰোঁতে টাইপ কৰা ভুল পাছৱৰ্ডবোৰৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যাধিকবাৰ ভুল পাছৱৰ্ড টাইপ কৰা হয়, তেন্তে Android TV ডিভাইচটো লক কৰক অথবা আপোনাৰ Android TV ডিভাইচৰ আটাইখিনি ডেটা মচক।"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"স্ক্ৰীন আনলক কৰোঁতে দিয়া অশুদ্ধ পাছৱৰ্ডৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যধিকবাৰ অশুদ্ধ পাছৱৰ্ড দিয়া হয় তেন্তে ইনফ’টেইনমেণ্ট ছিষ্টেমটো লক কৰক অথবা এই ইনফ’টেইনমেণ্ট ছিষ্টেমটোৰ আটাইবোৰ ডেটা মোহাৰক।"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"স্ক্ৰীন আনলক কৰোঁতে টাইপ কৰা অশুদ্ধ পাছৱৰ্ডৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যাধিকবাৰ অশুদ্ধ পাছৱৰ্ড টাইপ কৰা হয়, তেন্তে ফ\'নটো লক কৰক বা ফ\'নটোৰ আটাইখিনি ডেটা মচক।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"স্ক্ৰীন আনলক কৰোঁতে টাইপ কৰা অশুদ্ধ পাছৱৰ্ডৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যধিকবাৰ অশুদ্ধ পাছৱৰ্ড টাইপ কৰা হয়, তেন্তে টেবলেটটো লক কৰক বা এই ব্যৱহাৰকাৰীৰ আটাইখিনি ডেটা মচক।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"স্ক্ৰীনখন আনলক কৰোঁতে টাইপ কৰা ভুল পাছৱৰ্ডবোৰৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যধিকবাৰ ভুল পাছৱৰ্ড টাইপ কৰা হয়, তেন্তে Android TV ডিভাইচটো লক কৰক অথবা এই ব্যৱহাৰকাৰীৰ আটাইখিনি ডেটা মচক।"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"স্ক্ৰীন আনলক কৰোঁতে দিয়া অশুদ্ধ পাছৱৰ্ডৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যধিকবাৰ অশুদ্ধ পাছৱৰ্ড দিয়া হয় তেন্তে ইনফ’টেইনমেণ্ট ছিষ্টেমটো লক কৰক অথবা এই প্ৰ’ফাইলটোৰ আটাইবোৰ ডেটা মোহাৰক।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"স্ক্ৰীনখন আনলক কৰোঁতে টাইপ কৰা ভুল পাছৱৰ্ডবোৰৰ সংখ্যা নিৰীক্ষণ কৰক আৰু যদিহে অত্যধিকবাৰ ভুল পাছৱৰ্ড টাইপ কৰা হয়, তেন্তে ফ\'নটো লক কৰক অথবা এই ব্যৱহাৰকাৰীৰ আটাইখিনি ডেটা মচক।"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"স্ক্ৰীন লক সলনি কৰক"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"স্ক্ৰীন লক সলনি কৰক।"</string>
@@ -748,16 +757,19 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"আটাইবোৰ ডেটা মচক"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"সতৰ্কবাণী প্ৰেৰণ নকৰাকৈয়ে ফেক্টৰী ডেটা ৰিছেট কৰি টেবলেটৰ ডেটা মচক।"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"কোনো সতর্কবার্তা নপঠিওৱাকৈ ফেক্টৰী ডেটা ৰিছেট কৰি আপোনাৰ Android TV ডিভাইচৰ ডেটা মচক।"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"সর্তকবাণী নিদিয়াকৈয়ে ফেক্টৰী ডেটা ৰিছেট কৰি ইনফ’টেইনমেণ্ট ছিষ্টেমৰ ডেটা মোহাৰক।"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"সতৰ্কবাণী প্ৰেৰণ নকৰাকৈয়ে ফেক্টৰী ডেটা ৰিছেট কৰি ফ\'নৰ ডেটা মচক।"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"ব্য়ৱহাৰকাৰীৰ তথ্য় মচক"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"প্ৰ’ফাইলৰ ডেটা মোহাৰক"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"ব্য়ৱহাৰকাৰীৰ তথ্য় মচক"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"এই টেবলেটটোত থকা এই ব্যৱহাৰকাৰীৰ তথ্য কোনো সর্তকবাণী নিদিয়াকৈ মচি পেলাওক।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"কোনো সতর্কবার্তা নপঠিওৱাকৈ এই Android TV ডিভাইচটোত এই ব্যৱহাৰকাৰীৰ ডেটা মচক।"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"সর্তকবাণী নিদিয়াকৈয়ে এই ইনফ’টেইনমেণ্ট ছিষ্টেমত এই প্ৰ’ফাইলটোৰ ডেটা মোহাৰক।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"এই ফ\'নটোত থকা এই ব্যৱহাৰকাৰীৰ তথ্য কোনো সর্তকবাণী নিদিয়াকৈ মচি পেলাওক।"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"ডিভাইচৰ বাবে গ্ল\'বেল প্ৰক্সী ছেট কৰক"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"নীতি সক্ষম কৰি থোৱা অৱস্থাত ব্য়ৱহাৰ কৰিবৰ বাবে ডিভাইচৰ বাবে গ্ল\'বেল প্ৰক্সী ছেট কৰক। কেৱল ডিভাইচৰ গৰাকীয়েহে গ্ল\'বেল প্ৰক্সী ছেট কৰিব পাৰে।"</string>
     <string name="policylab_expirePassword" msgid="6015404400532459169">"স্ক্ৰীন লক পাছৱৰ্ডৰ ম্যাদ ওকলাৰ দিন ছেট কৰক"</string>
     <string name="policydesc_expirePassword" msgid="9136524319325960675">"স্ক্ৰীন লকৰ পাছৱৰ্ড, পিন বা আর্হি কিমান ঘনাই সলনি কৰিব লাগিব তাক সলনি কৰক।"</string>
-    <string name="policylab_encryptedStorage" msgid="9012936958126670110">"সঞ্চয়াগাৰৰ এনক্ৰিপশ্বন ছেট কৰক"</string>
+    <string name="policylab_encryptedStorage" msgid="9012936958126670110">"ষ্ট’ৰেজৰ এনক্ৰিপশ্বন ছেট কৰক"</string>
     <string name="policydesc_encryptedStorage" msgid="1102516950740375617">"সঞ্চয় কৰি ৰখা ডেটাক এনক্ৰিপ্ট কৰাৰ প্ৰয়োজন।"</string>
     <string name="policylab_disableCamera" msgid="5749486347810162018">"কেমেৰাবোৰ অক্ষম কৰক"</string>
     <string name="policydesc_disableCamera" msgid="3204405908799676104">"আটাইবোৰ ডিভাইচৰ কেমেৰা ব্যৱহাৰ কৰাত বাধা দিয়ক।"</string>
@@ -1175,9 +1187,9 @@
     <string name="deleteText" msgid="4200807474529938112">"মচক"</string>
     <string name="inputMethod" msgid="1784759500516314751">"ইনপুট পদ্ধতি"</string>
     <string name="editTextMenuTitle" msgid="857666911134482176">"পাঠ বিষয়ক কাৰ্য"</string>
-    <string name="low_internal_storage_view_title" msgid="9024241779284783414">"সঞ্চয়াগাৰৰ খালী ঠাই শেষ হৈ আছে"</string>
+    <string name="low_internal_storage_view_title" msgid="9024241779284783414">"ষ্ট’ৰেজৰ খালী ঠাই শেষ হৈ আছে"</string>
     <string name="low_internal_storage_view_text" msgid="8172166728369697835">"ছিষ্টেমৰ কিছুমান কাৰ্যকলাপে কাম নকৰিবও পাৰে"</string>
-    <string name="low_internal_storage_view_text_no_boot" msgid="7368968163411251788">"ছিষ্টেমৰ বাবে পৰ্যাপ্ত খালী ঠাই নাই। আপোনাৰ ২৫০এম. বি. খালী ঠাই থকাটো নিশ্চিত কৰক আৰু ৰিষ্টাৰ্ট কৰক।"</string>
+    <string name="low_internal_storage_view_text_no_boot" msgid="7368968163411251788">"ছিষ্টেমৰ বাবে পৰ্যাপ্ত খালী ঠাই নাই। আপোনাৰ ২৫০এমবি খালী ঠাই থকাটো নিশ্চিত কৰক আৰু ৰিষ্টাৰ্ট কৰক।"</string>
     <string name="app_running_notification_title" msgid="8985999749231486569">"<xliff:g id="APP_NAME">%1$s</xliff:g> চলি আছে"</string>
     <string name="app_running_notification_text" msgid="5120815883400228566">"অধিক তথ্য জানিবলৈ বা এপ বন্ধ কৰিবলৈ টিপক।"</string>
     <string name="ok" msgid="2646370155170753815">"ঠিক আছে"</string>
@@ -1264,17 +1276,21 @@
     <string name="android_start_title" product="automotive" msgid="7917984412828168079">"Android আৰম্ভ কৰি থকা হৈছে…"</string>
     <string name="android_start_title" product="tablet" msgid="4429767260263190344">"টেবলেটটো আৰম্ভ হৈছে…"</string>
     <string name="android_start_title" product="device" msgid="6967413819673299309">"ডিভাইচটো আৰম্ভ হৈছে…"</string>
-    <string name="android_upgrading_fstrim" msgid="3259087575528515329">"সঞ্চয়াগাৰ অপ্টিমাইজ কৰি থকা হৈছে।"</string>
+    <string name="android_upgrading_fstrim" msgid="3259087575528515329">"ষ্ট’ৰেজ অপ্টিমাইজ কৰি থকা হৈছে।"</string>
     <string name="android_upgrading_notification_title" product="default" msgid="3509927005342279257">"ছিষ্টেম আপডে’ট সম্পূৰ্ণ কৰা হৈছে…"</string>
     <string name="app_upgrading_toast" msgid="1016267296049455585">"<xliff:g id="APPLICATION">%1$s</xliff:g>ক আপগ্ৰেড কৰি থকা হৈছে…"</string>
     <string name="android_upgrading_apk" msgid="1339564803894466737">"<xliff:g id="NUMBER_1">%2$d</xliff:g>ৰ ভিতৰত <xliff:g id="NUMBER_0">%1$d</xliff:g> এপ্ অপ্টিমাইজ কৰি থকা হৈছে৷"</string>
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g>সাজু কৰি থকা হৈছে।"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"আৰম্ভ হৈ থকা এপসমূহ।"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"বুট কাৰ্য সমাপ্ত কৰিছে।"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"স্ক্ৰীন অফ কৰিবনে?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"আপোনাৰ ফিংগাৰপ্ৰিণ্ট ছেট আপ কৰাৰ সময়ত, আপুনি পাৱাৰ বুটামটো টিপিছে।\n\nএইটোৱে সচৰাচৰ আপোনাৰ স্ক্ৰীনখন অফ কৰে।"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"অফ কৰক"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"বাতিল কৰক"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"ছেট আপ অব্যাহত ৰাখিবনে?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"আপুনি পাৱাৰ বুটামটো টিপিছে — এইটোৱে সাধাৰণতে স্ক্ৰীনখন অফ কৰে।\n\nআপোনাৰ ফিংগাৰপ্ৰিণ্টটো ছেট আপ কৰাৰ সময়ত লাহেকৈ টিপি চাওক।"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"স্ক্ৰীন অফ কৰক"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"ছেট আপ অব্যাহত ৰাখক"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"ফিংগাৰপ্ৰিণ্ট সত্যাপন কৰা জাৰি ৰাখিবনে?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"আপুনি পাৱাৰ বুটামটো টিপিছে — এইটোৱে সাধাৰণতে স্ক্ৰীনখন অফ কৰে।\n\nআপোনাৰ ফিংগাৰপ্ৰিণ্টটো সত্যাপন কৰিবলৈ লাহেকৈ টিপি চাওক।"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"স্ক্ৰীন অফ কৰক"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"অব্যাহত ৰাখক"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> চলি আছে"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"গেইমলৈ উভতি যাওক"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"গেইম বাছনি কৰক"</string>
@@ -1370,7 +1386,7 @@
     <string name="no_permissions" msgid="5729199278862516390">"কোনো অনুমতিৰ প্ৰয়োজন নাই"</string>
     <string name="perm_costs_money" msgid="749054595022779685">"ইয়াৰ ফলত আপোনাৰ টকা খৰচ হ\'ব পাৰে"</string>
     <string name="dlg_ok" msgid="5103447663504839312">"ঠিক আছে"</string>
-    <string name="usb_charging_notification_title" msgid="1674124518282666955">"ইউএছবিৰ জৰিয়তে এই ডিভাইচটো চ্চাৰ্জ কৰি থকা হৈছে"</string>
+    <string name="usb_charging_notification_title" msgid="1674124518282666955">"ইউএছবিৰ জৰিয়তে এই ডিভাইচটো চাৰ্জ কৰি থকা হৈছে"</string>
     <string name="usb_supplying_notification_title" msgid="5378546632408101811">"ইউএছবিৰ জৰিয়তে সংযুক্ত ডিভাইচটো চ্চাৰ্জ কৰি থকা হৈছে"</string>
     <string name="usb_mtp_notification_title" msgid="1065989144124499810">"ইউএছবি জৰিয়তে ফাইল স্থানান্তৰণ অন কৰা হ’ল"</string>
     <string name="usb_ptp_notification_title" msgid="5043437571863443281">"ইউএছবিৰ জৰিয়তে পিটিপি অন কৰা হ’ল"</string>
@@ -1436,7 +1452,7 @@
     <string name="ext_media_badremoval_notification_title" msgid="4114625551266196872">"<xliff:g id="NAME">%s</xliff:g> অপ্ৰত্য়াশিতভাৱে আঁতৰোৱা হ’ল"</string>
     <string name="ext_media_badremoval_notification_message" msgid="1986514704499809244">"সমল হেৰুওৱাৰ পৰা হাত সাৰিবলৈ আঁতৰোৱাৰ আগতে মিডিয়া বাহিৰ কৰক"</string>
     <string name="ext_media_nomedia_notification_title" msgid="742671636376975890">"<xliff:g id="NAME">%s</xliff:g> আঁতৰোৱা হ’ল"</string>
-    <string name="ext_media_nomedia_notification_message" msgid="2832724384636625852">"কিছুমান কাৰ্যক্ষমতাই সঠিকভাৱে কাম নকৰিব পাৰে। নতুন সঞ্চয়াগাৰ ভৰাওক।"</string>
+    <string name="ext_media_nomedia_notification_message" msgid="2832724384636625852">"কিছুমান কাৰ্যক্ষমতাই সঠিকভাৱে কাম নকৰিব পাৰে। নতুন ষ্ট’ৰেজ ভৰাওক।"</string>
     <string name="ext_media_unmounting_notification_title" msgid="4147986383917892162">"<xliff:g id="NAME">%s</xliff:g> বাহিৰ কৰি থকা হৈছে"</string>
     <string name="ext_media_unmounting_notification_message" msgid="5717036261538754203">"আঁতৰাই নিদিব"</string>
     <string name="ext_media_init_action" msgid="2312974060585056709">"ছেট আপ কৰক"</string>
@@ -1530,7 +1546,7 @@
       <item quantity="other"><xliff:g id="TOTAL">%d</xliff:g>ৰ <xliff:g id="INDEX">%d</xliff:g>টা</item>
     </plurals>
     <string name="action_mode_done" msgid="2536182504764803222">"সম্পন্ন হ’ল"</string>
-    <string name="progress_erasing" msgid="6891435992721028004">"শ্বেয়াৰ কৰি থোৱা সঞ্চয়াগাৰ মচি থকা হৈছে…"</string>
+    <string name="progress_erasing" msgid="6891435992721028004">"শ্বেয়াৰ কৰি থোৱা ষ্ট’ৰেজ মচি থকা হৈছে…"</string>
     <string name="share" msgid="4157615043345227321">"শ্বেয়াৰ কৰক"</string>
     <string name="find" msgid="5015737188624767706">"বিচাৰক"</string>
     <string name="websearch" msgid="5624340204512793290">"ৱেবত সন্ধান কৰক"</string>
@@ -1590,7 +1606,7 @@
     <string name="storage_sd_card_label" msgid="7526153141147470509">"<xliff:g id="MANUFACTURER">%s</xliff:g> এছডি কাৰ্ড"</string>
     <string name="storage_usb_drive" msgid="448030813201444573">"ইউএছবি ড্ৰাইভ"</string>
     <string name="storage_usb_drive_label" msgid="6631740655876540521">"<xliff:g id="MANUFACTURER">%s</xliff:g> ইউএছবি ড্ৰাইভ"</string>
-    <string name="storage_usb" msgid="2391213347883616886">"ইউএছবি সঞ্চয়াগাৰ"</string>
+    <string name="storage_usb" msgid="2391213347883616886">"ইউএছবি ষ্ট’ৰেজ"</string>
     <string name="extract_edit_menu_button" msgid="63954536535863040">"সম্পাদনা কৰক"</string>
     <string name="data_usage_warning_title" msgid="9034893717078325845">"ডেটা সকীয়নি"</string>
     <string name="data_usage_warning_body" msgid="1669325367188029454">"আপুনি <xliff:g id="APP">%s</xliff:g> ডেটা ব্যৱহাৰ কৰিছে"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"কাষ্টম এপৰ জাননী"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g>ক <xliff:g id="ACCOUNT">%2$s</xliff:g>ৰ (এই একাউণ্টটোৰ এজন ব্যৱহাৰকাৰী ইতিমধ্যে আছে) জৰিয়তে এজন নতুন ব্যৱহাৰকাৰী সৃষ্টি কৰিবলৈ অনুমতি দিবনে ?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g>ক <xliff:g id="ACCOUNT">%2$s</xliff:g>ৰ জৰিয়তে এজন নতুন ব্যৱহাৰকাৰী সৃষ্টি কৰিবলৈ অনুমতি দিবনে?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"নিৰীক্ষণত থকা ব্যৱহাৰকাৰী যোগ দিয়ক"</string>
     <string name="language_selection_title" msgid="52674936078683285">"ভাষা যোগ কৰক"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"অঞ্চলৰ অগ্ৰাধিকাৰ"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"ভাষাৰ নাম লিখক"</string>
@@ -2022,7 +2039,7 @@
     <string name="app_category_maps" msgid="6395725487922533156">"মেপ আৰু দিক্-নিৰ্দেশনা"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"উৎপাদনশীলতা"</string>
     <string name="app_category_accessibility" msgid="6643521607848547683">"সাধ্য সুবিধা"</string>
-    <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"ডিভাইচৰ সঞ্চয়াগাৰ"</string>
+    <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"ডিভাইচৰ ষ্ট’ৰেজ"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"ইউএছবি ডিবাগিং"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"ঘণ্টা"</string>
     <string name="time_picker_minute_label" msgid="8307452311269824553">"মিনিট"</string>

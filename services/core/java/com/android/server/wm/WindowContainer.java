@@ -85,6 +85,7 @@ import android.view.MagnificationSpec;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
+import android.view.SurfaceControlViewHost;
 import android.view.SurfaceControl.Builder;
 import android.view.SurfaceSession;
 import android.view.TaskTransitionSpec;
@@ -312,6 +313,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     private final List<WindowContainerListener> mListeners = new ArrayList<>();
 
+    private OverlayHost mOverlayHost;
+
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
         mTransitionController = mWmService.mAtmService.getTransitionController();
@@ -341,6 +344,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         super.onConfigurationChanged(newParentConfig);
         updateSurfacePositionNonOrganized();
         scheduleAnimation();
+        if (mOverlayHost != null) {
+            mOverlayHost.dispatchConfigurationChanged(getConfiguration());
+        }
     }
 
     void reparent(WindowContainer newParent, int position) {
@@ -387,6 +393,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         if (mParent != null) {
             mParent.onChildAdded(this);
+        } else if (mSurfaceAnimator.hasLeash()) {
+            mSurfaceAnimator.cancelAnimation();
         }
         if (!mReparenting) {
             onSyncReparent(oldParent, mParent);
@@ -487,6 +495,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 t.reparent(sc, mSurfaceControl);
             }
         }
+
+        if (mOverlayHost != null) {
+            mOverlayHost.setParent(t, mSurfaceControl);
+        }
+
         scheduleAnimation();
     }
 
@@ -631,6 +644,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             setSurfaceControl(null);
             mLastSurfacePosition.set(0, 0);
             scheduleAnimation();
+        }
+        if (mOverlayHost != null) {
+            mOverlayHost.release();
+            mOverlayHost = null;
         }
 
         // This must happen after updating the surface so that sync transactions can be handled
@@ -2308,6 +2325,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 wc.assignLayer(t, layer++);
             }
         }
+        if (mOverlayHost != null) {
+            mOverlayHost.setLayer(t, layer++);
+        }
     }
 
     void assignChildLayers() {
@@ -2541,6 +2561,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         doAnimationFinished(mSurfaceAnimator.getAnimationType(), mSurfaceAnimator.getAnimation());
         mSurfaceAnimator.cancelAnimation();
         mSurfaceFreezer.unfreeze(getPendingTransaction());
+    }
+
+    /** Whether we can start change transition with this window and current display status. */
+    boolean canStartChangeTransition() {
+        return !mWmService.mDisableTransitionAnimation && mDisplayContent != null
+                && getSurfaceControl() != null && !mDisplayContent.inTransition()
+                && isVisible() && isVisibleRequested() && okToAnimate();
     }
 
     /**
@@ -2891,12 +2918,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     boolean okToAnimate() {
-        return okToAnimate(false /* ignoreFrozen */);
-    }
-
-    boolean okToAnimate(boolean ignoreFrozen) {
-        final DisplayContent dc = getDisplayContent();
-        return dc != null && dc.okToAnimate(ignoreFrozen);
+        return okToAnimate(false /* ignoreFrozen */, false /* ignoreScreenOn */);
     }
 
     boolean okToAnimate(boolean ignoreFrozen, boolean ignoreScreenOn) {
@@ -3179,6 +3201,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /** Cheap way of doing cast and instanceof. */
+    WindowState asWindowState() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
     ActivityRecord asActivityRecord() {
         return null;
     }
@@ -3347,8 +3374,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             mChildren.get(i).finishSync(outMergedTransaction, cancel);
         }
-        mSyncState = SYNC_STATE_NONE;
         if (cancel && mSyncGroup != null) mSyncGroup.onCancelSync(this);
+        clearSyncState();
+    }
+
+    void clearSyncState() {
+        mSyncState = SYNC_STATE_NONE;
         mSyncGroup = null;
     }
 
@@ -3558,5 +3589,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     private interface IAnimationStarter {
         void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
                 @AnimationType int type, @Nullable AnimationAdapter snapshotAnim);
+    }
+
+    void addOverlay(SurfaceControlViewHost.SurfacePackage overlay) {
+        if (mOverlayHost == null) {
+            mOverlayHost = new OverlayHost(mWmService);
+        }
+        mOverlayHost.addOverlay(overlay, mSurfaceControl);
+    }
+
+    void removeOverlay(SurfaceControlViewHost.SurfacePackage overlay) {
+        if (mOverlayHost != null && !mOverlayHost.removeOverlay(overlay)) {
+            mOverlayHost.release();
+            mOverlayHost = null;
+        }
     }
 }

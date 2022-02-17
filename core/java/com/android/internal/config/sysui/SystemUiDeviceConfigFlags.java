@@ -157,6 +157,12 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String PROPERTY_LOCATION_INDICATORS_ENABLED = "location_indicators_enabled";
 
+    /**
+     * Whether to show old location indicator on all location accesses.
+     */
+    public static final String PROPERTY_LOCATION_INDICATORS_SMALL_ENABLED =
+            "location_indicators_small_enabled";
+
     // Flags related to Assistant
 
     /**
@@ -511,6 +517,17 @@ public final class SystemUiDeviceConfigFlags {
      * is provided by GMS core.
      */
     public static final String DEFAULT_QR_CODE_SCANNER = "default_qr_code_scanner";
+
+    /**
+     * (boolean) Whether the task manager entrypoint is enabled.
+     */
+    public static final String TASK_MANAGER_ENABLED = "task_manager_enabled";
+
+
+    /**
+     * (boolean) Whether the clipboard overlay is enabled.
+     */
+    public static final String CLIPBOARD_OVERLAY_ENABLED = "clipboard_overlay_enabled";
 
     private SystemUiDeviceConfigFlags() {
     }

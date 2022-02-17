@@ -31,7 +31,6 @@ import static android.app.ActivityManager.START_TASK_TO_FRONT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
@@ -51,7 +50,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
-import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
@@ -63,6 +61,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.notNull;
@@ -353,7 +352,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         doReturn(null).when(mMockPackageManager).getDefaultHomeActivity(anyInt());
         doReturn(mMockPackageManager).when(mAtm).getPackageManagerInternalLocked();
         doReturn(false).when(mMockPackageManager).isInstantAppInstallerComponent(any());
-        doReturn(null).when(mMockPackageManager).resolveIntent(any(), any(), anyInt(), anyInt(),
+        doReturn(null).when(mMockPackageManager).resolveIntent(any(), any(), anyLong(), anyLong(),
                 anyInt(), anyBoolean(), anyInt());
         doReturn(new ComponentName("", "")).when(mMockPackageManager).getSystemUiServiceComponent();
 
@@ -458,7 +457,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         final ActivityRecord splitSecondReusableActivity = activities.second;
         final ActivityRecord splitSecondTopActivity = new ActivityBuilder(mAtm).setCreateTask(true)
                 .setParentTask(splitSecondReusableActivity.getRootTask()).build();
-        assertTrue(splitSecondTopActivity.inSplitScreenSecondaryWindowingMode());
+        assertTrue(splitSecondTopActivity.inMultiWindowMode());
 
         // Let primary stack has focus.
         splitPrimaryFocusActivity.moveFocusableActivityToTop("testSplitScreenTaskToFront");
@@ -477,10 +476,13 @@ public class ActivityStarterTests extends WindowTestsBase {
         final TestSplitOrganizer splitOrg = new TestSplitOrganizer(mAtm);
         // The fullscreen windowing mode activity will be moved to split-secondary by
         // TestSplitOrganizer when a split-primary task appears.
-        final ActivityRecord splitSecondActivity =
-                new ActivityBuilder(mAtm).setCreateTask(true).build();
         final ActivityRecord splitPrimaryActivity = new TaskBuilder(mSupervisor)
                 .setParentTaskFragment(splitOrg.mPrimary)
+                .setCreateActivity(true)
+                .build()
+                .getTopMostActivity();
+        final ActivityRecord splitSecondActivity = new TaskBuilder(mSupervisor)
+                .setParentTaskFragment(splitOrg.mSecondary)
                 .setCreateActivity(true)
                 .build()
                 .getTopMostActivity();
@@ -1094,7 +1096,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         starter.setActivityOptions(options.toBundle())
                 .setReason("testWindowingModeOptionsLaunchAdjacent")
                 .setOutActivity(outActivity).execute();
-        assertThat(outActivity[0].inSplitScreenSecondaryWindowingMode()).isTrue();
+        assertThat(outActivity[0].inMultiWindowMode()).isTrue();
     }
 
     @Test
@@ -1109,50 +1111,6 @@ public class ActivityStarterTests extends WindowTestsBase {
                 .execute();
 
         verify(recentTasks, times(1)).add(any());
-    }
-
-    @Test
-    public void testStartActivityInner_allSplitScreenPrimaryActivitiesVisible() {
-        // Given
-        final ActivityStarter starter = prepareStarter(0, false);
-
-        starter.setReason("testAllSplitScreenPrimaryActivitiesAreResumed");
-
-        final ActivityRecord targetRecord = new ActivityBuilder(mAtm).build();
-        targetRecord.setFocusable(false);
-        targetRecord.setVisibility(false);
-        final ActivityRecord sourceRecord = new ActivityBuilder(mAtm).build();
-
-        final Task stack = spy(
-                mRootWindowContainer.getDefaultTaskDisplayArea()
-                        .createRootTask(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD,
-                                /* onTop */true));
-
-        stack.addChild(targetRecord);
-
-        doReturn(stack).when(mRootWindowContainer).getLaunchRootTask(any(), any(), any(), any(),
-                anyBoolean(), any(), anyInt(), anyInt(), anyInt());
-
-        starter.mStartActivity = new ActivityBuilder(mAtm).build();
-
-        // When
-        starter.startActivityInner(
-                /* r */targetRecord,
-                /* sourceRecord */ sourceRecord,
-                /* voiceSession */null,
-                /* voiceInteractor */ null,
-                /* startFlags */ 0,
-                /* doResume */true,
-                /* options */null,
-                /* inTask */null,
-                /* inTaskFragment */ null,
-                /* restrictedBgActivity */false,
-                /* intentGrants */null);
-
-        // Then
-        verify(stack).ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
-        verify(targetRecord).makeVisibleIfNeeded(null, true);
-        assertTrue(targetRecord.mVisibleRequested);
     }
 
     @Test

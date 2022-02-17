@@ -16,29 +16,39 @@
 
 package com.android.systemui.statusbar.phone.dagger;
 
+import static com.android.systemui.statusbar.phone.dagger.StatusBarViewModule.STATUS_BAR_FRAGMENT;
+
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 import com.android.keyguard.LockIconViewController;
 import com.android.systemui.biometrics.AuthRippleController;
 import com.android.systemui.statusbar.NotificationShelfController;
+import com.android.systemui.statusbar.core.StatusBarInitializer;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowView;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowViewController;
 import com.android.systemui.statusbar.phone.SplitShadeHeaderController;
 import com.android.systemui.statusbar.phone.StatusBarCommandQueueCallbacks;
-import com.android.systemui.statusbar.phone.StatusBarDemoMode;
 import com.android.systemui.statusbar.phone.StatusBarHeadsUpChangeListener;
+import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragment;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 
+import javax.inject.Named;
 import javax.inject.Scope;
 
 import dagger.Subcomponent;
 
 /**
- * Dagger subcomponent tied to the lifecycle of StatusBar views.
+ * Dagger subcomponent for classes (semi-)related to the status bar. The component is created once
+ * inside {@link com.android.systemui.statusbar.phone.StatusBar} and never re-created.
+ *
+ * TODO(b/197137564): This should likely be re-factored a bit. It includes classes that aren't
+ * directly related to status bar functionality, like multiple notification classes. And, the fact
+ * that it has many getter methods indicates that we need to access many of these classes from
+ * outside the component. Should more items be moved *into* this component to avoid so many getters?
  */
 @Subcomponent(modules = {StatusBarViewModule.class})
 @StatusBarComponent.StatusBarScope
@@ -99,12 +109,6 @@ public interface StatusBarComponent {
     AuthRippleController getAuthRippleController();
 
     /**
-     * Creates a StatusBarDemoMode.
-     */
-    @StatusBarScope
-    StatusBarDemoMode getStatusBarDemoMode();
-
-    /**
      * Creates a StatusBarHeadsUpChangeListener.
      */
     @StatusBarScope
@@ -121,4 +125,17 @@ public interface StatusBarComponent {
      */
     @StatusBarScope
     SplitShadeHeaderController getSplitShadeHeaderController();
+
+    /**
+     * Creates a new {@link CollapsedStatusBarFragment} each time it's called. See
+     * {@link StatusBarViewModule#createCollapsedStatusBarFragment}.
+     */
+    @Named(STATUS_BAR_FRAGMENT)
+    CollapsedStatusBarFragment createCollapsedStatusBarFragment();
+
+    /**
+     * Creates a StatusBarInitializer
+     */
+    @StatusBarScope
+    StatusBarInitializer getStatusBarInitializer();
 }

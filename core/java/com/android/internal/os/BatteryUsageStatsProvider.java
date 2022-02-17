@@ -21,13 +21,16 @@ import android.hardware.SensorManager;
 import android.os.BatteryStats;
 import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
+import android.os.Parcel;
 import android.os.SystemClock;
 import android.os.UidBatteryConsumer;
 import android.util.Log;
 import android.util.SparseArray;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -133,9 +136,12 @@ public class BatteryUsageStatsProvider {
      */
     @VisibleForTesting
     public BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query) {
-        return getBatteryUsageStats(query, currentTimeMillis());
+        synchronized (mStats) {
+            return getBatteryUsageStats(query, currentTimeMillis());
+        }
     }
 
+    @GuardedBy("mStats")
     private BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query,
             long currentTimeMs) {
         if (query.getToTimestamp() == 0) {
@@ -145,6 +151,7 @@ public class BatteryUsageStatsProvider {
         }
     }
 
+    @GuardedBy("mStats")
     private BatteryUsageStats getCurrentBatteryUsageStats(BatteryUsageStatsQuery query,
             long currentTimeMs) {
         final long realtimeUs = elapsedRealtime() * 1000;
@@ -189,7 +196,18 @@ public class BatteryUsageStatsProvider {
             }
 
             BatteryStatsImpl batteryStatsImpl = (BatteryStatsImpl) mStats;
-            batteryUsageStatsBuilder.setBatteryHistory(batteryStatsImpl.mHistoryBuffer);
+
+            // Make a copy of battery history to avoid concurrent modification.
+            Parcel historyBuffer = Parcel.obtain();
+            historyBuffer.appendFrom(batteryStatsImpl.mHistoryBuffer, 0,
+                    batteryStatsImpl.mHistoryBuffer.dataSize());
+
+            final File systemDir =
+                    batteryStatsImpl.mBatteryStatsHistory.getHistoryDirectory().getParentFile();
+            final BatteryStatsHistory batteryStatsHistory =
+                    new BatteryStatsHistory(batteryStatsImpl, systemDir, historyBuffer);
+
+            batteryUsageStatsBuilder.setBatteryHistory(batteryStatsHistory);
         }
 
         return batteryUsageStatsBuilder.build();

@@ -32,6 +32,7 @@ import android.view.IWindow;
 import android.view.InputChannel;
 import android.view.MagnificationSpec;
 import android.view.RemoteAnimationTarget;
+import android.view.SurfaceControlViewHost;
 import android.view.WindowInfo;
 import android.view.WindowManager.DisplayImePolicy;
 
@@ -104,6 +105,32 @@ public abstract class WindowManagerInternal {
         void logTrace(String where, long loggingTypeFlags, String callingParams,
                 byte[] a11yDump, int callingUid, StackTraceElement[] callStack, long timeStamp,
                 int processId, long threadId, Set<String> ignoreStackEntries);
+
+        /**
+         * Set by the accessibility related modules which want to listen the event dispatched from
+         * window manager. Accessibility modules can use these callbacks to handle some display
+         * manipulations.
+         * @param callbacks The callbacks to invoke.
+         */
+        void setUiChangesForAccessibilityCallbacks(UiChangesForAccessibilityCallbacks callbacks);
+
+        /**
+         * This interface is used by window manager to dispatch some ui change events which may
+         * affect the screen accessibility features.
+         */
+        interface UiChangesForAccessibilityCallbacks {
+            /**
+             * Called when an application requests a rectangle focus on the screen.
+             *
+             * @param displayId The logical display id
+             * @param left The rectangle left.
+             * @param top The rectangle top.
+             * @param right The rectangle right.
+             * @param bottom The rectangle bottom.
+             */
+            void onRectangleOnScreenRequested(int displayId, int left, int top, int right,
+                    int bottom);
+        }
     }
 
     /**
@@ -741,4 +768,16 @@ public abstract class WindowManagerInternal {
      *         {@code false} otherwise.
      */
     public abstract boolean shouldRestoreImeVisibility(IBinder imeTargetWindowToken);
+
+    /**
+     * Internal methods for other parts of SystemServer to manage
+     * SurfacePackage based overlays on tasks.
+     *
+     * Callers prepare a view hierarchy with SurfaceControlViewHost
+     * and send the package to WM here. The remote view hierarchy will receive
+     * configuration change, lifecycle events, etc, forwarded over the
+     * ISurfaceControlViewHost interface inside the SurfacePackage.
+     */
+    public abstract void addTaskOverlay(int taskId, SurfaceControlViewHost.SurfacePackage overlay);
+    public abstract void removeTaskOverlay(int taskId, SurfaceControlViewHost.SurfacePackage overlay);
 }

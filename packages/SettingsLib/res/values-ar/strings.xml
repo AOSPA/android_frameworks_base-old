@@ -492,7 +492,7 @@
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"جارٍ الشحن لاسلكيًا"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"لا يتم الشحن"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"الجهاز متصل بالشاحن، ولا يتم الشحن."</string>
-    <string name="battery_info_status_full" msgid="1339002294876531312">"تم الشحن"</string>
+    <string name="battery_info_status_full" msgid="1339002294876531312">"مشحونة"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"إعدادات يتحكم فيها المشرف"</string>
     <string name="disabled" msgid="8017887509554714950">"غير مفعّل"</string>
     <string name="external_source_trusted" msgid="1146522036773132905">"مسموح به"</string>
@@ -556,7 +556,7 @@
     <string name="zen_mode_duration_always_prompt_title" msgid="3212996860498119555">"السؤال في كل مرة"</string>
     <string name="zen_mode_forever" msgid="3339224497605461291">"إلى أن يتم إيقاف الوضع"</string>
     <string name="time_unit_just_now" msgid="3006134267292728099">"للتو"</string>
-    <string name="media_transfer_this_device_name" msgid="2716555073132169240">"مكبر صوت الهاتف"</string>
+    <string name="media_transfer_this_device_name" msgid="2357329267148436433">"هذا الهاتف"</string>
     <string name="media_transfer_this_phone" msgid="7194341457812151531">"هذا الهاتف"</string>
     <string name="profile_connect_timeout_subtext" msgid="4043408193005851761">"حدثت مشكلة أثناء الاتصال. يُرجى إيقاف الجهاز ثم إعادة تشغيله."</string>
     <string name="media_transfer_wired_device_name" msgid="4447880899964056007">"جهاز سماعي سلكي"</string>

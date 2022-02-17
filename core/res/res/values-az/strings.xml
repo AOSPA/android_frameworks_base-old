@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Gələn və gedən zənglərlə bağlı məlumatlar daxil olmaqla tətbiqə Android TV cihazının zəng siyahısını dəyişdirmək icazəsi verir. Zərərli proqramlar zəng siyahısını silmək və ya dəyişdirmək üçün bundan istifadə edə bilər."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Tətbiqə sizin daxil olan və gedən zənglər daxil olmaqla telefon zəngi loqlarınızı redaktə etmək icazəsi verir. Zərərli tətbiqlər bundan telefon loqlarınızı silmək və ya redaktə etmək üçün istifadə edə bilər."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"bədən sensorlarına (ürək döyüntüsü monitorları kimi) giriş"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Tətbiqə ürək döyüntüsü kimi fiziki durumunuzu izləməyən sensorların datasına daxil olmağa icazə verir."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Ürək döyüntüsü, temperatur, qanda oksigen faizi kimi bədən sensorlarından əldə edilən məlumatlara giriş."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"arxa fonda işləyərkən bədən sensorlarına (ürək döyüntüsü nəzarətləri kimi) giriş"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Arxa fonda işləyərkən ürək döyüntüsü, temperatur, qanda oksigen faizi kimi bədən sensorlarından əldə edilən məlumatlara giriş."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Təqvim təqdirləri və detallarını oxuyun"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Bu tətbiq planşetdə yerləşdirilmiş və təqvim datasında yadda saxlanmış bütün təqvim tədbirlərini oxuya bilər."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Bu tətbiq Android TV cihazında saxlanılan bütün təqvim tədbirlərini oxuya, həmçinin təqvim datasını paylaşa və ya yadda saxlaya bilər."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Tətbiqə müdaxilə olmadan zəng etmək üçün IMS xidmətindən istifadə etməyə imkan verir."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"telefon statusunu və identifikasiyanı oxuyur"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Tətbiqə cihazın telefon funksiyalarına giriş icazəsi verir. Belə icazəli tətbiq bu telefonun nömrəsini və cihaz İD\'ni, zəngin aktiv olub-olmadığını və zəng edilən nömrəni müəyyən edə bilər."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"əsas telefoniya statusu və identifikasiyasını oxuyun"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Tətbiqə cihazın əsas telefoniya funksiyalarına giriş etmək imkanı verir."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"zəngləri sistem üzərindən yönləndirin"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Tətbiqə, zəng təcrübəsini yaxşılaşdırmaq üçün, zəngləri sistem üzərindən yönləndirməyə icazə verilir."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"zənglərə sistemdə baxın və nəzarət edin."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Üz modelinizi silmək üçün toxunun, sonra yenidən üzünüzü əlavə edin"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Üz ilə kiliddən çıxarmanı ayarlayın"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Telefona baxaraq onu kiliddən çıxarın"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Üz ilə Kiliddən Açma funksiyasını istifadə etmək üçün Ayarlar &gt; Məxfilik bölməsində "<b>"Kameraya girişi"</b>" aktiv edin"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Kiliddən çıxarmağın daha çox yolunu ayarlayın"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Barmaq izi əlavə etmək üçün toxunun"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Barmaq izi ilə kiliddən çıxarma"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Tətbiqə \"Narahat Etməyin\" konfiqurasiyasını oxumağa və yazmağa icazə verin."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"Baxış icazəsinin istifadəsinə başlayın"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Sahibinə tətbiqin icazədən istifadəsinə başlamağa imkan verir. Adi tətbiqlər üçün heç vaxt tələb edilmir."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"icazə qərarlarına baxışı başladın"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Sahibin icazə qərarlarını nəzərdən keçirmək üçün ekranı başlatmasına icazə verir. Normal tətbiqlər tərəfindən heç vaxt tələb edilmir."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"tətbiqin funksiyalarını görməyə başlamaq"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"İstifadəçinin tətbiqin funksiyaları barədə məlumatları görməyə başlamasına icazə verir."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"sensor datasına yüksək ölçmə sürəti ilə giriş etmək"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Ekranı kiliddən çıxarmaq üçün edilən cəhdlərə nəzarət edin"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Ekan kilidini açarkən daxil edilmiş yanlış parollara baxın və əgər həddindən çox yanlış parollar daxil edilibsə, planşeti kilidləyin və ya bütün planşet datasını silin."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Ekranı kiliddən çıxararkən yazılan yanlış parolların sayına nəzarət edin, Android TV cihazını kilidləyin və ya həddən çox yanlış parol yazılıbsa, Android TV cihazının bütün datasını silin."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Ekranı kiliddən çıxararkən yazılan yanlış parolların sayına nəzarət edin və həddindən çox yanlış parol daxil edilibsə, əyləncə-məlumat sistemini kilidləyin və ya bütün əyləncə-məlumat sistemi datasını silin."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Ekan kilidini açarkən daxil edilmiş yanlış parollara baxın və əgər həddindən çox yanlış parollar daxil edilibsə, telefonu kilidləyin və ya bütün telefon datasını silin."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Ekranı kiliddən çıxararkən yazılan yanlış parolların sayına nəzarət edin və planşeti kilidləyin və ya əgər həddən çox yanlış parol yazılıbsa, həmin istifadəçinin bütün verilənlərini silin."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Ekranı kiliddən çıxararkən yazılan yanlış parolların sayına nəzarət edin, Android TV cihazını kilidləyin və ya həddən çox yanlış parol yazılıbsa, həmin istifadəçinin bütün datasını silin."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Ekranı kiliddən çıxararkən yazılan yanlış parolların sayına nəzarət edin və həddindən çox yanlış parol daxil edilibsə, əyləncə-məlumat sistemini kilidləyin və ya bu profilin bütün datasını silin."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Ekranı kiliddən çıxararkən yazılan yanlış parolların sayına nəzarət edin və telefonu kilidləyin və ya əgər həddən çox yanlış parol yazılıbsa, həmin istifadəçinin bütün verilənlərini silin."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Ekran kilidini dəyişmək"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Ekran kilidini dəyişmək"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Bütün məlumatları silmək"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Planşetin datasını xəbərdarlıq olmadan, zavod data sıfırlaması ilə silin."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Android TV cihazının datasını fabrik sıfırlaması haqqında xəbərdarlıq olmadan silin."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Xəbərdarlıq etmədən istehsalçı nizamlarına qaytarmaqla əyləncə-məlumat sistemi datasını silin."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Telefondakı bütün məlumatları xəbərdarlıqsız sıfırlayaraq məhv etmək"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"İstifadəçi verilənlərini sil"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Profil datasını silin"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"İstifadəçi verilənlərini sil"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Xəbərdarlıq etmədən bu istifadəçinin verilənlərini bu planşetdə silin."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Bu istifadəçinin datasını xəbərdarlıq olmadan Android TV cihazında silin."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Xəbərdarlıq etmədən bu əyləncə-məlumat sistemində bu profilin datasını silin."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Xəbərdarlıq etmədən bu istifadəçinin bu telefondakı verilənlərini silin."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Cihazın qlobal proksisini ayarlayın"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Siyasət aktivləşdirilən zaman istifadə edilmək üçün cihazın qlobal proksisini təyin edin. Yalnız cihazın sahibi qlobal proksini təyin edə bilər."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> proqramının hazırlanması."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Tətbiqlər başladılır."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Yükləmə başa çatır."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Ekran deaktiv edilsin?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Barmaq izinizi ayarlayarkən Qidalanma düyməsinə basdınız.\n\nBu, adətən ekranınızı deaktiv edir."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Deaktiv edin"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Ləğv edin"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Ayarlamağa davam edilsin?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Qidalanma düyməsini basdınız — adətən bu, ekranı söndürür.\n\nBarmaq izini ayarlayarkən yüngülcə toxunmağa çalışın."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Ekranı söndürün"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Ayarlamağa davam edin"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Barmaq izini doğrulamağa davam edilsin?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Qidalanma düyməsini basdınız — adətən bu, ekranı söndürür.\n\nBarmaq izini doğrulamaq üçün yüngülcə toxunmağa çalışın."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Ekranı söndürün"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Davam edin"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> çalışır"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Oyuna qayıtmaq üçün klikləyin"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Oyun seçin"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Fərdi tətbiq bildirişi"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g> tətbiqinə <xliff:g id="ACCOUNT">%2$s</xliff:g> (artıq bu hesabı olan İstifadəçi mövcuddur) ilə yeni İstifadəçi yaratmağa icazə verilsin?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g> tətbiqinə <xliff:g id="ACCOUNT">%2$s</xliff:g> ilə yeni İstifadəçi yartmağa icazə verilsin?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Nəzarət edilən istifadəçi əlavə edin"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Dil əlavə edin"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Region seçimi"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Dil adını daxil edin"</string>

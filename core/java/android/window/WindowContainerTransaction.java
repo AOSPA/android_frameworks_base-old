@@ -23,6 +23,7 @@ import android.app.PendingIntent;
 import android.app.WindowConfiguration;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ShortcutInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -368,10 +369,12 @@ public final class WindowContainerTransaction implements Parcelable {
      */
     @NonNull
     public WindowContainerTransaction setAdjacentRoots(
-            @NonNull WindowContainerToken root1, @NonNull WindowContainerToken root2) {
+            @NonNull WindowContainerToken root1, @NonNull WindowContainerToken root2,
+            boolean moveTogether) {
         mHierarchyOps.add(HierarchyOp.createForAdjacentRoots(
                 root1.asBinder(),
-                root2.asBinder()));
+                root2.asBinder(),
+                moveTogether));
         return this;
     }
 
@@ -429,6 +432,21 @@ public final class WindowContainerTransaction implements Parcelable {
                 .setPendingIntent(sender)
                 .setActivityIntent(intent)
                 .build());
+        return this;
+    }
+
+    /**
+     * Starts activity(s) from a shortcut.
+     * @param callingPackage The package launching the shortcut.
+     * @param shortcutInfo Information about the shortcut to start
+     * @param options bundle containing ActivityOptions for the task's top activity.
+     * @hide
+     */
+    @NonNull
+    public WindowContainerTransaction startShortcut(@NonNull String callingPackage,
+            @NonNull ShortcutInfo shortcutInfo, @Nullable Bundle options) {
+        mHierarchyOps.add(HierarchyOp.createForStartShortcut(
+                callingPackage, shortcutInfo, options));
         return this;
     }
 
@@ -955,10 +973,15 @@ public final class WindowContainerTransaction implements Parcelable {
         public static final int HIERARCHY_OP_TYPE_REPARENT_CHILDREN = 11;
         public static final int HIERARCHY_OP_TYPE_PENDING_INTENT = 12;
         public static final int HIERARCHY_OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS = 13;
+        public static final int HIERARCHY_OP_TYPE_START_SHORTCUT = 14;
 
         // The following key(s) are for use with mLaunchOptions:
         // When launching a task (eg. from recents), this is the taskId to be launched.
         public static final String LAUNCH_KEY_TASK_ID = "android:transaction.hop.taskId";
+
+        // When starting from a shortcut, this contains the calling package.
+        public static final String LAUNCH_KEY_SHORTCUT_CALLING_PACKAGE =
+                "android:transaction.hop.shortcut_calling_package";
 
         private final int mType;
 
@@ -974,6 +997,9 @@ public final class WindowContainerTransaction implements Parcelable {
         private boolean mToTop;
 
         private boolean mReparentTopOnly;
+
+        // TODO(b/207185041): Remove this once having a single-top root for split screen.
+        private boolean mMoveAdjacentTogether;
 
         @Nullable
         private int[]  mWindowingModes;
@@ -993,6 +1019,9 @@ public final class WindowContainerTransaction implements Parcelable {
 
         @Nullable
         private PendingIntent mPendingIntent;
+
+        @Nullable
+        private ShortcutInfo mShortcutInfo;
 
         public static HierarchyOp createForReparent(
                 @NonNull IBinder container, @Nullable IBinder reparent, boolean toTop) {
@@ -1033,10 +1062,13 @@ public final class WindowContainerTransaction implements Parcelable {
                     .build();
         }
 
-        public static HierarchyOp createForAdjacentRoots(IBinder root1, IBinder root2) {
+        /** Create a hierarchy op for setting adjacent root tasks. */
+        public static HierarchyOp createForAdjacentRoots(IBinder root1, IBinder root2,
+                boolean moveTogether) {
             return new HierarchyOp.Builder(HIERARCHY_OP_TYPE_SET_ADJACENT_ROOTS)
                     .setContainer(root1)
                     .setReparentContainer(root2)
+                    .setMoveAdjacentTogether(moveTogether)
                     .build();
         }
 
@@ -1046,6 +1078,17 @@ public final class WindowContainerTransaction implements Parcelable {
             fullOptions.putInt(LAUNCH_KEY_TASK_ID, taskId);
             return new HierarchyOp.Builder(HIERARCHY_OP_TYPE_LAUNCH_TASK)
                     .setToTop(true)
+                    .setLaunchOptions(fullOptions)
+                    .build();
+        }
+
+        /** Create a hierarchy op for starting a shortcut. */
+        public static HierarchyOp createForStartShortcut(@NonNull String callingPackage,
+                @NonNull ShortcutInfo shortcutInfo, @Nullable Bundle options) {
+            final Bundle fullOptions = options == null ? new Bundle() : options;
+            fullOptions.putString(LAUNCH_KEY_SHORTCUT_CALLING_PACKAGE, callingPackage);
+            return new HierarchyOp.Builder(HIERARCHY_OP_TYPE_START_SHORTCUT)
+                    .setShortcutInfo(shortcutInfo)
                     .setLaunchOptions(fullOptions)
                     .build();
         }
@@ -1070,12 +1113,14 @@ public final class WindowContainerTransaction implements Parcelable {
             mReparent = copy.mReparent;
             mToTop = copy.mToTop;
             mReparentTopOnly = copy.mReparentTopOnly;
+            mMoveAdjacentTogether = copy.mMoveAdjacentTogether;
             mWindowingModes = copy.mWindowingModes;
             mActivityTypes = copy.mActivityTypes;
             mLaunchOptions = copy.mLaunchOptions;
             mActivityIntent = copy.mActivityIntent;
             mTaskFragmentCreationOptions = copy.mTaskFragmentCreationOptions;
             mPendingIntent = copy.mPendingIntent;
+            mShortcutInfo = copy.mShortcutInfo;
         }
 
         protected HierarchyOp(Parcel in) {
@@ -1084,12 +1129,14 @@ public final class WindowContainerTransaction implements Parcelable {
             mReparent = in.readStrongBinder();
             mToTop = in.readBoolean();
             mReparentTopOnly = in.readBoolean();
+            mMoveAdjacentTogether = in.readBoolean();
             mWindowingModes = in.createIntArray();
             mActivityTypes = in.createIntArray();
             mLaunchOptions = in.readBundle();
             mActivityIntent = in.readTypedObject(Intent.CREATOR);
             mTaskFragmentCreationOptions = in.readTypedObject(TaskFragmentCreationParams.CREATOR);
             mPendingIntent = in.readTypedObject(PendingIntent.CREATOR);
+            mShortcutInfo = in.readTypedObject(ShortcutInfo.CREATOR);
         }
 
         public int getType() {
@@ -1128,6 +1175,10 @@ public final class WindowContainerTransaction implements Parcelable {
             return mReparentTopOnly;
         }
 
+        public boolean getMoveAdjacentTogether() {
+            return mMoveAdjacentTogether;
+        }
+
         public int[] getWindowingModes() {
             return mWindowingModes;
         }
@@ -1156,6 +1207,11 @@ public final class WindowContainerTransaction implements Parcelable {
             return mPendingIntent;
         }
 
+        @Nullable
+        public ShortcutInfo getShortcutInfo() {
+            return mShortcutInfo;
+        }
+
         @Override
         public String toString() {
             switch (mType) {
@@ -1175,7 +1231,8 @@ public final class WindowContainerTransaction implements Parcelable {
                     return "{reorder: " + mContainer + " to " + (mToTop ? "top" : "bottom") + "}";
                 case HIERARCHY_OP_TYPE_SET_ADJACENT_ROOTS:
                     return "{SetAdjacentRoot: container=" + mContainer
-                            + " adjacentRoot=" + mReparent + "}";
+                            + " adjacentRoot=" + mReparent + " mMoveAdjacentTogether="
+                            + mMoveAdjacentTogether + "}";
                 case HIERARCHY_OP_TYPE_LAUNCH_TASK:
                     return "{LaunchTask: " + mLaunchOptions + "}";
                 case HIERARCHY_OP_TYPE_SET_LAUNCH_ADJACENT_FLAG_ROOT:
@@ -1197,6 +1254,9 @@ public final class WindowContainerTransaction implements Parcelable {
                 case HIERARCHY_OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS:
                     return "{SetAdjacentTaskFragments: container=" + mContainer
                             + " adjacentContainer=" + mReparent + "}";
+                case HIERARCHY_OP_TYPE_START_SHORTCUT:
+                    return "{StartShortcut: options=" + mLaunchOptions + " info=" + mShortcutInfo
+                            + "}";
                 default:
                     return "{mType=" + mType + " container=" + mContainer + " reparent=" + mReparent
                             + " mToTop=" + mToTop
@@ -1212,12 +1272,14 @@ public final class WindowContainerTransaction implements Parcelable {
             dest.writeStrongBinder(mReparent);
             dest.writeBoolean(mToTop);
             dest.writeBoolean(mReparentTopOnly);
+            dest.writeBoolean(mMoveAdjacentTogether);
             dest.writeIntArray(mWindowingModes);
             dest.writeIntArray(mActivityTypes);
             dest.writeBundle(mLaunchOptions);
             dest.writeTypedObject(mActivityIntent, flags);
             dest.writeTypedObject(mTaskFragmentCreationOptions, flags);
             dest.writeTypedObject(mPendingIntent, flags);
+            dest.writeTypedObject(mShortcutInfo, flags);
         }
 
         @Override
@@ -1251,6 +1313,8 @@ public final class WindowContainerTransaction implements Parcelable {
 
             private boolean mReparentTopOnly;
 
+            private boolean mMoveAdjacentTogether;
+
             @Nullable
             private int[]  mWindowingModes;
 
@@ -1268,6 +1332,9 @@ public final class WindowContainerTransaction implements Parcelable {
 
             @Nullable
             private PendingIntent mPendingIntent;
+
+            @Nullable
+            private ShortcutInfo mShortcutInfo;
 
             Builder(int type) {
                 mType = type;
@@ -1290,6 +1357,11 @@ public final class WindowContainerTransaction implements Parcelable {
 
             Builder setReparentTopOnly(boolean reparentTopOnly) {
                 mReparentTopOnly = reparentTopOnly;
+                return this;
+            }
+
+            Builder setMoveAdjacentTogether(boolean moveAdjacentTogether) {
+                mMoveAdjacentTogether = moveAdjacentTogether;
                 return this;
             }
 
@@ -1324,6 +1396,11 @@ public final class WindowContainerTransaction implements Parcelable {
                 return this;
             }
 
+            Builder setShortcutInfo(@Nullable ShortcutInfo shortcutInfo) {
+                mShortcutInfo = shortcutInfo;
+                return this;
+            }
+
             HierarchyOp build() {
                 final HierarchyOp hierarchyOp = new HierarchyOp(mType);
                 hierarchyOp.mContainer = mContainer;
@@ -1336,10 +1413,12 @@ public final class WindowContainerTransaction implements Parcelable {
                         : null;
                 hierarchyOp.mToTop = mToTop;
                 hierarchyOp.mReparentTopOnly = mReparentTopOnly;
+                hierarchyOp.mMoveAdjacentTogether = mMoveAdjacentTogether;
                 hierarchyOp.mLaunchOptions = mLaunchOptions;
                 hierarchyOp.mActivityIntent = mActivityIntent;
                 hierarchyOp.mPendingIntent = mPendingIntent;
                 hierarchyOp.mTaskFragmentCreationOptions = mTaskFragmentCreationOptions;
+                hierarchyOp.mShortcutInfo = mShortcutInfo;
 
                 return hierarchyOp;
             }

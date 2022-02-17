@@ -63,7 +63,6 @@ import static android.provider.Settings.System.FONT_SCALE;
 import static android.text.format.DateUtils.MINUTE_IN_MILLIS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_WAKE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
@@ -136,6 +135,7 @@ import android.app.Dialog;
 import android.app.IActivityClientController;
 import android.app.IActivityController;
 import android.app.IActivityTaskManager;
+import android.app.IAppTask;
 import android.app.IApplicationThread;
 import android.app.IAssistDataReceiver;
 import android.app.INotificationManager;
@@ -437,9 +437,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     private static final long START_AS_CALLER_TOKEN_EXPIRED_TIMEOUT =
             START_AS_CALLER_TOKEN_TIMEOUT_IMPL + 20 * MINUTE_IN_MILLIS;
 
-    // Activity tokens of system activities that are delegating their call to
-    // #startActivityByCaller, keyed by the permissionToken granted to the delegate.
-    final HashMap<IBinder, IBinder> mStartActivitySources = new HashMap<>();
+    // The component name of the delegated activities that are allowed to call
+    // #startActivityAsCaller with the one-time used permission token.
+    final HashMap<IBinder, ComponentName> mStartActivitySources = new HashMap<>();
 
     // Permission tokens that have expired, but we remember for error reporting.
     final ArrayList<IBinder> mExpiredStartAsCallerTokens = new ArrayList<>();
@@ -505,7 +505,27 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      * Whether normal application switches are allowed; a call to {@link #stopAppSwitches()
      * disables this.
      */
-    private volatile boolean mAppSwitchesAllowed = true;
+    private volatile int mAppSwitchesState = APP_SWITCH_ALLOW;
+
+    // The duration of resuming foreground app switch from disallow.
+    private static final long RESUME_FG_APP_SWITCH_MS = 500;
+
+    /** App switch is not allowed. */
+    static final int APP_SWITCH_DISALLOW = 0;
+
+    /** App switch is allowed only if the activity launch was requested by a foreground app. */
+    static final int APP_SWITCH_FG_ONLY = 1;
+
+    /** App switch is allowed. */
+    static final int APP_SWITCH_ALLOW = 2;
+
+    @IntDef({
+            APP_SWITCH_DISALLOW,
+            APP_SWITCH_FG_ONLY,
+            APP_SWITCH_ALLOW,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface AppSwitchState {}
 
     /**
      * Last stop app switches time, apps finished before this time cannot start background activity
@@ -667,14 +687,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
             POWER_MODE_REASON_START_ACTIVITY,
-            POWER_MODE_REASON_FREEZE_DISPLAY,
+            POWER_MODE_REASON_CHANGE_DISPLAY,
             POWER_MODE_REASON_UNKNOWN_VISIBILITY,
             POWER_MODE_REASON_ALL,
     })
     @interface PowerModeReason {}
 
     static final int POWER_MODE_REASON_START_ACTIVITY = 1 << 0;
-    static final int POWER_MODE_REASON_FREEZE_DISPLAY = 1 << 1;
+    static final int POWER_MODE_REASON_CHANGE_DISPLAY = 1 << 1;
     /** @see UnknownAppVisibilityController */
     static final int POWER_MODE_REASON_UNKNOWN_VISIBILITY = 1 << 2;
     /** This can only be used by {@link #endLaunchPowerMode(int)}.*/
@@ -1250,7 +1270,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (topFocusedRootTask != null && topFocusedRootTask.getTopResumedActivity() != null
                     && topFocusedRootTask.getTopResumedActivity().info.applicationInfo.uid
                     == Binder.getCallingUid()) {
-                mAppSwitchesAllowed = true;
+                mAppSwitchesState = APP_SWITCH_ALLOW;
             }
         }
         return pir.sendInner(0, fillInIntent, resolvedType, allowlistToken, null, null,
@@ -1493,7 +1513,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public IBinder requestStartActivityPermissionToken(IBinder delegatorToken) {
+    public IBinder requestStartActivityPermissionToken(ComponentName componentName) {
         int callingUid = Binder.getCallingUid();
         if (UserHandle.getAppId(callingUid) != SYSTEM_UID) {
             throw new SecurityException("Only the system process can request a permission token, "
@@ -1501,7 +1521,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
         IBinder permissionToken = new Binder();
         synchronized (mGlobalLock) {
-            mStartActivitySources.put(permissionToken, delegatorToken);
+            mStartActivitySources.put(permissionToken, componentName);
         }
 
         Message expireMsg = PooledLambda.obtainMessage(
@@ -1526,7 +1546,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // 1)  The caller is an activity that is part of the core framework, and then only when it
         //     is running as the system.
         // 2)  The caller provides a valid permissionToken.  Permission tokens are one-time use and
-        //     can only be requested by a system activity, which may then delegate this call to
+        //     can only be requested from system uid, which may then delegate this call to
         //     another app.
         final ActivityRecord sourceRecord;
         final int targetUid;
@@ -1537,18 +1557,26 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (resultTo == null) {
                 throw new SecurityException("Must be called from an activity");
             }
-            final IBinder sourceToken;
+
+            sourceRecord = ActivityRecord.isInAnyTask(resultTo);
+            if (sourceRecord == null) {
+                throw new SecurityException("Called with bad activity token: " + resultTo);
+            }
+            if (sourceRecord.app == null) {
+                throw new SecurityException("Called without a process attached to activity");
+            }
+
+            final ComponentName componentName;
             if (permissionToken != null) {
                 // To even attempt to use a permissionToken, an app must also have this signature
                 // permission.
                 mAmInternal.enforceCallingPermission(
                         android.Manifest.permission.START_ACTIVITY_AS_CALLER,
                         "startActivityAsCaller");
-                // If called with a permissionToken, we want the sourceRecord from the delegator
-                // activity that requested this token.
-                sourceToken = mStartActivitySources.remove(permissionToken);
-                if (sourceToken == null) {
-                    // Invalid permissionToken, check if it recently expired.
+                // If called with a permissionToken, the caller must be the same component that
+                // was allowed to use the permissionToken.
+                componentName = mStartActivitySources.remove(permissionToken);
+                if (!sourceRecord.mActivityComponent.equals(componentName)) {
                     if (mExpiredStartAsCallerTokens.contains(permissionToken)) {
                         throw new SecurityException("Called with expired permission token: "
                                 + permissionToken);
@@ -1558,33 +1586,21 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     }
                 }
             } else {
-                // This method was called directly by the source.
-                sourceToken = resultTo;
-            }
-
-            sourceRecord = ActivityRecord.isInAnyTask(sourceToken);
-            if (sourceRecord == null) {
-                throw new SecurityException("Called with bad activity token: " + sourceToken);
-            }
-            if (sourceRecord.app == null) {
-                throw new SecurityException("Called without a process attached to activity");
-            }
-
-            // Whether called directly or from a delegate, the source activity must be from the
-            // android package.
-            if (!sourceRecord.info.packageName.equals("android")) {
-                throw new SecurityException("Must be called from an activity that is "
-                        + "declared in the android package");
-            }
-
-            if (UserHandle.getAppId(sourceRecord.app.mUid) != SYSTEM_UID) {
-                // This is still okay, as long as this activity is running under the
-                // uid of the original calling activity.
-                if (sourceRecord.app.mUid != sourceRecord.launchedFromUid) {
-                    throw new SecurityException(
-                            "Calling activity in uid " + sourceRecord.app.mUid
-                                    + " must be system uid or original calling uid "
-                                    + sourceRecord.launchedFromUid);
+                // Whether called directly or from a delegate, the source activity must be from the
+                // android package.
+                if (!sourceRecord.info.packageName.equals("android")) {
+                    throw new SecurityException("Must be called from an activity that is "
+                            + "declared in the android package");
+                }
+                if (UserHandle.getAppId(sourceRecord.app.mUid) != SYSTEM_UID) {
+                    // This is still okay, as long as this activity is running under the
+                    // uid of the original calling activity.
+                    if (sourceRecord.app.mUid != sourceRecord.launchedFromUid) {
+                        throw new SecurityException(
+                                "Calling activity in uid " + sourceRecord.app.mUid
+                                        + " must be system uid or original calling uid "
+                                        + sourceRecord.launchedFromUid);
+                    }
                 }
             }
             if (ignoreTargetSecurity) {
@@ -2169,8 +2185,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /**
      * Return true if app switching is allowed.
      */
-    boolean getBalAppSwitchesAllowed() {
-        return mAppSwitchesAllowed;
+    @AppSwitchState int getBalAppSwitchesState() {
+        return mAppSwitchesState;
     }
 
     /** Register an {@link AnrController} to control the ANR dialog behavior */
@@ -2539,12 +2555,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public List<IBinder> getAppTasks(String callingPackage) {
-        int callingUid = Binder.getCallingUid();
         assertPackageMatchesCallingUid(callingPackage);
+        return getAppTasks(callingPackage, Binder.getCallingUid());
+    }
+
+    private List<IBinder> getAppTasks(String pkgName, int uid) {
         final long ident = Binder.clearCallingIdentity();
         try {
             synchronized (mGlobalLock) {
-                return mRecentTasks.getAppTasksList(callingUid, callingPackage);
+                return mRecentTasks.getAppTasksList(uid, pkgName);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -3691,8 +3710,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public void stopAppSwitches() {
         mAmInternal.enforceCallingPermission(STOP_APP_SWITCHES, "stopAppSwitches");
         synchronized (mGlobalLock) {
-            mAppSwitchesAllowed = false;
+            mAppSwitchesState = APP_SWITCH_DISALLOW;
             mLastStopAppSwitchesTime = SystemClock.uptimeMillis();
+            mH.removeMessages(H.RESUME_FG_APP_SWITCH_MSG);
+            mH.sendEmptyMessageDelayed(H.RESUME_FG_APP_SWITCH_MSG, RESUME_FG_APP_SWITCH_MS);
         }
     }
 
@@ -3700,7 +3721,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public void resumeAppSwitches() {
         mAmInternal.enforceCallingPermission(STOP_APP_SWITCHES, "resumeAppSwitches");
         synchronized (mGlobalLock) {
-            mAppSwitchesAllowed = true;
+            mAppSwitchesState = APP_SWITCH_ALLOW;
+            mH.removeMessages(H.RESUME_FG_APP_SWITCH_MSG);
         }
     }
 
@@ -4418,6 +4440,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     private void updateFontScaleIfNeeded(@UserIdInt int userId) {
+        if (userId != getCurrentUserId()) {
+            return;
+        }
+
         final float scaleFactor = Settings.System.getFloatForUser(mContext.getContentResolver(),
                 FONT_SCALE, 1.0f, userId);
 
@@ -4434,6 +4460,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     private void updateFontWeightAdjustmentIfNeeded(@UserIdInt int userId) {
+        if (userId != getCurrentUserId()) {
+            return;
+        }
+
         final int fontWeightAdjustment =
                 Settings.Secure.getIntForUser(
                         mContext.getContentResolver(),
@@ -5193,6 +5223,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         static final int REPORT_TIME_TRACKER_MSG = 1;
         static final int UPDATE_PROCESS_ANIMATING_STATE = 2;
         static final int END_POWER_MODE_UNKNOWN_VISIBILITY_MSG = 3;
+        static final int RESUME_FG_APP_SWITCH_MSG = 4;
 
         static final int FIRST_ACTIVITY_TASK_MSG = 100;
         static final int FIRST_SUPERVISOR_TASK_MSG = 200;
@@ -5226,6 +5257,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                             mTopApp.updateProcessInfo(false /* updateServiceConnection */,
                                     false /* activityChange */, true /* updateOomAdj */,
                                     false /* addPendingTopUid */);
+                        }
+                    }
+                }
+                break;
+                case RESUME_FG_APP_SWITCH_MSG: {
+                    synchronized (mGlobalLock) {
+                        if (mAppSwitchesState == APP_SWITCH_DISALLOW) {
+                            mAppSwitchesState = APP_SWITCH_FG_ONLY;
                         }
                     }
                 }
@@ -5373,42 +5412,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     intent.resolveTypeIfNeeded(mContext.getContentResolver()),
                     resultTo, null, 0, startFlags, null, options, userId,
                     false /*validateIncomingUser*/);
-        }
-
-        @Override
-        public void notifyKeyguardFlagsChanged(@Nullable Runnable callback, int displayId) {
-            synchronized (mGlobalLock) {
-
-                // We might change the visibilities here, so prepare an empty app transition which
-                // might be overridden later if we actually change visibilities.
-                final DisplayContent dc = mRootWindowContainer.getDisplayContent(displayId);
-                if (dc == null) {
-                    return;
-                }
-                final boolean wasTransitionSet = dc.mAppTransition.isTransitionSet();
-                if (!wasTransitionSet) {
-                    dc.prepareAppTransition(TRANSIT_NONE);
-                }
-                mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
-
-                // If there was a transition set already we don't want to interfere with it as we
-                // might be starting it too early.
-                if (!wasTransitionSet) {
-                    dc.executeAppTransition();
-                }
-            }
-            if (callback != null) {
-                callback.run();
-            }
-        }
-
-        @Override
-        public void notifyKeyguardTrustedChanged() {
-            synchronized (mGlobalLock) {
-                if (mKeyguardController.isKeyguardShowing(DEFAULT_DISPLAY)) {
-                    mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
-                }
-            }
         }
 
         /**
@@ -6664,6 +6667,17 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
             }
             return targetTask;
+        }
+
+        @Override
+        public List<ActivityManager.AppTask> getAppTasks(String pkgName, int uid) {
+            ArrayList<ActivityManager.AppTask> tasks = new ArrayList<>();
+            List<IBinder> appTasks = ActivityTaskManagerService.this.getAppTasks(pkgName, uid);
+            int numAppTasks = appTasks.size();
+            for (int i = 0; i < numAppTasks; i++) {
+                tasks.add(new ActivityManager.AppTask(IAppTask.Stub.asInterface(appTasks.get(i))));
+            }
+            return tasks;
         }
     }
 }

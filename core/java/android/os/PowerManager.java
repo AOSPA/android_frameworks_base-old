@@ -335,6 +335,12 @@ public final class PowerManager {
     public static final int USER_ACTIVITY_EVENT_FACE_DOWN = 5;
 
     /**
+     * User activity event type: There is a change in the device state.
+     * @hide
+     */
+    public static final int USER_ACTIVITY_EVENT_DEVICE_STATE = 6;
+
+    /**
      * User activity flag: If already dimmed, extend the dim timeout
      * but do not brighten.  This flag is useful for keeping the screen on
      * a little longer without causing a visible change such as when
@@ -440,9 +446,15 @@ public final class PowerManager {
     public static final int GO_TO_SLEEP_REASON_DISPLAY_GROUPS_TURNED_OFF = 12;
 
     /**
+     * Go to sleep reason code: A foldable device has been folded.
      * @hide
      */
-    public static final int GO_TO_SLEEP_REASON_MAX = GO_TO_SLEEP_REASON_DISPLAY_GROUPS_TURNED_OFF;
+    public static final int GO_TO_SLEEP_REASON_DEVICE_FOLD = 13;
+
+    /**
+     * @hide
+     */
+    public static final int GO_TO_SLEEP_REASON_MAX =  GO_TO_SLEEP_REASON_DEVICE_FOLD;
 
     /**
      * @hide
@@ -461,6 +473,7 @@ public final class PowerManager {
             case GO_TO_SLEEP_REASON_INATTENTIVE: return "inattentive";
             case GO_TO_SLEEP_REASON_DISPLAY_GROUP_REMOVED: return "display_group_removed";
             case GO_TO_SLEEP_REASON_DISPLAY_GROUPS_TURNED_OFF: return "display_groups_turned_off";
+            case GO_TO_SLEEP_REASON_DEVICE_FOLD: return "device_folded";
             default: return Integer.toString(sleepReason);
         }
     }
@@ -568,7 +581,8 @@ public final class PowerManager {
             GO_TO_SLEEP_REASON_ACCESSIBILITY,
             GO_TO_SLEEP_REASON_FORCE_SUSPEND,
             GO_TO_SLEEP_REASON_INATTENTIVE,
-            GO_TO_SLEEP_REASON_QUIESCENT
+            GO_TO_SLEEP_REASON_QUIESCENT,
+            GO_TO_SLEEP_REASON_DEVICE_FOLD
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface GoToSleepReason{}
@@ -1003,7 +1017,7 @@ public final class PowerManager {
             new PropertyInvalidatedCache<Void, Boolean>(MAX_CACHE_ENTRIES,
                 CACHE_KEY_IS_POWER_SAVE_MODE_PROPERTY) {
                 @Override
-                protected Boolean recompute(Void query) {
+                public Boolean recompute(Void query) {
                     try {
                         return mService.isPowerSaveMode();
                     } catch (RemoteException e) {
@@ -1016,7 +1030,7 @@ public final class PowerManager {
             new PropertyInvalidatedCache<Void, Boolean>(MAX_CACHE_ENTRIES,
                 CACHE_KEY_IS_INTERACTIVE_PROPERTY) {
                 @Override
-                protected Boolean recompute(Void query) {
+                public Boolean recompute(Void query) {
                     try {
                         return mService.isInteractive();
                     } catch (RemoteException e) {

@@ -107,6 +107,7 @@
     <string name="accessibility_phone_button" msgid="4256353121703100427">"电话"</string>
     <string name="accessibility_voice_assist_button" msgid="6497706615649754510">"语音助理"</string>
     <string name="accessibility_wallet_button" msgid="1458258783460555507">"电子钱包"</string>
+    <string name="accessibility_qr_code_scanner_button" msgid="7521277927692910795">"二维码扫描器"</string>
     <string name="accessibility_unlock_button" msgid="122785427241471085">"解锁"</string>
     <string name="accessibility_lock_icon" msgid="661492842417875775">"设备已锁定"</string>
     <string name="accessibility_scanning_face" msgid="3093828357921541387">"正在扫描面孔"</string>
@@ -174,33 +175,15 @@
     <string name="accessibility_desc_lock_screen" msgid="5983125095181194887">"锁定屏幕。"</string>
     <string name="accessibility_desc_work_lock" msgid="4355620395354680575">"工作锁定屏幕"</string>
     <string name="accessibility_desc_close" msgid="8293708213442107755">"关闭"</string>
-    <string name="accessibility_quick_settings_wifi_changed_off" msgid="2230487165558877262">"WLAN已关闭。"</string>
-    <string name="accessibility_quick_settings_wifi_changed_on" msgid="1490362586009027611">"WLAN已开启。"</string>
-    <string name="accessibility_quick_settings_airplane_changed_off" msgid="8880183481476943754">"飞行模式已关闭。"</string>
-    <string name="accessibility_quick_settings_airplane_changed_on" msgid="6327378061894076288">"飞行模式已开启。"</string>
     <string name="accessibility_quick_settings_dnd_none_on" msgid="3235552940146035383">"完全静音"</string>
     <string name="accessibility_quick_settings_dnd_alarms_on" msgid="3375848309132140014">"仅限闹钟"</string>
     <string name="accessibility_quick_settings_dnd" msgid="2415967452264206047">"勿扰。"</string>
-    <string name="accessibility_quick_settings_dnd_changed_off" msgid="1457150026842505799">"勿扰模式已关闭。"</string>
-    <string name="accessibility_quick_settings_dnd_changed_on" msgid="186315911607486129">"勿扰模式已开启。"</string>
     <string name="accessibility_quick_settings_bluetooth" msgid="8250942386687551283">"蓝牙。"</string>
     <string name="accessibility_quick_settings_bluetooth_on" msgid="3819082137684078013">"蓝牙开启。"</string>
-    <string name="accessibility_quick_settings_bluetooth_changed_off" msgid="3344226652293797283">"蓝牙已关闭。"</string>
-    <string name="accessibility_quick_settings_bluetooth_changed_on" msgid="1263282011749437549">"蓝牙已开启。"</string>
-    <string name="accessibility_quick_settings_location_changed_off" msgid="5132776369388699133">"位置报告功能已关闭。"</string>
-    <string name="accessibility_quick_settings_location_changed_on" msgid="7159115433070112154">"位置报告功能已开启。"</string>
     <string name="accessibility_quick_settings_alarm" msgid="558094529584082090">"闹钟已设置为：<xliff:g id="TIME">%s</xliff:g>。"</string>
     <string name="accessibility_quick_settings_more_time" msgid="7646479831704665284">"延长时间。"</string>
     <string name="accessibility_quick_settings_less_time" msgid="9110364286464977870">"缩短时间。"</string>
-    <string name="accessibility_quick_settings_flashlight_changed_off" msgid="3782375441381402599">"手电筒已关闭。"</string>
-    <string name="accessibility_quick_settings_flashlight_changed_on" msgid="4747870681508334200">"手电筒已打开。"</string>
-    <string name="accessibility_quick_settings_color_inversion_changed_off" msgid="7548045840282925393">"颜色反转功能已关闭。"</string>
-    <string name="accessibility_quick_settings_color_inversion_changed_on" msgid="4711141858364404084">"颜色反转功能已开启。"</string>
-    <string name="accessibility_quick_settings_hotspot_changed_off" msgid="7002061268910095176">"移动热点已关闭。"</string>
-    <string name="accessibility_quick_settings_hotspot_changed_on" msgid="2576895346762408840">"移动热点已开启。"</string>
     <string name="accessibility_casting_turned_off" msgid="1387906158563374962">"屏幕投射已停止。"</string>
-    <string name="accessibility_quick_settings_data_saver_changed_off" msgid="4910847127871603832">"流量节省程序已关闭。"</string>
-    <string name="accessibility_quick_settings_data_saver_changed_on" msgid="6370606590802623078">"流量节省程序已开启。"</string>
     <string name="accessibility_brightness" msgid="5391187016177823721">"屏幕亮度"</string>
     <string name="data_usage_disabled_dialog_mobile_title" msgid="2286843518689837719">"已暂停使用移动数据网络"</string>
     <string name="data_usage_disabled_dialog_title" msgid="9131615296036724838">"数据网络已暂停使用"</string>
@@ -249,7 +232,9 @@
     <string name="quick_settings_cast_detail_empty_text" msgid="2846282280014617785">"没有可用设备"</string>
     <string name="quick_settings_cast_no_wifi" msgid="6980194769795014875">"未连接到 WLAN 网络"</string>
     <string name="quick_settings_brightness_dialog_title" msgid="4980669966716685588">"亮度"</string>
-    <string name="quick_settings_inversion_label" msgid="5078769633069667698">"反色"</string>
+    <string name="quick_settings_inversion_label" msgid="3501527749494755688">"颜色反转"</string>
+    <!-- no translation found for quick_settings_color_correction_label (5636617913560474664) -->
+    <skip />
     <string name="quick_settings_more_settings" msgid="2878235926753776694">"更多设置"</string>
     <string name="quick_settings_more_user_settings" msgid="1064187451100861954">"用户设置"</string>
     <string name="quick_settings_done" msgid="2163641301648855793">"完成"</string>
@@ -291,6 +276,7 @@
     <string name="quick_settings_screen_record_label" msgid="8650355346742003694">"屏幕录制"</string>
     <string name="quick_settings_screen_record_start" msgid="1574725369331638985">"开始"</string>
     <string name="quick_settings_screen_record_stop" msgid="8087348522976412119">"停止"</string>
+    <string name="quick_settings_onehanded_label" msgid="2416537930246274991">"单手模式"</string>
     <string name="sensor_privacy_start_use_mic_dialog_title" msgid="563796653825944944">"要解锁设备麦克风吗？"</string>
     <string name="sensor_privacy_start_use_camera_dialog_title" msgid="8807639852654305227">"要解锁设备摄像头吗？"</string>
     <string name="sensor_privacy_start_use_mic_camera_dialog_title" msgid="4316471859905020023">"要解锁设备摄像头和麦克风吗？"</string>
@@ -464,6 +450,8 @@
     <string name="wallet_secondary_label_device_locked" msgid="5175862019125370506">"解锁设备即可使用"</string>
     <string name="wallet_error_generic" msgid="257704570182963611">"获取您的卡片时出现问题，请稍后重试"</string>
     <string name="wallet_lockscreen_settings_label" msgid="3539105300870383570">"锁定屏幕设置"</string>
+    <string name="qr_code_scanner_title" msgid="1598912458255252498">"扫描二维码"</string>
+    <string name="qr_code_scanner_description" msgid="7452098243938659945">"点击即可扫描二维码"</string>
     <string name="status_bar_work" msgid="5238641949837091056">"工作资料"</string>
     <string name="status_bar_airplane" msgid="4848702508684541009">"飞行模式"</string>
     <string name="zen_alarm_warning" msgid="7844303238486849503">"您在<xliff:g id="WHEN">%1$s</xliff:g>将不会听到下次闹钟响铃"</string>
@@ -483,6 +471,7 @@
     <string name="enable_bluetooth_message" msgid="6740938333772779717">"要将您的键盘连接到平板电脑，您必须先开启蓝牙。"</string>
     <string name="enable_bluetooth_confirmation_ok" msgid="2866408183324184876">"开启"</string>
     <string name="tuner_full_importance_settings" msgid="1388025816553459059">"高级通知设置"</string>
+    <string name="rotation_lock_camera_rotation_on" msgid="789434807790534274">"已开启 - 基于人脸"</string>
     <string name="power_notification_controls_description" msgid="1334963837572708952">"利用高级通知设置，您可以为应用通知设置从 0 级到 5 级的重要程度等级。\n\n"<b>"5 级"</b>" \n- 在通知列表顶部显示 \n- 允许全屏打扰 \n- 一律短暂显示通知 \n\n"<b>"4 级"</b>" \n- 禁止全屏打扰 \n- 一律短暂显示通知 \n\n"<b>"3 级"</b>" \n- 禁止全屏打扰 \n- 一律不短暂显示通知 \n\n"<b>"2 级"</b>" \n- 禁止全屏打扰 \n- 一律不短暂显示通知 \n- 一律不发出声音或振动 \n\n"<b>"1 级"</b>" \n- 禁止全屏打扰 \n- 一律不短暂显示通知 \n- 一律不发出声音或振动 \n- 不在锁定屏幕和状态栏中显示 \n- 在通知列表底部显示 \n\n"<b>"0 级"</b>" \n- 屏蔽应用的所有通知"</string>
     <string name="inline_done_button" msgid="6043094985588909584">"完成"</string>
     <string name="inline_ok_button" msgid="603075490581280343">"应用"</string>
@@ -743,7 +732,7 @@
     <string name="magnification_mode_switch_state_full_screen" msgid="5229653514979530561">"放大整个屏幕"</string>
     <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"放大部分屏幕"</string>
     <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"切换"</string>
-    <string name="accessibility_floating_button_migration_tooltip" msgid="4431046858918714564">"“无障碍”按钮已取代无障碍手势\n\n"<annotation id="link">"查看设置"</annotation></string>
+    <string name="accessibility_floating_button_migration_tooltip" msgid="5217151214439341902">"点按即可打开无障碍功能。您可在“设置”中自定义或更换此按钮。\n\n"<annotation id="link">"查看设置"</annotation></string>
     <string name="accessibility_floating_button_docking_tooltip" msgid="6814897496767461517">"将按钮移到边缘，即可暂时将其隐藏"</string>
     <string name="accessibility_floating_button_action_move_top_left" msgid="6253520703618545705">"移至左上角"</string>
     <string name="accessibility_floating_button_action_move_top_right" msgid="6106225581993479711">"移至右上角"</string>
@@ -794,10 +783,17 @@
     <string name="controls_media_settings_button" msgid="5815790345117172504">"设置"</string>
     <string name="controls_media_playing_item_description" msgid="4531853311504359098">"正在通过<xliff:g id="APP_LABEL">%3$s</xliff:g>播放<xliff:g id="ARTIST_NAME">%2$s</xliff:g>的《<xliff:g id="SONG_NAME">%1$s</xliff:g>》"</string>
     <string name="controls_media_seekbar_description" msgid="4389621713616214611">"<xliff:g id="ELAPSED_TIME">%1$s</xliff:g> / <xliff:g id="TOTAL_TIME">%2$s</xliff:g>"</string>
+    <string name="controls_media_button_play" msgid="2705068099607410633">"播放"</string>
+    <string name="controls_media_button_pause" msgid="8614887780950376258">"暂停"</string>
+    <string name="controls_media_button_prev" msgid="8126822360056482970">"上一首"</string>
+    <string name="controls_media_button_next" msgid="6662636627525947610">"下一首"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"播放"</string>
     <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"打开<xliff:g id="APP_LABEL">%1$s</xliff:g>"</string>
     <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"通过<xliff:g id="APP_LABEL">%3$s</xliff:g>播放<xliff:g id="ARTIST_NAME">%2$s</xliff:g>的《<xliff:g id="SONG_NAME">%1$s</xliff:g>》"</string>
     <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"通过<xliff:g id="APP_LABEL">%2$s</xliff:g>播放《<xliff:g id="SONG_NAME">%1$s</xliff:g>》"</string>
+    <string name="media_transfer_undo" msgid="1895606387620728736">"撤消"</string>
+    <string name="media_move_closer_to_transfer" msgid="1628426856415585141">"移近一点以在“<xliff:g id="DEVICENAME">%1$s</xliff:g>”上播放"</string>
+    <string name="media_transfer_playing" msgid="3760048096352107789">"正在“<xliff:g id="DEVICENAME">%1$s</xliff:g>”上播放"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"无效，请检查应用"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"未找到"</string>
     <string name="controls_error_removed_title" msgid="1207794911208047818">"控件不可用"</string>
@@ -812,7 +808,7 @@
     <string name="media_output_dialog_single_device" msgid="3102758980643351058">"已选择 1 个设备"</string>
     <string name="media_output_dialog_multiple_devices" msgid="1093771040315422350">"已选择 <xliff:g id="COUNT">%1$d</xliff:g> 个设备"</string>
     <string name="media_output_dialog_disconnected" msgid="7090512852817111185">"（已断开连接）"</string>
-    <string name="media_output_dialog_connect_failed" msgid="3225190634236259010">"无法连接。请重试。"</string>
+    <string name="media_output_dialog_connect_failed" msgid="3080972621975339387">"无法切换。点按即可重试。"</string>
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"与新设备配对"</string>
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"版本号"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"已将版本号复制到剪贴板。"</string>
@@ -877,8 +873,11 @@
     <string name="see_all_networks" msgid="3773666844913168122">"查看全部"</string>
     <string name="to_switch_networks_disconnect_ethernet" msgid="6698111101156951955">"如要切换网络，请断开以太网连接"</string>
     <string name="wifi_scan_notify_message" msgid="3753839537448621794">"为了提升设备的使用体验，即使 WLAN 已关闭，应用和服务仍可以随时扫描 WLAN 网络。您可以在 WLAN 扫描设置中更改此设置。"<annotation id="link">"更改"</annotation></string>
+    <string name="turn_off_airplane_mode" msgid="8425587763226548579">"关闭飞行模式"</string>
     <string name="qs_tile_request_dialog_text" msgid="3501359944139877694">"“<xliff:g id="APPNAME">%1$s</xliff:g>”希望将以下图块添加到“快捷设置”"</string>
     <string name="qs_tile_request_dialog_add" msgid="4888460910694986304">"添加图块"</string>
     <string name="qs_tile_request_dialog_not_add" msgid="4168716573114067296">"不添加图块"</string>
     <string name="qs_user_switch_dialog_title" msgid="3045189293587781366">"选择用户"</string>
+    <string name="fgs_manager_dialog_title" msgid="656091833603337197">"正在在后台运行的应用"</string>
+    <string name="fgs_manager_app_item_stop_button_label" msgid="7188317969020801156">"停止"</string>
 </resources>

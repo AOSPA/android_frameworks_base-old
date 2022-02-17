@@ -31,6 +31,7 @@ import static android.app.NotificationManager.IMPORTANCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_UNSPECIFIED;
 import static android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION;
 import static android.media.AudioAttributes.USAGE_NOTIFICATION;
+import static android.os.UserHandle.USER_SYSTEM;
 import static android.util.StatsLog.ANNOTATION_ID_IS_UID;
 
 import static com.android.internal.util.FrameworkStatsLog.PACKAGE_NOTIFICATION_CHANNEL_PREFERENCES;
@@ -541,18 +542,19 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper.setInvalidMessageSent(PKG_P, UID_P);
         mHelper.setValidMessageSent(PKG_P, UID_P);
         mHelper.setInvalidMsgAppDemoted(PKG_P, UID_P, true);
+        mHelper.setValidBubbleSent(PKG_P, UID_P);
 
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_NONE);
 
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_N_MR1, UID_N_MR1, true,
-                UserHandle.USER_SYSTEM, channel1.getId(), channel2.getId(), channel3.getId(),
+                USER_SYSTEM, channel1.getId(), channel2.getId(), channel3.getId(),
                 NotificationChannel.DEFAULT_CHANNEL_ID);
         mHelper.onPackagesChanged(true, UserHandle.myUserId(), new String[]{PKG_N_MR1, PKG_O},
                 new int[]{UID_N_MR1, UID_O});
 
         mHelper.setShowBadge(PKG_O, UID_O, true);
 
-        loadStreamXml(baos, true, UserHandle.USER_SYSTEM);
+        loadStreamXml(baos, true, USER_SYSTEM);
 
         assertEquals(IMPORTANCE_NONE, mHelper.getImportance(PKG_O, UID_O));
         assertTrue(mHelper.canShowBadge(PKG_N_MR1, UID_N_MR1));
@@ -560,6 +562,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertFalse(mHelper.hasSentInvalidMsg(PKG_N_MR1, UID_N_MR1));
         assertTrue(mHelper.hasSentValidMsg(PKG_P, UID_P));
         assertTrue(mHelper.didUserEverDemoteInvalidMsgApp(PKG_P, UID_P));
+        assertTrue(mHelper.hasSentValidBubble(PKG_P, UID_P));
         assertEquals(channel1,
                 mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false));
         compareChannels(channel2,
@@ -597,17 +600,22 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                 mPermissionHelper, mLogger, mAppOpsManager, mStatsEventBuilderFactory);
 
         String xml = "<ranking version=\"2\">\n"
-                + "<package name=\"" + PKG_N_MR1 + "\" show_badge=\"true\">\n"
+                + "<package name=\"" + PKG_N_MR1 + "\" uid=\"" + UID_N_MR1
+                + "\" show_badge=\"true\">\n"
                 + "<channel id=\"idn\" name=\"name\" importance=\"2\" />\n"
                 + "<channel id=\"miscellaneous\" name=\"Uncategorized\" />\n"
                 + "</package>\n"
-                + "<package name=\"" + PKG_O + "\" importance=\"0\">\n"
+                + "<package name=\"" + PKG_O + "\" uid=\"" + UID_O + "\" importance=\"0\">\n"
                 + "<channel id=\"ido\" name=\"name2\" importance=\"2\" show_badge=\"true\"/>\n"
                 + "</package>\n"
-                + "<package name=\"" + PKG_P + "\" importance=\"2\">\n"
+                + "<package name=\"" + PKG_P + "\" uid=\"" + UID_P + "\" importance=\"2\">\n"
                 + "<channel id=\"idp\" name=\"name3\" importance=\"4\" locked=\"2\" />\n"
                 + "</package>\n"
                 + "</ranking>\n";
+
+        loadByteArrayXml(xml.getBytes(), false, USER_SYSTEM);
+
+        // expected values
         NotificationChannel idn = new NotificationChannel("idn", "name", IMPORTANCE_LOW);
         idn.setSound(null, new AudioAttributes.Builder()
                 .setUsage(USAGE_NOTIFICATION)
@@ -637,8 +645,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         // Notifications enabled, user set b/c channel modified
         PackagePermission pExpected = new PackagePermission(PKG_P, 0, true, true);
 
-        loadByteArrayXml(xml.getBytes(), true, UserHandle.USER_SYSTEM);
-
+        // verify data
         assertTrue(mHelper.canShowBadge(PKG_N_MR1, UID_N_MR1));
 
         assertEquals(idn, mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, idn.getId(), false));
@@ -648,6 +655,85 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         verify(mPermissionHelper).setNotificationPermission(nMr1Expected);
         verify(mPermissionHelper).setNotificationPermission(oExpected);
         verify(mPermissionHelper).setNotificationPermission(pExpected);
+    }
+
+    @Test
+    public void testReadXml_oldXml_backup_migratesWhenPkgInstalled() throws Exception {
+        when(mPermissionHelper.isMigrationEnabled()).thenReturn(true);
+        mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
+                mPermissionHelper, mLogger, mAppOpsManager, mStatsEventBuilderFactory);
+
+        when(mPm.getPackageUidAsUser("pkg1", USER_SYSTEM)).thenReturn(UNKNOWN_UID);
+        when(mPm.getPackageUidAsUser("pkg2", USER_SYSTEM)).thenReturn(UNKNOWN_UID);
+        when(mPm.getPackageUidAsUser("pkg3", USER_SYSTEM)).thenReturn(UNKNOWN_UID);
+        when(mPm.getApplicationInfoAsUser(eq("pkg1"), anyInt(), anyInt())).thenThrow(
+                new PackageManager.NameNotFoundException());
+        when(mPm.getApplicationInfoAsUser(eq("pkg2"), anyInt(), anyInt())).thenThrow(
+                new PackageManager.NameNotFoundException());
+        when(mPm.getApplicationInfoAsUser(eq("pkg3"), anyInt(), anyInt())).thenThrow(
+                new PackageManager.NameNotFoundException());
+
+        String xml = "<ranking version=\"2\">\n"
+                + "<package name=\"pkg1\" show_badge=\"true\">\n"
+                + "<channel id=\"idn\" name=\"name\" importance=\"2\" />\n"
+                + "<channel id=\"miscellaneous\" name=\"Uncategorized\" />\n"
+                + "</package>\n"
+                + "<package name=\"pkg2\" importance=\"0\">\n"
+                + "<channel id=\"ido\" name=\"name2\" importance=\"2\" show_badge=\"true\"/>\n"
+                + "</package>\n"
+                + "<package name=\"pkg3\" importance=\"2\">\n"
+                + "<channel id=\"idp\" name=\"name3\" importance=\"4\" locked=\"2\" />\n"
+                + "</package>\n"
+                + "</ranking>\n";
+        NotificationChannel idn = new NotificationChannel("idn", "name", IMPORTANCE_LOW);
+        idn.setSound(null, new AudioAttributes.Builder()
+                .setUsage(USAGE_NOTIFICATION)
+                .setContentType(CONTENT_TYPE_SONIFICATION)
+                .setFlags(0)
+                .build());
+        idn.setShowBadge(false);
+        NotificationChannel ido = new NotificationChannel("ido", "name2", IMPORTANCE_LOW);
+        ido.setShowBadge(true);
+        ido.setSound(null, new AudioAttributes.Builder()
+                .setUsage(USAGE_NOTIFICATION)
+                .setContentType(CONTENT_TYPE_SONIFICATION)
+                .setFlags(0)
+                .build());
+        NotificationChannel idp = new NotificationChannel("idp", "name3", IMPORTANCE_HIGH);
+        idp.lockFields(2);
+        idp.setSound(null, new AudioAttributes.Builder()
+                .setUsage(USAGE_NOTIFICATION)
+                .setContentType(CONTENT_TYPE_SONIFICATION)
+                .setFlags(0)
+                .build());
+
+        // Notifications enabled, not user set
+        PackagePermission pkg1Expected = new PackagePermission("pkg1", 0, true, false);
+        // Notifications not enabled, so user set
+        PackagePermission pkg2Expected = new PackagePermission("pkg2", 0, false, true);
+        // Notifications enabled, user set b/c channel modified
+        PackagePermission pkg3Expected = new PackagePermission("pkg3", 0, true, true);
+
+        loadByteArrayXml(xml.getBytes(), true, USER_SYSTEM);
+
+        verify(mPermissionHelper, never()).setNotificationPermission(any());
+
+        when(mPm.getPackageUidAsUser("pkg1", USER_SYSTEM)).thenReturn(11);
+        when(mPm.getPackageUidAsUser("pkg2", USER_SYSTEM)).thenReturn(12);
+        when(mPm.getPackageUidAsUser("pkg3", USER_SYSTEM)).thenReturn(13);
+
+        mHelper.onPackagesChanged(
+                false, 0, new String[]{"pkg1", "pkg2", "pkg3"}, new int[] {11, 12, 13});
+
+        assertTrue(mHelper.canShowBadge("pkg1", 11));
+
+        assertEquals(idn, mHelper.getNotificationChannel("pkg1", 11, idn.getId(), false));
+        compareChannels(ido, mHelper.getNotificationChannel("pkg2", 12, ido.getId(), false));
+        compareChannels(idp, mHelper.getNotificationChannel("pkg3", 13, idp.getId(), false));
+
+        verify(mPermissionHelper).setNotificationPermission(pkg1Expected);
+        verify(mPermissionHelper).setNotificationPermission(pkg2Expected);
+        verify(mPermissionHelper).setNotificationPermission(pkg3Expected);
     }
 
     @Test
@@ -690,7 +776,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                 .setFlags(0)
                 .build());
 
-        loadByteArrayXml(xml.getBytes(), true, UserHandle.USER_SYSTEM);
+        loadByteArrayXml(xml.getBytes(), true, USER_SYSTEM);
 
         assertTrue(mHelper.canShowBadge(PKG_N_MR1, UID_N_MR1));
 
@@ -707,14 +793,14 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
                 mPermissionHelper, mLogger, mAppOpsManager, mStatsEventBuilderFactory);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);
-        appPermissions.put(new Pair(3, "third"), false);
-        appPermissions.put(new Pair(UID_P, PKG_P), true);
-        appPermissions.put(new Pair(UID_O, PKG_O), false);
-        appPermissions.put(new Pair(UID_N_MR1, PKG_N_MR1), true);
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));
+        appPermissions.put(new Pair(UID_P, PKG_P), new Pair(true, false));
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false));
+        appPermissions.put(new Pair(UID_N_MR1, PKG_N_MR1), new Pair(true, false));
 
-        when(mPermissionHelper.getNotificationPermissionValues(UserHandle.USER_SYSTEM))
+        when(mPermissionHelper.getNotificationPermissionValues(USER_SYSTEM))
                 .thenReturn(appPermissions);
 
         NotificationChannelGroup ncg = new NotificationChannelGroup("1", "bye");
@@ -748,7 +834,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper.setInvalidMsgAppDemoted(PKG_P, UID_P, true);
 
         ByteArrayOutputStream baos = writeXmlAndPurge(
-                PKG_N_MR1, UID_N_MR1, false, UserHandle.USER_SYSTEM);
+                PKG_N_MR1, UID_N_MR1, false, USER_SYSTEM);
         String expected = "<ranking version=\"3\">\n"
                 + "<package name=\"com.example.o\" show_badge=\"true\" "
                 + "app_user_locked_fields=\"0\" sent_invalid_msg=\"false\" "
@@ -788,14 +874,14 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
                 mPermissionHelper, mLogger, mAppOpsManager, mStatsEventBuilderFactory);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);
-        appPermissions.put(new Pair(3, "third"), false);
-        appPermissions.put(new Pair(UID_P, PKG_P), true);
-        appPermissions.put(new Pair(UID_O, PKG_O), false);
-        appPermissions.put(new Pair(UID_N_MR1, PKG_N_MR1), true);
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));
+        appPermissions.put(new Pair(UID_P, PKG_P), new Pair(true, false));
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false));
+        appPermissions.put(new Pair(UID_N_MR1, PKG_N_MR1), new Pair(true, false));
 
-        when(mPermissionHelper.getNotificationPermissionValues(UserHandle.USER_SYSTEM))
+        when(mPermissionHelper.getNotificationPermissionValues(USER_SYSTEM))
                 .thenReturn(appPermissions);
 
         NotificationChannelGroup ncg = new NotificationChannelGroup("1", "bye");
@@ -829,7 +915,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper.setInvalidMsgAppDemoted(PKG_P, UID_P, true);
 
         ByteArrayOutputStream baos = writeXmlAndPurge(
-                PKG_N_MR1, UID_N_MR1, true, UserHandle.USER_SYSTEM);
+                PKG_N_MR1, UID_N_MR1, true, USER_SYSTEM);
         String expected = "<ranking version=\"3\">\n"
                 // Importance 0 because off in permissionhelper
                 + "<package name=\"com.example.o\" importance=\"0\" show_badge=\"true\" "
@@ -875,10 +961,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
                 mPermissionHelper, mLogger, mAppOpsManager, mStatsEventBuilderFactory);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(UID_P, PKG_P), true);
-        appPermissions.put(new Pair(UID_O, PKG_O), false);
-        when(mPermissionHelper.getNotificationPermissionValues(UserHandle.USER_SYSTEM))
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(UID_P, PKG_P), new Pair(true, false));
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false));
+        when(mPermissionHelper.getNotificationPermissionValues(USER_SYSTEM))
                 .thenReturn(appPermissions);
 
         NotificationChannelGroup ncg = new NotificationChannelGroup("1", "bye");
@@ -912,7 +998,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper.setInvalidMsgAppDemoted(PKG_P, UID_P, true);
 
         ByteArrayOutputStream baos = writeXmlAndPurge(
-                PKG_N_MR1, UID_N_MR1, true, UserHandle.USER_SYSTEM);
+                PKG_N_MR1, UID_N_MR1, true, USER_SYSTEM);
         String expected = "<ranking version=\"3\">\n"
                 // Importance 0 because off in permissionhelper
                 + "<package name=\"com.example.o\" importance=\"0\" show_badge=\"true\" "
@@ -955,18 +1041,18 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
                 mPermissionHelper, mLogger, mAppOpsManager, mStatsEventBuilderFactory);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);
-        appPermissions.put(new Pair(3, "third"), false);
-        appPermissions.put(new Pair(UID_P, PKG_P), true);
-        appPermissions.put(new Pair(UID_O, PKG_O), false);
-        appPermissions.put(new Pair(UID_N_MR1, PKG_N_MR1), true);
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));
+        appPermissions.put(new Pair(UID_P, PKG_P), new Pair(true, false));
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false));
+        appPermissions.put(new Pair(UID_N_MR1, PKG_N_MR1), new Pair(true, false));
 
-        when(mPermissionHelper.getNotificationPermissionValues(UserHandle.USER_SYSTEM))
+        when(mPermissionHelper.getNotificationPermissionValues(USER_SYSTEM))
                 .thenReturn(appPermissions);
 
         ByteArrayOutputStream baos = writeXmlAndPurge(
-                PKG_N_MR1, UID_N_MR1, true, UserHandle.USER_SYSTEM);
+                PKG_N_MR1, UID_N_MR1, true, USER_SYSTEM);
         String expected = "<ranking version=\"3\">\n"
                 // Packages that exist solely in permissionhelper
                 + "<package name=\"" + PKG_P + "\" importance=\"3\" />\n"
@@ -986,10 +1072,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, channel, true, false);
 
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_N_MR1, UID_N_MR1, true,
-                UserHandle.USER_SYSTEM, channel.getId());
+                USER_SYSTEM, channel.getId());
 
         // Testing that in restore we are given the canonical version
-        loadStreamXml(baos, true, UserHandle.USER_SYSTEM);
+        loadStreamXml(baos, true, USER_SYSTEM);
         verify(mTestIContentProvider).uncanonicalize(any(), eq(CANONICAL_SOUND_URI));
     }
 
@@ -1012,9 +1098,9 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         channel.setSound(SOUND_URI, mAudioAttributes);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, channel, true, false);
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_N_MR1, UID_N_MR1, true,
-                UserHandle.USER_SYSTEM, channel.getId());
+                USER_SYSTEM, channel.getId());
 
-        loadStreamXml(baos, true, UserHandle.USER_SYSTEM);
+        loadStreamXml(baos, true, USER_SYSTEM);
 
         NotificationChannel actualChannel = mHelper.getNotificationChannel(
                 PKG_N_MR1, UID_N_MR1, channel.getId(), false);
@@ -1034,9 +1120,9 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         channel.setSound(SOUND_URI, mAudioAttributes);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, channel, true, false);
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_N_MR1, UID_N_MR1, true,
-                UserHandle.USER_SYSTEM, channel.getId());
+                USER_SYSTEM, channel.getId());
 
-        loadStreamXml(baos, true, UserHandle.USER_SYSTEM);
+        loadStreamXml(baos, true, USER_SYSTEM);
 
         NotificationChannel actualChannel = mHelper.getNotificationChannel(
                 PKG_N_MR1, UID_N_MR1, channel.getId(), false);
@@ -1065,7 +1151,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                 + "</ranking>\n";
 
         loadByteArrayXml(
-                backupWithUncanonicalizedSoundUri.getBytes(), true, UserHandle.USER_SYSTEM);
+                backupWithUncanonicalizedSoundUri.getBytes(), true, USER_SYSTEM);
 
         NotificationChannel actualChannel = mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, id, false);
         assertEquals(Settings.System.DEFAULT_NOTIFICATION_URI, actualChannel.getSound());
@@ -1078,9 +1164,9 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         channel.setSound(null, mAudioAttributes);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, channel, true, false);
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_N_MR1, UID_N_MR1, true,
-                UserHandle.USER_SYSTEM, channel.getId());
+                USER_SYSTEM, channel.getId());
 
-        loadStreamXml(baos, true, UserHandle.USER_SYSTEM);
+        loadStreamXml(baos, true, USER_SYSTEM);
 
         NotificationChannel actualChannel = mHelper.getNotificationChannel(
                 PKG_N_MR1, UID_N_MR1, channel.getId(), false);
@@ -1111,7 +1197,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                 mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel2.getId(), false));
 
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_N_MR1, UID_N_MR1, true,
-                UserHandle.USER_SYSTEM, channel1.getId(), channel2.getId(), channel3.getId(),
+                USER_SYSTEM, channel1.getId(), channel2.getId(), channel3.getId(),
                 NotificationChannel.DEFAULT_CHANNEL_ID);
         mHelper.onPackagesChanged(true, UserHandle.myUserId(), new String[]{PKG_N_MR1}, new int[]{
                 UID_N_MR1});
@@ -1120,7 +1206,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         parser.setInput(new BufferedInputStream(new ByteArrayInputStream(baos.toByteArray())),
                 null);
         parser.nextTag();
-        mHelper.readXml(parser, true, UserHandle.USER_SYSTEM);
+        mHelper.readXml(parser, true, USER_SYSTEM);
 
         assertNull(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1.getId(), false));
         assertNull(mHelper.getNotificationChannel(PKG_N_MR1, UID_N_MR1, channel3.getId(), false));
@@ -2218,7 +2304,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                 new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1, true, false);
 
-        assertTrue(mHelper.onPackagesChanged(true, UserHandle.USER_SYSTEM, new String[]{PKG_N_MR1},
+        assertTrue(mHelper.onPackagesChanged(true, USER_SYSTEM, new String[]{PKG_N_MR1},
                 new int[]{UID_N_MR1}));
 
         assertEquals(0, mHelper.getNotificationChannels(
@@ -2227,7 +2313,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         // Not deleted
         mHelper.createNotificationChannel(PKG_N_MR1, UID_N_MR1, channel1, true, false);
 
-        assertFalse(mHelper.onPackagesChanged(false, UserHandle.USER_SYSTEM,
+        assertFalse(mHelper.onPackagesChanged(false, USER_SYSTEM,
                 new String[]{PKG_N_MR1}, new int[]{UID_N_MR1}));
         assertEquals(2, mHelper.getNotificationChannels(PKG_N_MR1, UID_N_MR1, false).getList().size());
     }
@@ -2236,7 +2322,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     public void testOnPackageChanged_packageRemoval_importance() throws Exception {
         mHelper.setImportance(PKG_N_MR1, UID_N_MR1, NotificationManager.IMPORTANCE_HIGH);
 
-        mHelper.onPackagesChanged(true, UserHandle.USER_SYSTEM, new String[]{PKG_N_MR1}, new int[]{
+        mHelper.onPackagesChanged(true, USER_SYSTEM, new String[]{PKG_N_MR1}, new int[]{
                 UID_N_MR1});
 
         assertEquals(NotificationManager.IMPORTANCE_UNSPECIFIED, mHelper.getImportance(PKG_N_MR1,
@@ -2250,7 +2336,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         NotificationChannelGroup ncg2 = new NotificationChannelGroup("group2", "name2");
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, ncg2, true);
 
-        mHelper.onPackagesChanged(true, UserHandle.USER_SYSTEM, new String[]{PKG_N_MR1}, new int[]{
+        mHelper.onPackagesChanged(true, USER_SYSTEM, new String[]{PKG_N_MR1}, new int[]{
                 UID_N_MR1});
 
         assertEquals(0, mHelper.getNotificationChannelGroups(
@@ -2267,7 +2353,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         legacy.targetSdkVersion = Build.VERSION_CODES.N_MR1;
         when(mPm.getApplicationInfoAsUser(eq(PKG_O), anyInt(), anyInt())).thenReturn(legacy);
         mHelper.onPackagesChanged(
-                false, UserHandle.USER_SYSTEM, new String[]{PKG_O}, new int[]{UID_O});
+                false, USER_SYSTEM, new String[]{PKG_O}, new int[]{UID_O});
 
         // make sure the default channel was readded
         //assertEquals(2, mHelper.getNotificationChannels(PKG_O, UID_O, false).getList().size());
@@ -2556,11 +2642,11 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         //     know about, those are ignored if migration is not enabled
 
         // package permissions map to be passed in
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_P, PKG_P), true);  // in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));   // not in local prefs
+        appPermissions.put(new Pair(UID_P, PKG_P), new Pair(true, false));  // in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         NotificationChannel channel1 =
                 new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
@@ -2618,11 +2704,11 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         //     know about, those should still be included
 
         // package permissions map to be passed in
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_P, PKG_P), true);  // in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));   // not in local prefs
+        appPermissions.put(new Pair(UID_P, PKG_P), new Pair(true, false));  // in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         NotificationChannel channel1 =
                 new NotificationChannel("id1", "name1", NotificationManager.IMPORTANCE_HIGH);
@@ -2701,10 +2787,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         // not from the passed-in permissions map
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(false);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));   // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         // package preferences: only PKG_P is banned
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_HIGH);
@@ -2726,10 +2812,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         // have their permission set to false, and not based on PackagePreferences importance
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(true);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));   // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         // package preferences: PKG_O not banned based on local importance, and PKG_P is
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_HIGH);
@@ -2770,10 +2856,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         // confirm that the string resulting from dumpImpl contains only info from package prefs
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(false);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, true));    // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         // local package preferences: PKG_O is not banned even though the permissions would
         // indicate so
@@ -2796,6 +2882,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         ArrayList<String> notExpected = new ArrayList<>();
         notExpected.add("first (1) importance=DEFAULT");
         notExpected.add("third (3) importance=NONE");
+        notExpected.add("userSet=");  // no user-set information pre migration
 
         for (String exp : expected) {
             assertTrue(actual.contains(exp));
@@ -2819,10 +2906,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         // confirm that the string resulting from dumpImpl contains only importances from permission
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(true);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, true));   // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         // local package preferences
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_HIGH);
@@ -2837,9 +2924,9 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         // expected (substring) output for each preference via permissions
         ArrayList<String> expected = new ArrayList<>();
-        expected.add("first (1) importance=DEFAULT");
-        expected.add("third (3) importance=NONE");
-        expected.add(PKG_O + " (" + UID_O + ") importance=NONE");
+        expected.add("first (1) importance=DEFAULT userSet=false");
+        expected.add("third (3) importance=NONE userSet=true");
+        expected.add(PKG_O + " (" + UID_O + ") importance=NONE userSet=false");
         expected.add(PKG_P + " (" + UID_P + ")");
 
         // make sure we don't have package preference info
@@ -2881,10 +2968,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         // test that dumping to proto gets the importances from the right place
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(false);
 
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));   // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         // local package preferences
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_HIGH);
@@ -2921,10 +3008,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(true);
 
         // permissions -- these should take precedence
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));   // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         // local package preferences
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_HIGH);
@@ -3089,6 +3176,19 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testIsGroupBlocked_appCannotCreateAsBlocked() throws Exception {
+        NotificationChannelGroup group = new NotificationChannelGroup("id", "name");
+        group.setBlocked(true);
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, group, true);
+        assertFalse(mHelper.isGroupBlocked(PKG_N_MR1, UID_N_MR1, group.getId()));
+
+        NotificationChannelGroup group3 = group.clone();
+        group3.setBlocked(false);
+        mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, group3, true);
+        assertFalse(mHelper.isGroupBlocked(PKG_N_MR1, UID_N_MR1, group.getId()));
+    }
+
+    @Test
     public void testIsGroup_appCannotResetBlock() throws Exception {
         NotificationChannelGroup group = new NotificationChannelGroup("id", "name");
         mHelper.createNotificationChannelGroup(PKG_N_MR1, UID_N_MR1, group, true);
@@ -3223,7 +3323,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
                 mPermissionHelper, mLogger,
                 mAppOpsManager, mStatsEventBuilderFactory);
-        loadByteArrayXml(preQXml.getBytes(), true, UserHandle.USER_SYSTEM);
+        loadByteArrayXml(preQXml.getBytes(), true, USER_SYSTEM);
 
         assertEquals(PreferencesHelper.DEFAULT_HIDE_SILENT_STATUS_BAR_ICONS,
                 mHelper.shouldHideSilentStatusIcons());
@@ -4057,7 +4157,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         // clear data
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_O, UID_O, true,
-                UserHandle.USER_SYSTEM, channel1.getId(), NotificationChannel.DEFAULT_CHANNEL_ID);
+                USER_SYSTEM, channel1.getId(), NotificationChannel.DEFAULT_CHANNEL_ID);
         mHelper.onPackagesChanged(true, UserHandle.myUserId(), new String[]{PKG_O}, new int[]{
                 UID_O});
 
@@ -4069,7 +4169,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         parser.setInput(new BufferedInputStream(new ByteArrayInputStream(baos.toByteArray())),
                 null);
         parser.nextTag();
-        mHelper.readXml(parser, true, UserHandle.USER_SYSTEM);
+        mHelper.readXml(parser, true, USER_SYSTEM);
 
         assertTrue(mHelper.getNotificationChannel(PKG_O, UID_O, channel1.getId(), false)
                 .isImportanceLockedByCriticalDeviceFunction());
@@ -4356,7 +4456,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         assertTrue(nc1.isDeleted());
 
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG_P, UID_P, false,
-                UserHandle.USER_SYSTEM, "id", NotificationChannel.DEFAULT_CHANNEL_ID);
+                USER_SYSTEM, "id", NotificationChannel.DEFAULT_CHANNEL_ID);
 
         TypedXmlPullParser parser = Xml.newFastPullParser();
         parser.setInput(new BufferedInputStream(new ByteArrayInputStream(baos.toByteArray())),
@@ -4365,7 +4465,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         mHelper = new PreferencesHelper(getContext(), mPm, mHandler, mMockZenModeHelper,
                 mPermissionHelper, mLogger,
                 mAppOpsManager, mStatsEventBuilderFactory);
-        mHelper.readXml(parser, true, UserHandle.USER_SYSTEM);
+        mHelper.readXml(parser, true, USER_SYSTEM);
 
         NotificationChannel nc = mHelper.getNotificationChannel(PKG_P, UID_P, "id", true);
         assertTrue(DateUtils.isToday(nc.getDeletedTimeMs()));
@@ -4621,7 +4721,7 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     public void testGetConversations_noDisabledGroups() {
         NotificationChannelGroup group = new NotificationChannelGroup("a", "a");
         group.setBlocked(true);
-        mHelper.createNotificationChannelGroup(PKG_O, UID_O, group, true);
+        mHelper.createNotificationChannelGroup(PKG_O, UID_O, group, false);
         NotificationChannel parent = new NotificationChannel("parent", "p", 1);
         mHelper.createNotificationChannel(PKG_O, UID_O, parent, true, false);
 
@@ -4842,6 +4942,18 @@ public class PreferencesHelperTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testValidBubbleSent() {
+        // create package preferences
+        mHelper.canShowBadge(PKG_P, UID_P);
+        // false by default
+        assertFalse(mHelper.hasSentValidBubble(PKG_P, UID_P));
+
+        // set something valid was sent
+        mHelper.setValidBubbleSent(PKG_P, UID_P);
+        assertTrue(mHelper.hasSentValidBubble(PKG_P, UID_P));
+    }
+
+    @Test
     public void testPullPackageChannelPreferencesStats() {
         String channelId = "parent";
         String name = "messages";
@@ -4993,10 +5105,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(false);
 
         // build a collection of app permissions that should be passed in but ignored
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, false));   // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, false)); // in local prefs
 
         // package preferences: PKG_O not banned based on local importance, and PKG_P is
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_HIGH);
@@ -5027,6 +5139,11 @@ public class PreferencesHelperTest extends UiServiceTestCase {
                 assertTrue(expected.containsKey(uid));
                 assertThat(expected.get(uid)).isEqualTo(
                             builder.getInt(PackageNotificationPreferences.IMPORTANCE_FIELD_NUMBER));
+
+                // pre-migration, the userSet field will always default to false
+                boolean userSet = builder.getBoolean(
+                        PackageNotificationPreferences.USER_SET_IMPORTANCE_FIELD_NUMBER);
+                assertFalse(userSet);
             }
         }
     }
@@ -5036,10 +5153,10 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         when(mPermissionHelper.isMigrationEnabled()).thenReturn(true);
 
         // build a collection of app permissions that should be passed in but ignored
-        ArrayMap<Pair<Integer, String>, Boolean> appPermissions = new ArrayMap<>();
-        appPermissions.put(new Pair(1, "first"), true);    // not in local prefs
-        appPermissions.put(new Pair(3, "third"), false);   // not in local prefs
-        appPermissions.put(new Pair(UID_O, PKG_O), false); // in local prefs
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> appPermissions = new ArrayMap<>();
+        appPermissions.put(new Pair(1, "first"), new Pair(true, false));    // not in local prefs
+        appPermissions.put(new Pair(3, "third"), new Pair(false, true));   // not in local prefs
+        appPermissions.put(new Pair(UID_O, PKG_O), new Pair(false, true)); // in local prefs
 
         // package preferences: PKG_O not banned based on local importance, and PKG_P is
         mHelper.setImportance(PKG_O, UID_O, IMPORTANCE_HIGH);
@@ -5047,11 +5164,11 @@ public class PreferencesHelperTest extends UiServiceTestCase {
 
         // expected output. format: uid -> importance, as only uid (and not package name)
         // is in PackageNotificationPreferences
-        ArrayMap<Integer, Integer> expected = new ArrayMap<>();
-        expected.put(1, IMPORTANCE_DEFAULT);
-        expected.put(3, IMPORTANCE_NONE);
-        expected.put(UID_O, IMPORTANCE_NONE);    // banned by permissions
-        expected.put(UID_P, IMPORTANCE_NONE);    // defaults to none
+        ArrayMap<Integer, Pair<Integer, Boolean>> expected = new ArrayMap<>();
+        expected.put(1, new Pair(IMPORTANCE_DEFAULT, false));
+        expected.put(3, new Pair(IMPORTANCE_NONE, true));
+        expected.put(UID_O, new Pair(IMPORTANCE_NONE, true));     // banned by permissions
+        expected.put(UID_P, new Pair(IMPORTANCE_NONE, false));    // defaults to none, false
 
         ArrayList<StatsEvent> events = new ArrayList<>();
         mHelper.pullPackagePreferencesStats(events, appPermissions);
@@ -5059,11 +5176,14 @@ public class PreferencesHelperTest extends UiServiceTestCase {
         for (WrappedSysUiStatsEvent.WrappedBuilder builder : mStatsEventBuilderFactory.builders) {
             if (builder.getAtomId() == PACKAGE_NOTIFICATION_PREFERENCES) {
                 int uid = builder.getInt(PackageNotificationPreferences.UID_FIELD_NUMBER);
+                boolean userSet = builder.getBoolean(
+                        PackageNotificationPreferences.USER_SET_IMPORTANCE_FIELD_NUMBER);
 
                 // if it's one of the expected ids, then make sure the importance matches
                 assertTrue(expected.containsKey(uid));
-                assertThat(expected.get(uid)).isEqualTo(
+                assertThat(expected.get(uid).first).isEqualTo(
                         builder.getInt(PackageNotificationPreferences.IMPORTANCE_FIELD_NUMBER));
+                assertThat(expected.get(uid).second).isEqualTo(userSet);
             }
         }
     }

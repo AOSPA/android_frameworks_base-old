@@ -16,7 +16,7 @@
 
 package com.android.server.wm;
 
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
@@ -535,6 +535,7 @@ public class SizeCompatTests extends WindowTestsBase {
         mActivity.mVisibleRequested = false;
         mActivity.visibleIgnoringKeyguard = false;
         mActivity.app.setReportedProcState(ActivityManager.PROCESS_STATE_CACHED_ACTIVITY);
+        mActivity.app.computeProcessActivityState();
 
         // Simulate the display changes orientation.
         final Configuration rotatedConfig = rotateDisplay(display, ROTATION_90);
@@ -936,8 +937,8 @@ public class SizeCompatTests extends WindowTestsBase {
         mTask.reparent(organizer.mPrimary, POSITION_TOP,
                 false /*moveParents*/, "test");
         organizer.mPrimary.setBounds(0, 0, 1000, 1400);
-        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, mTask.getWindowingMode());
-        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, activity.getWindowingMode());
+        assertEquals(WINDOWING_MODE_MULTI_WINDOW, mTask.getWindowingMode());
+        assertEquals(WINDOWING_MODE_MULTI_WINDOW, activity.getWindowingMode());
 
         // Resizable activity is sandboxed due to config being enabled.
         assertActivityMaxBoundsSandboxed(activity);
@@ -1827,8 +1828,8 @@ public class SizeCompatTests extends WindowTestsBase {
         mTask.reparent(organizer.mPrimary, POSITION_TOP,
                 false /*moveParents*/, "test");
         organizer.mPrimary.setBounds(0, 0, 1000, 1400);
-        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, mTask.getWindowingMode());
-        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, mActivity.getWindowingMode());
+        assertEquals(WINDOWING_MODE_MULTI_WINDOW, mTask.getWindowingMode());
+        assertEquals(WINDOWING_MODE_MULTI_WINDOW, mActivity.getWindowingMode());
 
         // Non-resizable activity in size compat mode
         assertScaled();
@@ -1867,8 +1868,8 @@ public class SizeCompatTests extends WindowTestsBase {
         mTask.reparent(organizer.mPrimary, POSITION_TOP,
                 false /*moveParents*/, "test");
         organizer.mPrimary.setBounds(0, 0, 1000, 1400);
-        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, mTask.getWindowingMode());
-        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, mActivity.getWindowingMode());
+        assertEquals(WINDOWING_MODE_MULTI_WINDOW, mTask.getWindowingMode());
+        assertEquals(WINDOWING_MODE_MULTI_WINDOW, mActivity.getWindowingMode());
 
         // Non-resizable activity in size compat mode
         assertScaled();

@@ -19,6 +19,7 @@ package com.android.systemui.media.dialog;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -54,6 +55,7 @@ import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -93,6 +95,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
             mock(NotificationEntryManager.class);
     private final UiEventLogger mUiEventLogger = mock(UiEventLogger.class);
     private final DialogLaunchAnimator mDialogLaunchAnimator = mock(DialogLaunchAnimator.class);
+    private final SystemUIDialogManager mDialogManager = mock(SystemUIDialogManager.class);
 
     private Context mSpyContext;
     private MediaOutputController mMediaOutputController;
@@ -115,7 +118,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
 
         mMediaOutputController = new MediaOutputController(mSpyContext, TEST_PACKAGE_NAME, false,
                 mMediaSessionManager, mLocalBluetoothManager, mShadeController, mStarter,
-                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator);
+                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator, mDialogManager);
         mLocalMediaManager = spy(mMediaOutputController.mLocalMediaManager);
         mMediaOutputController.mLocalMediaManager = mLocalMediaManager;
         MediaDescription.Builder builder = new MediaDescription.Builder();
@@ -159,7 +162,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
     public void start_withoutPackageName_verifyMediaControllerInit() {
         mMediaOutputController = new MediaOutputController(mSpyContext, null, false,
                 mMediaSessionManager, mLocalBluetoothManager, mShadeController, mStarter,
-                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator);
+                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator, mDialogManager);
 
         mMediaOutputController.start(mCb);
 
@@ -180,7 +183,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
     public void stop_withoutPackageName_verifyMediaControllerDeinit() {
         mMediaOutputController = new MediaOutputController(mSpyContext, null, false,
                 mMediaSessionManager, mLocalBluetoothManager, mShadeController, mStarter,
-                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator);
+                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator, mDialogManager);
 
         mMediaOutputController.start(mCb);
 
@@ -234,7 +237,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
 
         mMediaOutputController.onRequestFailed(0 /* reason */);
 
-        verify(mCb).onRouteChanged();
+        verify(mCb, atLeastOnce()).onRouteChanged();
     }
 
     @Test
@@ -451,7 +454,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
     public void getNotificationLargeIcon_withoutPackageName_returnsNull() {
         mMediaOutputController = new MediaOutputController(mSpyContext, null, false,
                 mMediaSessionManager, mLocalBluetoothManager, mShadeController, mStarter,
-                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator);
+                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator, mDialogManager);
 
         assertThat(mMediaOutputController.getNotificationIcon()).isNull();
     }
@@ -469,7 +472,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
         when(entry.getSbn()).thenReturn(sbn);
         when(sbn.getNotification()).thenReturn(notification);
         when(sbn.getPackageName()).thenReturn(TEST_PACKAGE_NAME);
-        when(notification.hasMediaSession()).thenReturn(true);
+        when(notification.isMediaNotification()).thenReturn(true);
         when(notification.getLargeIcon()).thenReturn(null);
 
         assertThat(mMediaOutputController.getNotificationIcon()).isNull();
@@ -489,7 +492,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
         when(entry.getSbn()).thenReturn(sbn);
         when(sbn.getNotification()).thenReturn(notification);
         when(sbn.getPackageName()).thenReturn(TEST_PACKAGE_NAME);
-        when(notification.hasMediaSession()).thenReturn(true);
+        when(notification.isMediaNotification()).thenReturn(true);
         when(notification.getLargeIcon()).thenReturn(icon);
 
         assertThat(mMediaOutputController.getNotificationIcon() instanceof IconCompat).isTrue();
@@ -509,7 +512,7 @@ public class MediaOutputControllerTest extends SysuiTestCase {
         when(entry.getSbn()).thenReturn(sbn);
         when(sbn.getNotification()).thenReturn(notification);
         when(sbn.getPackageName()).thenReturn(TEST_PACKAGE_NAME);
-        when(notification.hasMediaSession()).thenReturn(false);
+        when(notification.isMediaNotification()).thenReturn(false);
         when(notification.getLargeIcon()).thenReturn(icon);
 
         assertThat(mMediaOutputController.getNotificationIcon()).isNull();

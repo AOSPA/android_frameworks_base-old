@@ -27,8 +27,6 @@ import android.content.pm.ServiceInfo
 import android.content.pm.Signature
 import android.content.pm.SigningDetails
 import android.content.pm.UserInfo
-import android.content.pm.parsing.ParsingPackage
-import android.content.pm.parsing.ParsingPackageUtils
 import android.content.pm.parsing.result.ParseTypeImpl
 import android.content.res.Resources
 import android.hardware.display.DisplayManager
@@ -47,6 +45,7 @@ import com.android.dx.mockito.inline.extended.ExtendedMockito
 import com.android.dx.mockito.inline.extended.ExtendedMockito.any
 import com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean
 import com.android.dx.mockito.inline.extended.ExtendedMockito.anyInt
+import com.android.dx.mockito.inline.extended.ExtendedMockito.anyLong
 import com.android.dx.mockito.inline.extended.ExtendedMockito.anyString
 import com.android.dx.mockito.inline.extended.ExtendedMockito.argThat
 import com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn
@@ -67,12 +66,15 @@ import com.android.server.pm.parsing.pkg.AndroidPackage
 import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.parsing.pkg.ParsedPackage
 import com.android.server.pm.permission.PermissionManagerServiceInternal
+import com.android.server.pm.pkg.parsing.ParsingPackage
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal
 import com.android.server.testutils.TestHandler
 import com.android.server.testutils.mock
 import com.android.server.testutils.nullable
 import com.android.server.testutils.whenever
 import com.android.server.utils.WatchedArrayMap
+import libcore.util.HexEncoding
 import org.junit.Assert
 import org.junit.rules.TestRule
 import org.junit.runner.Description
@@ -120,6 +122,9 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     /** The active map simulating the in memory storage of Settings  */
     private val mSettingsMap = WatchedArrayMap<String, PackageSetting>()
 
+    /** The shared libraries on the device */
+    private lateinit var mSharedLibraries: SharedLibrariesImpl
+
     init {
         PropertyInvalidatedCache.disableForTestMode()
         val apply = ExtendedMockito.mockitoSession()
@@ -136,6 +141,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
                 .mockStatic(EventLog::class.java)
                 .mockStatic(LocalServices::class.java)
                 .mockStatic(DeviceConfig::class.java)
+                .mockStatic(HexEncoding::class.java)
                 .apply(withSession)
         session = apply.startMocking()
         whenever(mocks.settings.insertPackageSettingLPw(
@@ -149,7 +155,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
         }
         whenever(mocks.settings.addPackageLPw(nullable(), nullable(), nullable(), nullable(),
                 nullable(), nullable(), nullable(), nullable(), nullable(), nullable(), nullable(),
-                nullable(), nullable(), nullable(), nullable())) {
+                nullable(), nullable(), nullable(), nullable(), nullable(), nullable())) {
             val name: String = getArgument(0)
             val pendingAdd = mPendingPackageAdds.firstOrNull { it.first == name }
                     ?: return@whenever null
@@ -323,6 +329,11 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
                 any(AndroidPackage::class.java), anyBoolean(), any(File::class.java))) {
             PackageAbiHelper.NativeLibraryPaths("", false, "", "")
         }
+        whenever(mocks.injector.bootstrap(any(PackageManagerService::class.java))) {
+            mSharedLibraries = SharedLibrariesImpl(
+                getArgument<Any>(0) as PackageManagerService, mocks.injector)
+        }
+        whenever(mocks.injector.sharedLibrariesImpl) { mSharedLibraries }
         // everything visible by default
         whenever(mocks.appsFilter.shouldFilterApplication(
                 anyInt(), nullable(), nullable(), anyInt())) { false }
@@ -617,7 +628,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     private fun mockQueryActivities(action: String, vararg activities: ActivityInfo) {
         whenever(mocks.componentResolver.queryActivities(
                 argThat { intent: Intent? -> intent != null && (action == intent.action) },
-                nullable(), anyInt(), anyInt())) {
+                nullable(), anyLong(), anyInt())) {
             ArrayList(activities.asList().map { info: ActivityInfo? ->
                 ResolveInfo().apply { activityInfo = info }
             })
@@ -627,7 +638,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     private fun mockQueryServices(action: String, vararg services: ServiceInfo) {
         whenever(mocks.componentResolver.queryServices(
                 argThat { intent: Intent? -> intent != null && (action == intent.action) },
-                nullable(), anyInt(), anyInt())) {
+                nullable(), anyLong(), anyInt())) {
             ArrayList(services.asList().map { info ->
                 ResolveInfo().apply { serviceInfo = info }
             })

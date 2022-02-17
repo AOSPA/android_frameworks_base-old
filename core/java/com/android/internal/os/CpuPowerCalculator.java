@@ -56,6 +56,7 @@ public class CpuPowerCalculator extends PowerCalculator {
         public long durationFgMs;
         public String packageWithHighestDrain;
         public double[] perProcStatePowerMah;
+        public long[] cpuFreqTimes;
     }
 
     public CpuPowerCalculator(PowerProfile profile) {
@@ -98,6 +99,9 @@ public class CpuPowerCalculator extends PowerCalculator {
 
         BatteryConsumer.Key[] keys = UNINITIALIZED_KEYS;
         Result result = new Result();
+        if (query.isProcessStateDataNeeded()) {
+            result.cpuFreqTimes = new long[batteryStats.getCpuFreqCount()];
+        }
         final SparseArray<UidBatteryConsumer.Builder> uidBatteryConsumerBuilders =
                 builder.getUidBatteryConsumerBuilders();
         for (int i = uidBatteryConsumerBuilders.size() - 1; i >= 0; i--) {
@@ -152,11 +156,11 @@ public class CpuPowerCalculator extends PowerCalculator {
     private void calculateMeasuredPowerPerProcessState(UidBatteryConsumer.Builder app,
             BatteryStats.Uid u, BatteryConsumer.Key[] keys) {
         for (BatteryConsumer.Key key : keys) {
-            // The key for "PROCESS_STATE_ANY" has already been populated with the
-            // full energy across all states.  We don't want to override it with
+            // The key for PROCESS_STATE_UNSPECIFIED aka PROCESS_STATE_ANY has already been
+            // populated with the full energy across all states.  We don't want to override it with
             // the energy for "other" states, which excludes the tracked states like
             // foreground, background etc.
-            if (key.processState == BatteryConsumer.PROCESS_STATE_ANY) {
+            if (key.processState == BatteryConsumer.PROCESS_STATE_UNSPECIFIED) {
                 continue;
             }
 
@@ -180,23 +184,22 @@ public class CpuPowerCalculator extends PowerCalculator {
                 uidProcState++) {
             @BatteryConsumer.ProcessState int procState =
                     BatteryStats.mapUidProcessStateToBatteryConsumerProcessState(uidProcState);
-            if (procState == BatteryConsumer.PROCESS_STATE_ANY) {
+            if (procState == BatteryConsumer.PROCESS_STATE_UNSPECIFIED) {
                 continue;
             }
 
             // TODO(b/191921016): use per-state CPU cluster times
             final long[] cpuClusterTimes = null;
 
-            final long[] cpuFreqTimes = u.getCpuFreqTimes(BatteryStats.STATS_SINCE_CHARGED,
-                    uidProcState);
-            if (cpuClusterTimes != null || cpuFreqTimes != null) {
+            boolean hasCpuFreqTimes = u.getCpuFreqTimes(result.cpuFreqTimes, uidProcState);
+            if (cpuClusterTimes != null || hasCpuFreqTimes) {
                 result.perProcStatePowerMah[procState] += calculateUidModeledPowerMah(u,
-                        0, cpuClusterTimes, cpuFreqTimes);
+                        0, cpuClusterTimes, result.cpuFreqTimes);
             }
         }
 
         for (BatteryConsumer.Key key : keys) {
-            if (key.processState == BatteryConsumer.PROCESS_STATE_ANY) {
+            if (key.processState == BatteryConsumer.PROCESS_STATE_UNSPECIFIED) {
                 continue;
             }
 

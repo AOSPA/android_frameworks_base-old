@@ -57,8 +57,9 @@ public class AmbientState {
     private int mTopPadding;
     private boolean mShadeExpanded;
     private float mMaxHeadsUpTranslation;
-    private boolean mDismissAllInProgress;
+    private boolean mClearAllInProgress;
     private int mLayoutMinHeight;
+    private int mLayoutMaxHeight;
     private NotificationShelf mShelf;
     private int mZDistanceBetweenElements;
     private int mBaseZHeight;
@@ -326,6 +327,14 @@ public class AmbientState {
         mLayoutHeight = layoutHeight;
     }
 
+    public void setLayoutMaxHeight(int maxLayoutHeight) {
+        mLayoutMaxHeight = maxLayoutHeight;
+    }
+
+    public int getLayoutMaxHeight() {
+        return mLayoutMaxHeight;
+    }
+
     public float getTopPadding() {
         return mTopPadding;
     }
@@ -375,12 +384,12 @@ public class AmbientState {
         return mMaxHeadsUpTranslation;
     }
 
-    public void setDismissAllInProgress(boolean dismissAllInProgress) {
-        mDismissAllInProgress = dismissAllInProgress;
+    public void setClearAllInProgress(boolean clearAllInProgress) {
+        mClearAllInProgress = clearAllInProgress;
     }
 
-    public boolean isDismissAllInProgress() {
-        return mDismissAllInProgress;
+    public boolean isClearAllInProgress() {
+        return mClearAllInProgress;
     }
 
     public void setLayoutMinHeight(int layoutMinHeight) {

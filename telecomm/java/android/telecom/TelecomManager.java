@@ -20,6 +20,7 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressAutoDoc;
 import android.annotation.SuppressLint;
@@ -31,6 +32,7 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -70,6 +72,7 @@ import java.util.concurrent.Executor;
  */
 @SuppressAutoDoc
 @SystemService(Context.TELECOM_SERVICE)
+@RequiresFeature(PackageManager.FEATURE_TELECOM)
 public class TelecomManager {
 
     /**
@@ -1005,6 +1008,11 @@ public class TelecomManager {
      */
     public static final int PRESENTATION_PAYPHONE = 4;
 
+    /**
+     * Indicates that the address or number of a call is unavailable.
+     */
+    public static final int PRESENTATION_UNAVAILABLE = 5;
+
 
     /*
      * Values for the adb property "persist.radio.videocall.audio.output"
@@ -1021,7 +1029,7 @@ public class TelecomManager {
     @IntDef(
             prefix = { "PRESENTATION_" },
             value = {PRESENTATION_ALLOWED, PRESENTATION_RESTRICTED, PRESENTATION_UNKNOWN,
-            PRESENTATION_PAYPHONE})
+            PRESENTATION_PAYPHONE, PRESENTATION_UNAVAILABLE})
     public @interface Presentation {}
 
 
@@ -1705,7 +1713,11 @@ public class TelecomManager {
      *
      * @param accountHandle The handle for the account retrieve a number for.
      * @return A string representation of the line 1 phone number.
+     * @deprecated use {@link SubscriptionManager#getPhoneNumber(int)} instead, which takes a
+     *             Telephony Subscription ID that can be retrieved with the {@code accountHandle}
+     *             from {@link TelephonyManager#getSubscriptionId(PhoneAccountHandle)}.
      */
+    @Deprecated
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges or default SMS app
     @RequiresPermission(anyOf = {
             android.Manifest.permission.READ_PHONE_STATE,

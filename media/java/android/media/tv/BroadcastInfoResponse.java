@@ -16,18 +16,49 @@
 
 package android.media.tv;
 
+import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.os.Parcel;
 import android.os.Parcelable;
 
-import android.annotation.NonNull;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /** @hide */
-public final class BroadcastInfoResponse implements Parcelable {
+public abstract class BroadcastInfoResponse implements Parcelable {
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({RESPONSE_RESULT_ERROR, RESPONSE_RESULT_OK, RESPONSE_RESULT_CANCEL})
+    public @interface ResponseResult {}
+
+    public static final int RESPONSE_RESULT_ERROR = 1;
+    public static final int RESPONSE_RESULT_OK = 2;
+    public static final int RESPONSE_RESULT_CANCEL = 3;
+
     public static final @NonNull Parcelable.Creator<BroadcastInfoResponse> CREATOR =
             new Parcelable.Creator<BroadcastInfoResponse>() {
                 @Override
                 public BroadcastInfoResponse createFromParcel(Parcel source) {
-                    return new BroadcastInfoResponse(source);
+                    @TvInputManager.BroadcastInfoType int type = source.readInt();
+                    switch (type) {
+                        case TvInputManager.BROADCAST_INFO_TYPE_TS:
+                            return TsResponse.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_SECTION:
+                            return SectionResponse.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_PES:
+                            return PesResponse.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_STREAM_EVENT:
+                            return StreamEventResponse.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_DSMCC:
+                            return DsmccResponse.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_COMMAND:
+                            return CommandResponse.createFromParcelBody(source);
+                        case TvInputManager.BROADCAST_INFO_TYPE_TIMELINE:
+                            return TimelineResponse.createFromParcelBody(source);
+                        default:
+                            throw new IllegalStateException(
+                                    "Unexpected broadcast info response type (value "
+                                            + type + ") in parcel.");
+                    }
                 }
 
                 @Override
@@ -36,14 +67,40 @@ public final class BroadcastInfoResponse implements Parcelable {
                 }
             };
 
-    int requestId;
+    protected final @TvInputManager.BroadcastInfoType int mType;
+    protected final int mRequestId;
+    protected final int mSequence;
+    protected final @ResponseResult int mResponseResult;
 
-    public BroadcastInfoResponse(int requestId) {
-        this.requestId = requestId;
+    protected BroadcastInfoResponse(@TvInputManager.BroadcastInfoType int type, int requestId,
+            int sequence, @ResponseResult int responseResult) {
+        mType = type;
+        mRequestId = requestId;
+        mSequence = sequence;
+        mResponseResult = responseResult;
     }
 
-    private BroadcastInfoResponse(Parcel source) {
-        requestId = source.readInt();
+    protected BroadcastInfoResponse(@TvInputManager.BroadcastInfoType int type, Parcel source) {
+        mType = type;
+        mRequestId = source.readInt();
+        mSequence = source.readInt();
+        mResponseResult = source.readInt();
+    }
+
+    public @TvInputManager.BroadcastInfoType int getType() {
+        return mType;
+    }
+
+    public int getRequestId() {
+        return mRequestId;
+    }
+
+    public int getSequence() {
+        return mSequence;
+    }
+
+    public @ResponseResult int getResponseResult() {
+        return mResponseResult;
     }
 
     @Override
@@ -53,6 +110,9 @@ public final class BroadcastInfoResponse implements Parcelable {
 
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
-        dest.writeInt(requestId);
+        dest.writeInt(mType);
+        dest.writeInt(mRequestId);
+        dest.writeInt(mSequence);
+        dest.writeInt(mResponseResult);
     }
 }

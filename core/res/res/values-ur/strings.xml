@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"‏آنے والی اور باہر جانے والی کالز کے بارے میں ڈیٹا سمیت، ایپ کو آپ کے Android TV آلہ کے کال لاگ میں ترمیم کرنے کی اجازت دیتا ہے۔ نقصان دہ ایپس آپ کی کال لاگ مٹانے یا اس میں ترمیم کرنے کیلئے اسے استعمال کر سکتی ہیں۔"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"ایپ کو آپ کے فون کی کال لاگ، بشمول آنے والی اور باہر جانے والی کالوں کے بارے میں ڈیٹا میں ترمیم کرنے کی اجازت دیتا ہے۔ نقصان دہ ایپس آپ کی کال لاگ مٹانے یا اس میں ترمیم کرنے کیلئے اسے استعمال کرسکتی ہیں۔"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"باڈی سینسرز تک رسائی حاصل کریں (جیسے حرکت قلب شرح مانیٹرز)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"ان سینسرز سے ڈیٹا تک رسائی حاصل کرنے کی اجازت دیتی ہے جو آپ کی حرکت قلب کی شرح جیسی آپ کی فزیکل صورتحال کو مانیٹر کرتے ہیں۔"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"باڈی سینسرز سے ڈیٹا تک رسائی حاصل کریں جیسے حرکت قلب کی شرح، درجہ حرارت، خون میں آکسیجن فیصد وغیرہ۔"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"پس منظر میں رہتے ہوئے باڈی سینسرز تک رسائی حاصل کریں (جیسے حرکت قلب کی شرح کے مانیٹرز)"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"پس منظر میں رہتے ہوئے باڈی سینسرز سے ڈیٹا تک رسائی حاصل کریں جیسے حرکت قلب کی شرح، درجہ حرارت، خون میں آکسیجن کا فیصد وغیرہ۔"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"کیلنڈر ایونٹس اور تفاصیل پڑھیں"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"یہ ایپ آپ کے ٹیبلیٹ پر اسٹور کردہ سبھی کیلنڈر ایونٹس کو پڑھ سکتی ہے اور آپ کے  کیلنڈر ڈیٹا کا اشتراک یا اسے محفوظ کر سکتی ہے۔"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"‏یہ ایپ آپ کے Android TV آلہ پر اسٹور کردہ سبھی کیلنڈر ایونٹس کو پڑھ سکتی ہے اور آپ کے کیلنڈر ڈیٹا کا اشتراک یا اسے محفوظ کر سکتی ہے۔"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"‏آپ کی مداخلت کے بغیر کالیں کرنے کیلئے ایپ کو IMS سروس استعمال کرنے کی اجازت دیتی ہے۔"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"فون کے اسٹیٹس اور شناخت کو پڑھیں"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"‏ایپ کو آلے کی فون والی خصوصیات تک رسائی حاصل کرنے کی اجازت دیتا ہے۔ یہ اجازت ایپ کو فون نمبر اور آلے کے IDs کا تعین کرنے، آیا کوئی کال فعال ہے، اور کال کے ذریعہ مربوط ریموٹ نمبر کا تعین کرنے دیتی ہے۔"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"بنیادی ٹیلیفونی صورتحال اور شناخت کو پڑھیں"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"اس سے ایپ کو آلے کی بنیادی ٹیلیفونی خصوصیات تک رسائی کی اجازت ملتی ہے۔"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"سسٹم کے ذریعہ کالز روٹ کریں"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"کالںگ کا تجربہ بہتر بنانے کے لیے سسٹم کے ذریعہ ایپ کو کالز روٹ کرنے کی اجازت دیتا ہے۔"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"سسٹم کے ذریعے کالز دیکھیں اور کنٹرول کریں۔"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"اپنے چہرے کا ماڈل حذف کرنے کے لیے تھپتھپائیں پھر اپنا چہرہ دوبارہ شامل کریں"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"فیس اَنلاک سیٹ اپ کریں"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"اپنے فون کی طرف دیکھ کر اسے غیر مقفل کریں"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"فیس اَنلاک کا استعمال کرنے کے لیے، ترتیبات اور رازداری میں "<b>"کیمرے تک رسائی"</b>" کو آن کریں"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"غیر مقفل کرنے کے مزید طریقے سیٹ اپ کریں"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"فنگر پرنٹ شامل کرنے کیلئے تھپتھپائیں"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"فنگر پرنٹ اَن لاک"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"ایپ کو ڈسٹرب نہ کریں کنفیگریشن لکھنے اور پڑھنے کے قابل کرتا ہے۔"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"اجازت کی استعمال کا ملاحظہ شروع کریں"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"حامل کو ایپ کی اجازت کے استعمال کو شروع کرنے کی اجازت دیتا ہے۔ عام ایپس کے لیے کبھی بھی درکار نہیں ہونا چاہیے۔"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"اجازت کے فیصلوں کو دیکھنا شروع کریں"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"ہولڈر کو اجازت کے فیصلوں کے جائزے کے لیے اسکرین شروع کرنے کی اجازت دیتا ہے۔ عام ایپس کے لیے کبھی بھی اس کی ضرورت نہيں ہونی چاہیے۔"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"ایپ کی خصوصیات کا ملاحظہ شروع کریں"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"ہولڈر کو ایپ کے لیے خصوصیات کی معلومات دیکھنے کی اجازت دیتا ہے۔"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"نمونہ کاری کی اعلی شرح پر سینسر کے ڈیٹا تک رسائی حاصل کریں"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"اسکرین غیر مقفل کرنے کی کوششیں مانیٹر کریں"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"اسکرین کو غیر مقفل کرتے وقت ٹائپ کیے گئے غلط پاس ورڈز کی تعداد مانیٹر کریں اور ٹیبلیٹ کو مقفل کریں یا اگر کافی زیادہ غلط پاس ورڈز ٹائپ کیے گئے ہیں تو ٹیبلیٹ کا سبھی ڈیٹا صاف کریں۔"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"‏اسکرین کو غیر مقفل کرتے وقت ٹائپ کردہ غلط پاس ورڈز کی تعداد پر نگاہ رکھیں اور اگر بہت زیادہ غلط پاسورڈز ٹائپ کیے جاتے ہیں تو اپنے Android TV آلہ کو مقفل کردیں یا اپنے Android TV آلہ کے ڈیٹا کو مٹادیں۔"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"اسکرین کو غیر مقفل کرتے وقت ٹائپ کیے گئے غلط پاس ورڈز کی تعداد مانیٹر کریں۔ اور معلوماتی انٹرٹینمنٹ سسٹم کو مقفل کریں یا اگر کافی زیادہ غلط پاس ورڈز ٹائپ کیے گئے ہیں تو معلوماتی انٹرٹینمنٹ سسٹم کا سبھی ڈیٹا صاف کریں۔"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"اسکرین کو غیر مقفل کرتے وقت ٹائپ کیے گئے غلط پاس ورڈز کی تعداد مانیٹر کریں اور فون کو مقفل کریں یا اگر کافی زیادہ غلط پاس ورڈز ٹائپ کیے گئے ہیں تو فون کا سبھی ڈیٹا صاف کریں۔"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"اسکرین کو غیر مقفل کرتے وقت ٹائپ کردہ غلط پاس ورڈز کی تعداد پر نگاہ رکھیں اور اگر بہت زیادہ غلط پاس ورڈز ٹائپ کیے جاتے ہیں تو ٹیبلٹ کو مقفل کریں یا اس صارف کا سبھی ڈیٹا ہٹائیں۔"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"‏اسکرین کو غیر مقفل کرتے وقت ٹائپ کردہ غلط پاس ورڈز کی تعداد پر نگاہ رکھیں اور اگر بہت زیادہ غلط پاس ورڈز ٹائپ کیے جاتے ہیں تو اپنے Android TV آلہ کو مقفل کریں یا اس صارف کا سبھی ڈیٹا ہٹائیں۔"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"اسکرین کو غیر مقفل کرتے وقت ٹائپ کردہ غلط پاس ورڈز کی تعداد مانیٹر کریں اور معلوماتی انٹرٹینمنٹ سسٹم کو مقفل کریں اگر بہت زیادہ غلط پاس ورڈز ٹائپ کیے جاتے ہیں تو اس پروفائل کا سبھی ڈیٹا ہٹائیں۔"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"اسکرین کو غیر مقفل کرتے وقت ٹائپ کردہ غلط پاس ورڈز کی تعداد پر نگاہ رکھیں اور اگر بہت زیادہ غلط پاس ورڈز ٹائپ کیے جاتے ہیں تو فون کو مقفل کریں یا اس صارف کا سبھی ڈیٹا ہٹائیں۔"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"اسکرین لاک تبدیل کریں"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"اسکرین لاک تبدیل کریں۔"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"سبھی ڈیٹا صاف کریں"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"فیکٹری ڈیٹا ری سیٹ انجام دے کر وارننگ کے بغیر ٹیبلٹ کا ڈیٹا مٹائیں۔"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"‏فیکٹری ڈیٹا ری سیٹ کو انجام دے کر انتباہ کیے بغیر اپنے Android TV آلہ کا ڈیٹا مٹائیں۔"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"فیکٹری ڈیٹا ری سیٹ کو انجام دے کر وارننگ کے بغیر معلوماتی انٹرٹینمنٹ سسٹم کا ڈیٹا صاف کریں۔"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"فیکٹری ڈیٹا ری سیٹ انجام دے کر وارننگ کے بغیر فون کا ڈیٹا مٹائیں۔"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"صارف کا ڈیٹا ہٹائیں"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"پروفائل ڈیٹا صاف کریں"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"صارف کا ڈیٹا ہٹائیں"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"وارننگ کے بغیر اس ٹیبلٹ پر موجود اس صارف کا ڈیٹا ہٹائیں۔"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"‏انتباہ کے بغیر اس Android TV آلہ پر اس صارف کا ڈیٹا ہٹائیں۔"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"وارننگ کے بغیر اس معلوماتی انٹرٹینمنٹ سسٹم پر اس پروفائل کا ڈیٹا صاف کریں۔"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"وارننگ کے بغیر اس فون پر موجود اس صارف کا ڈیٹا ہٹائیں۔"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"آلہ کی عالمی پراکسی سیٹ کریں"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"پالیسی فعال ہونے پر آلہ کی عالمی پراکسی کو استعمال کیے جانے کیلئے سیٹ کریں۔ صرف آلہ کا مالک ہی عالمی پراکسی سیٹ کر سکتا ہے۔"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> تیار ہو رہی ہے۔"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"ایپس شروع ہو رہی ہیں۔"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"بوٹ مکمل ہو رہا ہے۔"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"اسکرین آف کریں؟"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"اپنی فنگر پرنٹ سیٹ اپ کرنے کے دوران آپ نے پاور بٹن دبایا۔\n\n یہ عام طور پر آپ کی اسکرین کو آف کرتی ہے۔"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"آف کریں"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"منسوخ کریں"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"سیٹ اپ جاری رکھیں؟"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"آپ نے پاور بٹن دبایا — اس سے عام طور پر اسکرین آف ہو جاتی ہے۔\n\nاپنے فنگر پرنٹ کو سیٹ اپ کرنے کے دوران ہلکا سا تھپتھپانے کی کوشش کریں۔"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"اسکرین آف کریں"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"سیٹ اپ جاری رکھیں"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"اپنے فنگر پرنٹ کی توثیق کرنا جاری رکھیں؟"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"آپ نے پاور بٹن دبایا — اس سے عام طور پر اسکرین آف ہو جاتی ہے۔\n\nاپنے فنگر پرنٹ کی توثیق کرنے کے لیے ہلکا سا تھپتھپانے کی کوشش کریں۔"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"اسکرین آف کریں"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"جاری رکھیں"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> چل رہی ہے"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"گیم پر واپس جانے کے لیے تھپتھپائیں"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"گیم کا انتخاب کریں"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"حسب ضرورت ایپ کی اطلاع"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g> کو <xliff:g id="ACCOUNT">%2$s</xliff:g> کے ساتھ ایک نیا صارف بنانے کی اجازت دیں (اس اکاؤنٹ کے ساتھ ایک صارف پہلے سے موجود ہے) ؟"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="ACCOUNT">%2$s</xliff:g> کے ساتھ نئے صارف کو تخلیق کرنے کے لیے <xliff:g id="APP">%1$s</xliff:g> کو اجازت دیں ؟"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"زیر نگرانی صارف شامل کریں"</string>
     <string name="language_selection_title" msgid="52674936078683285">"ایک زبان شامل کریں"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"علاقہ کی ترجیح"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"زبان کا نام ٹائپ کریں"</string>

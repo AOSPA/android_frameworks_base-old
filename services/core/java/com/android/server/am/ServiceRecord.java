@@ -28,6 +28,7 @@ import android.annotation.Nullable;
 import android.app.IApplicationThread;
 import android.app.Notification;
 import android.app.PendingIntent;
+import android.app.RemoteServiceException.CannotPostForegroundServiceNotificationException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -173,6 +174,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     boolean mFgsNotificationWasDeferred;
     // FGS notification was shown before the FGS finishes, or it wasn't deferred in the first place.
     boolean mFgsNotificationShown;
+    // Whether FGS package has permissions to show notifications.
+    boolean mFgsHasNotificationPermission;
 
     // allow the service becomes foreground service? Service started from background may not be
     // allowed to become a foreground service.
@@ -589,6 +592,10 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         userId = UserHandle.getUserId(appInfo.uid);
         createdFromFg = callerIsFg;
         updateKeepWarmLocked();
+        // initialize notification permission state; this'll be updated whenever there's an attempt
+        // to post or update a notification, but that doesn't cover the time before the first
+        // notification
+        updateFgsHasNotificationPermission();
     }
 
     public ServiceState getTracker() {
@@ -946,6 +953,25 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         return lastStartId;
     }
 
+    private void updateFgsHasNotificationPermission() {
+        // Do asynchronous communication with notification manager to avoid deadlocks.
+        final String localPackageName = packageName;
+        final int appUid = appInfo.uid;
+
+        ams.mHandler.post(new Runnable() {
+            public void run() {
+                NotificationManagerInternal nm = LocalServices.getService(
+                        NotificationManagerInternal.class);
+                if (nm == null) {
+                    return;
+                }
+                // Record whether the package has permission to notify the user
+                mFgsHasNotificationPermission = nm.areNotificationsEnabledForPackage(
+                        localPackageName, appUid);
+            }
+        });
+    }
+
     public void postNotification() {
         if (isForeground && foregroundNoti != null && app != null) {
             final int appUid = appInfo.uid;
@@ -967,6 +993,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                     if (nm == null) {
                         return;
                     }
+                    // Record whether the package has permission to notify the user
+                    mFgsHasNotificationPermission = nm.areNotificationsEnabledForPackage(
+                            localPackageName, appUid);
                     Notification localForegroundNoti = _foregroundNoti;
                     try {
                         if (localForegroundNoti.getSmallIcon() == null) {
@@ -1059,7 +1088,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                         // If it gave us a garbage notification, it doesn't
                         // get to be foreground.
                         ams.mServices.killMisbehavingService(record,
-                                appUid, appPid, localPackageName);
+                                appUid, appPid, localPackageName,
+                                CannotPostForegroundServiceNotificationException.TYPE_ID);
                     }
                 }
             });

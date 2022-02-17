@@ -40,7 +40,6 @@ import static com.android.server.wm.ActivityRecord.State.RESUMED;
 import static com.android.server.wm.ActivityRecord.State.STOPPED;
 import static com.android.server.wm.ActivityTaskManagerService.TAG_ROOT_TASK;
 import static com.android.server.wm.DisplayContent.alwaysCreateRootTask;
-import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
@@ -810,6 +809,10 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         // Place root home tasks to the bottom.
         layer = adjustRootTaskLayer(t, mTmpHomeChildren, layer);
         layer = adjustRootTaskLayer(t, mTmpNormalChildren, layer);
+        // TODO(b/207185041): Remove this divider workaround after we full remove leagacy split and
+        //                    make app pair split only have single root then we can just attach the
+        //                    divider to the single root task in shell.
+        layer = Math.max(layer, SPLIT_DIVIDER_LAYER + 1);
         adjustRootTaskLayer(t, mTmpAlwaysOnTopChildren, layer);
         t.setLayer(mSplitScreenDividerAnchor, SPLIT_DIVIDER_LAYER);
     }
@@ -907,18 +910,24 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         mBackgroundColor = colorInt;
         Color color = Color.valueOf(colorInt);
         mColorLayerCounter++;
-        getPendingTransaction()
-                .setColor(mSurfaceControl, new float[]{color.red(), color.green(), color.blue()});
 
-        scheduleAnimation();
+        // Only apply the background color if the TDA is actually attached and has a valid surface
+        // to set the background color on. We still want to keep track of the background color state
+        // even if we are not showing it for when/if the TDA is reattached and gets a valid surface
+        if (mSurfaceControl != null) {
+            getPendingTransaction()
+                    .setColor(mSurfaceControl,
+                            new float[]{color.red(), color.green(), color.blue()});
+            scheduleAnimation();
+        }
     }
 
     void clearBackgroundColor() {
         mColorLayerCounter--;
 
         // Only clear the color layer if we have received the same amounts of clear as set
-        // requests.
-        if (mColorLayerCounter == 0) {
+        // requests and TDA has a non null surface control (i.e. is attached)
+        if (mColorLayerCounter == 0 && mSurfaceControl != null) {
             getPendingTransaction().unsetColor(mSurfaceControl);
             scheduleAnimation();
         }
@@ -1399,9 +1408,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
             leafTask.forAllLeafTaskFragments((taskFrag) -> {
                 final ActivityRecord resumedActivity = taskFrag.getResumedActivity();
-                if (resumedActivity != null
-                        && (taskFrag.getVisibility(resuming) != TASK_FRAGMENT_VISIBILITY_VISIBLE
-                        || !taskFrag.isTopActivityFocusable())) {
+                if (resumedActivity != null && !taskFrag.canBeResumed(resuming)) {
                     if (taskFrag.startPausing(false /* uiSleeping*/, resuming, "pauseBackTasks")) {
                         someActivityPaused[0]++;
                     }

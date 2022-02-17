@@ -37,6 +37,7 @@ import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
 import android.app.KeyguardManager;
+import android.app.TaskInfo;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.content.Context;
 import android.content.IIntentSender;
@@ -60,6 +61,7 @@ import com.android.internal.app.SuspendedAppActivity;
 import com.android.internal.app.UnlaunchableAppActivity;
 import com.android.server.LocalServices;
 import com.android.server.am.ActivityManagerService;
+import com.android.server.wm.ActivityInterceptorCallback.ActivityInterceptResult;
 
 /**
  * A class that contains activity intercepting logic for {@link ActivityStarter#startActivityLocked}
@@ -193,11 +195,12 @@ class ActivityStartInterceptor {
 
         for (int i = 0; i < callbacks.size(); i++) {
             final ActivityInterceptorCallback callback = callbacks.valueAt(i);
-            final Intent newIntent = callback.intercept(interceptorInfo);
-            if (newIntent == null) {
+            final ActivityInterceptResult interceptResult = callback.intercept(interceptorInfo);
+            if (interceptResult == null) {
                 continue;
             }
-            mIntent = newIntent;
+            mIntent = interceptResult.intent;
+            mActivityOptions = interceptResult.activityOptions;
             mCallingPid = mRealCallingPid;
             mCallingUid = mRealCallingUid;
             mRInfo = mSupervisor.resolveIntent(mIntent, null, mUserId, 0, mRealCallingUid);
@@ -401,5 +404,17 @@ class ActivityStartInterceptor {
         mRInfo = mSupervisor.resolveIntent(mIntent, mResolvedType, mUserId, 0, mRealCallingUid);
         mAInfo = mSupervisor.resolveActivity(mIntent, mRInfo, mStartFlags, null /*profilerInfo*/);
         return true;
+    }
+
+    /**
+     * Called when an activity is successfully launched.
+     */
+    void onActivityLaunched(TaskInfo taskInfo, ActivityInfo activityInfo) {
+        final SparseArray<ActivityInterceptorCallback> callbacks =
+                mService.getActivityInterceptorCallbacks();
+        for (int i = 0; i < callbacks.size(); i++) {
+            final ActivityInterceptorCallback callback = callbacks.valueAt(i);
+            callback.onActivityLaunched(taskInfo, activityInfo);
+        }
     }
 }

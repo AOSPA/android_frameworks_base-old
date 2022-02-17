@@ -22,6 +22,7 @@ import static android.os.BatteryStats.POWER_DATA_UNAVAILABLE;
 
 import android.annotation.NonNull;
 import android.app.StatsManager;
+import android.app.usage.NetworkStatsManager;
 import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -56,6 +57,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.WakeLockStats;
 import android.os.WorkSource;
 import android.os.connectivity.CellularBatteryStats;
 import android.os.connectivity.GpsBatteryStats;
@@ -130,6 +132,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     private static IBatteryStats sService;
 
+    private final PowerProfile mPowerProfile;
     final BatteryStatsImpl mStats;
     private final BatteryUsageStatsStore mBatteryUsageStatsStore;
     private final BatteryStatsImpl.UserInfoProvider mUserManagerUserInfoProvider;
@@ -343,13 +346,15 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper());
 
+        mPowerProfile = new PowerProfile(context);
+
         mStats = new BatteryStatsImpl(systemDir, handler, this,
                 this, mUserManagerUserInfoProvider);
         mWorker = new BatteryExternalStatsWorker(context, mStats);
         mStats.setExternalStatsSyncLocked(mWorker);
         mStats.setRadioScanningTimeoutLocked(mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_radioScanningTimeout) * 1000L);
-        mStats.setPowerProfileLocked(new PowerProfile(context));
+        mStats.setPowerProfileLocked(mPowerProfile);
         mStats.startTrackingSystemServerCpuTime();
 
         if (BATTERY_USAGE_STORE_ENABLED) {
@@ -2025,8 +2030,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
+            final NetworkStatsManager networkStatsManager = mContext.getSystemService(
+                    NetworkStatsManager.class);
             mHandler.post(() -> {
-                mStats.updateWifiState(info, POWER_DATA_UNAVAILABLE, elapsedRealtime, uptime);
+                mStats.updateWifiState(info, POWER_DATA_UNAVAILABLE, elapsedRealtime, uptime,
+                        networkStatsManager);
             });
         }
     }
@@ -2063,9 +2071,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
+            final NetworkStatsManager networkStatsManager = mContext.getSystemService(
+                    NetworkStatsManager.class);
             mHandler.post(() -> {
                 mStats.noteModemControllerActivity(info, POWER_DATA_UNAVAILABLE, elapsedRealtime,
-                        uptime);
+                        uptime, networkStatsManager);
             });
         }
     }
@@ -2464,6 +2474,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                                 BatteryStatsImpl checkinStats = new BatteryStatsImpl(
                                         null, mStats.mHandler, null, null,
                                         mUserManagerUserInfoProvider);
+                                checkinStats.setPowerProfileLocked(mPowerProfile);
                                 checkinStats.readSummaryFromParcel(in);
                                 in.recycle();
                                 checkinStats.dumpProtoLocked(
@@ -2504,6 +2515,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                                 BatteryStatsImpl checkinStats = new BatteryStatsImpl(
                                         null, mStats.mHandler, null, null,
                                         mUserManagerUserInfoProvider);
+                                checkinStats.setPowerProfileLocked(mPowerProfile);
                                 checkinStats.readSummaryFromParcel(in);
                                 in.recycle();
                                 checkinStats.dumpCheckinLocked(mContext, pw, apps, flags,
@@ -2587,6 +2599,20 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         awaitCompletion();
         synchronized (mStats) {
             return mStats.getGpsBatteryStats();
+        }
+    }
+
+    /**
+     * Gets a snapshot of wake lock stats
+     * @hide
+     */
+    public WakeLockStats getWakeLockStats() {
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BATTERY_STATS, null);
+
+        // Wait for the completion of pending works if there is any
+        awaitCompletion();
+        synchronized (mStats) {
+            return mStats.getWakeLockStats();
         }
     }
 

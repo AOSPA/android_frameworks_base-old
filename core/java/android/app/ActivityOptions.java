@@ -337,7 +337,7 @@ public class ActivityOptions extends ComponentOptions {
     private static final String KEY_LAUNCHED_FROM_BUBBLE =
             "android.activity.launchTypeBubble";
 
-    /** See {@link #setSplashscreenStyle(int)}. */
+    /** See {@link #setSplashScreenStyle(int)}. */
     private static final String KEY_SPLASH_SCREEN_STYLE =
             "android.activity.splashScreenStyle";
 
@@ -380,6 +380,8 @@ public class ActivityOptions extends ComponentOptions {
     public static final int ANIM_OPEN_CROSS_PROFILE_APPS = 12;
     /** @hide */
     public static final int ANIM_REMOTE_ANIMATION = 13;
+    /** @hide */
+    public static final int ANIM_FROM_STYLE = 14;
 
     private String mPackageName;
     private Rect mLaunchBounds;
@@ -431,7 +433,7 @@ public class ActivityOptions extends ComponentOptions {
     private boolean mOverrideTaskTransition;
     private String mSplashScreenThemeResName;
     @SplashScreen.SplashScreenStyle
-    private int mSplashScreenStyle;
+    private int mSplashScreenStyle = SplashScreen.SPLASH_SCREEN_STYLE_UNDEFINED;
     private boolean mRemoveWithTaskOrganizer;
     private boolean mLaunchedFromBubble;
     private boolean mTransientLaunch;
@@ -1391,20 +1393,27 @@ public class ActivityOptions extends ComponentOptions {
     }
 
     /**
-     * Sets the preferred splash screen style.
+     * Gets the style can be used for cold-launching an activity.
+     * @see #setSplashScreenStyle(int)
      * @hide
      */
-    public void setSplashscreenStyle(@SplashScreen.SplashScreenStyle int style) {
-        mSplashScreenStyle = style;
+    public @SplashScreen.SplashScreenStyle int getSplashScreenStyle() {
+        return mSplashScreenStyle;
     }
 
     /**
-     * Gets the preferred splash screen style from caller
-     * @hide
+     * Sets the preferred splash screen style of the opening activities. This only applies if the
+     * Activity or Process is not yet created.
+     * @param style Can be either {@link SplashScreen#SPLASH_SCREEN_STYLE_ICON} or
+     *              {@link SplashScreen#SPLASH_SCREEN_STYLE_EMPTY}
      */
-    @SplashScreen.SplashScreenStyle
-    public int getSplashScreenStyle() {
-        return mSplashScreenStyle;
+    @NonNull
+    public ActivityOptions setSplashScreenStyle(@SplashScreen.SplashScreenStyle int style) {
+        if (style == SplashScreen.SPLASH_SCREEN_STYLE_ICON
+                || style == SplashScreen.SPLASH_SCREEN_STYLE_EMPTY) {
+            mSplashScreenStyle = style;
+        }
+        return this;
     }
 
     /**

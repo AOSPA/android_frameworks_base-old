@@ -25,6 +25,18 @@
 //
 // READ ME: ########################################################
 
+// TODO(b/21090328): Remove filter after we are ready to.
+soong_config_module_type {
+    name: "java_library_with_nonpublic_deps",
+    module_type: "java_library",
+    config_namespace: "ANDROID",
+    bool_variables: ["include_nonpublic_framework_api"],
+    properties: [
+        "static_libs",
+        "libs",
+    ],
+}
+
 package {
     default_applicable_licenses: ["frameworks_base_license"],
 }
@@ -50,12 +62,8 @@ license {
         "SPDX-license-identifier-Apache-2.0",
         "SPDX-license-identifier-BSD",
         "SPDX-license-identifier-CC-BY",
-        "SPDX-license-identifier-CPL-1.0",
-        "SPDX-license-identifier-GPL",
-        "SPDX-license-identifier-GPL-2.0",
         "SPDX-license-identifier-MIT",
         "SPDX-license-identifier-Unicode-DFS",
-        "SPDX-license-identifier-W3C",
         "legacy_unencumbered",
     ],
     license_text: [
@@ -69,6 +77,8 @@ filegroup {
         // Java/AIDL sources under frameworks/base
         ":framework-annotations",
         ":framework-blobstore-sources",
+        ":framework-bluetooth-sources", // TODO(b/214988855) : Remove once framework-bluetooth jar is ready
+        ":framework-connectivity-tiramisu-sources",
         ":framework-core-sources",
         ":framework-drm-sources",
         ":framework-graphics-nonupdatable-sources",
@@ -80,8 +90,9 @@ filegroup {
         ":framework-mca-effect-sources",
         ":framework-mca-filterfw-sources",
         ":framework-mca-filterpacks-sources",
-        ":framework-media-sources",
+        ":framework-media-non-updatable-sources",
         ":framework-mms-sources",
+        ":framework-omapi-sources",
         ":framework-opengl-sources",
         ":framework-rs-sources",
         ":framework-sax-sources",
@@ -140,29 +151,7 @@ filegroup {
     ],
 }
 
-java_library {
-    name: "framework-updatable-stubs-module_libs_api",
-    static_libs: [
-        "android.net.ipsec.ike.stubs.module_lib",
-        "framework-appsearch.stubs.module_lib",
-        "framework-connectivity.stubs.module_lib",
-        "framework-graphics.stubs.module_lib",
-        "framework-media.stubs.module_lib",
-        "framework-mediaprovider.stubs.module_lib",
-        "framework-permission.stubs.module_lib",
-        "framework-permission-s.stubs.module_lib",
-        "framework-scheduling.stubs.module_lib",
-        "framework-sdkextensions.stubs.module_lib",
-        "framework-statsd.stubs.module_lib",
-        "framework-tethering.stubs.module_lib",
-        "framework-uwb.stubs.module_lib",
-        "framework-wifi.stubs.module_lib",
-    ],
-    sdk_version: "module_current",
-    visibility: ["//visibility:private"],
-}
-
-java_library {
+java_library_with_nonpublic_deps {
     name: "framework-all",
     installable: false,
     static_libs: [
@@ -170,6 +159,7 @@ java_library {
         "framework-minus-apex",
         "framework-appsearch.impl",
         "framework-connectivity.impl",
+        "framework-connectivity-tiramisu.impl",
         "framework-graphics.impl",
         "framework-mediaprovider.impl",
         "framework-permission.impl",
@@ -177,11 +167,20 @@ java_library {
         "framework-scheduling.impl",
         "framework-sdkextensions.impl",
         "framework-statsd.impl",
+        "framework-supplementalprocess.impl",
         "framework-tethering.impl",
+        "framework-nearby.impl",
         "framework-uwb.impl",
         "framework-wifi.impl",
         "updatable-media",
     ],
+    soong_config_variables: {
+        include_nonpublic_framework_api: {
+            static_libs: [
+                "framework-supplementalapi.impl",
+            ],
+        },
+    },
     apex_available: ["//apex_available:platform"],
     sdk_version: "core_platform",
     visibility: [
@@ -271,6 +270,7 @@ java_library {
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.vibrator-V1.3-java",
         "android.hardware.vibrator-V2-java",
+        "android.se.omapi-V1-java",
         "android.system.suspend.control.internal-java",
         "devicepolicyprotosnano",
 
@@ -344,8 +344,12 @@ java_defaults {
         "error_prone_android_framework",
     ],
     required: [
+        // TODO(b/120066492): remove default_television.xml when the build system
+        // propagates "required" properly.
+        "default_television.xml",
         "framework-platform-compat-config",
-        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
+        // TODO(b/120066492): remove gps_debug and protolog.conf.json when the build
+        // system propagates "required" properly.
         "gps_debug.conf",
         "icu4j-platform-compat-config",
         "protolog.conf.json.gz",
@@ -353,6 +357,7 @@ java_defaults {
         "TeleService-platform-compat-config",
         "documents-ui-compat-config",
         "calendar-provider-compat-config",
+        "contacts-provider-platform-compat-config",
     ],
     libs: [
         "app-compat-annotations",
@@ -374,6 +379,7 @@ java_defaults {
         "tv_tuner_resource_manager_aidl_interface-java",
         "soundtrigger_middleware-aidl-java",
         "modules-utils-preconditions",
+        "modules-utils-synchronous-result-receiver",
         "modules-utils-os",
         "framework-permission-aidl-java",
         "spatializer-aidl-java",
@@ -397,6 +403,9 @@ java_library {
         "//frameworks/base/packages/Tethering/tests/unit",
         "//packages/modules/Connectivity/Tethering/tests/unit",
     ],
+    lint: {
+        extra_check_modules: ["AndroidFrameworkLintChecker"],
+    },
     errorprone: {
         javacflags: [
             "-Xep:AndroidFrameworkBinderIdentity:ERROR",
@@ -444,7 +453,6 @@ filegroup {
     name: "framework-ike-shared-srcs",
     visibility: ["//packages/modules/IPsec"],
     srcs: [
-        "core/java/android/net/annotations/PolicyDirection.java",
         "core/java/com/android/internal/util/HexDump.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
         "services/core/java/com/android/server/vcn/util/PersistableBundleUtils.java",

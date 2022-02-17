@@ -1239,8 +1239,11 @@
     <string name="permlab_bodySensors">access body sensors (like heart rate monitors)
     </string>
     <!-- Description of the body sensors permission, listed so the user can decide whether to allow the application to access data from body sensors. [CHAR LIMIT=NONE] -->
-    <string name="permdesc_bodySensors" product="default">Allows the app to access data from sensors
-    that monitor your physical condition, such as your heart rate.</string>
+    <string name="permdesc_bodySensors" product="default">Access to data from body sensors such as heart rate, temperature, blood oxygen percentage, etc.</string>
+    <!-- Title of the background body sensors permission, listed so the user can decide whether to allow the application to access body sensor data in the background. [CHAR LIMIT=80] -->
+    <string name="permlab_bodySensors_background">access body sensors (like heart rate monitors) while in the background</string>
+    <!-- Description of the background body sensors permission, listed so the user can decide whether to allow the application to access data from body sensors in the background. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_bodySensors_background" product="default">Access to data from body sensors such as heart rate, temperature, blood oxygen percentage, etc. while in the background.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readCalendar">Read calendar events and details</string>
@@ -1356,6 +1359,12 @@
       features of the device.  This permission allows the app to determine the
       phone number and device IDs, whether a call is active, and the remote number
       connected by a call.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=80]-->
+    <string name="permlab_readBasicPhoneState">read basic telephony status and identity </string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permdesc_readBasicPhoneState">Allows the app to access the basic telephony
+        features of the device.</string>
 
     <!-- Title of an application permission.  When granted the user is giving access to a third
          party app to route its calls through the system. -->
@@ -1758,6 +1767,8 @@
     <string name="face_setup_notification_title">Set up Face Unlock</string>
     <!-- Contents of a notification that directs the user to set up face unlock by enrolling their face. [CHAR LIMIT=NONE] -->
     <string name="face_setup_notification_content">Unlock your phone by looking at it</string>
+    <!-- Error message indicating that the camera privacy sensor has been turned on [CHAR LIMIT=NONE] -->
+    <string name="face_sensor_privacy_enabled">To use Face Unlock, turn on <b>Camera access</b> in Settings > Privacy</string>
     <!-- Title of a notification that directs the user to enroll a fingerprint. [CHAR LIMIT=NONE] -->
     <string name="fingerprint_setup_notification_title">Set up more ways to unlock</string>
     <!-- Contents of a notification that directs the user to enroll a fingerprint. [CHAR LIMIT=NONE] -->
@@ -2003,6 +2014,11 @@
     <string name="permdesc_startViewPermissionUsage">Allows the holder to start the permission usage for an app. Should never be needed for normal apps.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permlab_startReviewPermissionDecisions">start view permission decisions</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permdesc_startReviewPermissionDecisions">Allows the holder to start screen to review permission decisions. Should never be needed for normal apps.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
     <string name="permlab_startViewAppFeatures">start view app features</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
     <string name="permdesc_startViewAppFeatures">Allows the holder to start viewing the features info for an app.</string>
@@ -2029,6 +2045,10 @@
     typed when unlocking the screen, and lock your Android TV device or erase all your Android TV device\'s
     data if too many incorrect passwords are typed.</string>
     <!-- Description of policy access to watch user login attempts -->
+    <string name="policydesc_watchLogin" product="automotive">Monitor the number of incorrect passwords
+    typed. when unlocking the screen, and lock the infotainment system or erase all the infotainment system\'s
+    data if too many incorrect passwords are typed.</string>
+    <!-- Description of policy access to watch user login attempts -->
     <string name="policydesc_watchLogin" product="default">Monitor the number of incorrect passwords
     typed. when unlocking the screen, and lock the phone or erase all the phone\'s
     data if too many incorrect passwords are typed.</string>
@@ -2037,6 +2057,9 @@
     if too many incorrect passwords are typed.</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv">Monitor the number of incorrect passwords
     typed when unlocking the screen, and lock your Android TV device or erase all this user\'s data
+    if too many incorrect passwords are typed.</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive">Monitor the number of incorrect passwords
+    typed when unlocking the screen, and lock the infotainment system or erase all this profile\'s data
     if too many incorrect passwords are typed.</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default">Monitor the number of incorrect passwords
     typed when unlocking the screen, and lock the phone or erase all this user\'s data
@@ -2056,13 +2079,19 @@
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData" product="tv">Erase your Android TV device\'s data without warning by performing a factory data reset.</string>
     <!-- Description of policy access to wipe the user's data -->
+    <string name="policydesc_wipeData" product="automotive">Erase the infotainment system\'s data without warning by performing a factory data reset.</string>
+    <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData" product="default">Erase the phone\'s data without warning by performing a factory data reset.</string>
     <!-- Title of policy access to wipe secondary user's data -->
-    <string name="policylab_wipeData_secondaryUser">Erase user data</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive">Erase profile data</string>
+    <!-- Title of policy access to wipe secondary user's data -->
+    <string name="policylab_wipeData_secondaryUser" product="default">Erase user data</string>
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData_secondaryUser" product="tablet">Erase this user\'s data on this tablet without warning.</string>
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData_secondaryUser" product="tv">Erase this user\'s data on this Android TV device without warning.</string>
+    <!-- Description of policy access to wipe the user's data -->
+    <string name="policydesc_wipeData_secondaryUser" product="automotive">Erase this profile\'s data on this infotainment system without warning.</string>
     <!-- Description of policy access to wipe the user's data -->
     <string name="policydesc_wipeData_secondaryUser" product="default">Erase this user\'s data on this phone without warning.</string>
     <!-- Title of policy access to set global proxy -->
@@ -3494,20 +3523,35 @@
 
     <!-- [CHAR LIMIT=40] Title of dialog shown to confirm device going to sleep if the power button
     is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_title">Turn off screen?</string>
+    <string name="fp_power_button_enrollment_title">Continue setup?</string>
 
     <!-- [CHAR LIMIT=NONE] Message of dialog shown to confirm device going to sleep if the power
     button is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_message">While setting up your fingerprint, you
-        pressed the Power button.\n\nThis usually turns off your screen.</string>
+    <string name="fp_power_button_enrollment_message">You pressed the power button — this usually turns off the screen.\n\nTry tapping lightly while setting up your fingerprint.</string>
 
     <!-- [CHAR LIMIT=20] Positive button of dialog shown to confirm device going to sleep if the
     power button is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_positive_button">Turn off</string>
+    <string name="fp_power_button_enrollment_positive_button">Turn off screen</string>
 
     <!-- [CHAR LIMIT=20] Negative button of dialog shown to confirm device going to sleep if the
     power button is pressed during fingerprint enrollment. -->
-    <string name="fp_enrollment_powerbutton_intent_negative_button">Cancel</string>
+    <string name="fp_power_button_enrollment_negative_button">Continue setup</string>
+
+    <!-- [CHAR LIMIT=40] Title of dialog shown to confirm device going to sleep if the power button
+    is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_title">Continue verifying your fingerprint?</string>
+
+    <!-- [CHAR LIMIT=NONE] Message of dialog shown to confirm device going to sleep if the power
+    button is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_message">You pressed the power button — this usually turns off the screen.\n\nTry tapping lightly to verify your fingerprint.</string>
+
+    <!-- [CHAR LIMIT=20] Positive button of dialog shown to confirm device going to sleep if the
+    power button is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_positive_button">Turn off screen</string>
+
+    <!-- [CHAR LIMIT=20] Negative button of dialog shown to confirm device going to sleep if the
+    power button is pressed during biometric prompt when a side fingerprint sensor is present. -->
+    <string name="fp_power_button_bp_negative_button">Continue</string>
 
     <!-- Notification text to tell the user that a heavy-weight application is running. -->
     <string name="heavy_weight_notification"><xliff:g id="app">%1$s</xliff:g> running</string>
@@ -4004,10 +4048,15 @@
     <!-- Description of an application permission that lets it ask user to ignore battery optimizations for that app-->
     <string name="permdesc_requestIgnoreBatteryOptimizations">Allows an app to ask for permission to ignore battery optimizations for that app.</string>
 
-    <!-- Title of an application permission that lets query all other packages. [CHAR LIMIT=NONE] -->
+    <!-- Title of an application permission that lets it query all other packages. [CHAR LIMIT=NONE] -->
     <string name="permlab_queryAllPackages">query all packages</string>
     <!-- Description of an application permission that lets it query all other packages. [CHAR LIMIT=NONE] -->
     <string name="permdesc_queryAllPackages">Allows an app to see all installed packages.</string>
+
+    <!-- Title of an application permission that lets it access SupplementalApis. [CHAR LIMIT=NONE] -->
+    <string name="permlab_accessSupplementalApi">access SupplementalApis</string>
+    <!-- Description of an application permission that lets it access SupplementalApis. [CHAR LIMIT=NONE]-->
+    <string name="permdesc_accessSupplementalApi">Allows an application to access SupplementalApis.</string>
 
     <!-- Shown in the tutorial for tap twice for zoom control. -->
     <string name="tutorial_double_tap_to_zoom_message_short">Tap twice for zoom control</string>
@@ -5340,6 +5389,8 @@
     <string name="user_creation_account_exists">Allow <xliff:g id="app" example="Gmail">%1$s</xliff:g> to create a new User with <xliff:g id="account" example="foobar@gmail.com">%2$s</xliff:g> (a User with this account already exists) ?</string>
     <!-- Message to user that app is trying to create user for a specified account. [CHAR LIMIT=none] -->
     <string name="user_creation_adding">Allow <xliff:g id="app" example="Gmail">%1$s</xliff:g> to create a new User with <xliff:g id="account" example="foobar@gmail.com">%2$s</xliff:g> ?</string>
+    <!-- String label displayed on buttons that trigger the flow for creating supervised users. [CHAR LIMIT=35] -->
+    <string name="supervised_user_creation_label">Add supervised user</string>
 
     <!-- Locale picker strings -->
 

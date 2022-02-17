@@ -154,6 +154,7 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.LOCKSCREEN_SHOW_CONTROLS, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.LOCKSCREEN_SHOW_WALLET, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.LOCK_SCREEN_SHOW_QR_CODE_SCANNER, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.DOZE_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.DOZE_ALWAYS_ON, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.DOZE_PICK_UP_GESTURE, BOOLEAN_VALIDATOR);
@@ -228,6 +229,7 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.SKIP_DIRECTION, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.SILENCE_GESTURE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, JSON_OBJECT_VALIDATOR);
+        VALIDATORS.put(Secure.NAV_BAR_KIDS_MODE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
                 Secure.NAVIGATION_MODE, new DiscreteValueValidator(new String[] {"0", "1", "2"}));
         VALIDATORS.put(Secure.BACK_GESTURE_INSET_SCALE_LEFT,
@@ -265,6 +267,7 @@ public class SecureSettingsValidators {
                 new InclusiveIntegerRangeValidator(
                         Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN,
                         Secure.ACCESSIBILITY_MAGNIFICATION_MODE_ALL));
+        VALIDATORS.put(Secure.ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
                 Secure.ACCESSIBILITY_BUTTON_TARGETS,
                 ACCESSIBILITY_SHORTCUT_TARGET_LIST_VALIDATOR);
@@ -320,5 +323,7 @@ public class SecureSettingsValidators {
             }
             return true;
         });
+        VALIDATORS.put(Secure.ODI_CAPTIONS_VOLUME_UI_ENABLED, BOOLEAN_VALIDATOR);
+
     }
 }

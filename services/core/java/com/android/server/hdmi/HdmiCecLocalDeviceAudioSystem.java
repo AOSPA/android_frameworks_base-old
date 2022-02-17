@@ -15,6 +15,9 @@
  */
 package com.android.server.hdmi;
 
+import static android.hardware.hdmi.DeviceFeatures.FEATURE_NOT_SUPPORTED;
+import static android.hardware.hdmi.DeviceFeatures.FEATURE_SUPPORTED;
+
 import static com.android.server.hdmi.Constants.ALWAYS_SYSTEM_AUDIO_CONTROL_ON_POWER_ON;
 import static com.android.server.hdmi.Constants.PROPERTY_SYSTEM_AUDIO_CONTROL_ON_POWER_ON;
 import static com.android.server.hdmi.Constants.USE_LAST_STATE_SYSTEM_AUDIO_CONTROL_ON_POWER_ON;
@@ -22,6 +25,7 @@ import static com.android.server.hdmi.Constants.USE_LAST_STATE_SYSTEM_AUDIO_CONT
 import android.annotation.Nullable;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.hardware.hdmi.DeviceFeatures;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.HdmiPortInfo;
@@ -177,14 +181,12 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
     }
 
     @Override
-    protected List<Integer> getDeviceFeatures() {
-        List<Integer> deviceFeatures = new ArrayList<>();
+    protected DeviceFeatures computeDeviceFeatures() {
+        boolean arcSupport = SystemProperties.getBoolean(Constants.PROPERTY_ARC_SUPPORT, true);
 
-        if (SystemProperties.getBoolean(Constants.PROPERTY_ARC_SUPPORT, true)) {
-            deviceFeatures.add(Constants.DEVICE_FEATURE_SOURCE_SUPPORTS_ARC_RX);
-        }
-
-        return deviceFeatures;
+        return DeviceFeatures.NO_FEATURES_SUPPORTED.toBuilder()
+                .setArcRxSupport(arcSupport ? FEATURE_SUPPORTED : FEATURE_NOT_SUPPORTED)
+                .build();
     }
 
     @Override
@@ -265,13 +267,20 @@ public class HdmiCecLocalDeviceAudioSystem extends HdmiCecLocalDeviceSource {
         // to request Short Audio Descriptor. Since ARC and SAM are independent,
         // we can turn on ARC anyways when audio system device just boots up.
         initArcOnFromAvr();
-        int systemAudioControlOnPowerOnProp =
-                SystemProperties.getInt(
-                        PROPERTY_SYSTEM_AUDIO_CONTROL_ON_POWER_ON,
-                        ALWAYS_SYSTEM_AUDIO_CONTROL_ON_POWER_ON);
-        boolean lastSystemAudioControlStatus =
-                SystemProperties.getBoolean(Constants.PROPERTY_LAST_SYSTEM_AUDIO_CONTROL, true);
-        systemAudioControlOnPowerOn(systemAudioControlOnPowerOnProp, lastSystemAudioControlStatus);
+
+        // This prevents turning on of System Audio Mode during a quiescent boot. If the quiescent
+        // boot is exited just after this check, this code will be executed only at the next
+        // wake-up.
+        if (!mService.isScreenOff()) {
+            int systemAudioControlOnPowerOnProp =
+                    SystemProperties.getInt(
+                            PROPERTY_SYSTEM_AUDIO_CONTROL_ON_POWER_ON,
+                            ALWAYS_SYSTEM_AUDIO_CONTROL_ON_POWER_ON);
+            boolean lastSystemAudioControlStatus =
+                    SystemProperties.getBoolean(Constants.PROPERTY_LAST_SYSTEM_AUDIO_CONTROL, true);
+            systemAudioControlOnPowerOn(
+                    systemAudioControlOnPowerOnProp, lastSystemAudioControlStatus);
+        }
         mService.getHdmiCecNetwork().clearDeviceList();
         launchDeviceDiscovery();
         startQueuedActions();

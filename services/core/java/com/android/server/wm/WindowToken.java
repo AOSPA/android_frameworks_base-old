@@ -295,6 +295,9 @@ class WindowToken extends WindowContainer<WindowState> {
         // surface for this token.
         if (mSurfaceControl == null) {
             createSurfaceControl(true /* force */);
+
+            // Layers could have been assigned before the surface was created, update them again
+            reassignLayer(getSyncTransaction());
         }
         if (!mChildren.contains(win)) {
             ProtoLog.v(WM_DEBUG_ADD_REMOVE, "Adding %s to %s", win, this);
@@ -690,11 +693,8 @@ class WindowToken extends WindowContainer<WindowState> {
     @Override
     public String toString() {
         if (stringName == null) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("WindowToken{");
-            sb.append(Integer.toHexString(System.identityHashCode(this)));
-            sb.append(" "); sb.append(token); sb.append('}');
-            stringName = sb.toString();
+            stringName = "WindowToken{" + Integer.toHexString(System.identityHashCode(this))
+                    + " type=" + windowType + " " + token + "}";
         }
         return stringName;
     }

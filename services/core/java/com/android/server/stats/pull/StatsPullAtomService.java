@@ -28,18 +28,11 @@ import static android.net.NetworkCapabilities.TRANSPORT_ETHERNET;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 import static android.net.NetworkIdentity.OEM_PAID;
 import static android.net.NetworkIdentity.OEM_PRIVATE;
-import static android.net.NetworkStats.DEFAULT_NETWORK_ALL;
-import static android.net.NetworkStats.METERED_ALL;
 import static android.net.NetworkStats.METERED_YES;
-import static android.net.NetworkStats.ROAMING_ALL;
 import static android.net.NetworkTemplate.MATCH_ETHERNET;
-import static android.net.NetworkTemplate.MATCH_MOBILE_WILDCARD;
-import static android.net.NetworkTemplate.MATCH_WIFI_WILDCARD;
-import static android.net.NetworkTemplate.NETWORK_TYPE_ALL;
+import static android.net.NetworkTemplate.MATCH_MOBILE;
+import static android.net.NetworkTemplate.MATCH_WIFI;
 import static android.net.NetworkTemplate.OEM_MANAGED_ALL;
-import static android.net.NetworkTemplate.buildTemplateMobileWildcard;
-import static android.net.NetworkTemplate.buildTemplateMobileWithRatType;
-import static android.net.NetworkTemplate.buildTemplateWifiWildcard;
 import static android.net.NetworkTemplate.getAllCollapsedRatTypes;
 import static android.os.Debug.getIonHeapsSizeKb;
 import static android.os.Process.LAST_SHARED_APPLICATION_GID;
@@ -51,17 +44,24 @@ import static android.telephony.TelephonyManager.UNKNOWN_CARRIER_ID;
 import static android.util.MathUtils.constrain;
 
 import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
+import static com.android.internal.util.FrameworkStatsLog.ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__A11Y_BUTTON;
+import static com.android.internal.util.FrameworkStatsLog.ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__A11Y_FLOATING_MENU;
+import static com.android.internal.util.FrameworkStatsLog.ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__A11Y_GESTURE;
+import static com.android.internal.util.FrameworkStatsLog.ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__UNKNOWN_TYPE;
 import static com.android.internal.util.FrameworkStatsLog.DATA_USAGE_BYTES_TRANSFER__OPPORTUNISTIC_DATA_SUB__NOT_OPPORTUNISTIC;
 import static com.android.internal.util.FrameworkStatsLog.DATA_USAGE_BYTES_TRANSFER__OPPORTUNISTIC_DATA_SUB__OPPORTUNISTIC;
 import static com.android.internal.util.FrameworkStatsLog.TIME_ZONE_DETECTOR_STATE__DETECTION_MODE__GEO;
 import static com.android.internal.util.FrameworkStatsLog.TIME_ZONE_DETECTOR_STATE__DETECTION_MODE__MANUAL;
 import static com.android.internal.util.FrameworkStatsLog.TIME_ZONE_DETECTOR_STATE__DETECTION_MODE__TELEPHONY;
+import static com.android.internal.util.FrameworkStatsLog.TIME_ZONE_DETECTOR_STATE__DETECTION_MODE__UNKNOWN;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromFilesystem;
 import static com.android.server.stats.pull.IonMemoryUtil.readProcessSystemIonHeapSizesFromDebugfs;
 import static com.android.server.stats.pull.IonMemoryUtil.readSystemIonHeapSizeFromDebugfs;
 import static com.android.server.stats.pull.ProcfsMemoryUtil.getProcessCmdlines;
 import static com.android.server.stats.pull.ProcfsMemoryUtil.readCmdlineFromProcfs;
 import static com.android.server.stats.pull.ProcfsMemoryUtil.readMemorySnapshotFromProcfs;
+
+import static libcore.io.IoUtils.closeQuietly;
 
 import static java.lang.Math.min;
 import static java.util.concurrent.TimeUnit.HOURS;
@@ -93,8 +93,12 @@ import android.content.pm.PackageManager;
 import android.content.pm.PermissionInfo;
 import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricsProtoEnums;
+import android.hardware.display.DisplayManager;
 import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
+import android.media.AudioManager;
+import android.media.MediaDrm;
+import android.media.UnsupportedSchemeException;
 import android.net.ConnectivityManager;
 import android.net.INetworkStatsService;
 import android.net.INetworkStatsSession;
@@ -161,8 +165,10 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseIntArray;
 import android.util.StatsEvent;
 import android.util.proto.ProtoOutputStream;
+import android.view.Display;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.procstats.IProcessStats;
@@ -171,7 +177,7 @@ import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatterySipper;
 import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BinderCallsStats.ExportedCallStat;
-import com.android.internal.os.DmabufInfoReader;
+import com.android.internal.os.KernelAllocationStats;
 import com.android.internal.os.KernelCpuBpfTracking;
 import com.android.internal.os.KernelCpuThreadReader;
 import com.android.internal.os.KernelCpuThreadReaderDiff;
@@ -216,6 +222,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -412,7 +419,6 @@ public class StatsPullAtomService extends SystemService {
     private final Object mSystemUptimeLock = new Object();
     private final Object mProcessMemoryStateLock = new Object();
     private final Object mProcessMemoryHighWaterMarkLock = new Object();
-    private final Object mProcessMemorySnapshotLock = new Object();
     private final Object mSystemIonHeapSizeLock = new Object();
     private final Object mIonHeapSizeLock = new Object();
     private final Object mProcessSystemIonHeapSizeLock = new Object();
@@ -550,9 +556,7 @@ public class StatsPullAtomService extends SystemService {
                             return pullProcessMemoryHighWaterMarkLocked(atomTag, data);
                         }
                     case FrameworkStatsLog.PROCESS_MEMORY_SNAPSHOT:
-                        synchronized (mProcessMemorySnapshotLock) {
-                            return pullProcessMemorySnapshotLocked(atomTag, data);
-                        }
+                        return pullProcessMemorySnapshot(atomTag, data);
                     case FrameworkStatsLog.SYSTEM_ION_HEAP_SIZE:
                         synchronized (mSystemIonHeapSizeLock) {
                             return pullSystemIonHeapSizeLocked(atomTag, data);
@@ -743,6 +747,8 @@ public class StatsPullAtomService extends SystemService {
                         return pullAccessibilityShortcutStatsLocked(atomTag, data);
                     case FrameworkStatsLog.ACCESSIBILITY_FLOATING_MENU_STATS:
                         return pullAccessibilityFloatingMenuStatsLocked(atomTag, data);
+                    case FrameworkStatsLog.MEDIA_CAPABILITIES:
+                        return pullMediaCapabilitiesStats(atomTag, data);
                     default:
                         throw new UnsupportedOperationException("Unknown tagId=" + atomTag);
                 }
@@ -940,6 +946,7 @@ public class StatsPullAtomService extends SystemService {
         registerKeystoreCrashStats();
         registerAccessibilityShortcutStats();
         registerAccessibilityFloatingMenuStats();
+        registerMediaCapabilitiesStats();
     }
 
     private void initAndRegisterNetworkStatsPullers() {
@@ -1165,9 +1172,10 @@ public class StatsPullAtomService extends SystemService {
             }
             case FrameworkStatsLog.BYTES_TRANSFER_BY_TAG_AND_METERED: {
                 final NetworkStats wifiStats = getUidNetworkStatsSnapshotForTemplate(
-                        buildTemplateWifiWildcard(), /*includeTags=*/true);
+                        new NetworkTemplate.Builder(MATCH_WIFI).build(), /*includeTags=*/true);
                 final NetworkStats cellularStats = getUidNetworkStatsSnapshotForTemplate(
-                        buildTemplateMobileWildcard(), /*includeTags=*/true);
+                        new NetworkTemplate.Builder(MATCH_MOBILE)
+                        .setMeteredness(METERED_YES).build(), /*includeTags=*/true);
                 if (wifiStats != null && cellularStats != null) {
                     final NetworkStats stats = wifiStats.add(cellularStats);
                     ret.add(new NetworkStatsExt(sliceNetworkStatsByUidTagAndMetered(stats),
@@ -1319,8 +1327,8 @@ public class StatsPullAtomService extends SystemService {
     @NonNull private List<NetworkStatsExt> getDataUsageBytesTransferSnapshotForOemManaged() {
         final List<Pair<Integer, Integer>> matchRulesAndTransports = List.of(
                 new Pair(MATCH_ETHERNET, TRANSPORT_ETHERNET),
-                new Pair(MATCH_MOBILE_WILDCARD, TRANSPORT_CELLULAR),
-                new Pair(MATCH_WIFI_WILDCARD, TRANSPORT_WIFI)
+                new Pair(MATCH_MOBILE, TRANSPORT_CELLULAR),
+                new Pair(MATCH_WIFI, TRANSPORT_WIFI)
         );
         final int[] oemManagedTypes = new int[] {OEM_PAID | OEM_PRIVATE, OEM_PAID, OEM_PRIVATE};
 
@@ -1329,12 +1337,11 @@ public class StatsPullAtomService extends SystemService {
         for (Pair<Integer, Integer> ruleAndTransport : matchRulesAndTransports) {
             final Integer matchRule = ruleAndTransport.first;
             for (final int oemManaged : oemManagedTypes) {
-                /* A null subscriberId will set wildcard=true, since we aren't trying to select a
-                   specific ssid or subscriber. */
-                final NetworkTemplate template = new NetworkTemplate(matchRule,
-                        /*subscriberId=*/null, /*matchSubscriberIds=*/null, /*networkId=*/null,
-                        METERED_ALL, ROAMING_ALL, DEFAULT_NETWORK_ALL, NETWORK_TYPE_ALL,
-                        oemManaged);
+                // Subscriber Ids and Wifi Network Keys will not be set since the purpose is to
+                // slice statistics of different OEM managed networks among all network types.
+                // Thus, specifying networks through their identifiers are not needed.
+                final NetworkTemplate template = new NetworkTemplate.Builder(matchRule)
+                        .setOemManaged(oemManaged).build();
                 final NetworkStats stats = getUidNetworkStatsSnapshotForTemplate(template, false);
                 final Integer transport = ruleAndTransport.second;
                 if (stats != null) {
@@ -1353,10 +1360,18 @@ public class StatsPullAtomService extends SystemService {
      * Create a snapshot of NetworkStats for a given transport.
      */
     @Nullable private NetworkStats getUidNetworkStatsSnapshotForTransport(int transport) {
-        final NetworkTemplate template = (transport == TRANSPORT_CELLULAR)
-                ? NetworkTemplate.buildTemplateMobileWithRatType(
-                /*subscriptionId=*/null, NETWORK_TYPE_ALL, METERED_YES)
-                : NetworkTemplate.buildTemplateWifiWildcard();
+        NetworkTemplate template = null;
+        switch (transport) {
+            case TRANSPORT_CELLULAR:
+                template = new NetworkTemplate.Builder(MATCH_MOBILE)
+                        .setMeteredness(METERED_YES).build();
+                break;
+            case TRANSPORT_WIFI:
+                template = new NetworkTemplate.Builder(MATCH_WIFI).build();
+                break;
+            default:
+                Log.wtf(TAG, "Unexpected transport.");
+        }
         return getUidNetworkStatsSnapshotForTemplate(template, /*includeTags=*/false);
     }
 
@@ -1395,8 +1410,10 @@ public class StatsPullAtomService extends SystemService {
         final List<NetworkStatsExt> ret = new ArrayList<>();
         for (final int ratType : getAllCollapsedRatTypes()) {
             final NetworkTemplate template =
-                    buildTemplateMobileWithRatType(subInfo.subscriberId, ratType,
-                    METERED_YES);
+                    new NetworkTemplate.Builder(MATCH_MOBILE)
+                    .setSubscriberIds(Set.of(subInfo.subscriberId))
+                    .setRatType(ratType)
+                    .setMeteredness(METERED_YES).build();
             final NetworkStats stats =
                     getUidNetworkStatsSnapshotForTemplate(template, /*includeTags=*/false);
             if (stats != null) {
@@ -2202,10 +2219,16 @@ public class StatsPullAtomService extends SystemService {
         );
     }
 
-    int pullProcessMemorySnapshotLocked(int atomTag, List<StatsEvent> pulledData) {
+    int pullProcessMemorySnapshot(int atomTag, List<StatsEvent> pulledData) {
         List<ProcessMemoryState> managedProcessList =
                 LocalServices.getService(ActivityManagerInternal.class)
                         .getMemoryStateForProcesses();
+        KernelAllocationStats.ProcessGpuMem[] gpuAllocations =
+                KernelAllocationStats.getGpuAllocations();
+        SparseIntArray gpuMemPerPid = new SparseIntArray(gpuAllocations.length);
+        for (KernelAllocationStats.ProcessGpuMem processGpuMem : gpuAllocations) {
+            gpuMemPerPid.put(processGpuMem.pid, processGpuMem.gpuMemoryKb);
+        }
         for (ProcessMemoryState managedProcess : managedProcessList) {
             final MemorySnapshot snapshot = readMemorySnapshotFromProcfs(managedProcess.pid);
             if (snapshot == null) {
@@ -2214,7 +2237,8 @@ public class StatsPullAtomService extends SystemService {
             pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, managedProcess.uid,
                     managedProcess.processName, managedProcess.pid, managedProcess.oomScore,
                     snapshot.rssInKilobytes, snapshot.anonRssInKilobytes, snapshot.swapInKilobytes,
-                    snapshot.anonRssInKilobytes + snapshot.swapInKilobytes));
+                    snapshot.anonRssInKilobytes + snapshot.swapInKilobytes,
+                    gpuMemPerPid.get(managedProcess.pid)));
         }
         // Complement the data with native system processes. Given these measurements can be taken
         // in response to LMKs happening, we want to first collect the managed app stats (to
@@ -2232,7 +2256,8 @@ public class StatsPullAtomService extends SystemService {
                     processCmdlines.valueAt(i), pid,
                     -1001 /*Placeholder for native processes, OOM_SCORE_ADJ_MIN - 1.*/,
                     snapshot.rssInKilobytes, snapshot.anonRssInKilobytes, snapshot.swapInKilobytes,
-                    snapshot.anonRssInKilobytes + snapshot.swapInKilobytes));
+                    snapshot.anonRssInKilobytes + snapshot.swapInKilobytes,
+                    gpuMemPerPid.get(pid)));
         }
         return StatsManager.PULL_SUCCESS;
     }
@@ -2312,7 +2337,8 @@ public class StatsPullAtomService extends SystemService {
             if (process.uid == Process.SYSTEM_UID) {
                 continue;
             }
-            DmabufInfoReader.ProcessDmabuf proc = DmabufInfoReader.getProcessStats(process.pid);
+            KernelAllocationStats.ProcessDmabuf proc =
+                    KernelAllocationStats.getDmabufAllocations(process.pid);
             if (proc == null || (proc.retainedBuffersCount <= 0 && proc.mappedBuffersCount <= 0)) {
                 continue;
             }
@@ -3399,14 +3425,21 @@ public class StatsPullAtomService extends SystemService {
             pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag,
                     metricsState.isTelephonyDetectionSupported(),
                     metricsState.isGeoDetectionSupported(),
-                    metricsState.isUserLocationEnabled(),
+                    metricsState.getUserLocationEnabledSetting(),
                     metricsState.getAutoDetectionEnabledSetting(),
                     metricsState.getGeoDetectionEnabledSetting(),
                     convertToMetricsDetectionMode(metricsState.getDetectionMode()),
                     metricsState.getDeviceTimeZoneIdOrdinal(),
-                    metricsState.getLatestManualSuggestionProtoBytes(),
-                    metricsState.getLatestTelephonySuggestionProtoBytes(),
-                    metricsState.getLatestGeolocationSuggestionProtoBytes()
+                    convertTimeZoneSuggestionToProtoBytes(
+                            metricsState.getLatestManualSuggestion()),
+                    convertTimeZoneSuggestionToProtoBytes(
+                            metricsState.getLatestTelephonySuggestion()),
+                    convertTimeZoneSuggestionToProtoBytes(
+                            metricsState.getLatestGeolocationSuggestion()),
+                    metricsState.isTelephonyTimeZoneFallbackSupported(),
+                    metricsState.getDeviceTimeZoneId(),
+                    metricsState.isEnhancedMetricsCollectionEnabled(),
+                    metricsState.getGeoDetectionRunInBackgroundEnabled()
             ));
         } catch (RuntimeException e) {
             Slog.e(TAG, "Getting time zone detection state failed: ", e);
@@ -3417,7 +3450,8 @@ public class StatsPullAtomService extends SystemService {
         return StatsManager.PULL_SUCCESS;
     }
 
-    private int convertToMetricsDetectionMode(int detectionMode) {
+    private static int convertToMetricsDetectionMode(
+            @MetricsTimeZoneDetectorState.DetectionMode int detectionMode) {
         switch (detectionMode) {
             case MetricsTimeZoneDetectorState.DETECTION_MODE_MANUAL:
                 return TIME_ZONE_DETECTOR_STATE__DETECTION_MODE__MANUAL;
@@ -3426,8 +3460,44 @@ public class StatsPullAtomService extends SystemService {
             case MetricsTimeZoneDetectorState.DETECTION_MODE_TELEPHONY:
                 return TIME_ZONE_DETECTOR_STATE__DETECTION_MODE__TELEPHONY;
             default:
-                throw new IllegalArgumentException("" + detectionMode);
+                return TIME_ZONE_DETECTOR_STATE__DETECTION_MODE__UNKNOWN;
         }
+    }
+
+    @Nullable
+    private static byte[] convertTimeZoneSuggestionToProtoBytes(
+            @Nullable MetricsTimeZoneDetectorState.MetricsTimeZoneSuggestion suggestion) {
+        if (suggestion == null) {
+            return null;
+        }
+
+        // We don't get access to the atoms.proto definition for nested proto fields, so we use
+        // an identically specified proto.
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        ProtoOutputStream protoOutputStream = new ProtoOutputStream(byteArrayOutputStream);
+        int typeProtoValue = suggestion.isCertain()
+                ? android.app.time.MetricsTimeZoneSuggestion.CERTAIN
+                : android.app.time.MetricsTimeZoneSuggestion.UNCERTAIN;
+        protoOutputStream.write(android.app.time.MetricsTimeZoneSuggestion.TYPE,
+                typeProtoValue);
+        if (suggestion.isCertain()) {
+            for (int zoneIdOrdinal : suggestion.getZoneIdOrdinals()) {
+                protoOutputStream.write(
+                        android.app.time.MetricsTimeZoneSuggestion.TIME_ZONE_ORDINALS,
+                        zoneIdOrdinal);
+            }
+            String[] zoneIds = suggestion.getZoneIds();
+            if (zoneIds != null) {
+                for (String zoneId : zoneIds) {
+                    protoOutputStream.write(
+                            android.app.time.MetricsTimeZoneSuggestion.TIME_ZONE_IDS,
+                            zoneId);
+                }
+            }
+        }
+        protoOutputStream.flush();
+        closeQuietly(byteArrayOutputStream);
+        return byteArrayOutputStream.toByteArray();
     }
 
     private void registerExternalStorageInfo() {
@@ -4188,6 +4258,16 @@ public class StatsPullAtomService extends SystemService {
         );
     }
 
+    private void registerMediaCapabilitiesStats() {
+        int tagId = FrameworkStatsLog.MEDIA_CAPABILITIES;
+        mStatsManager.setPullAtomCallback(
+                tagId,
+                null, // use default PullAtomMetadata values
+                DIRECT_EXECUTOR,
+                mStatsCallbackImpl
+        );
+    }
+
     int parseKeystoreStorageStats(KeystoreAtom[] atoms, List<StatsEvent> pulledData) {
         for (KeystoreAtom atomWrapper : atoms) {
             if (atomWrapper.payload.getTag() != KeystoreAtomPayload.storageStats) {
@@ -4395,8 +4475,9 @@ public class StatsPullAtomService extends SystemService {
                 final int userId = userInfo.getUserHandle().getIdentifier();
 
                 if (isAccessibilityShortcutUser(mContext, userId)) {
-                    final int software_shortcut_type = Settings.Secure.getIntForUser(resolver,
-                            Settings.Secure.ACCESSIBILITY_BUTTON_MODE, 0, userId);
+                    final int software_shortcut_type = convertToAccessibilityShortcutType(
+                            Settings.Secure.getIntForUser(resolver,
+                                    Settings.Secure.ACCESSIBILITY_BUTTON_MODE, 0, userId));
                     final String software_shortcut_list = Settings.Secure.getStringForUser(resolver,
                             Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS, userId);
                     final int software_shortcut_service_num = countAccessibilityServices(
@@ -4470,6 +4551,163 @@ public class StatsPullAtomService extends SystemService {
         return StatsManager.PULL_SUCCESS;
     }
 
+    int pullMediaCapabilitiesStats(int atomTag, List<StatsEvent> pulledData) {
+        AudioManager audioManager = mContext.getSystemService(AudioManager.class);
+        if (audioManager == null) {
+            return StatsManager.PULL_SKIP;
+        }
+
+        // get the surround sound metrics information
+        Map<Integer, Boolean> surroundEncodingsMap = audioManager.getSurroundFormats();
+        byte[] surroundEncodings = toBytes(new ArrayList(surroundEncodingsMap.keySet()));
+        byte[] sinkSurroundEncodings = toBytes(audioManager.getReportedSurroundFormats());
+        List<Integer> disabledSurroundEncodingsList = new ArrayList<>();
+        List<Integer> enabledSurroundEncodingsList = new ArrayList<>();
+        for (int surroundEncoding:  surroundEncodingsMap.keySet()) {
+            if (!surroundEncodingsMap.get(surroundEncoding)) {
+                disabledSurroundEncodingsList.add(surroundEncoding);
+            } else {
+                enabledSurroundEncodingsList.add(surroundEncoding);
+            }
+        }
+        byte[] disabledSurroundEncodings = toBytes(disabledSurroundEncodingsList);
+        byte[] enabledSurroundEncodings = toBytes(enabledSurroundEncodingsList);
+        int surroundOutputMode = audioManager.getEncodedSurroundMode();
+
+        DisplayManager displayManager = mContext.getSystemService(DisplayManager.class);
+        Display display = displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+        // get the display capabilities metrics information
+        Display.HdrCapabilities hdrCapabilities = display.getHdrCapabilities();
+        byte[] sinkHdrFormats = new byte[]{};
+        if (hdrCapabilities != null) {
+            sinkHdrFormats = toBytes(hdrCapabilities.getSupportedHdrTypes());
+        }
+        byte[] sinkDisplayModes = toBytes(display.getSupportedModes());
+        int hdcpLevel = -1;
+        List<UUID> uuids = MediaDrm.getSupportedCryptoSchemes();
+        try {
+            if (!uuids.isEmpty()) {
+                MediaDrm mediaDrm = new MediaDrm(uuids.get(0));
+                hdcpLevel = mediaDrm.getConnectedHdcpLevel();
+            }
+        } catch (UnsupportedSchemeException exception) {
+            Slog.e(TAG, "pulling hdcp level failed.", exception);
+            hdcpLevel = -1;
+        }
+
+        // get the display settings metrics information
+        int matchContentFrameRateUserPreference =
+                displayManager.getMatchContentFrameRateUserPreference();
+        byte[] userDisabledHdrTypes = toBytes(displayManager.getUserDisabledHdrTypes());
+        Display.Mode userPreferredDisplayMode =
+                displayManager.getGlobalUserPreferredDisplayMode();
+        int userPreferredWidth = userPreferredDisplayMode != null
+                ? userPreferredDisplayMode.getPhysicalWidth() : -1;
+        int userPreferredHeight = userPreferredDisplayMode != null
+                ? userPreferredDisplayMode.getPhysicalHeight() : -1;
+        float userPreferredRefreshRate = userPreferredDisplayMode != null
+                ? userPreferredDisplayMode.getRefreshRate() : 0.0f;
+        boolean hasUserDisabledAllm = false;
+        try {
+            hasUserDisabledAllm = Settings.Secure.getIntForUser(
+                    mContext.getContentResolver(),
+                    Settings.Secure.MINIMAL_POST_PROCESSING_ALLOWED,
+                    1) == 0;
+        } catch (Settings.SettingNotFoundException exception) {
+            Slog.e(
+                    TAG, "unable to find setting for MINIMAL_POST_PROCESSING_ALLOWED.",
+                    exception);
+            hasUserDisabledAllm = false;
+        }
+
+        pulledData.add(
+                FrameworkStatsLog.buildStatsEvent(
+                        atomTag, surroundEncodings, sinkSurroundEncodings,
+                        disabledSurroundEncodings, enabledSurroundEncodings, surroundOutputMode,
+                        sinkHdrFormats, sinkDisplayModes, hdcpLevel,
+                        matchContentFrameRateUserPreference, userDisabledHdrTypes,
+                        userPreferredWidth, userPreferredHeight, userPreferredRefreshRate,
+                        hasUserDisabledAllm));
+
+        return StatsManager.PULL_SUCCESS;
+    }
+
+    private byte[] toBytes(List<Integer> audioEncodings) {
+        ProtoOutputStream protoOutputStream = new ProtoOutputStream();
+        for (int audioEncoding : audioEncodings) {
+            protoOutputStream.write(
+                    ProtoOutputStream.FIELD_COUNT_REPEATED | ProtoOutputStream.FIELD_TYPE_ENUM | 1,
+                    audioEncoding);
+        }
+        return protoOutputStream.getBytes();
+    }
+
+    private byte[] toBytes(int[] array) {
+        ProtoOutputStream protoOutputStream = new ProtoOutputStream();
+        for (int element : array) {
+            protoOutputStream.write(
+                    ProtoOutputStream.FIELD_COUNT_REPEATED | ProtoOutputStream.FIELD_TYPE_ENUM | 1,
+                    element);
+        }
+        return protoOutputStream.getBytes();
+    }
+
+    private byte[] toBytes(Display.Mode[] displayModes) {
+        Map<Integer, Integer> modeGroupIds = createModeGroups(displayModes);
+        ProtoOutputStream protoOutputStream = new ProtoOutputStream();
+        for (Display.Mode element : displayModes) {
+            ProtoOutputStream protoOutputStreamMode = new ProtoOutputStream();
+            protoOutputStreamMode.write(
+                    ProtoOutputStream.FIELD_COUNT_SINGLE | ProtoOutputStream.FIELD_TYPE_INT32 | 1,
+                    element.getPhysicalHeight());
+            protoOutputStreamMode.write(
+                    ProtoOutputStream.FIELD_COUNT_SINGLE | ProtoOutputStream.FIELD_TYPE_INT32 | 2,
+                    element.getPhysicalWidth());
+            protoOutputStreamMode.write(
+                    ProtoOutputStream.FIELD_COUNT_SINGLE | ProtoOutputStream.FIELD_TYPE_FLOAT | 3,
+                    element.getRefreshRate());
+            protoOutputStreamMode.write(
+                    ProtoOutputStream.FIELD_COUNT_SINGLE | ProtoOutputStream.FIELD_TYPE_INT32 | 4,
+                    modeGroupIds.get(element.getModeId()));
+            protoOutputStream.write(
+                    ProtoOutputStream.FIELD_COUNT_REPEATED
+                            | ProtoOutputStream.FIELD_TYPE_MESSAGE | 1,
+                    protoOutputStreamMode.getBytes());
+        }
+        return protoOutputStream.getBytes();
+    }
+
+    // Returns map modeId -> groupId such that all modes with the same group have alternative
+    // refresh rates
+    private Map<Integer, Integer> createModeGroups(Display.Mode[] supportedModes) {
+        Map<Integer, Integer> modeGroupIds = new ArrayMap<>();
+        int groupId = 1;
+        for (Display.Mode mode : supportedModes) {
+            if (modeGroupIds.containsKey(mode.getModeId())) {
+                continue;
+            }
+            modeGroupIds.put(mode.getModeId(), groupId);
+            for (float refreshRate : mode.getAlternativeRefreshRates()) {
+                int alternativeModeId = findModeId(supportedModes, mode.getPhysicalWidth(),
+                        mode.getPhysicalHeight(), refreshRate);
+                if (alternativeModeId != -1 && !modeGroupIds.containsKey(alternativeModeId)) {
+                    modeGroupIds.put(alternativeModeId, groupId);
+                }
+            }
+            groupId++;
+        }
+        return modeGroupIds;
+    }
+
+    private int findModeId(Display.Mode[] modes, int width, int height, float refreshRate) {
+        for (Display.Mode mode : modes) {
+            if (mode.matches(width, height, refreshRate)) {
+                return mode.getModeId();
+            }
+        }
+        return -1;
+    }
+
     /**
      * Counts how many accessibility services (including features) there are in the colon-separated
      * string list.
@@ -4515,6 +4753,19 @@ public class StatsPullAtomService extends SystemService {
 
         return (mode == Settings.Secure.ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU)
                 && !TextUtils.isEmpty(software_string);
+    }
+
+    private int convertToAccessibilityShortcutType(int shortcutType) {
+        switch (shortcutType) {
+            case Settings.Secure.ACCESSIBILITY_BUTTON_MODE_NAVIGATION_BAR:
+                return ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__A11Y_BUTTON;
+            case Settings.Secure.ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU:
+                return ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__A11Y_FLOATING_MENU;
+            case Settings.Secure.ACCESSIBILITY_BUTTON_MODE_GESTURE:
+                return ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__A11Y_GESTURE;
+            default:
+                return ACCESSIBILITY_SHORTCUT_REPORTED__SHORTCUT_TYPE__UNKNOWN_TYPE;
+        }
     }
 
     // Thermal event received from vendor thermal management subsystem

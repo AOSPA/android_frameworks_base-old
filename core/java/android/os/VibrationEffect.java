@@ -53,7 +53,10 @@ import java.util.Objects;
 public abstract class VibrationEffect implements Parcelable {
     // Stevens' coefficient to scale the perceived vibration intensity.
     private static final float SCALE_GAMMA = 0.65f;
-
+    // If a vibration is playing for longer than 1s, it's probably not haptic feedback
+    private static final long MAX_HAPTIC_FEEDBACK_DURATION = 1000;
+    // If a vibration is playing more than 3 constants, it's probably not haptic feedback
+    private static final long MAX_HAPTIC_FEEDBACK_COMPOSITION_SIZE = 3;
 
     /**
      * The default vibration strength of the device.
@@ -257,7 +260,7 @@ public abstract class VibrationEffect implements Parcelable {
         for (int i = 0; i < timings.length; i++) {
             float parsedAmplitude = amplitudes[i] == DEFAULT_AMPLITUDE
                     ? DEFAULT_AMPLITUDE : (float) amplitudes[i] / MAX_AMPLITUDE;
-            segments.add(new StepSegment(parsedAmplitude, /* frequency= */ 0, (int) timings[i]));
+            segments.add(new StepSegment(parsedAmplitude, /* frequencyHz= */ 0, (int) timings[i]));
         }
         VibrationEffect effect = new Composed(segments, repeat);
         effect.validate();
@@ -439,6 +442,20 @@ public abstract class VibrationEffect implements Parcelable {
     public abstract long getDuration();
 
     /**
+     * Returns true if this effect could represent a touch haptic feedback.
+     *
+     * <p>It is strongly recommended that an instance of {@link VibrationAttributes} is specified
+     * for each vibration, with the correct usage. When a vibration is played with usage UNKNOWN,
+     * then this method will be used to classify the most common use case and make sure they are
+     * covered by the user settings for "Touch feedback".
+     *
+     * @hide
+     */
+    public boolean isHapticFeedbackCandidate() {
+        return false;
+    }
+
+    /**
      * Resolve default values into integer amplitude numbers.
      *
      * @param defaultAmplitude the default amplitude to apply, must be between 0 and
@@ -582,6 +599,7 @@ public abstract class VibrationEffect implements Parcelable {
             return mRepeatIndex;
         }
 
+        /** @hide */
         @Override
         public void validate() {
             int segmentCount = mSegments.size();
@@ -620,6 +638,37 @@ public abstract class VibrationEffect implements Parcelable {
             return totalDuration;
         }
 
+        /** @hide */
+        @Override
+        public boolean isHapticFeedbackCandidate() {
+            long totalDuration = getDuration();
+            if (totalDuration > MAX_HAPTIC_FEEDBACK_DURATION) {
+                // Vibration duration is known and is longer than the max duration used to classify
+                // haptic feedbacks (or repeating indefinitely with duration == Long.MAX_VALUE).
+                return false;
+            }
+            int segmentCount = mSegments.size();
+            if (segmentCount > MAX_HAPTIC_FEEDBACK_COMPOSITION_SIZE) {
+                // Vibration has some prebaked or primitive constants, it should be limited to the
+                // max composition size used to classify haptic feedbacks.
+                return false;
+            }
+            totalDuration = 0;
+            for (int i = 0; i < segmentCount; i++) {
+                if (!mSegments.get(i).isHapticFeedbackCandidate()) {
+                    // There is at least one segment that is not a candidate for a haptic feedback.
+                    return false;
+                }
+                long segmentDuration = mSegments.get(i).getDuration();
+                if (segmentDuration > 0) {
+                    totalDuration += segmentDuration;
+                }
+            }
+            // Vibration might still have some ramp or step segments, check the known duration.
+            return totalDuration <= MAX_HAPTIC_FEEDBACK_DURATION;
+        }
+
+        /** @hide */
         @NonNull
         @Override
         public Composed resolve(int defaultAmplitude) {
@@ -636,6 +685,7 @@ public abstract class VibrationEffect implements Parcelable {
             return resolved;
         }
 
+        /** @hide */
         @NonNull
         @Override
         public Composed scale(float scaleFactor) {
@@ -652,6 +702,7 @@ public abstract class VibrationEffect implements Parcelable {
             return scaled;
         }
 
+        /** @hide */
         @NonNull
         @Override
         public Composed applyEffectStrength(int effectStrength) {
@@ -815,7 +866,7 @@ public abstract class VibrationEffect implements Parcelable {
             Preconditions.checkArgumentNonnegative(delay);
             if (delay > 0) {
                 // Created a segment sustaining the zero amplitude to represent the delay.
-                addSegment(new StepSegment(/* amplitude= */ 0, /* frequency= */ 0,
+                addSegment(new StepSegment(/* amplitude= */ 0, /* frequencyHz= */ 0,
                         /* duration= */ delay));
             }
             return addSegments(effect);
@@ -982,26 +1033,27 @@ public abstract class VibrationEffect implements Parcelable {
         @NonNull
         public WaveformBuilder addStep(@FloatRange(from = 0f, to = 1f) float amplitude,
                 @IntRange(from = 0) int duration) {
-            return addStep(amplitude, getPreviousFrequency(), duration);
+            mSegments.add(new StepSegment(amplitude, getPreviousFrequencyHz(), duration));
+            return this;
         }
 
         /**
-         * Vibrate with given amplitude for the given duration, in millis, keeping the previous
-         * vibration frequency the same.
+         * Vibrate with given amplitude and frequency for the given duration, in millis.
          *
          * <p>If the duration is zero the vibrator will jump to new amplitude.
          *
          * @param amplitude The amplitude for this step
-         * @param frequency The frequency for this step
+         * @param frequencyHz The frequency for this step, in hertz
          * @param duration  The duration of this step in milliseconds
          * @return The {@link WaveformBuilder} object to enable adding multiple steps in chain.
          */
         @SuppressLint("MissingGetterMatchingBuilder")
         @NonNull
         public WaveformBuilder addStep(@FloatRange(from = 0f, to = 1f) float amplitude,
-                @FloatRange(from = -1f, to = 1f) float frequency,
+                @FloatRange(from = 1f) float frequencyHz,
                 @IntRange(from = 0) int duration) {
-            mSegments.add(new StepSegment(amplitude, frequency, duration));
+            Preconditions.checkArgument(frequencyHz >= 1, "Frequency must be >= 1");
+            mSegments.add(new StepSegment(amplitude, frequencyHz, duration));
             return this;
         }
 
@@ -1019,7 +1071,9 @@ public abstract class VibrationEffect implements Parcelable {
         @NonNull
         public WaveformBuilder addRamp(@FloatRange(from = 0f, to = 1f) float amplitude,
                 @IntRange(from = 0) int duration) {
-            return addRamp(amplitude, getPreviousFrequency(), duration);
+            mSegments.add(new RampSegment(getPreviousAmplitude(), amplitude,
+                    getPreviousFrequencyHz(), getPreviousFrequencyHz(), duration));
+            return this;
         }
 
         /**
@@ -1029,22 +1083,23 @@ public abstract class VibrationEffect implements Parcelable {
          * <p>If the duration is zero the vibrator will jump to new amplitude and frequency.
          *
          * @param amplitude The final amplitude this ramp should reach
-         * @param frequency The final frequency this ramp should reach
+         * @param frequencyHz The final frequency this ramp should reach, in hertz
          * @param duration  The duration of this ramp in milliseconds
          * @return The {@link WaveformBuilder} object to enable adding multiple steps in chain.
          */
         @SuppressLint("MissingGetterMatchingBuilder")
         @NonNull
         public WaveformBuilder addRamp(@FloatRange(from = 0f, to = 1f) float amplitude,
-                @FloatRange(from = -1f, to = 1f) float frequency,
+                @FloatRange(from = 1f) float frequencyHz,
                 @IntRange(from = 0) int duration) {
-            mSegments.add(new RampSegment(getPreviousAmplitude(), amplitude, getPreviousFrequency(),
-                    frequency, duration));
+            Preconditions.checkArgument(frequencyHz >= 1, "Frequency must be >= 1");
+            mSegments.add(new RampSegment(getPreviousAmplitude(), amplitude,
+                    getPreviousFrequencyHz(), frequencyHz, duration));
             return this;
         }
 
         /**
-         * Compose all of the steps together into a single {@link VibrationEffect}.
+         * Compose all the steps together into a single {@link VibrationEffect}.
          *
          * The {@link WaveformBuilder} object is still valid after this call, so you can
          * continue adding more primitives to it and generating more {@link VibrationEffect}s by
@@ -1058,7 +1113,7 @@ public abstract class VibrationEffect implements Parcelable {
         }
 
         /**
-         * Compose all of the steps together into a single {@link VibrationEffect}.
+         * Compose all the steps together into a single {@link VibrationEffect}.
          *
          * <p>To cause the pattern to repeat, pass the index at which to start the repetition
          * (starting at 0), or -1 to disable repeating.
@@ -1080,13 +1135,13 @@ public abstract class VibrationEffect implements Parcelable {
             return effect;
         }
 
-        private float getPreviousFrequency() {
+        private float getPreviousFrequencyHz() {
             if (!mSegments.isEmpty()) {
                 VibrationEffectSegment segment = mSegments.get(mSegments.size() - 1);
                 if (segment instanceof StepSegment) {
-                    return ((StepSegment) segment).getFrequency();
+                    return ((StepSegment) segment).getFrequencyHz();
                 } else if (segment instanceof RampSegment) {
-                    return ((RampSegment) segment).getEndFrequency();
+                    return ((RampSegment) segment).getEndFrequencyHz();
                 }
             }
             return 0;

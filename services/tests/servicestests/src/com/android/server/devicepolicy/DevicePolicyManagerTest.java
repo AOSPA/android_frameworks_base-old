@@ -37,6 +37,8 @@ import static android.app.admin.DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR;
 import static android.app.admin.DevicePolicyManager.WIPE_EUICC;
 import static android.app.admin.PasswordMetrics.computeForPasswordOrPin;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_DIRECT_BOOT_AWARE;
+import static android.net.ConnectivityManager.PROFILE_NETWORK_PREFERENCE_DEFAULT;
+import static android.net.ConnectivityManager.PROFILE_NETWORK_PREFERENCE_ENTERPRISE;
 import static android.net.InetAddresses.parseNumericAddress;
 
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_NONE;
@@ -100,7 +102,7 @@ import android.content.pm.StringParceledListSlice;
 import android.content.pm.UserInfo;
 import android.graphics.Color;
 import android.hardware.usb.UsbManager;
-import android.net.ConnectivityManager;
+import android.net.ProfileNetworkPreference;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
@@ -1735,11 +1737,11 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         pi.applicationInfo.flags = flags;
         doReturn(pi).when(getServices().ipackageManager).getPackageInfo(
                 eq(packageName),
-                anyInt(),
+                anyLong(),
                 eq(userId));
         doReturn(pi.applicationInfo).when(getServices().ipackageManager).getApplicationInfo(
                 eq(packageName),
-                anyInt(),
+                anyLong(),
                 eq(userId));
         doReturn(true).when(getServices().ipackageManager).isPackageAvailable(packageName, userId);
         // Setup application UID with the PackageManager
@@ -4058,12 +4060,15 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mServiceContext.permissions.add(permission.INTERACT_ACROSS_USERS_FULL);
 
         dpms.handleStartUser(managedProfileUserId);
-        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
-                eq(UserHandle.of(managedProfileUserId)),
-                anyInt(),
-                any(),
-                any()
-        );
+        ProfileNetworkPreference preferenceDetails =
+                new ProfileNetworkPreference.Builder()
+                .setPreference(PROFILE_NETWORK_PREFERENCE_DEFAULT)
+                .build();
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences,
+                null, null);
     }
 
     @Test
@@ -4075,12 +4080,15 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mServiceContext.permissions.add(permission.INTERACT_ACROSS_USERS_FULL);
 
         dpms.handleStopUser(managedProfileUserId);
-        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
-                eq(UserHandle.of(managedProfileUserId)),
-                eq(ConnectivityManager.PROFILE_NETWORK_PREFERENCE_DEFAULT),
-                any(),
-                any()
-        );
+        ProfileNetworkPreference preferenceDetails =
+                new ProfileNetworkPreference.Builder()
+                        .setPreference(PROFILE_NETWORK_PREFERENCE_DEFAULT)
+                        .build();
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences,
+                        null, null);
     }
 
     @Test
@@ -4098,21 +4106,29 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setPreferentialNetworkServiceEnabled(false);
         assertThat(dpm.isPreferentialNetworkServiceEnabled()).isFalse();
-        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
-                eq(UserHandle.of(managedProfileUserId)),
-                eq(ConnectivityManager.PROFILE_NETWORK_PREFERENCE_DEFAULT),
-                any(),
-                any()
-        );
+
+        ProfileNetworkPreference preferenceDetails =
+                new ProfileNetworkPreference.Builder()
+                        .setPreference(PROFILE_NETWORK_PREFERENCE_DEFAULT)
+                        .build();
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences,
+                        null, null);
 
         dpm.setPreferentialNetworkServiceEnabled(true);
         assertThat(dpm.isPreferentialNetworkServiceEnabled()).isTrue();
-        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
-                eq(UserHandle.of(managedProfileUserId)),
-                eq(ConnectivityManager.PROFILE_NETWORK_PREFERENCE_ENTERPRISE),
-                any(),
-                any()
-        );
+
+        ProfileNetworkPreference preferenceDetails2 =
+                new ProfileNetworkPreference.Builder()
+                        .setPreference(PROFILE_NETWORK_PREFERENCE_ENTERPRISE)
+                        .build();
+        List<ProfileNetworkPreference> preferences2 = new ArrayList<>();
+        preferences2.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences2,
+                        null, null);
     }
 
     @Test
@@ -4708,11 +4724,11 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // Ensure packages are *not* flagged as test_only.
         doReturn(new ApplicationInfo()).when(getServices().ipackageManager).getApplicationInfo(
                 eq(admin1.getPackageName()),
-                anyInt(),
+                anyLong(),
                 eq(CALLER_USER_HANDLE));
         doReturn(new ApplicationInfo()).when(getServices().ipackageManager).getApplicationInfo(
                 eq(admin2.getPackageName()),
-                anyInt(),
+                anyLong(),
                 eq(CALLER_USER_HANDLE));
 
         // Initial state is disabled.
@@ -7078,7 +7094,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         doReturn(ai).when(getServices().ipackageManager).getApplicationInfo(
                 eq(admin1.getPackageName()),
-                anyInt(),
+                anyLong(),
                 eq(CALLER_USER_HANDLE));
     }
 

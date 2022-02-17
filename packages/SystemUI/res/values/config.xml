@@ -82,7 +82,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner
+        internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,fgsmanager,color_correction
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -97,7 +97,9 @@
          The syntax is setting-name:spec. If the tile is a TileService, the spec should be specified
          as custom(package/class). Relative class name is supported. -->
     <string-array name="config_quickSettingsAutoAdd" translatable="false">
+        <item>accessibility_display_daltonizer_enabled:color_correction</item>
         <item>accessibility_display_inversion_enabled:inversion</item>
+        <item>one_handed_mode_enabled:onehanded</item>
     </string-array>
 
     <!-- Show indicator for Wifi on but not connected. -->
@@ -292,6 +294,7 @@
     <string-array name="config_systemUIServiceComponents" translatable="false">
         <item>com.android.systemui.util.NotificationChannels</item>
         <item>com.android.systemui.keyguard.KeyguardViewMediator</item>
+        <item>com.android.keyguard.KeyguardBiometricLockoutLogger</item>
         <item>com.android.systemui.recents.Recents</item>
         <item>com.android.systemui.volume.VolumeUI</item>
         <item>com.android.systemui.statusbar.phone.StatusBar</item>
@@ -313,6 +316,7 @@
         <item>com.android.systemui.accessibility.SystemActions</item>
         <item>com.android.systemui.toast.ToastUI</item>
         <item>com.android.systemui.wmshell.WMShell</item>
+        <item>com.android.systemui.clipboardoverlay.ClipboardListener</item>
     </string-array>
 
     <!-- SystemUI Services: The classes of the additional stuff to start. Services here are
@@ -675,6 +679,9 @@
          attempts. -->
     <integer name="config_communalSourceReconnectBaseDelay">1000</integer>
 
+    <!-- The minimum time in milliseconds for a connection to be considered connected. Any time -->
+    <integer name="config_connectionMinDuration">1000</integer>
+
     <!-- Flag to activate notification to contents feature -->
     <bool name="config_notificationToContents">false</bool>
 
@@ -714,21 +721,27 @@
     <bool name="config_enablePrivacyDot">true</bool>
 
     <!-- The positions widgets can be in defined as View.Gravity constants -->
-    <integer-array name="config_dreamOverlayPositions">
+    <integer-array name="config_dreamComplicationPositions">
     </integer-array>
 
-    <!-- Widget components to show as dream overlays -->
-    <string-array name="config_dreamOverlayComponents" translatable="false">
+    <!-- Widget components to show as dream complications -->
+    <string-array name="config_dreamAppWidgetComplications" translatable="false">
     </string-array>
 
-    <!-- Width percentage of dream overlay components -->
-    <item name="config_dreamOverlayComponentWidthPercent" translatable="false" format="float"
+    <!-- Width percentage of dream complications -->
+    <item name="config_dreamComplicationWidthPercent" translatable="false" format="float"
           type="dimen">0.33</item>
 
-    <!-- Height percentage of dream overlay components -->
-    <item name="config_dreamOverlayComponentHeightPercent" translatable="false" format="float"
+    <!-- Height percentage of dream complications -->
+    <item name="config_dreamComplicationHeightPercent" translatable="false" format="float"
           type="dimen">0.25</item>
 
     <!-- Flag to enable dream overlay service and its registration -->
     <bool name="config_dreamOverlayServiceEnabled">false</bool>
+
+    <!-- Class for the communal source connector to be used -->
+    <string name="config_communalSourceConnector" translatable="false"></string>
+
+    <!-- How often in milliseconds to jitter the dream overlay in order to avoid burn-in. -->
+    <integer name="config_dreamOverlayBurnInProtectionUpdateIntervalMillis">500</integer>
 </resources>

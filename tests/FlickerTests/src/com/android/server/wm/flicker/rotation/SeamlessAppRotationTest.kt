@@ -179,6 +179,17 @@ class SeamlessAppRotationTest(
         }
     }
 
+    /**
+     * Checks that the focus doesn't change during animation
+     */
+    @Presubmit
+    @Test
+    fun focusDoesNotChange() {
+        testSpec.assertEventLog {
+            this.focusDoesNotChange()
+        }
+    }
+
     /** {@inheritDoc} */
     @FlakyTest
     @Test

@@ -36,7 +36,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.PackageManager.NOTIFY_PACKAGE_USE_ACTIVITY;
 import static android.content.pm.PackageManager.PERMISSION_DENIED;
@@ -380,6 +379,17 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     /** Check if placing task or activity on specified display is allowed. */
     boolean canPlaceEntityOnDisplay(int displayId, int callingPid, int callingUid,
             ActivityInfo activityInfo) {
+        return canPlaceEntityOnDisplay(displayId, callingPid, callingUid, null /* task */,
+                activityInfo);
+    }
+
+    boolean canPlaceEntityOnDisplay(int displayId, int callingPid, int callingUid, Task task) {
+        return canPlaceEntityOnDisplay(displayId, callingPid, callingUid, task,
+                null /* activityInfo */);
+    }
+
+    private boolean canPlaceEntityOnDisplay(int displayId, int callingPid, int callingUid,
+            Task task, ActivityInfo activityInfo) {
         if (displayId == DEFAULT_DISPLAY) {
             // No restrictions for the default display.
             return true;
@@ -388,12 +398,31 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // Can't launch on secondary displays if feature is not supported.
             return false;
         }
+
         if (!isCallerAllowedToLaunchOnDisplay(callingPid, callingUid, displayId, activityInfo)) {
             // Can't place activities to a display that has restricted launch rules.
             // In this case the request should be made by explicitly adding target display id and
             // by caller with corresponding permissions. See #isCallerAllowedToLaunchOnDisplay().
             return false;
         }
+
+        final DisplayContent displayContent =
+                mRootWindowContainer.getDisplayContentOrCreate(displayId);
+        if (displayContent != null && displayContent.mDwpcHelper.hasController()) {
+            final ArrayList<ActivityInfo> activities = new ArrayList<>();
+            if (activityInfo != null) {
+                activities.add(activityInfo);
+            }
+            if (task != null) {
+                task.forAllActivities((r) -> {
+                    activities.add(r.info);
+                });
+            }
+            if (!displayContent.mDwpcHelper.canContainActivities(activities)) {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -688,22 +717,35 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             intent.setComponent(new ComponentName(
                     aInfo.applicationInfo.packageName, aInfo.name));
 
-            // Don't debug things in the system process
-            if (!aInfo.processName.equals("system")) {
-                if ((startFlags & (START_FLAG_DEBUG | START_FLAG_NATIVE_DEBUGGING
-                        | START_FLAG_TRACK_ALLOCATION)) != 0 || profilerInfo != null) {
-
+            final boolean requestDebug = (startFlags & (START_FLAG_DEBUG
+                    | START_FLAG_NATIVE_DEBUGGING | START_FLAG_TRACK_ALLOCATION)) != 0;
+            final boolean requestProfile = profilerInfo != null;
+            if (requestDebug || requestProfile) {
+                final boolean debuggable = (Build.IS_DEBUGGABLE
+                        || (aInfo.applicationInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0)
+                        && !aInfo.processName.equals("system");
+                if ((requestDebug && !debuggable) || (requestProfile
+                        && (!debuggable && !aInfo.applicationInfo.isProfileableByShell()))) {
+                    Slog.w(TAG, "Ignore debugging for non-debuggable app: " + aInfo.packageName);
+                } else {
                      // Mimic an AMS synchronous call by passing a message to AMS and wait for AMS
                      // to notify us that the task has completed.
                      // TODO(b/80414790) look into further untangling for the situation where the
                      // caller is on the same thread as the handler we are posting to.
                     synchronized (mService.mGlobalLock) {
                         // Post message to AMS.
-                        final Message msg = PooledLambda.obtainMessage(
-                                ActivityManagerInternal::setDebugFlagsForStartingActivity,
-                                mService.mAmInternal, aInfo, startFlags, profilerInfo,
-                                mService.mGlobalLock);
-                        mService.mH.sendMessage(msg);
+                        mService.mH.post(() -> {
+                            try {
+                                mService.mAmInternal.setDebugFlagsForStartingActivity(aInfo,
+                                        startFlags, profilerInfo, mService.mGlobalLock);
+                            } catch (Throwable e) {
+                                // Simply ignore it because the debugging doesn't take effect.
+                                Slog.w(TAG, e);
+                                synchronized (mService.mGlobalLockWithoutBoost) {
+                                    mService.mGlobalLockWithoutBoost.notifyAll();
+                                }
+                            }
+                        });
                         try {
                             mService.mGlobalLock.wait();
                         } catch (InterruptedException ignore) {
@@ -1448,7 +1490,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
             task.mTransitionController.requestTransitionIfNeeded(TRANSIT_TO_FRONT,
                     0 /* flags */, task, task /* readyGroupRef */,
-                    options != null ? options.getRemoteTransition() : null);
+                    options != null ? options.getRemoteTransition() : null,
+                    null /* displayChange */);
             reason = reason + " findTaskToMoveToFront";
             boolean reparented = false;
             if (task.isResizeable() && canUseActivityOptionsLaunchBounds(options)) {
@@ -1866,30 +1909,68 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     void acquireAppLaunchPerfLock(ActivityRecord r) {
         /* Acquire perf lock during new app launch */
         if (mPerfBoost != null) {
-            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
-            mPerfSendTapHint = true;
-            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
+
+            int pkgType = mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE,
+                                                     r.packageName);
+            int wpcPid = -1;
             if (mService != null && r != null && r.info != null && r.info.applicationInfo !=null) {
                 final WindowProcessController wpc =
                         mService.getProcessController(r.processName, r.info.applicationInfo.uid);
                 if (wpc != null && wpc.hasThread()) {
                    //If target process didn't start yet, this operation will be done when app call attach
-                   mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, wpc.getPid(), BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+                   wpcPid = wpc.getPid();
                 }
             }
+            if (mPerfBoost.getPerfHalVersion() >= BoostFramework.PERF_HAL_V23) {
+                mPerfBoost.perfHintAcqRel(-1, BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, -1, BoostFramework.Launch.BOOST_V1, 2, pkgType, wpcPid);
+                mPerfSendTapHint = true;
+                mPerfBoost.perfHintAcqRel(-1, BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, -1, BoostFramework.Launch.BOOST_V2, 2, pkgType, wpcPid);
+                if (wpcPid != -1) {
+                   mPerfBoost.perfHintAcqRel(-1, BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, wpcPid, BoostFramework.Launch.TYPE_ATTACH_APPLICATION,
+                        2, pkgType, wpcPid);
+                }
 
-            if(mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) == BoostFramework.WorkloadType.GAME)
-            {
-                mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+                if (pkgType == BoostFramework.WorkloadType.GAME)
+                {
+                    mPerfHandle =
+                        mPerfBoost.perfHintAcqRel(-1, BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                           r.packageName, -1, BoostFramework.Launch.BOOST_GAME, 2, pkgType, wpcPid);
+                } else {
+                    mPerfHandle =
+                        mPerfBoost.perfHintAcqRel(-1, BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, -1, BoostFramework.Launch.BOOST_V3, 2, pkgType, wpcPid);
+                }
+
             } else {
-                mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+                mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName,
+                                    -1, BoostFramework.Launch.BOOST_V1);
+                mPerfSendTapHint = true;
+                mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName,
+                    -1, BoostFramework.Launch.BOOST_V2);
+                if (wpcPid != -1) {
+                    mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, wpcPid, BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+                }
+
+                if (pkgType == BoostFramework.WorkloadType.GAME)
+                {
+                    mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                    r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+                } else {
+                    mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+                }
             }
             if (mPerfHandle > 0)
                 mIsPerfBoostAcquired = true;
             // Start IOP
             if (r.info.applicationInfo != null && r.info.applicationInfo.sourceDir != null) {
                 mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                       r.info.applicationInfo.sourceDir.substring(0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+                       r.info.applicationInfo.sourceDir.substring(0,
+                        r.info.applicationInfo.sourceDir.lastIndexOf('/')));
             }
         }
     }
@@ -2260,10 +2341,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             boolean forceNonResizable) {
         final boolean isSecondaryDisplayPreferred = preferredTaskDisplayArea != null
                 && preferredTaskDisplayArea.getDisplayId() != DEFAULT_DISPLAY;
-        final boolean inSplitScreenMode = actualRootTask != null
-                && actualRootTask.getDisplayArea().isSplitScreenModeActivated();
-        if (((!inSplitScreenMode && preferredWindowingMode != WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)
-                && !isSecondaryDisplayPreferred) || !task.isActivityTypeStandardOrUndefined()) {
+        if (!task.isActivityTypeStandardOrUndefined()) {
             return;
         }
 
@@ -2604,10 +2682,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                                 == PERMISSION_GRANTED) {
                     mRecentTasks.setFreezeTaskListReordering();
                 }
-                if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
-                        || activityOptions.getLaunchRootTask() != null) {
-                    // Don't move home activity forward if we are launching into primary split or
-                    // there is a launch root set.
+                if (activityOptions.getLaunchRootTask() != null) {
+                    // Don't move home activity forward if there is a launch root set.
                     moveHomeTaskForward = false;
                 }
             }

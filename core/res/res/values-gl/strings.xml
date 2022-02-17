@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Permite que a aplicación modifique o rexistro de chamadas do dispositivo Android TV, incluídos os datos acerca de chamadas entrantes e saíntes. As aplicacións maliciosas poden utilizar este permiso para borrar ou modificar o rexistro de chamadas."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Permite á aplicación modificar o rexistro de chamadas do teléfono, incluídos os datos acerca de chamadas entrantes e saíntes. É posible que aplicacións maliciosas utilicen esta acción para borrar ou modificar o teu rexistro de chamadas."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"acceder a sensores corporais (como monitores de ritmo cardíaco)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Permite que a aplicación acceda aos datos dos sensores que controlan o teu estado físico, como o ritmo cardíaco."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Acceso a datos de sensores corporais, como o ritmo cardíaco, a temperatura, a porcentaxe de osíxeno en sangue etc."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"acceso en segundo plano a sensores corporais (como monitores de ritmo cardíaco)"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Acceso en segundo plano a datos de sensores corporais, como o ritmo cardíaco, a temperatura, a porcentaxe de osíxeno en sangue etc."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Ler os detalles e os eventos do calendario"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Esta aplicación pode ler todos os eventos do calendario almacenados na túa tableta e compartir ou gardar os datos do calendario."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Esta aplicación pode ler todos os eventos do calendario almacenados no dispositivo Android TV e compartir ou gardar os datos do calendario."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Permite que a aplicación use o servizo de IMS para facer chamadas sen a túa intervención."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"ler o estado e a identidade do teléfono"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Permite á aplicación acceder ás funcións de teléfono do dispositivo. Con este permiso a aplicación pode determinar o número de teléfono e os ID do dispositivo, se unha chamada está activa e o número remoto conectado mediante unha chamada."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"ler a identidade e o estado das funcións básicas de telefonía"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Permítelle á aplicación acceder ás funcións básicas de telefonía do dispositivo."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"dirixir as chamadas a través do sistema"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Permite á aplicación dirixir as súas chamadas a través do sistema para mellorar a túa experiencia durante as chamadas."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"consultar e controlar as chamadas a través do sistema."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Toca para eliminar o teu modelo facial e despois engade de novo a cara"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Configurar o desbloqueo facial"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Mira o teléfono para desbloquealo"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Para usar o desbloqueo facial, activa "<b>"Acceso á cámara"</b>" en Configuración &gt; Privacidade"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Configura máis maneiras de desbloquear o dispositivo"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Toca para engadir unha impresión dixital"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Desbloqueo mediante impresión dixital"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Permite á aplicación ler e escribir a configuración do modo Non molestar."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"iniciar uso de permiso de vista"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Permite ao propietario iniciar o uso de permisos dunha aplicación. As aplicacións normais non deberían precisalo nunca."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"iniciar vista das decisións sobre os permisos"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Permite que a persoa propietaria acceda a unha pantalla onde poderá examinar as decisións relativas aos permisos. Esta opción nunca debería ser necesaria para as aplicacións normais."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"comezar a ver as funcións da aplicación"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Permite que o propietario comece a ver a información das funcións dunha aplicación."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"acceder aos datos dos sensores usando unha taxa de mostraxe alta"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Controlar os intentos de desbloqueo da pantalla"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Supervisa o número de contrasinais incorrectos escritos ao desbloquear a pantalla e bloquea a tableta ou borra todos os datos da tableta se se escriben demasiados contrasinais incorrectos."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Controla o número de contrasinais incorrectos escritos ao desbloquear a pantalla e bloquea o dispositivo Android TV ou borra todos os datos do dispositivo se se escriben demasiados contrasinais incorrectos."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Supervisa o número de contrasinais incorrectos que se escriben ao desbloquear a pantalla e bloquea o sistema de información e entretemento ou borra todos os seus datos se se meten demasiados incorrectos."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Supervisa o número de contrasinais incorrectos escritos ao desbloquear a pantalla e bloquea o teléfono ou borra todos os datos do teléfono se se escriben demasiados contrasinais incorrectos."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Supervisar o número de contrasinais incorrectos escritos ao desbloquear a pantalla e bloquear a tableta ou borrar todos os datos do usuario se se escriben demasiados contrasinais incorrectos."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Controla o número de contrasinais incorrectos escritos ao desbloquear a pantalla e bloquea o dispositivo Android TV ou borra todos os datos deste usuario se se escriben demasiados contrasinais incorrectos."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Supervisa o número de contrasinais incorrectos que se escriben ao desbloquear a pantalla e bloquea o sistema de información e entretemento ou borra todos os datos deste perfil se se meten demasiados incorrectos."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Supervisar o número de contrasinais incorrectos escritos ao desbloquear a pantalla e bloquear o teléfono ou borrar todos os datos do usuario se se escriben demasiados contrasinais incorrectos."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Cambiar o bloqueo da pantalla"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Cambia o bloqueo da pantalla."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Borrar todos os datos"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Borra os datos da tableta sen previo aviso mediante a realización dun restablecemento dos datos de fábrica."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Borra a información do dispositivo Android TV sen avisar e realiza un restablecemento dos datos de fábrica."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Borra os datos do sistema de información e entretemento sen previo aviso a través do restablecemento dos datos de fábrica."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Borra os datos do teléfono sen previo aviso mediante a realización dun restablecemento dos datos de fábrica."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Borrar os datos do usuario"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Borrar os datos do perfil"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Borrar os datos do usuario"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Borra os datos deste usuario nesta tableta sen previo aviso."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Borra os datos deste usuario neste dispositivo Android TV sen avisar."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Borra os datos deste perfil do sistema de información e entretemento sen previo aviso."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Borra os datos deste usuario neste teléfono sen previo aviso."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Establecer o proxy global do dispositivo"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Configura o proxy global do dispositivo que se debe usar cando a política está activada. Só o propietario do dispositivo pode configurar o proxy global."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Preparando <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Iniciando aplicacións."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Está finalizando o arranque"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Queres apagar a pantalla?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Premiches o botón de acendido mentres configurabas a impresión dixital.\n\nAo realizar esta acción, normalmente apágase a pantalla."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Apagar"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Cancelar"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Queres continuar coa configuración?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Premiches o botón de acendido, o que adoita facer que se apague a pantalla.\n\nProba a dar un toque suave namentres configuras a impresión dixital."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Desactivar pantalla"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Seguir configurando"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Queres seguir verificando a impresión?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Premiches o botón de acendido, o que adoita facer que se apague a pantalla.\n\nProba a dar un toque suave para verificar a impresión dixital."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Desactivar pantalla"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Continuar"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> está en execución"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Toca para volver ao xogo"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Escolle un xogo"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Notificación de aplicacións personalizada"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Queres permitir que <xliff:g id="APP">%1$s</xliff:g> cree un usuario novo con <xliff:g id="ACCOUNT">%2$s</xliff:g>? (Xa existe un usuario con esta conta)"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Queres permitir que <xliff:g id="APP">%1$s</xliff:g> cree un usuario novo con <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Engadir usuario supervisado"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Engadir un idioma"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Preferencia de rexión"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Escribe o nome do idioma"</string>

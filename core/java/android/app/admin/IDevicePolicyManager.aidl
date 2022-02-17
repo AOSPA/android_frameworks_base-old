@@ -17,6 +17,8 @@
 
 package android.app.admin;
 
+import android.app.admin.DevicePolicyDrawableResource;
+import android.app.admin.ParcelableResource;
 import android.app.admin.NetworkEvent;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
@@ -243,7 +245,7 @@ interface IDevicePolicyManager {
 
     boolean setPermittedInputMethods(in ComponentName admin,in List<String> packageList, boolean parent);
     List<String> getPermittedInputMethods(in ComponentName admin, boolean parent);
-    List<String> getPermittedInputMethodsForCurrentUser();
+    List<String> getPermittedInputMethodsAsUser(int userId);
     boolean isInputMethodPermittedByAdmin(in ComponentName admin, String packageName, int userId, boolean parent);
 
     boolean setPermittedCrossProfileNotificationListeners(in ComponentName admin, in List<String> packageList);
@@ -531,4 +533,7 @@ interface IDevicePolicyManager {
     boolean canUsbDataSignalingBeDisabled();
 
     List<UserHandle> listForegroundAffiliatedUsers();
+    void setDrawables(in List<DevicePolicyDrawableResource> resource);
+    void resetDrawables(in int[] drawableIds);
+    ParcelableResource getDrawable(int drawableId, int drawableStyle, int drawableSource);
 }

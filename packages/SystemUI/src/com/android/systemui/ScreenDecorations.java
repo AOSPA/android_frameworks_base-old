@@ -87,7 +87,7 @@ import com.android.systemui.animation.Interpolators;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.qs.SecureSetting;
+import com.android.systemui.qs.SettingObserver;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.events.PrivacyDotViewController;
 import com.android.systemui.tuner.TunerService;
@@ -96,6 +96,8 @@ import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.ThreadFactory;
 import com.android.systemui.util.settings.SecureSettings;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -107,7 +109,7 @@ import javax.inject.Inject;
  * for antialiasing and emulation purposes.
  */
 @SysUISingleton
-public class ScreenDecorations extends CoreStartable implements Tunable {
+public class ScreenDecorations extends CoreStartable implements Tunable , Dumpable{
     private static final boolean DEBUG = false;
     private static final String TAG = "ScreenDecorations";
 
@@ -159,7 +161,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable {
     private float mDensity;
     private WindowManager mWindowManager;
     private int mRotation;
-    private SecureSetting mColorInversionSetting;
+    private SettingObserver mColorInversionSetting;
     private DelayableExecutor mExecutor;
     private Handler mHandler;
     private boolean mPendingRotationChange;
@@ -346,11 +348,11 @@ public class ScreenDecorations extends CoreStartable implements Tunable {
             mDisplayManager.getDisplay(DEFAULT_DISPLAY).getMetrics(metrics);
             mDensity = metrics.density;
 
-            mExecutor.execute(() -> mTunerService.addTunable(this, SIZE));
+            mMainExecutor.execute(() -> mTunerService.addTunable(this, SIZE));
 
             // Watch color inversion and invert the overlay as needed.
             if (mColorInversionSetting == null) {
-                mColorInversionSetting = new SecureSetting(mSecureSettings, mHandler,
+                mColorInversionSetting = new SettingObserver(mSecureSettings, mHandler,
                         Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED,
                         mUserTracker.getUserId()) {
                     @Override
@@ -679,6 +681,20 @@ public class ScreenDecorations extends CoreStartable implements Tunable {
                 updateLayoutParams();
             }
         });
+    }
+
+    @Override
+    public void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
+        pw.println("ScreenDecorations state:");
+        pw.println("  DEBUG_DISABLE_SCREEN_DECORATIONS:" + DEBUG_DISABLE_SCREEN_DECORATIONS);
+        pw.println("  mIsRoundedCornerMultipleRadius:" + mIsRoundedCornerMultipleRadius);
+        pw.println("  mIsPrivacyDotEnabled:" + mIsPrivacyDotEnabled);
+        pw.println("  mPendingRotationChange:" + mPendingRotationChange);
+        pw.println("  mRoundedDefault(x,y)=(" + mRoundedDefault.x + "," + mRoundedDefault.y + ")");
+        pw.println("  mRoundedDefaultTop(x,y)=(" + mRoundedDefaultTop.x + "," + mRoundedDefaultTop.y
+                + ")");
+        pw.println("  mRoundedDefaultBottom(x,y)=(" + mRoundedDefaultBottom.x + ","
+                + mRoundedDefaultBottom.y + ")");
     }
 
     private void updateOrientation() {

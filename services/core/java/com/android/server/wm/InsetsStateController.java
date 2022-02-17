@@ -187,7 +187,6 @@ class InsetsStateController {
 
             // Navigation bar doesn't get influenced by anything else
             if (type == ITYPE_NAVIGATION_BAR || type == ITYPE_EXTRA_NAVIGATION_BAR) {
-                state.removeSource(ITYPE_IME);
                 state.removeSource(ITYPE_STATUS_BAR);
                 state.removeSource(ITYPE_CLIMATE_BAR);
                 state.removeSource(ITYPE_CAPTION_BAR);
@@ -247,16 +246,6 @@ class InsetsStateController {
             result[i] = mProviders.get(controlled.get(i)).getControl(target);
         }
         return result;
-    }
-
-    public void addProvidersToTransition() {
-        for (int i = mProviders.size() - 1; i >= 0; --i) {
-            final InsetsSourceProvider p = mProviders.valueAt(i);
-            if (p == null) continue;
-            final WindowContainer wc = p.mWin;
-            if (wc == null) continue;
-            mDisplayContent.mTransitionController.collect(wc);
-        }
     }
 
     /**

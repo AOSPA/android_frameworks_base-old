@@ -2667,6 +2667,46 @@ public abstract class ContentResolver implements ContentInterface {
                 ContentProvider.getUserIdFromUri(uri, mContext.getUserId()));
     }
 
+    /**
+     * Same as {@link #registerContentObserver(Uri, boolean, ContentObserver)}, but the observer
+     * registered will get content change notifications for the specified user.
+     * {@link ContentObserver#onChange(boolean, Collection, int, UserHandle)} should be
+     * overwritten to get the corresponding {@link UserHandle} for that notification.
+     *
+     * <p> If you don't hold the {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL}
+     * permission, you can register the {@link ContentObserver} only for current user.
+     *
+     * @param uri                  The URI to watch for changes. This can be a specific row URI,
+     *                             or a base URI for a whole class of content.
+     * @param notifyForDescendants When false, the observer will be notified
+     *                             whenever a change occurs to the exact URI specified by
+     *                             <code>uri</code> or to one of the URI's ancestors in the path
+     *                             hierarchy. When true, the observer will also be notified
+     *                             whenever a change occurs to the URI's descendants in the path
+     *                             hierarchy.
+     * @param observer             The object that receives callbacks when changes occur.
+     * @param userHandle           The UserHandle of the user the content change notifications are
+     *                             for.
+     * @hide
+     * @see #unregisterContentObserver
+     */
+    @RequiresPermission(value = android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
+            conditional = true)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public final void registerContentObserverAsUser(@NonNull Uri uri,
+            boolean notifyForDescendants,
+            @NonNull ContentObserver observer,
+            @NonNull UserHandle userHandle) {
+        Objects.requireNonNull(uri, "uri");
+        Objects.requireNonNull(observer, "observer");
+        Objects.requireNonNull(userHandle, "userHandle");
+        registerContentObserver(
+                ContentProvider.getUriWithoutUserId(uri),
+                notifyForDescendants,
+                observer,
+                userHandle.getIdentifier());
+    }
+
     /** @hide - designated user version */
     @UnsupportedAppUsage
     public final void registerContentObserver(Uri uri, boolean notifyForDescendents,
@@ -3824,7 +3864,7 @@ public abstract class ContentResolver implements ContentInterface {
         CursorWrapperInner(Cursor cursor, IContentProvider contentProvider) {
             super(cursor);
             mContentProvider = contentProvider;
-            mCloseGuard.open("close");
+            mCloseGuard.open("CursorWrapperInner.close");
         }
 
         @Override

@@ -54,4 +54,8 @@ oneway interface IPermissionController {
     void getGroupOfPlatformPermission(
             in String permissionName,
             in AndroidFuture<String> callback);
+    void getUnusedAppCount(
+            in AndroidFuture callback);
+    void selfRevokePermissions(in String packageName, in List<String> permissions,
+            in AndroidFuture callback);
 }

@@ -61,10 +61,12 @@ import android.window.TaskSnapshot;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.protolog.common.ProtoLog;
 import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
+import com.android.wm.shell.protolog.ShellProtoLogGroup;
 
 import java.util.function.Supplier;
 
@@ -106,9 +108,7 @@ import java.util.function.Supplier;
  */
 @ShellSplashscreenThread
 public class StartingSurfaceDrawer {
-    static final String TAG = StartingSurfaceDrawer.class.getSimpleName();
-    static final boolean DEBUG_SPLASH_SCREEN = StartingWindowController.DEBUG_SPLASH_SCREEN;
-    static final boolean DEBUG_TASK_SNAPSHOT = StartingWindowController.DEBUG_TASK_SNAPSHOT;
+    private static final String TAG = StartingWindowController.TAG;
 
     private final Context mContext;
     private final DisplayManager mDisplayManager;
@@ -134,7 +134,8 @@ public class StartingSurfaceDrawer {
         mDisplayManager.getDisplay(DEFAULT_DISPLAY);
     }
 
-    private final SparseArray<StartingWindowRecord> mStartingWindowRecords = new SparseArray<>();
+    @VisibleForTesting
+    final SparseArray<StartingWindowRecord> mStartingWindowRecords = new SparseArray<>();
 
     /**
      * Records of {@link SurfaceControlViewHost} where the splash screen icon animation is
@@ -178,11 +179,9 @@ public class StartingSurfaceDrawer {
 
         // replace with the default theme if the application didn't set
         final int theme = getSplashScreenTheme(windowInfo.splashScreenThemeResId, activityInfo);
-        if (DEBUG_SPLASH_SCREEN) {
-            Slog.d(TAG, "addSplashScreen " + activityInfo.packageName
-                    + " theme=" + Integer.toHexString(theme) + " task=" + taskInfo.taskId
-                    + " suggestType=" + suggestType);
-        }
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                "addSplashScreen for package: %s with theme: %s for task: %d, suggestType: %d",
+                activityInfo.packageName, Integer.toHexString(theme), taskId, suggestType);
         final Display display = getDisplay(displayId);
         if (display == null) {
             // Can't show splash screen on requested display, so skip showing at all.
@@ -207,10 +206,9 @@ public class StartingSurfaceDrawer {
 
         final Configuration taskConfig = taskInfo.getConfiguration();
         if (taskConfig.diffPublicOnly(context.getResources().getConfiguration()) != 0) {
-            if (DEBUG_SPLASH_SCREEN) {
-                Slog.d(TAG, "addSplashScreen: creating context based"
-                        + " on task Configuration " + taskConfig + " for splash screen");
-            }
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                    "addSplashScreen: creating context based on task Configuration %s",
+                    taskConfig);
             final Context overrideContext = context.createConfigurationContext(taskConfig);
             overrideContext.setTheme(theme);
             final TypedArray typedArray = overrideContext.obtainStyledAttributes(
@@ -221,10 +219,9 @@ public class StartingSurfaceDrawer {
                     // We want to use the windowBackground for the override context if it is
                     // available, otherwise we use the default one to make sure a themed starting
                     // window is displayed for the app.
-                    if (DEBUG_SPLASH_SCREEN) {
-                        Slog.d(TAG, "addSplashScreen: apply overrideConfig"
-                                + taskConfig + " to starting window resId=" + resId);
-                    }
+                    ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                            "addSplashScreen: apply overrideConfig %s",
+                            taskConfig);
                     context = overrideContext;
                 }
             } catch (Resources.NotFoundException e) {
@@ -272,6 +269,8 @@ public class StartingSurfaceDrawer {
         // touchable or focusable by the user.  We also add in the ALT_FOCUSABLE_IM
         // flag because we do know that the next window will take input
         // focus, so we want to get the IME window up on top of us right away.
+        // Touches will only pass through to the host activity window and will be blocked from
+        // passing to any other windows.
         windowFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -279,9 +278,6 @@ public class StartingSurfaceDrawer {
         params.token = appToken;
         params.packageName = activityInfo.packageName;
         params.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
-        // Setting as trusted overlay to let touches pass through. This is safe because this
-        // window is controlled by the system.
-        params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 
         if (!context.getResources().getCompatibilityInfo().supportsScreen()) {
             params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
@@ -460,12 +456,26 @@ public class StartingSurfaceDrawer {
      * Called when the content of a task is ready to show, starting window can be removed.
      */
     public void removeStartingWindow(StartingWindowRemovalInfo removalInfo) {
-        if (DEBUG_SPLASH_SCREEN || DEBUG_TASK_SNAPSHOT) {
-            Slog.d(TAG, "Task start finish, remove starting surface for task "
-                    + removalInfo.taskId);
-        }
-        removeWindowSynced(removalInfo);
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                "Task start finish, remove starting surface for task: %d",
+                removalInfo.taskId);
+        removeWindowSynced(removalInfo, false /* immediately */);
+    }
 
+    /**
+     * Clear all starting windows immediately.
+     */
+    public void clearAllWindows() {
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                "Clear all starting windows immediately");
+        final int taskSize = mStartingWindowRecords.size();
+        final int[] taskIds = new int[taskSize];
+        for (int i = taskSize - 1; i >= 0; --i) {
+            taskIds[i] = mStartingWindowRecords.keyAt(i);
+        }
+        for (int i = taskSize - 1; i >= 0; --i) {
+            removeWindowNoAnimate(taskIds[i]);
+        }
     }
 
     /**
@@ -485,10 +495,9 @@ public class StartingSurfaceDrawer {
         } else {
             parcelable = null;
         }
-        if (DEBUG_SPLASH_SCREEN) {
-            Slog.v(TAG, "Copying splash screen window view for task: " + taskId
-                    + " parcelable: " + parcelable);
-        }
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                "Copying splash screen window view for task: %d with parcelable %b",
+                taskId, parcelable != null);
         ActivityTaskManager.getInstance().onSplashScreenViewCopyFinished(taskId, parcelable);
     }
 
@@ -514,11 +523,9 @@ public class StartingSurfaceDrawer {
             return;
         }
         mAnimatedSplashScreenSurfaceHosts.remove(taskId);
-        if (DEBUG_SPLASH_SCREEN) {
-            String reason = fromServer ? "Server cleaned up" : "App removed";
-            Slog.v(TAG, reason + "the splash screen. Releasing SurfaceControlViewHost for task:"
-                    + taskId);
-        }
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                "%s the splash screen. Releasing SurfaceControlViewHost for task: %d",
+                fromServer ? "Server cleaned up" : "App removed", taskId);
         SplashScreenView.releaseIconHost(viewHost);
     }
 
@@ -550,7 +557,8 @@ public class StartingSurfaceDrawer {
         return shouldSaveView;
     }
 
-    private void saveSplashScreenRecord(IBinder appToken, int taskId, View view,
+    @VisibleForTesting
+    void saveSplashScreenRecord(IBinder appToken, int taskId, View view,
             @StartingWindowType int suggestType) {
         final StartingWindowRecord tView = new StartingWindowRecord(appToken, view,
                 null/* TaskSnapshotWindow */, suggestType);
@@ -559,28 +567,27 @@ public class StartingSurfaceDrawer {
 
     private void removeWindowNoAnimate(int taskId) {
         mTmpRemovalInfo.taskId = taskId;
-        removeWindowSynced(mTmpRemovalInfo);
+        removeWindowSynced(mTmpRemovalInfo, true /* immediately */);
     }
 
     void onImeDrawnOnTask(int taskId) {
         final StartingWindowRecord record = mStartingWindowRecords.get(taskId);
         if (record != null && record.mTaskSnapshotWindow != null
                 && record.mTaskSnapshotWindow.hasImeSurface()) {
-            record.mTaskSnapshotWindow.removeImmediately();
+            removeWindowNoAnimate(taskId);
         }
-        mStartingWindowRecords.remove(taskId);
     }
 
-    protected void removeWindowSynced(StartingWindowRemovalInfo removalInfo) {
+    protected void removeWindowSynced(StartingWindowRemovalInfo removalInfo, boolean immediately) {
         final int taskId = removalInfo.taskId;
         final StartingWindowRecord record = mStartingWindowRecords.get(taskId);
         if (record != null) {
             if (record.mDecorView != null) {
-                if (DEBUG_SPLASH_SCREEN) {
-                    Slog.v(TAG, "Removing splash screen window for task: " + taskId);
-                }
+                ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                        "Removing splash screen window for task: %d", taskId);
                 if (record.mContentView != null) {
-                    if (record.mSuggestType == STARTING_WINDOW_TYPE_LEGACY_SPLASH_SCREEN) {
+                    if (immediately
+                            || record.mSuggestType == STARTING_WINDOW_TYPE_LEGACY_SPLASH_SCREEN) {
                         removeWindowInner(record.mDecorView, false);
                     } else {
                         if (removalInfo.playRevealAnimation) {
@@ -601,11 +608,14 @@ public class StartingSurfaceDrawer {
                 mStartingWindowRecords.remove(taskId);
             }
             if (record.mTaskSnapshotWindow != null) {
-                if (DEBUG_TASK_SNAPSHOT) {
-                    Slog.v(TAG, "Removing task snapshot window for " + taskId);
+                ProtoLog.v(ShellProtoLogGroup.WM_SHELL_STARTING_WINDOW,
+                        "Removing task snapshot window for %d", taskId);
+                if (immediately) {
+                    record.mTaskSnapshotWindow.removeImmediately();
+                } else {
+                    record.mTaskSnapshotWindow.scheduleRemove(() ->
+                            mStartingWindowRecords.remove(taskId), removalInfo.deferRemoveForIme);
                 }
-                record.mTaskSnapshotWindow.scheduleRemove(
-                        () -> mStartingWindowRecords.remove(taskId), removalInfo.deferRemoveForIme);
             }
         }
     }

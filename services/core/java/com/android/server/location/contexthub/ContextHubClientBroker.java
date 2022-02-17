@@ -30,6 +30,7 @@ import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
 import android.content.Context;
 import android.content.Intent;
+import android.hardware.contexthub.HostEndpointInfo;
 import android.hardware.location.ContextHubInfo;
 import android.hardware.location.ContextHubManager;
 import android.hardware.location.ContextHubTransaction;
@@ -42,6 +43,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.Process;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
@@ -329,6 +331,7 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
         mAppOpsManager = context.getSystemService(AppOpsManager.class);
 
         startMonitoringOpChanges();
+        sendHostEndpointConnectedEvent();
     }
 
     /* package */ ContextHubClientBroker(
@@ -414,6 +417,11 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
             mPendingIntentRequest.clear();
         }
         onClientExit();
+    }
+
+    @Override
+    public int getId() {
+        return mHostEndPointId;
     }
 
     /**
@@ -540,6 +548,9 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
     /* package */ void onHubReset() {
         invokeCallback(callback -> callback.onHubReset());
         sendPendingIntent(() -> createIntent(ContextHubManager.EVENT_HUB_RESET));
+
+        // Re-send the host endpoint connected event as the Context Hub restarted.
+        sendHostEndpointConnectedEvent();
     }
 
     /**
@@ -862,6 +873,8 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
             mRegistered = false;
         }
         mAppOpsManager.stopWatchingMode(this);
+
+        mContextHubProxy.onHostEndpointDisconnected(mHostEndPointId);
     }
 
     private String authStateToString(@ContextHubManager.AuthorizationState int state) {
@@ -875,6 +888,17 @@ public class ContextHubClientBroker extends IContextHubClient.Stub
             default:
                 return "UNKNOWN";
         }
+    }
+
+    private void sendHostEndpointConnectedEvent() {
+        HostEndpointInfo info = new HostEndpointInfo();
+        info.hostEndpointId = (char) mHostEndPointId;
+        info.packageName = mPackage;
+        info.attributionTag = mAttributionTag;
+        info.type = (mUid == Process.SYSTEM_UID)
+             ? HostEndpointInfo.Type.FRAMEWORK
+             : HostEndpointInfo.Type.APP;
+        mContextHubProxy.onHostEndpointConnected(info);
     }
 
     /**

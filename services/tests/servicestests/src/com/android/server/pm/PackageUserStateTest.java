@@ -28,6 +28,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.SuspendDialogInfo;
 import android.content.pm.overlay.OverlayPaths;
 import android.os.PersistableBundle;
+import android.platform.test.annotations.Presubmit;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 
@@ -41,6 +42,7 @@ import com.android.server.pm.pkg.SuspendParams;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+@Presubmit
 @RunWith(AndroidJUnit4.class)
 @SmallTest
 public class PackageUserStateTest {
@@ -80,7 +82,8 @@ public class PackageUserStateTest {
         assertThat(testUserState.equals(oldUserState), is(false));
 
         oldUserState = new PackageUserStateImpl();
-        oldUserState.setSuspended(true);
+        oldUserState.putSuspendParams("suspendingPackage",
+                SuspendParams.getInstanceOrNull(null, new PersistableBundle(), null));
         assertThat(testUserState.equals(oldUserState), is(false));
 
         oldUserState = new PackageUserStateImpl();
@@ -229,7 +232,6 @@ public class PackageUserStateTest {
 
 
         final PackageUserStateImpl testUserState1 = new PackageUserStateImpl();
-        testUserState1.setSuspended(true);
         testUserState1.setSuspendParams(paramsMap1);
 
         PackageUserStateImpl testUserState2 =

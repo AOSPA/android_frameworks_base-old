@@ -67,6 +67,9 @@ public class GraphicsEnvironment {
     private static final String SYSTEM_DRIVER_NAME = "system";
     private static final String SYSTEM_DRIVER_VERSION_NAME = "";
     private static final long SYSTEM_DRIVER_VERSION_CODE = 0;
+    private static final String ANGLE_DRIVER_NAME = "angle";
+    private static final String ANGLE_DRIVER_VERSION_NAME = "";
+    private static final long ANGLE_DRIVER_VERSION_CODE = 0;
 
     // System properties related to updatable graphics drivers.
     private static final String PROPERTY_GFX_DRIVER_PRODUCTION = "ro.gfx.driver.0";
@@ -134,14 +137,24 @@ public class GraphicsEnvironment {
         Trace.traceEnd(Trace.TRACE_TAG_GRAPHICS);
 
         Trace.traceBegin(Trace.TRACE_TAG_GRAPHICS, "setupAngle");
-        setupAngle(context, coreSettings, pm, packageName);
+        boolean useAngle = false;
+        if (setupAngle(context, coreSettings, pm, packageName)) {
+            if (shouldUseAngle(context, coreSettings, packageName)) {
+                useAngle = true;
+                setGpuStats(ANGLE_DRIVER_NAME, ANGLE_DRIVER_VERSION_NAME, ANGLE_DRIVER_VERSION_CODE,
+                        0, packageName, getVulkanVersion(pm));
+            }
+        }
         Trace.traceEnd(Trace.TRACE_TAG_GRAPHICS);
 
         Trace.traceBegin(Trace.TRACE_TAG_GRAPHICS, "chooseDriver");
         if (!chooseDriver(context, coreSettings, pm, packageName, appInfoWithMetaData)) {
-            setGpuStats(SYSTEM_DRIVER_NAME, SYSTEM_DRIVER_VERSION_NAME, SYSTEM_DRIVER_VERSION_CODE,
-                    SystemProperties.getLong(PROPERTY_GFX_DRIVER_BUILD_TIME, 0), packageName,
-                    getVulkanVersion(pm));
+            if (!useAngle) {
+                setGpuStats(SYSTEM_DRIVER_NAME, SYSTEM_DRIVER_VERSION_NAME,
+                        SYSTEM_DRIVER_VERSION_CODE,
+                        SystemProperties.getLong(PROPERTY_GFX_DRIVER_BUILD_TIME, 0),
+                        packageName, getVulkanVersion(pm));
+            }
         }
         Trace.traceEnd(Trace.TRACE_TAG_GRAPHICS);
     }
@@ -179,14 +192,15 @@ public class GraphicsEnvironment {
 
         // We only want to use ANGLE if the developer has explicitly chosen something other than
         // default driver.
-        final boolean requested = devOptIn.equals(ANGLE_GL_DRIVER_CHOICE_ANGLE);
-        if (requested) {
+        final boolean forceAngle = devOptIn.equals(ANGLE_GL_DRIVER_CHOICE_ANGLE);
+        final boolean forceNative = devOptIn.equals(ANGLE_GL_DRIVER_CHOICE_NATIVE);
+        if (forceAngle || forceNative) {
             Log.v(TAG, "ANGLE developer option for " + packageName + ": " + devOptIn);
         }
 
         final boolean gameModeEnabledAngle = isAngleEnabledByGameMode(context, packageName);
 
-        return requested || gameModeEnabledAngle;
+        return !forceNative && (forceAngle || gameModeEnabledAngle);
     }
 
     private int getVulkanVersion(PackageManager pm) {

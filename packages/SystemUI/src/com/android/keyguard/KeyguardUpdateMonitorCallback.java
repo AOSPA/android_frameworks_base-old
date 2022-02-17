@@ -209,22 +209,6 @@ public class KeyguardUpdateMonitorCallback {
     public void onFinishedGoingToSleep(int why) { }
 
     /**
-     * Called when the screen has been turned on.
-     *
-     * @deprecated use {@link com.android.systemui.keyguard.ScreenLifecycle}.
-     */
-    @Deprecated
-    public void onScreenTurnedOn() { }
-
-    /**
-     * Called when the screen has been turned off.
-     *
-     * @deprecated use {@link com.android.systemui.keyguard.ScreenLifecycle}.
-     */
-    @Deprecated
-    public void onScreenTurnedOff() { }
-
-    /**
      * Called when trust changes for a user.
      */
     public void onTrustChanged(int userId) { }
@@ -298,6 +282,11 @@ public class KeyguardUpdateMonitorCallback {
      * has changed.
      */
     public void onStrongAuthStateChanged(int userId) { }
+
+    /**
+     * When the current user's locked out state changed.
+     */
+    public void onLockedOutStateChanged(BiometricSourceType biometricSourceType) { }
 
     /**
      * Called when the dream's window state is changed.

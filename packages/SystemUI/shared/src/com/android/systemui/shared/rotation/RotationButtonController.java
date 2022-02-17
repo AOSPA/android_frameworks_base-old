@@ -16,6 +16,7 @@
 
 package com.android.systemui.shared.rotation;
 
+import static android.content.pm.PackageManager.FEATURE_PC;
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import static com.android.internal.view.RotationPolicy.NATURAL_ROTATION;
@@ -36,6 +37,7 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.HapticFeedbackConstants;
 import android.view.IRotationWatcher;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -199,7 +201,7 @@ public class RotationButtonController {
     }
 
     public void registerListeners() {
-        if (mListenersRegistered) {
+        if (mListenersRegistered || getContext().getPackageManager().hasSystemFeature(FEATURE_PC)) {
             return;
         }
 
@@ -413,6 +415,9 @@ public class RotationButtonController {
     }
 
     public void onTaskbarStateChange(boolean visible, boolean stashed) {
+        if (getRotationButton() == null) {
+            return;
+        }
         getRotationButton().onTaskbarStateChanged(visible, stashed);
     }
 
@@ -453,6 +458,7 @@ public class RotationButtonController {
         mUiEventLogger.log(RotationButtonEvent.ROTATION_SUGGESTION_ACCEPTED);
         incrementNumAcceptedRotationSuggestionsIfNeeded();
         setRotationLockedAtAngle(mLastRotationSuggestion);
+        v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
     }
 
     private boolean onRotateSuggestionHover(View v, MotionEvent event) {
@@ -481,7 +487,9 @@ public class RotationButtonController {
      * orientation overview.
      */
     public void setSkipOverrideUserLockPrefsOnce() {
-        mSkipOverrideUserLockPrefsOnce = true;
+        // If live-tile is enabled (recents animation keeps running in overview), there is no
+        // activity switch so the display rotation is not changed, then it is no need to skip.
+        mSkipOverrideUserLockPrefsOnce = !mIsRecentsAnimationRunning;
     }
 
     private boolean shouldOverrideUserLockPrefs(final int rotation) {

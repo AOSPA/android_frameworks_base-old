@@ -18,11 +18,8 @@ package com.android.systemui.qs.external
 
 import android.content.Context
 import android.graphics.drawable.Icon
-import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-import android.view.WindowInsets
 import android.widget.TextView
 import com.android.systemui.R
 import com.android.systemui.plugins.qs.QSTile
@@ -38,23 +35,10 @@ import com.android.systemui.statusbar.phone.SystemUIDialog
  */
 class TileRequestDialog(
     context: Context
-) : SystemUIDialog(context, R.style.TileRequestDialog) {
+) : SystemUIDialog(context) {
 
     companion object {
         internal val CONTENT_ID = R.id.content
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        window?.apply {
-            attributes.fitInsetsTypes = attributes.fitInsetsTypes or WindowInsets.Type.statusBars()
-            attributes.receiveInsetsIgnoringZOrder = true
-            setLayout(
-                    context.resources
-                            .getDimensionPixelSize(R.dimen.qs_tile_service_request_dialog_width),
-                    WRAP_CONTENT
-            )
-        }
     }
 
     /**
@@ -75,10 +59,9 @@ class TileRequestDialog(
                                     R.dimen.qs_tile_service_request_tile_width),
                             context.resources.getDimensionPixelSize(R.dimen.qs_quick_tile_size)
                     )
+                    isSelected = true
         }
-        val spacing = context.resources.getDimensionPixelSize(
-                R.dimen.qs_tile_service_request_content_space
-        )
+        val spacing = 0
         setView(ll, spacing, spacing, spacing, spacing / 2)
     }
 
@@ -86,12 +69,17 @@ class TileRequestDialog(
         val tile = QSTileViewImpl(context, QSIconViewImpl(context), true)
         val state = QSTile.BooleanState().apply {
             label = tileData.label
+            handlesLongClick = false
             icon = tileData.icon?.loadDrawable(context)?.let {
                 QSTileImpl.DrawableIcon(it)
             } ?: ResourceIcon.get(R.drawable.android)
         }
         tile.onStateChanged(state)
-        tile.isSelected = true
+        tile.post {
+            tile.stateDescription = ""
+            tile.isClickable = false
+            tile.isSelected = true
+        }
         return tile
     }
 

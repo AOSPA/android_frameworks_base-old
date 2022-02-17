@@ -35,6 +35,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresFeature;
 import android.content.pm.PackageManager;
 import android.security.Credentials;
+import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.net.VpnProfile;
@@ -70,6 +71,7 @@ import java.util.Objects;
  *     Exchange, Version 2 (IKEv2)</a>
  */
 public final class Ikev2VpnProfile extends PlatformVpnProfile {
+    private static final String TAG = Ikev2VpnProfile.class.getSimpleName();
     /** Prefix for when a Private Key is an alias to look for in KeyStore @hide */
     public static final String PREFIX_KEYSTORE_ALIAS = "KEYSTORE_ALIAS:";
     /** Prefix for when a Private Key is stored directly in the profile @hide */
@@ -142,8 +144,9 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
             boolean isBypassable,
             boolean isMetered,
             int maxMtu,
-            boolean restrictToTestNetworks) {
-        super(type);
+            boolean restrictToTestNetworks,
+            boolean excludeLocalRoutes) {
+        super(type, excludeLocalRoutes);
 
         checkNotNull(serverAddr, MISSING_PARAM_MSG_TMPL, "Server address");
         checkNotNull(userIdentity, MISSING_PARAM_MSG_TMPL, "User Identity");
@@ -162,6 +165,10 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
 
         // UnmodifiableList doesn't make a defensive copy by default.
         mAllowedAlgorithms = Collections.unmodifiableList(new ArrayList<>(allowedAlgorithms));
+        if (excludeLocalRoutes && !isBypassable) {
+            throw new IllegalArgumentException(
+                    "Vpn should be byassable if excludeLocalRoutes is set");
+        }
 
         mIsBypassable = isBypassable;
         mIsMetered = isMetered;
@@ -403,7 +410,8 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
                 && mIsBypassable == other.mIsBypassable
                 && mIsMetered == other.mIsMetered
                 && mMaxMtu == other.mMaxMtu
-                && mIsRestrictedToTestNetworks == other.mIsRestrictedToTestNetworks;
+                && mIsRestrictedToTestNetworks == other.mIsRestrictedToTestNetworks
+                && mExcludeLocalRoutes == other.mExcludeLocalRoutes;
     }
 
     /**
@@ -417,7 +425,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
     @NonNull
     public VpnProfile toVpnProfile() throws IOException, GeneralSecurityException {
         final VpnProfile profile = new VpnProfile("" /* Key; value unused by IKEv2VpnProfile(s) */,
-                mIsRestrictedToTestNetworks);
+                mIsRestrictedToTestNetworks, mExcludeLocalRoutes);
         profile.type = mType;
         profile.server = mServerAddr;
         profile.ipsecIdentifier = mUserIdentity;
@@ -517,6 +525,11 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
             default:
                 throw new IllegalArgumentException("Invalid auth method set");
         }
+
+        if (profile.excludeLocalRoutes && !profile.isBypassable) {
+            Log.w(TAG, "ExcludeLocalRoutes should only be set in the bypassable VPN");
+        }
+        builder.setExcludeLocalRoutes(profile.excludeLocalRoutes && profile.isBypassable);
 
         return builder.build();
     }
@@ -657,6 +670,7 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
         private boolean mIsMetered = true;
         private int mMaxMtu = PlatformVpnProfile.MAX_MTU_DEFAULT;
         private boolean mIsRestrictedToTestNetworks = false;
+        private boolean mExcludeLocalRoutes = false;
 
         /**
          * Creates a new builder with the basic parameters of an IKEv2/IPsec VPN.
@@ -902,6 +916,32 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
         }
 
         /**
+         * Sets whether the local traffic is exempted from the VPN.
+         *
+         * When this is set, the system will not use the VPN network when an app
+         * tries to send traffic for an IP address that is on a local network.
+         *
+         * Note that there are important security implications. In particular, the
+         * networks that the device connects to typically decides what IP addresses
+         * are part of the local network. This means that for VPNs setting this
+         * flag, it is possible for anybody to set up a public network in such a
+         * way that traffic to arbitrary IP addresses will bypass the VPN, including
+         * traffic to services like DNS. When using this API, please consider the
+         * security implications for your particular case.
+         *
+         * Note that because the local traffic will always bypass the VPN,
+         * it is not possible to set this flag on a non-bypassable VPN.
+         *
+         * @hide TODO(184750836): unhide once the implementation is completed
+         */
+        @NonNull
+        @RequiresFeature(PackageManager.FEATURE_IPSEC_TUNNELS)
+        public Builder setExcludeLocalRoutes(boolean excludeLocalRoutes) {
+            mExcludeLocalRoutes = excludeLocalRoutes;
+            return this;
+        }
+
+        /**
          * Validates, builds and provisions the VpnProfile.
          *
          * @throws IllegalArgumentException if any of the required keys or values were invalid
@@ -924,7 +964,8 @@ public final class Ikev2VpnProfile extends PlatformVpnProfile {
                     mIsBypassable,
                     mIsMetered,
                     mMaxMtu,
-                    mIsRestrictedToTestNetworks);
+                    mIsRestrictedToTestNetworks,
+                    mExcludeLocalRoutes);
         }
     }
 }

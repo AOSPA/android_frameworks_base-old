@@ -85,6 +85,8 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(Global.WIFI_WATCHDOG_POOR_NETWORK_TEST_ENABLED, ANY_STRING_VALIDATOR);
         VALIDATORS.put(
                 Global.EMERGENCY_TONE, new DiscreteValueValidator(new String[] {"0", "1", "2"}));
+        VALIDATORS.put(Global.EMERGENCY_GESTURE_POWER_BUTTON_COOLDOWN_PERIOD_MS,
+                NON_NEGATIVE_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.CALL_AUTO_RETRY, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.DOCK_AUDIO_MEDIA_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
@@ -116,8 +118,6 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(
                 Global.DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD, PERCENTAGE_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.BLUETOOTH_ON, BOOLEAN_VALIDATOR);
-        VALIDATORS.put(Global.CLOCKWORK_SYSUI_MAIN_ACTIVITY_NAME, ANY_STRING_VALIDATOR);
-        VALIDATORS.put(Global.CLOCKWORK_SYSUI_PACKAGE_NAME, ANY_STRING_VALIDATOR);
         VALIDATORS.put(Global.CLOCKWORK_HOME_READY, ANY_STRING_VALIDATOR);
         VALIDATORS.put(Global.ENABLE_TARE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.ENABLE_TARE_ALARM_MANAGER, BOOLEAN_VALIDATOR);
@@ -207,7 +207,6 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(
                 Global.Wearable.ALT_BYPASS_WIFI_REQUIREMENT_TIME_MILLIS,
                 ANY_INTEGER_VALIDATOR);
-        VALIDATORS.put(Global.Wearable.UPDOWN_GESTURES_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
                 Global.Wearable.SETUP_SKIPPED,
                 new DiscreteValueValidator(
@@ -249,7 +248,6 @@ public class GlobalSettingsValidators {
                             String.valueOf(Global.Wearable.STEM_TYPE_CONTACT_LAUNCH)
                         }));
         VALIDATORS.put(Global.Wearable.MUTE_WHEN_OFF_BODY_ENABLED, BOOLEAN_VALIDATOR);
-        VALIDATORS.put(Global.Wearable.ALTERNATE_LAUNCHER_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.CORNER_ROUNDNESS, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.Wearable.SIDE_BUTTON, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.BUTTON_SET, BOOLEAN_VALIDATOR);
@@ -264,7 +262,6 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(Global.Wearable.AMBIENT_TOUCH_TO_WAKE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.DECOMPOSABLE_WATCHFACE, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.AMBIENT_FORCE_WHEN_DOCKED, BOOLEAN_VALIDATOR);
-        VALIDATORS.put(Global.Wearable.AMBIENT_GESTURE_SENSOR_ID, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.Wearable.AMBIENT_LOW_BIT_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.AMBIENT_PLUGGED_TIMEOUT_MIN, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.Wearable.AMBIENT_TILT_TO_BRIGHT, BOOLEAN_VALIDATOR);

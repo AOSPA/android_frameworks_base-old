@@ -45,6 +45,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -147,6 +148,10 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         return mMediaHost;
     }
 
+    public void setSquishinessFraction(float squishinessFraction) {
+        mView.setSquishinessFraction(squishinessFraction);
+    }
+
     @Override
     protected void onViewAttached() {
         mQsTileRevealController = createTileRevealController();
@@ -215,9 +220,8 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
     }
 
     private void addTile(final QSTile tile, boolean collapsedView) {
-        final TileRecord r = new TileRecord();
-        r.tile = tile;
-        r.tileView = mHost.createTileView(getContext(), tile, collapsedView);
+        final TileRecord r =
+                new TileRecord(tile, mHost.createTileView(getContext(), tile, collapsedView));
         mView.addTile(r);
         mRecords.add(r);
         mCachedSpecs = getTilesSpecs();
@@ -249,6 +253,15 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
     QSTileView getTileView(QSTile tile) {
         for (QSPanelControllerBase.TileRecord r : mRecords) {
             if (r.tile == tile) {
+                return r.tileView;
+            }
+        }
+        return null;
+    }
+
+    QSTileView getTileView(String spec) {
+        for (QSPanelControllerBase.TileRecord r : mRecords) {
+            if (Objects.equals(r.tile.getTileSpec(), spec)) {
                 return r.tileView;
             }
         }
@@ -388,6 +401,9 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
                 pw.print("    "); pw.println(record.tileView.toString());
             }
         }
+        if (mMediaHost != null) {
+            pw.println("  media bounds: " + mMediaHost.getCurrentBounds());
+        }
     }
 
     public QSPanel.QSTileLayout getTileLayout() {
@@ -414,6 +430,11 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
 
     /** */
     public static final class TileRecord extends QSPanel.Record {
+        public TileRecord(QSTile tile, com.android.systemui.plugins.qs.QSTileView tileView) {
+            this.tile = tile;
+            this.tileView = tileView;
+        }
+
         public QSTile tile;
         public com.android.systemui.plugins.qs.QSTileView tileView;
         public boolean scanState;

@@ -17,8 +17,10 @@
 package com.android.server.wm;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
+import android.app.TaskInfo;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
@@ -32,19 +34,27 @@ import java.lang.annotation.RetentionPolicy;
 public abstract class ActivityInterceptorCallback {
     /**
      * Intercept the launch intent based on various signals. If an interception happened, returns
-     * a new/existing non-null {@link Intent} which may redirect to another activity.
+     * a new/existing non-null {@link ActivityInterceptResult} which may redirect to another
+     * activity or with new {@link ActivityOptions}.
      *
-     * @return null if no interception occurred, or a non-null intent which replaces the
-     * existing intent.
+     * @return null if no interception occurred, or a non-null result which replaces the existing
+     * intent and activity options.
      */
-    public abstract @Nullable Intent intercept(ActivityInterceptorInfo info);
+    public abstract @Nullable ActivityInterceptResult intercept(ActivityInterceptorInfo info);
+
+    /**
+     * Called when an activity is successfully launched.
+     */
+    public void onActivityLaunched(TaskInfo taskInfo, ActivityInfo activityInfo) {
+    }
 
     /**
      * The unique id of each interceptor which determines the order it will execute in.
      */
     @IntDef(suffix = { "_ORDERED_ID" }, value = {
             FIRST_ORDERED_ID,
-            COMMUNAL_MODE_ORDERED_ID,
+            PERMISSION_POLICY_ORDERED_ID,
+            VIRTUAL_DEVICE_SERVICE_ORDERED_ID,
             LAST_ORDERED_ID // Update this when adding new ids
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -56,15 +66,21 @@ public abstract class ActivityInterceptorCallback {
     static final int FIRST_ORDERED_ID = 0;
 
     /**
-     * The identifier for {@link com.android.server.communal.CommunalManagerService} interceptor.
+     * The identifier for {@link com.android.server.policy.PermissionPolicyService} interceptor
      */
-    public static final int COMMUNAL_MODE_ORDERED_ID = 1;
+    public static final int PERMISSION_POLICY_ORDERED_ID = 1;
+
+    /**
+     * The identifier for {@link com.android.server.companion.virtual.VirtualDeviceManagerService}
+     * interceptor.
+     */
+    public static final int VIRTUAL_DEVICE_SERVICE_ORDERED_ID = 3;
 
     /**
      * The final id, used by the framework to determine the valid range of ids. Update this when
      * adding new ids.
      */
-    static final int LAST_ORDERED_ID = COMMUNAL_MODE_ORDERED_ID;
+    static final int LAST_ORDERED_ID = VIRTUAL_DEVICE_SERVICE_ORDERED_ID;
 
     /**
      * Data class for storing the various arguments needed for activity interception.
@@ -99,6 +115,21 @@ public abstract class ActivityInterceptorCallback {
             this.callingPid = callingPid;
             this.callingUid = callingUid;
             this.checkedOptions = checkedOptions;
+        }
+    }
+
+    /**
+     * Data class for storing the intercept result.
+     */
+    public static final class ActivityInterceptResult {
+        @NonNull public final Intent intent;
+        @NonNull public final ActivityOptions activityOptions;
+
+        public ActivityInterceptResult(
+                @NonNull Intent intent,
+                @NonNull ActivityOptions activityOptions) {
+            this.intent = intent;
+            this.activityOptions = activityOptions;
         }
     }
 }

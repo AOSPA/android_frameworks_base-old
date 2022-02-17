@@ -19,7 +19,6 @@ package com.android.wm.shell.splitscreen;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.content.Context;
-import android.graphics.Rect;
 import android.view.SurfaceSession;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
@@ -43,15 +42,6 @@ class SideStage extends StageTaskListener {
             @Nullable StageTaskUnfoldController stageTaskUnfoldController) {
         super(context, taskOrganizer, displayId, callbacks, syncQueue, surfaceSession, iconProvider,
                 stageTaskUnfoldController);
-    }
-
-    void moveToTop(Rect rootBounds, WindowContainerTransaction wct) {
-        final WindowContainerToken rootToken = mRootTaskInfo.token;
-        wct.setBounds(rootToken, rootBounds).reorder(rootToken, true /* onTop */);
-    }
-
-    void addTask(ActivityManager.RunningTaskInfo task, WindowContainerTransaction wct) {
-        wct.reparent(task.token, mRootTaskInfo.token, true /* onTop*/);
     }
 
     boolean removeAllTasks(WindowContainerTransaction wct, boolean toTop) {

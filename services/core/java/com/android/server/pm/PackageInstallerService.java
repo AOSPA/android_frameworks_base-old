@@ -70,6 +70,7 @@ import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.ExceptionUtils;
+import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -121,7 +122,9 @@ import java.util.function.Supplier;
 public class PackageInstallerService extends IPackageInstaller.Stub implements
         PackageSessionProvider {
     private static final String TAG = "PackageInstaller";
-    private static final boolean LOGD = false;
+    private static final boolean LOGD = Log.isLoggable(TAG, Log.DEBUG);
+
+    private static final boolean DEBUG = Build.IS_DEBUGGABLE;
 
     // TODO: remove outstanding sessions when installer package goes away
     // TODO: notify listeners in other users when package has been installed there
@@ -133,7 +136,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     /** Automatically destroy sessions older than this */
     private static final long MAX_AGE_MILLIS = 3 * DateUtils.DAY_IN_MILLIS;
     /** Automatically destroy staged sessions that have not changed state in this time */
-    private static final long MAX_TIME_SINCE_UPDATE_MILLIS = 7 * DateUtils.DAY_IN_MILLIS;
+    private static final long MAX_TIME_SINCE_UPDATE_MILLIS = 21 * DateUtils.DAY_IN_MILLIS;
     /** Upper bound on number of active sessions for a UID that has INSTALL_PACKAGES */
     private static final long MAX_ACTIVE_SESSIONS_WITH_PERMISSION = 1024;
     /** Upper bound on number of active sessions for a UID without INSTALL_PACKAGES */
@@ -284,6 +287,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         synchronized (mSessions) {
             readSessionsLocked();
+            expireSessionsLocked();
 
             reconcileStagesLocked(StorageManager.UUID_PRIVATE_INTERNAL);
 
@@ -327,7 +331,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 StagingManager.StagedSession stagedSession = session.mStagedSession;
                 if (!stagedSession.isInTerminalState() && stagedSession.hasParentSessionId()
                         && getSession(stagedSession.getParentSessionId()) == null) {
-                    stagedSession.setSessionFailed(SessionInfo.STAGED_SESSION_ACTIVATION_FAILED,
+                    stagedSession.setSessionFailed(SessionInfo.SESSION_ACTIVATION_FAILED,
                             "An orphan staged session " + stagedSession.sessionId() + " is found, "
                                 + "parent " + stagedSession.getParentSessionId() + " is missing");
                     continue;
@@ -401,7 +405,11 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 if (age >= MAX_SESSION_AGE_ON_LOW_STORAGE_MILLIS) {
                     // Aggressively close old sessions because we are running low on storage
                     // Their staging dirs will be removed too
-                    session.abandon();
+                    PackageInstallerSession root = !session.hasParentSessionId()
+                            ? session : mSessions.get(session.getParentSessionId());
+                    if (!root.isDestroyed()) {
+                        root.abandon();
+                    }
                 } else {
                     // Session is new enough, so it deserves to be kept even on low storage
                     unclaimedStagingDirsOnVolume.remove(session.stageDir);
@@ -409,13 +417,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             }
         }
         removeStagingDirs(unclaimedStagingDirsOnVolume);
-    }
-
-    public static boolean isStageName(String name) {
-        final boolean isFile = name.startsWith("vmdl") && name.endsWith(".tmp");
-        final boolean isContainer = name.startsWith("smdl") && name.endsWith(".tmp");
-        final boolean isLegacyContainer = name.startsWith("smdl2tmp");
-        return isFile || isContainer || isLegacyContainer;
     }
 
     @Deprecated
@@ -467,34 +468,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                             Slog.e(TAG, "Could not read session", e);
                             continue;
                         }
-
-                        final long age = System.currentTimeMillis() - session.createdMillis;
-                        final long timeSinceUpdate =
-                                System.currentTimeMillis() - session.getUpdatedMillis();
-                        final boolean valid;
-                        if (session.isStaged()) {
-                            if (timeSinceUpdate >= MAX_TIME_SINCE_UPDATE_MILLIS
-                                    && session.isStagedAndInTerminalState()) {
-                                valid = false;
-                            } else {
-                                valid = true;
-                            }
-                        } else if (age >= MAX_AGE_MILLIS) {
-                            Slog.w(TAG, "Abandoning old session created at "
-                                        + session.createdMillis);
-                            valid = false;
-                        } else {
-                            valid = true;
-                        }
-
-                        if (valid) {
-                            mSessions.put(session.sessionId, session);
-                        } else {
-                            // Since this is early during boot we don't send
-                            // any observer events about the session, but we
-                            // keep details around for dumpsys.
-                            addHistoricalSessionLocked(session);
-                        }
+                        mSessions.put(session.sessionId, session);
                         mAllocatedSessions.put(session.sessionId, true);
                     }
                 }
@@ -510,6 +484,51 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         for (int i = 0; i < mSessions.size(); ++i) {
             PackageInstallerSession session = mSessions.valueAt(i);
             session.onAfterSessionRead(mSessions);
+        }
+    }
+
+    @GuardedBy("mSessions")
+    private void expireSessionsLocked() {
+        SparseArray<PackageInstallerSession> tmp = mSessions.clone();
+        final int n = tmp.size();
+        for (int i = 0; i < n; ++i) {
+            PackageInstallerSession session = tmp.valueAt(i);
+            if (session.hasParentSessionId()) {
+                // Child sessions will be expired when handling parent sessions
+                continue;
+            }
+            final long age = System.currentTimeMillis() - session.createdMillis;
+            final long timeSinceUpdate = System.currentTimeMillis() - session.getUpdatedMillis();
+            final boolean valid;
+            if (session.isStaged()) {
+                valid = !session.isStagedAndInTerminalState()
+                        || timeSinceUpdate < MAX_TIME_SINCE_UPDATE_MILLIS;
+            } else if (age >= MAX_AGE_MILLIS) {
+                Slog.w(TAG, "Abandoning old session created at "
+                        + session.createdMillis);
+                valid = false;
+            } else {
+                valid = true;
+            }
+            if (!valid) {
+                Slog.w(TAG, "Remove old session: " + session.sessionId);
+                // Remove expired sessions as well as child sessions if any
+                removeActiveSession(session);
+            }
+        }
+    }
+
+    /**
+     * Moves a session (including the child sessions) from mSessions to mHistoricalSessions.
+     * This should only be called on a root session.
+     */
+    @GuardedBy("mSessions")
+    private void removeActiveSession(PackageInstallerSession session) {
+        mSessions.remove(session.sessionId);
+        addHistoricalSessionLocked(session);
+        for (PackageInstallerSession child : session.getChildSessions()) {
+            mSessions.remove(child.sessionId);
+            addHistoricalSessionLocked(child);
         }
     }
 
@@ -831,7 +850,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 mSilentUpdatePolicy, mInstallThread.getLooper(), mStagingManager, sessionId,
                 userId, callingUid, installSource, params, createdMillis, 0L, stageDir, stageCid,
                 null, null, false, false, false, false, null, SessionInfo.INVALID_ID,
-                false, false, false, SessionInfo.STAGED_SESSION_NO_ERROR, "");
+                false, false, false, SessionInfo.SESSION_NO_ERROR, "");
 
         synchronized (mSessions) {
             mSessions.put(sessionId, session);
@@ -840,6 +859,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mCallbacks.notifySessionCreated(session.sessionId, session.userId);
 
         mSettingsWriteRequest.schedule();
+        if (LOGD) {
+            Slog.d(TAG, "Created session id=" + sessionId + " staged=" + params.isStaged);
+        }
         return sessionId;
     }
 
@@ -910,10 +932,26 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     }
 
+    private boolean checkOpenSessionAccess(final PackageInstallerSession session) {
+        if (session == null) {
+            return false;
+        }
+        if (isCallingUidOwner(session)) {
+            return true;
+        }
+        // Package verifiers have access to openSession for sealed sessions.
+        if (session.isSealed() && mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.PACKAGE_VERIFICATION_AGENT)
+                == PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+        return false;
+    }
+
     private IPackageInstallerSession openSessionInternal(int sessionId) throws IOException {
         synchronized (mSessions) {
             final PackageInstallerSession session = mSessions.get(sessionId);
-            if (session == null || !isCallingUidOwner(session)) {
+            if (!checkOpenSessionAccess(session)) {
                 throw new SecurityException("Caller has no access to session " + sessionId);
             }
             session.open();
@@ -936,6 +974,23 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         throw new IllegalStateException("Failed to allocate session ID");
     }
 
+    static boolean isStageName(String name) {
+        final boolean isFile = name.startsWith("vmdl") && name.endsWith(".tmp");
+        final boolean isContainer = name.startsWith("smdl") && name.endsWith(".tmp");
+        final boolean isLegacyContainer = name.startsWith("smdl2tmp");
+        return isFile || isContainer || isLegacyContainer;
+    }
+
+    static int tryParseSessionId(@NonNull String tmpSessionDir)
+            throws IllegalArgumentException {
+        if (!tmpSessionDir.startsWith("vmdl") || !tmpSessionDir.endsWith(".tmp")) {
+            throw new IllegalArgumentException("Not a temporary session directory");
+        }
+        String sessionId = tmpSessionDir.substring("vmdl".length(),
+                tmpSessionDir.length() - ".tmp".length());
+        return Integer.parseInt(sessionId);
+    }
+
     private File getTmpSessionDir(String volumeUuid) {
         return Environment.getDataAppDirectory(volumeUuid);
     }
@@ -950,7 +1005,12 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             final File sessionStagingDir = Environment.getDataStagingDirectory(params.volumeUuid);
             return new File(sessionStagingDir, "session_" + sessionId);
         }
-        return buildTmpSessionDir(sessionId, params.volumeUuid);
+        final File result = buildTmpSessionDir(sessionId, params.volumeUuid);
+        if (DEBUG && !Objects.equals(tryParseSessionId(result.getName()), sessionId)) {
+            throw new RuntimeException(
+                    "session folder format is off: " + result.getName() + " (" + sessionId + ")");
+        }
+        return result;
     }
 
     static void prepareStageDir(File stageDir) throws IOException {
@@ -1312,7 +1372,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         PackageInfo packageInfo = null;
         try {
             packageInfo = AppGlobals.getPackageManager().getPackageInfo(
-                    basePackageName, PackageManager.MATCH_STATIC_SHARED_LIBRARIES, userId);
+                    basePackageName, PackageManager.MATCH_STATIC_SHARED_AND_SDK_LIBRARIES, userId);
         } catch (RemoteException ignored) {
         }
         if (packageInfo == null || packageInfo.applicationInfo == null) {
@@ -1445,8 +1505,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         private TreeMap<PackageInstallerSession, TreeSet<PackageInstallerSession>> mSessionMap;
 
         private final Comparator<PackageInstallerSession> mSessionCreationComparator =
-                Comparator.comparingLong((PackageInstallerSession sess) -> sess.createdMillis)
-                          .thenComparingInt(sess -> sess.sessionId);
+                Comparator.comparingLong(
+                        (PackageInstallerSession sess) -> sess != null ? sess.createdMillis : -1)
+                        .thenComparingInt(sess -> sess != null ? sess.sessionId : -1);
 
         ParentChildSessionMap() {
             mSessionMap = new TreeMap<>(mSessionCreationComparator);
@@ -1484,10 +1545,12 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             for (Map.Entry<PackageInstallerSession, TreeSet<PackageInstallerSession>> entry
                     : mSessionMap.entrySet()) {
                 PackageInstallerSession parentSession = entry.getKey();
-                pw.print(tag + " ");
-                parentSession.dump(pw);
-                pw.println();
-                pw.increaseIndent();
+                if (parentSession != null) {
+                    pw.print(tag + " ");
+                    parentSession.dump(pw);
+                    pw.println();
+                    pw.increaseIndent();
+                }
 
                 for (PackageInstallerSession childSession : entry.getValue()) {
                     pw.print(tag + " Child ");
@@ -1576,7 +1639,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                     progress);
         }
 
-        public void onStagedSessionChanged(PackageInstallerSession session) {
+        public void onSessionChanged(PackageInstallerSession session) {
             session.markUpdated();
             mSettingsWriteRequest.schedule();
             if (mOkToSendBroadcasts && !session.isDestroyed()) {
@@ -1598,10 +1661,18 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         mStagingManager.abortSession(session.mStagedSession);
                     }
                     synchronized (mSessions) {
-                        if (!session.isStaged() || !success) {
-                            mSessions.remove(session.sessionId);
+                        // Child sessions will be removed along with its parent as a whole
+                        if (!session.hasParentSessionId()) {
+                            // Retain policy:
+                            // 1. Don't keep non-staged sessions
+                            // 2. Don't keep explicitly abandoned sessions
+                            // 3. Don't keep sessions that fail validation (isCommitted() is false)
+                            boolean shouldRemove = !session.isStaged() || session.isDestroyed()
+                                    || !session.isCommitted();
+                            if (shouldRemove) {
+                                removeActiveSession(session);
+                            }
                         }
-                        addHistoricalSessionLocked(session);
 
                         final File appIconFile = buildAppIconFile(session.sessionId);
                         if (appIconFile.exists()) {

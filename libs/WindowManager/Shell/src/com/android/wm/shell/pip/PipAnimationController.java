@@ -584,9 +584,11 @@ public class PipAnimationController {
                     setCurrentValue(bounds);
                     if (inScaleTransition() || sourceHintRect == null) {
                         if (isOutPipDirection) {
-                            getSurfaceTransactionHelper().scale(tx, leash, end, bounds);
+                            getSurfaceTransactionHelper().crop(tx, leash, end)
+                                    .scale(tx, leash, end, bounds);
                         } else {
-                            getSurfaceTransactionHelper().scale(tx, leash, base, bounds, angle)
+                            getSurfaceTransactionHelper().crop(tx, leash, base)
+                                    .scale(tx, leash, base, bounds, angle)
                                     .round(tx, leash, base, bounds);
                         }
                     } else {
@@ -594,10 +596,10 @@ public class PipAnimationController {
                         getSurfaceTransactionHelper().scaleAndCrop(tx, leash,
                                 initialSourceValue, bounds, insets);
                         if (shouldApplyCornerRadius()) {
-                            final Rect destinationBounds = new Rect(bounds);
-                            destinationBounds.inset(insets);
+                            final Rect sourceBounds = new Rect(initialContainerRect);
+                            sourceBounds.inset(insets);
                             getSurfaceTransactionHelper().round(tx, leash,
-                                    initialContainerRect, destinationBounds);
+                                    sourceBounds, bounds);
                         }
                     }
                     if (!handlePipTransaction(leash, tx, bounds)) {
@@ -622,13 +624,13 @@ public class PipAnimationController {
                         if (rotationDelta == ROTATION_90) {
                             degree = 90 * (1 - fraction);
                             x = fraction * (end.left - start.left)
-                                    + start.left + start.right * (1 - fraction);
+                                    + start.left + start.width() * (1 - fraction);
                             y = fraction * (end.top - start.top) + start.top;
                         } else {
                             degree = -90 * (1 - fraction);
                             x = fraction * (end.left - start.left) + start.left;
                             y = fraction * (end.top - start.top)
-                                    + start.top + start.bottom * (1 - fraction);
+                                    + start.top + start.height() * (1 - fraction);
                         }
                     } else {
                         if (rotationDelta == ROTATION_90) {
@@ -641,11 +643,15 @@ public class PipAnimationController {
                             y = fraction * (end.bottom - start.top) + start.top;
                         }
                     }
+                    final Rect sourceBounds = new Rect(initialContainerRect);
+                    sourceBounds.inset(insets);
                     getSurfaceTransactionHelper()
                             .rotateAndScaleWithCrop(tx, leash, initialContainerRect, bounds,
                                     insets, degree, x, y, isOutPipDirection,
-                                    rotationDelta == ROTATION_270 /* clockwise */)
-                            .round(tx, leash, initialContainerRect, bounds);
+                                    rotationDelta == ROTATION_270 /* clockwise */);
+                    if (shouldApplyCornerRadius()) {
+                        getSurfaceTransactionHelper().round(tx, leash, sourceBounds, bounds);
+                    }
                     tx.apply();
                 }
 

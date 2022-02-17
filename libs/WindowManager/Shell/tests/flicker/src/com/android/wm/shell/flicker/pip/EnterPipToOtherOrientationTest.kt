@@ -98,7 +98,7 @@ class EnterPipToOtherOrientationTest(
                 // Enter PiP, and assert that the PiP is within bounds now that the device is back
                 // in portrait
                 broadcastActionTrigger.doAction(ACTION_ENTER_PIP)
-                wmHelper.waitFor { it.wmState.hasPipWindow() }
+                wmHelper.waitPipShown()
                 wmHelper.waitForAppTransitionIdle()
                 // during rotation the status bar becomes invisible and reappears at the end
                 wmHelper.waitForNavBarStatusBarVisible()
@@ -117,7 +117,7 @@ class EnterPipToOtherOrientationTest(
      * Checks that the [FlickerComponentName.STATUS_BAR] has the correct position at
      * the start and end of the transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     override fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
@@ -204,6 +204,7 @@ class EnterPipToOtherOrientationTest(
     @Presubmit
     @Test
     fun testAppPlusPipLayerCoversFullScreenOnEnd() {
+        // This test doesn't work in shell transitions because of b/206669574
         testSpec.assertLayersEnd {
             val pipRegion = visibleRegion(pipApp.component).region
             visibleRegion(testApp.component)

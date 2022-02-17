@@ -23,9 +23,11 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.util.ArrayMap;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.Gravity;
@@ -103,6 +105,9 @@ public class QSPanel extends LinearLayout implements Tunable {
     protected LinearLayout mHorizontalContentContainer;
 
     protected QSTileLayout mTileLayout;
+    private float mSquishinessFraction = 1f;
+    private final ArrayMap<View, Integer> mChildrenLayoutTop = new ArrayMap<>();
+    private final Rect mClippingRect = new Rect();
 
     public QSPanel(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -130,8 +135,7 @@ public class QSPanel extends LinearLayout implements Tunable {
 
             mHorizontalContentContainer = new RemeasuringLinearLayout(mContext);
             mHorizontalContentContainer.setOrientation(LinearLayout.VERTICAL);
-            mHorizontalContentContainer.setClipChildren(true);
-            mHorizontalContentContainer.setClipToPadding(false);
+            setHorizontalContentContainerClipping();
 
             LayoutParams lp = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1);
             int marginSize = (int) mContext.getResources().getDimension(R.dimen.qs_media_padding);
@@ -143,6 +147,23 @@ public class QSPanel extends LinearLayout implements Tunable {
             lp = new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1);
             addView(mHorizontalLinearLayout, lp);
         }
+    }
+
+    protected void setHorizontalContentContainerClipping() {
+        mHorizontalContentContainer.setClipChildren(true);
+        mHorizontalContentContainer.setClipToPadding(false);
+        // Don't clip on the top, that way, secondary pages tiles can animate up
+        mHorizontalContentContainer.addOnLayoutChangeListener(
+                (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                    if (left != oldLeft || right != oldRight || bottom != oldBottom) {
+                        mClippingRect.left = left;
+                        mClippingRect.right = right;
+                        mClippingRect.bottom = bottom;
+                        mHorizontalContentContainer.setClipBounds(mClippingRect);
+                    }
+                });
+        mClippingRect.top = -1000;
+        mHorizontalContentContainer.setClipBounds(mClippingRect);
     }
 
     /**
@@ -179,8 +200,24 @@ public class QSPanel extends LinearLayout implements Tunable {
         if (mTileLayout == null) {
             mTileLayout = (QSTileLayout) LayoutInflater.from(mContext)
                     .inflate(R.layout.qs_paged_tile_layout, this, false);
+            mTileLayout.setSquishinessFraction(mSquishinessFraction);
         }
         return mTileLayout;
+    }
+
+    public void setSquishinessFraction(float squishinessFraction) {
+        if (Float.compare(squishinessFraction, mSquishinessFraction) == 0) {
+            return;
+        }
+        mSquishinessFraction = squishinessFraction;
+        if (mTileLayout == null) {
+            return;
+        }
+        mTileLayout.setSquishinessFraction(squishinessFraction);
+        if (getMeasuredWidth() == 0) {
+            return;
+        }
+        updateViewPositions();
     }
 
     @Override
@@ -226,6 +263,34 @@ public class QSPanel extends LinearLayout implements Tunable {
             }
         }
         setMeasuredDimension(getMeasuredWidth(), height);
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            mChildrenLayoutTop.put(child, child.getTop());
+        }
+        updateViewPositions();
+    }
+
+    private void updateViewPositions() {
+        // Adjust view positions based on tile squishing
+        int tileHeightOffset = mTileLayout.getTilesHeight() - mTileLayout.getHeight();
+
+        boolean move = false;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (move) {
+                int top = mChildrenLayoutTop.get(child);
+                child.setLeftTopRightBottom(child.getLeft(), top + tileHeightOffset,
+                        child.getRight(), top + tileHeightOffset + child.getHeight());
+            }
+            if (child == mTileLayout) {
+                move = true;
+            }
+        }
     }
 
     protected String getDumpableTag() {
@@ -511,14 +576,6 @@ public class QSPanel extends LinearLayout implements Tunable {
                     fireScanStateChanged(tileRecord.scanState);
                 }
             }
-
-            @Override
-            public void onAnnouncementRequested(CharSequence announcement) {
-                if (announcement != null) {
-                    mHandler.obtainMessage(H.ANNOUNCE_FOR_ACCESSIBILITY, announcement)
-                            .sendToTarget();
-                }
-            }
         };
 
         tileRecord.tile.addCallback(callback);
@@ -734,6 +791,12 @@ public class QSPanel extends LinearLayout implements Tunable {
 
         /** */
         void setListening(boolean listening, UiEventLogger uiEventLogger);
+
+        /** */
+        int getHeight();
+
+        /** */
+        int getTilesHeight();
 
         /**
          * Sets a size modifier for the tile. Where 0 means collapsed, and 1 expanded.

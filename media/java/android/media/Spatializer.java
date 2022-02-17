@@ -22,7 +22,9 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
+import android.media.CallbackUtil.ListenerInfo;
 import android.media.permission.ClearCallingIdentityContext;
 import android.media.permission.SafeCloseable;
 import android.os.RemoteException;
@@ -213,6 +215,29 @@ public class Spatializer {
     public static final int HEAD_TRACKING_MODE_RELATIVE_DEVICE = 2;
 
     /**
+     * @hide
+     * Head tracking mode to string conversion
+     * @param mode a valid head tracking mode
+     * @return a string containing the matching constant name
+     */
+    public static final String headtrackingModeToString(int mode) {
+        switch(mode) {
+            case HEAD_TRACKING_MODE_UNSUPPORTED:
+                return "HEAD_TRACKING_MODE_UNSUPPORTED";
+            case HEAD_TRACKING_MODE_DISABLED:
+                return "HEAD_TRACKING_MODE_DISABLED";
+            case HEAD_TRACKING_MODE_OTHER:
+                return "HEAD_TRACKING_MODE_OTHER";
+            case HEAD_TRACKING_MODE_RELATIVE_WORLD:
+                return "HEAD_TRACKING_MODE_RELATIVE_WORLD";
+            case HEAD_TRACKING_MODE_RELATIVE_DEVICE:
+                return "HEAD_TRACKING_MODE_RELATIVE_DEVICE";
+            default:
+                return "head tracking mode unknown " + mode;
+        }
+    }
+
+    /**
      * Return the level of support for the spatialization feature on this device.
      * This level of support is independent of whether the {@code Spatializer} is currently
      * enabled or available and will not change over time.
@@ -373,33 +398,8 @@ public class Spatializer {
     public void addOnSpatializerStateChangedListener(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull OnSpatializerStateChangedListener listener) {
-        Objects.requireNonNull(executor);
-        Objects.requireNonNull(listener);
-        synchronized (mStateListenerLock) {
-            if (hasSpatializerStateListener(listener)) {
-                throw new IllegalArgumentException(
-                        "Called addOnSpatializerStateChangedListener() "
-                        + "on a previously registered listener");
-            }
-            // lazy initialization of the list of strategy-preferred device listener
-            if (mStateListeners == null) {
-                mStateListeners = new ArrayList<>();
-            }
-            mStateListeners.add(new StateListenerInfo(listener, executor));
-            if (mStateListeners.size() == 1) {
-                // register binder for callbacks
-                if (mInfoDispatcherStub == null) {
-                    mInfoDispatcherStub =
-                            new SpatializerInfoDispatcherStub();
-                }
-                try {
-                    mAm.getService().registerSpatializerCallback(
-                            mInfoDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-            }
-        }
+        mStateListenerMgr.addListener(executor, listener, "addOnSpatializerStateChangedListener",
+                () -> new SpatializerInfoDispatcherStub());
     }
 
     /**
@@ -410,25 +410,7 @@ public class Spatializer {
      */
     public void removeOnSpatializerStateChangedListener(
             @NonNull OnSpatializerStateChangedListener listener) {
-        Objects.requireNonNull(listener);
-        synchronized (mStateListenerLock) {
-            if (!removeStateListener(listener)) {
-                throw new IllegalArgumentException(
-                        "Called removeOnSpatializerStateChangedListener() "
-                        + "on an unregistered listener");
-            }
-            if (mStateListeners.size() == 0) {
-                // unregister binder for callbacks
-                try {
-                    mAm.getService().unregisterSpatializerCallback(mInfoDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                } finally {
-                    mInfoDispatcherStub = null;
-                    mStateListeners = null;
-                }
-            }
-        }
+        mStateListenerMgr.removeListener(listener, "removeOnSpatializerStateChangedListener");
     }
 
     /**
@@ -483,97 +465,43 @@ public class Spatializer {
         }
     }
 
-    private final Object mStateListenerLock = new Object();
     /**
-     * List of listeners for state listener and their associated Executor.
-     * List is lazy-initialized on first registration
+     * manages the OnSpatializerStateChangedListener listeners and the
+     * SpatializerInfoDispatcherStub
      */
-    @GuardedBy("mStateListenerLock")
-    private @Nullable ArrayList<StateListenerInfo> mStateListeners;
+    private final CallbackUtil.LazyListenerManager<OnSpatializerStateChangedListener>
+            mStateListenerMgr = new CallbackUtil.LazyListenerManager();
 
-    @GuardedBy("mStateListenerLock")
-    private @Nullable SpatializerInfoDispatcherStub mInfoDispatcherStub;
-
-    private final class SpatializerInfoDispatcherStub extends ISpatializerCallback.Stub {
+    private final class SpatializerInfoDispatcherStub extends ISpatializerCallback.Stub
+            implements CallbackUtil.DispatcherStub {
         @Override
+        public void register(boolean register) {
+            try {
+                if (register) {
+                    mAm.getService().registerSpatializerCallback(this);
+                } else {
+                    mAm.getService().unregisterSpatializerCallback(this);
+                }
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
+        }
+
+        @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
         public void dispatchSpatializerEnabledChanged(boolean enabled) {
-            // make a shallow copy of listeners so callback is not executed under lock
-            final ArrayList<StateListenerInfo> stateListeners;
-            synchronized (mStateListenerLock) {
-                if (mStateListeners == null || mStateListeners.size() == 0) {
-                    return;
-                }
-                stateListeners = (ArrayList<StateListenerInfo>) mStateListeners.clone();
-            }
-            try (SafeCloseable ignored = ClearCallingIdentityContext.create()) {
-                for (StateListenerInfo info : stateListeners) {
-                    info.mExecutor.execute(() ->
-                            info.mListener.onSpatializerEnabledChanged(Spatializer.this, enabled));
-                }
-            }
+            mStateListenerMgr.callListeners(
+                    (listener) -> listener.onSpatializerEnabledChanged(
+                            Spatializer.this, enabled));
         }
 
         @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
         public void dispatchSpatializerAvailableChanged(boolean available) {
-            // make a shallow copy of listeners so callback is not executed under lock
-            final ArrayList<StateListenerInfo> stateListeners;
-            synchronized (mStateListenerLock) {
-                if (mStateListeners == null || mStateListeners.size() == 0) {
-                    return;
-                }
-                stateListeners = (ArrayList<StateListenerInfo>) mStateListeners.clone();
-            }
-            try (SafeCloseable ignored = ClearCallingIdentityContext.create()) {
-                for (StateListenerInfo info : stateListeners) {
-                    info.mExecutor.execute(() ->
-                            info.mListener.onSpatializerAvailableChanged(
-                                    Spatializer.this, available));
-                }
-            }
+            mStateListenerMgr.callListeners(
+                    (listener) -> listener.onSpatializerAvailableChanged(
+                            Spatializer.this, available));
         }
-    }
-
-    private static class StateListenerInfo {
-        final @NonNull OnSpatializerStateChangedListener mListener;
-        final @NonNull Executor mExecutor;
-
-        StateListenerInfo(@NonNull OnSpatializerStateChangedListener listener,
-                @NonNull Executor exe) {
-            mListener = listener;
-            mExecutor = exe;
-        }
-    }
-
-    @GuardedBy("mStateListenerLock")
-    private boolean hasSpatializerStateListener(OnSpatializerStateChangedListener listener) {
-        return getStateListenerInfo(listener) != null;
-    }
-
-    @GuardedBy("mStateListenerLock")
-    private @Nullable StateListenerInfo getStateListenerInfo(
-            OnSpatializerStateChangedListener listener) {
-        if (mStateListeners == null) {
-            return null;
-        }
-        for (StateListenerInfo info : mStateListeners) {
-            if (info.mListener == listener) {
-                return info;
-            }
-        }
-        return null;
-    }
-
-    @GuardedBy("mStateListenerLock")
-    /**
-     * @return true if the listener was removed from the list
-     */
-    private boolean removeStateListener(OnSpatializerStateChangedListener listener) {
-        final StateListenerInfo infoToRemove = getStateListenerInfo(listener);
-        if (infoToRemove != null) {
-            mStateListeners.remove(infoToRemove);
-            return true;
-        }
-        return false;
     }
 
 
@@ -688,34 +616,9 @@ public class Spatializer {
     public void addOnHeadTrackingModeChangedListener(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull OnHeadTrackingModeChangedListener listener) {
-        Objects.requireNonNull(executor);
-        Objects.requireNonNull(listener);
-        synchronized (mHeadTrackingListenerLock) {
-            if (hasListener(listener, mHeadTrackingListeners)) {
-                throw new IllegalArgumentException(
-                        "Called addOnHeadTrackingModeChangedListener() "
-                                + "on a previously registered listener");
-            }
-            // lazy initialization of the list of strategy-preferred device listener
-            if (mHeadTrackingListeners == null) {
-                mHeadTrackingListeners = new ArrayList<>();
-            }
-            mHeadTrackingListeners.add(
-                    new ListenerInfo<OnHeadTrackingModeChangedListener>(listener, executor));
-            if (mHeadTrackingListeners.size() == 1) {
-                // register binder for callbacks
-                if (mHeadTrackingDispatcherStub == null) {
-                    mHeadTrackingDispatcherStub =
-                            new SpatializerHeadTrackingDispatcherStub();
-                }
-                try {
-                    mAm.getService().registerSpatializerHeadTrackingCallback(
-                            mHeadTrackingDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-            }
-        }
+        mHeadTrackingListenerMgr.addListener(executor, listener,
+                "addOnHeadTrackingModeChangedListener",
+                 () -> new SpatializerHeadTrackingDispatcherStub());
     }
 
     /**
@@ -728,26 +631,8 @@ public class Spatializer {
     @RequiresPermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     public void removeOnHeadTrackingModeChangedListener(
             @NonNull OnHeadTrackingModeChangedListener listener) {
-        Objects.requireNonNull(listener);
-        synchronized (mHeadTrackingListenerLock) {
-            if (!removeListener(listener, mHeadTrackingListeners)) {
-                throw new IllegalArgumentException(
-                        "Called removeOnHeadTrackingModeChangedListener() "
-                                + "on an unregistered listener");
-            }
-            if (mHeadTrackingListeners.size() == 0) {
-                // unregister binder for callbacks
-                try {
-                    mAm.getService().unregisterSpatializerHeadTrackingCallback(
-                            mHeadTrackingDispatcherStub);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                } finally {
-                    mHeadTrackingDispatcherStub = null;
-                    mHeadTrackingListeners = null;
-                }
-            }
-        }
+        mHeadTrackingListenerMgr.removeListener(listener,
+                "removeOnHeadTrackingModeChangedListener");
     }
 
     /**
@@ -931,97 +816,44 @@ public class Spatializer {
     }
 
     //-----------------------------------------------------------------------------
-    // callback helper definitions
-
-    private static class ListenerInfo<T> {
-        final @NonNull T mListener;
-        final @NonNull Executor mExecutor;
-
-        ListenerInfo(T listener, Executor exe) {
-            mListener = listener;
-            mExecutor = exe;
-        }
-    }
-
-    private static <T> ListenerInfo<T> getListenerInfo(
-            T listener, ArrayList<ListenerInfo<T>> listeners) {
-        if (listeners == null) {
-            return null;
-        }
-        for (ListenerInfo<T> info : listeners) {
-            if (info.mListener == listener) {
-                return info;
-            }
-        }
-        return null;
-    }
-
-    private static <T> boolean hasListener(T listener, ArrayList<ListenerInfo<T>> listeners) {
-        return getListenerInfo(listener, listeners) != null;
-    }
-
-    private static <T> boolean removeListener(T listener, ArrayList<ListenerInfo<T>> listeners) {
-        final ListenerInfo<T> infoToRemove = getListenerInfo(listener, listeners);
-        if (infoToRemove != null) {
-            listeners.remove(infoToRemove);
-            return true;
-        }
-        return false;
-    }
-
-    //-----------------------------------------------------------------------------
     // head tracking callback management and stub
 
-    private final Object mHeadTrackingListenerLock = new Object();
     /**
-     * List of listeners for head tracking mode listener and their associated Executor.
-     * List is lazy-initialized on first registration
+     * manages the OnHeadTrackingModeChangedListener listeners and the
+     * SpatializerHeadTrackingDispatcherStub
      */
-    @GuardedBy("mHeadTrackingListenerLock")
-    private @Nullable ArrayList<ListenerInfo<OnHeadTrackingModeChangedListener>>
-            mHeadTrackingListeners;
-
-    @GuardedBy("mHeadTrackingListenerLock")
-    private @Nullable SpatializerHeadTrackingDispatcherStub mHeadTrackingDispatcherStub;
+    private final CallbackUtil.LazyListenerManager<OnHeadTrackingModeChangedListener>
+            mHeadTrackingListenerMgr = new CallbackUtil.LazyListenerManager();
 
     private final class SpatializerHeadTrackingDispatcherStub
-            extends ISpatializerHeadTrackingModeCallback.Stub {
+            extends ISpatializerHeadTrackingModeCallback.Stub
+            implements CallbackUtil.DispatcherStub {
         @Override
-        public void dispatchSpatializerActualHeadTrackingModeChanged(int mode) {
-            // make a shallow copy of listeners so callback is not executed under lock
-            final ArrayList<ListenerInfo<OnHeadTrackingModeChangedListener>> headTrackingListeners;
-            synchronized (mHeadTrackingListenerLock) {
-                if (mHeadTrackingListeners == null || mHeadTrackingListeners.size() == 0) {
-                    return;
+        public void register(boolean register) {
+            try {
+                if (register) {
+                    mAm.getService().registerSpatializerHeadTrackingCallback(this);
+                } else {
+                    mAm.getService().unregisterSpatializerHeadTrackingCallback(this);
                 }
-                headTrackingListeners = (ArrayList<ListenerInfo<OnHeadTrackingModeChangedListener>>)
-                        mHeadTrackingListeners.clone();
-            }
-            try (SafeCloseable ignored = ClearCallingIdentityContext.create()) {
-                for (ListenerInfo<OnHeadTrackingModeChangedListener> info : headTrackingListeners) {
-                    info.mExecutor.execute(() -> info.mListener
-                            .onHeadTrackingModeChanged(Spatializer.this, mode));
-                }
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
 
         @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
+        public void dispatchSpatializerActualHeadTrackingModeChanged(int mode) {
+            mHeadTrackingListenerMgr.callListeners(
+                    (listener) -> listener.onHeadTrackingModeChanged(Spatializer.this, mode));
+        }
+
+        @Override
+        @SuppressLint("GuardedBy") // lock applied inside callListeners method
         public void dispatchSpatializerDesiredHeadTrackingModeChanged(int mode) {
-            // make a shallow copy of listeners so callback is not executed under lock
-            final ArrayList<ListenerInfo<OnHeadTrackingModeChangedListener>> headTrackingListeners;
-            synchronized (mHeadTrackingListenerLock) {
-                if (mHeadTrackingListeners == null || mHeadTrackingListeners.size() == 0) {
-                    return;
-                }
-                headTrackingListeners = (ArrayList<ListenerInfo<OnHeadTrackingModeChangedListener>>)
-                        mHeadTrackingListeners.clone();
-            }
-            try (SafeCloseable ignored = ClearCallingIdentityContext.create()) {
-                for (ListenerInfo<OnHeadTrackingModeChangedListener> info : headTrackingListeners) {
-                    info.mExecutor.execute(() -> info.mListener
-                            .onDesiredHeadTrackingModeChanged(Spatializer.this, mode));
-                }
-            }
+            mHeadTrackingListenerMgr.callListeners(
+                    (listener) -> listener.onDesiredHeadTrackingModeChanged(
+                            Spatializer.this, mode));
         }
     }
 

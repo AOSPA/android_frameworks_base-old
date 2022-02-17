@@ -18,6 +18,7 @@ package android.content;
 
 import static android.content.ContentProvider.maybeAddUserId;
 
+import android.Manifest;
 import android.accessibilityservice.AccessibilityService;
 import android.annotation.AnyRes;
 import android.annotation.BroadcastBehavior;
@@ -2041,6 +2042,21 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.VIEW_PERMISSION_USAGE_FOR_PERIOD";
 
     /**
+     * Activity action: Launch the Safety Hub UI.
+     *
+     * <p>
+     * Input: Nothing.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @RequiresPermission(Manifest.permission.MANAGE_SENSOR_PRIVACY)
+    public static final String ACTION_VIEW_SAFETY_HUB =
+            "android.intent.action.VIEW_SAFETY_HUB";
+
+    /**
      * Activity action: Launch UI to manage a default app.
      * <p>
      * Input: {@link #EXTRA_ROLE_NAME} specifies the role of the default app which will be managed
@@ -2377,6 +2393,14 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_VIEW_APP_FEATURES =
             "android.intent.action.VIEW_APP_FEATURES";
+
+    /**
+     * Activity action: Launch UI to open the Safety Center, which highlights the user's security
+     * and privacy status.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_SAFETY_CENTER =
+            "android.intent.action.SAFETY_CENTER";
 
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
@@ -2950,6 +2974,9 @@ public class Intent implements Parcelable, Cloneable {
      * Broadcast Action: A uid has been removed from the system.  The uid
      * number is stored in the extra data under {@link #EXTRA_UID}.
      *
+     * In certain instances, {@link #EXTRA_REPLACING} is set to true if the UID is not being
+     * fully removed.
+     *
      * <p class="note">This is a protected intent that can only be sent
      * by the system.
      */
@@ -3164,9 +3191,8 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Broadcast Action: The receiver's effective locale has changed.
      *
-     * This happens when the device locale, or the
-     *  {(TODO: will only compile after ag/15518063) @link LocaleManager#setApplicationLocales}
-     *  receiving app's locale changed.
+     * This happens when the device locale, or the receiving app's locale
+     * (set via {@link android.app.LocaleManager#setApplicationLocales}) changed.
      *
      * Can be received by manifest-declared receivers.
      *
@@ -3783,6 +3809,47 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.ACTION_IDLE_MAINTENANCE_END";
 
     /**
+     * Broadcast Action: A broadcast sent by the system to indicate that
+     * {@link android.safetycenter.SafetyCenterManager} is requesting data from safety sources
+     * regarding their safety state.
+     *
+     * This broadcast is sent when a user triggers a data refresh from the Safety Center UI or when
+     * Safety Center detects that its stored safety information is stale and needs to be updated.
+     *
+     * This broadcast is sent explicitly to safety sources by targeting intents to a specified set
+     * of components provided by the safety sources in the safety source configuration.
+     * The receiving components should be manifest-declared receivers so that safety sources can be
+     * requested to send data even if they are not running.
+     *
+     * On receiving this broadcast, safety sources should determine their safety state
+     * according to the parameters specified in the intent extras (see below) and send Safety Center
+     * data about their safety state using
+     * {@link android.safetycenter.SafetyCenterManager#sendSafetyCenterUpdate(android.safetycenter.SafetySourceData)}.
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     *
+     * <p>Includes the following extras:
+     * <ul>
+     * <li>{@link #EXTRA_REFRESH_SAFETY_SOURCES_REQUEST_TYPE}: An int representing the type of data
+     * being requested. Possible values are all values in {@link RefreshRequestType}.
+     * <li>{@link #EXTRA_REFRESH_SAFETY_SOURCE_IDS}: A {@code String[]} of ids
+     * representing the safety sources being requested for data. This extra exists for
+     * disambiguation in the case that a single component is responsible for receiving refresh
+     * requests for multiple safety sources.
+     * </ul>
+     *
+     * @hide
+     */
+    // TODO(b/210805082): Define the term "safety sources" more concretely here once safety sources
+    //  are configured in xml config.
+    // TODO(b/210979035): Determine recommendation for sources if they are requested for fresh data
+    //  but cannot provide it.
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_REFRESH_SAFETY_SOURCES =
+            "android.intent.action.REFRESH_SAFETY_SOURCES";
+
+    /**
      * Broadcast Action: a remote intent is to be broadcasted.
      *
      * A remote intent is used for remote RPC between devices. The remote intent
@@ -4339,9 +4406,9 @@ public class Intent implements Parcelable, Cloneable {
      * restored from (corresponds to {@link android.os.Build.VERSION#SDK_INT}). The first three
      * values are represented as strings, the fourth one as int.
      *
-     * <p>This broadcast is sent only for settings provider entries known to require special handling
-     * around restore time.  These entries are found in the BROADCAST_ON_RESTORE table within
-     * the provider's backup agent implementation.
+     * <p>This broadcast is sent only for settings provider entries known to require special
+     * handling around restore time to specific receivers. These entries are found in the
+     * BROADCAST_ON_RESTORE table within the provider's backup agent implementation.
      *
      * @see #EXTRA_SETTING_NAME
      * @see #EXTRA_SETTING_PREVIOUS_VALUE
@@ -4349,15 +4416,46 @@ public class Intent implements Parcelable, Cloneable {
      * @see #EXTRA_SETTING_RESTORED_FROM_SDK_INT
      * {@hide}
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @SuppressLint("ActionValue")
     public static final String ACTION_SETTING_RESTORED = "android.os.action.SETTING_RESTORED";
 
-    /** {@hide} */
+    /**
+     * String intent extra to be used with {@link ACTION_SETTING_RESTORED}.
+     * Contain the name of the restored setting.
+     * {@hide}
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @SuppressLint("ActionValue")
     public static final String EXTRA_SETTING_NAME = "setting_name";
-    /** {@hide} */
+
+    /**
+     * String intent extra to be used with {@link ACTION_SETTING_RESTORED}.
+     * Contain the value of the {@link EXTRA_SETTING_NAME} settings entry prior to the restore
+     * operation.
+     * {@hide}
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @SuppressLint("ActionValue")
     public static final String EXTRA_SETTING_PREVIOUS_VALUE = "previous_value";
-    /** {@hide} */
+
+    /**
+     * String intent extra to be used with {@link ACTION_SETTING_RESTORED}.
+     * Contain the value of the {@link EXTRA_SETTING_NAME} settings entry being restored.
+     * {@hide}
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @SuppressLint("ActionValue")
     public static final String EXTRA_SETTING_NEW_VALUE = "new_value";
-    /** {@hide} */
+
+    /**
+     * Int intent extra to be used with {@link ACTION_SETTING_RESTORED}.
+     * Contain the version of the SDK that the setting has been restored from (corresponds to
+     * {@link android.os.Build.VERSION#SDK_INT}).
+     * {@hide}
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @SuppressLint("ActionValue")
     public static final String EXTRA_SETTING_RESTORED_FROM_SDK_INT = "restored_from_sdk_int";
 
     /**
@@ -5535,8 +5633,8 @@ public class Intent implements Parcelable, Cloneable {
 
     /**
      * A boolean extra, when used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD},
-     * that specifies whether the system displayed attribution information in the
-     * permission usage system UI for the chosen entry.
+     * that specifies whether the permission usage system UI is showing attribution information
+     * for the chosen entry.
      *
      * <p> The extra can only be true if application has specified attributionsAreUserVisible
      * in its manifest. </p>
@@ -5587,7 +5685,9 @@ public class Intent implements Parcelable, Cloneable {
      *
      * <p>Targets provided in this way will be presented inline with all other targets provided
      * by services from other apps. They will be prioritized before other service targets, but
-     * after those targets provided by sources that the user has manually pinned to the front.</p>
+     * after those targets provided by sources that the user has manually pinned to the front.
+     * You can provide up to two targets on this extra (the limit of two targets
+     * starts in Android 10).</p>
      *
      * @see #ACTION_CHOOSER
      */
@@ -5698,9 +5798,11 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * A Parcelable[] of {@link Intent} or
      * {@link android.content.pm.LabeledIntent} objects as set with
-     * {@link #putExtra(String, Parcelable[])} of additional activities to place
-     * a the front of the list of choices, when shown to the user with a
-     * {@link #ACTION_CHOOSER}.
+     * {@link #putExtra(String, Parcelable[])} to place
+     * at the front of the list of choices, when shown to the user with an
+     * {@link #ACTION_CHOOSER}. You can choose up to two additional activities
+     * to show before the app suggestions (the limit of two additional activities starts in
+     * Android 10).
      */
     public static final String EXTRA_INITIAL_INTENTS = "android.intent.extra.INITIAL_INTENTS";
 
@@ -5904,6 +6006,14 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_UID = "android.intent.extra.UID";
 
     /**
+     * Used as an optional int extra field in {@link android.content.Intent#ACTION_PACKAGE_ADDED}
+     * intents to supply the previous uid the package had been assigned.
+     * This would only be set when a package is leaving sharedUserId in an upgrade, or when a
+     * system app upgrade that had left sharedUserId is getting uninstalled.
+     */
+    public static final String EXTRA_PREVIOUS_UID = "android.intent.extra.PREVIOUS_UID";
+
+    /**
      * @hide String array of package names.
      */
     @SystemApi
@@ -5933,6 +6043,16 @@ public class Intent implements Parcelable, Cloneable {
      * different version of the same package.
      */
     public static final String EXTRA_REPLACING = "android.intent.extra.REPLACING";
+
+    /**
+     * Used as a boolean extra field in {@link android.content.Intent#ACTION_PACKAGE_REMOVED},
+     * {@link android.content.Intent#ACTION_UID_REMOVED}, and
+     * {@link android.content.Intent#ACTION_PACKAGE_ADDED}
+     * intents to indicate that this package is changing its UID.
+     * This would only be set when a package is leaving sharedUserId in an upgrade, or when a
+     * system app upgrade that had left sharedUserId is getting uninstalled.
+     */
+    public static final String EXTRA_UID_CHANGING = "android.intent.extra.UID_CHANGING";
 
     /**
      * Used as an int extra field in {@link android.app.AlarmManager} pending intents
@@ -6353,6 +6473,77 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_VISIBILITY_ALLOW_LIST =
             "android.intent.extra.VISIBILITY_ALLOW_LIST";
 
+
+    /**
+     * Used as a {@code String[]} extra field in
+     * {@link android.content.Intent#ACTION_REFRESH_SAFETY_SOURCES} intents to specify the safety
+     * source ids of the safety sources being requested for data by Safety Center.
+     *
+     * When this extra field is not specified in the intent, it is assumed that Safety Center is
+     * requesting data from all safety sources supported by the component receiving the broadcast.
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_REFRESH_SAFETY_SOURCE_IDS =
+            "android.intent.extra.REFRESH_SAFETY_SOURCE_IDS";
+
+    /**
+     * Used as an {@code int} extra field in
+     * {@link android.content.Intent#ACTION_REFRESH_SAFETY_SOURCES} intents to specify the type of
+     * data request from Safety Center.
+     *
+     * Possible values are all values in {@link RefreshRequestType}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_REFRESH_SAFETY_SOURCES_REQUEST_TYPE =
+            "android.intent.extra.REFRESH_SAFETY_SOURCES_REQUEST_TYPE";
+
+    /**
+     * All possible types of data refresh requests in broadcasts with intent action
+     * {@link android.content.Intent#ACTION_REFRESH_SAFETY_SOURCES}.
+     *
+     * @hide
+     */
+    @IntDef(prefix = { "EXTRA_REFRESH_REQUEST_TYPE_" }, value = {
+            EXTRA_REFRESH_REQUEST_TYPE_FETCH_FRESH_DATA,
+            EXTRA_REFRESH_REQUEST_TYPE_GET_DATA,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface RefreshRequestType {}
+
+    /**
+     * Used as an int value for
+     * {@link android.content.Intent#EXTRA_REFRESH_SAFETY_SOURCES_REQUEST_TYPE}
+     * to indicate that the safety source should fetch fresh data relating to their safety state
+     * upon receiving a broadcast with intent action
+     * {@link android.content.Intent#ACTION_REFRESH_SAFETY_SOURCES} and provide it to Safety Center.
+     *
+     * The term "fresh" here means that the sources should ensure that the safety data is accurate
+     * as possible at the time of providing it to Safety Center, even if it involves performing an
+     * expensive and/or slow process.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EXTRA_REFRESH_REQUEST_TYPE_FETCH_FRESH_DATA = 0;
+
+    /**
+     * Used as an int value for
+     * {@link android.content.Intent#EXTRA_REFRESH_SAFETY_SOURCES_REQUEST_TYPE}
+     * to indicate that upon receiving a broadcasts with intent action
+     * {@link android.content.Intent#ACTION_REFRESH_SAFETY_SOURCES}, the safety source should
+     * provide data relating to their safety state to Safety Center.
+     *
+     * If the source already has its safety data cached, it may provide it without triggering a
+     * process to fetch state which may be expensive and/or slow.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EXTRA_REFRESH_REQUEST_TYPE_GET_DATA = 1;
+
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // Intent flags (see mFlags variable).
@@ -6428,6 +6619,7 @@ public class Intent implements Parcelable, Cloneable {
             FLAG_RECEIVER_FROM_SHELL,
             FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS,
             FLAG_RECEIVER_OFFLOAD,
+            FLAG_RECEIVER_OFFLOAD_FOREGROUND,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Flags {}
@@ -6473,6 +6665,7 @@ public class Intent implements Parcelable, Cloneable {
             FLAG_RECEIVER_FROM_SHELL,
             FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS,
             FLAG_RECEIVER_OFFLOAD,
+            FLAG_RECEIVER_OFFLOAD_FOREGROUND,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface MutableFlags {}
@@ -6926,6 +7119,13 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final int FLAG_RECEIVER_OFFLOAD = 0x80000000;
+    /**
+     * If set, when sending a broadcast the recipient will run on the system dedicated queue.
+     *
+     * @hide
+     */
+    public static final int FLAG_RECEIVER_OFFLOAD_FOREGROUND = 0x00000800;
+
     /**
      * If this is an ordered broadcast, don't allow receivers to abort the broadcast.
      * They can still propagate results through to later receivers, but they can not prevent
@@ -9216,7 +9416,7 @@ public class Intent implements Parcelable, Cloneable {
      * @see #resolveActivity
      */
     public ActivityInfo resolveActivityInfo(@NonNull PackageManager pm,
-            @PackageManager.ComponentInfoFlags int flags) {
+            @PackageManager.ComponentInfoFlagsBits int flags) {
         ActivityInfo ai = null;
         if (mComponent != null) {
             try {
@@ -9244,7 +9444,7 @@ public class Intent implements Parcelable, Cloneable {
      */
     @UnsupportedAppUsage
     public @Nullable ComponentName resolveSystemService(@NonNull PackageManager pm,
-            @PackageManager.ComponentInfoFlags int flags) {
+            @PackageManager.ComponentInfoFlagsBits int flags) {
         if (mComponent != null) {
             return mComponent;
         }

@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Permite que o app modifique o registro de chamadas do seu dispositivo Android TV, incluindo dados sobre chamadas recebidas e realizadas. Apps maliciosos podem usar essa permissão para apagar ou modificar seu registro de chamadas."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Permite que o app modifique o registro de chamadas de seu telefone, incluindo dados sobre chamadas recebidas e efetuadas. Apps maliciosos podem usar esta permissão para apagar ou modificar seu registro de chamadas."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"acessar sensores corporais (como monitores de frequência cardíaca)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Permite que o app acesse dados de sensores que monitoram sua condição física, como a frequência cardíaca."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Acesso a dados dos sensores corporais, como frequência cardíaca, temperatura, porcentagem de oxigênio no sangue etc."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"acessar sensores corporais (como monitores de frequência cardíaca) em segundo plano"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Acesso a dados dos sensores corporais, como frequência cardíaca, temperatura, porcentagem de oxigênio no sangue etc. em segundo plano."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Ler detalhes e eventos da agenda"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Este app pode ler todos os eventos da agenda armazenados no seu tablet e compartilhar ou salvar os dados da sua agenda."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Este app pode ler todos os eventos da agenda armazenados no seu dispositivo Android TV e compartilhar ou salvar os dados da sua agenda."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Permite que o app use o serviço de mensagens instantâneas para fazer chamadas sem sua intervenção."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"ler status e identidade do telefone"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Permite que o app acesse os recursos de telefonia do dispositivo. Esta permissão autoriza o app a determinar o número de telefone e IDs de dispositivo, quando uma chamada está ativa, e o número remoto conectado a uma chamada."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"ler status e identidade básicos de telefonia"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Permite que o app acesse os recursos básicos de telefonia do dispositivo."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"encaminhar chamadas pelo sistema"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Permite que o app encaminhe suas chamadas por meio do sistema para melhorar a experiência com chamadas."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"ver e controlar chamadas pelo sistema."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Toque para excluir seu modelo de rosto e crie um novo"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Configurar o Desbloqueio facial"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Desbloqueie o smartphone olhando para ele"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Para usar o Desbloqueio facial, ative o "<b>"acesso à câmera"</b>" em Configurações &gt; Privacidade"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Configure mais formas de desbloquear a tela"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Toque para adicionar uma impressão digital"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Desbloqueio por impressão digital"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Permitir que o app leia e grave a configuração \"Não perturbe\"."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"iniciar uso da permissão para visualização"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Permite que o sistema inicie o uso de permissão para um app. Não deve ser necessário para apps comuns."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"decisões de permissão da visualização inicial"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Autoriza o detentor a iniciar a tela para revisar as decisões de permissão. Não deve ser necessário para apps normais."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"ver recursos do app"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Permite que o sistema comece a ver as informações de recursos de um app."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"acessar os dados do sensor em uma taxa de amostragem elevada"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Monitorar tentativas de desbloqueio de tela"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Monitora quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloqueia o telefone ou apaga todos os dados do telefone se a senha for digitada incorretamente muitas vezes."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia o dispositivo Android TV ou limpa todos os dados nele se muitas senhas incorretas forem digitadas."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Monitora quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloqueia o sistema de infoentretenimento ou apaga todos os dados desse sistema quando isso acontece muitas vezes."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Monitora quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloqueia o telefone ou apaga todos os dados do telefone se a senha for digitada incorretamente muitas vezes."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia o tablet ou limpa todos os dados do usuário se muitas senhas incorretas forem digitadas."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia o dispositivo Android TV ou apaga todos os dados do usuário se muitas senhas incorretas forem digitadas."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Monitora quantas vezes a senha foi digitada incorretamente ao desbloquear a tela e bloqueia o sistema de infoentretenimento ou apaga todos os dados do perfil quando isso acontece muitas vezes."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Monitora o número de senhas incorretas digitadas ao desbloquear a tela e bloqueia o smartphone ou limpa todos os dados do usuário se muitas senhas incorretas forem digitadas."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Alterar o bloqueio de tela"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Altera o bloqueio de tela."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Apagar todos os dados"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Apague os dados do tablet sem aviso redefinindo a configuração original."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Redefine o dispositivo Android TV para a configuração original e apaga os dados sem aviso."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Apaga os dados sem aviso, redefinindo o sistema de infoentretenimento para a configuração original."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Apaga os dados sem aviso redefinindo o smartphone para a configuração original."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Limpar dados do usuário"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Apagar dados do perfil"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Limpar dados do usuário"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Limpa os dados do usuário neste tablet sem aviso prévio."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Limpa os dados do usuário neste dispositivo Android TV sem aviso prévio."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Apaga os dados do perfil do sistema de infoentretenimento sem aviso."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Limpa os dados do usuário neste smartphone sem aviso prévio."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Definir o proxy global do dispositivo"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Configura o proxy global do dispositivo para ser usado enquanto a política está ativada. Somente o proprietário do dispositivo pode definir o proxy global."</string>
@@ -1203,7 +1215,7 @@
     <string name="whichOpenLinksWith" msgid="1120936181362907258">"Abrir links com"</string>
     <string name="whichOpenLinksWithApp" msgid="6917864367861910086">"Abrir links com <xliff:g id="APPLICATION">%1$s</xliff:g>"</string>
     <string name="whichOpenHostLinksWithApp" msgid="2401668560768463004">"Abrir links do domínio <xliff:g id="HOST">%1$s</xliff:g> usando <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
-    <string name="whichGiveAccessToApplicationLabel" msgid="7805857277166106236">"Conceder acesso"</string>
+    <string name="whichGiveAccessToApplicationLabel" msgid="7805857277166106236">"Permitir acesso"</string>
     <string name="whichEditApplication" msgid="6191568491456092812">"Editar com"</string>
     <string name="whichEditApplicationNamed" msgid="8096494987978521514">"Editar com %1$s"</string>
     <string name="whichEditApplicationLabel" msgid="1463288652070140285">"Editar"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Preparando <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Iniciando apps."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Concluindo a inicialização."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Desligar a tela?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Durante a configuração da sua impressão digital, você pressionou o botão liga/desliga.\n\nNormalmente, essa ação desliga a tela."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Desligar"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Cancelar"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Continuar a configuração?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Você pressionou o botão liga/desliga. Normalmente, essa ação desliga a tela.\n\nToque levemente na tela durante a configuração da impressão digital."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Desligar a tela"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Continuar configuração"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Continuar a verificação da digital?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Você pressionou o botão liga/desliga. Normalmente, essa ação desliga a tela.\n\nToque levemente na tela para verificar sua impressão digital."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Desligar a tela"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Continuar"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> em execução"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Toque para voltar ao jogo"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Escolha o jogo"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Notificação personalizada do app"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Permitir que o app <xliff:g id="APP">%1$s</xliff:g> crie um novo usuário com <xliff:g id="ACCOUNT">%2$s</xliff:g> (já existe um usuário com essa conta)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Permitir que o app <xliff:g id="APP">%1$s</xliff:g> crie um novo usuário com <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Adicionar usuário supervisionado"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Adicionar um idioma"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Preferência de região"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Digitar nome do idioma"</string>
@@ -2105,12 +2122,12 @@
     <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Esta notificação foi rebaixada a Silenciosa. Toque para enviar seu feedback."</string>
     <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Esta notificação foi classificada com maior prioridade. Toque para enviar seu feedback."</string>
     <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Esta notificação foi classificada com menor prioridade. Toque para enviar seu feedback."</string>
-    <string name="nas_upgrade_notification_title" msgid="8436359459300146555">"Notificações aprimoradas"</string>
-    <string name="nas_upgrade_notification_content" msgid="5157550369837103337">"As ações e respostas sugeridas agora são fornecidas pelas notificações aprimoradas. As Notificações adaptáveis do Android não estão mais disponíveis."</string>
+    <string name="nas_upgrade_notification_title" msgid="8436359459300146555">"Notificações avançadas"</string>
+    <string name="nas_upgrade_notification_content" msgid="5157550369837103337">"As ações e respostas sugeridas agora são fornecidas pelas notificações avançadas. As Notificações adaptáveis do Android não estão mais disponíveis."</string>
     <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"OK"</string>
     <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"Desativar"</string>
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Saiba mais"</string>
-    <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"No Android 12, as notificações aprimoradas substituíram as notificações adaptáveis. Esse recurso exibe ações e respostas sugeridas, além de organizar suas notificações.\n\nAs notificações aprimoradas podem acessar o conteúdo das notificações, incluindo informações pessoais como nomes de contatos e mensagens. Elas também podem dispensar ou responder às notificações, como atender chamadas telefônicas e controlar o Não perturbe."</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"No Android 12, as notificações avançadas substituíram as notificações adaptáveis. Esse recurso exibe ações e respostas sugeridas, além de organizar suas notificações.\n\nAs notificações avançadas podem acessar o conteúdo das notificações, incluindo informações pessoais como nomes de contatos e mensagens. Elas também podem dispensar ou responder às notificações, como atender chamadas telefônicas e controlar o Não perturbe."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Notificação de informação do modo rotina"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"A bateria pode acabar antes da recarga normal"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"A Economia de bateria foi ativada para aumentar a duração da carga"</string>

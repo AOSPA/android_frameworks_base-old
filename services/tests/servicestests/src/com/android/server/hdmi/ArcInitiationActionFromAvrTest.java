@@ -15,6 +15,7 @@
  */
 package com.android.server.hdmi;
 
+import static com.android.server.SystemService.PHASE_SYSTEM_SERVICES_READY;
 import static com.android.server.hdmi.HdmiControlService.INITIATED_BY_ENABLE_CEC;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -108,13 +109,13 @@ public class ArcInitiationActionFromAvrTest {
                 hdmiControlService, mNativeWrapper, hdmiControlService.getAtomWriter());
         hdmiControlService.setCecController(hdmiCecController);
         hdmiControlService.setHdmiMhlController(HdmiMhlControllerStub.create(hdmiControlService));
-        hdmiControlService.setMessageValidator(new HdmiCecMessageValidator(hdmiControlService));
         hdmiControlService.initService();
         mPowerManager = new FakePowerManagerWrapper(mContextSpy);
         hdmiControlService.setPowerManager(mPowerManager);
         mAction = new ArcInitiationActionFromAvr(mHdmiCecLocalDeviceAudioSystem);
 
         mLocalDevices.add(mHdmiCecLocalDeviceAudioSystem);
+        hdmiControlService.onBootPhase(PHASE_SYSTEM_SERVICES_READY);
         hdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
     }

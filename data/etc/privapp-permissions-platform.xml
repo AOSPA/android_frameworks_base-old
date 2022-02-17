@@ -154,6 +154,7 @@ applications that come with the platform
         <permission name="android.permission.PACKAGE_USAGE_STATS" />
         <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE" />
         <permission name="android.permission.MODIFY_AUDIO_ROUTING" />
+        <permission name="android.permission.WRITE_SECURE_SETTINGS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.phone">
@@ -225,6 +226,8 @@ applications that come with the platform
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
+        <permission name="android.permission.READ_COMPAT_CHANGE_CONFIG" />
+        <permission name="android.permission.LOG_COMPAT_CHANGE" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.providers.downloads">
@@ -272,6 +275,7 @@ applications that come with the platform
     <privapp-permissions package="com.android.server.telecom">
         <permission name="android.permission.BIND_CONNECTION_SERVICE"/>
         <permission name="android.permission.BIND_INCALL_SERVICE"/>
+        <permission name="android.permission.BLUETOOTH_PRIVILEGED"/>
         <permission name="android.permission.CALL_PRIVILEGED"/>
         <permission name="android.permission.HANDLE_CAR_MODE_CHANGES"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
@@ -290,6 +294,7 @@ applications that come with the platform
 
     <privapp-permissions package="com.android.shell">
         <!-- Needed for test only -->
+        <permission name="android.permission.LAUNCH_DEVICE_MANAGER_SETUP"/>
         <permission name="android.permission.MODIFY_DAY_NIGHT_MODE"/>
         <permission name="android.permission.ACCESS_LOWPAN_STATE"/>
         <permission name="android.permission.BACKUP"/>
@@ -387,10 +392,13 @@ applications that come with the platform
         <permission name="android.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS"/>
         <permission name="android.permission.SET_WALLPAPER" />
         <permission name="android.permission.SET_WALLPAPER_COMPONENT" />
+        <permission name="android.permission.SET_WALLPAPER_DIM_AMOUNT" />
         <permission name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
         <!-- Permissions required for Incremental CTS tests -->
         <permission name="com.android.permission.USE_INSTALLER_V2"/>
         <permission name="android.permission.LOADER_USAGE_STATS"/>
+        <!-- Permissions required for Package Verifier tests -->
+        <permission name="android.permission.PACKAGE_VERIFICATION_AGENT" />
         <!-- Permission required to test system only camera devices. -->
         <permission name="android.permission.SYSTEM_CAMERA" />
         <!-- Permission required to test ExplicitHealthCheckServiceImpl. -->
@@ -420,6 +428,10 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_NOTIFICATIONS"/>
         <!-- Permission required for CompanionDeviceManager CTS test. -->
         <permission name="android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS" />
+        <permission name="android.permission.MANAGE_COMPANION_DEVICES" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
+        <permission name="android.permission.REQUEST_COMPANION_SELF_MANAGED" />
         <!-- Permission required for testing registering pull atom callbacks. -->
         <permission name="android.permission.REGISTER_STATS_PULL_ATOM"/>
         <!-- Permission required for testing system audio effect APIs. -->
@@ -487,6 +499,8 @@ applications that come with the platform
         <!-- Permission required for CTS test - SystemMediaRouter2Test -->
         <permission name="android.permission.MEDIA_CONTENT_CONTROL"/>
         <permission name="android.permission.MODIFY_AUDIO_ROUTING"/>
+        <!-- Permission required for CTS test - CallAudioInterceptionTest -->
+        <permission name="android.permission.CALL_AUDIO_INTERCEPTION"/>
         <!-- Permission required for CTS test - CtsPermission5TestCases -->
         <permission name="android.permission.RENOUNCE_PERMISSIONS" />
         <permission name="android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS" />
@@ -505,6 +519,11 @@ applications that come with the platform
         <permission name="android.permission.NOTIFY_PENDING_SYSTEM_UPDATE" />
         <!-- Permission required for GTS test - GtsAssistIntentTestCases -->
         <permission name="android.permission.MANAGE_VOICE_KEYPHRASES" />
+        <!-- Permission required for ATS test - CarDevicePolicyManagerTest -->
+        <permission name="android.permission.LOCK_DEVICE" />
+        <!-- Permissions required for CTS test - CtsSafetyCenterTestCases -->
+        <permission name="android.permission.SEND_SAFETY_CENTER_UPDATE" />
+        <permission name="android.permission.READ_SAFETY_CENTER_STATUS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

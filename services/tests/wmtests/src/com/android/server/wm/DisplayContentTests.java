@@ -102,6 +102,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.when;
 
 import android.app.ActivityTaskManager;
 import android.app.WindowConfiguration;
@@ -134,6 +135,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.View;
 import android.view.WindowManager;
+import android.window.IDisplayAreaOrganizer;
 import android.window.WindowContainerToken;
 
 import androidx.test.filters.SmallTest;
@@ -388,6 +390,32 @@ public class DisplayContentTests extends WindowTestsBase {
         // Compute IME parent returns nothing if current target and window receiving input
         // are different i.e. if current window didn't request IME.
         assertNull("computeImeParent() should be null", mDisplayContent.computeImeParent());
+    }
+
+    @Test
+    public void testUpdateImeParent_skipForOrganizedImeContainer() {
+        final DisplayArea.Tokens imeContainer = mDisplayContent.getImeContainer();
+        final ActivityRecord activity = createActivityRecord(mDisplayContent);
+
+        final WindowState startingWin = createWindow(null, TYPE_APPLICATION_STARTING, activity,
+                "startingWin");
+        startingWin.setHasSurface(true);
+        assertTrue(startingWin.canBeImeTarget());
+        final SurfaceControl imeSurfaceParent = mock(SurfaceControl.class);
+        doReturn(imeSurfaceParent).when(mDisplayContent).computeImeParent();
+
+        // Main precondition for this test: organize the ImeContainer.
+        final IDisplayAreaOrganizer mockImeOrganizer = mock(IDisplayAreaOrganizer.class);
+        when(mockImeOrganizer.asBinder()).thenReturn(new Binder());
+        imeContainer.setOrganizer(mockImeOrganizer);
+
+        mDisplayContent.updateImeParent();
+
+        assertNull("Don't reparent the surface of an organized ImeContainer.",
+                mDisplayContent.mInputMethodSurfaceParent);
+
+        // Clean up organizer.
+        imeContainer.setOrganizer(null);
     }
 
     /**
@@ -653,7 +681,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
         final int maxWidth = 300;
         final int resultingHeight = (maxWidth * baseHeight) / baseWidth;
-        final int resultingDensity = baseDensity;
+        final int resultingDensity = (baseDensity * maxWidth) / baseWidth;
 
         displayContent.setMaxUiWidth(maxWidth);
         verifySizes(displayContent, maxWidth, resultingHeight, resultingDensity);
@@ -725,6 +753,33 @@ public class DisplayContentTests extends WindowTestsBase {
         // Verify that forcing the size is idempotent.
         displayContent.setForcedSize(forcedWidth, forcedHeight);
         verifySizes(displayContent, baseWidth, baseHeight, baseDensity);
+    }
+
+    @Test
+    public void testSetForcedDensity() {
+        final DisplayContent displayContent = createDisplayNoUpdateDisplayInfo();
+        final int baseWidth = 1280;
+        final int baseHeight = 720;
+        final int baseDensity = 320;
+
+        displayContent.mInitialDisplayWidth = baseWidth;
+        displayContent.mInitialDisplayHeight = baseHeight;
+        displayContent.mInitialDisplayDensity = baseDensity;
+        displayContent.updateBaseDisplayMetrics(baseWidth, baseHeight, baseDensity);
+
+        final int forcedDensity = 600;
+
+        // Verify that forcing the density is honored and the size doesn't change.
+        displayContent.setForcedDensity(forcedDensity, 0 /* userId */);
+        verifySizes(displayContent, baseWidth, baseHeight, forcedDensity);
+
+        // Verify that forcing the density is idempotent.
+        displayContent.setForcedDensity(forcedDensity, 0 /* userId */);
+        verifySizes(displayContent, baseWidth, baseHeight, forcedDensity);
+
+        // Verify that forcing resolution won't affect the already forced density.
+        displayContent.setForcedSize(1800, 1200);
+        verifySizes(displayContent, 1800, 1200, forcedDensity);
     }
 
     @Test
@@ -1281,7 +1336,6 @@ public class DisplayContentTests extends WindowTestsBase {
         spyOn(rotationAnim);
         // Assume that the display rotation is changed so it is frozen in preparation for animation.
         doReturn(true).when(rotationAnim).hasScreenshot();
-        mWm.mDisplayFrozen = true;
         displayContent.getDisplayRotation().setRotation((displayContent.getRotation() + 1) % 4);
         displayContent.setRotationAnimation(rotationAnim);
         // The fade rotation animation also starts to hide some non-app windows.
@@ -1292,9 +1346,9 @@ public class DisplayContentTests extends WindowTestsBase {
             w.setOrientationChanging(true);
         }
         // The display only waits for the app window to unfreeze.
-        assertFalse(displayContent.waitForUnfreeze(statusBar));
-        assertFalse(displayContent.waitForUnfreeze(navBar));
-        assertTrue(displayContent.waitForUnfreeze(app));
+        assertFalse(displayContent.shouldSyncRotationChange(statusBar));
+        assertFalse(displayContent.shouldSyncRotationChange(navBar));
+        assertTrue(displayContent.shouldSyncRotationChange(app));
         // If all windows animated by fade rotation animation have done the orientation change,
         // the animation controller should be cleared.
         statusBar.setOrientationChanging(false);
@@ -1368,18 +1422,16 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(config90.orientation, app.getConfiguration().orientation);
         assertEquals(config90.windowConfiguration.getBounds(), app.getBounds());
 
-        // Make wallaper laid out with the fixed rotation transform.
+        // Associate wallpaper with the fixed rotation transform.
         final WindowToken wallpaperToken = mWallpaperWindow.mToken;
         wallpaperToken.linkFixedRotationTransform(app);
-        mWallpaperWindow.mLayoutNeeded = true;
-        performLayout(mDisplayContent);
 
         // Force the negative offset to verify it can be updated.
         mWallpaperWindow.mXOffset = mWallpaperWindow.mYOffset = -1;
         assertTrue(mDisplayContent.mWallpaperController.updateWallpaperOffset(mWallpaperWindow,
                 false /* sync */));
-        assertThat(mWallpaperWindow.mXOffset).isGreaterThan(-1);
-        assertThat(mWallpaperWindow.mYOffset).isGreaterThan(-1);
+        assertThat(mWallpaperWindow.mXOffset).isNotEqualTo(-1);
+        assertThat(mWallpaperWindow.mYOffset).isNotEqualTo(-1);
 
         // The wallpaper need to animate with transformed position, so its surface position should
         // not be reset.
@@ -1666,6 +1718,7 @@ public class DisplayContentTests extends WindowTestsBase {
     @Test
     public void testShellTransitRotation() {
         DisplayContent dc = createNewDisplay();
+        dc.setLastHasContent();
 
         final TestTransitionPlayer testPlayer = registerTestTransitionPlayer();
         final DisplayRotation dr = dc.getDisplayRotation();

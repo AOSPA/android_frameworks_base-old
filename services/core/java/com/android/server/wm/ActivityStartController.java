@@ -455,6 +455,10 @@ public class ActivityStartController {
             // Lock the loop to ensure the activities launched in a sequence.
             synchronized (mService.mGlobalLock) {
                 mService.deferWindowLayout();
+                // To avoid creating multiple starting window when creating starting multiples
+                // activities, we defer the creation of the starting window once all start request
+                // are processed
+                mService.mWindowManager.mStartingSurfaceController.beginDeferAddStartingWindow();
                 try {
                     for (int i = 0; i < starters.length; i++) {
                         final int startResult = starters[i].setResultTo(resultTo)
@@ -480,6 +484,7 @@ public class ActivityStartController {
                         }
                     }
                 } finally {
+                    mService.mWindowManager.mStartingSurfaceController.endDeferAddStartingWindow();
                     mService.continueWindowLayout();
                 }
             }
@@ -496,11 +501,13 @@ public class ActivityStartController {
      * @param activityIntent intent to start the activity.
      * @param activityOptions ActivityOptions to start the activity with.
      * @param resultTo the caller activity
+     * @param callingUid the caller uid
+     * @param callingPid the caller pid
      * @return the start result.
      */
     int startActivityInTaskFragment(@NonNull TaskFragment taskFragment,
             @NonNull Intent activityIntent, @Nullable Bundle activityOptions,
-            @Nullable IBinder resultTo) {
+            @Nullable IBinder resultTo, int callingUid, int callingPid) {
         final ActivityRecord caller =
                 resultTo != null ? ActivityRecord.forTokenLocked(resultTo) : null;
         return obtainStarter(activityIntent, "startActivityInTaskFragment")
@@ -508,8 +515,8 @@ public class ActivityStartController {
                 .setInTaskFragment(taskFragment)
                 .setResultTo(resultTo)
                 .setRequestCode(-1)
-                .setCallingUid(Binder.getCallingUid())
-                .setCallingPid(Binder.getCallingPid())
+                .setCallingUid(callingUid)
+                .setCallingPid(callingPid)
                 .setUserId(caller != null ? caller.mUserId : mService.getCurrentUserId())
                 .execute();
     }

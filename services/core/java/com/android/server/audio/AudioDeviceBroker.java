@@ -327,7 +327,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
         }
 
         boolean isBtScoRequested = isBluetoothScoRequested();
-        if (isBtScoRequested && !wasBtScoRequested) {
+        if (isBtScoRequested && (!wasBtScoRequested || !isBluetoothScoActive())) {
             if (!mBtHelper.startBluetoothSco(scoAudioMode, eventSource)) {
                 Log.w(TAG, "setCommunicationRouteForClient: failure to start BT SCO for pid: "
                         + pid);
@@ -493,12 +493,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
         return isDeviceActiveForCommunication(AudioDeviceInfo.TYPE_BLUETOOTH_SCO);
     }
 
+    /*package*/ boolean isDeviceConnected(@NonNull AudioDeviceAttributes device) {
+        synchronized (mDeviceStateLock) {
+            return mDeviceInventory.isDeviceConnected(device);
+        }
+    }
+
     /*package*/ void setWiredDeviceConnectionState(int type,
             @AudioService.ConnectionState int state, String address, String name,
             String caller) {
         //TODO move logging here just like in setBluetooth* methods
         synchronized (mDeviceStateLock) {
             mDeviceInventory.setWiredDeviceConnectionState(type, state, address, name, caller);
+        }
+    }
+
+    /*package*/ void setTestDeviceConnectionState(@NonNull AudioDeviceAttributes device,
+            @AudioService.ConnectionState int state) {
+        synchronized (mDeviceStateLock) {
+            mDeviceInventory.setTestDeviceConnectionState(device, state);
         }
     }
 
@@ -1002,7 +1015,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
     /*package*/ boolean handleDeviceConnection(boolean connect, int device, String address,
                                                        String deviceName) {
         synchronized (mDeviceStateLock) {
-            return mDeviceInventory.handleDeviceConnection(connect, device, address, deviceName);
+            return mDeviceInventory.handleDeviceConnection(connect, device, address, deviceName,
+                    false /*for test*/);
         }
     }
 
@@ -1205,6 +1219,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
                         mDeviceInventory.onSetBtActiveDevice((BtDeviceInfo) msg.obj,
                                 mAudioService.getBluetoothContextualVolumeStream());
                     }
+                    break;
                 case MSG_BT_HEADSET_CNCT_FAILED:
                     synchronized (mSetModeLock) {
                         synchronized (mDeviceStateLock) {

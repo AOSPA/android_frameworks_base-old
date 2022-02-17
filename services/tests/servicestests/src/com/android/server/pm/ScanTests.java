@@ -17,6 +17,7 @@
 package com.android.server.pm;
 
 import static android.content.pm.SharedLibraryInfo.TYPE_DYNAMIC;
+import static android.content.pm.SharedLibraryInfo.TYPE_SDK;
 import static android.content.pm.SharedLibraryInfo.TYPE_STATIC;
 import static android.content.pm.SharedLibraryInfo.VERSION_UNDEFINED;
 
@@ -42,8 +43,8 @@ import android.Manifest;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.SharedLibraryInfo;
-import android.content.pm.parsing.ParsingPackage;
-import android.content.pm.parsing.component.ParsedUsesPermissionImpl;
+import com.android.server.pm.pkg.parsing.ParsingPackage;
+import com.android.server.pm.pkg.component.ParsedUsesPermissionImpl;
 import android.content.res.TypedArray;
 import android.os.Environment;
 import android.os.UserHandle;
@@ -235,6 +236,37 @@ public class ScanTests {
         final ScanResult scanResult = executeScan(scanRequest);
 
         assertBasicPackageScanResult(scanResult, DUMMY_PACKAGE_NAME, true /*isInstant*/);
+    }
+
+    @Test
+    public void installSdkLibrary() throws Exception {
+        final ParsedPackage pkg = ((ParsedPackage) createBasicPackage("ogl.sdk_123")
+                .setSdkLibName("ogl.sdk")
+                .setSdkLibVersionMajor(123)
+                .hideAsParsed())
+                .setPackageName("ogl.sdk_123")
+                .setVersionCodeMajor(5)
+                .setVersionCode(678)
+                .setBaseApkPath("/some/path.apk")
+                .setSplitCodePaths(new String[] {"/some/other/path.apk"});
+
+        final ScanRequest scanRequest = new ScanRequestBuilder(pkg)
+                .setUser(UserHandle.of(0)).build();
+
+        final ScanResult scanResult = executeScan(scanRequest);
+
+        assertThat(scanResult.mSdkSharedLibraryInfo.getPackageName(), is("ogl.sdk_123"));
+        assertThat(scanResult.mSdkSharedLibraryInfo.getName(), is("ogl.sdk"));
+        assertThat(scanResult.mSdkSharedLibraryInfo.getLongVersion(), is(123L));
+        assertThat(scanResult.mSdkSharedLibraryInfo.getType(), is(TYPE_SDK));
+        assertThat(scanResult.mSdkSharedLibraryInfo.getDeclaringPackage().getPackageName(),
+                is("ogl.sdk_123"));
+        assertThat(scanResult.mSdkSharedLibraryInfo.getDeclaringPackage().getLongVersionCode(),
+                is(pkg.getLongVersionCode()));
+        assertThat(scanResult.mSdkSharedLibraryInfo.getAllCodePaths(),
+                hasItems("/some/path.apk", "/some/other/path.apk"));
+        assertThat(scanResult.mSdkSharedLibraryInfo.getDependencies(), nullValue());
+        assertThat(scanResult.mSdkSharedLibraryInfo.getDependentPackages(), empty());
     }
 
     @Test
@@ -438,9 +470,7 @@ public class ScanTests {
                 .addUsesPermission(
                         new ParsedUsesPermissionImpl(Manifest.permission.FACTORY_TEST, 0));
 
-        final ScanPackageHelper scanPackageHelper = new ScanPackageHelper(
-                mMockPackageManager, mMockInjector);
-        final ScanResult scanResult = scanPackageHelper.scanPackageOnlyLI(
+        final ScanResult scanResult = ScanPackageUtils.scanPackageOnlyLI(
                 createBasicScanRequestBuilder(basicPackage).build(),
                 mMockInjector,
                 true /*isUnderFactoryTest*/,
@@ -488,9 +518,7 @@ public class ScanTests {
 
     private ScanResult executeScan(
             ScanRequest scanRequest) throws PackageManagerException {
-        final ScanPackageHelper scanPackageHelper = new ScanPackageHelper(
-                mMockPackageManager, mMockInjector);
-        ScanResult result = scanPackageHelper.scanPackageOnlyLI(
+        ScanResult result = ScanPackageUtils.scanPackageOnlyLI(
                 scanRequest,
                 mMockInjector,
                 false /*isUnderFactoryTest*/,
@@ -528,10 +556,10 @@ public class ScanTests {
                 "/data/tmp/randompath/base.apk", createCodePath(packageName),
                 mock(TypedArray.class), false)
                 .setVolumeUuid(UUID_ONE.toString())
-                .addUsesStaticLibrary("some.static.library")
-                .addUsesStaticLibraryVersion(234L)
-                .addUsesStaticLibrary("some.other.static.library")
-                .addUsesStaticLibraryVersion(456L)
+                .addUsesStaticLibrary("some.static.library", 234L, new String[]{"testCert1"})
+                .addUsesStaticLibrary("some.other.static.library", 456L, new String[]{"testCert2"})
+                .addUsesSdkLibrary("some.sdk.library", 123L, new String[]{"testCert3"})
+                .addUsesSdkLibrary("some.other.sdk.library", 789L, new String[]{"testCert4"})
                 .hideAsParsed())
                 .setNativeLibraryRootDir("/data/tmp/randompath/base.apk:/lib")
                 .setVersionCodeMajor(1)
@@ -557,6 +585,9 @@ public class ScanTests {
         assertThat(pkgSetting.getUsesStaticLibraries(),
                 arrayContaining("some.static.library", "some.other.static.library"));
         assertThat(pkgSetting.getUsesStaticLibrariesVersions(), is(new long[]{234L, 456L}));
+        assertThat(pkgSetting.getUsesSdkLibraries(),
+                arrayContaining("some.sdk.library", "some.other.sdk.library"));
+        assertThat(pkgSetting.getUsesSdkLibrariesVersionsMajor(), is(new long[]{123L, 789L}));
         assertThat(pkgSetting.getPkg(), is(scanResult.mRequest.mParsedPackage));
         assertThat(pkgSetting.getPath(), is(new File(createCodePath(packageName))));
         assertThat(pkgSetting.getVersionCode(),

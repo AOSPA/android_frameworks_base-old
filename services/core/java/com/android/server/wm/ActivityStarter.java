@@ -30,8 +30,6 @@ import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP;
@@ -72,6 +70,8 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_USER_
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerService.ANIMATE;
+import static com.android.server.wm.ActivityTaskManagerService.APP_SWITCH_ALLOW;
+import static com.android.server.wm.ActivityTaskManagerService.APP_SWITCH_FG_ONLY;
 import static com.android.server.wm.ActivityTaskSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityTaskSupervisor.ON_TOP;
 import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
@@ -1292,7 +1292,7 @@ class ActivityStarter {
 
         // This is used to block background activity launch even if the app is still
         // visible to user after user clicking home button.
-        final boolean appSwitchAllowed = mService.getBalAppSwitchesAllowed();
+        final int appSwitchState = mService.getBalAppSwitchesState();
 
         // don't abort if the callingUid has a visible window or is a persistent system process
         final int callingUidProcState = mService.mActiveUids.getUidState(callingUid);
@@ -1305,7 +1305,9 @@ class ActivityStarter {
 
         // Normal apps with visible app window will be allowed to start activity if app switching
         // is allowed, or apps like live wallpaper with non app visible window will be allowed.
-        if (((appSwitchAllowed || mService.mActiveUids.hasNonAppVisibleWindow(callingUid))
+        final boolean appSwitchAllowedOrFg =
+                appSwitchState == APP_SWITCH_ALLOW || appSwitchState == APP_SWITCH_FG_ONLY;
+        if (((appSwitchAllowedOrFg || mService.mActiveUids.hasNonAppVisibleWindow(callingUid))
                 && callingUidHasAnyVisibleWindow)
                 || isCallingUidPersistentSystemProcess) {
             if (DEBUG_ACTIVITY_STARTS) {
@@ -1434,7 +1436,7 @@ class ActivityStarter {
         // don't abort if the callerApp or other processes of that uid are allowed in any way
         if (callerApp != null) {
             // first check the original calling process
-            if (callerApp.areBackgroundActivityStartsAllowed(appSwitchAllowed)) {
+            if (callerApp.areBackgroundActivityStartsAllowed(appSwitchState)) {
                 if (DEBUG_ACTIVITY_STARTS) {
                     Slog.d(TAG, "Background activity start allowed: callerApp process (pid = "
                             + callerApp.getPid() + ", uid = " + callerAppUid + ") is allowed");
@@ -1448,7 +1450,7 @@ class ActivityStarter {
                 for (int i = uidProcesses.size() - 1; i >= 0; i--) {
                     final WindowProcessController proc = uidProcesses.valueAt(i);
                     if (proc != callerApp
-                            && proc.areBackgroundActivityStartsAllowed(appSwitchAllowed)) {
+                            && proc.areBackgroundActivityStartsAllowed(appSwitchState)) {
                         if (DEBUG_ACTIVITY_STARTS) {
                             Slog.d(TAG,
                                     "Background activity start allowed: process " + proc.getPid()
@@ -1462,7 +1464,7 @@ class ActivityStarter {
         // anything that has fallen through would currently be aborted
         Slog.w(TAG, "Background activity start [callingPackage: " + callingPackage
                 + "; callingUid: " + callingUid
-                + "; appSwitchAllowed: " + appSwitchAllowed
+                + "; appSwitchState: " + appSwitchState
                 + "; isCallingUidForeground: " + isCallingUidForeground
                 + "; callingUidHasAnyVisibleWindow: " + callingUidHasAnyVisibleWindow
                 + "; callingUidProcState: " + DebugUtils.valueToString(ActivityManager.class,
@@ -1562,6 +1564,10 @@ class ActivityStarter {
             final boolean visible = top != null && top.isVisible();
             mService.getTaskChangeNotificationController().notifyActivityRestartAttempt(
                     targetTask.getTaskInfo(), homeTaskVisible, clearedTask, visible);
+        }
+
+        if (ActivityManager.isStartResultSuccessful(result)) {
+            mInterceptor.onActivityLaunched(targetTask.getTaskInfo(), r.info);
         }
     }
 
@@ -1668,7 +1674,8 @@ class ActivityStarter {
                 }
                 if (newTransition != null) {
                     transitionController.requestStartTransition(newTransition,
-                            mTargetTask, remoteTransition);
+                            mTargetTask == null ? r.getTask() : mTargetTask,
+                            remoteTransition, null /* displayChange */);
                 } else if (started) {
                     // Make the collecting transition wait until this request is ready.
                     transitionController.setReady(r, false);
@@ -1812,9 +1819,19 @@ class ActivityStarter {
                     ? mSourceRecord.getTask() : null;
             String packageName= mService.mContext.getPackageName();
             if (mPerf != null) {
-                mStartActivity.perfActivityBoostHandler =
-                    mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                if (mPerf.getPerfHalVersion() >= BoostFramework.PERF_HAL_V23) {
+                    int pkgType =
+                        mPerf.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE,
+                                                    packageName);
+                    mStartActivity.perfActivityBoostHandler =
+                        mPerf.perfHintAcqRel(mStartActivity.perfActivityBoostHandler,
+                                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName,
+                                        -1, BoostFramework.Launch.BOOST_V1, 1, pkgType);
+                } else {
+                    mStartActivity.perfActivityBoostHandler =
+                        mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                                         packageName, -1, BoostFramework.Launch.BOOST_V1);
+                }
             }
             setNewTask(taskToAffiliate);
         } else if (mAddingToTask) {
@@ -1927,27 +1944,6 @@ class ActivityStarter {
 
     private void computeLaunchParams(ActivityRecord r, ActivityRecord sourceRecord,
             Task targetTask) {
-        final Task sourceRootTask = mSourceRootTask != null ? mSourceRootTask
-                : mRootWindowContainer.getTopDisplayFocusedRootTask();
-        if (sourceRootTask != null && sourceRootTask.inSplitScreenWindowingMode()
-                && (mOptions == null
-                        || mOptions.getLaunchWindowingMode() == WINDOWING_MODE_UNDEFINED)) {
-            int windowingMode =
-                    targetTask != null ? targetTask.getWindowingMode() : WINDOWING_MODE_UNDEFINED;
-            if ((mLaunchFlags & FLAG_ACTIVITY_LAUNCH_ADJACENT) != 0) {
-                if (sourceRootTask.inSplitScreenPrimaryWindowingMode()) {
-                    windowingMode = WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
-                } else if (sourceRootTask.inSplitScreenSecondaryWindowingMode()) {
-                    windowingMode = WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-                }
-            }
-
-            if (mOptions == null) {
-                mOptions = ActivityOptions.makeBasic();
-            }
-            mOptions.setLaunchWindowingMode(windowingMode);
-        }
-
         mSupervisor.getLaunchParamsController().calculate(targetTask, r.info.windowLayout, r,
                 sourceRecord, mOptions, mRequest, PHASE_BOUNDS, mLaunchParams);
         mPreferredTaskDisplayArea = mLaunchParams.hasPreferredTaskDisplayArea()
@@ -2794,8 +2790,8 @@ class ActivityStarter {
         // If it exist, we need to reparent target root task from TDA to launch root task.
         final TaskDisplayArea tda = mTargetRootTask.getDisplayArea();
         final Task launchRootTask = tda.getLaunchRootTask(mTargetRootTask.getWindowingMode(),
-                mTargetRootTask.getActivityType(), null /** options */,
-                mSourceRootTask, 0 /** launchFlags */);
+                mTargetRootTask.getActivityType(), null /** options */, mSourceRootTask,
+                mLaunchFlags);
         // If target root task is created by organizer, let organizer handle reparent itself.
         if (!mTargetRootTask.mCreatedByOrganizer && launchRootTask != null
                 && launchRootTask != mTargetRootTask) {
@@ -2854,9 +2850,19 @@ class ActivityStarter {
     private void addOrReparentStartingActivity(@NonNull Task task, String reason) {
         String packageName= mService.mContext.getPackageName();
         if (mPerf != null) {
-            mStartActivity.perfActivityBoostHandler =
-                mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+            if (mPerf.getPerfHalVersion() >= BoostFramework.PERF_HAL_V23) {
+                    int pkgType =
+                        mPerf.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE,
+                                                    packageName);
+                    mStartActivity.perfActivityBoostHandler =
+                        mPerf.perfHintAcqRel(mStartActivity.perfActivityBoostHandler,
+                                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName,
+                                        -1, BoostFramework.Launch.BOOST_V1, 1, pkgType);
+            } else {
+                mStartActivity.perfActivityBoostHandler =
+                    mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                                     packageName, -1, BoostFramework.Launch.BOOST_V1);
+            }
         }
         TaskFragment newParent = task;
         if (mInTaskFragment != null) {

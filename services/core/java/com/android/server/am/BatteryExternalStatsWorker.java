@@ -16,6 +16,7 @@
 package com.android.server.am;
 
 import android.annotation.Nullable;
+import android.app.usage.NetworkStatsManager;
 import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
@@ -45,7 +46,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.power.MeasuredEnergyStats;
 import com.android.internal.util.FrameworkStatsLog;
-import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 
 import libcore.util.EmptyArray;
@@ -130,6 +130,9 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
 
     @GuardedBy("this")
     private Future<?> mBatteryLevelSync;
+
+    @GuardedBy("this")
+    private Future<?> mProcessStateSync;
 
     // If both mStats and mWorkerLock need to be synchronized, mWorkerLock must be acquired first.
     private final Object mWorkerLock = new Object();
@@ -260,43 +263,6 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
     }
 
     @Override
-    public Future<?> scheduleReadProcStateCpuTimes(
-            boolean onBattery, boolean onBatteryScreenOff, long delayMillis) {
-        synchronized (mStats) {
-            if (!mStats.trackPerProcStateCpuTimes()) {
-                return null;
-            }
-        }
-        synchronized (BatteryExternalStatsWorker.this) {
-            if (!mExecutorService.isShutdown()) {
-                return mExecutorService.schedule(PooledLambda.obtainRunnable(
-                        BatteryStatsImpl::updateProcStateCpuTimes,
-                        mStats, onBattery, onBatteryScreenOff).recycleOnUse(),
-                        delayMillis, TimeUnit.MILLISECONDS);
-            }
-        }
-        return null;
-    }
-
-    @Override
-    public Future<?> scheduleCopyFromAllUidsCpuTimes(
-            boolean onBattery, boolean onBatteryScreenOff) {
-        synchronized (mStats) {
-            if (!mStats.trackPerProcStateCpuTimes()) {
-                return null;
-            }
-        }
-        synchronized (BatteryExternalStatsWorker.this) {
-            if (!mExecutorService.isShutdown()) {
-                return mExecutorService.submit(PooledLambda.obtainRunnable(
-                        BatteryStatsImpl::copyFromAllUidsCpuTimes,
-                        mStats, onBattery, onBatteryScreenOff).recycleOnUse());
-            }
-        }
-        return null;
-    }
-
-    @Override
     public Future<?> scheduleSyncDueToScreenStateChange(int flags, boolean onBattery,
             boolean onBatteryScreenOff, int screenState, int[] perDisplayScreenStates) {
         synchronized (BatteryExternalStatsWorker.this) {
@@ -350,6 +316,25 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
         if (mBatteryLevelSync != null) {
             mBatteryLevelSync.cancel(false);
             mBatteryLevelSync = null;
+        }
+    }
+
+    @Override
+    public Future<?> scheduleSyncDueToProcessStateChange(long delayMillis) {
+        synchronized (BatteryExternalStatsWorker.this) {
+            mProcessStateSync = scheduleDelayedSyncLocked(mProcessStateSync,
+                    () -> scheduleSync("procstate-change", UPDATE_ON_PROC_STATE_CHANGE),
+                    delayMillis);
+            return mProcessStateSync;
+        }
+    }
+
+    public void cancelSyncDueToProcessStateChange() {
+        synchronized (BatteryExternalStatsWorker.this) {
+            if (mProcessStateSync != null) {
+                mProcessStateSync.cancel(false);
+                mProcessStateSync = null;
+            }
         }
     }
 
@@ -472,6 +457,9 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
                 if ((updateFlags & UPDATE_CPU) != 0) {
                     cancelCpuSyncDueToWakelockChange();
                 }
+                if ((updateFlags & UPDATE_ON_PROC_STATE_CHANGE) == UPDATE_ON_PROC_STATE_CHANGE) {
+                    cancelSyncDueToProcessStateChange();
+                }
             }
 
             try {
@@ -491,7 +479,7 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
                 }
 
                 if ((updateFlags & UPDATE_CPU) != 0) {
-                    mStats.copyFromAllUidsCpuTimes();
+                    mStats.updateCpuTimesForAllUids();
                 }
 
                 // Clean up any UIDs if necessary.
@@ -725,8 +713,10 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
             if (wifiInfo.isValid()) {
                 final long wifiChargeUC = measuredEnergyDeltas != null ?
                         measuredEnergyDeltas.wifiChargeUC : MeasuredEnergySnapshot.UNAVAILABLE;
-                mStats.updateWifiState(
-                        extractDeltaLocked(wifiInfo), wifiChargeUC, elapsedRealtime, uptime);
+                final NetworkStatsManager networkStatsManager = mInjector.getSystemService(
+                        NetworkStatsManager.class);
+                mStats.updateWifiState(extractDeltaLocked(wifiInfo),
+                        wifiChargeUC, elapsedRealtime, uptime, networkStatsManager);
             } else {
                 Slog.w(TAG, "wifi info is invalid: " + wifiInfo);
             }
@@ -735,8 +725,10 @@ class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStatsSync {
         if (modemInfo != null) {
             final long mobileRadioChargeUC = measuredEnergyDeltas != null
                     ? measuredEnergyDeltas.mobileRadioChargeUC : MeasuredEnergySnapshot.UNAVAILABLE;
+            final NetworkStatsManager networkStatsManager = mInjector.getSystemService(
+                    NetworkStatsManager.class);
             mStats.noteModemControllerActivity(modemInfo, mobileRadioChargeUC, elapsedRealtime,
-                    uptime);
+                    uptime, networkStatsManager);
         }
 
         if (updateFlags == UPDATE_ALL) {

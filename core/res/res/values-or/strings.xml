@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"ଇନ୍‍କମିଂ ତଥା ଆଉଟ୍‌ଗୋଇଂ କଲ୍ ଡାଟା ସହ ଆପଣଙ୍କ Android TV ଡିଭାଇସ୍‌ର କଲ୍ ଲଗ୍ ସଂଶୋଧନ କରିବାକୁ ଆପ୍‍କୁ ଅନୁମତି ଦେଇଥାଏ। କ୍ଷତିକାରକ ଆପ୍‌ଗୁଡ଼ିକ ଆପଣଙ୍କ କଲ୍ ଲଗ୍ ଲିଭାଇବାକୁ କିମ୍ବା ସଂଶୋଧନ କରିବା ପାଇଁ ଏହାକୁ ବ୍ୟବହାର କରିପାରନ୍ତି।"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"ଇନ୍‍କମିଙ୍ଗ ତଥା ଆଉଟ୍‍ଗୋଇଙ୍ଗ କଲ୍‌ ଡାଟା ସହ ଆପଣଙ୍କ ଫୋନ୍‍ର କଲ୍‍ ଲଗ୍‍ ବଦଳାଇବା ପାଇଁ ଆପ୍‍କୁ ଅନୁମତି ଦିଏ। ହାନୀକାରକ ଆପ୍‍ ଆପଣଙ୍କ କଲ୍‍ ଲଗ୍‍ ଲିଭାଇବାକୁ କିମ୍ବା ବଦଳାଇବାକୁ ଏହା ବ୍ୟବହାର କରିପାରନ୍ତି।"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"ବଡୀ ସେନ୍ସର୍‍ ଆକ୍ସେସ୍‍ କରେ (ଯେପରିକି ହୃଦ୍‍ ହାର ମନିଟର୍‍)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"ଆପ୍‌କୁ ସେନ୍ସର୍ ଡେଟା ପର୍ଯ୍ୟନ୍ତ ପହଞ୍ଚିବାକୁ ଦେଇଥାଏ, ଯାହା ଆପଣଙ୍କ ଶାରୀରିକ ସ୍ଥିତିର ନିରୀକ୍ଷଣ କରିଥାଏ, ଯେପରିକି ଆପଣଙ୍କ ହୃଦୟ ସ୍ତର।"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"ହାର୍ଟ ରେଟ, ତାପମାତ୍ରା, ରକ୍ତରେ ଅମ୍ଳଜାନ ଶତକଡ଼ା ଇତ୍ୟାଦି ପରି ବଡି ସେନ୍ସରରୁ ଡାଟାକୁ ଆକ୍ସେସ।"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"ପୃଷ୍ଠପଟରେ ଥିବା ସମୟରେ (ହାର୍ଟ ରେଟ ମନିଟର ପରି) ବଡି ସେନ୍ସରକୁ ଆକ୍ସେସ"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"ପୃଷ୍ଠପଟରେ ଥିବା ସମୟରେ ହାର୍ଟ ରେଟ, ତାପମାତ୍ରା, ରକ୍ତରେ ଅମ୍ଳଜାନ ଶତକଡ଼ା ଇତ୍ୟାଦି ପରି ବଡି ସେନ୍ସରରୁ ଡାଟାକୁ ଆକ୍ସେସ।"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"କ୍ୟାଲେଣ୍ଡର୍‍ ଇଭେଣ୍ଟ ଏବଂ ବିବରଣୀ ପଢ଼େ"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"ଆପଣଙ୍କ ଟାବଲେଟ୍‌ରେ ଷ୍ଟୋର୍‍ କରାଯାଇଥିବା ସମସ୍ତ କ୍ୟାଲେଣ୍ଡର ଇଭେଣ୍ଟ ଏହି ଆପ୍‍ ପଢ଼ିପାରେ ଏବଂ ଆପଣଙ୍କ କ୍ୟାଲେଣ୍ଡର ଡାଟା ସେୟାର୍‍ କରିପାରେ କିମ୍ବା ସେଭ୍‍ କରିପାରେ।"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"ଏହି ଆପ୍ ଆପଣଙ୍କ Android TV ଡିଭାଇସ୍‌ରେ ଷ୍ଟୋର୍ କରାଯାଇଥିବା ସମସ୍ତ କ୍ୟାଲେଣ୍ଡର ଇଭେଣ୍ଟ ପଢ଼ିପାରେ ଏବଂ ଆପଣଙ୍କ କ୍ୟାଲେଣ୍ଡର ଡାଟା ସେୟାର୍ କରିପାରେ କିମ୍ବା ସେଭ୍ କରିପାରେ।"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"ଆପଣଙ୍କ ହସ୍ତକ୍ଷେପ ବିନା କଲ୍‍ କରିପାରିବା ପାଇଁ ଆପ୍‌କୁ IMS ସେବା ବ୍ୟବହାର କରିବାକୁ ଦିଏ।"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"ଫୋନ୍‍ ସ୍ଥିତି ଓ ପରିଚୟ ପଢ଼ନ୍ତୁ"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"ଆପ୍‌କୁ ଡିଭାଇସ୍‌ର ଫୋନ୍‌ ବୈଶିଷ୍ଟ୍ୟ ଆକ୍ସେସ୍‍ କରିବାକୁ ଅନୁମତି ଦେଇଥାଏ। ଏହି ଅନୁମତି ଆପ୍‌କୁ ଫୋନ୍‌ ନମ୍ବର୍ ଓ ଡିଭାଇସ୍‌ IDଗୁଡ଼ିକୁ ନିର୍ଦ୍ଧାରଣ କରିବାକୁ ଅନୁମତି ଦେଇଥାଏ, କଲ୍ ସକ୍ରିୟ ଥିଲେ ବି ଏବଂ କଲ୍ ଦ୍ୱାରା ସଂଯୋଗ ଥିବା ରିମୋଟ୍‌ ନମ୍ବର୍‌କୁ ମଧ୍ୟ।"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"ବେସିକ ଟେଲିଫୋନି ସ୍ଥିତି ଏବଂ ପରିଚୟ ପଢ଼ନ୍ତୁ"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"ଡିଭାଇସର ବେସିକ ଟେଲିଫୋନି ଫିଚରଗୁଡ଼ିକୁ ଆକ୍ସେସ କରିବା ପାଇଁ ଏହା ଆପକୁ ଅନୁମତି ଦିଏ।"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"ସିଷ୍ଟମ୍‍ ଜରିଆରେ କଲ୍‌ର ମାର୍ଗ ବଦଳାଇପାରେ"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"କଲ୍‍ କରିବାର ଅନୁଭୂତି ବଢ଼ାଇବାକୁ ସିଷ୍ଟମ୍‍ ଜରିଆରେ ଆପର କଲ୍‍ଗୁଡ଼ିକୁ ରୁଟ୍‍ କରିବାକୁ ଏହାକୁ ଅନୁମତି ଦେଇଥାଏ।"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"ସିଷ୍ଟମ୍‍ ମାଧ୍ୟମରେ କଲ୍‍ଗୁଡ଼ିକୁ ଦେଖିଥାଏ ଏବଂ ନିୟନ୍ତ୍ରଣ କରିଥାଏ।"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"ଆପଣଙ୍କ ଫେସ୍ ମଡେଲକୁ ଡିଲିଟ୍ କରିବାକୁ ଟାପ୍ କରନ୍ତୁ, ତା\'ପରେ ପୁଣି ଆପଣଙ୍କ ଫେସ୍ ଯୋଗ କରନ୍ତୁ"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"ଫେସ୍ ଅନଲକ୍ ସେଟ୍ ଅପ୍ କରନ୍ତୁ"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"ଫୋନକୁ ଦେଖି ଏହାକୁ ଅନଲକ୍ କରନ୍ତୁ"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"ଫେସ ଅନଲକ ବ୍ୟବହାର କରିବା ପାଇଁ, ସେଟିଂସ ଏବଂ ଗୋପନୀୟତାରେ "<b>"କ୍ୟାମେରା ଆକ୍ସେସ"</b>"କୁ ଚାଲୁ କରନ୍ତୁ"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"ଅନଲକ୍ କରିବା ପାଇଁ ଆହୁରି ଅଧିକ ଉପାୟ ସେଟ୍ ଅପ୍ କରନ୍ତୁ"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"ଏକ ଟିପଚିହ୍ନ ଯୋଗ କରିବାକୁ ଟାପ୍ କରନ୍ତୁ"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"ଫିଙ୍ଗରପ୍ରିଣ୍ଟ ଅନଲକ୍"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"\"ବିରକ୍ତ କରନ୍ତୁ ନାହିଁ\" କନଫିଗରେଶନ୍‍ ପଢ଼ିବା ତଥା ଲେଖିବା ପାଇଁ ଆପକୁ ଅନୁମତି ଦେଇଥାଏ।"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"ଅନୁମତି ବ୍ୟବହାର ଦେଖିବା ଆରମ୍ଭ କରନ୍ତୁ"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"ଏକ ଆପ୍ ପାଇଁ ଅନୁମତିର ବ୍ୟବହାର ଆରମ୍ଭ କରିବାକୁ ଧାରକକୁ ଅନୁମତି ଦେଇଥାଏ। ସାଧାରଣ ଆପ୍‌ଗୁଡ଼ିକ ପାଇଁ ଏହା ଆବଶ୍ୟକ ନୁହେଁ।"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"ଅନୁମତି ନିଷ୍ପତ୍ତିଗୁଡ଼ିକ ଦେଖିବା ଆରମ୍ଭ କରନ୍ତୁ"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"ଅନୁମତି ନିଷ୍ପତ୍ତିଗୁଡ଼ିକର ସମୀକ୍ଷା କରିବାକୁ ସ୍କ୍ରିନ ଚାଲୁ କରିବା ପାଇଁ ହୋଲଡରଙ୍କୁ ଅନୁମତି ଦିଏ। ସାଧାରଣ ଆପଗୁଡ଼ିକ ପାଇଁ ଏହା କେବେ ବି ଆବଶ୍ୟକ ହେବ ନାହିଁ।"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"ଆପର ଫିଚରଗୁଡ଼ିକୁ ଦେଖିବା ଆରମ୍ଭ କରନ୍ତୁ"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"କୌଣସି ଆପ ପାଇଁ ଫିଚରଗୁଡ଼ିକ ବିଷୟରେ ସୂଚନା ଦେଖିବା ଆରମ୍ଭ କରିବାକୁ ହୋଲଡରଙ୍କୁ ଅନୁମତି ଦିଏ।"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"ଏକ ଉଚ୍ଚ ନମୁନାକରଣ ରେଟରେ ସେନ୍ସର୍ ଡାଟାକୁ ଆକ୍ସେସ୍ କରନ୍ତୁ"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"ସ୍କ୍ରୀନ୍-ଅନଲକ୍ କରିବା ଉଦ୍ୟମ ନୀରିକ୍ଷଣ କରନ୍ତୁ"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"ସ୍କ୍ରୀନ୍‍ ଅନଲକ୍‍ କରିବାବେଳେ ଟାଇପ୍‍ କରିଥିବା ଭୁଲ ପାସୱର୍ଡର ସଂଖ୍ୟାକୁ ନୀରିକ୍ଷଣ କରେ ଏବଂ ଟାବଲେଟ୍‍କୁ ଲକ୍‍ କରିଦିଏ କିମ୍ବା ଯଦି ଅନେକ ଭୁଲ ପାସୱର୍ଡ ଟାଇପ୍‍ କରାଯାଇଥାଏ, ତେବେ ଟାବଲେଟ୍‍ର ସମସ୍ତ ଡାଟା ଲିଭାଇଦିଏ।"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"ସ୍କ୍ରିନ୍ ଅନ୍‌ଲକ୍ କରିବା ସମୟରେ ଟାଇପ୍ କରାଯାଇଥିବା ଭୁଲ ପାସ୍‌ୱାର୍ଡଗୁଡ଼ିକର ସଂଖ୍ୟାକୁ ନିରୀକ୍ଷଣ କରନ୍ତୁ ଏବଂ ଆପଣଙ୍କର Android TV ଡିଭାଇସ୍‌କୁ ଲକ୍ କରନ୍ତୁ କିମ୍ବା ଯଦି ଅନେକ ଭୁଲ ପାସ୍‌ୱାର୍ଡ ଟାଇପ୍ କରାଯାଇଥାଏ, ତେବେ ଆପଣଙ୍କ Android TV ଡିଭାଇସ୍‌ର ସମସ୍ତ ଡାଟା ଲିଭାଇ ଦିଅନ୍ତୁ।"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"ସ୍କ୍ରିନ ଅନଲକ କରିବା ସମୟରେ ଟାଇପ କରାଯାଇଥିବା ଭୁଲ ପାସୱାର୍ଡର ସଂଖ୍ୟାକୁ ମନିଟର କରନ୍ତୁ ଏବଂ ଇନଫୋଟେନମେଣ୍ଟ ସିଷ୍ଟମକୁ ଲକ କରନ୍ତୁ କିମ୍ବା ଯଦି ଅନେକଗୁଡ଼ିଏ ଭୁଲ ପାସୱାର୍ଡ ଟାଇପ କରାଯାଇଥାଏ ତେବେ ଇନଫୋଟେନମେଣ୍ଟ ସିଷ୍ଟମର ସମସ୍ତ ଡାଟା ଖାଲି କରନ୍ତୁ।"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"ସ୍କ୍ରୀନ୍‍ ଅନଲକ୍‍ କରିବାବେଳେ ଟାଇପ୍‍ କରିଥିବା ଭୁଲ ପାସୱର୍ଡର ସଂଖ୍ୟାକୁ ନୀରିକ୍ଷଣ କରେ ଏବଂ ଫୋନ୍‍କୁ ଲକ୍‍ କରିଦିଏ କିମ୍ବା ଯଦି ଅନେକ ଭୁଲ ପାସୱର୍ଡ ଟାଇପ୍‍ କରାଯାଇଥାଏ, ତେବେ ଫୋନ୍‍ର ସମସ୍ତ ଡାଟା ଲିଭାଇଦିଏ।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"ସ୍କ୍ରୀନ୍‍ ଅନଲକ୍‍ କରିବାବେଳେ ଟାଇପ୍‍ କରାଯାଇଥିବା ଭୁଲ ପାସ୍‌ୱର୍ଡର ସଂଖ୍ୟାକୁ ନୀରିକ୍ଷଣ କରେ ଏବଂ ଟାବଲେଟ୍‍କୁ ଲକ୍‍ କରିଦିଏ କିମ୍ବା ଯଦି ଅନେକ ଭୁଲ ପାସ୍‌ୱର୍ଡ ଟାଇପ୍‍ କରାଯାଇଥାଏ, ତେବେ ସମସ୍ତ ଡାଟା ଲିଭାଇଦିଏ।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"ସ୍କ୍ରିନ୍ ଅନ୍‌ଲକ୍ କରିବା ସମୟରେ ଟାଇପ୍ କରାଯାଇଥିବା ଭୁଲ ପାସ୍‌ୱାର୍ଡଗୁଡ଼ିକର ସଂଖ୍ୟାକୁ ନିରୀକ୍ଷଣ କରନ୍ତୁ ଏବଂ ଆପଣଙ୍କର Android TV ଡିଭାଇସ୍‌କୁ ଲକ୍ କରନ୍ତୁ କିମ୍ବା ଯଦି ଅନେକ ଭୁଲ ପାସ୍‌ୱାର୍ଡ ଟାଇପ୍ କରାଯାଇଥାଏ, ତେବେ ସମସ୍ତ ଡାଟା ଲିଭାଇ ଦିଅନ୍ତୁ।"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"ସ୍କ୍ରିନ ଅନଲକ କରିବା ସମୟରେ ଟାଇପ କରାଯାଇଥିବା ଭୁଲ ପାସୱାର୍ଡର ସଂଖ୍ୟାକୁ ମନିଟର କରନ୍ତୁ ଏବଂ ଇନଫୋଟେନମେଣ୍ଟ ସିଷ୍ଟମକୁ ଲକ କରନ୍ତୁ କିମ୍ବା ଯଦି ଅନେକଗୁଡ଼ିଏ ଭୁଲ ପାସୱାର୍ଡ ଟାଇପ କରାଯାଇଥାଏ ତେବେ ଏହି ପ୍ରୋଫାଇଲର ସମସ୍ତ ଡାଟା ଖାଲି କରନ୍ତୁ।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"ସ୍କ୍ରୀନ୍‍ ଅନଲକ୍‍ କରିବାବେଳେ ଟାଇପ୍‍ କରାଯାଇଥିବା ଭୁଲ ପାସ୍‌ୱର୍ଡର ସଂଖ୍ୟାକୁ ନୀରିକ୍ଷଣ କରେ ଏବଂ ଫୋନ୍‍କୁ ଲକ୍‍ କରିଦିଏ କିମ୍ବା ଯଦି ଅନେକ ଭୁଲ ପାସ୍‌ୱର୍ଡ ଟାଇପ୍‍ କରାଯାଇଥାଏ, ତେବେ ସମସ୍ତ ଡାଟା ଲିଭାଇଦିଏ।"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"ସ୍କ୍ରିନ୍ ଲକ୍ ବଦଳାଏ"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"ସ୍କ୍ରିନ୍ ଲକ୍‍ ବଦଳାଏ।"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"ସମସ୍ତ ଡାଟା ଖାଲି କରିବା"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"ବିନା ଚେତାବନୀରେ ଫ୍ୟାକ୍ଟୋରୀ ସେଟିଙ୍ଗ କରାଇ ଟାବ୍‍ଲେଟ୍‍ର ଡାଟା ଲିଭାଇଥାଏ।"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"ଏକ ଫ୍ୟାକ୍ଟୋରୀ ଡାଟା ରିସେଟ୍ କରି ବିନା ଚେତାବନୀରେ ଆପଣଙ୍କର Android TV ଡିଭାଇସ୍‌ର ଡାଟା ଲିଭାନ୍ତୁ।"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"ଏକ ଫ୍ୟାକ୍ଟୋରୀ ଡାଟା ରିସେଟ କରି ବିନା ଚେତାବନୀରେ ଇନଫୋଟେନମେଣ୍ଟ ସିଷ୍ଟମର ଡାଟା ଖାଲି କରନ୍ତୁ।"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"ବିନା ଚେତାବନୀରେ ଫ୍ୟାକ୍ଟୋରୀ ଡାଟା ରିସେଟ୍ କରି ଫୋନ୍‍ର ଡାଟା ଲିଭାଇଥାଏ।"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"ୟୁଜର୍‍ ଡାଟା ଲିଭାନ୍ତୁ"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"ପ୍ରୋଫାଇଲ ଡାଟା ଖାଲି କରନ୍ତୁ"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"ୟୁଜର୍‍ ଡାଟା ଲିଭାନ୍ତୁ"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"ବିନା ଚେତାବନୀରେ ଏହି ଟାବଲେଟରେ ଥିବା ଏହି ୟୁଜରଙ୍କ ଡାଟା ଲିଭାଇ ଦିଅନ୍ତୁ।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"ବିନା ଚେତାବନୀରେ ଏହି Android TV ଡିଭାଇସ୍‌ରେ ଏହି ଉପଯୋଗକର୍ତ୍ତାଙ୍କ ଡାଟା ଲିଭାଇ ଦିଅନ୍ତୁ।"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"ବିନା ଚେତାବନୀରେ ଇନଫୋଟେନମେଣ୍ଟ ସିଷ୍ଟମରେ ଥିବା ଏହି ପ୍ରୋଫାଇଲର ଡାଟା ଖାଲି କରନ୍ତୁ।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"ବିନା ଚେତାବନୀରେ ଏହି ଫୋନରେ ଥିବା ଏହି ୟୁଜରଙ୍କ ଡାଟା ଲିଭାଇ ଦିଅନ୍ତୁ।"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"ଗ୍ଲୋବଲ୍ ପ୍ରକ୍ସୀ ଡିଭାଇସ୍‌କୁ ସେଟ୍ କରନ୍ତୁ"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"ପଲିସୀ ସକ୍ଷମ କରାଯାଇଥିବାବେଳେ ବ୍ୟବହାର କରିବା ପାଇଁ ଗ୍ଲୋବାଲ୍‍ ପ୍ରକ୍ସୀ ସେଟ୍‍ କରନ୍ତୁ। କେବଳ ଡିଭାଇସ୍‍ ମାଲିକ ଗ୍ଲୋବାଲ୍‍ ପ୍ରକ୍ସୀ ସେଟ୍‍ କରିପାରିବେ।"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> ପ୍ରସ୍ତୁତ କରାଯାଉଛି।"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"ଆପ୍‍ ଆରମ୍ଭ କରାଯାଉଛି।"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"ବୁଟ୍‍ ସମାପ୍ତ କରୁଛି।"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"ସ୍କ୍ରିନ୍ ବନ୍ଦ କରିବେ?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"ଆପଣଙ୍କ ଟିପଚିହ୍ନ ସେଟ୍ ଅପ୍ କରିବା ସମୟରେ, ଆପଣ ପାୱାର ବଟନ୍ ଦବାଇଛନ୍ତି।\n\nଏହା ସାଧାରଣତଃ ଆପଣଙ୍କ ସ୍କ୍ରିନକୁ ବନ୍ଦ କରେ।"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"ବନ୍ଦ କରନ୍ତୁ"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"ବାତିଲ୍ କରନ୍ତୁ"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"ସେଟଅପ କରିବା ଜାରି ରଖିବେ?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"ଆପଣ ପାୱାର ବଟନ ଦବାଇଛନ୍ତି — ଏହା ସାଧାରଣତଃ ଆପଣଙ୍କ ସ୍କ୍ରିନକୁ ବନ୍ଦ କରିଥାଏ।\n\nଆପଣଙ୍କ ଟିପଚିହ୍ନ ସେଟ ଅପ କରିବା ସମୟରେ ଧୀରେ ଟାପ କରିବାକୁ ଚେଷ୍ଟା କରନ୍ତୁ।"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"ସ୍କ୍ରିନ ବନ୍ଦ କରନ୍ତୁ"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"ସେଟଅପ କରିବା ଜାରି ରଖ"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"ଆପଣଙ୍କ ଟିପଚିହ୍ନ ଯାଞ୍ଚ କରିବା ଜାରି ରଖିବେ?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"ଆପଣ ପାୱାର ବଟନ ଦବାଇଛନ୍ତି — ଏହା ସାଧାରଣତଃ ଆପଣଙ୍କ ସ୍କ୍ରିନକୁ ବନ୍ଦ କରିଥାଏ।\n\nଆପଣଙ୍କ ଟିପଚିହ୍ନ ଯାଞ୍ଚ କରିବା ପାଇଁ ଧୀରେ ଟାପ କରିବାକୁ ଚେଷ୍ଟା କରନ୍ତୁ।"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"ସ୍କ୍ରିନ ବନ୍ଦ କରନ୍ତୁ"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"ଜାରି ରଖନ୍ତୁ"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> ଚାଲୁଛି"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"ଗେମ୍‌କୁ ଫେରିଆସିବା ପାଇଁ ଟାପ୍ କରନ୍ତୁ"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"ଗେମ୍ ଚୟନ କରନ୍ତୁ"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"କଷ୍ଟମ୍ ଆପ୍ ବିଜ୍ଞପ୍ତି"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g>ରେ ଏକ ନୂଆ ଉପଯୋଗକର୍ତ୍ତା ତିଆରି କରିବା ପାଇଁ <xliff:g id="ACCOUNT">%2$s</xliff:g>କୁ (ପୂର୍ବରୁ ଏହି ଆକାଉଣ୍ଟ ଉପଯୋଗକର୍ତ୍ତାଙ୍କ ନାମରେ ଅଛି) ଅନୁମତି ଦେବେ?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g>ରେ ଏକ ନୂଆ ଉପଯୋଗକର୍ତ୍ତା ତିଆରି କରିବା ପାଇଁ <xliff:g id="ACCOUNT">%2$s</xliff:g>କୁ ଅନୁମତି ଦେବେ?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"ନିରୀକ୍ଷିତ ଉପଯୋଗକର୍ତ୍ତା ଯୋଗ କରନ୍ତୁ"</string>
     <string name="language_selection_title" msgid="52674936078683285">"ଏକ ଭାଷା ଯୋଗ କରନ୍ତୁ"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"ପସନ୍ଦର ଅଞ୍ଚଳ"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"ଭାଷାର ନାମ ଟାଇପ୍‍ କରନ୍ତୁ"</string>

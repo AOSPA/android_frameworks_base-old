@@ -36,6 +36,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.LauncherApps;
 import android.graphics.drawable.Icon;
+import android.os.Handler;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
 import android.testing.TestableLooper;
@@ -114,6 +115,7 @@ public class NotificationTestHelper {
     private final IconManager mIconManager;
     private StatusBarStateController mStatusBarStateController;
     private final PeopleNotificationIdentifier mPeopleNotificationIdentifier;
+    public final OnUserInteractionCallback mOnUserInteractionCallback;
 
     public NotificationTestHelper(
             Context context,
@@ -139,6 +141,8 @@ public class NotificationTestHelper {
                 mock(NotificationGroupManagerLegacy.class),
                 mock(ConfigurationControllerImpl.class)
         );
+        mHeadsUpManager.mHandler.removeCallbacksAndMessages(null);
+        mHeadsUpManager.mHandler = new Handler(mTestLooper.getLooper());
         mGroupMembershipManager.setHeadsUpManager(mHeadsUpManager);
         mIconManager = new IconManager(
                 mock(CommonNotifCollection.class),
@@ -170,6 +174,7 @@ public class NotificationTestHelper {
         verify(collection).addCollectionListener(collectionListenerCaptor.capture());
         mBindPipelineEntryListener = collectionListenerCaptor.getValue();
         mPeopleNotificationIdentifier = mock(PeopleNotificationIdentifier.class);
+        mOnUserInteractionCallback = mock(OnUserInteractionCallback.class);
     }
 
     /**
@@ -496,7 +501,7 @@ public class NotificationTestHelper {
                 new FalsingCollectorFake(),
                 mStatusBarStateController,
                 mPeopleNotificationIdentifier,
-                mock(OnUserInteractionCallback.class),
+                mOnUserInteractionCallback,
                 Optional.of(mock(BubblesManager.class)),
                 mock(NotificationGutsManager.class));
 

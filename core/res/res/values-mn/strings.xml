@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Аппад таны Android TV төхөөрөмжийн ирсэн болон залгасан дуудлага зэрэг өгөгдөл бүхий дуудлагын жагсаалтыг өөрчлөхийг зөвшөөрнө. Хортой аппууд үүнийг ашиглан таны дуудлагын жагсаалтыг устгаж эсвэл өөрчилж болзошгүй."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Апп нь таны утасны ирсэн гарсан дуудлага зэргийг агуулсан дуудлагын логыг өөрчлөх боломжтой. Хортой апп нь энийг ашиглан таны дуудлагын логыг өөрчлөх болон арилгах боломжтой."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"биеийн мэдрэгчид хандах (зүрхний хэмнэл шалгагч г.м)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Апп-т таны зүрхний цохилт гэх мэт биеийн байдлыг хянадаг мэдрэгчдийн датанд хандалт хийх боломж олгоно."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Зүрхний хэм, температур, цусны хүчилтөрөгчийн хувь гэх мэт биеийн мэдрэгчийн өгөгдөлд хандана уу"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"арын дэвсгэрт ажиллах үед биеийн мэдрэгчид (зүрхний хэм хянагч гэх мэт) хандах"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Арын дэвсгэрт ажиллах үед зүрхний хэм, температур, цусны хүчилтөрөгчийн хувь гэх мэт биеийн мэдрэгчийн өгөгдөлд хандана уу."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Календарийн арга хэмжээ, дэлгэрэнгүйг унших"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Энэ апп таны таблетад хадгалсан календарийн бүх арга хэмжээг унших, календарийн өгөгдлийг хуваалцах, хадгалах боломжтой."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Энэ апп таны Android TV төхөөрөмжид хадгалсан календарийн бүх арга хэмжээг унших болон таны календарийн өгөгдлийг хуваалцах эсвэл хадгалах боломжтой."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Апп нь дуудлага хийхдээ таны оролцоогүйгээр IMS үйлчилгээг ашиглах боломжтой."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"утасны статус ба таниулбарыг унших"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Апп нь төхөөрөмжийн утасны функцд хандах боломжтой. Энэ зөвшөөрөл нь апп-д утасны дугаар болон төхөөрөмжийн ID-г, дуудлага идэвхтэй эсэх, холын дугаар дуудлагаар холбогдсон байгаа эсэхийг тогтоох боломжийг олгоно,"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"утасны үндсэн статус болон таних мэдээллийг уншуулна уу"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Аппад төхөөрөмжийн утасны үндсэн онцлогт хандах боломжийг олгоно."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"системээр дамжуулах дуудлага"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Дуудлагыг сайжруулахын тулд дуудлагаа системээр дамжуулах зөвшөөрлийг апп-д олгодог."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"систем дэх дуудлагыг харах болон хянах."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Нүүрний загвараа устгахын тулд товшоод, дараа нь царайгаа дахин нэмнэ үү"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Царайгаар түгжээ тайлахыг тохируулах"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Утас руугаа харж түгжээг нь тайлна уу"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Царайгаар түгжээ тайлахыг ашиглахын тулд Тохиргоо &gt; Нууцлал хэсэгт "<b>" Камерын хандалтыг "</b>" асаана уу"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Түгжээ тайлах илүү олон арга тохируулна уу"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Хурууны хээ нэмэхийн тулд товшино уу"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Хурууны хээгээр түгжээ тайлах"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Апп-д Бүү саад бол тохируулгыг уншиж, бичихийг зөвшөөрөх"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"зөвшөөрлийн ашиглалтыг харж эхлэх"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Эзэмшигчид аппын зөвшөөрлөө ашиглаж эхлэхийг зөвшөөрдөг. Энгийн аппуудад шаардлагагүй."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"зөвшөөрлийн шийдвэрийг хянах дэлгэцийг эхлүүлэх"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Эзэмшигчид зөвшөөрлийн шийдвэрийг хянах дэлгэцийг эхлүүлэх боломжийг олгоно. Энгийн аппуудад хэзээ ч шаардагдахгүй."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"аппын онцлогуудыг үзэж эхлэх"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Аппын онцлогуудын мэдээллийг үзэж эхлэхийг эзэмшигчид зөвшөөрдөг."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"түүврийн өндөр хувиар мэдрэгчийн өгөгдөлд хандах"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Дэлгэцийн түгжээг тайлах оролдлогыг хянах"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Дэлгэц түгжигдсэн үед нууц үг буруу оруулалтын тоог хянах ба хэрэв хэт олон удаа нууц үгийг буруу оруулбал таблетыг түгжих болон таблетын бүх датаг арилгана"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Дэлгэцийн түгжээг тайлахаар буруу оруулсан нууц үгийн тоог хянаж, нууц үгийг хэт олон удаа буруу оруулсан тохиолдолд таны Android TV төхөөрөмжийг түгжиж эсвэл үүний бүх өгөгдлийг устгана."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Дэлгэцийн түгжээг тайлахад буруу бичиж оруулсан нууц үгний тоог хянаж, инфотэйнмент системийг түгжих эсвэл хэт олон удаа нууц үгийг буруу бичиж оруулсан тохиолдолд инфотэйнмент системийн бүх өгөгдлийг устгана."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Дэлгэц түгжигдсэн үед нууц үг буруу оруулалтын тоог хянах, ба хэрэв хэт олон удаа нууц үгийг буруу оруулбал утсыг түгжих болон утасны бүх датаг арилгана"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Дэлгэцийн түгжээг тайлахад оруулсан буруу нууц үгийн давтамжийг хянаж таблетыг түгжих эсвэл буруу нууц үгийг хэт олон удаа оруулсан тохиолдолд энэ хэрэглэгчийн мэдээллийг устгах."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Дэлгэцийн түгжээг тайлахаар буруу оруулсан нууц үгийн тоог хянаж, нууц үгийг хэт олон удаа буруу оруулсан тохиолдолд таны Android TV төхөөрөмжийг түгжиж эсвэл энэ хэрэглэгчийн бүх өгөгдлийг устгана."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Дэлгэцийн түгжээг тайлахад буруу бичиж оруулсан нууц үгний тоог хянаж, инфотэйнмент системийг түгжих эсвэл хэт олон удаа нууц үгийг буруу бичиж оруулсан тохиолдолд энэ профайлын бүх өгөгдлийг устгана."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Дэлгэцийн түгжээг тайлахад оруулсан буруу нууц үгийн давтамжийг хянаж гар утсыг түгжих эсвэл буруу нууц үгийг хэт олон удаа оруулсан тохиолдолд энэ хэрэглэгчийн мэдээллийг устгах."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Дэлгэцийн түгжээг өөрчлөх"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Дэлгэцийн түгжээг өөрчлөх."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Бүх датаг арилгах"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Үйлдвэрийн дата утгыг өгсөнөөр таблетын дата шууд арилгагдана."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Таны Android TV төхөөрөмжийн өгөгдлийг танд анхааруулалгүйгээр үйлдвэрээс гарсан төлөвт шилжүүлэн устгана."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Үйлдвэрийн өгөгдлийн төлөвт үйлдлийг гүйцэтгэснээр инфотэйнмент системийн өгөгдлийг сануулгагүйгээр устгана."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Сануулахгүйгээр утасны бүх мэдээллийг устгаж, үйлдвэрийн өгөгдмөл байдалд шилжүүлнэ"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Хэрэглэгчийн мэдээллийг арилгах"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Профайлын өгөгдлийг устгах"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Хэрэглэгчийн мэдээллийг арилгах"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Анхааруулга өгөхгүйгээр энэ хэрэглэгчийн энэ таблет дээрх мэдээллийг устгах."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Энэ Android TV төхөөрөмж дээрх хэрэглэгчийн өгөгдлийг хэрэглэгчид анхааруулалгүйгээр устгана."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Энэ инфотэйнмент систем дээр энэ профайлын өгөгдлийг сануулгагүйгээр устгана."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Анхааруулга өгөхгүйгээр энэ хэрэглэгчийн энэ гар утсан дээрх мэдээллийг устгах."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Төхөрөөмжийн глобал проксиг тохируулах"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Бодлогыг ашиглах боломжтой үед төхөөрөмжийн олон улсын эрхийг тохируулах. Зөвхөн төхөөрөмж эзэмшигч нь олон улсын эрхийг тохируулах боломжтой."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Бэлдэж байна <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Апп-г эхлүүлж байна."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Эхлэлийг дуусгаж байна."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Дэлгэцийг унтраах уу?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Та хурууны хээгээ тохируулж байх үед Асаах/унтраах товчийг дарсан байна.\n\nЭнэ нь ихэвчлэн таны дэлгэцийг унтраана."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Унтраах"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Цуцлах"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Тохируулгыг үргэлжлүүлэх үү?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Та асаах/унтраах товчийг дарсан байна — энэ нь ихэвчлэн дэлгэцийг унтраадаг.\n\nХурууны хээгээ тохируулж байх үедээ зөөлөн товшиж үзнэ үү."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Дэлгэцийг унтраах"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Тохируулгыг үргэлжлүүлэх"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Хурууны хээгээ үргэлжлүүлэн баталгаажуулах уу?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Та асаах/унтраах товчийг дарсан байна — энэ нь ихэвчлэн дэлгэцийг унтраадаг.\n\nХурууны хээгээ баталгаажуулахын тулд зөөлөн товшиж үзнэ үү."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Дэлгэцийг унтраах"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Үргэлжлүүлэх"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> ажиллаж байна"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Тоглоом руу буцахын тулд товших"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Тоглоом сонгох"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Аппын захиалгат мэдэгдэл"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g>-д <xliff:g id="ACCOUNT">%2$s</xliff:g>-тай (ийм бүртгэлтэй хэрэглэгч аль хэдийн байна) шинэ хэрэглэгч үүсгэхийг зөвшөөрөх үү ?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g>-д <xliff:g id="ACCOUNT">%2$s</xliff:g>-тай шинэ хэрэглэгч үүсгэхийг зөвшөөрөх үү?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Хяналттай хэрэглэгч нэмэх"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Хэл нэмэх"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Бүс нутгийн тохиргоо"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Улсын хэлийг бичнэ үү"</string>

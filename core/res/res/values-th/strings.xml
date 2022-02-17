@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"อนุญาตให้แอปแก้ไขบันทึกการโทรจากอุปกรณ์ Android TV รวมถึงข้อมูลเกี่ยวกับสายเรียกเข้าและสายโทรออก แอปที่เป็นอันตรายอาจใช้สิทธิ์นี้เพื่อลบหรือแก้ไขบันทึกการโทรได้"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"อนุญาตให้แอปแก้ไขบันทึกการโทรจากโทรศัพท์ของคุณ รวมถึงข้อมูลเกี่ยวกับสายเรียกเข้าและการโทรออก แอปที่เป็นอันตรายอาจใช้สิ่งนี้เพื่อลบหรือแก้ไขบันทึกการโทรของคุณ"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"เข้าถึงเซ็นเซอร์ร่างกาย (เช่น ตัววัดอัตราการเต้นของหัวใจ)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"อนุญาตให้แอปเข้าถึงข้อมูลจากเซ็นเซอร์ที่ตรวจสอบสภาพทางกายภาพ เช่น อัตราการเต้นของหัวใจ"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"เข้าถึงข้อมูลจากเซ็นเซอร์ร่างกาย เช่น อัตราการเต้นของหัวใจ อุณหภูมิ เปอร์เซ็นต์ออกซิเจนในเลือด ฯลฯ"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"เข้าถึงเซ็นเซอร์ร่างกาย (เช่น เครื่องวัดอัตราการเต้นของหัวใจ) ในเบื้องหลัง"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"เข้าถึงข้อมูลจากเซ็นเซอร์ร่างกาย เช่น อัตราการเต้นของหัวใจ อุณหภูมิ เปอร์เซ็นต์ออกซิเจนในเลือด ฯลฯ ในเบื้องหลัง"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"อ่านกิจกรรมในปฏิทินและรายละเอียด"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"แอปนี้สามารถอ่านกิจกรรมทั้งหมดในปฏิทินที่เก็บไว้ในแท็บเล็ต รวมถึงแชร์หรือบันทึกข้อมูลในปฏิทินของคุณ"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"แอปนี้อ่านกิจกรรมทั้งหมดในปฏิทินที่จัดเก็บไว้ในอุปกรณ์ Android TV ได้ รวมถึงแชร์หรือบันทึกข้อมูลในปฏิทินของคุณได้ด้วย"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"อนุญาตให้แอปใช้บริการ IMS เพื่อโทรออกโดยคุณไม่ต้องดำเนินการใดๆ เลย"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"อ่านสถานะและข้อมูลระบุตัวตนของโทรศัพท์"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"อนุญาตให้แอปพลิเคชันเข้าถึงฟีเจอร์โทรศัพท์ของอุปกรณ์ การอนุญาตนี้ทำให้แอปพลิเคชันสามารถตรวจสอบหมายเลขโทรศัพท์และรหัสอุปกรณ์ ตรวจสอบว่ามีการโทรที่ทำงานอยู่หรือไม่ และตรวจสอบหมายเลขระยะไกลที่เชื่อมต่อด้วยการโทร"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"อ่านสถานะการใช้โทรศัพท์เบื้องต้นและข้อมูลระบุตัวตน"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"อนุญาตให้แอปเข้าถึงฟีเจอร์พื้นฐานในการใช้โทรศัพท์ของอุปกรณ์นี้"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"กำหนดเส้นทางการโทรผ่านระบบ"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"อนุญาตให้แอปกำหนดเส้นทางการโทรของแอปผ่านระบบเพื่อปรับปรุงประสบการณ์ในการโทร"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"ดูและจัดการการติดต่อผ่านระบบ"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"แตะเพื่อลบรูปแบบใบหน้า แล้วเพิ่มใบหน้าอีกครั้ง"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"ตั้งค่าการปลดล็อกด้วยใบหน้า"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"ปลดล็อกโทรศัพท์โดยมองไปที่โทรศัพท์"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"หากต้องการใช้ปลดล็อกด้วยใบหน้า ให้เปิด"<b>"การเข้าถึงกล้อง"</b>"ในการตั้งค่าและความเป็นส่วนตัว"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"ตั้งค่าการปลดล็อกด้วยวิธีอื่น"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"แตะเพื่อเพิ่มลายนิ้วมือ"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"ปลดล็อกด้วยลายนิ้วมือ"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"อนุญาตให้แอปอ่านและเขียนการกำหนดค่าโหมดห้ามรบกวน"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"เริ่มการใช้สิทธิ์การดู"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"อนุญาตให้เจ้าของเริ่มการใช้สิทธิ์ของแอป ไม่จำเป็นสำหรับแอปทั่วไป"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"เริ่มดูสิทธิ์ที่เลือกไว้"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"อนุญาตให้แอปเริ่มหน้าจอเพื่อดูสิทธิ์ที่เลือกไว้ แอปทั่วไปไม่จำเป็นต้องใช้"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"เริ่มดูฟีเจอร์ของแอป"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"อนุญาตให้เจ้าของเริ่มดูข้อมูลฟีเจอร์สำหรับแอป"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"เข้าถึงข้อมูลเซ็นเซอร์ที่อัตราการสุ่มตัวอย่างสูง"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"ตรวจสอบความพยายามในการปลดล็อกหน้าจอ"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"ตรวจสอบจำนวนของรหัสผ่านที่พิมพ์ไม่ถูกต้องขณะปลดล็อกหน้าจอ และล็อกแท็บเล็ตหรือลบข้อมูลทั้งหมดในแท็บเล็ตถ้ามีการพิมพ์รหัสผ่านที่ไม่ถูกต้องมากเกินไป"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"ตรวจสอบรหัสผ่านที่พิมพ์ไม่ถูกต้องเวลาปลดล็อกหน้าจอ และล็อกอุปกรณ์ Android TV หรือลบข้อมูลทั้งหมดของอุปกรณ์ Android TV หากมีการพิมพ์รหัสผ่านไม่ถูกต้องหลายครั้งเกินไป"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"ตรวจสอบจำนวนครั้งที่พิมพ์รหัสผ่านไม่ถูกต้องเวลาปลดล็อกหน้าจอ และล็อกระบบสาระบันเทิงหรือลบข้อมูลทั้งหมดของระบบสาระบันเทิงหากพิมพ์รหัสผ่านไม่ถูกต้องบ่อยเกินไป"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"ตรวจสอบจำนวนการพิมพ์รหัสผ่านที่ไม่ถูกต้องขณะปลดล็อกหน้าจอ และล็อกโทรศัพท์หรือลบข้อมูลทั้งหมดในโทรศัพท์ถ้ามีการพิมพ์รหัสผ่านที่ไม่ถูกต้องมากเกินไป"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"ตรวจสอบจำนวนรหัสผ่านที่พิมพ์ไม่ถูกต้องเวลาปลดล็อกหน้าจอ และล็อกแท็บเล็ตหรือลบข้อมูลทั้งหมดของผู้ใช้นี้หากพิมพ์รหัสผ่านไม่ถูกต้องบ่อยเกินไป"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"ตรวจสอบจำนวนรหัสผ่านที่พิมพ์ไม่ถูกต้องเวลาปลดล็อกหน้าจอ และล็อกอุปกรณ์ Android TV หรือลบข้อมูลทั้งหมดของผู้ใช้นี้หากพิมพ์รหัสผ่านไม่ถูกต้องหลายครั้งเกินไป"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"ตรวจสอบจำนวนครั้งที่พิมพ์รหัสผ่านไม่ถูกต้องเวลาปลดล็อกหน้าจอ และล็อกระบบสาระบันเทิงหรือลบข้อมูลทั้งหมดของโปรไฟล์นี้หากพิมพ์รหัสผ่านไม่ถูกต้องบ่อยเกินไป"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"ตรวจสอบจำนวนรหัสผ่านที่พิมพ์ไม่ถูกต้องเวลาปลดล็อกหน้าจอ และล็อกโทรศัพท์หรือลบข้อมูลทั้งหมดของผู้ใช้นี้หากพิมพ์รหัสผ่านไม่ถูกต้องบ่อยเกินไป"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"เปลี่ยนการล็อกหน้าจอ"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"เปลี่ยนการล็อกหน้าจอ"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"ลบข้อมูลทั้งหมด"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"ลบข้อมูลของแท็บเล็ตโดยไม่มีการเตือน ด้วยการดำเนินการรีเซ็ตข้อมูลเป็นค่าเริ่มต้น"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"ลบข้อมูลของอุปกรณ์ Android TV โดยไม่มีการเตือนด้วยการรีเซ็ตข้อมูลเป็นค่าเริ่มต้น"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"ดำเนินการรีเซ็ตข้อมูลเป็นค่าเริ่มต้นเพื่อลบข้อมูลของระบบสาระบันเทิงโดยไม่มีการเตือน"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"ลบข้อมูลโทรศัพท์โดยไม่มีการเตือน ด้วยการรีเซ็ตข้อมูลเป็นค่าเริ่มต้น"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"ลบข้อมูลผู้ใช้"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"ลบข้อมูลโปรไฟล์"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"ลบข้อมูลผู้ใช้"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"ลบข้อมูลของผู้ใช้นี้ในแท็บเล็ตเครื่องนี้โดยไม่มีการเตือน"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"ลบข้อมูลของผู้ใช้นี้ในอุปกรณ์ Android TV เครื่องนี้โดยไม่มีการเตือน"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"ลบข้อมูลของโปรไฟล์ดังกล่าวในระบบสาระบันเทิงนี้โดยไม่มีการเตือน"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"ลบข้อมูลของผู้ใช้นี้ในโทรศัพท์เครื่องนี้โดยไม่มีการเตือน"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"ตั้งค่าพร็อกซีส่วนกลางของอุปกรณ์"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"ตั้งค่าพร็อกซีส่วนกลางของอุปกรณ์ที่จะใช้ขณะที่เปิดใช้นโยบายอยู่ เฉพาะเจ้าของอุปกรณ์เท่านั้นที่สามารถตั้งค่าพร็อกซีส่วนกลาง"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"กำลังเตรียม <xliff:g id="APPNAME">%1$s</xliff:g>"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"กำลังเริ่มต้นแอปพลิเคชัน"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"เสร็จสิ้นการบูต"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"ปิดหน้าจอใช่ไหม"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"ขณะตั้งค่าลายนิ้วมือคุณจะต้องกดปุ่มเปิด/ปิด\n\nซึ่งโดยปกติจะเป็นการปิดหน้าจอด้วย"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"ปิด"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"ยกเลิก"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"ตั้งค่าต่อไหม"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"คุณกดปุ่มเปิด/ปิดซึ่งโดยปกติจะเป็นการปิดหน้าจอ\n\nลองแตะเบาๆ ขณะตั้งค่าลายนิ้วมือ"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"ปิดหน้าจอ"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"ตั้งค่าต่อ"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"ยืนยันลายนิ้วมือต่อไหม"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"คุณกดปุ่มเปิด/ปิดซึ่งโดยปกติจะเป็นการปิดหน้าจอ\n\nลองแตะเบาๆ เพื่อยืนยันลายนิ้วมือ"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"ปิดหน้าจอ"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"ต่อไป"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> กำลังทำงาน"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"แตะเพื่อกลับไปที่เกม"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"เลือกเกม"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"การแจ้งเตือนที่กำหนดเองของแอป"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"อนุญาตให้ <xliff:g id="APP">%1$s</xliff:g> สร้างผู้ใช้ใหม่ด้วย <xliff:g id="ACCOUNT">%2$s</xliff:g> ไหม (มีผู้ใช้ที่มีบัญชีนี้อยู่แล้ว)"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"อนุญาตให้ <xliff:g id="APP">%1$s</xliff:g> สร้างผู้ใช้ใหม่ด้วย <xliff:g id="ACCOUNT">%2$s</xliff:g> ไหม"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"เพิ่มผู้ใช้ภายใต้การควบคุมดูแล"</string>
     <string name="language_selection_title" msgid="52674936078683285">"เพิ่มภาษา"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"ค่ากำหนดภูมิภาค"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"พิมพ์ชื่อภาษา"</string>

@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
@@ -28,7 +29,6 @@ import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_LANDSCAPE
 import com.android.wm.shell.flicker.testapp.Components.FixedActivity.EXTRA_FIXED_ORIENTATION
 import com.android.wm.shell.flicker.testapp.Components.PipActivity.EXTRA_ENTER_PIP
-import org.junit.Assert.assertEquals
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,7 +37,7 @@ import org.junit.runners.Parameterized
 
 /**
  * Test Pip with orientation changes.
- * To run this test: `atest WMShellFlickerTests:PipOrientationTest`
+ * To run this test: `atest WMShellFlickerTests:SetRequestedOrientationWhilePinnedTest`
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
@@ -76,35 +76,34 @@ class SetRequestedOrientationWhilePinnedTest(
                 pipApp.launchViaIntent(wmHelper)
                 wmHelper.waitForFullScreenApp(pipApp.component)
                 wmHelper.waitForRotation(Surface.ROTATION_90)
-                assertEquals(Surface.ROTATION_90, device.displayRotation)
             }
         }
 
-    @FlakyTest
+    @Presubmit
+    @Test
+    fun displayEndsAt90Degrees() {
+        testSpec.assertWmEnd {
+            hasRotation(Surface.ROTATION_90)
+        }
+    }
+
+    @Presubmit
     @Test
     override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
 
-    @FlakyTest
-    @Test
-    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
-
-    @FlakyTest
+    @Presubmit
     @Test
     override fun statusBarLayerIsVisible() = super.statusBarLayerIsVisible()
 
     @FlakyTest
     @Test
-    override fun statusBarWindowIsVisible() = super.statusBarWindowIsVisible()
-
-    @FlakyTest
-    @Test
     override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
 
-    @FlakyTest
+    @FlakyTest(bugId = 206753786)
     @Test
     override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun pipWindowInsideDisplay() {
         testSpec.assertWmStart {
@@ -112,7 +111,7 @@ class SetRequestedOrientationWhilePinnedTest(
         }
     }
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun pipAppShowsOnTop() {
         testSpec.assertWmEnd {
@@ -120,7 +119,7 @@ class SetRequestedOrientationWhilePinnedTest(
         }
     }
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun pipLayerInsideDisplay() {
         testSpec.assertLayersStart {
@@ -128,23 +127,21 @@ class SetRequestedOrientationWhilePinnedTest(
         }
     }
 
-    @FlakyTest
+    @Presubmit
     @Test
-    fun pipAlwaysVisible() = testSpec.assertWm {
-        this.isAppWindowVisible(pipApp.component)
+    fun pipAlwaysVisible() {
+        testSpec.assertWm {
+            this.isAppWindowVisible(pipApp.component)
+        }
     }
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun pipAppLayerCoversFullScreen() {
         testSpec.assertLayersEnd {
             visibleRegion(pipApp.component).coversExactly(endingBounds)
         }
     }
-
-    @FlakyTest
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

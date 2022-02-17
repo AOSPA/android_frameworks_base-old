@@ -148,6 +148,13 @@ public class ShadeControllerImpl implements ShadeController {
     }
 
     @Override
+    public boolean isShadeOpen() {
+        NotificationPanelViewController controller =
+                getNotificationPanelViewController();
+        return controller.isExpanding() || controller.isFullyExpanded();
+    }
+
+    @Override
     public void postOnShadeExpanded(Runnable executable) {
         getNotificationPanelViewController().addOnGlobalLayoutListener(
                 new ViewTreeObserver.OnGlobalLayoutListener() {
@@ -216,10 +223,6 @@ public class ShadeControllerImpl implements ShadeController {
 
     protected NotificationShadeWindowView getNotificationShadeWindowView() {
         return getStatusBar().getNotificationShadeWindowView();
-    }
-
-    protected PhoneStatusBarView getStatusBarView() {
-        return (PhoneStatusBarView) getStatusBar().getStatusBarView();
     }
 
     private NotificationPanelViewController getNotificationPanelViewController() {

@@ -39,7 +39,7 @@ import static android.net.NetworkStats.STATS_PER_UID;
 import static android.net.NetworkStats.TAG_NONE;
 import static android.net.TrafficStats.UID_TETHERING;
 
-import static com.android.server.NetworkManagementSocketTagger.PROP_QTAGUID_ENABLED;
+import static com.android.net.module.util.NetworkStatsUtils.LIMIT_GLOBAL_ALERT;
 
 import android.annotation.NonNull;
 import android.app.ActivityManager;
@@ -72,7 +72,6 @@ import android.os.ServiceManager;
 import android.os.ServiceSpecificException;
 import android.os.StrictMode;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.os.Trace;
 import android.text.TextUtils;
 import android.util.Log;
@@ -135,12 +134,6 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
     private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int MAX_UID_RANGES_PER_COMMAND = 10;
-
-    /**
-     * Name representing {@link #setGlobalAlert(long)} limit when delivered to
-     * {@link INetworkManagementEventObserver#limitReached(String, String)}.
-     */
-    public static final String LIMIT_GLOBAL_ALERT = "globalAlert";
 
     static final int DAEMON_MSG_MOBILE_CONN_REAL_TIME_INFO = 1;
 
@@ -445,9 +438,6 @@ public class NetworkManagementService extends INetworkManagementService.Stub {
 
         // push any existing quota or UID rules
         synchronized (mQuotaLock) {
-
-            // Netd unconditionally enable bandwidth control
-            SystemProperties.set(PROP_QTAGUID_ENABLED, "1");
 
             mStrictEnabled = true;
 

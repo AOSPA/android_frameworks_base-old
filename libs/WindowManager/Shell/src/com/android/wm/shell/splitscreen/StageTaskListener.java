@@ -20,6 +20,7 @@ import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
+import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static com.android.wm.shell.transition.Transitions.ENABLE_SHELL_TRANSITIONS;
@@ -33,15 +34,18 @@ import android.graphics.Rect;
 import android.util.SparseArray;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
+import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
 import androidx.annotation.NonNull;
 
+import com.android.internal.R;
 import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.SurfaceUtils;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.split.SplitDecorManager;
+import com.android.wm.shell.splitscreen.SplitScreen.StageType;
 
 import java.io.PrintWriter;
 
@@ -70,6 +74,8 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         void onStatusChanged(boolean visible, boolean hasChildren);
 
         void onChildTaskStatusChanged(int taskId, boolean present, boolean visible);
+
+        void onChildTaskEnterPip(int taskId);
 
         void onRootTaskVanished();
 
@@ -102,7 +108,12 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         mSurfaceSession = surfaceSession;
         mIconProvider = iconProvider;
         mStageTaskUnfoldController = stageTaskUnfoldController;
-        taskOrganizer.createRootTask(displayId, WINDOWING_MODE_MULTI_WINDOW, this);
+
+        // No need to create root task if the device is using legacy split screen.
+        // TODO(b/199236198): Remove this check after totally deprecated legacy split.
+        if (!context.getResources().getBoolean(R.bool.config_useLegacySplit)) {
+            taskOrganizer.createRootTask(displayId, WINDOWING_MODE_MULTI_WINDOW, this);
+        }
     }
 
     int getChildCount() {
@@ -249,6 +260,9 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
             mChildrenTaskInfo.remove(taskId);
             mChildrenLeashes.remove(taskId);
             mCallbacks.onChildTaskStatusChanged(taskId, false /* present */, taskInfo.isVisible);
+            if (taskInfo.getWindowingMode() == WINDOWING_MODE_PINNED) {
+                mCallbacks.onChildTaskEnterPip(taskId);
+            }
             if (ENABLE_SHELL_TRANSITIONS) {
                 // Status is managed/synchronized by the transition lifecycle.
                 return;
@@ -287,6 +301,20 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         }
     }
 
+    void addTask(ActivityManager.RunningTaskInfo task, WindowContainerTransaction wct) {
+        // Clear overridden bounds and windowing mode to make sure the child task can inherit
+        // windowing mode and bounds from split root.
+        wct.setWindowingMode(task.token, WINDOWING_MODE_UNDEFINED)
+                .setBounds(task.token, null);
+
+        wct.reparent(task.token, mRootTaskInfo.token, true /* onTop*/);
+    }
+
+    void moveToTop(Rect rootBounds, WindowContainerTransaction wct) {
+        final WindowContainerToken rootToken = mRootTaskInfo.token;
+        wct.setBounds(rootToken, rootBounds).reorder(rootToken, true /* onTop */);
+    }
+
     void setBounds(Rect bounds, WindowContainerTransaction wct) {
         wct.setBounds(mRootTaskInfo.token, bounds);
     }
@@ -311,7 +339,7 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
     }
 
     void onSplitScreenListenerRegistered(SplitScreen.SplitScreenListener listener,
-            @SplitScreen.StageType int stage) {
+            @StageType int stage) {
         for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
             int taskId = mChildrenTaskInfo.keyAt(i);
             listener.onTaskStageChanged(taskId, stage,

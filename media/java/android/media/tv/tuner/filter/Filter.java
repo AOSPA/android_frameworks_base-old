@@ -159,7 +159,8 @@ public class Filter implements AutoCloseable {
     public @interface Status {}
 
     /**
-     * The status of a filter that the data in the filter buffer is ready to be read.
+     * The status of a filter that the data in the filter buffer is ready to be read. It can also be
+     * used to know the STC (System Time Clock) ready status if it's PCR filter.
      */
     public static final int STATUS_DATA_READY = DemuxFilterStatus.DATA_READY;
     /**
@@ -251,8 +252,10 @@ public class Filter implements AutoCloseable {
     private native int nativeFlushFilter();
     private native int nativeRead(byte[] buffer, long offset, long size);
     private native int nativeClose();
-    private native String nativeCreateSharedFilter();
-    private native void nativeReleaseSharedFilter(String token);
+    private native String nativeAcquireSharedFilterToken();
+    private native void nativeFreeSharedFilterToken(String token);
+    private native int nativeSetTimeDelayHint(int timeDelayInMs);
+    private native int nativeSetDataSizeDelayHint(int dataSizeDelayInBytes);
 
     // Called by JNI
     private Filter(long id) {
@@ -280,9 +283,21 @@ public class Filter implements AutoCloseable {
                     synchronized (mCallbackLock) {
                         if (mCallback != null) {
                             mCallback.onFilterEvent(this, events);
+                        } else {
+                            for (FilterEvent event : events) {
+                                if (event instanceof MediaEvent) {
+                                    ((MediaEvent)event).release();
+                                }
+                            }
                         }
                     }
                 });
+            } else {
+                for (FilterEvent event : events) {
+                    if (event instanceof MediaEvent) {
+                        ((MediaEvent)event).release();
+                    }
+                }
             }
         }
     }
@@ -555,6 +570,8 @@ public class Filter implements AutoCloseable {
             if (res != Tuner.RESULT_SUCCESS) {
                 TunerUtils.throwExceptionForResult(res, "Failed to close filter.");
             } else {
+                mCallback = null;
+                mExecutor = null;
                 mIsStarted = false;
                 mIsClosed = true;
             }
@@ -562,20 +579,20 @@ public class Filter implements AutoCloseable {
     }
 
     /**
-     * Creates a shared filter.
+     * Acquires a shared filter token.
      *
      * @return a string shared filter token.
      */
     @Nullable
-    public String createSharedFilter() {
+    public String acquireSharedFilterToken() {
         synchronized (mLock) {
             TunerUtils.checkResourceState(TAG, mIsClosed);
             if (mIsStarted || mIsShared) {
-                Log.d(TAG, "Create shared filter in a wrong state, started: " +
+                Log.d(TAG, "Acquire shared filter in a wrong state, started: " +
                      mIsStarted + "shared: " + mIsShared);
                 return null;
             }
-            String token = nativeCreateSharedFilter();
+            String token = nativeAcquireSharedFilterToken();
             if (token != null) {
                 mIsShared = true;
             }
@@ -584,18 +601,74 @@ public class Filter implements AutoCloseable {
     }
 
     /**
-     * Releases a shared filter.
+     * Frees a shared filter token.
      *
      * @param filterToken the token of the shared filter being released.
      */
-    public void releaseSharedFilter(@NonNull String filterToken) {
+    public void freeSharedFilterToken(@NonNull String filterToken) {
         synchronized (mLock) {
             TunerUtils.checkResourceState(TAG, mIsClosed);
             if (!mIsShared) {
                 return;
             }
-            nativeReleaseSharedFilter(filterToken);
+            nativeFreeSharedFilterToken(filterToken);
             mIsShared = false;
+        }
+    }
+
+    /**
+     * Set filter time delay.
+     *
+     * <p> Setting a time delay instructs the filter to delay its event callback invocation until
+     * the specified amount of time has passed. The default value (delay disabled) is {@code 0}.
+     *
+     * <p>This functionality is only available in Tuner version 2.0 and higher and will otherwise
+     * be a no-op. Use {@link TunerVersionChecker#getTunerVersion()} to get the version information.
+     *
+     * @param delayInMs specifies the duration of the delay in milliseconds.
+     * @return one of the following results: {@link Tuner#RESULT_SUCCESS},
+     * {@link Tuner#RESULT_UNAVAILABLE}, {@link Tuner#RESULT_NOT_INITIALIZED},
+     * {@link Tuner#RESULT_INVALID_STATE}, {@link Tuner#RESULT_INVALID_ARGUMENT},
+     * {@link Tuner#RESULT_OUT_OF_MEMORY}, or {@link Tuner#RESULT_UNKNOWN_ERROR}.
+     */
+    public int delayCallbackUntilMillisElapsed(long delayInMs) {
+        if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
+                  TunerVersionChecker.TUNER_VERSION_2_0, "setTimeDelayHint")) {
+            return Tuner.RESULT_UNAVAILABLE;
+        }
+
+        if (delayInMs >= 0 && delayInMs <= Integer.MAX_VALUE) {
+            synchronized (mLock) {
+                return nativeSetTimeDelayHint((int) delayInMs);
+            }
+        }
+        return Tuner.RESULT_INVALID_ARGUMENT;
+    }
+
+    /**
+     * Set filter data size delay.
+     *
+     * <p> Setting a data size delay instructs the filter to delay its event callback invocation
+     * until a specified amount of data has accumulated. The default value (delay disabled) is
+     * {@code 0}.
+     *
+     * <p>This functionality is only available in Tuner version 2.0 and higher and will otherwise
+     * be a no-op. Use {@link TunerVersionChecker#getTunerVersion()} to get the version information.
+     *
+     * @param delayInBytes specifies the duration of the delay in bytes.
+     * @return one of the following results: {@link Tuner#RESULT_SUCCESS},
+     * {@link Tuner#RESULT_UNAVAILABLE}, {@link Tuner#RESULT_NOT_INITIALIZED},
+     * {@link Tuner#RESULT_INVALID_STATE}, {@link Tuner#RESULT_INVALID_ARGUMENT},
+     * {@link Tuner#RESULT_OUT_OF_MEMORY}, or {@link Tuner#RESULT_UNKNOWN_ERROR}.
+     */
+    public int delayCallbackUntilBytesAccumulated(int delayInBytes) {
+        if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
+                  TunerVersionChecker.TUNER_VERSION_2_0, "setTimeDelayHint")) {
+            return Tuner.RESULT_UNAVAILABLE;
+        }
+
+        synchronized (mLock) {
+            return nativeSetDataSizeDelayHint(delayInBytes);
         }
     }
 }

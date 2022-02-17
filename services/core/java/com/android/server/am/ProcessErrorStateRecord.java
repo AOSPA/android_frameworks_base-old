@@ -16,6 +16,8 @@
 
 package com.android.server.am;
 
+import static android.os.Process.SYSTEM_UID;
+
 import static com.android.server.Watchdog.NATIVE_STACKS_OF_INTEREST;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ANR;
 import static com.android.server.am.ActivityManagerService.MY_PID;
@@ -301,6 +303,7 @@ class ProcessErrorStateRecord {
                     && mService.mTraceErrorLogger.isAddErrorIdEnabled()) {
                 errorId = mService.mTraceErrorLogger.generateErrorId();
                 mService.mTraceErrorLogger.addErrorIdToTrace(mApp.processName, errorId);
+                mService.mTraceErrorLogger.addSubjectToTrace(annotation, errorId);
             } else {
                 errorId = null;
             }
@@ -500,7 +503,7 @@ class ProcessErrorStateRecord {
         if (mApp.info != null && mApp.info.packageName != null && packageManagerInternal != null) {
             IncrementalStatesInfo incrementalStatesInfo =
                     packageManagerInternal.getIncrementalStatesInfo(
-                            mApp.info.packageName, mApp.uid, mApp.userId);
+                            mApp.info.packageName, SYSTEM_UID, mApp.userId);
             if (incrementalStatesInfo != null) {
                 loadingProgress = incrementalStatesInfo.getProgress();
             }

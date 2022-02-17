@@ -16,9 +16,9 @@
 
 package com.android.wm.shell.flicker.legacysplitscreen
 
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -108,7 +108,7 @@ class LegacySplitScreenToLauncher(
     @Test
     fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
-    @Presubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
@@ -116,11 +116,11 @@ class LegacySplitScreenToLauncher(
     @Test
     fun statusBarLayerIsVisible() = testSpec.statusBarLayerIsVisible()
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun dockedStackDividerBecomesInvisible() = testSpec.dockedStackDividerBecomesInvisible()
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun layerBecomesInvisible() {
         testSpec.assertLayers {
@@ -130,7 +130,7 @@ class LegacySplitScreenToLauncher(
         }
     }
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun focusDoesNotChange() {
         testSpec.assertEventLog {

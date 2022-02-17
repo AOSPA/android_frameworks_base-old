@@ -21,6 +21,7 @@ import android.annotation.Nullable;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.res.Resources;
+import android.hardware.SensorPrivacyManager;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricFaceConstants;
@@ -56,6 +57,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
     @NonNull private final LockoutCache mLockoutCache;
     @Nullable private final NotificationManager mNotificationManager;
     @Nullable private ICancellationSignal mCancellationSignal;
+    @Nullable private SensorPrivacyManager mSensorPrivacyManager;
 
     private final int[] mBiometricPromptIgnoreList;
     private final int[] mBiometricPromptIgnoreListVendor;
@@ -81,6 +83,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         mUsageStats = usageStats;
         mLockoutCache = lockoutCache;
         mNotificationManager = context.getSystemService(NotificationManager.class);
+        mSensorPrivacyManager = context.getSystemService(SensorPrivacyManager.class);
 
         final Resources resources = getContext().getResources();
         mBiometricPromptIgnoreList = resources.getIntArray(
@@ -102,13 +105,23 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
     @NonNull
     @Override
     protected Callback wrapCallbackForStart(@NonNull Callback callback) {
-        return new CompositeCallback(createALSCallback(true /* startWithClient */), callback);
+        return new CompositeCallback(
+                getLogger().createALSCallback(true /* startWithClient */), callback);
     }
 
     @Override
     protected void startHalOperation() {
         try {
-            mCancellationSignal = getFreshDaemon().authenticate(mOperationId);
+            if (mSensorPrivacyManager != null
+                    && mSensorPrivacyManager
+                    .isSensorPrivacyEnabled(SensorPrivacyManager.Sensors.CAMERA,
+                    getTargetUserId())) {
+                onError(BiometricConstants.BIOMETRIC_ERROR_HW_UNAVAILABLE,
+                        0 /* vendorCode */);
+                mCallback.onClientFinished(this, false /* success */);
+            } else {
+                mCancellationSignal = getFreshDaemon().authenticate(mOperationId);
+            }
         } catch (RemoteException e) {
             Slog.e(TAG, "Remote exception when requesting auth", e);
             onError(BiometricFaceConstants.FACE_ERROR_HW_UNAVAILABLE, 0 /* vendorCode */);
@@ -229,7 +242,8 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_TIMED);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT;
-        logOnError(getContext(), error, 0 /* vendorCode */, getTargetUserId());
+        getLogger().logOnError(getContext(), error, 0 /* vendorCode */,
+                isCryptoOperation(), getTargetUserId());
 
         try {
             getListener().onError(getSensorId(), getCookie(), error, 0 /* vendorCode */);
@@ -244,7 +258,8 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_PERMANENT);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT_PERMANENT;
-        logOnError(getContext(), error, 0 /* vendorCode */, getTargetUserId());
+        getLogger().logOnError(getContext(), error, 0 /* vendorCode */,
+                isCryptoOperation(), getTargetUserId());
 
         try {
             getListener().onError(getSensorId(), getCookie(), error, 0 /* vendorCode */);

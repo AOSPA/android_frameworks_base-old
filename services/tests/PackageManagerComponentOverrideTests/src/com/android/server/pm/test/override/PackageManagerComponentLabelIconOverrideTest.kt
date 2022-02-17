@@ -20,7 +20,7 @@ import android.app.PropertyInvalidatedCache
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
-import android.content.pm.parsing.component.ParsedActivity
+import com.android.server.pm.pkg.component.ParsedActivity
 import android.os.Binder
 import android.os.UserHandle
 import android.util.ArrayMap
@@ -274,7 +274,7 @@ class PackageManagerComponentLabelIconOverrideTest {
     private fun makePkgSetting(pkgName: String) = spy(
         PackageSetting(
             pkgName, null, File("/test"),
-            null, null, null, null, 0, 0, 0, 0, null, null, null,
+            null, null, null, null, 0, 0, 0, 0, null, null, null, null, null,
             UUID.fromString("3f9d52b7-d7b4-406a-a1da-d9f19984c72c")
         )
     ) {
@@ -354,6 +354,7 @@ class PackageManagerComponentLabelIconOverrideTest {
                 PackageManager.PERMISSION_GRANTED
             }
         }
+        val mockSharedLibrariesImpl: SharedLibrariesImpl = mock()
         val mockInjector: PackageManagerServiceInjector = mock {
             whenever(this.lock) { PackageManagerTracedLock() }
             whenever(this.componentResolver) { mockComponentResolver }
@@ -366,6 +367,7 @@ class PackageManagerComponentLabelIconOverrideTest {
             whenever(this.appsFilter) { mockAppsFilter }
             whenever(this.context) { mockContext }
             whenever(this.getHandler()) { testHandler }
+            whenever(this.sharedLibrariesImpl) { mockSharedLibrariesImpl }
         }
         val testParams = PackageManagerServiceTestParams().apply {
             this.pendingPackageBroadcasts = mockPendingBroadcasts

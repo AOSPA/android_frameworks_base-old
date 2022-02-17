@@ -21,6 +21,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningAppProcessInfo;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.media.IResourceManagerService;
 import android.media.tv.TvInputManager;
 import android.media.tv.tunerresourcemanager.CasSessionRequest;
@@ -37,6 +38,7 @@ import android.media.tv.tunerresourcemanager.TunerResourceManager;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Slog;
@@ -52,6 +54,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This class provides a system service that manages the TV tuner resources.
@@ -64,6 +69,8 @@ public class TunerResourceManagerService extends SystemService implements IBinde
 
     public static final int INVALID_CLIENT_ID = -1;
     private static final int MAX_CLIENT_PRIORITY = 1000;
+    private static final long INVALID_THREAD_ID = -1;
+    private static final long TRMS_LOCK_TIMEOUT = 500;
 
     // Map of the registered client profiles
     private Map<Integer, ClientProfile> mClientProfiles = new HashMap<>();
@@ -93,6 +100,12 @@ public class TunerResourceManagerService extends SystemService implements IBinde
 
     // Used to synchronize the access to the service.
     private final Object mLock = new Object();
+
+    private final ReentrantLock mLockForTRMSLock = new ReentrantLock();
+    private final Condition mTunerApiLockReleasedCV = mLockForTRMSLock.newCondition();
+    private int mTunerApiLockHolder = INVALID_CLIENT_ID;
+    private long mTunerApiLockHolderThreadId = INVALID_THREAD_ID;
+    private int mTunerApiLockNestedCount = 0;
 
     public TunerResourceManagerService(@Nullable Context context) {
         super(context);
@@ -231,21 +244,24 @@ public class TunerResourceManagerService extends SystemService implements IBinde
 
         @Override
         public boolean requestFrontend(@NonNull TunerFrontendRequest request,
-                @NonNull int[] frontendHandle) throws RemoteException {
+                @NonNull int[] frontendHandle) {
             enforceTunerAccessPermission("requestFrontend");
             enforceTrmAccessPermission("requestFrontend");
             if (frontendHandle == null) {
-                throw new RemoteException("frontendHandle can't be null");
+                Slog.e(TAG, "frontendHandle can't be null");
+                return false;
             }
             synchronized (mLock) {
                 if (!checkClientExists(request.clientId)) {
-                    throw new RemoteException("Request frontend from unregistered client: "
+                    Slog.e(TAG, "Request frontend from unregistered client: "
                             + request.clientId);
+                    return false;
                 }
                 // If the request client is holding or sharing a frontend, throw an exception.
                 if (!getClientProfile(request.clientId).getInUseFrontendHandles().isEmpty()) {
-                    throw new RemoteException("Release frontend before requesting another one. "
-                            + "Client id: " + request.clientId);
+                    Slog.e(TAG, "Release frontend before requesting another one. Client id: "
+                            + request.clientId);
+                    return false;
                 }
                 return requestFrontendInternal(request, frontendHandle);
             }
@@ -269,6 +285,23 @@ public class TunerResourceManagerService extends SystemService implements IBinde
                             + "frontend resources. Target client id:" + targetClientId);
                 }
                 shareFrontendInternal(selfClientId, targetClientId);
+            }
+        }
+
+        @Override
+        public boolean transferOwner(int resourceType, int currentOwnerId, int newOwnerId) {
+            enforceTunerAccessPermission("transferOwner");
+            enforceTrmAccessPermission("transferOwner");
+            synchronized (mLock) {
+                if (!checkClientExists(currentOwnerId)) {
+                    Slog.e(TAG, "currentOwnerId:" + currentOwnerId + " does not exit");
+                    return false;
+                }
+                if (!checkClientExists(newOwnerId)) {
+                    Slog.e(TAG, "newOwnerId:" + newOwnerId + " does not exit");
+                    return false;
+                }
+                return transferOwnerInternal(resourceType, currentOwnerId, newOwnerId);
             }
         }
 
@@ -372,7 +405,11 @@ public class TunerResourceManagerService extends SystemService implements IBinde
                 if (fe == null) {
                     throw new RemoteException("Releasing frontend does not exist.");
                 }
-                if (fe.getOwnerClientId() != clientId) {
+                int ownerClientId = fe.getOwnerClientId();
+                ClientProfile ownerProfile = getClientProfile(ownerClientId);
+                if (ownerClientId != clientId
+                        && (ownerProfile != null
+                              && !ownerProfile.getShareFeClientIds().contains(clientId))) {
                     throw new RemoteException(
                             "Client is not the current owner of the releasing fe.");
                 }
@@ -511,8 +548,28 @@ public class TunerResourceManagerService extends SystemService implements IBinde
         }
 
         @Override
+        public boolean acquireLock(int clientId, long clientThreadId) {
+            enforceTrmAccessPermission("acquireLock");
+            // this must not be locked with mLock
+            return acquireLockInternal(clientId, clientThreadId, TRMS_LOCK_TIMEOUT);
+        }
+
+        @Override
+        public boolean releaseLock(int clientId) {
+            enforceTrmAccessPermission("releaseLock");
+            // this must not be locked with mLock
+            return releaseLockInternal(clientId, TRMS_LOCK_TIMEOUT, false, false);
+        }
+
+        @Override
         protected void dump(FileDescriptor fd, final PrintWriter writer, String[] args) {
             final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
+
+            if (getContext().checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
+                    != PackageManager.PERMISSION_GRANTED) {
+                pw.println("Permission Denial: can't dump!");
+                return;
+            }
 
             synchronized (mLock) {
                 if (mClientProfiles != null) {
@@ -583,6 +640,21 @@ public class TunerResourceManagerService extends SystemService implements IBinde
             }
         }
 
+        @Override
+        public int getClientPriority(int useCase, int pid) throws RemoteException {
+            enforceTrmAccessPermission("getClientPriority");
+            synchronized (mLock) {
+                return TunerResourceManagerService.this.getClientPriority(
+                        useCase, checkIsForeground(pid));
+            }
+        }
+        @Override
+        public int getConfigPriority(int useCase, boolean isForeground) throws RemoteException {
+            enforceTrmAccessPermission("getConfigPriority");
+            synchronized (mLock) {
+                return TunerResourceManagerService.this.getClientPriority(useCase, isForeground);
+            }
+        }
     }
 
     /**
@@ -940,6 +1012,83 @@ public class TunerResourceManagerService extends SystemService implements IBinde
         getClientProfile(targetClientId).shareFrontend(selfClientId);
     }
 
+    private boolean transferFeOwner(int currentOwnerId, int newOwnerId) {
+        ClientProfile currentOwnerProfile = getClientProfile(currentOwnerId);
+        ClientProfile newOwnerProfile = getClientProfile(newOwnerId);
+        // change the owner of all the inUse frontend
+        newOwnerProfile.shareFrontend(currentOwnerId);
+        currentOwnerProfile.stopSharingFrontend(newOwnerId);
+        for (int inUseHandle : newOwnerProfile.getInUseFrontendHandles()) {
+            getFrontendResource(inUseHandle).setOwner(newOwnerId);
+        }
+        // double check there is no other resources tied to the previous owner
+        for (int inUseHandle : currentOwnerProfile.getInUseFrontendHandles()) {
+            int ownerId = getFrontendResource(inUseHandle).getOwnerClientId();
+            if (ownerId != newOwnerId) {
+                Slog.e(TAG, "something is wrong in transferFeOwner:" + inUseHandle
+                        + ", " + ownerId + ", " + newOwnerId);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean transferFeCiCamOwner(int currentOwnerId, int newOwnerId) {
+        ClientProfile currentOwnerProfile = getClientProfile(currentOwnerId);
+        ClientProfile newOwnerProfile = getClientProfile(newOwnerId);
+
+        // link ciCamId to the new profile
+        int ciCamId = currentOwnerProfile.getInUseCiCamId();
+        newOwnerProfile.useCiCam(ciCamId);
+
+        // set the new owner Id
+        CiCamResource ciCam = getCiCamResource(ciCamId);
+        ciCam.setOwner(newOwnerId);
+
+        // unlink cicam resource from the original owner profile
+        currentOwnerProfile.releaseCiCam();
+        return true;
+    }
+
+    private boolean transferLnbOwner(int currentOwnerId, int newOwnerId) {
+        ClientProfile currentOwnerProfile = getClientProfile(currentOwnerId);
+        ClientProfile newOwnerProfile = getClientProfile(newOwnerId);
+
+        Set<Integer> inUseLnbHandles = new HashSet<>();
+        for (Integer lnbHandle : currentOwnerProfile.getInUseLnbHandles()) {
+            // link lnb handle to the new profile
+            newOwnerProfile.useLnb(lnbHandle);
+
+            // set new owner Id
+            LnbResource lnb = getLnbResource(lnbHandle);
+            lnb.setOwner(newOwnerId);
+
+            inUseLnbHandles.add(lnbHandle);
+        }
+
+        // unlink lnb handles from the original owner
+        for (Integer lnbHandle : inUseLnbHandles) {
+            currentOwnerProfile.releaseLnb(lnbHandle);
+        }
+
+        return true;
+    }
+
+    @VisibleForTesting
+    protected boolean transferOwnerInternal(int resourceType, int currentOwnerId, int newOwnerId) {
+        switch (resourceType) {
+            case TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND:
+                return transferFeOwner(currentOwnerId, newOwnerId);
+            case TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND_CICAM:
+                return transferFeCiCamOwner(currentOwnerId, newOwnerId);
+            case TunerResourceManager.TUNER_RESOURCE_TYPE_LNB:
+                return transferLnbOwner(currentOwnerId, newOwnerId);
+            default:
+                Slog.e(TAG, "transferOwnerInternal. unsupported resourceType: " + resourceType);
+                return false;
+        }
+    }
+
     @VisibleForTesting
     protected boolean requestLnbInternal(TunerLnbRequest request, int[] lnbHandle) {
         if (DEBUG) {
@@ -1127,7 +1276,8 @@ public class TunerResourceManagerService extends SystemService implements IBinde
             ClientProfile ownerClient = getClientProfile(fe.getOwnerClientId());
             if (ownerClient != null) {
                 for (int shareOwnerId : ownerClient.getShareFeClientIds()) {
-                    clearFrontendAndClientMapping(getClientProfile(shareOwnerId));
+                    reclaimResource(shareOwnerId,
+                            TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND);
                 }
             }
         }
@@ -1194,6 +1344,187 @@ public class TunerResourceManagerService extends SystemService implements IBinde
         return true;
     }
 
+    // Return value is guaranteed to be positive
+    private long getElapsedTime(long begin) {
+        long now = SystemClock.uptimeMillis();
+        long elapsed;
+        if (now >= begin) {
+            elapsed = now - begin;
+        } else {
+            elapsed = Long.MAX_VALUE - begin + now;
+            if (elapsed < 0) {
+                elapsed = Long.MAX_VALUE;
+            }
+        }
+        return elapsed;
+    }
+
+    private boolean lockForTunerApiLock(int clientId, long timeoutMS, String callerFunction) {
+        try {
+            if (mLockForTRMSLock.tryLock(timeoutMS, TimeUnit.MILLISECONDS)) {
+                return true;
+            } else {
+                Slog.e(TAG, "FAILED to lock mLockForTRMSLock in " + callerFunction
+                        + ", clientId:" + clientId + ", timeoutMS:" + timeoutMS
+                        + ", mTunerApiLockHolder:" + mTunerApiLockHolder);
+                return false;
+            }
+        } catch (InterruptedException ie) {
+            Slog.e(TAG, "exception thrown in " + callerFunction + ":" + ie);
+            if (mLockForTRMSLock.isHeldByCurrentThread()) {
+                mLockForTRMSLock.unlock();
+            }
+            return false;
+        }
+    }
+
+    private boolean acquireLockInternal(int clientId, long clientThreadId, long timeoutMS) {
+        long begin = SystemClock.uptimeMillis();
+
+        // Grab lock
+        if (!lockForTunerApiLock(clientId, timeoutMS, "acquireLockInternal()")) {
+            return false;
+        }
+
+        try {
+            boolean available = mTunerApiLockHolder == INVALID_CLIENT_ID;
+            boolean nestedSelf = (clientId == mTunerApiLockHolder)
+                    && (clientThreadId == mTunerApiLockHolderThreadId);
+            boolean recovery = false;
+
+            // Allow same thread to grab the lock multiple times
+            while (!available && !nestedSelf) {
+                // calculate how much time is left before timeout
+                long leftOverMS = timeoutMS - getElapsedTime(begin);
+                if (leftOverMS <= 0) {
+                    Slog.e(TAG, "FAILED:acquireLockInternal(" + clientId + ", " + clientThreadId
+                            + ", " + timeoutMS + ") - timed out, but will grant the lock to "
+                            + "the callee by stealing it from the current holder:"
+                            + mTunerApiLockHolder + "(" + mTunerApiLockHolderThreadId + "), "
+                            + "who likely failed to call releaseLock(), "
+                            + "to prevent this from becoming an unrecoverable error");
+                    // This should not normally happen, but there sometimes are cases where
+                    // in-flight tuner API execution gets scheduled even after binderDied(),
+                    // which can leave the in-flight execution dissappear/stopped in between
+                    // acquireLock and releaseLock
+                    recovery = true;
+                    break;
+                }
+
+                // Cond wait for left over time
+                mTunerApiLockReleasedCV.await(leftOverMS, TimeUnit.MILLISECONDS);
+
+                // Check the availability for "spurious wakeup"
+                // The case that was confirmed is that someone else can acquire this in between
+                // signal() and wakup from the above await()
+                available = mTunerApiLockHolder == INVALID_CLIENT_ID;
+
+                if (!available) {
+                    Slog.w(TAG, "acquireLockInternal(" + clientId + ", " + clientThreadId + ", "
+                            + timeoutMS + ") - woken up from cond wait, but " + mTunerApiLockHolder
+                            + "(" + mTunerApiLockHolderThreadId + ") is already holding the lock. "
+                            + "Going to wait again if timeout hasn't reached yet");
+                }
+            }
+
+            // Will always grant unless exception is thrown (or lock is already held)
+            if (available || recovery) {
+                if (DEBUG) {
+                    Slog.d(TAG, "SUCCESS:acquireLockInternal(" + clientId + ", " + clientThreadId
+                            + ", " + timeoutMS + ")");
+                }
+
+                if (mTunerApiLockNestedCount != 0) {
+                    Slog.w(TAG, "Something is wrong as nestedCount(" + mTunerApiLockNestedCount
+                            + ") is not zero. Will overriding it to 1 anyways");
+                }
+
+                // set the caller to be the holder
+                mTunerApiLockHolder = clientId;
+                mTunerApiLockHolderThreadId = clientThreadId;
+                mTunerApiLockNestedCount = 1;
+            } else if (nestedSelf) {
+                // Increment the nested count so releaseLockInternal won't signal prematuredly
+                mTunerApiLockNestedCount++;
+                if (DEBUG) {
+                    Slog.d(TAG, "acquireLockInternal(" + clientId + ", " + clientThreadId
+                            + ", " + timeoutMS + ") - nested count incremented to "
+                            + mTunerApiLockNestedCount);
+                }
+            } else {
+                Slog.e(TAG, "acquireLockInternal(" + clientId + ", " + clientThreadId
+                        + ", " + timeoutMS + ") - should not reach here");
+            }
+            // return true in "recovery" so callee knows that the deadlock is possible
+            // only when the return value is false
+            return (available || nestedSelf || recovery);
+        } catch (InterruptedException ie) {
+            Slog.e(TAG, "exception thrown in acquireLockInternal(" + clientId + ", "
+                    + clientThreadId + ", " + timeoutMS + "):" + ie);
+            return false;
+        } finally {
+            if (mLockForTRMSLock.isHeldByCurrentThread()) {
+                mLockForTRMSLock.unlock();
+            }
+        }
+    }
+
+    private boolean releaseLockInternal(int clientId, long timeoutMS,
+            boolean ignoreNestedCount, boolean suppressError) {
+        // Grab lock first
+        if (!lockForTunerApiLock(clientId, timeoutMS, "releaseLockInternal()")) {
+            return false;
+        }
+
+        try {
+            if (mTunerApiLockHolder == clientId) {
+                // Should always reach here unless called from binderDied()
+                mTunerApiLockNestedCount--;
+                if (ignoreNestedCount || mTunerApiLockNestedCount <= 0) {
+                    if (DEBUG) {
+                        Slog.d(TAG, "SUCCESS:releaseLockInternal(" + clientId + ", " + timeoutMS
+                                + ", " + ignoreNestedCount + ", " + suppressError
+                                + ") - signaling!");
+                    }
+                    // Reset the current holder and signal
+                    mTunerApiLockHolder = INVALID_CLIENT_ID;
+                    mTunerApiLockHolderThreadId = INVALID_THREAD_ID;
+                    mTunerApiLockNestedCount = 0;
+                    mTunerApiLockReleasedCV.signal();
+                } else {
+                    if (DEBUG) {
+                        Slog.d(TAG, "releaseLockInternal(" + clientId + ", " + timeoutMS
+                                + ", " + ignoreNestedCount + ", " + suppressError
+                                + ") - NOT signaling because nested count is not zero ("
+                                + mTunerApiLockNestedCount + ")");
+                    }
+                }
+                return true;
+            } else if (mTunerApiLockHolder == INVALID_CLIENT_ID) {
+                if (!suppressError) {
+                    Slog.w(TAG, "releaseLockInternal(" + clientId + ", " + timeoutMS
+                            + ") - called while there is no current holder");
+                }
+                // No need to do anything.
+                // Shouldn't reach here unless called from binderDied()
+                return false;
+            } else {
+                if (!suppressError) {
+                    Slog.e(TAG, "releaseLockInternal(" + clientId + ", " + timeoutMS
+                            + ") - called while someone else:" + mTunerApiLockHolder
+                            + "is the current holder");
+                }
+                // Cannot reset the holder Id because it reaches here when called
+                // from binderDied()
+                return false;
+            }
+        } finally {
+            if (mLockForTRMSLock.isHeldByCurrentThread()) {
+                mLockForTRMSLock.unlock();
+            }
+        }
+    }
+
     @VisibleForTesting
     protected class ResourcesReclaimListenerRecord implements IBinder.DeathRecipient {
         private final IResourcesReclaimListener mListener;
@@ -1206,10 +1537,15 @@ public class TunerResourceManagerService extends SystemService implements IBinde
 
         @Override
         public void binderDied() {
-            synchronized (mLock) {
-                if (checkClientExists(mClientId)) {
-                    removeClientProfile(mClientId);
+            try {
+                synchronized (mLock) {
+                    if (checkClientExists(mClientId)) {
+                        removeClientProfile(mClientId);
+                    }
                 }
+            } finally {
+                // reset the tuner API lock
+                releaseLockInternal(mClientId, TRMS_LOCK_TIMEOUT, true, true);
             }
         }
 
@@ -1246,6 +1582,13 @@ public class TunerResourceManagerService extends SystemService implements IBinde
     @VisibleForTesting
     protected boolean reclaimResource(int reclaimingClientId,
             @TunerResourceManager.TunerResourceType int resourceType) {
+
+        // Allowing this because:
+        // 1) serialization of resource reclaim is required in the current design
+        // 2) the outgoing transaction is handled by the system app (with
+        //    android.Manifest.permission.TUNER_RESOURCE_ACCESS), which goes through full
+        //    Google certification
+        Binder.allowBlockingForCurrentThread();
 
         // Reclaim all the resources of the share owners of the frontend that is used by the current
         // resource reclaimed client.

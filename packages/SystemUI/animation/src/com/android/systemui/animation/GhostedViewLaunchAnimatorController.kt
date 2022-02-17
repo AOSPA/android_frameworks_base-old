@@ -53,8 +53,12 @@ open class GhostedViewLaunchAnimatorController(
     private val ghostedView: View,
 
     /** The [InteractionJankMonitor.CujType] associated to this animation. */
-    private val cujType: Int? = null
+    private val cujType: Int? = null,
+    private var interactionJankMonitor: InteractionJankMonitor? = null
 ) : ActivityLaunchAnimator.Controller {
+
+    constructor(view: View, type: Int) : this(view, type, null)
+
     /** The container to which we will add the ghost view and expanding background. */
     override var launchContainer = ghostedView.rootView as ViewGroup
     private val launchContainerOverlay: ViewGroupOverlay
@@ -170,7 +174,7 @@ open class GhostedViewLaunchAnimatorController(
         val matrix = ghostView?.animationMatrix ?: Matrix.IDENTITY_MATRIX
         matrix.getValues(initialGhostViewMatrixValues)
 
-        cujType?.let { InteractionJankMonitor.getInstance().begin(ghostedView, it) }
+        cujType?.let { interactionJankMonitor?.begin(ghostedView, it) }
     }
 
     override fun onLaunchAnimationProgress(
@@ -186,7 +190,11 @@ open class GhostedViewLaunchAnimatorController(
                 // Making the ghost view invisible will make the ghosted view visible, so order is
                 // important here.
                 ghostView.visibility = View.INVISIBLE
-                ghostedView.visibility = View.INVISIBLE
+
+                // Make the ghosted view invisible again. We use the transition visibility like
+                // GhostView does so that we don't mess up with the accessibility tree (see
+                // b/204944038#comment17).
+                ghostedView.setTransitionVisibility(View.INVISIBLE)
                 backgroundView.visibility = View.INVISIBLE
             }
             return
@@ -251,12 +259,16 @@ open class GhostedViewLaunchAnimatorController(
             return
         }
 
-        cujType?.let { InteractionJankMonitor.getInstance().end(it) }
+        cujType?.let { interactionJankMonitor?.end(it) }
 
         backgroundDrawable?.wrapped?.alpha = startBackgroundAlpha
 
         GhostView.removeGhost(ghostedView)
         launchContainerOverlay.remove(backgroundView)
+
+        // Make sure that the view is considered VISIBLE by accessibility by first making it
+        // INVISIBLE then VISIBLE (see b/204944038#comment17 for more info).
+        ghostedView.visibility = View.INVISIBLE
         ghostedView.visibility = View.VISIBLE
         ghostedView.invalidate()
     }

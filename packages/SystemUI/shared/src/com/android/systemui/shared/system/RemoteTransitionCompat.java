@@ -149,7 +149,7 @@ public class RemoteTransitionCompat implements Parcelable {
                 }
                 // Also make all the wallpapers opaque since we want the visible from the start
                 for (int i = wallpapers.length - 1; i >= 0; --i) {
-                    t.setAlpha(wallpapers[i].leash.mSurfaceControl, 1);
+                    t.setAlpha(wallpapers[i].leash, 1);
                 }
                 t.apply();
                 mRecentsSession.setup(controller, info, finishedCallback, pausingTasks, pipTask,
@@ -246,10 +246,6 @@ public class RemoteTransitionCompat implements Parcelable {
                 if (mPausingTasks.contains(openingTasks.get(i).getContainer())) {
                     ++pauseMatches;
                 }
-                if (openingTasks.get(i).getContainer().equals(mPausingTasks.get(i))) {
-                    // In this case, we are "returning" to an already running app, so just consume
-                    // the merge and do nothing.
-                }
             }
             if (pauseMatches > 0) {
                 if (pauseMatches != mPausingTasks.size()) {
@@ -270,14 +266,14 @@ public class RemoteTransitionCompat implements Parcelable {
                 mOpeningLeashes.add(openingTasks.get(i).getLeash());
                 // We are receiving new opening tasks, so convert to onTasksAppeared.
                 final RemoteAnimationTargetCompat target = new RemoteAnimationTargetCompat(
-                        openingTasks.get(i), layer, mInfo, t);
-                mLeashMap.put(mOpeningLeashes.get(i), target.leash.mSurfaceControl);
-                t.reparent(target.leash.mSurfaceControl, mInfo.getRootLeash());
-                t.setLayer(target.leash.mSurfaceControl, layer);
-                t.hide(target.leash.mSurfaceControl);
-                t.apply();
+                        openingTasks.get(i), layer, info, t);
+                mLeashMap.put(mOpeningLeashes.get(i), target.leash);
+                t.reparent(target.leash, mInfo.getRootLeash());
+                t.setLayer(target.leash, layer);
+                t.hide(target.leash);
                 targets[i] = target;
             }
+            t.apply();
             recents.onTasksAppeared(targets);
             return true;
         }
@@ -321,7 +317,7 @@ public class RemoteTransitionCompat implements Parcelable {
                     // re-showing it's task).
                     final WindowContainerTransaction wct = new WindowContainerTransaction();
                     final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-                    for (int i = mPausingTasks.size() - 1; i >= 0; ++i) {
+                    for (int i = mPausingTasks.size() - 1; i >= 0; --i) {
                         // reverse order so that index 0 ends up on top
                         wct.reorder(mPausingTasks.get(i), true /* onTop */);
                         t.show(mInfo.getChange(mPausingTasks.get(i)).getLeash());

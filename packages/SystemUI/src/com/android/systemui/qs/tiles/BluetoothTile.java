@@ -243,15 +243,6 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
     }
 
     @Override
-    protected String composeChangeAnnouncement() {
-        if (mState.value) {
-            return mContext.getString(R.string.accessibility_quick_settings_bluetooth_changed_on);
-        } else {
-            return mContext.getString(R.string.accessibility_quick_settings_bluetooth_changed_off);
-        }
-    }
-
-    @Override
     public boolean isAvailable() {
         return mController.isBluetoothSupported();
     }
@@ -329,6 +320,7 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
         // We probably won't ever have space in the UI for more than 20 devices, so don't
         // get info for them.
         private static final int MAX_DEVICES = 20;
+        @Nullable
         private QSDetailItems mItems;
 
         @Override
@@ -394,10 +386,11 @@ public class BluetoothTile extends QSTileImpl<BooleanState> {
                 int count = 0;
                 for (CachedBluetoothDevice device : devices) {
                     if (mController.getBondState(device) == BluetoothDevice.BOND_NONE) continue;
-                    final Item item = new Item();
-                    item.iconResId = com.android.internal.R.drawable.ic_qs_bluetooth;
-                    item.line1 = device.getName();
-                    item.tag = device;
+                    final Item item =
+                            new Item(
+                                    com.android.internal.R.drawable.ic_qs_bluetooth,
+                                    device.getName(),
+                                    device);
                     int state = device.getMaxConnectionState();
                     if (state == BluetoothProfile.STATE_CONNECTED) {
                         item.iconResId = R.drawable.ic_bluetooth_connected;

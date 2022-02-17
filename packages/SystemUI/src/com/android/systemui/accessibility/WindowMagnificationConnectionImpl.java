@@ -49,11 +49,13 @@ class WindowMagnificationConnectionImpl extends IWindowMagnificationConnection.S
     }
 
     @Override
-    public void enableWindowMagnification(int displayId, float scale, float centerX,
-            float centerY, IRemoteMagnificationAnimationCallback callback) {
+    public void enableWindowMagnification(int displayId, float scale, float centerX, float centerY,
+            float magnificationFrameOffsetRatioX, float magnificationFrameOffsetRatioY,
+            IRemoteMagnificationAnimationCallback callback) {
         mHandler.post(
                 () -> mWindowMagnification.enableWindowMagnification(displayId, scale, centerX,
-                        centerY, callback));
+                        centerY, magnificationFrameOffsetRatioX,
+                        magnificationFrameOffsetRatioY, callback));
     }
 
     @Override
@@ -137,6 +139,16 @@ class WindowMagnificationConnectionImpl extends IWindowMagnificationConnection.S
                 mConnectionCallback.onChangeMagnificationMode(displayId, mode);
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to inform changing magnification mode", e);
+            }
+        }
+    }
+
+    void onDrag(int displayId) {
+        if (mConnectionCallback != null) {
+            try {
+                mConnectionCallback.onDrag(displayId);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to inform taking control by a user", e);
             }
         }
     }

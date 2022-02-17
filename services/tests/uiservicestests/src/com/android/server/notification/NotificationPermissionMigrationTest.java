@@ -27,10 +27,6 @@ import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.UserHandle.USER_SYSTEM;
 
-import static com.android.server.notification.NotificationManagerService.ACTION_DISABLE_NAS;
-import static com.android.server.notification.NotificationManagerService.ACTION_ENABLE_NAS;
-import static com.android.server.notification.NotificationManagerService.ACTION_LEARNMORE_NAS;
-
 import static com.google.common.truth.Truth.assertThat;
 
 import static junit.framework.Assert.assertEquals;
@@ -44,6 +40,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doNothing;
@@ -89,6 +86,7 @@ import android.media.AudioManager;
 import android.media.session.MediaSession;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Process;
@@ -250,7 +248,6 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
     @Mock
     MultiRateLimiter mToastRateLimiter;
     BroadcastReceiver mPackageIntentReceiver;
-    BroadcastReceiver mNASIntentReceiver;
     NotificationRecordLoggerFake mNotificationRecordLogger = new NotificationRecordLoggerFake();
     private InstanceIdSequence mNotificationInstanceIdSequence = new InstanceIdSequenceFake(
             1 << 30);
@@ -306,7 +303,7 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         // MockPackageManager - default returns ApplicationInfo with matching calling UID
         mContext.setMockPackageManager(mPackageManagerClient);
 
-        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), anyInt()))
+        when(mPackageManager.getApplicationInfo(anyString(), anyLong(), anyInt()))
                 .thenAnswer((Answer<ApplicationInfo>) invocation -> {
                     Object[] args = invocation.getArguments();
                     return getApplicationInfo((String) args[0], mUid);
@@ -405,14 +402,9 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
                     && filter.hasAction(Intent.ACTION_PACKAGES_UNSUSPENDED)
                     && filter.hasAction(Intent.ACTION_PACKAGES_SUSPENDED)) {
                 mPackageIntentReceiver = broadcastReceivers.get(i);
-            } else if (filter.hasAction(ACTION_ENABLE_NAS)
-                    && filter.hasAction(ACTION_DISABLE_NAS)
-                    && filter.hasAction(ACTION_LEARNMORE_NAS)) {
-                mNASIntentReceiver = broadcastReceivers.get(i);
             }
         }
         assertNotNull("package intent receiver should exist", mPackageIntentReceiver);
-        assertNotNull("nas intent receiver should exist", mNASIntentReceiver);
 
         // Pretend the shortcut exists
         List<ShortcutInfo> shortcutInfos = new ArrayList<>();
@@ -544,6 +536,12 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testAreNotificationsEnabledForPackage_viaInternalService() {
+        mInternalService.areNotificationsEnabledForPackage(mContext.getPackageName(), mUid);
+        verify(mPermissionHelper).hasPermission(mUid);
+    }
+
+    @Test
     public void testGetPackageImportance() throws Exception {
         when(mPermissionHelper.hasPermission(mUid)).thenReturn(true);
         assertThat(mBinderService.getPackageImportance(mContext.getPackageName()))
@@ -603,6 +601,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         when(mAppOpsManager.checkOpNoThrow(anyInt(), eq(mUid), eq(PKG))).thenReturn(MODE_IGNORED);
 
         mService.mAppOpsCallback.opChanged(0, mUid, PKG);
+        Thread.sleep(500);
+        waitForIdle();
 
         ArgumentCaptor<Intent> captor = ArgumentCaptor.forClass(Intent.class);
         verify(mContext, times(1)).sendBroadcastAsUser(captor.capture(), any(), eq(null));
@@ -618,6 +618,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         when(mAppOpsManager.checkOpNoThrow(anyInt(), eq(mUid), eq(PKG))).thenReturn(MODE_ALLOWED);
 
         mService.mAppOpsCallback.opChanged(0, mUid, PKG);
+        Thread.sleep(500);
+        waitForIdle();
 
         ArgumentCaptor<Intent> captor = ArgumentCaptor.forClass(Intent.class);
         verify(mContext, times(1)).sendBroadcastAsUser(captor.capture(), any(), eq(null));
@@ -746,6 +748,18 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         assertThat(mService.checkDisqualifyingFeatures(r.getUserId(), r.getUid(),
                 r.getSbn().getId(), r.getSbn().getTag(), r, false)).isFalse();
 
+        // using the style, but incorrect type in session - blocked
+        nb.setStyle(new Notification.MediaStyle());
+        Bundle extras = new Bundle();
+        extras.putParcelable(Notification.EXTRA_MEDIA_SESSION, new Intent());
+        nb.addExtras(extras);
+        sbn = new StatusBarNotification(PKG, PKG, 8, "tag", mUid, 0,
+                nb.build(), UserHandle.getUserHandleForUid(mUid), null, 0);
+        r = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
+
+        assertThat(mService.checkDisqualifyingFeatures(r.getUserId(), r.getUid(),
+                r.getSbn().getId(), r.getSbn().getTag(), r, false)).isFalse();
+
         // style + media session - bypasses block
         nb.setStyle(new Notification.MediaStyle().setMediaSession(mock(MediaSession.Token.class)));
         sbn = new StatusBarNotification(PKG, PKG, 8, "tag", mUid, 0,
@@ -826,21 +840,25 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         when(mUm.getUsers()).thenReturn(userInfos);
 
         // construct the permissions for each of them
-        ArrayMap<Pair<Integer, String>, Boolean> permissions0 = new ArrayMap<>(),
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> permissions0 = new ArrayMap<>(),
                 permissions1 = new ArrayMap<>();
-        permissions0.put(new Pair<>(10, "package1"), true);
-        permissions0.put(new Pair<>(20, "package2"), false);
-        permissions1.put(new Pair<>(11, "package1"), false);
-        permissions1.put(new Pair<>(21, "package2"), true);
+        permissions0.put(new Pair<>(10, "package1"), new Pair<>(true, false));
+        permissions0.put(new Pair<>(20, "package2"), new Pair<>(false, true));
+        permissions1.put(new Pair<>(11, "package1"), new Pair<>(false, false));
+        permissions1.put(new Pair<>(21, "package2"), new Pair<>(true, true));
         when(mPermissionHelper.getNotificationPermissionValues(0)).thenReturn(permissions0);
         when(mPermissionHelper.getNotificationPermissionValues(1)).thenReturn(permissions1);
         when(mPermissionHelper.getNotificationPermissionValues(2)).thenReturn(new ArrayMap<>());
 
-        ArrayMap<Pair<Integer, String>, Boolean> combinedPermissions =
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> combinedPermissions =
                 mService.getAllUsersNotificationPermissions();
-        assertTrue(combinedPermissions.get(new Pair<>(10, "package1")));
-        assertFalse(combinedPermissions.get(new Pair<>(20, "package2")));
-        assertFalse(combinedPermissions.get(new Pair<>(11, "package1")));
-        assertTrue(combinedPermissions.get(new Pair<>(21, "package2")));
+        assertTrue(combinedPermissions.get(new Pair<>(10, "package1")).first);
+        assertFalse(combinedPermissions.get(new Pair<>(10, "package1")).second);
+        assertFalse(combinedPermissions.get(new Pair<>(20, "package2")).first);
+        assertTrue(combinedPermissions.get(new Pair<>(20, "package2")).second);
+        assertFalse(combinedPermissions.get(new Pair<>(11, "package1")).first);
+        assertFalse(combinedPermissions.get(new Pair<>(11, "package1")).second);
+        assertTrue(combinedPermissions.get(new Pair<>(21, "package2")).first);
+        assertTrue(combinedPermissions.get(new Pair<>(21, "package2")).second);
     }
 }

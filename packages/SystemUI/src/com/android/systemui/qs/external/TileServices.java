@@ -35,6 +35,8 @@ import android.service.quicksettings.TileService;
 import android.util.ArrayMap;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
+
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.systemui.Dependency;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -46,6 +48,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Objects;
 
 /**
  * Runs the day-to-day operations of which tiles should be bound and when.
@@ -178,6 +181,13 @@ public class TileServices extends IQSService.Stub {
                 return;
             }
             TileServiceManager service = mServices.get(customTile);
+            if (service == null) {
+                Log.e(
+                        TAG,
+                        "No TileServiceManager found in requestListening for tile "
+                                + customTile.getTileSpec());
+                return;
+            }
             if (!service.isActiveTile()) {
                 return;
             }
@@ -236,7 +246,7 @@ public class TileServices extends IQSService.Stub {
             verifyCaller(customTile);
             customTile.onDialogShown();
             mHost.forceCollapsePanels();
-            mServices.get(customTile).setShowingDialog(true);
+            Objects.requireNonNull(mServices.get(customTile)).setShowingDialog(true);
         }
     }
 
@@ -245,7 +255,7 @@ public class TileServices extends IQSService.Stub {
         CustomTile customTile = getTileForToken(token);
         if (customTile != null) {
             verifyCaller(customTile);
-            mServices.get(customTile).setShowingDialog(false);
+            Objects.requireNonNull(mServices.get(customTile)).setShowingDialog(false);
             customTile.onDialogHidden();
         }
     }
@@ -289,6 +299,7 @@ public class TileServices extends IQSService.Stub {
         }
     }
 
+    @Nullable
     @Override
     public Tile getTile(IBinder token) {
         CustomTile customTile = getTileForToken(token);
@@ -322,12 +333,14 @@ public class TileServices extends IQSService.Stub {
         return keyguardStateController.isMethodSecure() && keyguardStateController.isShowing();
     }
 
+    @Nullable
     private CustomTile getTileForToken(IBinder token) {
         synchronized (mServices) {
             return mTokenMap.get(token);
         }
     }
 
+    @Nullable
     private CustomTile getTileForComponent(ComponentName component) {
         synchronized (mServices) {
             return mTiles.get(component);

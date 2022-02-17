@@ -32,7 +32,6 @@ import android.util.Log;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
 import android.view.ViewGroup;
-import android.view.WindowManager.LayoutParams;
 import android.widget.Button;
 
 import androidx.annotation.Nullable;
@@ -41,6 +40,7 @@ import com.android.internal.app.MediaRouteDialogPresenter;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.R;
+import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
@@ -77,8 +77,8 @@ public class CastTile extends QSTileImpl<BooleanState> {
     private final CastDetailAdapter mDetailAdapter;
     private final KeyguardStateController mKeyguard;
     private final NetworkController mNetworkController;
+    private final DialogLaunchAnimator mDialogLaunchAnimator;
     private final Callback mCallback = new Callback();
-    private Dialog mDialog;
     private boolean mWifiConnected;
     private boolean mHotspotConnected;
     private static final String WFD_ENABLE = "persist.debug.wfd.enable";
@@ -96,7 +96,8 @@ public class CastTile extends QSTileImpl<BooleanState> {
             CastController castController,
             KeyguardStateController keyguardStateController,
             NetworkController networkController,
-            HotspotController hotspotController
+            HotspotController hotspotController,
+            DialogLaunchAnimator dialogLaunchAnimator
     ) {
         super(host, backgroundLooper, mainHandler, falsingManager, metricsLogger,
                 statusBarStateController, activityStarter, qsLogger);
@@ -104,6 +105,7 @@ public class CastTile extends QSTileImpl<BooleanState> {
         mDetailAdapter = new CastDetailAdapter();
         mKeyguard = keyguardStateController;
         mNetworkController = networkController;
+        mDialogLaunchAnimator = dialogLaunchAnimator;
         mController.observe(this, mCallback);
         mKeyguard.observe(this, mCallback);
         mNetworkController.observe(this, mSignalCallback);
@@ -155,9 +157,15 @@ public class CastTile extends QSTileImpl<BooleanState> {
 
         List<CastDevice> activeDevices = getActiveDevices();
         if (willPopDetail()) {
-            mActivityStarter.postQSRunnableDismissingKeyguard(() -> {
-                showDetail(true);
-            });
+            if (!mKeyguard.isShowing()) {
+                showDetail(view);
+            } else {
+                mActivityStarter.postQSRunnableDismissingKeyguard(() -> {
+                    // Dismissing the keyguard will collapse the shade, so we don't animate from the
+                    // view here as it would not look good.
+                    showDetail(null /* view */);
+                });
+            }
         } else {
             mController.stopCasting(activeDevices.get(0));
         }
@@ -186,19 +194,41 @@ public class CastTile extends QSTileImpl<BooleanState> {
 
     @Override
     public void showDetail(boolean show) {
+        showDetail(null /* view */);
+    }
+
+    private static class DialogHolder {
+        private Dialog mDialog;
+
+        private void init(Dialog dialog) {
+            mDialog = dialog;
+        }
+    }
+
+    private void showDetail(@Nullable View view) {
         mUiHandler.post(() -> {
-            mDialog = MediaRouteDialogPresenter.createDialog(mContext, ROUTE_TYPE_REMOTE_DISPLAY,
+            final DialogHolder holder = new DialogHolder();
+            final Dialog dialog = MediaRouteDialogPresenter.createDialog(
+                    mContext,
+                    ROUTE_TYPE_REMOTE_DISPLAY,
                     v -> {
-                        mDialog.dismiss();
+                        mDialogLaunchAnimator.disableAllCurrentDialogsExitAnimations();
+                        holder.mDialog.dismiss();
                         mActivityStarter
                                 .postStartActivityDismissingKeyguard(getLongClickIntent(), 0);
                     });
-            mDialog.getWindow().setType(LayoutParams.TYPE_KEYGUARD_DIALOG);
-            SystemUIDialog.setShowForAllUsers(mDialog, true);
-            SystemUIDialog.registerDismissListener(mDialog);
-            SystemUIDialog.setWindowOnTop(mDialog);
-            mUiHandler.post(() -> mDialog.show());
-            mHost.collapsePanels();
+            holder.init(dialog);
+            SystemUIDialog.setShowForAllUsers(dialog, true);
+            SystemUIDialog.registerDismissListener(dialog);
+            SystemUIDialog.setWindowOnTop(dialog);
+
+            mUiHandler.post(() -> {
+                if (view != null) {
+                    mDialogLaunchAnimator.showFromView(dialog, view);
+                } else {
+                    dialog.show();
+                }
+            });
         });
     }
 
@@ -257,15 +287,6 @@ public class CastTile extends QSTileImpl<BooleanState> {
     @Override
     public int getMetricsCategory() {
         return MetricsEvent.QS_CAST;
-    }
-
-    @Override
-    protected String composeChangeAnnouncement() {
-        if (!mState.value) {
-            // We only announce when it's turned off to avoid vocal overflow.
-            return mContext.getString(R.string.accessibility_casting_turned_off);
-        }
-        return null;
     }
 
     private String getDeviceName(CastDevice device) {
@@ -391,11 +412,12 @@ public class CastTile extends QSTileImpl<BooleanState> {
                 // if we are connected, simply show that device
                 for (CastDevice device : devices) {
                     if (device.state == CastDevice.STATE_CONNECTED) {
-                        final Item item = new Item();
-                        item.iconResId = R.drawable.ic_cast_connected;
-                        item.line1 = getDeviceName(device);
+                        final Item item =
+                                new Item(
+                                        R.drawable.ic_cast_connected,
+                                        getDeviceName(device),
+                                        device);
                         item.line2 = mContext.getString(R.string.quick_settings_connected);
-                        item.tag = device;
                         item.canDisconnect = true;
                         items = new Item[] { item };
                         break;
@@ -411,13 +433,11 @@ public class CastTile extends QSTileImpl<BooleanState> {
                     for (String id : mVisibleOrder.keySet()) {
                         final CastDevice device = mVisibleOrder.get(id);
                         if (!devices.contains(device)) continue;
-                        final Item item = new Item();
-                        item.iconResId = R.drawable.ic_cast;
-                        item.line1 = getDeviceName(device);
+                        final Item item =
+                                new Item(R.drawable.ic_cast, getDeviceName(device), device);
                         if (device.state == CastDevice.STATE_CONNECTING) {
                             item.line2 = mContext.getString(R.string.quick_settings_connecting);
                         }
-                        item.tag = device;
                         items[i++] = item;
                     }
                 }

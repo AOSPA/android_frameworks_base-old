@@ -33,11 +33,11 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.SigningDetails;
 import android.content.pm.UserInfo;
-import android.content.pm.parsing.component.ParsedComponent;
-import android.content.pm.parsing.component.ParsedInstrumentation;
-import android.content.pm.parsing.component.ParsedIntentInfo;
-import android.content.pm.parsing.component.ParsedMainComponent;
-import android.content.pm.parsing.component.ParsedProvider;
+import com.android.server.pm.pkg.component.ParsedComponent;
+import com.android.server.pm.pkg.component.ParsedInstrumentation;
+import com.android.server.pm.pkg.component.ParsedIntentInfo;
+import com.android.server.pm.pkg.component.ParsedMainComponent;
+import com.android.server.pm.pkg.component.ParsedProvider;
 import android.os.Binder;
 import android.os.Process;
 import android.os.Trace;
@@ -500,16 +500,10 @@ public class AppsFilter implements Watchable, Snappable {
                 forcedQueryablePackageNames[i] = forcedQueryablePackageNames[i].intern();
             }
         }
-        final StateProvider stateProvider = new StateProvider() {
-            // TODO: This lock and its handling should be owned by AppsFilter
-            private final Object mLock = new Object();
-
-            @Override
-            public void runWithState(CurrentStateCallback command) {
-                synchronized (mLock) {
-                    command.currentState(pms.getPackageStates(),
-                            injector.getUserManagerInternal().getUserInfos());
-                }
+        final StateProvider stateProvider = command -> {
+            synchronized (injector.getLock()) {
+                command.currentState(injector.getSettings().getPackagesLocked().untrackedStorage(),
+                        injector.getUserManagerInternal().getUserInfos());
             }
         };
         AppsFilter appsFilter = new AppsFilter(stateProvider, featureConfig,

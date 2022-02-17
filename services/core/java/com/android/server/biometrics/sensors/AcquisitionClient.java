@@ -19,12 +19,12 @@ package com.android.server.biometrics.sensors;
 import android.annotation.NonNull;
 import android.content.Context;
 import android.hardware.biometrics.BiometricConstants;
-import android.media.AudioAttributes;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Slog;
@@ -38,11 +38,8 @@ public abstract class AcquisitionClient<T> extends HalClientMonitor<T> implement
 
     private static final String TAG = "Biometrics/AcquisitionClient";
 
-    private static final AudioAttributes VIBRATION_SONIFICATION_ATTRIBUTES =
-            new AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                    .build();
+    private static final VibrationAttributes HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES =
+            VibrationAttributes.createForUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK);
 
     private static final VibrationEffect SUCCESS_VIBRATION_EFFECT =
             VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
@@ -108,7 +105,8 @@ public abstract class AcquisitionClient<T> extends HalClientMonitor<T> implement
         // that do not handle lockout under the HAL. In these cases, ensure that the framework only
         // sends errors once per ClientMonitor.
         if (mShouldSendErrorToClient) {
-            logOnError(getContext(), errorCode, vendorCode, getTargetUserId());
+            getLogger().logOnError(getContext(), errorCode, vendorCode,
+                    isCryptoOperation(), getTargetUserId());
             try {
                 if (getListener() != null) {
                     mShouldSendErrorToClient = false;
@@ -166,7 +164,8 @@ public abstract class AcquisitionClient<T> extends HalClientMonitor<T> implement
 
     protected final void onAcquiredInternal(int acquiredInfo, int vendorCode,
             boolean shouldSend) {
-        super.logOnAcquired(getContext(), acquiredInfo, vendorCode, getTargetUserId());
+        getLogger().logOnAcquired(getContext(), acquiredInfo, vendorCode,
+                isCryptoOperation(), getTargetUserId());
         if (DEBUG) {
             Slog.v(TAG, "Acquired: " + acquiredInfo + " " + vendorCode
                     + ", shouldSend: " + shouldSend);
@@ -199,7 +198,7 @@ public abstract class AcquisitionClient<T> extends HalClientMonitor<T> implement
                     getContext().getOpPackageName(),
                     SUCCESS_VIBRATION_EFFECT,
                     getClass().getSimpleName() + "::success",
-                    VIBRATION_SONIFICATION_ATTRIBUTES);
+                    HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES);
         }
     }
 
@@ -210,7 +209,7 @@ public abstract class AcquisitionClient<T> extends HalClientMonitor<T> implement
                     getContext().getOpPackageName(),
                     ERROR_VIBRATION_EFFECT,
                     getClass().getSimpleName() + "::error",
-                    VIBRATION_SONIFICATION_ATTRIBUTES);
+                    HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES);
         }
     }
 }

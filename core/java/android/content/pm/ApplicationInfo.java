@@ -35,6 +35,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
+import android.util.ArrayMap;
 import android.util.Printer;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
@@ -411,7 +412,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
 
     /**
      * Value for {@link #flags}: {@code true} if the application may use cleartext network traffic
-     * (e.g., HTTP rather than HTTPS; WebSockets rather than WebSockets Secure; XMPP, IMAP, STMP
+     * (e.g., HTTP rather than HTTPS; WebSockets rather than WebSockets Secure; XMPP, IMAP, SMTP
      * without STARTTLS or TLS). If {@code false}, the app declares that it does not intend to use
      * cleartext network traffic, in which case platform components (e.g., HTTP stacks,
      * {@code DownloadManager}, {@code MediaPlayer}) will refuse app's requests to use cleartext
@@ -1163,6 +1164,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public int versionCode;
 
     /**
+     * The timestamp of when this ApplicationInfo was created.
+     * @hide
+     */
+    public long createTimestamp;
+
+    /**
      * The user-visible SDK version (ex. 26) of the framework against which the application claims
      * to have been compiled, or {@code 0} if not specified.
      * <p>
@@ -1542,6 +1549,20 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
 
     private int mHiddenApiPolicy = HIDDEN_API_ENFORCEMENT_DEFAULT;
 
+    /**
+     * A map from a process name to an (custom) application class name in this package, derived
+     * from the <processes> tag in the app's manifest. This map may not contain all the process
+     * names. Processses not in this map will use the default app class name,
+     * which is {@link #className}, or the default class {@link android.app.Application}.
+     */
+    @Nullable
+    private ArrayMap<String, String> mAppClassNamesByProcess;
+
+    /**
+     * Resource file providing the application's locales configuration.
+     */
+    private int localeConfigRes;
+
     public void dump(Printer pw, String prefix) {
         dump(pw, prefix, DUMP_FLAG_ALL);
     }
@@ -1549,8 +1570,14 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** @hide */
     public void dump(Printer pw, String prefix, int dumpFlags) {
         super.dumpFront(pw, prefix);
-        if ((dumpFlags & DUMP_FLAG_DETAILS) != 0 && className != null) {
-            pw.println(prefix + "className=" + className);
+        if ((dumpFlags & DUMP_FLAG_DETAILS) != 0) {
+            if (className != null) {
+                pw.println(prefix + "className=" + className);
+            }
+            for (int i = 0; i < ArrayUtils.size(mAppClassNamesByProcess); i++) {
+                pw.println(prefix + "  process=" + mAppClassNamesByProcess.keyAt(i)
+                        + " className=" + mAppClassNamesByProcess.valueAt(i));
+            }
         }
         if (permission != null) {
             pw.println(prefix + "permission=" + permission);
@@ -1653,7 +1680,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
                 pw.println(prefix + "requestRawExternalStorageAccess="
                         + requestRawExternalStorageAccess);
             }
+            if (localeConfigRes != 0) {
+                pw.println(prefix + "localeConfigRes=0x"
+                        + Integer.toHexString(localeConfigRes));
+            }
         }
+        pw.println(prefix + "createTimestamp=" + createTimestamp);
         super.dumpBack(pw, prefix);
     }
 
@@ -1811,6 +1843,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
 
     public ApplicationInfo() {
+        createTimestamp = System.currentTimeMillis();
     }
 
     public ApplicationInfo(ApplicationInfo orig) {
@@ -1884,6 +1917,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         memtagMode = orig.memtagMode;
         nativeHeapZeroInitialized = orig.nativeHeapZeroInitialized;
         requestRawExternalStorageAccess = orig.requestRawExternalStorageAccess;
+        localeConfigRes = orig.localeConfigRes;
+        createTimestamp = System.currentTimeMillis();
     }
 
     public String toString() {
@@ -1976,6 +2011,18 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(memtagMode);
         dest.writeInt(nativeHeapZeroInitialized);
         sForBoolean.parcel(requestRawExternalStorageAccess, dest, parcelableFlags);
+        dest.writeLong(createTimestamp);
+        if (mAppClassNamesByProcess == null) {
+            dest.writeInt(0);
+        } else {
+            final int size = mAppClassNamesByProcess.size();
+            dest.writeInt(size);
+            for (int i = 0; i < size; i++) {
+                dest.writeString(mAppClassNamesByProcess.keyAt(i));
+                dest.writeString(mAppClassNamesByProcess.valueAt(i));
+            }
+        }
+        dest.writeInt(localeConfigRes);
     }
 
     public static final @android.annotation.NonNull Parcelable.Creator<ApplicationInfo> CREATOR
@@ -2065,6 +2112,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         memtagMode = source.readInt();
         nativeHeapZeroInitialized = source.readInt();
         requestRawExternalStorageAccess = sForBoolean.unparcel(source);
+        createTimestamp = source.readLong();
+        final int allClassesSize = source.readInt();
+        if (allClassesSize > 0) {
+            mAppClassNamesByProcess = new ArrayMap<>(allClassesSize);
+            for (int i = 0; i < allClassesSize; i++) {
+                mAppClassNamesByProcess.put(source.readString(), source.readString());
+            }
+        }
+        localeConfigRes = source.readInt();
     }
 
     /**
@@ -2554,6 +2610,19 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
     /** {@hide} */ public void setOverrideRes(int overrideResolution) { overrideRes = overrideResolution; }
 
+    /**
+     * Replaces {@link #mAppClassNamesByProcess}. This takes over the ownership of the passed map.
+     * Do not modify the argument at the callsite.
+     * {@hide}
+     */
+    public void setAppClassNamesByProcess(@Nullable ArrayMap<String, String> value) {
+        if (ArrayUtils.size(value) == 0) {
+            mAppClassNamesByProcess = null;
+        } else {
+            mAppClassNamesByProcess = value;
+        }
+    }
+
     /** {@hide} */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public String getCodePath() { return scanSourceDir; }
@@ -2582,6 +2651,35 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     @NativeHeapZeroInitialized
     public int getNativeHeapZeroInitialized() {
         return nativeHeapZeroInitialized;
+    }
+
+    /**
+     * Return the application class name defined in the manifest. The class name set in the
+     * <processes> tag for this process, then return it. Otherwise it'll return the class
+     * name set in the <application> tag. If neither is set, it'll return null.
+     * @hide
+     */
+    @Nullable
+    public String getCustomApplicationClassNameForProcess(String processName) {
+        if (mAppClassNamesByProcess != null) {
+            String byProcess = mAppClassNamesByProcess.get(processName);
+            if (byProcess != null) {
+                return byProcess;
+            }
+        }
+        return className;
+    }
+
+    /** @hide */ public void setLocaleConfigRes(int value) { localeConfigRes = value; }
+
+    /**
+     * Return the resource id pointing to the resource file that provides the application's locales
+     * configuration.
+     *
+     * @hide
+     */
+    public int getLocaleConfigRes() {
+        return localeConfigRes;
     }
     /** {@hide} */ public int canOverrideRes() { return overrideRes; }
 }

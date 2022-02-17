@@ -88,7 +88,7 @@ open class QSTileViewImpl @JvmOverloads constructor(
     private val colorUnavailable = Utils.applyAlpha(UNAVAILABLE_ALPHA, colorInactive)
 
     private val colorLabelActive =
-            Utils.getColorAttrDefaultColor(context, android.R.attr.textColorPrimaryInverse)
+            Utils.getColorAttrDefaultColor(context, com.android.internal.R.attr.textColorOnAccent)
     private val colorLabelInactive =
             Utils.getColorAttrDefaultColor(context, android.R.attr.textColorPrimary)
     private val colorLabelUnavailable = Utils.applyAlpha(UNAVAILABLE_ALPHA, colorLabelInactive)
@@ -247,7 +247,10 @@ open class QSTileViewImpl @JvmOverloads constructor(
         } else {
             measuredHeight
         }
-        bottom = top + (actualHeight * squishinessFraction).toInt()
+        // Limit how much we affect the height, so we don't have rounding artifacts when the tile
+        // is too short.
+        val constrainedSquishiness = 0.1f + squishinessFraction * 0.9f
+        bottom = top + (actualHeight * constrainedSquishiness).toInt()
         scrollY = (actualHeight - height) / 2
     }
 
@@ -648,7 +651,10 @@ internal object SubtitleArrayMapping {
         "controls" to R.array.tile_states_controls,
         "wallet" to R.array.tile_states_wallet,
         "qr_code_scanner" to R.array.tile_states_qr_code_scanner,
-        "alarm" to R.array.tile_states_alarm
+        "alarm" to R.array.tile_states_alarm,
+        "onehanded" to R.array.tile_states_onehanded,
+        "fgsmanager" to R.array.tile_states_fgsmanager,
+        "color_correction" to R.array.tile_states_color_correction
     )
 
     fun getSubtitleId(spec: String?): Int {

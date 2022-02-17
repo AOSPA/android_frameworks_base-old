@@ -20,7 +20,6 @@ import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
-import android.media.AudioAttributes;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseArray;
@@ -180,14 +179,13 @@ public class SystemVibrator extends Vibrator {
 
     @Override
     public boolean setAlwaysOnEffect(int uid, String opPkg, int alwaysOnId, VibrationEffect effect,
-            AudioAttributes attributes) {
+            VibrationAttributes attrs) {
         if (mVibratorManager == null) {
             Log.w(TAG, "Failed to set always-on effect; no vibrator manager.");
             return false;
         }
-        VibrationAttributes attr = new VibrationAttributes.Builder(attributes, effect).build();
         CombinedVibration combinedEffect = CombinedVibration.createParallel(effect);
-        return mVibratorManager.setAlwaysOnEffect(uid, opPkg, alwaysOnId, combinedEffect, attr);
+        return mVibratorManager.setAlwaysOnEffect(uid, opPkg, alwaysOnId, combinedEffect, attrs);
     }
 
     @Override
@@ -398,7 +396,7 @@ public class SystemVibrator extends Vibrator {
             mExecutor.execute(() -> {
                 boolean anyVibrating;
                 synchronized (mLock) {
-                    int allInitializedMask = 1 << mVibratorListeners.size() - 1;
+                    int allInitializedMask = (1 << mVibratorListeners.size()) - 1;
                     int vibratorMask = 1 << vibratorIdx;
                     if ((mInitializedMask & vibratorMask) == 0) {
                         // First state report for this vibrator, set vibrating initial value.

@@ -17,6 +17,7 @@
 package android.os;
 
 import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
@@ -124,8 +125,8 @@ public class VibrationEffectTest {
         VibrationEffect.startWaveform()
                 .addStep(/* amplitude= */ 1, /* duration= */ 10)
                 .addRamp(/* amplitude= */ 0, /* duration= */ 20)
-                .addStep(/* amplitude= */ 1, /* frequency*/ 1, /* duration= */ 100)
-                .addRamp(/* amplitude= */ 0.5f, /* frequency*/ -1, /* duration= */ 50)
+                .addStep(/* amplitude= */ 1, /* frequencyHz= */ 1, /* duration= */ 100)
+                .addRamp(/* amplitude= */ 0.5f, /* frequencyHz= */ 100, /* duration= */ 50)
                 .build()
                 .validate();
 
@@ -149,10 +150,22 @@ public class VibrationEffectTest {
                         .addStep(/* amplitude= */ -2, 10).build().validate());
         assertThrows(IllegalArgumentException.class,
                 () -> VibrationEffect.startWaveform()
+                        .addStep(1, /* frequencyHz= */ -1f, 10).build().validate());
+        assertThrows(IllegalArgumentException.class,
+                () -> VibrationEffect.startWaveform()
                         .addStep(1, /* duration= */ -1).build().validate());
         assertThrows(IllegalArgumentException.class,
                 () -> VibrationEffect.startWaveform()
-                        .addStep(1, 0, /* duration= */ -1).build().validate());
+                        .addStep(1, 100f, /* duration= */ -1).build().validate());
+        assertThrows(IllegalArgumentException.class,
+                () -> VibrationEffect.startWaveform()
+                        .addRamp(/* amplitude= */ -3, 10).build().validate());
+        assertThrows(IllegalArgumentException.class,
+                () -> VibrationEffect.startWaveform()
+                        .addRamp(1, /* frequencyHz= */ 0, 10).build().validate());
+        assertThrows(IllegalArgumentException.class,
+                () -> VibrationEffect.startWaveform()
+                        .addRamp(1, 10f, /* duration= */ -3).build().validate());
     }
 
     @Test
@@ -312,8 +325,106 @@ public class VibrationEffectTest {
         assertTrue(100 / 255f > ((StepSegment) scaledDown.getSegments().get(1)).getAmplitude());
     }
 
+
+    @Test
+    public void testDuration() {
+        assertEquals(1, VibrationEffect.createOneShot(1, 1).getDuration());
+        assertEquals(-1, VibrationEffect.get(VibrationEffect.EFFECT_CLICK).getDuration());
+        assertEquals(-1,
+                VibrationEffect.startComposition()
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK)
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 1, 100)
+                        .compose()
+                        .getDuration());
+        assertEquals(6, VibrationEffect.createWaveform(
+                new long[]{1, 2, 3}, new int[]{1, 2, 3}, -1).getDuration());
+        assertEquals(Long.MAX_VALUE, VibrationEffect.createWaveform(
+                new long[]{1, 2, 3}, new int[]{1, 2, 3}, 0).getDuration());
+    }
+
+    @Test
+    public void testIsHapticFeedbackCandidate_repeatingEffects_notCandidates() {
+        assertFalse(VibrationEffect.createWaveform(
+                new long[]{1, 2, 3}, new int[]{1, 2, 3}, 0).isHapticFeedbackCandidate());
+    }
+
+    @Test
+    public void testIsHapticFeedbackCandidate_longEffects_notCandidates() {
+        assertFalse(VibrationEffect.createOneShot(1500, 255).isHapticFeedbackCandidate());
+        assertFalse(VibrationEffect.createWaveform(
+                new long[]{200, 200, 700}, new int[]{1, 2, 3}, -1).isHapticFeedbackCandidate());
+        assertFalse(VibrationEffect.startWaveform()
+                .addRamp(1, 500)
+                .addStep(1, 200)
+                .addRamp(0, 500)
+                .build()
+                .isHapticFeedbackCandidate());
+    }
+
+    @Test
+    public void testIsHapticFeedbackCandidate_shortEffects_areCandidates() {
+        assertTrue(VibrationEffect.createOneShot(500, 255).isHapticFeedbackCandidate());
+        assertTrue(VibrationEffect.createWaveform(
+                new long[]{100, 200, 300}, new int[]{1, 2, 3}, -1).isHapticFeedbackCandidate());
+        assertTrue(VibrationEffect.startWaveform()
+                .addRamp(1, 300)
+                .addStep(1, 200)
+                .addRamp(0, 300)
+                .build()
+                .isHapticFeedbackCandidate());
+    }
+
+    @Test
+    public void testIsHapticFeedbackCandidate_longCompositions_notCandidates() {
+        assertFalse(VibrationEffect.startComposition()
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_LOW_TICK)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_SPIN)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_SLOW_RISE)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_FALL)
+                .compose()
+                .isHapticFeedbackCandidate());
+
+        assertFalse(VibrationEffect.startComposition()
+                .addEffect(VibrationEffect.createOneShot(1500, 255))
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK)
+                .compose()
+                .isHapticFeedbackCandidate());
+    }
+
+    @Test
+    public void testIsHapticFeedbackCandidate_shortCompositions_areCandidates() {
+        assertTrue(VibrationEffect.startComposition()
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_SLOW_RISE)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_FALL)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK)
+                .compose()
+                .isHapticFeedbackCandidate());
+
+        assertTrue(VibrationEffect.startComposition()
+                .addEffect(VibrationEffect.createOneShot(100, 255))
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK)
+                .compose()
+                .isHapticFeedbackCandidate());
+    }
+
+    @Test
+    public void testIsHapticFeedbackCandidate_prebakedRingtones_notCandidates() {
+        assertFalse(VibrationEffect.get(
+                VibrationEffect.RINGTONES[1]).isHapticFeedbackCandidate());
+    }
+
+    @Test
+    public void testIsHapticFeedbackCandidate_prebakedNotRingtoneConstants_areCandidates() {
+        assertTrue(VibrationEffect.get(VibrationEffect.EFFECT_CLICK).isHapticFeedbackCandidate());
+        assertTrue(VibrationEffect.get(VibrationEffect.EFFECT_THUD).isHapticFeedbackCandidate());
+        assertTrue(VibrationEffect.get(VibrationEffect.EFFECT_TICK).isHapticFeedbackCandidate());
+    }
+
     private Resources mockRingtoneResources() {
-        return mockRingtoneResources(new String[] {
+        return mockRingtoneResources(new String[]{
                 RINGTONE_URI_1,
                 RINGTONE_URI_2,
                 RINGTONE_URI_3

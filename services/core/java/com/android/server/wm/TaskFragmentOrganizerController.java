@@ -22,8 +22,10 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANI
 import static com.android.server.wm.WindowOrganizerController.configurationsAreEqualForOrganizer;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.res.Configuration;
+import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -31,10 +33,8 @@ import android.os.RemoteException;
 import android.util.ArrayMap;
 import android.util.Slog;
 import android.view.RemoteAnimationDefinition;
-import android.view.SurfaceControl;
 import android.window.ITaskFragmentOrganizer;
 import android.window.ITaskFragmentOrganizerController;
-import android.window.TaskFragmentAppearedInfo;
 import android.window.TaskFragmentInfo;
 
 import com.android.internal.protolog.common.ProtoLog;
@@ -135,11 +135,8 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         void onTaskFragmentAppeared(ITaskFragmentOrganizer organizer, TaskFragment tf) {
             ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "TaskFragment appeared name=%s", tf.getName());
             final TaskFragmentInfo info = tf.getTaskFragmentInfo();
-            final SurfaceControl outSurfaceControl = new SurfaceControl(tf.getSurfaceControl(),
-                    "TaskFragmentOrganizerController.onTaskFragmentInfoAppeared");
             try {
-                organizer.onTaskFragmentAppeared(
-                        new TaskFragmentAppearedInfo(info, outSurfaceControl));
+                organizer.onTaskFragmentAppeared(info);
                 mLastSentTaskFragmentInfos.put(tf, info);
                 tf.mTaskFragmentAppearedSent = true;
             } catch (RemoteException e) {
@@ -434,6 +431,9 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         private final TaskFragment mTaskFragment;
         private final IBinder mErrorCallback;
         private final Throwable mException;
+        // Set when the event is deferred due to the host task is invisible. The defer time will
+        // be the last active time of the host task.
+        private long mDeferTime;
 
         private PendingTaskFragmentEvent(TaskFragment taskFragment,
                 ITaskFragmentOrganizer taskFragmentOrg, @EventType int eventType) {
@@ -498,16 +498,68 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         return null;
     }
 
+    private boolean shouldSendEventWhenTaskInvisible(@NonNull Task task,
+            @NonNull PendingTaskFragmentEvent event) {
+        final TaskFragmentOrganizerState state =
+                mTaskFragmentOrganizerState.get(event.mTaskFragmentOrg.asBinder());
+        final TaskFragmentInfo lastInfo = state.mLastSentTaskFragmentInfos.get(event.mTaskFragment);
+        final TaskFragmentInfo info = event.mTaskFragment.getTaskFragmentInfo();
+        // Send an info changed callback if this event is for the last activities to finish in a
+        // Task so that the {@link TaskFragmentOrganizer} can delete this TaskFragment. Otherwise,
+        // the Task may be removed before it becomes visible again to send this event because it no
+        // longer has activities. As a result, the organizer will never get this info changed event
+        // and will not delete the TaskFragment because the organizer thinks the TaskFragment still
+        // has running activities.
+        return event.mEventType == PendingTaskFragmentEvent.EVENT_INFO_CHANGED
+                && task.topRunningActivity() == null && lastInfo != null
+                && lastInfo.getRunningActivityCount() > 0 && info.getRunningActivityCount() == 0;
+    }
+
     void dispatchPendingEvents() {
         if (mAtmService.mWindowManager.mWindowPlacerLocked.isLayoutDeferred()
                 || mPendingTaskFragmentEvents.isEmpty()) {
             return;
         }
+
+        final ArrayList<Task> visibleTasks = new ArrayList<>();
+        final ArrayList<Task> invisibleTasks = new ArrayList<>();
+        final ArrayList<PendingTaskFragmentEvent> candidateEvents = new ArrayList<>();
         for (int i = 0, n = mPendingTaskFragmentEvents.size(); i < n; i++) {
-            PendingTaskFragmentEvent event = mPendingTaskFragmentEvents.get(i);
-            dispatchEvent(event);
+            final PendingTaskFragmentEvent event = mPendingTaskFragmentEvents.get(i);
+            final Task task = event.mTaskFragment != null ? event.mTaskFragment.getTask() : null;
+            if (task != null && (task.lastActiveTime <= event.mDeferTime
+                    || !(isTaskVisible(task, visibleTasks, invisibleTasks)
+                    || shouldSendEventWhenTaskInvisible(task, event)))) {
+                // Defer sending events to the TaskFragment until the host task is active again.
+                event.mDeferTime = task.lastActiveTime;
+                continue;
+            }
+            candidateEvents.add(event);
         }
-        mPendingTaskFragmentEvents.clear();
+        final int numEvents = candidateEvents.size();
+        for (int i = 0; i < numEvents; i++) {
+            dispatchEvent(candidateEvents.get(i));
+        }
+        if (numEvents > 0) {
+            mPendingTaskFragmentEvents.removeAll(candidateEvents);
+        }
+    }
+
+    private static boolean isTaskVisible(Task task, ArrayList<Task> knownVisibleTasks,
+            ArrayList<Task> knownInvisibleTasks) {
+        if (knownVisibleTasks.contains(task)) {
+            return true;
+        }
+        if (knownInvisibleTasks.contains(task)) {
+            return false;
+        }
+        if (task.shouldBeVisible(null /* starting */)) {
+            knownVisibleTasks.add(task);
+            return true;
+        } else {
+            knownInvisibleTasks.add(task);
+            return false;
+        }
     }
 
     void dispatchPendingInfoChangedEvent(TaskFragment taskFragment) {
@@ -545,6 +597,28 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
             case PendingTaskFragmentEvent.EVENT_ERROR:
                 state.onTaskFragmentError(taskFragmentOrg, event.mErrorCallback,
                         event.mException);
+        }
+    }
+
+    // TODO(b/204399167): change to push the embedded state to the client side
+    @Override
+    public boolean isActivityEmbedded(IBinder activityToken) {
+        synchronized (mGlobalLock) {
+            final ActivityRecord activity = ActivityRecord.forTokenLocked(activityToken);
+            if (activity == null) {
+                return false;
+            }
+            final TaskFragment taskFragment = activity.getOrganizedTaskFragment();
+            if (taskFragment == null) {
+                return false;
+            }
+            final Task parentTask = taskFragment.getTask();
+            if (parentTask != null) {
+                final Rect taskBounds = parentTask.getBounds();
+                final Rect taskFragBounds = taskFragment.getBounds();
+                return !taskBounds.equals(taskFragBounds) && taskBounds.contains(taskFragBounds);
+            }
+            return false;
         }
     }
 }

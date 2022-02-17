@@ -126,8 +126,8 @@ public class MasterClearReceiver extends BroadcastReceiver {
 
     private boolean wipeUser(Context context, @UserIdInt int userId, String wipeReason) {
         final UserManager userManager = context.getSystemService(UserManager.class);
-        final int result = userManager.removeUserOrSetEphemeral(
-                userId, /* evenWhenDisallowed= */ false);
+        final int result = userManager.removeUserWhenPossible(
+                UserHandle.of(userId), /* overrideDevicePolicy= */ false);
         if (result == UserManager.REMOVE_RESULT_ERROR) {
             Slogf.e(TAG, "Can't remove user %d", userId);
             return false;
@@ -181,7 +181,7 @@ public class MasterClearReceiver extends BroadcastReceiver {
         public WipeDataTask(Context context, Thread chainedTask) {
             mContext = context;
             mChainedTask = chainedTask;
-            mProgressDialog = new ProgressDialog(context);
+            mProgressDialog = new ProgressDialog(context, R.style.Theme_DeviceDefault_System);
         }
 
         @Override

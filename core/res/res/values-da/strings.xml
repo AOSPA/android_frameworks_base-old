@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Tillader, at appen ændrer din Android TV-enheds opkaldshistorik, bl.a. data om indgående og udgående opkald. Skadelige apps kan bruge dette til at rydde eller ændre din opkaldshistorik."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Tillader, at appen ændrer telefonens opkaldshistorik, f.eks. data om indgående og udgående opkald. Ondsindede apps kan bruge dette til at slette eller ændre din opkaldshistorik."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"få adgang til kropssensorer (f.eks. pulsmålere)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Giver appen adgang til data fra sensorer, der overvåger din fysiske tilstand, f.eks. din puls."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Adgang til data fra kropssensorer såsom puls, temperatur, procentdelen af ilt i blodet m.m."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"tilgå kropssensorer (f.eks. pulsmålere), mens appen kører i baggrunden."</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Adgang til data fra kropssensorer såsom puls, temperatur, procentdelen af ilt i blodet m.m., mens appen kører i baggrunden."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Læs kalenderbegivenheder og -info"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Denne app kan læse alle kalenderbegivenheder, der er gemt på din tablet, og dele eller gemme dine kalenderdata."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Denne app kan læse alle kalenderbegivenheder, der er gemt på din Android TV-enhed, og dele eller gemme dine kalenderdata."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Tillader, at appen kan bruge chat-tjenesten til at foretage opkald, uden du gør noget."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"læse telefonens status og identitet"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Tillader, at appen kan få adgang til telefonfunktionerne på enheden. Med denne tilladelse kan appen fastslå telefonnummeret og enheds-id\'erne, hvorvidt et opkald er aktivt samt det eksterne nummer, der oprettes forbindelse til via et opkald."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"tilgå grundlæggende oplysninger om telefonistatus og -identitet"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Giver appen adgang til enhedens grundlæggende telefonifunktioner."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"dirigere opkald gennem systemet"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Tillader appen at dirigere sine opkald gennem systemet for at forbedre opkaldsoplevelsen."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"se og styre opkald via systemet."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Tryk for at slette din ansigtsmodel, og tilføj derefter dit ansigt igen"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Konfigurer ansigtslås"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Lås din telefon op ved at kigge på den"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Hvis du vil bruge ansigtslåsen, skal du aktivere "<b>"Kameraadgang"</b>" under Indstillinger &gt; Privatliv"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Konfigurer flere måder at låse op på"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Tryk for at tilføje et fingeraftryk"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Oplåsning med fingeraftryk"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Giver appen tilladelse til at læse og redigere konfigurationen af Forstyr ikke."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"start brugen at tilladelsesvisning"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Tillader, at brugeren kan bruge en tilladelse for en app. Dette bør aldrig være nødvendigt for almindelige apps."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"starte visningen af beslutninger om tilladelser"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Giver modtageren mulighed for at åbne skærmen til gennemgang af beslutninger om tilladelser. Dette bør aldrig være nødvendigt for standardapps."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"se appfunktioner"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Giver den app, som har tilladelsen, mulighed for at se oplysninger om en apps funktioner."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"få adgang til sensordata ved høj samplingfrekvens"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Overvåg forsøg på oplåsning af skærm"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Overvåg antallet af forkert indtastede adgangskoder, når du låser skærmen op, og lås din tablet, eller slet alle data i den, hvis der er indtastet for mange forkerte adgangskoder."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Registrer antallet af forkerte adgangskoder, der angives ved oplåsning af skærmen, og lås din Android TV-enhed, eller ryd alle dataene på din Android TV-enhed, hvis adgangskoden angives forkert for mange gange."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Registrer antallet af forkert indtastede adgangskoder, når du låser skærmen op, og lås infotainmentsystemet, eller slet alle data i infotainmentsystemet, hvis der er indtastet for mange forkerte adgangskoder."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Overvåg antallet af forkerte adgangskoder ved oplåsning af skærmen, og lås telefonen eller slet alle data på telefonen, hvis der er indtastet for mange forkerte adgangskoder."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Registrer antallet af forkerte adgangskoder, der angives ved oplåsning af skærmen, og lås din tablet, eller slet alle brugerens data, hvis adgangskoden tastes forkert for mange gange."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Registrer antallet af forkerte adgangskoder, der angives ved oplåsning af skærmen, og lås din Android TV-enhed, eller ryd alle brugerens data, hvis adgangskoden angives forkert for mange gange."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Registrer antallet af forkert indtastede adgangskoder, når du låser skærmen op, og lås infotainmentsystemet, eller slet alle data på denne profil, hvis der er indtastet for mange forkerte adgangskoder."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Registrer antallet af forkerte adgangskoder, der angives ved oplåsning af skærmen, og lås telefonen, eller slet alle brugerens data, hvis adgangskoden tastes forkert for mange gange."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Skifte skærmlås"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Skifter skærmlåsen."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Slette alle data"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Slet din tablets data uden varsel ved at gendanne fabriksindstillingerne."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Ryd dataene på din Android TV-enhed uden at gendanne fabriksdataene."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Ryd infotainmentsystemets data uden varsel ved at gendanne fabriksindstillingerne."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Sletter telefonens data uden varsel ved at gendanne fabriksindstillingerne."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Slet brugerdata"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Ryd profildata"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Slet brugerdata"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Slet denne brugers data på denne tablet uden varsel."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Ryd denne brugers data på denne Android TV-enhed uden varsel."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Ryd denne profils data i dette infotainmentsystem uden varsel."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Slet denne brugers data på denne telefon uden varsel."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Angiv enhedens globale proxy"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Indstil den globale proxy for enheden, der skal bruges, mens politikken er aktiveret. Det er kun enhedens ejer, der kan indstille den globale proxy."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Forbereder <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Åbner dine apps."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Gennemfører start."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Vil du slukke skærmen?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Ved konfigurationen af dit fingeraftryk trykkede du på afbryderknappen.\n\nDet medfører normalt, at din skærm slukkes."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Sluk"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Annuller"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Vil du fortsætte konfigurationen?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Du har trykket på afbryderknappen, hvilket som regel slukker skærmen.\n\nPrøv at trykke let på knappen, mens du konfigurerer dit fingeraftryk."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Sluk skærm"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Fortsæt"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Vil du bekræfte dit fingeraftryk?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Du har trykket på afbryderknappen, hvilket som regel slukker skærmen.\n\nPrøv at trykke let på knappen for at bekræfte dit fingeraftryk."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Sluk skærm"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Fortsæt"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> er i gang"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Tryk for at vende tilbage til spillet"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Vælg et spil"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Tilpasset appnotifikation"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Vil du give <xliff:g id="APP">%1$s</xliff:g> tilladelse til at oprette en ny bruger med <xliff:g id="ACCOUNT">%2$s</xliff:g> (der findes allerede en bruger med denne konto)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Vil du give <xliff:g id="APP">%1$s</xliff:g> tilladelse til at oprette en nye bruger med <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Tilføj en administreret bruger"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Tilføj et sprog"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Områdeindstilling"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Angiv sprog"</string>

@@ -23,6 +23,8 @@ import static com.android.keyguard.KeyguardClockSwitch.LARGE;
 
 import android.app.WallpaperManager;
 import android.content.res.Resources;
+import android.database.ContentObserver;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,11 +51,13 @@ import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.NotificationIconContainer;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.util.ViewController;
+import com.android.systemui.util.settings.SecureSettings;
 
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 
@@ -72,6 +76,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final BatteryController mBatteryController;
     private final LockscreenSmartspaceController mSmartspaceController;
     private final Resources mResources;
+    private final SecureSettings mSecureSettings;
 
     /**
      * Clock for both small and large sizes
@@ -84,7 +89,6 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final KeyguardBypassController mBypassController;
 
-    private int mLargeClockTopMargin = 0;
     private int mKeyguardClockTopMargin = 0;
 
     /**
@@ -109,6 +113,14 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private SmartspaceTransitionController mSmartspaceTransitionController;
 
     private boolean mOnlyClock = false;
+    private Executor mUiExecutor;
+    private boolean mCanShowDoubleLineClock = true;
+    private ContentObserver mDoubleLineClockObserver = new ContentObserver(null) {
+        @Override
+        public void onChange(boolean change) {
+            updateDoubleLineClock();
+        }
+    };
 
     @Inject
     public KeyguardClockSwitchController(
@@ -125,6 +137,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             LockscreenSmartspaceController smartspaceController,
             KeyguardUnlockAnimationController keyguardUnlockAnimationController,
             SmartspaceTransitionController smartspaceTransitionController,
+            SecureSettings secureSettings,
+            @Main Executor uiExecutor,
             @Main Resources resources) {
         super(keyguardClockSwitch);
         mStatusBarStateController = statusBarStateController;
@@ -138,7 +152,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mBypassController = bypassController;
         mSmartspaceController = smartspaceController;
         mResources = resources;
-
+        mSecureSettings = secureSettings;
+        mUiExecutor = uiExecutor;
         mKeyguardUnlockAnimationController = keyguardUnlockAnimationController;
         mSmartspaceTransitionController = smartspaceTransitionController;
     }
@@ -223,6 +238,14 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             updateClockLayout();
             mSmartspaceTransitionController.setLockscreenSmartspace(mSmartspaceView);
         }
+
+        mSecureSettings.registerContentObserver(
+                Settings.Secure.getUriFor(Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK),
+                false, /* notifyForDescendants */
+                mDoubleLineClockObserver
+        );
+
+        updateDoubleLineClock();
     }
 
     int getNotificationIconAreaHeight() {
@@ -236,7 +259,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
         mColorExtractor.removeOnColorsChangedListener(mColorsListener);
         mView.setClockPlugin(null, mStatusBarStateController.getState());
-        mView.onViewDetached();
+
+        mSecureSettings.unregisterContentObserver(mDoubleLineClockObserver);
     }
 
     /**
@@ -251,26 +275,34 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     }
 
     private void updateClockLayout() {
-        if (mSmartspaceController.isEnabled()) {
-            RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(MATCH_PARENT,
-                    MATCH_PARENT);
-            mLargeClockTopMargin = getContext().getResources().getDimensionPixelSize(
-                    R.dimen.keyguard_large_clock_top_margin);
-            lp.topMargin = mLargeClockTopMargin;
-            mLargeClockFrame.setLayoutParams(lp);
-        } else {
-            mLargeClockTopMargin = 0;
-        }
+        int largeClockTopMargin = getContext().getResources().getDimensionPixelSize(
+                R.dimen.keyguard_large_clock_top_margin);
+
+        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(MATCH_PARENT,
+                MATCH_PARENT);
+        lp.topMargin = largeClockTopMargin;
+        mLargeClockFrame.setLayoutParams(lp);
     }
 
     /**
      * Set which clock should be displayed on the keyguard. The other one will be automatically
      * hidden.
      */
-    public void displayClock(@KeyguardClockSwitch.ClockSize int clockSize) {
-        boolean appeared = mView.switchToClock(clockSize);
-        if (appeared && clockSize == LARGE) {
+    public void displayClock(@KeyguardClockSwitch.ClockSize int clockSize, boolean animate) {
+        if (!mCanShowDoubleLineClock && clockSize == KeyguardClockSwitch.LARGE) {
+            return;
+        }
+
+        boolean appeared = mView.switchToClock(clockSize, animate);
+        if (animate && appeared && clockSize == LARGE) {
             mLargeClockViewController.animateAppear();
+        }
+    }
+
+    public void animateFoldToAod() {
+        if (mClockViewController != null) {
+            mClockViewController.animateFoldAppear();
+            mLargeClockViewController.animateFoldAppear();
         }
     }
 
@@ -329,8 +361,6 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
                 mKeyguardUnlockAnimationController.updateLockscreenSmartSpacePosition();
             }
         }
-
-        mKeyguardSliceViewController.updatePosition(x, props, animate);
     }
 
     /** Sets an alpha value on every child view except for the smartspace. */
@@ -409,5 +439,14 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
 
     private int getCurrentLayoutDirection() {
         return TextUtils.getLayoutDirectionFromLocale(Locale.getDefault());
+    }
+
+    private void updateDoubleLineClock() {
+        mCanShowDoubleLineClock = mSecureSettings.getInt(
+            Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK, 1) != 0;
+
+        if (!mCanShowDoubleLineClock) {
+            mUiExecutor.execute(() -> displayClock(KeyguardClockSwitch.SMALL, /* animate */ true));
+        }
     }
 }

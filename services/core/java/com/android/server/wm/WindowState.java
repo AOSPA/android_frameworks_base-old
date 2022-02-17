@@ -48,7 +48,6 @@ import static android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
 import static android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
 import static android.view.WindowManager.LayoutParams.FLAG_SCALED;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
@@ -845,6 +844,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     };
 
+    @Override
+    WindowState asWindowState() {
+        return this;
+    }
+
     /**
      * @see #setSurfaceTranslationY(int)
      */
@@ -1338,8 +1342,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         outFrame.set(0, 0, mWindowFrames.mCompatFrame.width(), mWindowFrames.mCompatFrame.height());
     }
 
-    @Override
-    public WindowManager.LayoutParams getAttrs() {
+    WindowManager.LayoutParams getAttrs() {
         return mAttrs;
     }
 
@@ -1475,12 +1478,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (changing) {
             mLastFreezeDuration = 0;
             if (mWmService.mRoot.mOrientationChangeComplete
-                    && mDisplayContent.waitForUnfreeze(this)) {
+                    && mDisplayContent.shouldSyncRotationChange(this)) {
                 mWmService.mRoot.mOrientationChangeComplete = false;
             }
         } else {
             // The orientation change is completed. If it was hidden by the animation, reshow it.
-            mDisplayContent.finishFadeRotationAnimation(this);
+            mDisplayContent.finishFadeRotationAnimation(mToken);
         }
     }
 
@@ -2544,7 +2547,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         if (DEBUG_INPUT_METHOD) {
             Slog.i(TAG_WM, "isVisibleRequestedOrAdding " + this + ": "
-                    + isVisibleRequestedOrAdding());
+                    + isVisibleRequestedOrAdding() + " isVisible: " + (isVisible()
+                    && mActivityRecord != null && mActivityRecord.isVisible()));
             if (!isVisibleRequestedOrAdding()) {
                 Slog.i(TAG_WM, "  mSurfaceController=" + mWinAnimator.mSurfaceController
                         + " relayoutCalled=" + mRelayoutCalled
@@ -2559,7 +2563,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
         }
-        return isVisibleRequestedOrAdding();
+        return isVisibleRequestedOrAdding()
+                || (isVisible() && mActivityRecord != null && mActivityRecord.isVisible());
     }
 
     private final class DeadWindowEventReceiver extends InputEventReceiver {
@@ -2687,10 +2692,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-    int getSurfaceTouchableRegion(Region region, int flags) {
-        final boolean modal = (flags & (FLAG_NOT_TOUCH_MODAL | FLAG_NOT_FOCUSABLE)) == 0;
+    void getSurfaceTouchableRegion(Region region, WindowManager.LayoutParams attrs) {
+        final boolean modal = attrs.isModal();
         if (modal) {
-            flags |= FLAG_NOT_TOUCH_MODAL;
             if (mActivityRecord != null) {
                 // Limit the outer touch to the activity root task region.
                 updateRegionForModalActivityWindow(region);
@@ -2722,8 +2726,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mInvGlobalScale != 1.f) {
             region.scale(mInvGlobalScale);
         }
-
-        return flags;
     }
 
     /**
@@ -2885,6 +2887,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     private Configuration getLastReportedConfiguration() {
         return mLastReportedConfiguration.getMergedConfiguration();
+    }
+
+    /** Returns the last window configuration bounds reported to the client. */
+    Rect getLastReportedBounds() {
+        final Rect bounds = getLastReportedConfiguration().windowConfiguration.getBounds();
+        return !bounds.isEmpty() ? bounds : getBounds();
     }
 
     void adjustStartingWindowFlags() {
@@ -3414,7 +3422,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
         // Exclude toast because legacy apps may show toast window by themselves, so the misused
         // apps won't always be considered as foreground state.
-        if (mAttrs.type >= FIRST_SYSTEM_WINDOW && mAttrs.type != TYPE_TOAST) {
+        // Exclude private presentations as they can only be shown on private virtual displays and
+        // shouldn't be the cause of an app be considered foreground.
+        if (mAttrs.type >= FIRST_SYSTEM_WINDOW && mAttrs.type != TYPE_TOAST
+                && mAttrs.type != TYPE_PRIVATE_PRESENTATION) {
             mWmService.mAtmService.mActiveUids.onNonAppSurfaceVisibilityChanged(mOwnerUid, shown);
         }
     }
@@ -3559,10 +3570,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * {@link WindowManager.LayoutParams#FLAG_NOT_TOUCH_MODAL touch modality.}
      */
     void getEffectiveTouchableRegion(Region outRegion) {
-        final boolean modal = (mAttrs.flags & (FLAG_NOT_TOUCH_MODAL | FLAG_NOT_FOCUSABLE)) == 0;
         final DisplayContent dc = getDisplayContent();
 
-        if (modal && dc != null) {
+        if (mAttrs.isModal() && dc != null) {
             outRegion.set(dc.getBounds());
             cropRegionToRootTaskBoundsIfNeeded(outRegion);
             subtractTouchExcludeRegionIfNeeded(outRegion);
@@ -3833,6 +3843,24 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     public boolean canShowTransient() {
         return (mAttrs.insetsFlags.behavior & BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE) != 0;
+    }
+
+    boolean canBeHiddenByKeyguard() {
+        // Keyguard visibility of window from activities are determined over activity visibility.
+        if (mActivityRecord != null) {
+            return false;
+        }
+        switch (mAttrs.type) {
+            case TYPE_NOTIFICATION_SHADE:
+            case TYPE_STATUS_BAR:
+            case TYPE_NAVIGATION_BAR:
+            case TYPE_WALLPAPER:
+                return false;
+            default:
+                // Hide only windows below the keyguard host window.
+                return mPolicy.getWindowLayerLw(this)
+                        < mPolicy.getWindowLayerFromTypeLw(TYPE_NOTIFICATION_SHADE);
+        }
     }
 
     private int getRootTaskId() {
@@ -4710,6 +4738,48 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return false;
     }
 
+    private boolean shouldFinishAnimatingExit() {
+        // Exit animation might be applied soon.
+        if (inTransition()) {
+            ProtoLog.d(WM_DEBUG_APP_TRANSITIONS, "shouldWaitAnimatingExit: isTransition: %s",
+                    this);
+            return false;
+        }
+        if (!mDisplayContent.okToAnimate()) {
+            return true;
+        }
+        // Exit animation is running.
+        if (isAnimating(TRANSITION | PARENTS, EXIT_ANIMATING_TYPES)) {
+            ProtoLog.d(WM_DEBUG_APP_TRANSITIONS, "shouldWaitAnimatingExit: isAnimating: %s",
+                    this);
+            return false;
+        }
+        // If the wallpaper is currently behind this app window, we need to change both of
+        // them inside of a transaction to avoid artifacts.
+        if (mDisplayContent.mWallpaperController.isWallpaperTarget(this)) {
+            ProtoLog.d(WM_DEBUG_APP_TRANSITIONS,
+                    "shouldWaitAnimatingExit: isWallpaperTarget: %s", this);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * If this is window is stuck in the animatingExit status, resume clean up procedure blocked
+     * by the exit animation.
+     */
+    void cleanupAnimatingExitWindow() {
+        // TODO(b/205335975): WindowManagerService#tryStartExitingAnimation starts an exit animation
+        // and set #mAnimationExit. After the exit animation finishes, #onExitAnimationDone shall
+        // be called, but there seems to be a case that #onExitAnimationDone is not triggered, so
+        // a windows stuck in the animatingExit status.
+        if (mAnimatingExit && shouldFinishAnimatingExit()) {
+            ProtoLog.w(WM_DEBUG_APP_TRANSITIONS, "Clear window stuck on animatingExit status: %s",
+                    this);
+            onExitAnimationDone();
+        }
+    }
+
     void onExitAnimationDone() {
         if (DEBUG_ANIM) Slog.v(TAG, "onExitAnimationDone in " + this
                 + ": exiting=" + mAnimatingExit + " remove=" + mRemoveOnExit
@@ -4768,13 +4838,18 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             if (hasSurface) {
                 mWmService.mDestroySurface.add(this);
             }
-            if (mRemoveOnExit) {
-                mWmService.mPendingRemove.add(this);
-                mRemoveOnExit = false;
-            }
         }
         mAnimatingExit = false;
         getDisplayContent().mWallpaperController.hideWallpapers(this);
+    }
+
+    @Override
+    boolean handleCompleteDeferredRemoval() {
+        if (mRemoveOnExit) {
+            mRemoveOnExit = false;
+            removeImmediately();
+        }
+        return super.handleCompleteDeferredRemoval();
     }
 
     boolean clearAnimatingFlags() {
@@ -5173,6 +5248,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // Child window follows parent's scale.
             return;
         }
+        if (!isVisibleRequested() && !(mIsWallpaper && mToken.isVisible())) {
+            // Skip if it is requested to be invisible, but if it is wallpaper, it may be in
+            // transition that still needs to update the scale for zoom effect.
+            return;
+        }
         float newHScale = mHScale * mGlobalScale * mWallpaperScale;
         float newVScale = mVScale * mGlobalScale * mWallpaperScale;
         if (mLastHScale != newHScale ||
@@ -5192,7 +5272,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         updateSurfacePositionNonOrganized();
         // Send information to SurfaceFlinger about the priority of the current window.
         updateFrameRateSelectionPriorityIfNeeded();
-        if (isVisibleRequested()) updateScaleIfNeeded();
+        updateScaleIfNeeded();
 
         mWinAnimator.prepareSurfaceLocked(getSyncTransaction());
         super.prepareSurfaces();
@@ -5218,11 +5298,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mSurfacePosition);
 
         if (mWallpaperScale != 1f) {
-            DisplayInfo displayInfo = getDisplayInfo();
+            final Rect bounds = getLastReportedBounds();
             Matrix matrix = mTmpMatrix;
             matrix.setTranslate(mXOffset, mYOffset);
-            matrix.postScale(mWallpaperScale, mWallpaperScale, displayInfo.logicalWidth / 2f,
-                displayInfo.logicalHeight / 2f);
+            matrix.postScale(mWallpaperScale, mWallpaperScale, bounds.exactCenterX(),
+                    bounds.exactCenterY());
             matrix.getValues(mTmpMatrixArray);
             mSurfacePosition.offset(Math.round(mTmpMatrixArray[Matrix.MTRANS_X]),
                 Math.round(mTmpMatrixArray[Matrix.MTRANS_Y]));
@@ -5354,7 +5434,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     void assignLayer(Transaction t, int layer) {
-        if (isStartingWindowAssociatedToTask()) {
+        if (mStartingData != null) {
             // The starting window should cover the task.
             t.setLayer(mSurfaceControl, Integer.MAX_VALUE);
             return;
@@ -5674,29 +5754,36 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             Slog.i(TAG, "finishDrawing of relaunch: " + this + " " + duration + "ms");
             mActivityRecord.mRelaunchStartTime = 0;
         }
-
-        executeDrawHandlers(postDrawTransaction);
-
-        final boolean applyPostDrawNow = mClientWasDrawingForSync && postDrawTransaction != null;
-        mClientWasDrawingForSync = false;
-        if (!onSyncFinishedDrawing()) {
-            return mWinAnimator.finishDrawingLocked(postDrawTransaction, applyPostDrawNow);
-        }
-
-        if (mActivityRecord != null
-                && mTransitionController.isShellTransitionsEnabled()
-                && mAttrs.type == TYPE_APPLICATION_STARTING) {
+        if (mActivityRecord != null && mAttrs.type == TYPE_APPLICATION_STARTING) {
             mWmService.mAtmService.mTaskSupervisor.getActivityMetricsLogger()
                     .notifyStartingWindowDrawn(mActivityRecord);
         }
 
-        if (postDrawTransaction != null) {
+        final boolean hasSyncHandlers = executeDrawHandlers(postDrawTransaction);
+
+        boolean skipLayout = false;
+        // Control the timing to switch the appearance of window with different rotations.
+        final FadeRotationAnimationController fadeRotationController =
+                mDisplayContent.getFadeRotationAnimationController();
+        if (fadeRotationController != null
+                && fadeRotationController.handleFinishDrawing(this, postDrawTransaction)) {
+            // Consume the transaction because the controller will apply it with fade animation.
+            // Layout is not needed because the window will be hidden by the fade leash. Clear
+            // sync state because its sync transaction doesn't need to be merged to sync group.
+            postDrawTransaction = null;
+            skipLayout = true;
+            clearSyncState();
+        } else if (onSyncFinishedDrawing() && postDrawTransaction != null) {
             mSyncTransaction.merge(postDrawTransaction);
+            // Consume the transaction because the sync group will merge it.
+            postDrawTransaction = null;
         }
 
-        mWinAnimator.finishDrawingLocked(null, false /* forceApplyNow */);
+        final boolean layoutNeeded =
+                mWinAnimator.finishDrawingLocked(postDrawTransaction, mClientWasDrawingForSync);
+        mClientWasDrawingForSync = false;
         // We always want to force a traversal after a finish draw for blast sync.
-        return true;
+        return !skipLayout && (hasSyncHandlers || layoutNeeded);
     }
 
     void immediatelyNotifyBlastSync() {

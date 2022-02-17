@@ -65,7 +65,10 @@ import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_S
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_SPLASH_SCREEN;
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_WINDOWS_DRAWN;
 import static com.android.server.wm.AppTransition.isNormalTransit;
+import static com.android.server.wm.NonAppWindowAnimationAdapter.shouldAttachNavBarToApp;
+import static com.android.server.wm.NonAppWindowAnimationAdapter.shouldStartNonAppWindowAnimationsForKeyguardExit;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
+import static com.android.server.wm.WallpaperAnimationAdapter.shouldStartWallpaperAnimation;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -173,6 +176,9 @@ public class AppTransitionController {
         Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "AppTransitionReady");
 
         ProtoLog.v(WM_DEBUG_APP_TRANSITIONS, "**** GOOD TO GO");
+        // TODO(b/205335975): Remove window which stuck in animatingExit status. Find actual cause.
+        mDisplayContent.forAllWindows(WindowState::cleanupAnimatingExitWindow,
+                true /* traverseTopToBottom */);
         // TODO(new-app-transition): Remove code using appTransition.getAppTransition()
         final AppTransition appTransition = mDisplayContent.mAppTransition;
 
@@ -529,18 +535,9 @@ public class AppTransitionController {
         // Having {@code transit} of those types doesn't mean it will contain non-app windows, but
         // non-app windows will only be included with those transition types. And we don't currently
         // have any use case of those for TaskFragment transition.
-        // @see NonAppWindowAnimationAdapter#startNonAppWindowAnimations
-        if (transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY
-                || transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY_ON_WALLPAPER
-                || transit == TRANSIT_OLD_TASK_OPEN || transit == TRANSIT_OLD_TASK_TO_FRONT
-                || transit == TRANSIT_OLD_WALLPAPER_CLOSE) {
-            return true;
-        }
-
-        // Check if the wallpaper is going to participate in the transition. We don't want to have
-        // the client to animate the wallpaper windows.
-        // @see WallpaperAnimationAdapter#startWallpaperAnimations
-        return mDisplayContent.mWallpaperController.isWallpaperVisible();
+        return shouldStartNonAppWindowAnimationsForKeyguardExit(transit)
+                || shouldAttachNavBarToApp(mService, mDisplayContent, transit)
+                || shouldStartWallpaperAnimation(mDisplayContent);
     }
 
     /**
@@ -596,7 +593,7 @@ public class AppTransitionController {
             }
             // We don't want the organizer to handle transition of non-embedded activity of other
             // app.
-            if (r.getUid() != rootActivity.getUid() && !r.isEmbedded()) {
+            if (r.getUid() != task.effectiveUid && !r.isEmbedded()) {
                 leafTask = null;
                 break;
             }
@@ -802,6 +799,21 @@ public class AppTransitionController {
     }
 
     /**
+     * Returns {@code true} if a given {@link WindowContainer} is an embedded Task in
+     * {@link com.android.wm.shell.TaskView}.
+     *
+     * Note that this is a short term workaround to support Android Auto until it migrate to
+     * ShellTransition. This should only be used by {@link #getAnimationTargets}.
+     *
+     * TODO(b/213312721): Remove this predicate and its callers once ShellTransition is enabled.
+     */
+    private static boolean isTaskViewTask(WindowContainer wc) {
+        // We use Task#mRemoveWithTaskOrganizer to identify an embedded Task, but this is a hack and
+        // it is not guaranteed to work this logic in the future version.
+        return wc instanceof Task && ((Task) wc).mRemoveWithTaskOrganizer;
+    }
+
+    /**
      * Find WindowContainers to be animated from a set of opening and closing apps. We will promote
      * animation targets to higher level in the window hierarchy if possible.
      *
@@ -847,7 +859,13 @@ public class AppTransitionController {
             siblings.add(current);
             boolean canPromote = true;
 
-            if (parent == null || !parent.canCreateRemoteAnimationTarget()
+            if (isTaskViewTask(current)) {
+                // Don't animate an embedded Task in app transition. This is a short term workaround
+                // to prevent conflict of surface hierarchy changes between legacy app transition
+                // and TaskView (b/205189147).
+                // TODO(b/213312721): Remove this once ShellTransition is enabled.
+                continue;
+            } else if (parent == null || !parent.canCreateRemoteAnimationTarget()
                     || !parent.canBeAnimationTarget()
                     // We cannot promote the animation on Task's parent when the task is in
                     // clearing task in case the animating get stuck when performing the opening
@@ -890,7 +908,13 @@ public class AppTransitionController {
                 for (int j = 0; j < parent.getChildCount(); ++j) {
                     final WindowContainer sibling = parent.getChildAt(j);
                     if (candidates.remove(sibling)) {
-                        siblings.add(sibling);
+                        if (!isTaskViewTask(sibling)) {
+                            // Don't animate an embedded Task in app transition. This is a short
+                            // term workaround to prevent conflict of surface hierarchy changes
+                            // between legacy app transition and TaskView (b/205189147).
+                            // TODO(b/213312721): Remove this once ShellTransition is enabled.
+                            siblings.add(sibling);
+                        }
                     } else if (sibling != current && sibling.isVisible()) {
                         canPromote = false;
                     }

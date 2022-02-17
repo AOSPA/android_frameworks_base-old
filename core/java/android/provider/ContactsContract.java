@@ -2962,7 +2962,10 @@ public final class ContactsContract {
          */
         @Nullable
         public static String getLocalAccountName(@NonNull Context context) {
-            return null;
+            //  config_rawContactsLocalAccountName is defined in
+            //  platform/frameworks/base/core/res/res/values/config.xml
+            return TextUtils.nullIfEmpty(context.getString(
+                    com.android.internal.R.string.config_rawContactsLocalAccountName));
         }
 
         /**
@@ -2978,7 +2981,10 @@ public final class ContactsContract {
          */
         @Nullable
         public static String getLocalAccountType(@NonNull Context context) {
-            return null;
+            //  config_rawContactsLocalAccountType is defined in
+            //  platform/frameworks/base/core/res/res/values/config.xml
+            return TextUtils.nullIfEmpty(context.getString(
+                    com.android.internal.R.string.config_rawContactsLocalAccountType));
         }
 
         /**
@@ -8797,6 +8803,8 @@ public final class ContactsContract {
         /**
          * Get the account that is set as the default account for new contacts, which should be
          * initially selected when creating a new contact on contact management apps.
+         * If the setting has not been set by any app, it will return null. Once the setting
+         * is set to non-null Account, it can still be set to null in the future.
          *
          * @param resolver the ContentResolver to query.
          * @return the default account for new contacts, or null if it's not set or set to NULL
@@ -8811,7 +8819,13 @@ public final class ContactsContract {
 
         /**
          * Sets the account as the default account that should be initially selected
-         * when creating a new contact on contact management apps.
+         * when creating a new contact on contact management apps. Apps can only set one of
+         * the following accounts as the default account:
+         * <ol>
+         *   <li>null or custom local account
+         *   <li>SIM account
+         *   <li>AccountManager accounts
+         * </ol>
          *
          * @param resolver the ContentResolver to query.
          * @param account the account to be set to default.

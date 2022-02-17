@@ -35,6 +35,7 @@ import java.lang.annotation.Target;
 import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -55,6 +56,7 @@ public final class ServerFlags {
      */
     @StringDef(prefix = "KEY_", value = {
             KEY_LOCATION_TIME_ZONE_DETECTION_FEATURE_SUPPORTED,
+            KEY_LOCATION_TIME_ZONE_DETECTION_RUN_IN_BACKGROUND_ENABLED,
             KEY_PRIMARY_LTZP_MODE_OVERRIDE,
             KEY_SECONDARY_LTZP_MODE_OVERRIDE,
             KEY_LTZP_INITIALIZATION_TIMEOUT_FUZZ_MILLIS,
@@ -65,6 +67,8 @@ public final class ServerFlags {
             KEY_LOCATION_TIME_ZONE_DETECTION_SETTING_ENABLED_DEFAULT,
             KEY_TIME_DETECTOR_LOWER_BOUND_MILLIS_OVERRIDE,
             KEY_TIME_DETECTOR_ORIGIN_PRIORITIES_OVERRIDE,
+            KEY_TIME_ZONE_DETECTOR_TELEPHONY_FALLBACK_SUPPORTED,
+            KEY_ENHANCED_METRICS_COLLECTION_ENABLED,
     })
     @Target({ ElementType.TYPE_USE, ElementType.TYPE_PARAMETER })
     @Retention(RetentionPolicy.SOURCE)
@@ -78,6 +82,15 @@ public final class ServerFlags {
      */
     public static final @DeviceConfigKey String KEY_LOCATION_TIME_ZONE_DETECTION_FEATURE_SUPPORTED =
             "location_time_zone_detection_feature_supported";
+
+    /**
+     * Controls whether location time zone detection should run all the time on supported devices,
+     * even when the user has not enabled it explicitly in settings. Enabled for internal testing
+     * only.
+     */
+    public static final @DeviceConfigKey String
+            KEY_LOCATION_TIME_ZONE_DETECTION_RUN_IN_BACKGROUND_ENABLED =
+            "location_time_zone_detection_run_in_background_enabled";
 
     /**
      * The key for the server flag that can override the device config for whether the primary
@@ -139,6 +152,14 @@ public final class ServerFlags {
             "location_time_zone_detection_setting_enabled_default";
 
     /**
+     * The key to control support for time zone detection falling back to telephony detection under
+     * certain circumstances.
+     */
+    public static final @DeviceConfigKey String
+            KEY_TIME_ZONE_DETECTOR_TELEPHONY_FALLBACK_SUPPORTED =
+            "time_zone_detector_telephony_fallback_supported";
+
+    /**
      * The key to override the time detector origin priorities configuration. A comma-separated list
      * of strings that will be passed to {@link TimeDetectorStrategy#stringToOrigin(String)}.
      * All values must be recognized or the override value will be ignored.
@@ -147,14 +168,25 @@ public final class ServerFlags {
             "time_detector_origin_priorities_override";
 
     /**
-     * The key to override the time detector lower bound configuration. The values is the number of
+     * The key to override the time detector lower bound configuration. The value is the number of
      * milliseconds since the beginning of the Unix epoch.
      */
     public static final @DeviceConfigKey String KEY_TIME_DETECTOR_LOWER_BOUND_MILLIS_OVERRIDE =
             "time_detector_lower_bound_millis_override";
 
+    /**
+     * The key to allow extra metrics / telemetry information to be collected from internal testers.
+     */
+    public static final @DeviceConfigKey String KEY_ENHANCED_METRICS_COLLECTION_ENABLED =
+            "enhanced_metrics_collection_enabled";
+
+    /**
+     * The registered listeners and the keys to trigger on. The value is explicitly a HashSet to
+     * ensure O(1) lookup performance when working out whether a listener should trigger.
+     */
     @GuardedBy("mListeners")
-    private final ArrayMap<ConfigurationChangeListener, Set<String>> mListeners = new ArrayMap<>();
+    private final ArrayMap<ConfigurationChangeListener, HashSet<String>> mListeners =
+            new ArrayMap<>();
 
     private static final Object SLOCK = new Object();
 
@@ -181,18 +213,29 @@ public final class ServerFlags {
 
     private void handlePropertiesChanged(@NonNull DeviceConfig.Properties properties) {
         synchronized (mListeners) {
-            for (Map.Entry<ConfigurationChangeListener, Set<String>> listenerEntry
+            for (Map.Entry<ConfigurationChangeListener, HashSet<String>> listenerEntry
                     : mListeners.entrySet()) {
-                if (intersects(listenerEntry.getValue(), properties.getKeyset())) {
+                // It's unclear which set of the following two Sets is going to be larger in the
+                // average case: monitoredKeys will be a subset of the set of possible keys, but
+                // only changed keys are reported. Because we guarantee the type / lookup behavior
+                // of the monitoredKeys by making that a HashSet, that is used as the haystack Set,
+                // while the changed keys is treated as the needles Iterable. At the time of
+                // writing, properties.getKeyset() actually returns a HashSet, so iteration isn't
+                // super efficient and the use of HashSet for monitoredKeys may be redundant, but
+                // neither set will be enormous.
+                HashSet<String> monitoredKeys = listenerEntry.getValue();
+                Iterable<String> modifiedKeys = properties.getKeyset();
+                if (containsAny(monitoredKeys, modifiedKeys)) {
                     listenerEntry.getKey().onChange();
                 }
             }
         }
     }
 
-    private static boolean intersects(@NonNull Set<String> one, @NonNull Set<String> two) {
-        for (String toFind : one) {
-            if (two.contains(toFind)) {
+    private static boolean containsAny(
+            @NonNull Set<String> haystack, @NonNull Iterable<String> needles) {
+        for (String needle : needles) {
+            if (haystack.contains(needle)) {
                 return true;
             }
         }
@@ -211,8 +254,11 @@ public final class ServerFlags {
         Objects.requireNonNull(listener);
         Objects.requireNonNull(keys);
 
+        // Make a defensive copy and use a well-defined Set implementation to provide predictable
+        // performance on the lookup.
+        HashSet<String> keysCopy = new HashSet<>(keys);
         synchronized (mListeners) {
-            mListeners.put(listener, keys);
+            mListeners.put(listener, keysCopy);
         }
     }
 

@@ -16,31 +16,40 @@
 
 package com.android.server.companion;
 
-import static com.android.internal.util.CollectionUtils.forEach;
 import static com.android.server.companion.CompanionDeviceManagerService.LOG_TAG;
 
+import android.companion.AssociationInfo;
 import android.util.Log;
 import android.util.Slog;
 
 import java.io.PrintWriter;
+import java.util.List;
 
 class CompanionDeviceShellCommand extends android.os.ShellCommand {
     private final CompanionDeviceManagerService mService;
+    private final AssociationStore mAssociationStore;
 
-    CompanionDeviceShellCommand(CompanionDeviceManagerService service) {
+    CompanionDeviceShellCommand(CompanionDeviceManagerService service,
+            AssociationStore associationStore) {
         mService = service;
+        mAssociationStore = associationStore;
     }
 
     @Override
     public int onCommand(String cmd) {
+        final PrintWriter out = getOutPrintWriter();
         try {
             switch (cmd) {
                 case "list": {
-                    forEach(
-                            mService.getAllAssociations(getNextArgInt()),
-                            a -> getOutPrintWriter()
-                                    .println(a.getPackageName() + " "
-                                            + a.getDeviceMacAddress()));
+                    final int userId = getNextArgInt();
+                    final List<AssociationInfo> associationsForUser =
+                            mAssociationStore.getAssociationsForUser(userId);
+                    for (AssociationInfo association : associationsForUser) {
+                        // TODO(b/212535524): use AssociationInfo.toShortString(), once it's not
+                        //  longer referenced in tests.
+                        out.println(association.getPackageName() + " "
+                                + association.getDeviceMacAddress());
+                    }
                 }
                 break;
 
@@ -48,13 +57,19 @@ class CompanionDeviceShellCommand extends android.os.ShellCommand {
                     int userId = getNextArgInt();
                     String packageName = getNextArgRequired();
                     String address = getNextArgRequired();
-                    mService.createAssociationInternal(userId, address, packageName, null);
+                    mService.legacyCreateAssociation(userId, address, packageName, null);
                 }
                 break;
 
                 case "disassociate": {
-                    mService.removeAssociation(getNextArgInt(), getNextArgRequired(),
-                            getNextArgRequired());
+                    final int userId = getNextArgInt();
+                    final String packageName = getNextArgRequired();
+                    final String address = getNextArgRequired();
+                    final AssociationInfo association =
+                            mService.getAssociationWithCallerChecks(userId, packageName, address);
+                    if (association != null) {
+                        mService.disassociateInternal(association.getId());
+                    }
                 }
                 break;
 
@@ -67,7 +82,10 @@ class CompanionDeviceShellCommand extends android.os.ShellCommand {
                     mService.onDeviceDisconnected(getNextArgRequired());
                 }
                 break;
-
+                case "clear-association-memory-cache": {
+                    mService.loadAssociationsFromDisk();
+                }
+                break;
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -95,5 +113,8 @@ class CompanionDeviceShellCommand extends android.os.ShellCommand {
         pw.println("      Create a new Association.");
         pw.println("  disassociate USER_ID PACKAGE MAC_ADDRESS");
         pw.println("      Remove an existing Association.");
+        pw.println("  clear-association-memory-cache");
+        pw.println("      Clear the in-memory association cache and reload all association "
+                + "information from persistent storage. USE FOR DEBUGGING PURPOSES ONLY.");
     }
 }

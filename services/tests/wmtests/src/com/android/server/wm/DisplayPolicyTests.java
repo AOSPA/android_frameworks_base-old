@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.view.InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.RoundedCorners.NO_ROUNDED_CORNERS;
@@ -188,11 +189,6 @@ public class DisplayPolicyTests extends WindowTestsBase {
         assertEquals(0,
                 displayPolicy.updateLightNavigationBarLw(APPEARANCE_LIGHT_NAVIGATION_BARS, null));
 
-        // Dimming window clears APPEARANCE_LIGHT_NAVIGATION_BARS.
-        assertEquals(0, displayPolicy.updateLightNavigationBarLw(0, dimming));
-        assertEquals(0, displayPolicy.updateLightNavigationBarLw(
-                APPEARANCE_LIGHT_NAVIGATION_BARS, dimming));
-
         // Control window overrides APPEARANCE_LIGHT_NAVIGATION_BARS flag.
         assertEquals(0, displayPolicy.updateLightNavigationBarLw(0, opaqueDarkNavBar));
         assertEquals(0, displayPolicy.updateLightNavigationBarLw(
@@ -251,28 +247,38 @@ public class DisplayPolicyTests extends WindowTestsBase {
 
     @Test
     public void testOverlappingWithNavBar() {
+        final InsetsSource navSource = new InsetsSource(ITYPE_NAVIGATION_BAR);
+        navSource.setFrame(new Rect(100, 200, 200, 300));
+        testOverlappingWithNavBarType(navSource);
+    }
+
+    @Test
+    public void testOverlappingWithExtraNavBar() {
+        final InsetsSource navSource = new InsetsSource(ITYPE_EXTRA_NAVIGATION_BAR);
+        navSource.setFrame(new Rect(100, 200, 200, 300));
+        testOverlappingWithNavBarType(navSource);
+    }
+
+    private void testOverlappingWithNavBarType(InsetsSource navSource) {
         final WindowState targetWin = createApplicationWindow();
         final WindowFrames winFrame = targetWin.getWindowFrames();
         winFrame.mFrame.set(new Rect(100, 100, 200, 200));
-
-        final WindowState navigationBar = createNavigationBarWindow();
-
-        navigationBar.getFrame().set(new Rect(100, 200, 200, 300));
+        targetWin.mAboveInsetsState.addSource(navSource);
 
         assertFalse("Freeform is overlapping with navigation bar",
-                DisplayPolicy.isOverlappingWithNavBar(targetWin, navigationBar));
+                DisplayPolicy.isOverlappingWithNavBar(targetWin));
 
         winFrame.mFrame.set(new Rect(100, 101, 200, 201));
         assertTrue("Freeform should be overlapping with navigation bar (bottom)",
-                DisplayPolicy.isOverlappingWithNavBar(targetWin, navigationBar));
+                DisplayPolicy.isOverlappingWithNavBar(targetWin));
 
         winFrame.mFrame.set(new Rect(99, 200, 199, 300));
         assertTrue("Freeform should be overlapping with navigation bar (right)",
-                DisplayPolicy.isOverlappingWithNavBar(targetWin, navigationBar));
+                DisplayPolicy.isOverlappingWithNavBar(targetWin));
 
         winFrame.mFrame.set(new Rect(199, 200, 299, 300));
         assertTrue("Freeform should be overlapping with navigation bar (left)",
-                DisplayPolicy.isOverlappingWithNavBar(targetWin, navigationBar));
+                DisplayPolicy.isOverlappingWithNavBar(targetWin));
     }
 
     private WindowState createNavigationBarWindow() {
@@ -315,5 +321,27 @@ public class DisplayPolicyTests extends WindowTestsBase {
         assertFalse(imeSource.getFrame().isEmpty());
         assertFalse(navBarSource.getFrame().isEmpty());
         assertTrue(imeSource.getFrame().contains(navBarSource.getFrame()));
+    }
+
+    @UseTestDisplay(addWindows = { W_NAVIGATION_BAR })
+    @Test
+    public void testInsetsGivenContentFrame() {
+        final DisplayPolicy displayPolicy = mDisplayContent.getDisplayPolicy();
+        final DisplayInfo displayInfo = new DisplayInfo();
+        displayInfo.logicalWidth = 1000;
+        displayInfo.logicalHeight = 2000;
+        displayInfo.rotation = ROTATION_0;
+
+        WindowManager.LayoutParams attrs = mNavBarWindow.mAttrs;
+        displayPolicy.addWindowLw(mNavBarWindow, attrs);
+        mNavBarWindow.setRequestedSize(attrs.width, attrs.height);
+        mNavBarWindow.getControllableInsetProvider().setServerVisible(true);
+
+        mNavBarWindow.mGivenContentInsets.set(0, 10, 0, 0);
+
+        displayPolicy.layoutWindowLw(mNavBarWindow, null, mDisplayContent.mDisplayFrames);
+        final InsetsState state = mDisplayContent.getInsetsStateController().getRawInsetsState();
+        final InsetsSource navBarSource = state.peekSource(ITYPE_NAVIGATION_BAR);
+        assertEquals(attrs.height - 10, navBarSource.getFrame().height());
     }
 }

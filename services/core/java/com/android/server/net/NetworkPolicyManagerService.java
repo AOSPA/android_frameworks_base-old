@@ -130,7 +130,7 @@ import static com.android.internal.util.XmlUtils.writeIntArrayXml;
 import static com.android.internal.util.XmlUtils.writeIntAttribute;
 import static com.android.internal.util.XmlUtils.writeLongAttribute;
 import static com.android.internal.util.XmlUtils.writeStringAttribute;
-import static com.android.server.NetworkManagementService.LIMIT_GLOBAL_ALERT;
+import static com.android.net.module.util.NetworkStatsUtils.LIMIT_GLOBAL_ALERT;
 import static com.android.server.net.NetworkStatsService.ACTION_NETWORK_STATS_UPDATED;
 
 import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
@@ -151,6 +151,8 @@ import android.app.IUidObserver;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.usage.NetworkStats;
+import android.app.usage.NetworkStatsManager;
 import android.app.usage.UsageStatsManagerInternal;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -181,7 +183,6 @@ import android.net.NetworkRequest;
 import android.net.NetworkSpecifier;
 import android.net.NetworkStack;
 import android.net.NetworkStateSnapshot;
-import android.net.NetworkStats;
 import android.net.NetworkTemplate;
 import android.net.TelephonyNetworkSpecifier;
 import android.net.TrafficStats;
@@ -255,6 +256,7 @@ import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.StatLogger;
 import com.android.internal.util.XmlUtils;
 import com.android.net.module.util.NetworkIdentityUtils;
+import com.android.net.module.util.NetworkStatsUtils;
 import com.android.net.module.util.PermissionUtils;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
@@ -440,7 +442,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     private final Context mContext;
     private final IActivityManager mActivityManager;
-    private NetworkStatsManagerInternal mNetworkStats;
+    private NetworkStatsManager mNetworkStats;
     private final INetworkManagementService mNetworkManager;
     private UsageStatsManagerInternal mUsageStats;
     private AppStandbyInternal mAppStandby;
@@ -452,6 +454,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private ConnectivityManager mConnManager;
     private PowerManagerInternal mPowerManagerInternal;
     private PowerWhitelistManager mPowerWhitelistManager;
+    @NonNull
+    private final Dependencies mDeps;
 
     /** Current cached value of the current Battery Saver mode's setting for restrict background. */
     @GuardedBy("mUidRulesFirstLock")
@@ -703,7 +707,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     public NetworkPolicyManagerService(Context context, IActivityManager activityManager,
             INetworkManagementService networkManagement) {
         this(context, activityManager, networkManagement, AppGlobals.getPackageManager(),
-                getDefaultClock(), getDefaultSystemDir(), false);
+                getDefaultClock(), getDefaultSystemDir(), false, new Dependencies(context));
     }
 
     private static @NonNull File getDefaultSystemDir() {
@@ -715,9 +719,59 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 Clock.systemUTC());
     }
 
+    static class Dependencies {
+        final Context mContext;
+        final NetworkStatsManager mNetworkStatsManager;
+        Dependencies(Context context) {
+            mContext = context;
+            mNetworkStatsManager = mContext.getSystemService(NetworkStatsManager.class);
+            // Query stats from NetworkStatsService will trigger a poll by default.
+            // But since NPMS listens stats updated event, and will query stats
+            // after the event. A polling -> updated -> query -> polling loop will be introduced
+            // if polls on open. Hence, while NPMS manages it's poll requests explicitly, set
+            // flag to false to prevent a polling loop.
+            mNetworkStatsManager.setPollOnOpen(false);
+        }
+
+        long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
+            Trace.traceBegin(TRACE_TAG_NETWORK, "getNetworkTotalBytes");
+            try {
+                final NetworkStats.Bucket ret = mNetworkStatsManager
+                        .querySummaryForDevice(template, start, end);
+                return ret.getRxBytes() + ret.getTxBytes();
+            } catch (RuntimeException e) {
+                Slog.w(TAG, "Failed to read network stats: " + e);
+                return 0;
+            } finally {
+                Trace.traceEnd(TRACE_TAG_NETWORK);
+            }
+        }
+
+        @NonNull
+        List<NetworkStats.Bucket> getNetworkUidBytes(
+                @NonNull NetworkTemplate template, long start, long end) {
+            Trace.traceBegin(TRACE_TAG_NETWORK, "getNetworkUidBytes");
+            final List<NetworkStats.Bucket> buckets = new ArrayList<>();
+            try {
+                final NetworkStats stats = mNetworkStatsManager.querySummary(template, start, end);
+                while (stats.hasNextBucket()) {
+                    final NetworkStats.Bucket bucket = new NetworkStats.Bucket();
+                    stats.getNextBucket(bucket);
+                    buckets.add(bucket);
+                }
+            } catch (RuntimeException e) {
+                Slog.w(TAG, "Failed to read network stats: " + e);
+            } finally {
+                Trace.traceEnd(TRACE_TAG_NETWORK);
+            }
+            return buckets;
+        }
+    }
+
+    @VisibleForTesting
     public NetworkPolicyManagerService(Context context, IActivityManager activityManager,
             INetworkManagementService networkManagement, IPackageManager pm, Clock clock,
-            File systemDir, boolean suppressDefaultPolicy) {
+            File systemDir, boolean suppressDefaultPolicy, Dependencies deps) {
         mContext = Objects.requireNonNull(context, "missing context");
         mActivityManager = Objects.requireNonNull(activityManager, "missing activityManager");
         mNetworkManager = Objects.requireNonNull(networkManagement, "missing networkManagement");
@@ -738,10 +792,12 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         mUidEventHandler = new Handler(mUidEventThread.getLooper(), mUidEventHandlerCallback);
 
         mSuppressDefaultPolicy = suppressDefaultPolicy;
+        mDeps = Objects.requireNonNull(deps, "missing Dependencies");
 
         mPolicyFile = new AtomicFile(new File(systemDir, "netpolicy.xml"), "net-policy");
 
         mAppOps = context.getSystemService(AppOpsManager.class);
+        mNetworkStats = context.getSystemService(NetworkStatsManager.class);
         mMultipathPolicyTracker = new MultipathPolicyTracker(mContext, mHandler);
         // Expose private service for system components to use.
         LocalServices.addService(NetworkPolicyManagerInternal.class,
@@ -841,7 +897,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
             mUsageStats = LocalServices.getService(UsageStatsManagerInternal.class);
             mAppStandby = LocalServices.getService(AppStandbyInternal.class);
-            mNetworkStats = LocalServices.getService(NetworkStatsManagerInternal.class);
 
             synchronized (mUidRulesFirstLock) {
                 synchronized (mNetworkPoliciesSecondLock) {
@@ -1160,20 +1215,33 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     };
 
     /**
-     * Receiver that watches for {@link INetworkStatsService} updates, which we
+     * Receiver that watches for {@link NetworkStatsManager} updates, which we
      * use to check against {@link NetworkPolicy#warningBytes}.
      */
-    final private BroadcastReceiver mStatsReceiver = new BroadcastReceiver() {
+    private final NetworkStatsBroadcastReceiver mStatsReceiver =
+            new NetworkStatsBroadcastReceiver();
+    private class NetworkStatsBroadcastReceiver extends BroadcastReceiver {
+        private boolean mIsAnyIntentReceived = false;
         @Override
         public void onReceive(Context context, Intent intent) {
             // on background handler thread, and verified
             // READ_NETWORK_USAGE_HISTORY permission above.
+
+            mIsAnyIntentReceived = true;
 
             synchronized (mNetworkPoliciesSecondLock) {
                 updateNetworkRulesNL();
                 updateNetworkEnabledNL();
                 updateNotificationsNL();
             }
+        }
+
+        /**
+         * Return whether any {@code ACTION_NETWORK_STATS_UPDATED} intent is received.
+         * Used to determine if NetworkStatsService is ready.
+         */
+        public boolean isAnyIntentReceived() {
+            return mIsAnyIntentReceived;
         }
     };
 
@@ -1384,15 +1452,17 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         long maxBytes = 0;
         int maxUid = 0;
 
-        final NetworkStats stats = getNetworkUidBytes(template, start, end);
-        NetworkStats.Entry entry = null;
-        for (int i = 0; i < stats.size(); i++) {
-            entry = stats.getValues(i, entry);
-            final long bytes = entry.rxBytes + entry.txBytes;
+        // Skip if not ready. NetworkStatsService will block public API calls until it is
+        // ready. To prevent NPMS be blocked on that, skip and fail fast instead.
+        if (!mStatsReceiver.isAnyIntentReceived()) return null;
+
+        final List<NetworkStats.Bucket> stats = mDeps.getNetworkUidBytes(template, start, end);
+        for (final NetworkStats.Bucket entry : stats) {
+            final long bytes = entry.getRxBytes() + entry.getTxBytes();
             totalBytes += bytes;
             if (bytes > maxBytes) {
                 maxBytes = bytes;
-                maxUid = entry.uid;
+                maxUid = entry.getUid();
             }
         }
 
@@ -2004,7 +2074,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         for (final NetworkStateSnapshot snapshot : snapshots) {
             mNetIdToSubId.put(snapshot.getNetwork().getNetId(), parseSubId(snapshot));
 
-            // Policies matched by NPMS only match by subscriber ID or by ssid. Thus subtype
+            // Policies matched by NPMS only match by subscriber ID or by network ID. Thus subtype
             // in the object created here is never used and its value doesn't matter, so use
             // NETWORK_TYPE_UNKNOWN.
             final NetworkIdentity ident = NetworkIdentity.buildNetworkIdentity(mContext, snapshot,
@@ -2368,7 +2438,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                             templateMeteredness = readIntAttribute(in, ATTR_TEMPLATE_METERED);
 
                         } else {
-                            subscriberIdMatchRule = NetworkTemplate.SUBSCRIBER_ID_MATCH_RULE_EXACT;
+                            subscriberIdMatchRule =
+                                    NetworkStatsUtils.SUBSCRIBER_ID_MATCH_RULE_EXACT;
                             if (templateType == MATCH_MOBILE) {
                                 Log.d(TAG, "Update template match rule from mobile to carrier and"
                                         + " force to metered");
@@ -2431,12 +2502,20 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                         } else {
                             inferred = false;
                         }
-                        final NetworkTemplate template = new NetworkTemplate(templateType,
-                                subscriberId, new String[] { subscriberId },
-                                networkId, templateMeteredness, NetworkStats.ROAMING_ALL,
-                                NetworkStats.DEFAULT_NETWORK_ALL, NetworkTemplate.NETWORK_TYPE_ALL,
-                                NetworkTemplate.OEM_MANAGED_ALL, subscriberIdMatchRule);
-                        if (template.isPersistable()) {
+                        final NetworkTemplate.Builder builder =
+                                new NetworkTemplate.Builder(templateType)
+                                        .setMeteredness(templateMeteredness);
+                        if (subscriberIdMatchRule
+                                == NetworkStatsUtils.SUBSCRIBER_ID_MATCH_RULE_EXACT) {
+                            final ArraySet<String> ids = new ArraySet<>();
+                            ids.add(subscriberId);
+                            builder.setSubscriberIds(ids);
+                        }
+                        if (networkId != null) {
+                            builder.setWifiNetworkKeys(Set.of(networkId));
+                        }
+                        final NetworkTemplate template = builder.build();
+                        if (NetworkPolicy.isTemplatePersistable(template)) {
                             mNetworkPolicy.put(template, new NetworkPolicy(template, cycleRule,
                                     warningBytes, limitBytes, lastWarningSnooze,
                                     lastLimitSnooze, metered, inferred));
@@ -2585,35 +2664,39 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      * into {@link WifiConfiguration}.
      */
     private void upgradeWifiMeteredOverride() {
-        final ArrayMap<String, Boolean> wifiNetworkIds = new ArrayMap<>();
+        final ArrayMap<String, Boolean> wifiNetworkKeys = new ArrayMap<>();
         synchronized (mNetworkPoliciesSecondLock) {
             for (int i = 0; i < mNetworkPolicy.size();) {
                 final NetworkPolicy policy = mNetworkPolicy.valueAt(i);
                 if (policy.template.getMatchRule() == NetworkTemplate.MATCH_WIFI
                         && !policy.inferred) {
                     mNetworkPolicy.removeAt(i);
-                    wifiNetworkIds.put(policy.template.getNetworkId(), policy.metered);
+                    final Set<String> keys = policy.template.getWifiNetworkKeys();
+                    wifiNetworkKeys.put(keys.isEmpty() ? null : keys.iterator().next(),
+                            policy.metered);
                 } else {
                     i++;
                 }
             }
         }
 
-        if (wifiNetworkIds.isEmpty()) {
+        if (wifiNetworkKeys.isEmpty()) {
             return;
         }
         final WifiManager wm = mContext.getSystemService(WifiManager.class);
         final List<WifiConfiguration> configs = wm.getConfiguredNetworks();
         for (int i = 0; i < configs.size(); ++i) {
             final WifiConfiguration config = configs.get(i);
-            final String networkId = resolveNetworkId(config);
-            final Boolean metered = wifiNetworkIds.get(networkId);
-            if (metered != null) {
-                Slog.d(TAG, "Found network " + networkId + "; upgrading metered hint");
-                config.meteredOverride = metered
-                        ? WifiConfiguration.METERED_OVERRIDE_METERED
-                        : WifiConfiguration.METERED_OVERRIDE_NOT_METERED;
-                wm.updateNetwork(config);
+            for (String key : config.getAllPersistableNetworkKeys()) {
+                final Boolean metered = wifiNetworkKeys.get(key);
+                if (metered != null) {
+                    Slog.d(TAG, "Found network " + key + "; upgrading metered hint");
+                    config.meteredOverride = metered
+                            ? WifiConfiguration.METERED_OVERRIDE_METERED
+                            : WifiConfiguration.METERED_OVERRIDE_NOT_METERED;
+                    wm.updateNetwork(config);
+                    break;
+                }
             }
         }
 
@@ -2643,7 +2726,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             for (int i = 0; i < mNetworkPolicy.size(); i++) {
                 final NetworkPolicy policy = mNetworkPolicy.valueAt(i);
                 final NetworkTemplate template = policy.template;
-                if (!template.isPersistable()) continue;
+                if (!NetworkPolicy.isTemplatePersistable(template)) continue;
 
                 out.startTag(null, TAG_NETWORK_POLICY);
                 writeIntAttribute(out, ATTR_NETWORK_TEMPLATE, template.getMatchRule());
@@ -2651,11 +2734,13 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 if (subscriberId != null) {
                     out.attribute(null, ATTR_SUBSCRIBER_ID, subscriberId);
                 }
-                writeIntAttribute(out, ATTR_SUBSCRIBER_ID_MATCH_RULE,
-                        template.getSubscriberIdMatchRule());
-                final String networkId = template.getNetworkId();
-                if (networkId != null) {
-                    out.attribute(null, ATTR_NETWORK_ID, networkId);
+                final int subscriberIdMatchRule = template.getSubscriberIds().isEmpty()
+                        ? NetworkStatsUtils.SUBSCRIBER_ID_MATCH_RULE_ALL
+                        : NetworkStatsUtils.SUBSCRIBER_ID_MATCH_RULE_EXACT;
+                writeIntAttribute(out, ATTR_SUBSCRIBER_ID_MATCH_RULE, subscriberIdMatchRule);
+                if (!template.getWifiNetworkKeys().isEmpty()) {
+                    out.attribute(null, ATTR_NETWORK_ID,
+                            template.getWifiNetworkKeys().iterator().next());
                 }
                 writeIntAttribute(out, ATTR_TEMPLATE_METERED,
                         template.getMeteredness());
@@ -3345,6 +3430,35 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             result &= set.add(elements[i]);
         }
         return result;
+    }
+
+    /**
+     * Get subscription plan for the given networkTemplate.
+     *
+     * @param template the networkTemplate to get the subscription plan for.
+     */
+    @Override
+    public SubscriptionPlan getSubscriptionPlan(@NonNull NetworkTemplate template) {
+        enforceAnyPermissionOf(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
+        synchronized (mNetworkPoliciesSecondLock) {
+            final int subId = findRelevantSubIdNL(template);
+            return getPrimarySubscriptionPlanLocked(subId);
+        }
+    }
+
+    /**
+     * Notifies that the specified {@link NetworkStatsProvider} has reached its quota
+     * which was set through {@link NetworkStatsProvider#onSetLimit(String, long)} or
+     * {@link NetworkStatsProvider#onSetWarningAndLimit(String, long, long)}.
+     */
+    @Override
+    public void onStatsProviderWarningOrLimitReached() {
+        enforceAnyPermissionOf(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
+        // This API may be called before the system is ready.
+        synchronized (mNetworkPoliciesSecondLock) {
+            if (!mSystemReady) return;
+        }
+        mHandler.obtainMessage(MSG_STATS_PROVIDER_WARNING_OR_LIMIT_REACHED).sendToTarget();
     }
 
     @Override
@@ -4739,6 +4853,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 ? ALLOWED_REASON_POWER_SAVE_ALLOWLIST : 0);
         newAllowedReasons |= (isWhitelistedFromPowerSaveExceptIdleUL(uid)
                 ? ALLOWED_REASON_POWER_SAVE_EXCEPT_IDLE_ALLOWLIST : 0);
+        newAllowedReasons |= (uidBlockedState.allowedReasons
+                & ALLOWED_REASON_RESTRICTED_MODE_PERMISSIONS);
 
         uidBlockedState.blockedReasons = (uidBlockedState.blockedReasons
                 & BLOCKED_METERED_REASON_MASK) | newBlockedReasons;
@@ -5331,25 +5447,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     @Deprecated
     private long getTotalBytes(NetworkTemplate template, long start, long end) {
-        return getNetworkTotalBytes(template, start, end);
-    }
-
-    private long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
-        try {
-            return mNetworkStats.getNetworkTotalBytes(template, start, end);
-        } catch (RuntimeException e) {
-            Slog.w(TAG, "Failed to read network stats: " + e);
-            return 0;
-        }
-    }
-
-    private NetworkStats getNetworkUidBytes(NetworkTemplate template, long start, long end) {
-        try {
-            return mNetworkStats.getNetworkUidBytes(template, start, end);
-        } catch (RuntimeException e) {
-            Slog.w(TAG, "Failed to read network stats: " + e);
-            return new NetworkStats(SystemClock.elapsedRealtime(), 0);
-        }
+        // Skip if not ready. NetworkStatsService will block public API calls until it is
+        // ready. To prevent NPMS be blocked on that, skip and fail fast instead.
+        if (!mStatsReceiver.isAnyIntentReceived()) return 0;
+        return mDeps.getNetworkTotalBytes(template, start, end);
     }
 
     private boolean isBandwidthControlEnabled() {
@@ -5565,14 +5666,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
 
         @Override
-        public SubscriptionPlan getSubscriptionPlan(NetworkTemplate template) {
-            synchronized (mNetworkPoliciesSecondLock) {
-                final int subId = findRelevantSubIdNL(template);
-                return getPrimarySubscriptionPlanLocked(subId);
-            }
-        }
-
-        @Override
         public long getSubscriptionOpportunisticQuota(Network network, int quotaType) {
             final long quotaBytes;
             synchronized (mNetworkPoliciesSecondLock) {
@@ -5613,12 +5706,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         public void setMeteredRestrictedPackagesAsync(Set<String> packageNames, int userId) {
             mHandler.obtainMessage(MSG_METERED_RESTRICTED_PACKAGES_CHANGED,
                     userId, 0, packageNames).sendToTarget();
-        }
-
-        @Override
-        public void onStatsProviderWarningOrLimitReached(@NonNull String tag) {
-            Log.v(TAG, "onStatsProviderWarningOrLimitReached: " + tag);
-            mHandler.obtainMessage(MSG_STATS_PROVIDER_WARNING_OR_LIMIT_REACHED).sendToTarget();
         }
     }
 

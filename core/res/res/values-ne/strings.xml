@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"एपलाई तपाईंको Android टिभी डिभाइसको आगमन र बहिर्गमन कलसम्बन्धी डेटासहित कल लग परिमार्जन गर्ने अनुमति दिन्छ। हानिकारक एपहरूले यसलाई तपाईंको कल लग मेटाउन वा परिमार्जन गर्न प्रयोग गर्न सक्छन्।"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"एपलाई तपाईंको फोनको आउने र बाहिर जाने कलहरूको बारेको डेटा सहित कल लग परिमार्जन गर्न अनुमति दिन्छ। खराब एपहरूले यसलाई तपाईंको कल लग मेटाउन वा परिमार्जन गर्न प्रयोग गर्न सक्दछ।"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"शरीरका सेन्सरहरूमा पहुँच गराउनुहोस् (जस्तै हृदय धड्कन निगरानीहरू)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"तपाईँको हृदय गति जस्तो सेंसर बाट डेटा पहुँचको लागि एप अनुमति दिन्छ जसले तपाईँको भौतिक अवस्था अनुगमन गर्छ।"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"बडी सेन्सरका सहायताले हृदयको गति, शरीरको तापक्रम, रगतमा रहेको अक्सिजनको प्रतिशतलगायतका डेटा हेर्ने अनुमति।"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"ब्याकग्राउन्डमा काम गर्ने बडी सेन्सरका सहायताले (हृदयको गति मापन जस्ता) डेटा हेर्ने अनुमति"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"ब्याकग्राउन्डमा काम गर्ने बडी सेन्सरका सहायताले हृदयको गति, शरीरको तापक्रम, रगतमा रहेको अक्सिजनको प्रतिशतलगायतका डेटा हेर्ने अनुमति।"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"पात्रोका कार्यक्रम र विवरणहरू पढ्ने"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"यस एपले तपाईंको ट्याब्लेटमा भण्डारण गरिएका पात्रो सम्बन्धी सबै कार्यक्रमहरू पढ्न र तपाईंको पात्रोको डेटा आदान प्रदान वा सुरक्षित गर्न सक्छ।"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"यस एपले तपाईंको Android टिभी डिभाइसमा भण्डार गरिएका पात्रोसम्बन्धी सबै कार्यक्रमहरू पढ्न र तपाईंको पात्रोको डेटा आदान प्रदान वा सुरक्षित गर्न सक्छ।"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"तपाईँको हस्तक्षेप बिना नै कल गर्न IMS सेवा प्रयोग गर्न एपलाई अनुमति दिन्छ।"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"फोन स्थिति र पहिचान पढ्नुहोस्"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"उपकरणको फोन विशेषताहरूको पहुँच गर्न एपलाई अनुमति दिन्छ। यस अनुमतिले फोन नम्बर र उपकरणको IDs, कल सक्षम छ कि छैन र कलद्वारा जोडिएको टाढाको नम्बर निर्धारण गर्न अनुमति दिन्छ।"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"टेलिफोन सेवाका आधारभूत स्थिति र त्यसको पहिचानसम्बन्धी जानकारी रिड गर्ने"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"तपाईंले यो अनुमति दिनुभयो भने यो एपले यस डिभाइसको टेलिफोन सेवाका आधारभूत सुविधाहरू प्रयोग गर्न सक्छ।"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"प्रणाली मार्फत कल गर्न दिनुहोस्‌"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"कल गर्दाको अनुभवलाई सुधार्न यस एपलाई प्रणाली मार्फत कलहरू गर्न अनुमति दिन्छ।"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"प्रणालीमार्फत कलहरू हेर्नुका साथै तिनीहरूलाई नियन्त्रण गर्नुहोस्‌।"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"आफ्नो फेस मोडेल मेटाउन ट्याप गर्नुहोस् अनि आफ्नो अनुहार फेरि दर्ता गर्नुहोस्"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"फेस अनलक सेटअप गर्नुहोस्"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"फोनमा हेरेकै भरमा फोन अनलक गर्नुहोस्"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"फेस अनलक प्रयोग गर्न \"सेटिङ तथा गोपनीयता\" मा गई "<b>"क्यामेरा प्रयोग गर्ने अनुमति"</b>" दिनुहोस्"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"अनलक गर्ने अन्य तरिकाहरू सेटअप गर्नुहोस्"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"फिंगरप्रिन्ट हाल्न ट्याप गर्नुहोस्"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"फिंगरप्रिन्ट अनलक"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"बाधा नपुर्याउँनुहोस् कन्फिगरेसन पढ्न र लेख्‍नको लागि एपलाई अनुमति दिनुहोस्।"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"हेर्ने अनुमतिको प्रयोग सुरु गर्नुहोस्"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"वाहकलाई कुनै एपसम्बन्धी अनुमतिको प्रयोग सुरु गर्न दिन्छ। साधारण एपहरूलाई कहिल्यै आवश्यक नपर्नु पर्ने हो।"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"अनुमतिसम्बन्धी निर्णयहरू हेर्न सुरु गर्नुहोस्"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"होल्डरलाई अनुमतिसम्बन्धी निर्णयहरू समीक्षा गर्ने स्क्रिन सुरु गर्न दिन्छ। सामान्य एपहरूलाई कहिल्यै पनि नचाहिनु पर्ने हो।"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"एपका सुविधासम्बन्धी जानकारी हेर्न थाल्नुहोस्"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"होल्डरलाई एपका सुविधासम्बन्धी जानकारी हेर्न दिन्छ।"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"नमुना लिने उच्च दरमा सेन्सरसम्बन्धी डेटा प्रयोग गर्ने"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"मनिटरको स्क्रिन अनलक गर्ने प्रयासहरू"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप भएको संख्या निरीक्षण गर्नुहोस् र यदि निकै धेरै गलत पासवर्डहरू टाइप भएका छन भने ट्याब्लेट लक गर्नुहोस् वा ट्याब्लेटका सबै डेटा मेट्नुहोस्।"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप गरेको सङ्ख्या निरीक्षण गर्नुहोस्, र धेरै पटक गलत पासवर्डहरू टाइप गरिएको खण्डमा आफ्नो Android टिभी यन्त्र लक गर्नुहोस् वा डिभाइसमा भएको सम्पूर्ण डेटा मेटाउनुहोस्।"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप गरिन्छ भन्ने कुरा निगरानी गरियोस् र अत्यन्तै धेरै पटक गलत पासवर्ड टाइप गरिएका खण्डमा यो इन्फोटेनमेन्ट प्रणाली लक गरियोस् वा यस इन्फोटेनमेन्ट प्रणालीका सबै डेटा मेटाइयोस्।"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"स्क्रिनअनलक गर्दा गलत पासवर्ड टाइप भएको संख्या निरीक्षण गर्नुहोस् र यदि निकै धेरै गलत पासवर्डहरू टाइप भएका छन भने फोन लक गर्नुहोस् वा फोनका सबै डेटा मेट्नुहोस्।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप संख्या अनुगमन गर्नुहोस्, र यदि निकै धेरै गलत पासवर्डहरू टाइप गरिएमा ट्याब्लेट लक गर्नुहोस् वा प्रयोगकर्ताको डेटा मेटाउनुहोस्।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप गरेको सङ्ख्या निरीक्षण गर्नुहोस्, र धेरै पटक गलत पासवर्डहरू टाइप गरिएको खण्डमा आफ्नो Android टिभी यन्त्र लक गर्नुहोस् वा यो प्रयोगकर्ताको सम्पूर्ण डेटा मेटाउनुहोस्।"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"स्क्रिन अनलक गर्दा कति पटक गलत पासवर्ड टाइप गरिन्छ भन्ने कुरा निगरानी गरियोस् र अत्यन्तै धेरै पटक गलत पासवर्ड टाइप गरिएका खण्डमा यो इन्फोटेनमेन्ट प्रणाली लक गरियोस् वा यस प्रोफाइलका सबै डेटा मेटाइयोस्।"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"स्क्रिन अनलक गर्दा गलत पासवर्ड टाइप संख्या अनुगमन गर्नुहोस्, र यदि निकै धेरै गलत पासवर्डहरू टाइप गरिएमा फोन लक गर्नुहोस् वा प्रयोगकर्ताको डेटा मेटाउनुहोस्।"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"स्क्रिन लक परिवर्तन गर्ने"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"स्क्रिन लक परिवर्तन गर्नुहोस्।"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"सबै डेटा मेट्ने"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"एउटा फ्याक्ट्रि डेटा रिसेट गरेर चेतावनी नआउँदै ट्याबल्टको डेटा मेट्नुहोस्।"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"फ्याक्ट्री डेटा रिसेट गरेर चेतावनी नदिइकन आफ्नो Android टिभी डिभाइसको डेटा मेटाउनुहोस्।"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"यो इन्फोटेनमेन्ट प्रणालीको डेटा कुनै चेतावनीविनै फ्याक्ट्री डेटा रिसेट गरेर मेटाइयोस्।"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"एउटा फ्याक्ट्रि डेटा रिसेट गरेर चेतावनी नदिइकन फोनको डेटा मेट्न।"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"प्रयोगकर्ता डेटा मेट्नुहोस्"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"प्रोफाइल डेटा मेटाइयोस्"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"प्रयोगकर्ता डेटा मेट्नुहोस्"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"चेतावनी बिना यो ट्याब्लेटमा यस प्रयोगकर्ताको डेटा मेट्नुहोस्।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"यो Android टिभी डिभाइसमा भएको यस प्रयोगकर्ताको डेटा चेतावनी नदिइकन मेटाउनुहोस्।"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"यो इन्फोटेनमेन्ट प्रणालीमा भएको यस प्रोफाइलको डेटा कुनै चेतावनीविनै मेटाइयोस्।"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"चेतावनी बिना यो फोनमा यस प्रयोगकर्ताको डेटा मेट्नुहोस्।"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"उपकरण विश्वव्यापी प्रोक्सी मिलाउनुहोस्"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"नीति सक्षम हुँदा प्रयोग गरिनको लागि यन्त्र ग्लोवल प्रोक्सी सेट गर्नुहोस्। केवल यन्त्र मालिकले ग्लोवल प्रोक्सी सेट गर्न सक्नुहुन्छ।"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> तयारी गर्दै।"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"सुरुवात एपहरू।"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"बुट पुरा हुँदै।"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"स्क्रिन अफ गर्ने हो?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"आफ्नो फिंगरप्रिन्ट सेटअप गर्दा तपाईंले पावर बटन थिच्नुभयो।\n\nयसो गर्दा सामान्यतया तपाईंको स्क्रिन अफ हुन्छ।"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"अफ गर्नुहोस्"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"रद्द गर्नुहोस्"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"सेटअप गर्ने प्रक्रिया जारी राख्ने हो?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"तपाईंले पावर बटन थिच्नुभयो — सामान्यतया स्क्रिन अफ गर्न यो बटन थिच्ने गरिन्छ।\n\nफिंगरप्रिन्ट सेटअप भइन्जेल हल्का तरिकाले यो बटन ट्याप गर्नुहोस्।"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"स्क्रिन अफ गर्नुहोस्"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"सेटअप जारी राख्नुस्"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"फिंगरप्रिन्ट पुष्टि गर्ने क्रम जारी राख्ने हो?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"तपाईंले पावर बटन थिच्नुभयो — सामान्यतया स्क्रिन अफ गर्न यो बटन थिच्ने गरिन्छ।\n\nतपाईं आफ्नो फिंगरप्रिन्ट पुष्टि गर्न चाहनुहुन्छ भने हल्का तरिकाले यो बटन ट्याप गरी हेर्नुहोस्।"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"स्क्रिन अफ गर्नुहोस्"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"जारी राख्नुहोस्"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> चलिरहेको छ"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"खेलमा फर्कन ट्याप गर्नुहोस्"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"खेल छनौट गर्नुहोस्‌"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"एपसम्बन्धी आफ्नो रोजाइअनुसारको सूचना"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="ACCOUNT">%2$s</xliff:g> (यस खाताको प्रयोगकर्ता पहिले नै अवस्थित छ) मा नयाँ प्रयोगकर्ता सिर्जना गर्न <xliff:g id="APP">%1$s</xliff:g> लाई अनुमति दिने हो?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="ACCOUNT">%2$s</xliff:g> मा नयाँ प्रयोगकर्ता सिर्जना गर्न <xliff:g id="APP">%1$s</xliff:g> लाई अनुमति दिने हो?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"सुपरिवेक्षित प्रयोगकर्ता हाल्नुहोस्"</string>
     <string name="language_selection_title" msgid="52674936078683285">"भाषा थप्नुहोस्"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"क्षेत्रको प्राथमिकता"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"भाषाको नाम टाइप गर्नुहोस्"</string>

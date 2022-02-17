@@ -32,7 +32,6 @@ import static com.android.server.pm.PackageManagerService.SYSTEM_PARTITIONS;
 import static com.android.server.pm.PackageManagerService.TAG;
 
 import android.annotation.Nullable;
-import android.content.pm.parsing.ParsingPackageUtils;
 import android.os.Environment;
 import android.os.SystemClock;
 import android.os.Trace;
@@ -47,6 +46,7 @@ import com.android.server.EventLogTags;
 import com.android.server.pm.parsing.PackageCacher;
 import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import com.android.server.utils.WatchedArrayMap;
 
 import java.io.File;
@@ -126,13 +126,13 @@ final class InitAndSystemPackageHelper {
         return null;
     }
 
-    public OverlayConfig setUpSystemPackages(
+    public OverlayConfig initPackages(
             WatchedArrayMap<String, PackageSetting> packageSettings, int[] userIds,
             long startTime) {
         PackageParser2 packageParser = mPm.mInjector.getScanningCachingPackageParser();
 
         ExecutorService executorService = ParallelPackageParser.makeExecutorService();
-        // Prepare apex package info before scanning APKs, these information are needed when
+        // Prepare apex package info before scanning APKs, this information is needed when
         // scanning apk in apex.
         mPm.mApexManager.scanApexPackagesTraced(packageParser, executorService);
 
@@ -289,7 +289,7 @@ final class InitAndSystemPackageHelper {
             long currentTime, PackageParser2 packageParser, ExecutorService executorService) {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "scanDir [" + scanDir.getAbsolutePath() + "]");
         try {
-            mInstallPackageHelper.installSystemPackagesFromDir(scanDir, parseFlags, scanFlags,
+            mInstallPackageHelper.installPackagesFromDir(scanDir, parseFlags, scanFlags,
                     currentTime, packageParser, executorService);
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);

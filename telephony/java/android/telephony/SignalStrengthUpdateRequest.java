@@ -19,6 +19,7 @@ package android.telephony;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
@@ -71,12 +72,7 @@ public final class SignalStrengthUpdateRequest implements Parcelable {
             @Nullable List<SignalThresholdInfo> signalThresholdInfos,
             boolean isReportingRequestedWhileIdle,
             boolean isSystemThresholdReportingRequestedWhileIdle) {
-        // System app (like Bluetooth) can specify the request to report system thresholds while
-        // device is idle (with permission protection). In this case, the request doesn't need to
-        // provide a non-empty list of SignalThresholdInfo which is only asked for public apps.
-        if (!isSystemThresholdReportingRequestedWhileIdle) {
-            validate(signalThresholdInfos);
-        }
+        validate(signalThresholdInfos, isSystemThresholdReportingRequestedWhileIdle);
 
         mSignalThresholdInfos = signalThresholdInfos;
         mIsReportingRequestedWhileIdle = isReportingRequestedWhileIdle;
@@ -135,7 +131,10 @@ public final class SignalStrengthUpdateRequest implements Parcelable {
         /**
          * Set the builder object if require reporting on the system thresholds when device is idle.
          *
-         * <p>This can only used by the system caller. Requires permission
+         * <p>This is intended to be used by the system privileged caller only. When setting to
+         * {@code true}, signal strength update request through
+         * {@link TelephonyManager#setSignalStrengthUpdateRequest(SignalStrengthUpdateRequest)}
+         * will require permission
          * {@link android.Manifest.permission#LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH}.
          *
          * @param isSystemThresholdReportingRequestedWhileIdle true if request reporting on the
@@ -143,6 +142,7 @@ public final class SignalStrengthUpdateRequest implements Parcelable {
          * @return the builder to facilitate the chaining
          * @hide
          */
+        @SystemApi
         @RequiresPermission(android.Manifest.permission.LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH)
         public @NonNull Builder setSystemThresholdReportingRequestedWhileIdle(
                 boolean isSystemThresholdReportingRequestedWhileIdle) {
@@ -196,6 +196,7 @@ public final class SignalStrengthUpdateRequest implements Parcelable {
      *
      * @hide
      */
+    @SystemApi
     public boolean isSystemThresholdReportingRequestedWhileIdle() {
         return mIsSystemThresholdReportingRequestedWhileIdle;
     }
@@ -274,8 +275,12 @@ public final class SignalStrengthUpdateRequest implements Parcelable {
      * Throw IAE if SignalThresholdInfo collection is null or empty,
      * or the SignalMeasurementType for the same RAN in the collection is not unique.
      */
-    private static void validate(Collection<SignalThresholdInfo> infos) {
-        if (infos == null || infos.isEmpty()) {
+    private static void validate(Collection<SignalThresholdInfo> infos,
+            boolean isSystemThresholdReportingRequestedWhileIdle) {
+        // System app (like Bluetooth) can specify the request to report system thresholds while
+        // device is idle (with permission protection). In this case, the request doesn't need to
+        // provide a non-empty list of SignalThresholdInfo which is only asked for public apps.
+        if (infos == null || (infos.isEmpty() && !isSystemThresholdReportingRequestedWhileIdle)) {
             throw new IllegalArgumentException("SignalThresholdInfo collection is null or empty");
         }
 

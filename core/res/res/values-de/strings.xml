@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Ermöglicht der App, die Anrufliste deines Android TV-Geräts zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Du solltest wissen, dass dies von schädlichen Apps genutzt werden kann, um Einträge in der Anrufliste zu löschen oder zu ändern."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Ermöglicht der App, die Anrufliste deines Telefons zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Schädliche Apps können so die Einträge in der Anrufliste löschen oder sie ändern."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"Auf Körpersensoren wie z. B. Pulsmesser zugreifen"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Ermöglicht der App, auf Daten von Sensoren zuzugreifen, die deine körperliche Verfassung überwachen, beispielsweise deinen Puls"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Zugriff auf Daten von Körpersensoren, wie z. B. Herzfrequenz, Temperatur und Sauerstoffsättigung."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"Auf im Hintergrund aktive Körpersensoren (z. B. Herzfrequenzmesser) zugreifen"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Zugriff auf Daten von Körpersensoren, wie z. B. Herzfrequenz, Temperatur und Sauerstoffsättigung, während sie im Hintergrund aktiv sind."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Kalendertermine und Details lesen"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Diese App kann alle auf deinem Tablet gespeicherten Kalendertermine lesen und deine Kalenderdaten teilen oder speichern."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Diese App kann alle auf deinem Android TV-Gerät gespeicherten Kalendertermine lesen und die Kalenderdaten teilen oder speichern."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Ermöglicht der App die Verwendung des IMS-Dienstes zum Tätigen von Anrufen ohne Nutzereingriffe"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"Telefonstatus und Identität abrufen"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Ermöglicht der App, auf die Telefonfunktionen des Geräts zuzugreifen. Die Berechtigung erlaubt der App, die Telefonnummer und Geräte-IDs zu erfassen, festzustellen, ob gerade ein Gespräch geführt wird, und die Rufnummer verbundener Anrufer zu lesen."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"Grundlegenden Telefoniestatus und Identität lesen"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Ermöglicht der App, auf die grundlegenden Telefoniefunktionen des Geräts zuzugreifen."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"Anrufe über das System durchführen"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Ermöglicht der App, Anrufe über das System durchzuführen, um die Anrufqualität zu verbessern."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"Anrufe durch das System einsehen und verwalten."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Tippe, um dein Gesichtsmodell zu löschen, und füge es dann noch einmal hinzu"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Entsperrung per Gesichtserkennung einrichten"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Entsperre dein Smartphone, indem du es ansiehst"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Wenn du die Entsperrung per Gesichtserkennung verwenden möchtest, aktiviere in den Einstellungen unter „Datenschutz“ die Option "<b>"Kamerazugriff"</b></string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Weitere Möglichkeiten zum Entsperren einrichten"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Tippe, um einen Fingerabdruck hinzuzufügen"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Entsperrung per Fingerabdruck"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Ermöglicht der App Lese- und Schreibzugriff auf die „Bitte nicht stören“-Konfiguration"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"Mit der Verwendung der Anzeigeberechtigung beginnen"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Ermöglicht dem Inhaber, die Berechtigungsnutzung für eine App zu beginnen. Sollte für normale Apps nie benötigt werden."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"Entscheidungen zu Leseberechtigung starten"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Ermöglicht dem Inhaber, das Display zu starten, um Berechtigungsentscheidungen anzusehen. Sollte für normale Apps nie benötigt werden."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"App-Funktionen ansehen"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Ermöglicht der App, die Informationen über die Funktionen einer anderen App anzusehen."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"Sensordaten mit hoher Frequenz auslesen"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Versuche zum Entsperren des Displays überwachen"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Anzahl der falsch eingegebenen Passwörter beim Entsperren des Displays überwachen und Tablet sperren oder alle Daten auf dem Tablet löschen, wenn zu häufig ein falsches Passwort eingegeben wird."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Es wird überwacht, wie oft beim Versuch, den Bildschirm zu entsperren, ein falsches Passwort eingegeben wird. Wenn es zu viele Fehlversuche gibt, wird das Android TV-Gerät gesperrt oder alle Daten darauf werden gelöscht."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Anzahl der falsch eingegebenen Passwörter beim Entsperren des Displays erfassen und Infotainmentsystem sperren oder alle Daten des Infotainmentsystems löschen, wenn zu häufig ein falsches Passwort eingegeben wird."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Anzahl der falsch eingegebenen Passwörter beim Entsperren des Bildschirms überwachen und Telefon sperren oder alle Daten auf dem Telefon löschen, wenn zu häufig ein falsches Passwort eingegeben wird."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Anzahl der falsch eingegebenen Passwörter beim Entsperren des Displays überwachen und Tablet sperren oder alle Daten dieses Nutzers löschen, wenn zu häufig ein falsches Passwort eingegeben wird"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Es wird überwacht, wie oft beim Versuch, den Bildschirm zu entsperren, ein falsches Passwort eingegeben wird. Wenn es zu viele Fehlversuche gibt, wird das Android TV-Gerät gesperrt oder alle Daten dieses Nutzers werden gelöscht."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Anzahl der falsch eingegebenen Passwörter beim Entsperren des Displays erfassen und Infotainmentsystem sperren oder alle Daten dieses Profils löschen, wenn zu häufig ein falsches Passwort eingegeben wird."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Anzahl der falsch eingegebenen Passwörter beim Entsperren des Displays überwachen und Smartphone sperren oder alle Daten dieses Nutzers löschen, wenn zu häufig ein falsches Passwort eingegeben wird"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Displaysperre ändern"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Ändern der Displaysperre"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Alle Daten löschen"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Auf Werkseinstellungen zurücksetzen und Daten auf dem Tablet ohne Warnung löschen"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Du kannst die Daten auf deinem Android TV-Gerät ohne vorherige Warnung löschen, indem du es auf die Werkseinstellungen zurücksetzt."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Gerät auf Werkseinstellungen zurücksetzen und damit Daten des Infotainmentsystems ohne Warnung löschen."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Gerät auf Werkseinstellungen zurücksetzen und damit Daten auf dem Telefon ohne Warnung löschen"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Nutzerdaten löschen"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Profildaten löschen"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Nutzerdaten löschen"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Daten dieses Nutzers auf diesem Tablet ohne vorherige Warnung löschen"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Daten dieses Nutzers auf diesem Android TV-Gerät werden ohne vorherige Warnung gelöscht."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Daten dieses Profils in diesem Infotainmentsystem ohne Warnung löschen."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Daten dieses Nutzers auf diesem Smartphone ohne vorherige Warnung löschen"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Den globalen Proxy des Geräts festlegen"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Bei aktivierter Richtlinie zu verwendenden globalen Geräteproxy festlegen. Nur der Eigentümer des Geräts kann den globalen Proxy festlegen."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> wird vorbereitet"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Apps werden gestartet..."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Start wird abgeschlossen..."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Display ausschalten?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Beim Einrichten deines Fingerabdrucks hast du die Ein-/Aus-Taste gedrückt.\n\nDamit wird üblicherweise das Display ausgeschaltet."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Ausschalten"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Abbrechen"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Einrichtung fortsetzen?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Du hast die Ein-/Aus-Taste gedrückt — damit wird der Bildschirm ausgeschaltet.\n\nTippe die Taste leicht an, um deinen Fingerabdruck einzurichten."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Ausschalten"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Weiter einrichten"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Mit der Fingerabdruckprüfung fortfahren?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Du hast die Ein-/Aus-Taste gedrückt — damit wird der Bildschirm ausgeschaltet.\n\nTippe die Taste leicht an, um mit deinem Fingerabdruck deine Identität zu bestätigen."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Ausschalten"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Fortfahren"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> läuft"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Tippe, um zum Spiel zurückzukehren"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Spiel wählen"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Benutzerdefinierte App-Benachrichtigung"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Es gibt bereits einen Nutzer mit <xliff:g id="ACCOUNT">%2$s</xliff:g>. Möchtest du zulassen, dass <xliff:g id="APP">%1$s</xliff:g> einen neuen Nutzer mit diesem Konto erstellt?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Möchtest du zulassen, dass <xliff:g id="APP">%1$s</xliff:g> einen neuen Nutzer mit <xliff:g id="ACCOUNT">%2$s</xliff:g> erstellt?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Betreuten Nutzer hinzufügen"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Sprache hinzufügen"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Region auswählen"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Sprache eingeben"</string>

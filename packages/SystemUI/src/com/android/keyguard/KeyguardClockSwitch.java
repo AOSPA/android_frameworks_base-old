@@ -11,7 +11,6 @@ import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver.OnPreDrawListener;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
@@ -89,7 +88,6 @@ public class KeyguardClockSwitch extends RelativeLayout {
 
     private int mClockSwitchYAmount;
     @VisibleForTesting boolean mChildrenAreLaidOut = false;
-    private OnPreDrawListener mPreDrawListener;
 
     public KeyguardClockSwitch(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -192,10 +190,14 @@ public class KeyguardClockSwitch extends RelativeLayout {
         }
     }
 
-    private void animateClockChange(boolean useLargeClock) {
+    private void updateClockViews(boolean useLargeClock, boolean animate) {
         if (mClockInAnim != null) mClockInAnim.cancel();
         if (mClockOutAnim != null) mClockOutAnim.cancel();
         if (mStatusAreaAnim != null) mStatusAreaAnim.cancel();
+
+        mClockInAnim = null;
+        mClockOutAnim = null;
+        mStatusAreaAnim = null;
 
         View in, out;
         int direction = 1;
@@ -214,6 +216,14 @@ public class KeyguardClockSwitch extends RelativeLayout {
 
             // Must remove in order for notifications to appear in the proper place
             removeView(out);
+        }
+
+        if (!animate) {
+            out.setAlpha(0f);
+            in.setAlpha(1f);
+            in.setVisibility(VISIBLE);
+            mStatusArea.setTranslationY(statusAreaYTranslation);
+            return;
         }
 
         mClockOutAnim = new AnimatorSet();
@@ -275,7 +285,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
      *
      * @return true if desired clock appeared and false if it was already visible
      */
-    boolean switchToClock(@ClockSize int clockSize) {
+    boolean switchToClock(@ClockSize int clockSize, boolean animate) {
         if (mDisplayedClockSize != null && clockSize == mDisplayedClockSize) {
             return false;
         }
@@ -283,31 +293,22 @@ public class KeyguardClockSwitch extends RelativeLayout {
         // let's make sure clock is changed only after all views were laid out so we can
         // translate them properly
         if (mChildrenAreLaidOut) {
-            animateClockChange(clockSize == LARGE);
-            mDisplayedClockSize = clockSize;
-        } else if (mPreDrawListener == null) {
-            mPreDrawListener = () -> {
-                switchToClock(clockSize);
-                getViewTreeObserver().removeOnPreDrawListener(mPreDrawListener);
-                mPreDrawListener = null;
-                return true;
-            };
-            getViewTreeObserver().addOnPreDrawListener(mPreDrawListener);
+            updateClockViews(clockSize == LARGE, animate);
         }
+
+        mDisplayedClockSize = clockSize;
         return true;
     }
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
-        mChildrenAreLaidOut = true;
-    }
 
-    void onViewDetached() {
-        if (mPreDrawListener != null) {
-            getViewTreeObserver().removeOnPreDrawListener(mPreDrawListener);
-            mPreDrawListener = null;
+        if (mDisplayedClockSize != null && !mChildrenAreLaidOut) {
+            updateClockViews(mDisplayedClockSize == LARGE, /* animate */ true);
         }
+
+        mChildrenAreLaidOut = true;
     }
 
     public Paint getPaint() {
@@ -368,5 +369,6 @@ public class KeyguardClockSwitch extends RelativeLayout {
         pw.println("  mDarkAmount: " + mDarkAmount);
         pw.println("  mSupportsDarkText: " + mSupportsDarkText);
         pw.println("  mColorPalette: " + Arrays.toString(mColorPalette));
+        pw.println("  mDisplayedClockSize: " + mDisplayedClockSize);
     }
 }

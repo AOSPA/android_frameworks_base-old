@@ -18,6 +18,7 @@ package com.android.server.display;
 
 import android.annotation.NonNull;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayManagerInternal.RefreshRateLimitation;
@@ -31,6 +32,7 @@ import android.view.DisplayAddress;
 
 import com.android.internal.R;
 import com.android.internal.display.BrightnessSynchronizer;
+import com.android.server.display.config.Density;
 import com.android.server.display.config.DisplayConfiguration;
 import com.android.server.display.config.DisplayQuirks;
 import com.android.server.display.config.HbmTiming;
@@ -50,8 +52,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 import javax.xml.datatype.DatatypeConfigurationException;
@@ -70,6 +74,8 @@ public class DisplayDeviceConfig {
     private static final String ETC_DIR = "etc";
     private static final String DISPLAY_CONFIG_DIR = "displayconfig";
     private static final String CONFIG_FILE_FORMAT = "display_%s.xml";
+    private static final String DEFAULT_CONFIG_FILE = "default.xml";
+    private static final String DEFAULT_CONFIG_FILE_WITH_UIMODE_FORMAT = "default_%s.xml";
     private static final String PORT_SUFFIX_FORMAT = "port_%d";
     private static final String STABLE_ID_SUFFIX_FORMAT = "id_%d";
     private static final String NO_SUFFIX_FORMAT = "%d";
@@ -80,6 +86,13 @@ public class DisplayDeviceConfig {
     private static final float INVALID_BRIGHTNESS_IN_CONFIG = -2f;
 
     private static final float NITS_INVALID = -1;
+
+    // Length of the ambient light horizon used to calculate the long term estimate of ambient
+    // light.
+    private static final int AMBIENT_LIGHT_LONG_HORIZON_MILLIS = 10000;
+
+    // Length of the ambient light horizon used to calculate short-term estimate of ambient light.
+    private static final int AMBIENT_LIGHT_SHORT_HORIZON_MILLIS = 2000;
 
     private final Context mContext;
 
@@ -115,12 +128,15 @@ public class DisplayDeviceConfig {
     private float mBrightnessRampFastIncrease = Float.NaN;
     private float mBrightnessRampSlowDecrease = Float.NaN;
     private float mBrightnessRampSlowIncrease = Float.NaN;
+    private int mAmbientHorizonLong = AMBIENT_LIGHT_LONG_HORIZON_MILLIS;
+    private int mAmbientHorizonShort = AMBIENT_LIGHT_SHORT_HORIZON_MILLIS;
     private Spline mBrightnessToBacklightSpline;
     private Spline mBacklightToBrightnessSpline;
     private Spline mBacklightToNitsSpline;
     private List<String> mQuirks;
     private boolean mIsHighBrightnessModeEnabled = false;
     private HighBrightnessModeData mHbmData;
+    private DensityMap mDensityMap;
     private String mLoadedFrom = null;
 
     private DisplayDeviceConfig(Context context) {
@@ -141,6 +157,33 @@ public class DisplayDeviceConfig {
      */
     public static DisplayDeviceConfig create(Context context, long physicalDisplayId,
             boolean isDefaultDisplay) {
+        final DisplayDeviceConfig config = createWithoutDefaultValues(context, physicalDisplayId,
+                isDefaultDisplay);
+
+        config.copyUninitializedValuesFromSecondaryConfig(loadDefaultConfigurationXml(context));
+        return config;
+    }
+
+    /**
+     * Creates an instance using global values since no display device config xml exists.
+     * Uses values from config or PowerManager.
+     *
+     * @param context
+     * @param useConfigXml
+     * @return A configuration instance.
+     */
+    public static DisplayDeviceConfig create(Context context, boolean useConfigXml) {
+        final DisplayDeviceConfig config;
+        if (useConfigXml) {
+            config = getConfigFromGlobalXml(context);
+        } else {
+            config = getConfigFromPmValues(context);
+        }
+        return config;
+    }
+
+    private static DisplayDeviceConfig createWithoutDefaultValues(Context context,
+            long physicalDisplayId, boolean isDefaultDisplay) {
         DisplayDeviceConfig config;
 
         config = loadConfigFromDirectory(context, Environment.getProductDirectory(),
@@ -161,22 +204,53 @@ public class DisplayDeviceConfig {
         return create(context, isDefaultDisplay);
     }
 
-    /**
-     * Creates an instance using global values since no display device config xml exists.
-     * Uses values from config or PowerManager.
-     *
-     * @param context
-     * @param useConfigXml
-     * @return A configuration instance.
-     */
-    public static DisplayDeviceConfig create(Context context, boolean useConfigXml) {
-        DisplayDeviceConfig config;
-        if (useConfigXml) {
-            config = getConfigFromGlobalXml(context);
-        } else {
-            config = getConfigFromPmValues(context);
+    private static DisplayConfiguration loadDefaultConfigurationXml(Context context) {
+        List<File> defaultXmlLocations = new ArrayList<>();
+        defaultXmlLocations.add(Environment.buildPath(Environment.getProductDirectory(),
+                ETC_DIR, DISPLAY_CONFIG_DIR, DEFAULT_CONFIG_FILE));
+        defaultXmlLocations.add(Environment.buildPath(Environment.getVendorDirectory(),
+                ETC_DIR, DISPLAY_CONFIG_DIR, DEFAULT_CONFIG_FILE));
+
+        // Read config_defaultUiModeType directly because UiModeManager hasn't started yet.
+        final int uiModeType = context.getResources()
+                .getInteger(com.android.internal.R.integer.config_defaultUiModeType);
+        final String uiModeTypeStr = Configuration.getUiModeTypeString(uiModeType);
+        if (uiModeTypeStr != null) {
+            defaultXmlLocations.add(Environment.buildPath(Environment.getRootDirectory(),
+                    ETC_DIR, DISPLAY_CONFIG_DIR,
+                    String.format(DEFAULT_CONFIG_FILE_WITH_UIMODE_FORMAT, uiModeTypeStr)));
         }
-        return config;
+        defaultXmlLocations.add(Environment.buildPath(Environment.getRootDirectory(),
+                ETC_DIR, DISPLAY_CONFIG_DIR, DEFAULT_CONFIG_FILE));
+
+        final File configFile = getFirstExistingFile(defaultXmlLocations);
+        if (configFile == null) {
+            // Display configuration files aren't required to exist.
+            return null;
+        }
+
+        DisplayConfiguration defaultConfig = null;
+
+        try (InputStream in = new BufferedInputStream(new FileInputStream(configFile))) {
+            defaultConfig = XmlParser.read(in);
+            if (defaultConfig == null) {
+                Slog.i(TAG, "Default DisplayDeviceConfig file is null");
+            }
+        } catch (IOException | DatatypeConfigurationException | XmlPullParserException e) {
+            Slog.e(TAG, "Encountered an error while reading/parsing display config file: "
+                    + configFile, e);
+        }
+
+        return defaultConfig;
+    }
+
+    private static File getFirstExistingFile(Collection<File> files) {
+        for (File file : files) {
+            if (file.exists() && file.isFile()) {
+                return file;
+            }
+        }
+        return null;
     }
 
     private static DisplayDeviceConfig loadConfigFromDirectory(Context context,
@@ -282,6 +356,14 @@ public class DisplayDeviceConfig {
         return mBrightnessRampSlowIncrease;
     }
 
+    public int getAmbientHorizonLong() {
+        return mAmbientHorizonLong;
+    }
+
+    public int getAmbientHorizonShort() {
+        return mAmbientHorizonShort;
+    }
+
     SensorData getAmbientLightSensor() {
         return mAmbientLightSensor;
     }
@@ -316,9 +398,13 @@ public class DisplayDeviceConfig {
         return mRefreshRateLimitations;
     }
 
+    public DensityMap getDensityMap() {
+        return mDensityMap;
+    }
+
     @Override
     public String toString() {
-        String str = "DisplayDeviceConfig{"
+        return "DisplayDeviceConfig{"
                 + "mLoadedFrom=" + mLoadedFrom
                 + ", mBacklight=" + Arrays.toString(mBacklight)
                 + ", mNits=" + Arrays.toString(mNits)
@@ -337,11 +423,13 @@ public class DisplayDeviceConfig {
                 + ", mBrightnessRampFastIncrease=" + mBrightnessRampFastIncrease
                 + ", mBrightnessRampSlowDecrease=" + mBrightnessRampSlowDecrease
                 + ", mBrightnessRampSlowIncrease=" + mBrightnessRampSlowIncrease
+                + ", mAmbientHorizonLong=" + mAmbientHorizonLong
+                + ", mAmbientHorizonShort=" + mAmbientHorizonShort
                 + ", mAmbientLightSensor=" + mAmbientLightSensor
                 + ", mProximitySensor=" + mProximitySensor
                 + ", mRefreshRateLimitations= " + Arrays.toString(mRefreshRateLimitations.toArray())
+                + ", mDensityMap= " + mDensityMap
                 + "}";
-        return str;
     }
 
     private static DisplayDeviceConfig getConfigFromSuffix(Context context, File baseDirectory,
@@ -384,6 +472,7 @@ public class DisplayDeviceConfig {
         try (InputStream in = new BufferedInputStream(new FileInputStream(configFile))) {
             final DisplayConfiguration config = XmlParser.read(in);
             if (config != null) {
+                loadDensityMap(config);
                 loadBrightnessDefaultFromDdcXml(config);
                 loadBrightnessConstraintsFromConfigXml();
                 loadBrightnessMap(config);
@@ -392,6 +481,7 @@ public class DisplayDeviceConfig {
                 loadBrightnessRamps(config);
                 loadAmbientLightSensorFromDdc(config);
                 loadProxSensorFromDdc(config);
+                loadAmbientHorizonFromDdc(config);
             } else {
                 Slog.w(TAG, "DisplayDeviceConfig file is null");
             }
@@ -427,6 +517,35 @@ public class DisplayDeviceConfig {
         setSimpleMappingStrategyValues();
         loadAmbientLightSensorFromConfigXml();
         setProxSensorUnspecified();
+    }
+
+    private void copyUninitializedValuesFromSecondaryConfig(DisplayConfiguration defaultConfig) {
+        if (defaultConfig == null) {
+            return;
+        }
+
+        if (mDensityMap == null) {
+            loadDensityMap(defaultConfig);
+        }
+    }
+
+    private void loadDensityMap(DisplayConfiguration config) {
+        if (config.getDensityMap() == null) {
+            return;
+        }
+
+        final List<Density> entriesFromXml = config.getDensityMap().getDensity();
+
+        final DensityMap.Entry[] entries =
+                new DensityMap.Entry[entriesFromXml.size()];
+        for (int i = 0; i < entriesFromXml.size(); i++) {
+            final Density density = entriesFromXml.get(i);
+            entries[i] = new DensityMap.Entry(
+                    density.getWidth().intValue(),
+                    density.getHeight().intValue(),
+                    density.getDensity().intValue());
+        }
+        mDensityMap = DensityMap.createByOwning(entries);
     }
 
     private void loadBrightnessDefaultFromDdcXml(DisplayConfiguration config) {
@@ -768,6 +887,17 @@ public class DisplayDeviceConfig {
             default:
                 Slog.wtf(TAG, "Unexpected Thermal Status: " + value);
                 return PowerManager.THERMAL_STATUS_NONE;
+        }
+    }
+
+    private void loadAmbientHorizonFromDdc(DisplayConfiguration config) {
+        final BigInteger configLongHorizon = config.getAmbientLightHorizonLong();
+        if (configLongHorizon != null) {
+            mAmbientHorizonLong = configLongHorizon.intValue();
+        }
+        final BigInteger configShortHorizon = config.getAmbientLightHorizonShort();
+        if (configShortHorizon != null) {
+            mAmbientHorizonShort = configShortHorizon.intValue();
         }
     }
 

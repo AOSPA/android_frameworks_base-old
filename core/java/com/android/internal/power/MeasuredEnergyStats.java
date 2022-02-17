@@ -328,7 +328,7 @@ public class MeasuredEnergyStats {
                 if (multiStateCounter != null) {
                     if (mAccumulatedMultiStateChargeMicroCoulomb == null) {
                         mAccumulatedMultiStateChargeMicroCoulomb =
-                                new LongMultiStateCounter[numWrittenEntries];
+                                new LongMultiStateCounter[mAccumulatedChargeMicroCoulomb.length];
                     }
                     mAccumulatedMultiStateChargeMicroCoulomb[index] = multiStateCounter;
                 }
@@ -589,6 +589,10 @@ public class MeasuredEnergyStats {
         final int numIndices = mConfig.getNumberOfBuckets();
         for (int index = 0; index < numIndices; index++) {
             setValueIfSupported(index, 0L);
+            if (mAccumulatedMultiStateChargeMicroCoulomb != null
+                    && mAccumulatedMultiStateChargeMicroCoulomb[index] != null) {
+                mAccumulatedMultiStateChargeMicroCoulomb[index].reset();
+            }
         }
     }
 

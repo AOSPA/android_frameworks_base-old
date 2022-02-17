@@ -18,11 +18,12 @@ package android.media.tv;
 
 import android.graphics.Rect;
 import android.media.PlaybackParams;
+import android.media.tv.AdRequest;
+import android.media.tv.BroadcastInfoRequest;
 import android.media.tv.TvTrackInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Surface;
-import android.media.tv.BroadcastInfoRequest;
 
 /**
  * Sub-interface of ITvInputService which is created per session and has its own context.
@@ -40,6 +41,8 @@ oneway interface ITvInputSession {
     void tune(in Uri channelUri, in Bundle params);
     void setCaptionEnabled(boolean enabled);
     void selectTrack(int type, in String trackId);
+
+    void setInteractiveAppNotificationEnabled(boolean enable);
 
     void appPrivateCommand(in String action, in Bundle data);
 
@@ -64,4 +67,8 @@ oneway interface ITvInputSession {
 
     // For broadcast info
     void requestBroadcastInfo(in BroadcastInfoRequest request);
+    void removeBroadcastInfo(int id);
+
+    // For ad request
+    void requestAd(in AdRequest request);
 }

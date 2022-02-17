@@ -16,7 +16,6 @@
 
 package com.android.server.wm.flicker.rotation
 
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
@@ -95,13 +94,13 @@ class ChangeAppRotationTest(
             }
         }
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun runPresubmitAssertion() {
         flickerRule.checkPresubmitAssertions()
     }
 
-    @Postsubmit
+    @FlakyTest
     @Test
     fun runPostsubmitAssertion() {
         flickerRule.checkPostsubmitAssertions()
@@ -113,11 +112,16 @@ class ChangeAppRotationTest(
         flickerRule.checkFlakyAssertions()
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Windows maybe recreated when rotated. Checks that the focus does not change or if it does,
+     * focus returns to [testApp]
+     */
     @FlakyTest(bugId = 190185577)
     @Test
-    override fun focusDoesNotChange() {
-        super.focusDoesNotChange()
+    fun focusChanges() {
+        testSpec.assertEventLog {
+            this.focusChanges(testApp.`package`)
+        }
     }
 
     /**
@@ -159,7 +163,7 @@ class ChangeAppRotationTest(
     /**
      * Checks the position of the status bar at the start and end of the transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 

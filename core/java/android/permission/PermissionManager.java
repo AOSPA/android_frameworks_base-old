@@ -24,6 +24,8 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SdkConstant;
+import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
@@ -66,6 +68,7 @@ import com.android.internal.annotations.Immutable;
 import com.android.internal.util.CollectionUtils;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -100,6 +103,26 @@ public final class PermissionManager {
      * The app should receive a {@code SecurityException}, or an error through a relevant callback.
      */
     public static final int PERMISSION_HARD_DENIED = 2;
+
+    /**
+     * Activity action: Launch UI to review permission decisions.
+     * <p>
+     * <strong>Important:</strong>You must protect the activity that handles this action with the
+     * {@link android.Manifest.permission#START_REVIEW_PERMISSION_DECISIONS} permission to ensure
+     * that only the system can launch this activity. The system will not launch activities that are
+     * not properly protected.
+     * <p>
+     * Input: Nothing.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @RequiresPermission(android.Manifest.permission.START_REVIEW_PERMISSION_DECISIONS)
+    public static final String ACTION_REVIEW_PERMISSION_DECISIONS =
+            "android.permission.action.REVIEW_PERMISSION_DECISIONS";
+
 
     /** @hide */
     public static final String LOG_TAG_TRACE_GRANTS = "PermissionGrantTrace";
@@ -218,7 +241,8 @@ public final class PermissionManager {
     /**
      * Checks whether a given data access chain described by the given {@link AttributionSource}
      * has a given permission. Call this method if you are the datasource which would not blame you
-     * for access to the data since you are the data.
+     * for access to the data since you are the data. Use this API if you are the datasource of the
+     * protected state.
      *
      * <strong>NOTE:</strong> Use this method only for permission checks at the
      * point where you will deliver the permission protected data to clients.
@@ -532,6 +556,19 @@ public final class PermissionManager {
         try {
             mPermissionManager
                     .revokeRuntimePermission(packageName, permName, user.getIdentifier(), reason);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @see Context#selfRevokePermissions(Collection)
+     * @hide
+     */
+    public void selfRevokePermissions(@NonNull Collection<String> permissions) {
+        try {
+            mPermissionManager.selfRevokePermissions(mContext.getPackageName(),
+                    new ArrayList<String>(permissions));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1339,6 +1376,26 @@ public final class PermissionManager {
         return false;
     }
 
+    /**
+     * Revoke the POST_NOTIFICATIONS permission, without killing the app. This method must ONLY BE
+     * USED in CTS or local tests.
+     *
+     * @param packageName The package to be revoked
+     * @param userId The user for which to revoke
+     *
+     * @hide
+     */
+    @TestApi
+    public void revokePostNotificationPermissionWithoutKillForTest(@NonNull String packageName,
+            int userId) {
+        try {
+            mPermissionManager.revokePostNotificationPermissionWithoutKillForTest(packageName,
+                    userId);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
     /* @hide */
     private static int checkPermissionUncached(@Nullable String permission, int pid, int uid) {
         final IActivityManager am = ActivityManager.getService();
@@ -1424,7 +1481,7 @@ public final class PermissionManager {
             new PropertyInvalidatedCache<PermissionQuery, Integer>(
                     2048, CACHE_KEY_PACKAGE_INFO, "checkPermission") {
                 @Override
-                protected Integer recompute(PermissionQuery query) {
+                public Integer recompute(PermissionQuery query) {
                     return checkPermissionUncached(query.permission, query.pid, query.uid);
                 }
             };
@@ -1507,12 +1564,12 @@ public final class PermissionManager {
             new PropertyInvalidatedCache<PackageNamePermissionQuery, Integer>(
                     16, CACHE_KEY_PACKAGE_INFO, "checkPackageNamePermission") {
                 @Override
-                protected Integer recompute(PackageNamePermissionQuery query) {
+                public Integer recompute(PackageNamePermissionQuery query) {
                     return checkPackageNamePermissionUncached(
                             query.permName, query.pkgName, query.userId);
                 }
                 @Override
-                protected boolean bypass(PackageNamePermissionQuery query) {
+                public boolean bypass(PackageNamePermissionQuery query) {
                     return query.userId < 0;
                 }
             };

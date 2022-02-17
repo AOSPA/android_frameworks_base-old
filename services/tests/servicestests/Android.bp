@@ -25,6 +25,7 @@ android_test {
         "test-apps/JobTestApp/src/**/*.java",
 
         "test-apps/SuspendTestApp/src/**/*.java",
+        ":service-bluetooth-tests-sources", // TODO(b/214988855) : Remove once framework-bluetooth jar is ready
     ],
     static_libs: [
         "frameworks-base-testutils",
@@ -32,6 +33,7 @@ android_test {
         "services.appwidget",
         "services.autofill",
         "services.backup",
+        "services.companion",
         "services.core",
         "services.devicepolicy",
         "services.net",
@@ -108,6 +110,7 @@ android_test {
 
     data: [
         ":JobTestApp",
+        ":StubTestApp",
     ],
 
     java_resources: [
@@ -179,18 +182,41 @@ filegroup {
 java_genrule {
     name: "FrameworksServicesTests_apks_as_resources",
     srcs: [
-        ":FrameworksCoreTests_install_complete_package_info",
+        ":FrameworksServicesTests_install",
+        ":FrameworksServicesTests_install_bad_dex",
+        ":FrameworksServicesTests_install_complete_package_info",
+        ":FrameworksServicesTests_install_decl_perm",
         ":FrameworksServicesTests_install_intent_filters",
+        ":FrameworksServicesTests_install_loc_auto",
+        ":FrameworksServicesTests_install_loc_internal",
+        ":FrameworksServicesTests_install_loc_sdcard",
+        ":FrameworksServicesTests_install_loc_unspecified",
         ":FrameworksServicesTests_install_split_base",
         ":FrameworksServicesTests_install_split_feature_a",
+        ":FrameworksServicesTests_install_use_perm_good",
+        ":FrameworksServicesTests_install_uses_feature",
         ":FrameworksServicesTests_install_uses_sdk_0",
         ":FrameworksServicesTests_install_uses_sdk_q0",
         ":FrameworksServicesTests_install_uses_sdk_q0_r0",
-        ":FrameworksServicesTests_install_uses_sdk_r_none",
         ":FrameworksServicesTests_install_uses_sdk_r0",
         ":FrameworksServicesTests_install_uses_sdk_r5",
+        ":FrameworksServicesTests_install_uses_sdk_r_none",
         ":FrameworksServicesTests_install_uses_sdk_r0_s0",
         ":FrameworksServicesTests_install_uses_sdk_r0_s5",
+        ":FrameworksServicesTests_keyset_permdef_sa_unone",
+        ":FrameworksServicesTests_keyset_permuse_sa_ua_ub",
+        ":FrameworksServicesTests_keyset_permuse_sb_ua_ub",
+        ":FrameworksServicesTests_keyset_sa_ua",
+        ":FrameworksServicesTests_keyset_sa_ua_ub",
+        ":FrameworksServicesTests_keyset_sa_uab",
+        ":FrameworksServicesTests_keyset_sa_ub",
+        ":FrameworksServicesTests_keyset_sa_unone",
+        ":FrameworksServicesTests_keyset_sab_ua",
+        ":FrameworksServicesTests_keyset_sau_ub",
+        ":FrameworksServicesTests_keyset_sb_ua",
+        ":FrameworksServicesTests_keyset_sb_ub",
+        ":FrameworksServicesTests_keyset_splat_api",
+        ":FrameworksServicesTests_keyset_splata_api",
     ],
     out: ["FrameworkServicesTests_apks_as_resources.res.zip"],
     tools: ["soong_zip"],

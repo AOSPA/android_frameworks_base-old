@@ -33,11 +33,11 @@ import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.window.TaskFragmentAppearedInfo;
 import android.window.TaskFragmentInfo;
 import android.window.WindowContainerTransaction;
 
@@ -64,6 +64,9 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     private @NonNull Consumer<List<SplitInfo>> mEmbeddingCallback;
     private final List<SplitInfo> mLastReportedSplitStates = new ArrayList<>();
 
+    // We currently only support split activity embedding within the one root Task.
+    private final Rect mParentBounds = new Rect();
+
     public SplitController() {
         mPresenter = new SplitPresenter(new MainThreadExecutor(), this);
         ActivityThread activityThread = ActivityThread.currentActivityThread();
@@ -80,6 +83,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     public void setEmbeddingRules(@NonNull Set<EmbeddingRule> rules) {
         mSplitRules.clear();
         mSplitRules.addAll(rules);
+        updateAnimationOverride();
     }
 
     @NonNull
@@ -92,11 +96,13 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
      */
     public void startActivityToSide(@NonNull Activity launchingActivity, @NonNull Intent intent,
             @Nullable Bundle options, @NonNull SplitRule sideRule,
-            @NonNull Consumer<Exception> failureCallback) {
+            @Nullable Consumer<Exception> failureCallback) {
         try {
             mPresenter.startActivityToSide(launchingActivity, intent, options, sideRule);
         } catch (Exception e) {
-            failureCallback.accept(e);
+            if (failureCallback != null) {
+                failureCallback.accept(e);
+            }
         }
     }
 
@@ -110,14 +116,13 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     }
 
     @Override
-    public void onTaskFragmentAppeared(@NonNull TaskFragmentAppearedInfo taskFragmentAppearedInfo) {
-        TaskFragmentContainer container = getContainer(
-                taskFragmentAppearedInfo.getTaskFragmentInfo().getFragmentToken());
+    public void onTaskFragmentAppeared(@NonNull TaskFragmentInfo taskFragmentInfo) {
+        TaskFragmentContainer container = getContainer(taskFragmentInfo.getFragmentToken());
         if (container == null) {
             return;
         }
 
-        container.setInfo(taskFragmentAppearedInfo.getTaskFragmentInfo());
+        container.setInfo(taskFragmentInfo);
         if (container.isFinished()) {
             mPresenter.cleanupContainer(container, false /* shouldFinishDependent */);
         }
@@ -158,10 +163,56 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     @Override
     public void onTaskFragmentParentInfoChanged(@NonNull IBinder fragmentToken,
             @NonNull Configuration parentConfig) {
+        onParentBoundsMayChange(parentConfig.windowConfiguration.getBounds());
         TaskFragmentContainer container = getContainer(fragmentToken);
         if (container != null) {
             mPresenter.updateContainer(container);
             updateCallbackIfNecessary();
+        }
+    }
+
+    private void onParentBoundsMayChange(Activity activity) {
+        if (activity.isFinishing()) {
+            return;
+        }
+
+        onParentBoundsMayChange(mPresenter.getParentContainerBounds(activity));
+    }
+
+    private void onParentBoundsMayChange(Rect parentBounds) {
+        if (!parentBounds.isEmpty() && !mParentBounds.equals(parentBounds)) {
+            mParentBounds.set(parentBounds);
+            updateAnimationOverride();
+        }
+    }
+
+    /**
+     * Updates if we should override transition animation. We only want to override if the Task
+     * bounds is large enough for at least one split rule.
+     */
+    private void updateAnimationOverride() {
+        if (mParentBounds.isEmpty()) {
+            // We don't know about the parent bounds yet.
+            return;
+        }
+
+        // Check if the parent container bounds can support any split rule.
+        boolean supportSplit = false;
+        for (EmbeddingRule rule : mSplitRules) {
+            if (!(rule instanceof SplitRule)) {
+                continue;
+            }
+            if (mPresenter.shouldShowSideBySide(mParentBounds, (SplitRule) rule)) {
+                supportSplit = true;
+                break;
+            }
+        }
+
+        // We only want to override if it supports split.
+        if (supportSplit) {
+            mPresenter.startOverrideSplitAnimation();
+        } else {
+            mPresenter.stopOverrideSplitAnimation();
         }
     }
 
@@ -179,6 +230,11 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
         final List<EmbeddingRule> splitRules = getSplitRules();
         final TaskFragmentContainer currentContainer = getContainerWithActivity(
                 launchedActivity.getActivityToken());
+
+        if (currentContainer == null) {
+            // Initial check before any TaskFragment is created.
+            onParentBoundsMayChange(launchedActivity);
+        }
 
         // Check if the activity is configured to always be expanded.
         if (shouldExpand(launchedActivity, null, splitRules)) {
@@ -257,6 +313,8 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             // onTaskFragmentParentInfoChanged
             return;
         }
+        // The bounds of the container may have been changed.
+        onParentBoundsMayChange(activity);
 
         // Check if activity requires a placeholder
         launchPlaceholderIfNecessary(activity);
@@ -295,11 +353,12 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             @NonNull TaskFragmentContainer primaryContainer, @NonNull Activity primaryActivity,
             @NonNull TaskFragmentContainer secondaryContainer,
             @NonNull SplitRule splitRule) {
+        SplitContainer splitContainer = new SplitContainer(primaryContainer, primaryActivity,
+                secondaryContainer, splitRule);
+        // Remove container later to prevent pinning escaping toast showing in lock task mode.
         if (splitRule instanceof SplitPairRule && ((SplitPairRule) splitRule).shouldClearTop()) {
             removeExistingSecondaryContainers(wct, primaryContainer);
         }
-        SplitContainer splitContainer = new SplitContainer(primaryContainer, primaryActivity,
-                secondaryContainer, splitRule);
         mSplitContainers.add(splitContainer);
     }
 
@@ -345,7 +404,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     TaskFragmentContainer getTopActiveContainer() {
         for (int i = mContainers.size() - 1; i >= 0; i--) {
             TaskFragmentContainer container = mContainers.get(i);
-            if (!container.isFinished()) {
+            if (!container.isFinished() && container.getTopNonFinishingActivity() != null) {
                 return container;
             }
         }
@@ -859,5 +918,13 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             options.putBinder(ActivityOptions.KEY_LAUNCH_TASK_FRAGMENT_TOKEN,
                     launchingContainer.getTaskFragmentToken());
         }
+    }
+
+    /**
+     * Checks if an activity is embedded and its presentation is customized by a
+     * {@link android.window.TaskFragmentOrganizer} to only occupy a portion of Task bounds.
+     */
+    public boolean isActivityEmbedded(@NonNull Activity activity) {
+        return mPresenter.isActivityEmbedded(activity.getActivityToken());
     }
 }

@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Cho phép ứng dụng sửa đổi nhật ký cuộc gọi trên thiết bị Android TV, bao gồm cả dữ liệu về cuộc gọi đến và cuộc gọi đi. Các ứng dụng độc hại có thể sử dụng quyền này để xóa hoặc sửa đổi nhật ký cuộc gọi của bạn."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Cho phép ứng dụng sửa đổi nhật ký cuộc gọi trên điện thoại của bạn, bao gồm dữ liệu về các cuộc gọi đến và gọi đi. Các ứng dụng độc hại có thể sử dụng quyền này để xóa hoặc sửa đổi nhật ký cuộc gọi của bạn."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"truy cập cảm biến cơ thể (như máy đo nhịp tim)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Cho phép ứng dụng truy cập dữ liệu từ bộ cảm biến giám sát tình trạng sức khỏe của bạn, ví dụ như nhịp tim."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Quyền truy cập vào dữ liệu từ các cảm biến cơ thể, chẳng hạn như dữ liệu về nhịp tim, nhiệt độ, tỷ lệ phần trăm oxy trong máu và các dữ liệu khác."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"truy cập vào các cảm biến cơ thể (như máy đo nhịp tim) khi ở trong nền"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Quyền truy cập vào dữ liệu từ các cảm biến cơ thể, chẳng hạn như dữ liệu về nhịp tim, nhiệt độ, tỷ lệ phần trăm oxy trong máu và các dữ liệu khác khi ở trong nền."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Đọc chi tiết và sự kiện lịch"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Ứng dụng này có thể đọc tất cả các sự kiện lịch được lưu trữ trên máy tính bảng của bạn và chia sẻ hoặc lưu dữ liệu lịch của bạn."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Ứng dụng này có thể đọc tất cả sự kiện trên lịch mà bạn lưu vào thiết bị Android TV cũng như chia sẻ hoặc lưu dữ liệu lịch của bạn."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Cho phép ứng dụng sử dụng dịch vụ IMS để thực hiện cuộc gọi mà không có sự can thiệp của bạn."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"đọc trạng thái và nhận dạng của điện thoại"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Cho phép ứng dụng truy cập vào các tính năng điện thoại của thiết bị. Quyền này cho phép ứng dụng xác định số điện thoại và ID thiết bị, cho dù cuộc gọi có hiện hoạt hay không và số từ xa có được kết nối bằng một cuộc gọi hay không."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"đọc danh tính và trạng thái cơ bản của điện thoại"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Cho phép ứng dụng dùng các tính năng cơ bản của điện thoại trên thiết bị."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"định tuyến cuộc gọi thông qua hệ thống"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Cho phép ứng dụng định tuyến cuộc gọi thông qua hệ thống nhằm cải thiện trải nghiệm gọi điện."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"xem và kiểm soát cuộc gọi thông qua hệ thống."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Nhấn để xóa mẫu khuôn mặt, sau đó thêm lại khuôn mặt của bạn"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Thiết lập tính năng Mở khóa bằng khuôn mặt"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Mở khóa điện thoại bằng cách nhìn vào điện thoại"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Để dùng tính năng Mở khoá bằng khuôn mặt, hãy bật tuỳ chọn "<b>"Truy cập máy ảnh"</b>" trong phần Cài đặt &gt; Quyền riêng tư"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Thiết lập thêm những cách mở khóa khác"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Nhấn để thêm vân tay"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Mở khóa bằng vân tay"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Cho phép ứng dụng đọc và ghi cấu hình Không làm phiền."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"cấp quyền xem"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Cho phép chủ sở hữu cấp quyền cho một ứng dụng. Các ứng dụng thông thường sẽ không bao giờ cần quyền này."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"bắt đầu xem các quyết định cấp quyền"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Cho phép chủ sở hữu bắt đầu kiểm tra để xem xét các quyết định cấp quyền. Việc này hoàn toàn không cần thiết đối với các ứng dụng thông thường."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"bắt đầu xem các tính năng của ứng dụng"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Cho phép chủ sở hữu bắt đầu xem thông tin về tính năng của một ứng dụng."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"truy cập vào dữ liệu cảm biến ở tốc độ lấy mẫu cao"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Giám sát những lần thử mở khóa màn hình"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Theo dõi số lần nhập mật khẩu không chính xác khi mở khóa màn hình và khóa máy tính bảng hoặc xóa tất cả dữ liệu của máy tính bảng nếu có quá nhiều lần nhập mật khẩu không chính xác."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Giám sát số lần nhập mật khẩu không chính xác khi mở khóa màn hình, đồng thời khóa thiết bị Android TV hoặc xóa tất cả dữ liệu trên thiết bị Android TV nếu bạn nhập mật khẩu sai quá nhiều lần."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Theo dõi số lần nhập sai mật khẩu khi mở khoá màn hình và khoá hệ thống thông tin giải trí hoặc xoá tất cả dữ liệu của hệ thống này nếu có quá nhiều lần nhập sai mật khẩu."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Theo dõi số lần nhập mật khẩu không chính xác khi mở khóa màn hình và khóa điện thoại hoặc xóa tất cả dữ liệu của điện thoại nếu có quá nhiều lần nhập mật khẩu không chính xác."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Giám sát số lần nhập sai mật khẩu khi mở khóa màn hình và khóa máy tính bảng hoặc xóa tất cả dữ liệu của người dùng này nếu nhập sai mật khẩu quá nhiều lần."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Giám sát số lần nhập mật khẩu không chính xác khi mở khóa màn hình, đồng thời khóa thiết bị Android TV hoặc xóa tất cả dữ liệu của người dùng này nếu bạn nhập mật khẩu sai quá nhiều lần."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Theo dõi số lần nhập sai mật khẩu khi mở khoá màn hình và khoá hệ thống thông tin giải trí hoặc xoá tất cả dữ liệu của hồ sơ này nếu có quá nhiều lần nhập sai mật khẩu."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Giám sát số lần nhập sai mật khẩu khi mở khóa màn hình và khóa điện thoại hoặc xóa tất cả dữ liệu của người dùng này nếu nhập sai mật khẩu quá nhiều lần."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Thay đổi phương thức khóa màn hình"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Thay đổi phương thức khóa màn hình."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Xóa tất cả dữ liệu"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Xóa dữ liệu trên máy tính bảng mà không cần cảnh báo, bằng cách thực hiện thiết lập lại dữ liệu ban đầu."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Xóa dữ liệu trên thiết bị Android TV mà không cảnh báo bằng cách thiết lập lại dữ liệu ban đầu."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Xoá dữ liệu của hệ thống thông tin giải trí mà không cảnh báo bằng cách đặt lại dữ liệu về trạng thái ban đầu."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Xóa dữ liệu trên điện thoại mà không cần cảnh báo, bằng cách thiết lập lại dữ liệu ban đầu."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Xóa dữ liệu người dùng"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Xoá dữ liệu hồ sơ"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Xóa dữ liệu người dùng"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Xóa dữ liệu của người dùng trên máy tính bảng này mà không cảnh báo."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Xóa dữ liệu của người dùng này trên thiết bị Android TV mà không cảnh báo."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Xoá dữ liệu của hồ sơ này trên hệ thống thông tin giải trí này mà không cảnh báo."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Xóa dữ liệu của người dùng trên điện thoại này mà không cảnh báo."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Đặt proxy chung của điện thoại"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Đặt proxy chung của thiết bị được sử dụng trong khi chính sách bật. Chỉ chủ sở hữu thiết bị mới có thể đặt proxy chung."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Đang chuẩn bị <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Khởi động ứng dụng."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Hoàn tất khởi động."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Tắt màn hình?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Trong khi thiết lập vân tay, bạn đã nhấn vào nút Nguồn.\n\nThông thường, thao tác này sẽ tắt màn hình."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Tắt"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Hủy"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Tiếp tục thiết lập?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Bạn đã nhấn nút nguồn – thao tác này thường tắt màn hình.\n\nHãy thử nhấn nhẹ khi thiết lập vân tay của bạn."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Tắt màn hình"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Tiếp tục thiết lập"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Tiếp tục xác minh vân tay của bạn?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Bạn đã nhấn nút nguồn – thao tác này thường tắt màn hình.\n\nHãy thử nhấn nhẹ để xác minh vân tay."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Tắt màn hình"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Tiếp tục"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> đang hoạt động"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Nhấn để quay lại trò chơi"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Chọn trò chơi"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Thông báo tùy chỉnh cho ứng dụng"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Cho phép <xliff:g id="APP">%1$s</xliff:g> tạo người dùng mới bằng <xliff:g id="ACCOUNT">%2$s</xliff:g> (đã tồn tại người dùng có tài khoản này)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Cho phép <xliff:g id="APP">%1$s</xliff:g> tạo người dùng mới bằng <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Thêm người dùng được giám sát"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Thêm ngôn ngữ"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Tùy chọn khu vực"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Nhập tên ngôn ngữ"</string>

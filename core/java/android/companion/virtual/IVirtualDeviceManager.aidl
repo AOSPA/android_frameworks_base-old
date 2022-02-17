@@ -17,6 +17,7 @@
 package android.companion.virtual;
 
 import android.companion.virtual.IVirtualDevice;
+import android.companion.virtual.VirtualDeviceParams;
 
 /**
  * Interface for communication between VirtualDeviceManager and VirtualDeviceManagerService.
@@ -25,5 +26,18 @@ import android.companion.virtual.IVirtualDevice;
  */
 interface IVirtualDeviceManager {
 
-    IVirtualDevice createVirtualDevice();
+    /**
+     * Creates a virtual device that can be used to create virtual displays and stream contents.
+     *
+     * @param token The binder token created by the caller of this API.
+     * @param packageName The package name of the caller. Implementation of this method must verify
+     *   that this belongs to the calling UID.
+     * @param associationId The association ID as returned by {@link AssociationInfo#getId()} from
+     *   CDM. Virtual devices must have a corresponding association with CDM in order to be created.
+     * @param params The parameters for creating this virtual device. See {@link
+     *   VirtualDeviceManager.VirtualDeviceParams}.
+     */
+    IVirtualDevice createVirtualDevice(
+            in IBinder token, String packageName, int associationId,
+            in VirtualDeviceParams params);
 }

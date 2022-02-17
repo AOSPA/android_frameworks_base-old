@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Leyfir forritinu að breyta símtalaskrá Android TV tækisins, þ. á m. gögnum um hringd og móttekin símtöl. Spilliforrit geta notað þetta til að eyða eða breyta símtalaskránni."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"Leyfir forriti að breyta símtalaskrá símans, þ. á m. gögnum um hringd og móttekin símtöl. Spilliforrit geta notað þetta til að eyða eða breyta símtalaskránni."</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"fá aðgang að líkamsskynjurum (s.s. hjartsláttarmælum)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"Veitir forritinu aðgang að gögnum frá skynjurum sem fylgjast með líkamsstarfsemi þinni, svo sem hjartslætti."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"Aðgangur að gögnum frá líkamsskynjurum, svo sem um hjartslátt, hitastig, súrefnismettun í blóði o.s.frv."</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"aðgangur að líkamsskynjurum (svo sem púlsmælum) í bakgrunni"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"Aðgangur að gögnum frá líkamsskynjurum, svo sem um hjartslátt, hitastig, súrefnismettun í blóði o.s.frv. í bakgrunni."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Lesa dagatalsviðburði og upplýsingar"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Þetta forrit getur lesið alla dagatalsviðburði sem eru vistaðir í spjaldtölvunni og deilt eða vistað dagatalsgögnin þín."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Þetta forrit getur lesið alla dagatalsviðburði sem eru vistaðir í Android TV og deilt eða vistað dagatalsgögnin þín."</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Leyfir forriti að nota IMS-þjónustu til að hringja án inngrips frá þér."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"lesa stöðu símans og auðkenni"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"Leyfir forriti að fá aðgang að símaeiginleikum tækisins. Þessi heimild gerir forritinu kleift að komast að símanúmeri og auðkennum tækisins, hvort símtal er í gangi og símanúmeri viðmælanda í símtali."</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"lesa stöðu og auðkenni grunneiginleika símaþjónustu"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"Leyfir forritinu að fá aðgang að grunneiginleikum símaþjónustu tækisins."</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"senda símtöl gegnum kerfið"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"Heimilar forritinu að senda símtöl sín gegnum kerfið til að bæta gæði símtalsins."</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"sjá og stjórna símtölum í gegnum kerfið."</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"Ýttu til að eyða andlitslíkaninu og skráðu svo andlitið aftur"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"Setja upp andlitskenni"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Taktu símann úr lás með því að horfa á hann"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Þú verður að kveikja á "<b>"aðgangi að myndavél"</b>" í „Stillingar &gt; persónuvernd“ til að nota andlitskenni"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Settu upp fleiri leiðir til að taka úr lás"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Ýttu til að bæta við fingrafari"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Fingrafarskenni"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Leyfir forriti að lesa og skrifa í grunnstillingu „Ónáðið ekki“."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"heimildanotkun upphafsyfirlits"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Leyfir handhafa að byrja heimildanotkun fyrir forrit. Ætti aldrei að þurfa fyrir venjuleg forrit."</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"opna ákvarðanir um skoðunarheimildir"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Gerir notandanum kleift að opna skjá til að fara yfir ákvarðanir um heimildir. Þetta ætti aldrei að þurfa fyrir venjuleg forrit."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"byrja að skoða eiginleika forrits"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Leyfir handhafa að skoða upplýsingar um eiginleika tiltekins forrits."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"aðgangur að skynjaragögnum með hárri upptökutíðni"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Fylgjast með tilraunum til að taka skjáinn úr lás"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa spjaldtölvunni eða eyða öllum gögnum hennar ef rangt aðgangsorð er fært inn of oft."</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa Android TV tækinu eða eyða öllum gögnum tækisins ef rangt aðgangsorð er fært inn of oft."</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa upplýsinga- og afþreyingarkerfinu eða eyða öllum gögnum upplýsinga- og afþreyingarkerfisins ef rangt aðgangsorð er fært inn of oft."</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa símanum eða eyða öllum gögnum hans ef rangt aðgangsorð er fært inn of oft."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa spjaldtölvunni eða eyða öllum gögnum viðkomandi notanda ef rangt aðgangsorð er fært inn of oft."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa Android TV eða eyða öllum gögnum viðkomandi notanda ef rangt aðgangsorð er fært inn of oft."</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa upplýsinga- og afþreyingarkerfinu eða eyða öllum gögnum þessa prófíls ef rangt aðgangsorð er fært inn of oft."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"Fylgjast með fjölda rangra innskráningartilrauna með aðgangsorði þegar skjárinn er tekinn úr lás og læsa símanum eða eyða öllum gögnum viðkomandi notanda ef rangt aðgangsorð er fært inn of oft."</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"Breyta skjálásnum"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"Breyta skjálásnum."</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Eyða öllum gögnum"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Eyða gögnum spjaldtölvunnar fyrirvaralaust með núllstillingu."</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Eyða gögnum Android TV tækisins án viðvörunar með því að núllstilla það."</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"Eyða gögnum upplýsinga- og afþreyingarkerfisins án viðvörunar með núllstillingu."</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Eyða gögnum símans fyrirvaralaust með núllstillingu."</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Eyða gögnum notanda"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"Eyða prófílgögnum"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"Eyða gögnum notanda"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Eyða gögnum viðkomandi notanda í þessari spjaldtölvu án viðvörunar."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Eyða gögnum þessa notanda úr þessu Android TV tæki án viðvörunar."</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"Eyða gögnum þessa prófíls í þessu upplýsinga- og afþreyingarkerfi án viðvörunar."</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"Eyða gögnum viðkomandi notanda í þessum síma án viðvörunar."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"Stilla altækan proxy-þjón fyrir tækið"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"Velja altækan proxy-þjón tækisins sem nota á þegar stefnan er virk. Aðeins eigandi tækisins getur valið altækan proxy-þjón."</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Undirbýr <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Ræsir forrit."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Lýkur ræsingu."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Slökkva á skjá?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Þú ýttir á aflrofann þegar þú varst að skrá fingrafarið þitt.\n\nYfirleitt slekkur það á skjánum."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Slökkva"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Hætta við"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"Halda uppsetningu áfram?"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"Þú ýttir á aflrofann. Yfirleitt slekkur það á skjánum.\n\nPrófaðu að ýta laust þegar þú setur upp fingrafarið."</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"Slökkva á skjá"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"Halda uppsetningu áfram"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"Halda áfram að staðfesta fingrafarið?"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"Þú ýttir á aflrofann. Yfirleitt slekkur það á skjánum.\n\nPrófaðu að ýta laust til að staðfesta fingrafarið þitt."</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"Slökkva á skjá"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"Áfram"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> er í gangi"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Ýttu til að fara aftur í leik"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Velja leik"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"Sérsniðin forritatilkynning"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"Viltu leyfa <xliff:g id="APP">%1$s</xliff:g> að stofna nýjan notanda með <xliff:g id="ACCOUNT">%2$s</xliff:g> (notandi með þennan reikning er þegar fyrir hendi)?"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"Leyfa <xliff:g id="APP">%1$s</xliff:g> að stofna nýjan notanda með <xliff:g id="ACCOUNT">%2$s</xliff:g> ?"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"Bæta við stýrðum notanda"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Bæta við tungumáli"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"Svæðisval"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Sláðu inn heiti tungumáls"</string>

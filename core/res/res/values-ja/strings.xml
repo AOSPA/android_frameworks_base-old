@@ -427,7 +427,9 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="3934939195095317432">"Android TV デバイスの通話履歴（着信や発信のデータなど）の変更をアプリに許可します。この許可を悪意のあるアプリに利用されると、通話履歴が消去または変更される恐れがあります。"</string>
     <string name="permdesc_writeCallLog" product="default" msgid="5903033505665134802">"モバイル デバイスの通話履歴（着信や発信のデータなど）の変更をアプリに許可します。この許可を悪意のあるアプリに利用されると、通話履歴が消去または変更される恐れがあります。"</string>
     <string name="permlab_bodySensors" msgid="3411035315357380862">"ボディーセンサー（心拍数モニターなど）へのアクセス"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="2365357960407973997">"心拍数など、身体状態を監視するセンサーからのデータにアクセスすることをアプリに許可します。"</string>
+    <string name="permdesc_bodySensors" product="default" msgid="3208940894182188063">"心拍数、体温、血液中の酸素の割合などのボディセンサー データにアクセスする権限です。"</string>
+    <string name="permlab_bodySensors_background" msgid="4352831883331744370">"ボディセンサー（心拍数モニター）のデータへのバックグラウンドでのアクセス権限"</string>
+    <string name="permdesc_bodySensors_background" product="default" msgid="8512392249166660872">"心拍数、体温、血液中の酸素の割合などのボディセンサー データにバックグラウンドでアクセスする権限です。"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"カレンダーの予定と詳細を読み取り"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"このアプリは、お使いのタブレットに保存されたカレンダーの予定をすべて読み取り、カレンダーのデータを共有したり、保存したりできます。"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"このアプリは、Android TV デバイスに保存されているカレンダーの予定をすべて読み取り、カレンダーのデータを共有したり、保存したりできます。"</string>
@@ -471,6 +473,8 @@
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"IMSサービスがユーザー操作なしで電話をかけることをアプリに許可します。"</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"デバイス情報と ID の読み取り"</string>
     <string name="permdesc_readPhoneState" msgid="7229063553502788058">"デバイスの電話機能へのアクセスをアプリに許可します。これにより、電話番号、デバイスID、通話中かどうか、通話相手の電話番号をアプリから特定できるようになります。"</string>
+    <string name="permlab_readBasicPhoneState" msgid="3214853233263871347">"電話の基本的なステータスと ID の読み取り"</string>
+    <string name="permdesc_readBasicPhoneState" msgid="828185691675460520">"デバイスの基本的な電話機能へのアクセスをアプリに許可します。"</string>
     <string name="permlab_manageOwnCalls" msgid="9033349060307561370">"システム経由での通話転送"</string>
     <string name="permdesc_manageOwnCalls" msgid="4431178362202142574">"通話環境の改善のために、システム経由での通話転送をアプリに許可します。"</string>
     <string name="permlab_callCompanionApp" msgid="3654373653014126884">"システム経由の通話の表示と操作。"</string>
@@ -622,6 +626,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"タップして顔モデルを削除してから、改めて顔を追加してください"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"顔認証の設定"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"スマートフォンに顔を向けるとロックが解除されます"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"顔認証を使用するには、[設定] &gt; [プライバシー] で"<b>"カメラへのアクセス"</b>"を有効にしてください"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"その他のロック解除方法の設定"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"タップすると指紋が追加されます"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"指紋認証"</string>
@@ -728,6 +733,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"サイレント モード設定の読み取りと書き込みをアプリに許可します。"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"表示権限の使用の開始"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"アプリの権限使用の開始を所有者に許可します。通常のアプリでは不要です。"</string>
+    <string name="permlab_startReviewPermissionDecisions" msgid="8690578688476599284">"閲覧権限の許可 / 拒否の開始"</string>
+    <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"権限の許可 / 拒否を確認するための画面の開始を所有者に許可します。通常のアプリでは不要です。"</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"アプリ機能の表示の開始"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"アプリの機能情報の表示の開始を所有者に許可します。"</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"高サンプリング レートでセンサーデータにアクセスする"</string>
@@ -737,9 +744,11 @@
     <string name="policylab_watchLogin" msgid="7599669460083719504">"画面ロック解除試行の監視"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="2388436408621909298">"画面のロック解除に正しくないパスワードを入力した回数を監視し、回数が多すぎる場合はタブレットをロックするかタブレットのデータをすべて消去します。"</string>
     <string name="policydesc_watchLogin" product="tv" msgid="2140588224468517507">"画面のロック解除の際に入力したパスワードが間違っていた回数を監視し、回数が多すぎる場合は Android TV デバイスをロックするか Android TV デバイスのデータをすべて消去します。"</string>
+    <string name="policydesc_watchLogin" product="automotive" msgid="7011438994051251521">"画面のロック解除に正しくないパスワードを入力した回数を監視し、回数が多すぎる場合はインフォテインメント システムをロックするかインフォテインメント システムのデータをすべて消去します。"</string>
     <string name="policydesc_watchLogin" product="default" msgid="4885030206253600299">"画面のロック解除に正しくないパスワードを入力した回数を監視し、回数が多すぎる場合はモバイルデバイスをロックするかモバイルデバイスのデータをすべて消去します。"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="2049038943004297474">"画面のロック解除の際に入力したパスワードが間違っていた回数を監視し、回数が多すぎる場合はタブレットをロックするかこのユーザーのデータをすべて消去します。"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="tv" msgid="8965224107449407052">"画面のロック解除の際に入力したパスワードが間違っていた回数を監視し、回数が多すぎる場合は Android TV デバイスをロックするかこのユーザーのデータをすべて消去します。"</string>
+    <string name="policydesc_watchLogin_secondaryUser" product="automotive" msgid="7180857406058327941">"画面のロック解除に正しくないパスワードを入力した回数を監視し、回数が多すぎる場合はインフォテインメント システムをロックするかこのプロファイルのデータをすべて消去します。"</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="9177645136475155924">"画面のロック解除の際に入力したパスワードが間違っていた回数を監視し、回数が多すぎる場合はスマートフォンをロックするかこのユーザーのデータをすべて消去します。"</string>
     <string name="policylab_resetPassword" msgid="214556238645096520">"画面ロックの変更"</string>
     <string name="policydesc_resetPassword" msgid="4626419138439341851">"画面ロックを変更します。"</string>
@@ -748,10 +757,13 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"すべてのデータを消去"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"警告せずにタブレットを初期化して内部のデータを消去します。"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"警告せずに出荷時設定へのリセットを実行して Android TV デバイスのデータを消去します。"</string>
+    <string name="policydesc_wipeData" product="automotive" msgid="660804547737323300">"警告せずにインフォテインメント システムを初期化して内部のデータを消去します。"</string>
     <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"警告せずにデバイスを初期化して内部のデータを消去します。"</string>
-    <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"ユーザーデータの消去"</string>
+    <string name="policylab_wipeData_secondaryUser" product="automotive" msgid="115034358520328373">"プロファイル データの消去"</string>
+    <string name="policylab_wipeData_secondaryUser" product="default" msgid="413813645323433166">"ユーザーデータの消去"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"このタブレットのこのユーザーのデータを警告なく消去します。"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"この Android TV デバイスでこのユーザーのデータを警告なく消去します。"</string>
+    <string name="policydesc_wipeData_secondaryUser" product="automotive" msgid="4658832487305780879">"警告せずにこのインフォテインメント システムにあるこのプロファイルのデータを消去します。"</string>
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"このスマートフォンのこのユーザーのデータを警告なく消去します。"</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"デバイスのグローバルプロキシを設定"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"ポリシーが有効になっている場合はデバイスのグローバルプロキシが使用されるように設定します。グローバルプロキシを設定できるのはデバイスの所有者だけです。"</string>
@@ -1271,10 +1283,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g>をペア設定しています。"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"アプリを起動しています。"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"ブートを終了しています。"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"画面を OFF にしますか？"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"指紋の設定中に電源ボタンが押されました。\n\n通常、この操作により画面が OFF になります。"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"OFF にする"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"キャンセル"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"設定を続行しますか？"</string>
+    <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"電源ボタンを押しました。通常、この操作で画面が OFF になります。\n\n指紋を設定する場合は電源ボタンに軽く触れてみましょう。"</string>
+    <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"画面を OFF にする"</string>
+    <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"設定を続行"</string>
+    <string name="fp_power_button_bp_title" msgid="5585506104526820067">"指紋の確認を続行しますか？"</string>
+    <string name="fp_power_button_bp_message" msgid="2983163038168903393">"電源ボタンを押しました。通常、この操作で画面が OFF になります。\n\n指紋を確認するには、電源ボタンに軽く触れてみましょう。"</string>
+    <string name="fp_power_button_bp_positive_button" msgid="728945472408552251">"画面を OFF にする"</string>
+    <string name="fp_power_button_bp_negative_button" msgid="3971364246496775178">"続行"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g>を実行中"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"タップするとゲームに戻ります"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"ゲームの選択"</string>
@@ -1977,6 +1993,7 @@
     <string name="notification_history_title_placeholder" msgid="7748630986182249599">"カスタムアプリ通知"</string>
     <string name="user_creation_account_exists" msgid="2239146360099708035">"<xliff:g id="APP">%1$s</xliff:g> が <xliff:g id="ACCOUNT">%2$s</xliff:g> で新しいユーザーを作成できるようにしますか？（このアカウントのユーザーはすでに存在します）"</string>
     <string name="user_creation_adding" msgid="7305185499667958364">"<xliff:g id="APP">%1$s</xliff:g> が <xliff:g id="ACCOUNT">%2$s</xliff:g> で新しいユーザーを作成できるようにしますか？"</string>
+    <string name="supervised_user_creation_label" msgid="6884904353827427515">"監視対象ユーザーを追加"</string>
     <string name="language_selection_title" msgid="52674936078683285">"言語を追加"</string>
     <string name="country_selection_title" msgid="5221495687299014379">"地域設定"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"言語名を入力"</string>

@@ -94,8 +94,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * Interface to global information about an application environment.  This is
@@ -534,7 +537,8 @@ public abstract class Context {
 
     /** @hide */
     @IntDef(flag = true, prefix = { "RECEIVER_VISIBLE" }, value = {
-            RECEIVER_VISIBLE_TO_INSTANT_APPS, RECEIVER_EXPORTED, RECEIVER_NOT_EXPORTED
+            RECEIVER_VISIBLE_TO_INSTANT_APPS, RECEIVER_EXPORTED, RECEIVER_NOT_EXPORTED,
+            RECEIVER_EXPORTED_UNAUDITED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface RegisterReceiverFlags {}
@@ -549,6 +553,14 @@ public abstract class Context {
      * Has the same behavior as marking a statically registered receiver with "exported=true"
      */
     public static final int RECEIVER_EXPORTED = 0x2;
+
+    /**
+     * @deprecated Use {@link #RECEIVER_NOT_EXPORTED} or {@link #RECEIVER_EXPORTED} instead.
+     * @hide
+     */
+    @Deprecated
+    @TestApi
+    public static final int RECEIVER_EXPORTED_UNAUDITED = RECEIVER_EXPORTED;
 
     /**
      * Flag for {@link #registerReceiver}: The receiver cannot receive broadcasts from other Apps.
@@ -3004,10 +3016,11 @@ public abstract class Context {
      * {@link android.os.Build.VERSION_CODES#TIRAMISU},
      *              either {@link #RECEIVER_EXPORTED} or
      * {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being registered
-     *              for protected broadcasts or an exception will be thrown. If
+     *              for <a href="{@docRoot}guide/components/broadcasts#system-broadcasts">system
+     *              broadcasts</a> or an exception will be thrown. If
      *              {@link #RECEIVER_EXPORTED} is specified, a receiver may additionally
      *              specify {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS}. For a complete list of
-     *              protected broadcast actions, see the BROADCAST_ACTIONS.TXT file in the
+     *              system broadcast actions, see the BROADCAST_ACTIONS.TXT file in the
      *              Android SDK. If both {@link #RECEIVER_EXPORTED} and
      *              {@link #RECEIVER_NOT_EXPORTED} are specified, an exception will be thrown as
      *              well.
@@ -3082,12 +3095,18 @@ public abstract class Context {
      *      no permission is required.
      * @param scheduler Handler identifying the thread that will receive
      *      the Intent.  If null, the main thread of the process will be used.
-     * @param flags Additional options for the receiver. As of
-     * Android T, either {@link #RECEIVER_EXPORTED} or
+     * @param flags Additional options for the receiver. For apps targeting
+     * {@link android.os.Build.VERSION_CODES#TIRAMISU},
+     *              either {@link #RECEIVER_EXPORTED} or
      * {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being registered
-     *            for protected broadcasts, and may additionally specify
-     *            {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS} if {@link #RECEIVER_EXPORTED} is
-     *            specified.
+     *              for <a href="{@docRoot}guide/components/broadcasts#system-broadcasts">system
+     *              broadcasts</a> or an exception will be thrown. If
+     *              {@link #RECEIVER_EXPORTED} is specified, a receiver may additionally
+     *              specify {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS}. For a complete list of
+     *              system broadcast actions, see the BROADCAST_ACTIONS.TXT file in the
+     *              Android SDK. If both {@link #RECEIVER_EXPORTED} and
+     *              {@link #RECEIVER_NOT_EXPORTED} are specified, an exception will be thrown as
+     *              well.
      *
      * @return The first sticky intent found that matches <var>filter</var>,
      *         or null if there are none.
@@ -3146,10 +3165,18 @@ public abstract class Context {
      *      no permission is required.
      * @param scheduler Handler identifying the thread that will receive
      *      the Intent. If {@code null}, the main thread of the process will be used.
-     * @param flags Additional options for the receiver. As of
-     *      Android T, either {@link #RECEIVER_EXPORTED} or
-     *      {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being
-     *      registered for protected broadcasts
+     * @param flags Additional options for the receiver. For apps targeting
+     * {@link android.os.Build.VERSION_CODES#TIRAMISU},
+     *              either {@link #RECEIVER_EXPORTED} or
+     * {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being registered
+     *              for <a href="{@docRoot}guide/components/broadcasts#system-broadcasts">system
+     *              broadcasts</a> or an exception will be thrown. If
+     *              {@link #RECEIVER_EXPORTED} is specified, a receiver may additionally
+     *              specify {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS}. For a complete list of
+     *              system broadcast actions, see the BROADCAST_ACTIONS.TXT file in the
+     *              Android SDK. If both {@link #RECEIVER_EXPORTED} and
+     *              {@link #RECEIVER_NOT_EXPORTED} are specified, an exception will be thrown as
+     *              well.
      *
      * @return The first sticky intent found that matches <var>filter</var>,
      *         or {@code null} if there are none.
@@ -3213,10 +3240,18 @@ public abstract class Context {
      *      no permission is required.
      * @param scheduler Handler identifying the thread that will receive
      *      the Intent.  If null, the main thread of the process will be used.
-     * @param flags Additional options for the receiver. As of
-     *      Android T, either {@link #RECEIVER_EXPORTED} or
-     *      {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being
-     *      registered for protected broadcasts
+     * @param flags Additional options for the receiver. For apps targeting
+     * {@link android.os.Build.VERSION_CODES#TIRAMISU},
+     *              either {@link #RECEIVER_EXPORTED} or
+     * {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being registered
+     *              for <a href="{@docRoot}guide/components/broadcasts#system-broadcasts">system
+     *              broadcasts</a> or an exception will be thrown. If
+     *              {@link #RECEIVER_EXPORTED} is specified, a receiver may additionally
+     *              specify {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS}. For a complete list of
+     *              system broadcast actions, see the BROADCAST_ACTIONS.TXT file in the
+     *              Android SDK. If both {@link #RECEIVER_EXPORTED} and
+     *              {@link #RECEIVER_NOT_EXPORTED} are specified, an exception will be thrown as
+     *              well.
      *
      * @return The first sticky intent found that matches <var>filter</var>,
      *         or null if there are none.
@@ -3566,10 +3601,18 @@ public abstract class Context {
      * Binds to a service in the given {@code user} in the same manner as
      * {@link #bindService(Intent, ServiceConnection, int)}.
      *
-     * <p>If the given {@code user} is in the same profile group and the target package is the
-     * same as the caller, {@code android.Manifest.permission.INTERACT_ACROSS_PROFILES} is
-     * sufficient. Otherwise, requires {@code android.Manifest.permission.INTERACT_ACROSS_USERS}
-     * for interacting with other users.
+     * <p>Requires that one of the following conditions are met:
+     * <ul>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS_FULL}</li>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS} and is the same
+     *      package as the {@code service} (determined by its component's package) and the Android
+     *      version is at least {@link android.os.Build.VERSION_CODES#S}</li>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS} and is in same
+     *      profile group as the given {@code user}</li>
+     *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_PROFILES} and is in same
+     *      profile group as the given {@code user} and is the same package as the {@code service}
+     *      </li>
+     * </ul>
      *
      * @param service Identifies the service to connect to.  The Intent must
      *      specify an explicit component name.
@@ -3583,17 +3626,17 @@ public abstract class Context {
      *          {@link #BIND_ADJUST_WITH_ACTIVITY}.
      * @return {@code true} if the system is in the process of bringing up a
      *         service that your client has permission to bind to; {@code false}
-     *         if the system couldn't find the service. If this value is {@code true}, you
-     *         should later call {@link #unbindService} to release the
-     *         connection.
+     *         if the system couldn't find the service. You should call {@link #unbindService}
+     *         to release the connection even if this method returned {@code false}.
      *
      * @throws SecurityException if the client does not have the required permission to bind.
      */
     @SuppressWarnings("unused")
     @RequiresPermission(anyOf = {
             android.Manifest.permission.INTERACT_ACROSS_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
             android.Manifest.permission.INTERACT_ACROSS_PROFILES
-    })
+            }, conditional = true)
     public boolean bindServiceAsUser(
             @NonNull @RequiresPermission Intent service, @NonNull ServiceConnection conn, int flags,
             @NonNull UserHandle user) {
@@ -3606,7 +3649,11 @@ public abstract class Context {
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.INTERACT_ACROSS_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
+            android.Manifest.permission.INTERACT_ACROSS_PROFILES
+            }, conditional = true)
     @UnsupportedAppUsage(trackingBug = 136728678)
     public boolean bindServiceAsUser(Intent service, ServiceConnection conn, int flags,
             Handler handler, UserHandle user) {
@@ -3818,6 +3865,9 @@ public abstract class Context {
             //@hide: SPEECH_RECOGNITION_SERVICE,
             UWB_SERVICE,
             MEDIA_METRICS_SERVICE,
+            SUPPLEMENTAL_PROCESS_SERVICE,
+            //@hide: ATTESTATION_VERIFICATION_SERVICE,
+            //@hide: SAFETY_CENTER_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -4764,6 +4814,15 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.view.selectiontoolbar.SelectionToolbarManager} for selection toolbar service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String SELECTION_TOOLBAR_SERVICE = "selection_toolbar";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.graphics.fonts.FontManager} for font services.
      *
      * @see #getSystemService(String)
@@ -5330,9 +5389,13 @@ public abstract class Context {
      * {@link android.net.NetworkScoreManager} for managing network scoring.
      * @see #getSystemService(String)
      * @see android.net.NetworkScoreManager
+     * @deprecated see
+     * <a href="{@docRoot}guide/topics/connectivity/wifi-suggest">Wi-Fi Suggestion API</a>
+     * for alternative API to propose WiFi networks.
      * @hide
      */
     @SystemApi
+    @Deprecated
     public static final String NETWORK_SCORE_SERVICE = "network_score";
 
     /**
@@ -5503,6 +5566,12 @@ public abstract class Context {
      * @hide
      */
     public static final String STATS_COMPANION_SERVICE = "statscompanion";
+
+    /**
+     * Service to assist statsd in logging atoms from bootstrap atoms.
+     * @hide
+     */
+    public static final String STATS_BOOTSTRAP_ATOM_SERVICE = "statsbootstrap";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an {@link android.app.StatsManager}.
@@ -5709,6 +5778,15 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.security.attestationverification.AttestationVerificationManager}.
+     * @see #getSystemService(String)
+     * @see android.security.attestationverification.AttestationVerificationManager
+     * @hide
+     */
+    public static final String ATTESTATION_VERIFICATION_SERVICE = "attestation_verification";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
      * {@link android.security.FileIntegrityManager}.
      * @see #getSystemService(String)
      * @see android.security.FileIntegrityManager
@@ -5817,21 +5895,40 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.app.CommunalManager} for interacting with the global system state.
-     *
-     * @see #getSystemService(String)
-     * @see android.app.CommunalManager
-     * @hide
-     */
-    public static final String COMMUNAL_MANAGER_SERVICE = "communal_manager";
-
-    /**
-     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.LocaleManager}.
      *
      * @see #getSystemService(String)
      */
     public static final String LOCALE_SERVICE = "locale";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a Supplemental Process Manager.
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String SUPPLEMENTAL_PROCESS_SERVICE = "supplemental_process";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link
+     * android.safetycenter.SafetyCenterManager} instance for interacting with the safety center.
+     *
+     * @see #getSystemService(String)
+     * @see android.safetycenter.SafetyCenterManager
+     * @hide
+     */
+    @SystemApi
+    public static final String SAFETY_CENTER_SERVICE = "safety_center";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.nearby.NearbyManager} to discover nearby devices.
+     *
+     * @see #getSystemService(String)
+     * @see android.nearby.NearbyManager
+     * @hide
+     */
+    @SystemApi
+    public static final String NEARBY_SERVICE = "nearby";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -6315,6 +6412,43 @@ public abstract class Context {
             @Nullable String writePermission, int pid, int uid, @Intent.AccessUriMode int modeFlags,
             @Nullable String message);
 
+
+    /**
+     * Triggers the asynchronous revocation of a permission.
+     *
+     * @param permName The name of the permission to be revoked.
+     * @see #selfRevokePermissions(Collection)
+     */
+    public void selfRevokePermission(@NonNull String permName) {
+        selfRevokePermissions(Collections.singletonList(permName));
+    }
+
+    /**
+     * Triggers the revocation of one or more permissions for the calling package. A package is only
+     * able to revoke a permission under the following conditions:
+     * <ul>
+     * <li>Each permission in {@code permissions} must be granted to the calling package.
+     * <li>Each permission in {@code permissions} must be a runtime permission.
+     * </ul>
+     * <p>
+     * For every permission in {@code permissions}, the entire permission group it belongs to will
+     * be revoked. The revocation happens asynchronously and kills all processes running in the
+     * calling UID. It will be triggered once it is safe to do so. In particular, it will not be
+     * triggered as long as the package remains in the foreground, or has any active manifest
+     * components (e.g. when another app is accessing a content provider in the package).
+     * <p>
+     * If you want to revoke the permissions right away, you could call {@code System.exit()}, but
+     * this could affect other apps that are accessing your app at the moment. For example, apps
+     * accessing a content provider in your app will all crash.
+     *
+     * @param permissions Collection of permissions to be revoked.
+     * @see PackageManager#getGroupOfPlatformPermission(String, Executor, Consumer)
+     * @see PackageManager#getPlatformPermissionsForGroup(String, Executor, Consumer)
+     */
+    public void selfRevokePermissions(@NonNull Collection<String> permissions) {
+        throw new AbstractMethodError("Must be overridden in implementing class");
+    }
+
     /** @hide */
     @IntDef(flag = true, prefix = { "CONTEXT_" }, value = {
             CONTEXT_INCLUDE_CODE,
@@ -6507,30 +6641,24 @@ public abstract class Context {
             @NonNull Configuration overrideConfiguration);
 
     /**
-     * Return a new Context object for the current Context but whose resources
-     * are adjusted to match the metrics of the given Display.  Each call to this method
-     * returns a new instance of a Context object; Context objects are not
-     * shared, however common state (ClassLoader, other Resources for the
-     * same configuration) may be so the Context itself can be fairly lightweight.
-     *
-     * To obtain an instance of a {@link WindowManager} (see {@link #getSystemService(String)}) that
-     * is configured to show windows on the given display call
-     * {@link #createWindowContext(int, Bundle)} on the returned display Context or use an
-     * {@link android.app.Activity}.
-     *
+     * Returns a new <code>Context</code> object from the current context but with resources
+     * adjusted to match the metrics of <code>display</code>. Each call to this method
+     * returns a new instance of a context object. Context objects are not shared; however,
+     * common state (such as the {@link ClassLoader} and other resources for the same
+     * configuration) can be shared, so the <code>Context</code> itself is lightweight.
      * <p>
-     * Note that invoking #createDisplayContext(Display) from an UI context is not regarded
-     * as an UI context. In other words, it is not suggested to access UI components (such as
-     * obtain a {@link WindowManager} by {@link #getSystemService(String)})
-     * from the context created from #createDisplayContext(Display).
-     * </p>
+     * To obtain an instance of {@link WindowManager} configured to show windows on the given
+     * display, call {@link #createWindowContext(int, Bundle)} on the returned display context,
+     * then call {@link #getSystemService(String)} or {@link #getSystemService(Class)} on the
+     * returned window context.
+     * <p>
+     * <b>Note:</b> The context returned by <code>createDisplayContext(Display)</code> is not a UI
+     * context. Do not access UI components or obtain a {@link WindowManager} from the context
+     * created by <code>createDisplayContext(Display)</code>.
      *
-     * @param display A {@link Display} object specifying the display for whose metrics the
-     * Context's resources should be tailored.
+     * @param display The display to which the current context's resources are adjusted.
      *
-     * @return A {@link Context} for the display.
-     *
-     * @see #getSystemService(String)
+     * @return A context for the display.
      */
     @DisplayContext
     public abstract Context createDisplayContext(@NonNull Display display);

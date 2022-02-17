@@ -550,7 +550,7 @@
     <attr name="allowTaskReparenting" format="boolean" />
 
     <!-- Declare that this application may use cleartext traffic, such as HTTP rather than HTTPS;
-         WebSockets rather than WebSockets Secure; XMPP, IMAP, STMP without STARTTLS or TLS.
+         WebSockets rather than WebSockets Secure; XMPP, IMAP, SMTP without STARTTLS or TLS.
          Defaults to true. If set to false {@code false}, the application declares that it does not
          intend to use cleartext network traffic, in which case platform components (e.g. HTTP
          stacks, {@code DownloadManager}, {@code MediaPlayer}) will refuse applications's requests
@@ -1519,6 +1519,9 @@
     <!-- An XML resource with the application's Network Security Config. -->
     <attr name="networkSecurityConfig" format="reference" />
 
+    <!-- An XML resource with the application's {@link android.app.LocaleConfig} -->
+    <attr name="localeConfig" format="reference" />
+
     <!-- When an application is partitioned into splits, this is the name of the
          split that contains the defined component. -->
     <attr name="splitName" format="string" />
@@ -1785,7 +1788,7 @@
         <!-- @deprecated replaced by setting appCategory attribute to "game" -->
         <attr name="isGame" />
         <!-- Declare that this application may use cleartext traffic, such as HTTP rather than
-             HTTPS; WebSockets rather than WebSockets Secure; XMPP, IMAP, STMP without STARTTLS or
+             HTTPS; WebSockets rather than WebSockets Secure; XMPP, IMAP, SMTP without STARTTLS or
              TLS). Defaults to true. If set to false {@code false}, the application declares that it
              does not intend to use cleartext network traffic, in which case platform components
              (e.g. HTTP stacks, {@code DownloadManager}, {@code MediaPlayer}) will refuse
@@ -1801,6 +1804,7 @@
         <attr name="maxAspectRatio" />
         <attr name="minAspectRatio" />
         <attr name="networkSecurityConfig" />
+        <attr name="localeConfig" />
         <!-- Declare the category of this app. Categories are used to cluster multiple apps
              together into meaningful groups, such as when summarizing battery, network, or
              disk usage. Apps should only define this value when they fit well into one of
@@ -1991,6 +1995,12 @@
 
         <!-- Whether attributions provided are meant to be user-visible. -->
         <attr name="attributionsAreUserVisible" format="boolean" />
+
+        <!-- Specifies whether enabled settings of components in the application should be
+             reset to {@link android.content.pm.PackageManager#COMPONENT_ENABLED_STATE_DEFAULT}
+             when the application's user data is cleared. The default value is false.
+        -->
+        <attr name="resetEnabledSettingsOnAppDataCleared" format="boolean" />
     </declare-styleable>
 
     <!-- An attribution is a logical part of an app and is identified by a tag.
@@ -2297,6 +2307,36 @@
         <attr name="authorities" />
     </declare-styleable>
 
+    <!-- The <code>sdk-library</code> tag declares that this apk is providing itself
+    as an SDK library for other applications to use. Any app can declare an SDK library and there
+    can be only one SDK library per package. These SDK libraries are updatable, multiple major
+    versions can be installed at the same time, and an app depends on a specific version.
+    Other apks can link to it with the {@link #AndroidManifestUsesSdkLibrary uses-sdk-library} tag.
+
+    <p>This appears as a child tag of the {@link #AndroidManifestApplication application} tag. -->
+    <declare-styleable name="AndroidManifestSdkLibrary" parent="AndroidManifestApplication">
+        <!-- Required public name of the SDK library, which other components and packages will use
+        when referring to this SDK library. This is a string using Java-style scoping to ensure
+        it is unique.
+        Both name and version should typically form the apk's package name: name_versionMajor. -->
+        <attr name="name" />
+        <!-- Required major version of the SDK library. -->
+        <attr name="versionMajor" format="integer" />
+    </declare-styleable>
+
+
+    <!-- The <code>uses-sdk-library</code> specifies a shared <strong>SDK</strong> library that this
+    package requires to be present on the device.
+
+    <p>This appears as a child tag of the {@link #AndroidManifestApplication application} tag. -->
+    <declare-styleable name="AndroidManifestUsesSdkLibrary" parent="AndroidManifestApplication">
+        <!-- Required name of the SDK library you use. -->
+        <attr name="name" />
+        <!-- Specify which major version of the SDK library you use. -->
+        <attr name="versionMajor" format="integer" />
+        <!-- The SHA-256 digest of the SDK library signing certificate. -->
+        <attr name="certDigest" format="string" />
+    </declare-styleable>
 
     <!-- The <code>static-library</code> tag declares that this apk is providing itself
        as a static shared library for other applications to use. Any app can declare such
@@ -2548,6 +2588,9 @@
     <declare-styleable name="AndroidManifestProcess" parent="AndroidManifestProcesses">
         <!-- Required name of the process that is allowed -->
         <attr name="process" />
+        <!-- custom Application class name. We use call it "name", not "className", to be
+             consistent with the Application tag. -->
+        <attr name="name" />
         <attr name="gwpAsanMode" />
         <attr name="memtagMode" />
         <attr name="nativeHeapZeroInitialized" />
@@ -2770,6 +2813,22 @@
              Context.createAttributionContext() using the first attribution tag
              contained here. -->
         <attr name="attributionTags" />
+    </declare-styleable>
+
+    <!-- @hide The <code>apex-system-service</code> tag declares an apex system service
+         that is contained within an application.
+
+         The apex system service tag appears as a child tag of the
+         {@link #AndroidManifestApplication application} tag. -->
+    <declare-styleable name="AndroidManifestApexSystemService"
+                       parent="AndroidManifestApplication">
+        <!-- The fully qualified class name of the system service. -->
+        <attr name="name" />
+        <!-- The filepath to the .jar that contains the system service. If this is not provided, it
+             is assumed that the system service exists in SYSTEMSERVERCLASSPATH. -->
+        <attr name="path" />
+        <attr name="minSdkVersion" />
+        <attr name="maxSdkVersion" />
     </declare-styleable>
 
     <!-- The <code>receiver</code> tag declares an

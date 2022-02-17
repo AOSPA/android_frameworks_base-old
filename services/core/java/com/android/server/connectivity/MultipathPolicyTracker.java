@@ -25,9 +25,7 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.NetworkPolicy.LIMIT_DISABLED;
 import static android.net.NetworkPolicy.WARNING_DISABLED;
-import static android.net.NetworkTemplate.NETWORK_TYPE_ALL;
 import static android.net.NetworkTemplate.OEM_MANAGED_ALL;
-import static android.net.NetworkTemplate.SUBSCRIBER_ID_MATCH_RULE_EXACT;
 import static android.provider.Settings.Global.NETWORK_DEFAULT_DAILY_MULTIPATH_QUOTA_BYTES;
 import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
@@ -70,13 +68,14 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.net.NetworkPolicyManagerInternal;
-import com.android.server.net.NetworkStatsManagerInternal;
 
 import java.time.Clock;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -200,6 +199,7 @@ public class MultipathPolicyTracker {
         private final NetworkTemplate mNetworkTemplate;
         private final UsageCallback mUsageCallback;
         private NetworkCapabilities mNetworkCapabilities;
+        private final NetworkStatsManager mStatsManager;
 
         public MultipathTracker(Network network, NetworkCapabilities nc) {
             this.network = network;
@@ -224,12 +224,13 @@ public class MultipathPolicyTracker {
                         "Can't get TelephonyManager for subId %d", subId));
             }
 
-            subscriberId = tele.getSubscriberId();
-            mNetworkTemplate = new NetworkTemplate(
-                    NetworkTemplate.MATCH_MOBILE, subscriberId, new String[] { subscriberId },
-                    null, NetworkStats.METERED_YES, NetworkStats.ROAMING_ALL,
-                    NetworkStats.DEFAULT_NETWORK_NO, NETWORK_TYPE_ALL, OEM_MANAGED_ALL,
-                    SUBSCRIBER_ID_MATCH_RULE_EXACT);
+            subscriberId = Objects.requireNonNull(tele.getSubscriberId(),
+                    "Null subscriber Id for subId " + subId);
+            mNetworkTemplate = new NetworkTemplate.Builder(NetworkTemplate.MATCH_MOBILE)
+                    .setSubscriberIds(Set.of(subscriberId))
+                    .setMeteredness(NetworkStats.METERED_YES)
+                    .setDefaultNetworkStatus(NetworkStats.DEFAULT_NETWORK_NO)
+                    .build();
             mUsageCallback = new UsageCallback() {
                 @Override
                 public void onThresholdReached(int networkType, String subscriberId) {
@@ -238,6 +239,13 @@ public class MultipathPolicyTracker {
                     updateMultipathBudget();
                 }
             };
+            mStatsManager = mContext.getSystemService(NetworkStatsManager.class);
+            // Query stats from NetworkStatsService will trigger a poll by default.
+            // But since MultipathPolicyTracker listens NPMS events that triggered by
+            // stats updated event, and will query stats
+            // after the event. A polling -> updated -> query -> polling loop will be introduced
+            // if polls on open. Hence, set flag to false to prevent a polling loop.
+            mStatsManager.setPollOnOpen(false);
 
             updateMultipathBudget();
         }
@@ -261,8 +269,9 @@ public class MultipathPolicyTracker {
 
         private long getNetworkTotalBytes(long start, long end) {
             try {
-                return LocalServices.getService(NetworkStatsManagerInternal.class)
-                        .getNetworkTotalBytes(mNetworkTemplate, start, end);
+                final android.app.usage.NetworkStats.Bucket ret =
+                        mStatsManager.querySummaryForDevice(mNetworkTemplate, start, end);
+                return ret.getRxBytes() + ret.getTxBytes();
             } catch (RuntimeException e) {
                 Log.w(TAG, "Failed to get data usage: " + e);
                 return -1;

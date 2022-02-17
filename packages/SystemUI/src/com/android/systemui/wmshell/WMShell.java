@@ -56,6 +56,8 @@ import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.tracing.nano.SystemUiTraceProto;
 import com.android.wm.shell.ShellCommandHandler;
+import com.android.wm.shell.compatui.CompatUI;
+import com.android.wm.shell.draganddrop.DragAndDrop;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.nano.WmShellTraceProto;
@@ -112,6 +114,8 @@ public final class WMShell extends CoreStartable
     private final Optional<OneHanded> mOneHandedOptional;
     private final Optional<HideDisplayCutout> mHideDisplayCutoutOptional;
     private final Optional<ShellCommandHandler> mShellCommandHandler;
+    private final Optional<CompatUI> mCompatUIOptional;
+    private final Optional<DragAndDrop> mDragAndDropOptional;
 
     private final CommandQueue mCommandQueue;
     private final ConfigurationController mConfigurationController;
@@ -128,6 +132,7 @@ public final class WMShell extends CoreStartable
     private KeyguardUpdateMonitorCallback mSplitScreenKeyguardCallback;
     private KeyguardUpdateMonitorCallback mPipKeyguardCallback;
     private KeyguardUpdateMonitorCallback mOneHandedKeyguardCallback;
+    private KeyguardUpdateMonitorCallback mCompatUIKeyguardCallback;
     private WakefulnessLifecycle.Observer mWakefulnessObserver;
 
     @Inject
@@ -138,6 +143,8 @@ public final class WMShell extends CoreStartable
             Optional<OneHanded> oneHandedOptional,
             Optional<HideDisplayCutout> hideDisplayCutoutOptional,
             Optional<ShellCommandHandler> shellCommandHandler,
+            Optional<CompatUI> sizeCompatUIOptional,
+            Optional<DragAndDrop> dragAndDropOptional,
             CommandQueue commandQueue,
             ConfigurationController configurationController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
@@ -162,6 +169,8 @@ public final class WMShell extends CoreStartable
         mWakefulnessLifecycle = wakefulnessLifecycle;
         mProtoTracer = protoTracer;
         mShellCommandHandler = shellCommandHandler;
+        mCompatUIOptional = sizeCompatUIOptional;
+        mDragAndDropOptional = dragAndDropOptional;
         mSysUiMainExecutor = sysUiMainExecutor;
     }
 
@@ -176,6 +185,8 @@ public final class WMShell extends CoreStartable
         mSplitScreenOptional.ifPresent(this::initSplitScreen);
         mOneHandedOptional.ifPresent(this::initOneHanded);
         mHideDisplayCutoutOptional.ifPresent(this::initHideDisplayCutout);
+        mCompatUIOptional.ifPresent(this::initCompatUi);
+        mDragAndDropOptional.ifPresent(this::initDragAndDrop);
     }
 
     @VisibleForTesting
@@ -247,13 +258,15 @@ public final class WMShell extends CoreStartable
             public void onKeyguardVisibilityChanged(boolean showing) {
                 splitScreen.onKeyguardVisibilityChanged(showing);
             }
-
-            @Override
-            public void onKeyguardOccludedChanged(boolean occluded) {
-                splitScreen.onKeyguardOccludedChanged(occluded);
-            }
         };
         mKeyguardUpdateMonitor.registerCallback(mSplitScreenKeyguardCallback);
+
+        mWakefulnessLifecycle.addObserver(new WakefulnessLifecycle.Observer() {
+            @Override
+            public void onFinishedWakingUp() {
+                splitScreen.onFinishedWakingUp();
+            }
+        });
     }
 
     @VisibleForTesting
@@ -363,6 +376,31 @@ public final class WMShell extends CoreStartable
             @Override
             public void onConfigChanged(Configuration newConfig) {
                 hideDisplayCutout.onConfigurationChanged(newConfig);
+            }
+        });
+    }
+
+    @VisibleForTesting
+    void initCompatUi(CompatUI sizeCompatUI) {
+        mCompatUIKeyguardCallback = new KeyguardUpdateMonitorCallback() {
+            @Override
+            public void onKeyguardOccludedChanged(boolean occluded) {
+                sizeCompatUI.onKeyguardOccludedChanged(occluded);
+            }
+        };
+        mKeyguardUpdateMonitor.registerCallback(mCompatUIKeyguardCallback);
+    }
+
+    void initDragAndDrop(DragAndDrop dragAndDrop) {
+        mConfigurationController.addCallback(new ConfigurationController.ConfigurationListener() {
+            @Override
+            public void onConfigChanged(Configuration newConfig) {
+                dragAndDrop.onConfigChanged(newConfig);
+            }
+
+            @Override
+            public void onThemeChanged() {
+                dragAndDrop.onThemeChanged();
             }
         });
     }

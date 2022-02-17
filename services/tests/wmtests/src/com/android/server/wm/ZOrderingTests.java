@@ -428,6 +428,25 @@ public class ZOrderingTests extends WindowTestsBase {
         assertWindowHigher(mImeWindow, imeAppTarget);
     }
 
+    @Test
+    public void testAssignWindowLayers_ForImeOnPopupImeLayeringTarget() {
+        final WindowState imeAppTarget = createWindow(null, TYPE_APPLICATION,
+                mAppWindow.mActivityRecord, "imeAppTarget");
+        mDisplayContent.setImeInputTarget(imeAppTarget);
+        mDisplayContent.setImeLayeringTarget(imeAppTarget);
+        mDisplayContent.setImeControlTarget(imeAppTarget);
+
+        // Set a popup IME layering target and keeps the original IME control target behinds it.
+        final WindowState popupImeTargetWin = createWindow(imeAppTarget,
+                TYPE_APPLICATION_SUB_PANEL, mAppWindow.mActivityRecord, "popupImeTargetWin");
+        mDisplayContent.setImeLayeringTarget(popupImeTargetWin);
+        mDisplayContent.updateImeParent();
+
+        // Ime should on top of the popup IME layering target window.
+        mDisplayContent.assignChildLayers(mTransaction);
+        assertWindowHigher(mImeWindow, popupImeTargetWin);
+    }
+
 
     @Test
     public void testAssignWindowLayers_ForNegativelyZOrderedSubtype() {
@@ -489,8 +508,8 @@ public class ZOrderingTests extends WindowTestsBase {
                 createTask(mDisplayContent, WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
         final WindowState splitWindow2 =
                 createAppWindow(splitScreenTask2, ACTIVITY_TYPE_STANDARD, "splitWindow2");
-        splitScreenTask1.setAdjacentTaskFragment(splitScreenTask2);
-        splitScreenTask2.setAdjacentTaskFragment(splitScreenTask1);
+        splitScreenTask1.setAdjacentTaskFragment(splitScreenTask2, true /* moveTogether */);
+        splitScreenTask2.setAdjacentTaskFragment(splitScreenTask1, true /* moveTogether */);
 
         final Task aboveTask =
                 createTask(mDisplayContent, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
@@ -500,13 +519,44 @@ public class ZOrderingTests extends WindowTestsBase {
         mDisplayContent.assignChildLayers(mTransaction);
 
         assertWindowHigher(splitWindow1, belowTaskWindow);
-        assertWindowHigher(splitWindow1, belowTaskWindow);
-        assertWindowHigher(splitWindow2, belowTaskWindow);
         assertWindowHigher(splitWindow2, belowTaskWindow);
         assertWindowHigher(mDockedDividerWindow, splitWindow1);
         assertWindowHigher(mDockedDividerWindow, splitWindow2);
         assertWindowHigher(aboveTaskWindow, mDockedDividerWindow);
         assertWindowHigher(pinnedWindow, aboveTaskWindow);
+    }
+
+
+    @Test
+    public void testDockedDividerPosition_noAboveTask() {
+        final Task pinnedTask =
+                createTask(mDisplayContent, WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD);
+        final WindowState pinnedWindow =
+                createAppWindow(pinnedTask, ACTIVITY_TYPE_STANDARD, "pinnedWindow");
+
+        final Task belowTask =
+                createTask(mDisplayContent, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
+        final WindowState belowTaskWindow =
+                createAppWindow(belowTask, ACTIVITY_TYPE_STANDARD, "belowTaskWindow");
+
+        final Task splitScreenTask1 =
+                createTask(mDisplayContent, WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
+        final WindowState splitWindow1 =
+                createAppWindow(splitScreenTask1, ACTIVITY_TYPE_STANDARD, "splitWindow1");
+        final Task splitScreenTask2 =
+                createTask(mDisplayContent, WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
+        final WindowState splitWindow2 =
+                createAppWindow(splitScreenTask2, ACTIVITY_TYPE_STANDARD, "splitWindow2");
+        splitScreenTask1.setAdjacentTaskFragment(splitScreenTask2, true /* moveTogether */);
+        splitScreenTask2.setAdjacentTaskFragment(splitScreenTask1, true /* moveTogether */);
+
+        mDisplayContent.assignChildLayers(mTransaction);
+
+        assertWindowHigher(splitWindow1, belowTaskWindow);
+        assertWindowHigher(splitWindow2, belowTaskWindow);
+        assertWindowHigher(mDockedDividerWindow, splitWindow1);
+        assertWindowHigher(mDockedDividerWindow, splitWindow2);
+        assertWindowHigher(pinnedWindow, mDockedDividerWindow);
     }
 
     @Test

@@ -87,7 +87,6 @@ import android.app.ActivityManagerInternal.ServiceNotificationPolicy;
 import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
-import android.app.ForegroundServiceDidNotStartInTimeException;
 import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.IApplicationThread;
 import android.app.IForegroundServiceObserver;
@@ -95,6 +94,7 @@ import android.app.IServiceConnection;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.RemoteServiceException.ForegroundServiceDidNotStartInTimeException;
 import android.app.Service;
 import android.app.ServiceStartArgs;
 import android.app.admin.DevicePolicyEventLogger;
@@ -159,6 +159,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.procstats.ServiceState;
 import com.android.internal.messages.nano.SystemMessageProto;
 import com.android.internal.notification.SystemNotificationChannels;
+import com.android.internal.os.SomeArgs;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastPrintWriter;
@@ -896,7 +897,7 @@ public final class ActiveServices {
                 final ServiceState stracker = r.getTracker();
                 if (stracker != null) {
                     stracker.setForeground(true, mAm.mProcessStats.getMemFactorLocked(),
-                            r.lastActivity);
+                            SystemClock.uptimeMillis()); // Use current time, not lastActivity.
                 }
             }
             mAm.mAppOpsService.startOperation(AppOpsManager.getToken(mAm.mAppOpsService),
@@ -1172,7 +1173,8 @@ public final class ActiveServices {
         synchronized (mAm.mProcessStats.mLock) {
             final ServiceState stracker = r.getTracker();
             if (stracker != null) {
-                stracker.setStarted(true, mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
+                stracker.setStarted(true, mAm.mProcessStats.getMemFactorLocked(),
+                        SystemClock.uptimeMillis()); // Use current time, not lastActivity.
             }
         }
         r.callStart = false;
@@ -1328,7 +1330,7 @@ public final class ActiveServices {
     }
 
     void killMisbehavingService(ServiceRecord r,
-            int appUid, int appPid, String localPackageName) {
+            int appUid, int appPid, String localPackageName, int exceptionTypeId) {
         synchronized (mAm) {
             if (!r.destroying) {
                 // This service is still alive, stop it.
@@ -1342,8 +1344,8 @@ public final class ActiveServices {
                     stopServiceLocked(found, false);
                 }
             }
-            mAm.crashApplication(appUid, appPid, localPackageName, -1,
-                    "Bad notification for startForeground", true /*force*/);
+            mAm.crashApplicationWithType(appUid, appPid, localPackageName, -1,
+                    "Bad notification for startForeground", true /*force*/, exceptionTypeId);
         }
     }
 
@@ -2009,7 +2011,8 @@ public final class ActiveServices {
                                 final ServiceState stracker = r.getTracker();
                                 if (stracker != null) {
                                     stracker.setForeground(true,
-                                            mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
+                                            mAm.mProcessStats.getMemFactorLocked(),
+                                            SystemClock.uptimeMillis());
                                 }
                             }
                         } else {
@@ -2878,7 +2881,7 @@ public final class ActiveServices {
                         final ServiceState stracker = s.getTracker();
                         if (stracker != null) {
                             stracker.setBound(true, mAm.mProcessStats.getMemFactorLocked(),
-                                    s.lastActivity);
+                                    SystemClock.uptimeMillis());
                         }
                     }
                 }
@@ -3551,11 +3554,9 @@ public final class ActiveServices {
     }
 
     private int getAllowMode(Intent service, @Nullable String callingPackage) {
-        if (callingPackage == null || service.getComponent() == null) {
-            return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
-        }
-        if (callingPackage.equals(service.getComponent().getPackageName())) {
-            return ActivityManagerInternal.ALLOW_ALL_PROFILE_PERMISSIONS_IN_PROFILE;
+        if (callingPackage != null && service.getComponent() != null
+                && callingPackage.equals(service.getComponent().getPackageName())) {
+            return ActivityManagerInternal.ALLOW_PROFILES_OR_NON_FULL;
         } else {
             return ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
         }
@@ -3591,14 +3592,14 @@ public final class ActiveServices {
             timeoutNeeded = false;
         }
 
-        long now = SystemClock.uptimeMillis();
         ProcessServiceRecord psr;
         if (r.executeNesting == 0) {
             r.executeFg = fg;
             synchronized (mAm.mProcessStats.mLock) {
                 final ServiceState stracker = r.getTracker();
                 if (stracker != null) {
-                    stracker.setExecuting(true, mAm.mProcessStats.getMemFactorLocked(), now);
+                    stracker.setExecuting(true, mAm.mProcessStats.getMemFactorLocked(),
+                            SystemClock.uptimeMillis());
                 }
             }
             if (r.app != null) {
@@ -3629,7 +3630,7 @@ public final class ActiveServices {
         }
         r.executeFg |= fg;
         r.executeNesting++;
-        r.executingStart = now;
+        r.executingStart = SystemClock.uptimeMillis();
         return oomAdjusted;
     }
 
@@ -3839,7 +3840,8 @@ public final class ActiveServices {
             if (oldPosInRestarting == -1) {
                 r.createdFromFg = false;
                 synchronized (mAm.mProcessStats.mLock) {
-                    r.makeRestarting(mAm.mProcessStats.getMemFactorLocked(), now);
+                    r.makeRestarting(mAm.mProcessStats.getMemFactorLocked(),
+                            SystemClock.uptimeMillis());
                 }
             }
             boolean added = false;
@@ -4676,7 +4678,6 @@ public final class ActiveServices {
             }
         }
 
-        final long now = SystemClock.uptimeMillis();
         // Check to see if the service had been started as foreground, but being
         // brought down before actually showing a notification.  That is not allowed.
         if (r.fgRequired) {
@@ -4687,7 +4688,8 @@ public final class ActiveServices {
             synchronized (mAm.mProcessStats.mLock) {
                 ServiceState stracker = r.getTracker();
                 if (stracker != null) {
-                    stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(), now);
+                    stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(),
+                            SystemClock.uptimeMillis());
                 }
             }
             mAm.mAppOpsService.finishOperation(AppOpsManager.getToken(mAm.mAppOpsService),
@@ -4697,9 +4699,12 @@ public final class ActiveServices {
             if (r.app != null) {
                 Message msg = mAm.mHandler.obtainMessage(
                         ActivityManagerService.SERVICE_FOREGROUND_CRASH_MSG);
-                msg.obj = r.app;
-                msg.getData().putCharSequence(
-                    ActivityManagerService.SERVICE_RECORD_KEY, r.toString());
+                SomeArgs args = SomeArgs.obtain();
+                args.arg1 = r.app;
+                args.arg2 = r.toString();
+                args.arg3 = r.getComponentName();
+
+                msg.obj = args;
                 mAm.mHandler.sendMessage(msg);
             }
         }
@@ -4749,7 +4754,8 @@ public final class ActiveServices {
             synchronized (mAm.mProcessStats.mLock) {
                 ServiceState stracker = r.getTracker();
                 if (stracker != null) {
-                    stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(), now);
+                    stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(),
+                            SystemClock.uptimeMillis());
                 }
             }
             mAm.mAppOpsService.finishOperation(
@@ -4826,6 +4832,7 @@ public final class ActiveServices {
         synchronized (mAm.mProcessStats.mLock) {
             final int memFactor = mAm.mProcessStats.getMemFactorLocked();
             if (r.tracker != null) {
+                final long now = SystemClock.uptimeMillis();
                 r.tracker.setStarted(false, memFactor, now);
                 r.tracker.setBound(false, memFactor, now);
                 if (r.executeNesting == 0) {
@@ -5871,11 +5878,14 @@ public final class ActiveServices {
         }
     }
 
-    void serviceForegroundCrash(ProcessRecord app, CharSequence serviceRecord) {
-        mAm.crashApplicationWithType(app.uid, app.getPid(), app.info.packageName, app.userId,
+    void serviceForegroundCrash(ProcessRecord app, String serviceRecord,
+            ComponentName service) {
+        mAm.crashApplicationWithTypeWithExtras(
+                app.uid, app.getPid(), app.info.packageName, app.userId,
                 "Context.startForegroundService() did not then call Service.startForeground(): "
                     + serviceRecord, false /*force*/,
-                ForegroundServiceDidNotStartInTimeException.TYPE_ID);
+                ForegroundServiceDidNotStartInTimeException.TYPE_ID,
+                ForegroundServiceDidNotStartInTimeException.createExtrasForService(service));
     }
 
     void scheduleServiceTimeoutLocked(ProcessRecord proc) {
@@ -6967,7 +6977,8 @@ public final class ActiveServices {
                 r.mFgsNotificationShown,
                 durationMs,
                 r.mStartForegroundCount,
-                ActivityManagerUtils.hashComponentNameForAtom(r.shortInstanceName));
+                ActivityManagerUtils.hashComponentNameForAtom(r.shortInstanceName),
+                r.mFgsHasNotificationPermission);
     }
 
     boolean canAllowWhileInUsePermissionInFgsLocked(int callingPid, int callingUid,

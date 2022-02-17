@@ -44,6 +44,7 @@ import android.view.View;
 import android.view.autofill.AutofillId;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
@@ -91,6 +92,7 @@ public class EditorInfo implements InputType, Parcelable {
      *                1                  TYPE_TEXT_FLAG_MULTI_LINE
      *               1                   TYPE_TEXT_FLAG_IME_MULTI_LINE
      *              1                    TYPE_TEXT_FLAG_NO_SUGGESTIONS
+     *             1                     TYPE_TEXT_FLAG_ENABLE_TEXT_CONVERSION_SUGGESTIONS
      * |-------|-------|-------|-------|
      *                                1  TYPE_CLASS_NUMBER
      *                             1     TYPE_NUMBER_VARIATION_PASSWORD
@@ -585,6 +587,16 @@ public class EditorInfo implements InputType, Parcelable {
     }
 
     /**
+     * An internal variant of {@link #setInitialSurroundingText(CharSequence)}.
+     *
+     * @param surroundingText {@link SurroundingText} to be set.
+     * @hide
+     */
+    public final void setInitialSurroundingTextInternal(@NonNull SurroundingText surroundingText) {
+        mInitialSurroundingText = surroundingText;
+    }
+
+    /**
      * Editors may use this method to provide initial input text to IMEs. As the surrounding text
      * could be used to provide various input assistance, we recommend editors to provide the
      * complete initial input text in its {@link View#onCreateInputConnection(EditorInfo)} callback.
@@ -969,6 +981,35 @@ public class EditorInfo implements InputType, Parcelable {
         if (targetInputMethodUser != null) {
             pw.println(prefix + "targetInputMethodUserId=" + targetInputMethodUser.getIdentifier());
         }
+    }
+
+    /**
+     * @return A deep copy of {@link EditorInfo}.
+     * @hide
+     */
+    @NonNull
+    public final EditorInfo createCopyInternal() {
+        final EditorInfo newEditorInfo = new EditorInfo();
+        newEditorInfo.inputType = inputType;
+        newEditorInfo.imeOptions = imeOptions;
+        newEditorInfo.privateImeOptions = privateImeOptions;
+        newEditorInfo.internalImeOptions = internalImeOptions;
+        newEditorInfo.actionLabel = TextUtils.stringOrSpannedString(actionLabel);
+        newEditorInfo.actionId = actionId;
+        newEditorInfo.initialSelStart = initialSelStart;
+        newEditorInfo.initialSelEnd = initialSelEnd;
+        newEditorInfo.initialCapsMode = initialCapsMode;
+        newEditorInfo.hintText = TextUtils.stringOrSpannedString(hintText);
+        newEditorInfo.label = TextUtils.stringOrSpannedString(label);
+        newEditorInfo.packageName = packageName;
+        newEditorInfo.autofillId = autofillId;
+        newEditorInfo.fieldId = fieldId;
+        newEditorInfo.fieldName = fieldName;
+        newEditorInfo.extras = extras != null ? extras.deepCopy() : null;
+        newEditorInfo.mInitialSurroundingText = mInitialSurroundingText;
+        newEditorInfo.hintLocales = hintLocales;
+        newEditorInfo.contentMimeTypes = ArrayUtils.cloneOrNull(contentMimeTypes);
+        return newEditorInfo;
     }
 
     /**

@@ -47,6 +47,8 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.statusbar.phone.StatusBarContentInsetsProvider;
+import com.android.systemui.unfold.UnfoldTransitionProgressProvider;
+import com.android.systemui.unfold.util.JankMonitorTransitionProgressListener;
 
 import java.util.Optional;
 
@@ -64,7 +66,6 @@ public class StatusBarWindowController {
     private final WindowManager mWindowManager;
     private final IWindowManager mIWindowManager;
     private final StatusBarContentInsetsProvider mContentInsetsProvider;
-    private final Resources mResources;
     private int mBarHeight = -1;
     private final State mCurrentState = new State();
 
@@ -82,7 +83,8 @@ public class StatusBarWindowController {
             WindowManager windowManager,
             IWindowManager iWindowManager,
             StatusBarContentInsetsProvider contentInsetsProvider,
-            @Main Resources resources) {
+            @Main Resources resources,
+            Optional<UnfoldTransitionProgressProvider> unfoldTransitionProgressProvider) {
         mContext = context;
         mWindowManager = windowManager;
         mIWindowManager = iWindowManager;
@@ -91,11 +93,14 @@ public class StatusBarWindowController {
         mLaunchAnimationContainer = mStatusBarWindowView.findViewById(
                 R.id.status_bar_launch_animation_container);
         mLpChanged = new WindowManager.LayoutParams();
-        mResources = resources;
 
         if (mBarHeight < 0) {
             mBarHeight = SystemBarUtils.getStatusBarHeight(mContext);
         }
+        unfoldTransitionProgressProvider.ifPresent(
+                unfoldProgressProvider -> unfoldProgressProvider.addCallback(
+                        new JankMonitorTransitionProgressListener(
+                                /* attachedViewProvider=*/ () -> mStatusBarWindowView)));
     }
 
     public int getStatusBarHeight() {

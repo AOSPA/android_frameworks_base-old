@@ -25,6 +25,8 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
+import org.junit.Assume.assumeFalse
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -81,6 +83,27 @@ class OpenAppWarmTest(testSpec: FlickerTestParameter) : OpenAppTransition(testSp
                 wmHelper.waitForFullScreenApp(testApp.component)
             }
         }
+
+    /** {@inheritDoc} */
+    @FlakyTest(bugId = 206753786)
+    @Test
+    override fun statusBarLayerRotatesScales() {
+        // This test doesn't work in shell transitions because of b/206753786
+        assumeFalse(isShellTransitionsEnabled)
+        super.statusBarLayerRotatesScales()
+    }
+
+    /** {@inheritDoc} */
+    @Presubmit
+    @Test
+    override fun appWindowReplacesLauncherAsTopWindow() =
+            super.appWindowReplacesLauncherAsTopWindow()
+
+    /** {@inheritDoc} */
+    @Presubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+            super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
     @FlakyTest

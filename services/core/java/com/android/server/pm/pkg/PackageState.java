@@ -27,7 +27,6 @@ import android.content.pm.SharedLibraryInfo;
 import android.content.pm.SigningInfo;
 import android.util.SparseArray;
 
-import com.android.internal.R;
 import com.android.server.pm.PackageSetting;
 import com.android.server.pm.Settings;
 
@@ -99,12 +98,6 @@ public interface PackageState {
      */
     @Nullable
     String getCpuAbiOverride();
-
-    /**
-     * In epoch milliseconds. The timestamp of the first install of the particular app on the
-     * device, surviving past app updates. This does not survive full uninstalls + reinstalls.
-     */
-    long getFirstInstallTime();
 
     /**
      * In epoch milliseconds. The last modified time of the file directory which houses the app
@@ -204,6 +197,18 @@ public interface PackageState {
      */
     @NonNull
     List<SharedLibraryInfo> getUsesLibraryInfos();
+
+    /**
+     * @see R.styleable#AndroidManifestUsesSdkLibrary
+     */
+    @NonNull
+    String[] getUsesSdkLibraries();
+
+    /**
+     * @see R.styleable#AndroidManifestUsesSdkLibrary_versionMajor
+     */
+    @NonNull
+    long[] getUsesSdkLibrariesVersionsMajor();
 
     /**
      * @see R.styleable#AndroidManifestUsesStaticLibrary

@@ -30,21 +30,9 @@
 
 namespace android {
 
-static jlong nativeCreate(JNIEnv* env, jclass clazz, jstring jName, jlong surfaceControl,
-                          jlong width, jlong height, jint format) {
-    String8 str8;
-    if (jName) {
-        const jchar* str16 = env->GetStringCritical(jName, nullptr);
-        if (str16) {
-            str8 = String8(reinterpret_cast<const char16_t*>(str16), env->GetStringLength(jName));
-            env->ReleaseStringCritical(jName, str16);
-            str16 = nullptr;
-        }
-    }
-    std::string name = str8.string();
-    sp<BLASTBufferQueue> queue =
-            new BLASTBufferQueue(name, reinterpret_cast<SurfaceControl*>(surfaceControl), width,
-                                 height, format);
+static jlong nativeCreate(JNIEnv* env, jclass clazz, jstring jName) {
+    ScopedUtfChars name(env, jName);
+    sp<BLASTBufferQueue> queue = new BLASTBufferQueue(name.c_str());
     queue->incStrong((void*)nativeCreate);
     return reinterpret_cast<jlong>(queue.get());
 }
@@ -73,10 +61,11 @@ static jint nativeGetUndequeuedBufferCount(JNIEnv* env, jclass clazz, jlong ptr)
     return queue->getUndequeuedBufferCount();
 }
 
-static void nativeSetSyncTransaction(JNIEnv* env, jclass clazz, jlong ptr, jlong transactionPtr) {
+static void nativeSetSyncTransaction(JNIEnv* env, jclass clazz, jlong ptr, jlong transactionPtr,
+                                     jboolean acquireSingleBuffer) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionPtr);
-    queue->setSyncTransaction(transaction);
+    queue->setSyncTransaction(transaction, acquireSingleBuffer);
 }
 
 static void nativeUpdate(JNIEnv* env, jclass clazz, jlong ptr, jlong surfaceControl, jlong width,
@@ -91,7 +80,7 @@ static void nativeMergeWithNextTransaction(JNIEnv*, jclass clazz, jlong ptr, jlo
                                            jlong framenumber) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionPtr);
-    queue->mergeWithNextTransaction(transaction, framenumber);
+    queue->mergeWithNextTransaction(transaction, CC_UNLIKELY(framenumber < 0) ? 0 : framenumber);
 }
 
 static jlong nativeGetLastAcquiredFrameNum(JNIEnv* env, jclass clazz, jlong ptr) {
@@ -104,19 +93,25 @@ static void nativeApplyPendingTransactions(JNIEnv* env, jclass clazz, jlong ptr,
     queue->applyPendingTransactions(frameNum);
 }
 
+static bool nativeIsSameSurfaceControl(JNIEnv* env, jclass clazz, jlong ptr, jlong surfaceControl) {
+    sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
+    return queue->isSameSurfaceControl(reinterpret_cast<SurfaceControl*>(surfaceControl));
+}
+
 static const JNINativeMethod gMethods[] = {
         /* name, signature, funcPtr */
         // clang-format off
-        {"nativeCreate", "(Ljava/lang/String;JJJI)J", (void*)nativeCreate},
+        {"nativeCreate", "(Ljava/lang/String;)J", (void*)nativeCreate},
         {"nativeGetSurface", "(JZ)Landroid/view/Surface;", (void*)nativeGetSurface},
         {"nativeSetUndequeuedBufferCount", "(JI)V", (void*)nativeSetUndequeuedBufferCount},
         {"nativeGetUndequeuedBufferCount", "(J)I", (void*)nativeGetUndequeuedBufferCount},
         {"nativeDestroy", "(J)V", (void*)nativeDestroy},
-        {"nativeSetSyncTransaction", "(JJ)V", (void*)nativeSetSyncTransaction},
+        {"nativeSetSyncTransaction", "(JJZ)V", (void*)nativeSetSyncTransaction},
         {"nativeUpdate", "(JJJJIJ)V", (void*)nativeUpdate},
         {"nativeMergeWithNextTransaction", "(JJJ)V", (void*)nativeMergeWithNextTransaction},
         {"nativeGetLastAcquiredFrameNum", "(J)J", (void*)nativeGetLastAcquiredFrameNum},
         {"nativeApplyPendingTransactions", "(JJ)V", (void*)nativeApplyPendingTransactions},
+        {"nativeIsSameSurfaceControl", "(JJ)Z", (void*)nativeIsSameSurfaceControl},
         // clang-format on
 };
 

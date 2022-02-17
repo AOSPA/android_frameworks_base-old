@@ -63,7 +63,6 @@ public final class DozeServiceHost implements DozeHost {
     private final DozeLog mDozeLog;
     private final PowerManager mPowerManager;
     private boolean mAnimateWakeup;
-    private boolean mAnimateScreenOff;
     private boolean mIgnoreTouchWhilePulsing;
     private Runnable mPendingScreenOffCallback;
     @VisibleForTesting
@@ -257,7 +256,6 @@ public final class DozeServiceHost implements DozeHost {
 
             private void setPulsing(boolean pulsing) {
                 mStatusBarKeyguardViewManager.setPulsing(pulsing);
-                mKeyguardViewMediator.setPulsing(pulsing);
                 mNotificationPanel.setPulsing(pulsing);
                 mStatusBarStateController.setPulsing(pulsing);
                 mIgnoreTouchWhilePulsing = false;
@@ -359,11 +357,6 @@ public final class DozeServiceHost implements DozeHost {
     }
 
     @Override
-    public void setAnimateScreenOff(boolean animateScreenOff) {
-        mAnimateScreenOff = animateScreenOff;
-    }
-
-    @Override
     public void onSlpiTap(float screenX, float screenY) {
         if (screenX > 0 && screenY > 0 && mAmbientIndicationContainer != null
                 && mAmbientIndicationContainer.getVisibility() == View.VISIBLE) {
@@ -440,10 +433,6 @@ public final class DozeServiceHost implements DozeHost {
 
     boolean shouldAnimateWakeup() {
         return mAnimateWakeup;
-    }
-
-    boolean shouldAnimateScreenOff() {
-        return mAnimateScreenOff;
     }
 
     boolean getIgnoreTouchWhilePulsing() {

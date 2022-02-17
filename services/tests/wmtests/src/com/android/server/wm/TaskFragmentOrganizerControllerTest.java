@@ -21,13 +21,17 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.server.wm.testing.Assert.assertThrows;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
 import android.content.Intent;
@@ -329,7 +333,7 @@ public class TaskFragmentOrganizerControllerTest extends WindowTestsBase {
 
         // Throw exception if the transaction is trying to change a window that is not organized by
         // the organizer.
-        mTransaction.setAdjacentRoots(mFragmentWindowToken, token2);
+        mTransaction.setAdjacentRoots(mFragmentWindowToken, token2, false /* moveTogether */);
 
         assertThrows(SecurityException.class, () -> {
             try {
@@ -352,28 +356,66 @@ public class TaskFragmentOrganizerControllerTest extends WindowTestsBase {
     }
 
     @Test
-    public void testApplyTransaction_enforceHierarchyChange_createTaskFragment() {
+    public void testApplyTransaction_enforceHierarchyChange_createTaskFragment()
+            throws RemoteException {
+        mController.registerOrganizer(mIOrganizer);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent);
+        final int uid = Binder.getCallingUid();
+        activity.info.applicationInfo.uid = uid;
+        activity.getTask().effectiveUid = uid;
+        final IBinder fragmentToken = new Binder();
+        final TaskFragmentCreationParams params = new TaskFragmentCreationParams.Builder(
+                mOrganizerToken, fragmentToken, activity.token).build();
         mOrganizer.applyTransaction(mTransaction);
 
         // Allow organizer to create TaskFragment and start/reparent activity to TaskFragment.
-        final TaskFragmentCreationParams mockParams = mock(TaskFragmentCreationParams.class);
-        doReturn(mOrganizerToken).when(mockParams).getOrganizer();
-        mTransaction.createTaskFragment(mockParams);
+        mTransaction.createTaskFragment(params);
         mTransaction.startActivityInTaskFragment(
                 mFragmentToken, null /* callerToken */, new Intent(), null /* activityOptions */);
         mTransaction.reparentActivityToTaskFragment(mFragmentToken, mock(IBinder.class));
         mTransaction.setAdjacentTaskFragments(mFragmentToken, mock(IBinder.class),
                 null /* options */);
+        mAtm.getWindowOrganizerController().applyTransaction(mTransaction);
 
-        // It is expected to fail for the mock TaskFragmentCreationParams. It is ok as we are
-        // testing the security check here.
-        assertThrows(IllegalArgumentException.class, () -> {
-            try {
-                mAtm.getWindowOrganizerController().applyTransaction(mTransaction);
-            } catch (RemoteException e) {
-                fail();
-            }
-        });
+        // Successfully created a TaskFragment.
+        final TaskFragment taskFragment = mAtm.mWindowOrganizerController
+                .getTaskFragment(fragmentToken);
+        assertNotNull(taskFragment);
+        assertEquals(activity.getTask(), taskFragment.getTask());
+    }
+
+    @Test
+    public void testApplyTransaction_createTaskFragment_failForDifferentUid()
+            throws RemoteException {
+        mController.registerOrganizer(mIOrganizer);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent);
+        final int uid = Binder.getCallingUid();
+        final IBinder fragmentToken = new Binder();
+        final TaskFragmentCreationParams params = new TaskFragmentCreationParams.Builder(
+                mOrganizerToken, fragmentToken, activity.token).build();
+        mOrganizer.applyTransaction(mTransaction);
+        mTransaction.createTaskFragment(params);
+
+        // Fail to create TaskFragment when the task uid is different from caller.
+        activity.info.applicationInfo.uid = uid;
+        activity.getTask().effectiveUid = uid + 1;
+        mAtm.getWindowOrganizerController().applyTransaction(mTransaction);
+
+        assertNull(mAtm.mWindowOrganizerController.getTaskFragment(fragmentToken));
+
+        // Fail to create TaskFragment when the task uid is different from owner activity.
+        activity.info.applicationInfo.uid = uid + 1;
+        activity.getTask().effectiveUid = uid;
+        mAtm.getWindowOrganizerController().applyTransaction(mTransaction);
+
+        assertNull(mAtm.mWindowOrganizerController.getTaskFragment(fragmentToken));
+
+        // Successfully created a TaskFragment for same uid.
+        activity.info.applicationInfo.uid = uid;
+        activity.getTask().effectiveUid = uid;
+        mAtm.getWindowOrganizerController().applyTransaction(mTransaction);
+
+        assertNotNull(mAtm.mWindowOrganizerController.getTaskFragment(fragmentToken));
     }
 
     @Test
@@ -423,5 +465,62 @@ public class TaskFragmentOrganizerControllerTest extends WindowTestsBase {
         mAtm.getWindowOrganizerController().applyTransaction(mTransaction);
 
         verify(mAtm.mRootWindowContainer).resumeFocusedTasksTopActivities();
+    }
+
+    @Test
+    public void testDeferPendingTaskFragmentEventsOfInvisibleTask() {
+        // Task - TaskFragment - Activity.
+        final Task task = createTask(mDisplayContent);
+        final TaskFragment taskFragment = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .setOrganizer(mOrganizer)
+                .setFragmentToken(mFragmentToken)
+                .build();
+
+        // Mock the task to invisible
+        doReturn(false).when(task).shouldBeVisible(any());
+
+        // Sending events
+        mController.registerOrganizer(mIOrganizer);
+        taskFragment.mTaskFragmentAppearedSent = true;
+        mController.onTaskFragmentInfoChanged(mIOrganizer, taskFragment);
+        mController.dispatchPendingEvents();
+
+        // Verifies that event was not sent
+        verify(mOrganizer, never()).onTaskFragmentInfoChanged(any());
+    }
+
+    /**
+     * Tests that a task fragment info changed event is still sent if the task is invisible only
+     * when the info changed event is because of the last activity in a task finishing.
+     */
+    @Test
+    public void testLastPendingTaskFragmentInfoChangedEventOfInvisibleTaskSent() {
+        // Create a TaskFragment with an activity, all within a parent task
+        final TaskFragment taskFragment = new TaskFragmentBuilder(mAtm)
+                .setOrganizer(mOrganizer)
+                .setFragmentToken(mFragmentToken)
+                .setCreateParentTask()
+                .createActivityCount(1)
+                .build();
+        final Task parentTask = taskFragment.getTask();
+        final ActivityRecord activity = taskFragment.getTopNonFinishingActivity();
+        assertTrue(parentTask.shouldBeVisible(null));
+
+        // Dispatch pending info changed event from creating the activity
+        mController.registerOrganizer(mIOrganizer);
+        taskFragment.mTaskFragmentAppearedSent = true;
+        mController.onTaskFragmentInfoChanged(mIOrganizer, taskFragment);
+        mController.dispatchPendingEvents();
+
+        // Finish the activity and verify that the task is invisible
+        activity.finishing = true;
+        assertFalse(parentTask.shouldBeVisible(null));
+
+        // Verify the info changed callback still occurred despite the task being invisible
+        reset(mOrganizer);
+        mController.onTaskFragmentInfoChanged(mIOrganizer, taskFragment);
+        mController.dispatchPendingEvents();
+        verify(mOrganizer).onTaskFragmentInfoChanged(any());
     }
 }

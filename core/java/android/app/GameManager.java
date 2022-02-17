@@ -21,8 +21,8 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
-import android.annotation.TestApi;
 import android.annotation.UserHandleAware;
 import android.content.Context;
 import android.os.Handler;
@@ -125,7 +125,7 @@ public final class GameManager {
      *
      * @hide
      */
-    @TestApi
+    @SystemApi
     @UserHandleAware
     @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
     public void setGameMode(@NonNull String packageName, @GameMode int gameMode) {
@@ -163,6 +163,18 @@ public final class GameManager {
     public @GameMode boolean getAngleEnabled(@NonNull String packageName) {
         try {
             return mService.getAngleEnabled(packageName, mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by games to communicate the current state to the platform.
+     * @param gameState An object set to the current state.
+     */
+    public void setGameState(@NonNull GameState gameState) {
+        try {
+            mService.setGameState(mContext.getPackageName(), gameState, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

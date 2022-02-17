@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.pip.phone;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.provider.Settings.ACTION_PICTURE_IN_PICTURE_SETTINGS;
@@ -32,8 +33,10 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.annotation.IntDef;
+import android.app.ActivityManager;
 import android.app.PendingIntent.CanceledException;
 import android.app.RemoteAction;
+import android.app.WindowConfiguration;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -60,12 +63,15 @@ import android.widget.LinearLayout;
 import com.android.wm.shell.R;
 import com.android.wm.shell.animation.Interpolators;
 import com.android.wm.shell.common.ShellExecutor;
+import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.PipUtils;
+import com.android.wm.shell.splitscreen.SplitScreenController;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Translucent window that gets started on top of a task in PIP to allow the user to control it.
@@ -105,6 +111,7 @@ public class PipMenuView extends FrameLayout {
     private boolean mAllowMenuTimeout = true;
     private boolean mAllowTouches = true;
     private int mDismissFadeOutDurationMs;
+    private boolean mFocusedTaskAllowSplitScreen;
 
     private final List<RemoteAction> mActions = new ArrayList<>();
 
@@ -115,7 +122,9 @@ public class PipMenuView extends FrameLayout {
     private int mBetweenActionPaddingLand;
 
     private AnimatorSet mMenuContainerAnimator;
-    private PhonePipMenuController mController;
+    private final PhonePipMenuController mController;
+    private final Optional<SplitScreenController> mSplitScreenControllerOptional;
+    private final PipUiEventLogger mPipUiEventLogger;
 
     private ValueAnimator.AnimatorUpdateListener mMenuBgUpdateListener =
             new ValueAnimator.AnimatorUpdateListener() {
@@ -144,12 +153,16 @@ public class PipMenuView extends FrameLayout {
     protected PipMenuIconsAlgorithm mPipMenuIconsAlgorithm;
 
     public PipMenuView(Context context, PhonePipMenuController controller,
-            ShellExecutor mainExecutor, Handler mainHandler) {
+            ShellExecutor mainExecutor, Handler mainHandler,
+            Optional<SplitScreenController> splitScreenController,
+            PipUiEventLogger pipUiEventLogger) {
         super(context, null, 0);
         mContext = context;
         mController = controller;
         mMainExecutor = mainExecutor;
         mMainHandler = mainHandler;
+        mSplitScreenControllerOptional = splitScreenController;
+        mPipUiEventLogger = pipUiEventLogger;
 
         mAccessibilityManager = context.getSystemService(AccessibilityManager.class);
         inflate(context, R.layout.pip_menu, this);
@@ -180,7 +193,7 @@ public class PipMenuView extends FrameLayout {
         mEnterSplitButton = findViewById(R.id.enter_split);
         mEnterSplitButton.setAlpha(0);
         mEnterSplitButton.setOnClickListener(v -> {
-            if (mMenuContainer.getAlpha() != 0) {
+            if (mEnterSplitButton.getAlpha() != 0) {
                 enterSplit();
             }
         });
@@ -255,6 +268,15 @@ public class PipMenuView extends FrameLayout {
         return super.dispatchGenericMotionEvent(event);
     }
 
+    public void onFocusTaskChanged(ActivityManager.RunningTaskInfo taskInfo) {
+        final boolean isSplitScreen = mSplitScreenControllerOptional.isPresent()
+                && mSplitScreenControllerOptional.get().isTaskInSplitScreen(taskInfo.taskId);
+        mFocusedTaskAllowSplitScreen = isSplitScreen
+                || (taskInfo.getWindowingMode() == WINDOWING_MODE_FULLSCREEN
+                && taskInfo.supportsSplitScreenMultiWindow
+                && taskInfo.topActivityType != WindowConfiguration.ACTIVITY_TYPE_HOME);
+    }
+
     void showMenu(int menuState, Rect stackBounds, boolean allowMenuTimeout,
             boolean resizeMenuOnShow, boolean withDelay, boolean showResizeHandle) {
         mAllowMenuTimeout = allowMenuTimeout;
@@ -278,7 +300,8 @@ public class PipMenuView extends FrameLayout {
             ObjectAnimator dismissAnim = ObjectAnimator.ofFloat(mDismissButton, View.ALPHA,
                     mDismissButton.getAlpha(), 1f);
             ObjectAnimator enterSplitAnim = ObjectAnimator.ofFloat(mEnterSplitButton, View.ALPHA,
-                    mEnterSplitButton.getAlpha(), ENABLE_ENTER_SPLIT ? 1f : 0f);
+                    mEnterSplitButton.getAlpha(),
+                    ENABLE_ENTER_SPLIT && mFocusedTaskAllowSplitScreen ? 1f : 0f);
             if (menuState == MENU_STATE_FULL) {
                 mMenuContainerAnimator.playTogether(menuAnim, settingsAnim, dismissAnim,
                         enterSplitAnim);
@@ -520,6 +543,8 @@ public class PipMenuView extends FrameLayout {
         // handles the message
         hideMenu(mController::onPipExpand, false /* notifyMenuVisibility */, true /* resize */,
                 ANIM_TYPE_HIDE);
+        mPipUiEventLogger.log(
+                PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_EXPAND_TO_FULLSCREEN);
     }
 
     private void dismissPip() {
@@ -528,6 +553,7 @@ public class PipMenuView extends FrameLayout {
             // any other dismissal that will update the touch state and fade out the PIP task
             // and the menu view at the same time.
             mController.onPipDismiss();
+            mPipUiEventLogger.log(PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_TAP_TO_REMOVE);
         }
     }
 
@@ -547,6 +573,7 @@ public class PipMenuView extends FrameLayout {
                     Uri.fromParts("package", topPipActivityInfo.first.getPackageName(), null));
             settingsIntent.setFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK);
             mContext.startActivityAsUser(settingsIntent, UserHandle.of(topPipActivityInfo.second));
+            mPipUiEventLogger.log(PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_SHOW_SETTINGS);
         }
     }
 

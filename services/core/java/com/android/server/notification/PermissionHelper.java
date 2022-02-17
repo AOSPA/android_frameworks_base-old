@@ -16,6 +16,7 @@
 
 package com.android.server.notification;
 
+import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
 import static android.content.pm.PackageManager.GET_PERMISSIONS;
 import static android.permission.PermissionManager.PERMISSION_GRANTED;
@@ -27,6 +28,7 @@ import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
+import android.os.Binder;
 import android.os.RemoteException;
 import android.permission.IPermissionManager;
 import android.util.ArrayMap;
@@ -36,10 +38,8 @@ import android.util.Slog;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -75,7 +75,12 @@ public final class PermissionHelper {
      */
     public boolean hasPermission(int uid) {
         assertFlag();
-        return mPmi.checkUidPermission(uid, NOTIFICATION_PERMISSION) == PERMISSION_GRANTED;
+        final long callingId = Binder.clearCallingIdentity();
+        try {
+            return mPmi.checkUidPermission(uid, NOTIFICATION_PERMISSION) == PERMISSION_GRANTED;
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
     }
 
     /**
@@ -139,17 +144,27 @@ public final class PermissionHelper {
         return granted;
     }
 
+    // Key: (uid, package name); Value: (granted, user set)
     public @NonNull
-    ArrayMap<Pair<Integer, String>, Boolean> getNotificationPermissionValues(
-            int userId) {
+            ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>>
+                    getNotificationPermissionValues(int userId) {
         assertFlag();
-        ArrayMap<Pair<Integer, String>, Boolean> notifPermissions = new ArrayMap<>();
+        ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> notifPermissions = new ArrayMap<>();
         Set<Pair<Integer, String>> allRequestingUids = getAppsRequestingPermission(userId);
         Set<Pair<Integer, String>> allApprovedUids = getAppsGrantedPermission(userId);
         for (Pair<Integer, String> pair : allRequestingUids) {
-            notifPermissions.put(pair, allApprovedUids.contains(pair));
+            notifPermissions.put(pair, new Pair(allApprovedUids.contains(pair),
+                    isPermissionUserSet(pair.second /* package name */, userId)));
         }
         return notifPermissions;
+    }
+
+    /**
+     * @see setNotificationPermission(String, int, boolean, boolean, boolean)
+     */
+    public void setNotificationPermission(String packageName, @UserIdInt int userId, boolean grant,
+            boolean userSet) {
+        setNotificationPermission(packageName, userId, grant, userSet, false);
     }
 
     /**
@@ -159,8 +174,9 @@ public final class PermissionHelper {
      * with a lock held.
      */
     public void setNotificationPermission(String packageName, @UserIdInt int userId, boolean grant,
-            boolean userSet) {
+            boolean userSet, boolean reviewRequired) {
         assertFlag();
+        final long callingId = Binder.clearCallingIdentity();
         try {
             if (grant) {
                 mPermManager.grantRuntimePermission(packageName, NOTIFICATION_PERMISSION, userId);
@@ -170,30 +186,66 @@ public final class PermissionHelper {
             }
             if (userSet) {
                 mPermManager.updatePermissionFlags(packageName, NOTIFICATION_PERMISSION,
-                        FLAG_PERMISSION_USER_SET, FLAG_PERMISSION_USER_SET, true, userId);
+                        FLAG_PERMISSION_USER_SET | FLAG_PERMISSION_REVIEW_REQUIRED,
+                        FLAG_PERMISSION_USER_SET, true, userId);
+            } else if (reviewRequired) {
+                mPermManager.updatePermissionFlags(packageName, NOTIFICATION_PERMISSION,
+                        FLAG_PERMISSION_REVIEW_REQUIRED, FLAG_PERMISSION_REVIEW_REQUIRED, true,
+                        userId);
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "Could not reach system server", e);
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
         }
     }
 
+    /**
+     * Set the notification permission state upon phone version upgrade from S- to T+, or upon
+     * restoring a pre-T backup on a T+ device
+     */
     public void setNotificationPermission(PackagePermission pkgPerm) {
         assertFlag();
-        setNotificationPermission(
-                pkgPerm.packageName, pkgPerm.userId, pkgPerm.granted, pkgPerm.userSet);
+        if (pkgPerm == null || pkgPerm.packageName == null) {
+            return;
+        }
+        setNotificationPermission(pkgPerm.packageName, pkgPerm.userId, pkgPerm.granted,
+                pkgPerm.userSet, !pkgPerm.userSet);
     }
 
     public boolean isPermissionFixed(String packageName, @UserIdInt int userId) {
         assertFlag();
+        final long callingId = Binder.clearCallingIdentity();
         try {
-            int flags = mPermManager.getPermissionFlags(packageName, NOTIFICATION_PERMISSION,
-                    userId);
-            return (flags & PackageManager.FLAG_PERMISSION_SYSTEM_FIXED) != 0
-                    || (flags & PackageManager.FLAG_PERMISSION_POLICY_FIXED) != 0;
-        } catch (RemoteException e) {
-            Slog.e(TAG, "Could not reach system server", e);
+            try {
+                int flags = mPermManager.getPermissionFlags(packageName, NOTIFICATION_PERMISSION,
+                        userId);
+                return (flags & PackageManager.FLAG_PERMISSION_SYSTEM_FIXED) != 0
+                        || (flags & PackageManager.FLAG_PERMISSION_POLICY_FIXED) != 0;
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Could not reach system server", e);
+            }
+            return false;
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
         }
-        return false;
+    }
+
+    boolean isPermissionUserSet(String packageName, @UserIdInt int userId) {
+        assertFlag();
+        final long callingId = Binder.clearCallingIdentity();
+        try {
+            try {
+                int flags = mPermManager.getPermissionFlags(packageName, NOTIFICATION_PERMISSION,
+                        userId);
+                return (flags & PackageManager.FLAG_PERMISSION_USER_SET) != 0;
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Could not reach system server", e);
+            }
+            return false;
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
     }
 
     private void assertFlag() {

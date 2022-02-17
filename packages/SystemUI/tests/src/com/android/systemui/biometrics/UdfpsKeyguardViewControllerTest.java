@@ -36,12 +36,14 @@ import androidx.test.filters.SmallTest;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
+import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.phone.panelstate.PanelExpansionListener;
 import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
@@ -92,7 +94,11 @@ public class UdfpsKeyguardViewControllerTest extends SysuiTestCase {
     @Mock
     private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
     @Mock
+    private SystemUIDialogManager mDialogManager;
+    @Mock
     private UdfpsController mUdfpsController;
+    @Mock
+    private ActivityLaunchAnimator mActivityLaunchAnimator;
     private FakeSystemClock mSystemClock = new FakeSystemClock();
 
     private UdfpsKeyguardViewController mController;
@@ -130,7 +136,9 @@ public class UdfpsKeyguardViewControllerTest extends SysuiTestCase {
                 mSystemClock,
                 mKeyguardStateController,
                 mUnlockedScreenOffAnimationController,
-                mUdfpsController);
+                mDialogManager,
+                mUdfpsController,
+                mActivityLaunchAnimator);
     }
 
     @Test
@@ -351,9 +359,8 @@ public class UdfpsKeyguardViewControllerTest extends SysuiTestCase {
         mSystemClock.advanceTime(205);
         mController.onTouchOutsideView();
 
-        // THEN show the bouncer and reset alt auth
+        // THEN show the bouncer
         verify(mStatusBarKeyguardViewManager).showBouncer(eq(true));
-        verify(mStatusBarKeyguardViewManager).resetAlternateAuth(anyBoolean());
     }
 
     @Test

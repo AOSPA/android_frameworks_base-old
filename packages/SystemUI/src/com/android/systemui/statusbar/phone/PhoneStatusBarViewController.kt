@@ -15,12 +15,15 @@
  */
 package com.android.systemui.statusbar.phone
 
+import android.content.res.Configuration
 import android.graphics.Point
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import com.android.systemui.R
 import com.android.systemui.shared.animation.UnfoldMoveFromCenterAnimator
+import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.unfold.SysUIUnfoldComponent
 import com.android.systemui.unfold.UNFOLD_STATUS_BAR
 import com.android.systemui.unfold.util.ScopedUnfoldTransitionProgressProvider
@@ -35,15 +38,21 @@ class PhoneStatusBarViewController private constructor(
     view: PhoneStatusBarView,
     @Named(UNFOLD_STATUS_BAR) private val progressProvider: ScopedUnfoldTransitionProgressProvider?,
     private val moveFromCenterAnimationController: StatusBarMoveFromCenterAnimationController?,
-    touchEventHandler: PhoneStatusBarView.TouchEventHandler
+    touchEventHandler: PhoneStatusBarView.TouchEventHandler,
+    private val configurationController: ConfigurationController
 ) : ViewController<PhoneStatusBarView>(view) {
+
+    private val configurationListener = object : ConfigurationController.ConfigurationListener {
+        override fun onConfigChanged(newConfig: Configuration?) {
+            mView.updateResources()
+        }
+    }
 
     override fun onViewAttached() {
         moveFromCenterAnimationController?.let { animationController ->
             val statusBarLeftSide: View = mView.findViewById(R.id.status_bar_left_side)
             val systemIconArea: ViewGroup = mView.findViewById(R.id.system_icon_area)
 
-            val viewCenterProvider = StatusBarViewsCenterProvider()
             val viewsToAnimate = arrayOf(
                 statusBarLeftSide,
                 systemIconArea
@@ -52,7 +61,7 @@ class PhoneStatusBarViewController private constructor(
             mView.viewTreeObserver.addOnPreDrawListener(object :
                 ViewTreeObserver.OnPreDrawListener {
                 override fun onPreDraw(): Boolean {
-                    animationController.onViewsReady(viewsToAnimate, viewCenterProvider)
+                    animationController.onViewsReady(viewsToAnimate)
                     mView.viewTreeObserver.removeOnPreDrawListener(this)
                     return true
                 }
@@ -67,11 +76,13 @@ class PhoneStatusBarViewController private constructor(
         }
 
         progressProvider?.setReadyToHandleTransition(true)
+        configurationController.addCallback(configurationListener)
     }
 
     override fun onViewDetached() {
         progressProvider?.setReadyToHandleTransition(false)
         moveFromCenterAnimationController?.onViewDetached()
+        configurationController.removeCallback(configurationListener)
     }
 
     init {
@@ -82,7 +93,31 @@ class PhoneStatusBarViewController private constructor(
         mView.importantForAccessibility = mode
     }
 
-    private class StatusBarViewsCenterProvider : UnfoldMoveFromCenterAnimator.ViewCenterProvider {
+    /**
+     * Sends a touch event to the status bar view.
+     *
+     * This is required in certain cases because the status bar view is in a separate window from
+     * the rest of SystemUI, and other windows may decide that their touch should instead be treated
+     * as a status bar window touch.
+     */
+    fun sendTouchToView(ev: MotionEvent): Boolean {
+        return mView.dispatchTouchEvent(ev)
+    }
+
+    /**
+     * Returns true if the given (x, y) point (in screen coordinates) is within the status bar
+     * view's range and false otherwise.
+     */
+    fun touchIsWithinView(x: Float, y: Float): Boolean {
+        val left = mView.locationOnScreen[0]
+        val top = mView.locationOnScreen[1]
+        return left <= x &&
+                x <= left + mView.width &&
+                top <= y &&
+                y <= top + mView.height
+    }
+
+    class StatusBarViewsCenterProvider : UnfoldMoveFromCenterAnimator.ViewCenterProvider {
         override fun getViewCenter(view: View, outPoint: Point) =
             when (view.id) {
                 R.id.status_bar_left_side -> {
@@ -117,7 +152,8 @@ class PhoneStatusBarViewController private constructor(
     class Factory @Inject constructor(
         private val unfoldComponent: Optional<SysUIUnfoldComponent>,
         @Named(UNFOLD_STATUS_BAR)
-        private val progressProvider: Optional<ScopedUnfoldTransitionProgressProvider>
+        private val progressProvider: Optional<ScopedUnfoldTransitionProgressProvider>,
+        private val configurationController: ConfigurationController
     ) {
         fun create(
             view: PhoneStatusBarView,
@@ -129,7 +165,8 @@ class PhoneStatusBarViewController private constructor(
                 unfoldComponent.map {
                     it.getStatusBarMoveFromCenterAnimationController()
                 }.getOrNull(),
-                touchEventHandler
+                touchEventHandler,
+                configurationController
             )
     }
 }

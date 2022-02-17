@@ -36,6 +36,7 @@ import com.android.systemui.statusbar.policy.BatteryController
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.leak.RotationUtils
 import com.android.systemui.R
+import com.android.systemui.flags.Flags
 import com.android.systemui.util.time.SystemClock
 import java.io.PrintWriter
 import javax.inject.Inject
@@ -61,7 +62,7 @@ class WiredChargingRippleController @Inject constructor(
     private val uiEventLogger: UiEventLogger
 ) {
     private var pluggedIn: Boolean? = null
-    private val rippleEnabled: Boolean = featureFlags.isChargingRippleEnabled &&
+    private val rippleEnabled: Boolean = featureFlags.isEnabled(Flags.CHARGING_RIPPLE) &&
             !SystemProperties.getBoolean("persist.debug.suppress-charging-ripple", false)
     private var normalizedPortPosX: Float = context.resources.getFloat(
             R.dimen.physical_charger_port_location_normalized_x)
@@ -93,9 +94,8 @@ class WiredChargingRippleController @Inject constructor(
                 nowPluggedIn: Boolean,
                 charging: Boolean
             ) {
-                // Suppresses the ripple when it's disabled, or when the state change comes
-                // from wireless charging.
-                if (!rippleEnabled || batteryController.isPluggedInWireless) {
+                // Suppresses the ripple when the state change comes from wireless charging.
+                if (batteryController.isPluggedInWireless) {
                     return
                 }
                 val wasPluggedIn = pluggedIn
@@ -145,7 +145,7 @@ class WiredChargingRippleController @Inject constructor(
     }
 
     fun startRipple() {
-        if (!rippleEnabled || rippleView.rippleInProgress || rippleView.parent != null) {
+        if (rippleView.rippleInProgress || rippleView.parent != null) {
             // Skip if ripple is still playing, or not playing but already added the parent
             // (which might happen just before the animation starts or right after
             // the animation ends.)

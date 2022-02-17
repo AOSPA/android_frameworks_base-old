@@ -80,6 +80,10 @@ class RotateTwoLaunchedAppsRotateAndEnterAppPairsMode(
     @Test
     override fun statusBarLayerIsVisible() = super.statusBarLayerIsVisible()
 
+    @FlakyTest(bugId = 206753786)
+    @Test
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
+
     @Presubmit
     @Test
     fun bothAppWindowsVisible() {
@@ -89,13 +93,13 @@ class RotateTwoLaunchedAppsRotateAndEnterAppPairsMode(
         }
     }
 
-    @FlakyTest(bugId = 172776659)
+    @Presubmit
     @Test
     fun appPairsPrimaryBoundsIsVisibleAtEnd() =
         testSpec.appPairsPrimaryBoundsIsVisibleAtEnd(testSpec.endRotation,
             primaryApp.component)
 
-    @FlakyTest(bugId = 172776659)
+    @Presubmit
     @Test
     fun appPairsSecondaryBoundsIsVisibleAtEnd() =
         testSpec.appPairsSecondaryBoundsIsVisibleAtEnd(testSpec.endRotation,

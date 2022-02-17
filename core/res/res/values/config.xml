@@ -654,10 +654,23 @@
         -->
     </integer-array>
 
-    <!-- When entering this device state (defined in device_state_configuration.xml),
-         we should wake the device. -1 to disable the feature (do not wake on any device-state
-         transition). -->
-    <integer name="config_deviceStateOnWhichToWakeUp">-1</integer>
+    <!-- When a device enters any of these states, it should be woken up. States are defined in
+         device_state_configuration.xml. -->
+    <integer-array name="config_deviceStatesOnWhichToWakeUp">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        -->
+    </integer-array>
+
+    <!-- When a device enters any of these states, it should go to sleep. States are defined in
+         device_state_configuration.xml. -->
+    <integer-array name="config_deviceStatesOnWhichToSleep">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        -->
+    </integer-array>
 
     <!-- Indicate the display area rect for foldable devices in folded state. -->
     <string name="config_foldedArea"></string>
@@ -1035,8 +1048,15 @@
             0 - Nothing
             1 - Toggle theater mode setting
             2 - Brightness boost
+            3 - Launch target activity defined by config_doublePressOnPowerTargetActivity
+                if available
     -->
     <integer name="config_doublePressOnPowerBehavior">0</integer>
+
+    <!-- Activity name for the default target activity to be launched. Note that
+            config_doublePressOnPowerBehavior must be set to 3 for this to work. [DO NOT TRANSLATE]
+    -->
+    <string name="config_doublePressOnPowerTargetActivity" translatable="false"></string>
 
     <!-- Control the behavior when the user triple presses the power button.
             0 - Nothing
@@ -1159,10 +1179,18 @@
     <string-array translatable="false" name="config_ringtoneEffectUris">
     </string-array>
 
+    <!-- The default intensity level for alarm vibrations. See
+         Settings.System.ALARM_VIBRATION_INTENSITY more details on the constant values and
+         meanings. -->
+    <integer name="config_defaultAlarmVibrationIntensity">2</integer>
     <!-- The default intensity level for haptic feedback. See
          Settings.System.HAPTIC_FEEDBACK_INTENSITY more details on the constant values and
          meanings. -->
     <integer name="config_defaultHapticFeedbackIntensity">2</integer>
+    <!-- The default intensity level for media vibrations. See
+         Settings.System.MEDIA_VIBRATION_INTENSITY more details on the constant values and
+         meanings. -->
+    <integer name="config_defaultMediaVibrationIntensity">2</integer>
     <!-- The default intensity level for notification vibrations. See
          Settings.System.NOTIFICATION_VIBRATION_INTENSITY more details on the constant values and
          meanings. -->
@@ -1406,6 +1434,12 @@
     <integer name="config_screenBrightnessDim">10</integer>
     <item name="config_screenBrightnessDimFloat" format="float" type="dimen">0.05</item>
 
+    <!-- If the screen brightness is already set at or below config_screenBrightnessDim, and the
+         user activity timeout expires, we still want to dim the screen slightly to indicate that
+         the device is about to go to sleep. The screen will dim by this amount in that case.
+         -->
+    <item name="config_screenBrightnessMinimumDimAmountFloat" format="float" type="dimen">0.04</item>
+
     <!-- Minimum allowable screen brightness to use in a very dark room.
          This value sets the floor for the darkest possible auto-brightness
          adjustment.  It is expected to be somewhat less than the first entry in
@@ -1464,6 +1498,30 @@
     <integer-array name="config_autoBrightnessLevels">
     </integer-array>
 
+    <!-- Array of light sensor lux values to define our levels for auto backlight brightness
+         support whilst in idle mode.
+         The N entries of this array define N + 1 control points as follows:
+         (1-based arrays)
+
+         Point 1:            (0, value[1]):             lux <= 0
+         Point 2:     (level[1], value[2]):  0        < lux <= level[1]
+         Point 3:     (level[2], value[3]):  level[2] < lux <= level[3]
+         ...
+         Point N+1: (level[N], value[N+1]):  level[N] < lux
+
+         The control points must be strictly increasing. Each control point
+         corresponds to an entry in the brightness backlight values arrays.
+         For example, if lux == level[1] (first element of the levels array)
+         then the brightness will be determined by value[2] (second element
+         of the brightness values array).
+
+         Spline interpolation is used to determine the auto-brightness
+         backlight values for lux levels between these control points.
+
+         Must be overridden in platform specific overlays -->
+    <integer-array name="config_autoBrightnessLevelsIdle">
+    </integer-array>
+
     <!-- Timeout (in milliseconds) after which we remove the effects any user interactions might've
          had on the brightness mapping. This timeout doesn't start until we transition to a
          non-interactive display policy so that we don't reset while users are using their devices,
@@ -1487,6 +1545,10 @@
     <integer-array name="config_autoBrightnessLcdBacklightValues_doze">
     </integer-array>
 
+    <!-- Enables idle screen brightness mode on this device.
+         If this is true, config_autoBrightnessDisplayValuesNitsIdle must be defined. -->
+    <bool name="config_enableIdleScreenBrightnessMode">false</bool>
+
     <!-- Array of desired screen brightness in nits corresponding to the lux values
          in the config_autoBrightnessLevels array. As with config_screenBrightnessMinimumNits and
          config_screenBrightnessMaximumNits, the display brightness is defined as the measured
@@ -1501,6 +1563,13 @@
          array. The brightness values must be non-negative and non-decreasing. This must be
          overridden in platform specific overlays -->
     <array name="config_autoBrightnessDisplayValuesNits">
+    </array>
+
+    <!-- Array of desired screen brightness in nits for idle screen brightness mode.
+         This array should meet the same requirements as config_autoBrightnessDisplayValuesNits.
+         This array also corresponds to the lux values given in config_autoBrightnessLevelsIdle.
+         In order to activate this mode, config_enableIdleScreenBrightnessMode must be true. -->
+    <array name="config_autoBrightnessDisplayValuesNitsIdle">
     </array>
 
     <!-- Array of output values for button backlight corresponding to the luX values
@@ -1747,6 +1816,13 @@
          See android.service.timezone.TimeZoneProviderService for how to host location time zone
          provider services. -->
     <string name="config_secondaryLocationTimeZoneProviderPackageName" translatable="false"></string>
+
+    <!-- Whether the time zone detection logic supports fall back from geolocation suggestions to
+         telephony suggestions temporarily in certain circumstances. Reduces time zone detection
+         latency during some scenarios like air travel. Only useful when both geolocation and
+         telephony time zone detection are supported on a device.
+         See com.android.server.timezonedetector.TimeZoneDetectorStrategy for more information. -->
+    <bool name="config_supportTelephonyTimeZoneFallback" translatable="false">true</bool>
 
     <!-- Whether to enable network location overlay which allows network location provider to be
          replaced by an app at run-time. When disabled, only the
@@ -2045,6 +2121,8 @@
     <string name="config_systemWifiCoexManager" translatable="false"></string>
     <!-- The name of the package that will hold the wellbeing role. -->
     <string name="config_systemWellbeing" translatable="false"></string>
+    <!-- The name of the package that will hold the game service role. -->
+    <string name="config_systemGameService" translatable="false"></string>
     <!-- The name of the package that will hold the television notification handler role -->
     <string name="config_systemTelevisionNotificationHandler" translatable="false"></string>
     <!-- The name of the package that will hold the system activity recognizer role. -->
@@ -2056,6 +2134,10 @@
     <string name="config_systemTelevisionRemoteService" translatable="false">@string/config_tvRemoteServicePackage</string>
     <!-- The name of the package that will hold the device management role -->
     <string name="config_deviceManager" translatable="false"></string>
+    <!-- The name of the package that will hold the app protection service role. -->
+    <string name="config_systemAppProtectionService" translatable="false"></string>
+    <!-- The name of the package that will hold the system calendar sync manager role. -->
+    <string name="config_systemAutomotiveCalendarSyncManager" translatable="false"></string>
 
     <!-- The name of the package that will be allowed to change its components' label/icon. -->
     <string name="config_overrideComponentUiPackage" translatable="false">com.android.stk</string>
@@ -2314,7 +2396,7 @@
     <!-- If supported and enabled, are dreams activated when asleep and charging? (by default) -->
     <bool name="config_dreamsActivatedOnSleepByDefault">false</bool>
     <!-- ComponentName of the default dream (Settings.Secure.DEFAULT_SCREENSAVER_COMPONENT) -->
-    <string name="config_dreamsDefaultComponent" translatable="false">com.google.android.deskclock/com.android.deskclock.Screensaver</string>
+    <string name="config_dreamsDefaultComponent" translatable="false">com.android.deskclock/com.android.deskclock.Screensaver</string>
 
     <!-- Are we allowed to dream while not plugged in? -->
     <bool name="config_dreamsEnabledOnBattery">false</bool>
@@ -2616,9 +2698,26 @@
     <!-- Configure mobile tcp buffer sizes in the form:
          rat-name:rmem_min,rmem_def,rmem_max,wmem_min,wmem_def,wmem_max
          If no value is found for the rat-name in use, the system default will be applied.
+
+         This is deprecated. Please use config_tcp_buffers.
     -->
     <string-array name="config_mobile_tcp_buffers">
     </string-array>
+
+    <!-- Configure tcp buffer sizes in the form:
+         rmem_min,rmem_def,rmem_max,wmem_min,wmem_def,wmem_max
+         If this is configured as an empty string, the system default will be applied.
+
+         For now this config is used by mobile data only. In the future it should be
+         used by Wi-Fi as well.
+
+         Note that starting from Android 13, the TCP buffer size is fixed after boot up, and should
+         never be changed based on carriers or the network types. The value should be configured
+         appropriately based on the device's memory and performance. It is recommended to use lower
+         values if the device has low memory or doesn't support high-speed network such like LTE,
+         NR, or Wifi.
+    -->
+    <string name="config_tcp_buffers" translatable="false"></string>
 
     <!-- Configure ethernet tcp buffersizes in the form:
          rmem_min,rmem_def,rmem_max,wmem_min,wmem_def,wmem_max -->
@@ -2704,6 +2803,16 @@
         <item>350</item>
     </integer-array>
 
+    <!-- A vibration waveform for notifications that specify DEFAULT_VIBRATE.
+         This value is a float array with values grouped as
+         { targetAmplitude (within [0,1]), targetFrequency (in hertz), duration (in milliseconds) }
+         This is only applied on devices with vibration frequency control. If the device doesn't
+         support frequency control, then the vibration specified in
+         config_defaultNotificationVibePattern is used instead.
+     -->
+    <array name="config_defaultNotificationVibeWaveform">
+    </array>
+
     <!-- Vibrator pattern to be used as the default for notifications
          that do not specify vibration but vibrate anyway because the device
          is in vibrate mode.
@@ -2714,6 +2823,16 @@
         <item>150</item>
         <item>100</item>
     </integer-array>
+
+    <!-- A vibration waveform for notifications that do not specify vibration but vibrate anyway,
+         because the device is in vibrate mode. This value is a float array with values grouped as
+         { targetAmplitude (within [0,1]), targetFrequency (in hertz), duration (in milliseconds) }
+         This is only applied on devices with vibration frequency control. If the device doesn't
+         support frequency control, then the vibration specified in
+         config_notificationFallbackVibePattern is used instead.
+     -->
+    <array name="config_notificationFallbackVibeWaveform">
+    </array>
 
     <!-- Flag indicating if the speed up audio on mt call code should be executed -->
     <bool name="config_speed_up_audio_on_mt_calls">false</bool>
@@ -2827,6 +2946,10 @@
 
     <!-- Make the IME killable by the lowmemorykiller by raising its oom_score_adj. -->
     <bool name="config_killableInputMethods">false</bool>
+
+    <!-- Prevent the InputMethodManagerService from starting up the IME unless
+     the currently focused view is a text editor. -->
+    <bool name="config_preventImeStartupUnlessTextEditor">false</bool>
 
     <!-- The list of classes that should be added to the notification ranking pipeline.
      See {@link com.android.server.notification.NotificationSignalExtractor}
@@ -3270,6 +3393,20 @@
          or a single SIM device can have 1 phones/logical modems, but 2 physical slots (one eSIM
          and one pSIM) -->
     <integer name="config_num_physical_slots">1</integer>
+
+    <!--The default "usage setting" indicating that the device is either a voice-centric
+    device (1) or a data-centric device (2). A voice-centric device will require that any cellular
+    service that it uses provides access to voice capability, and a data-centric device will
+    likewise require that the network provides access to data services. These settings are
+    sent to the cellular modem and control the behavior in accordance with 3gpp TS 24.301 sec 4.3
+    (and equivalent functionality in other generations of cellular).-->
+    <integer name="config_default_cellular_usage_setting">1</integer>
+
+    <!--The list of supported cellular usage settings for this device.-->
+    <integer-array translatable="false" name="config_supported_cellular_usage_settings">
+        <item>1</item>    <!-- USAGE_SETTING_VOICE_CENTRIC -->
+        <item>2</item>    <!-- USAGE_SETTING_DATA_CENTRIC -->
+    </integer-array>
 
     <!-- When a radio power off request is received, we will delay completing the request until
          either IMS moves to the deregistered state or the timeout defined by this configuration
@@ -3956,6 +4093,11 @@
          Example: "com.android.captions/.SystemCaptionsManagerService"
     -->
     <string name="config_defaultSystemCaptionsManagerService" translatable="false"></string>
+
+    <!-- Indicates whether the system wide captions service should also support
+         call captioning.
+    -->
+    <bool name="config_systemCaptionsServiceCallsEnabled" translatable="false"></bool>
 
     <!-- The package name for the incident report approver app.
         This app is usually PermissionController or an app that replaces it.  When
@@ -4903,12 +5045,6 @@
          button. -->
     <integer name="config_mashPressVibrateTimeOnPowerButton">0</integer>
 
-    <!-- Control the behavior when the user presses the power button 5 times.
-           0 - Nothing
-           1 - Launch panic button gesture
-    -->
-    <integer name="config_mashPressOnPowerBehavior">0</integer>
-
     <!-- Whether or not to enable the binder heavy hitter watcher by default -->
     <bool name="config_defaultBinderHeavyHitterWatcherEnabled">false</bool>
 
@@ -4947,9 +5083,10 @@
          the app in the letterbox mode. -->
     <item name="config_fixedOrientationLetterboxAspectRatio" format="float" type="dimen">0.0</item>
 
-    <!-- Corners radius for activity presented the letterbox mode. Values < 0 will be ignored and
-         min between device bottom corner radii will be used instead. -->
-    <integer name="config_letterboxActivityCornersRadius">-1</integer>
+    <!-- Corners radius for activity presented the letterbox mode. Values < 0 enable rounded
+         corners with radius equal to min between device bottom corner radii. Default 0 value turns
+         off rounded corners logic in LetterboxUiController. -->
+    <integer name="config_letterboxActivityCornersRadius">0</integer>
 
     <!-- Blur radius for the Option 3 in R.integer.config_letterboxBackgroundType. Values < 0 are
         ignored and 0 is used. -->
@@ -5005,6 +5142,10 @@
         If given value is outside of this range, the option 1 (center) is assummed. -->
     <integer name="config_letterboxDefaultPositionForReachability">1</integer>
 
+    <!-- Whether a camera compat controller is enabled to allow the user to apply or revert
+         treatment for stretched issues in camera viewfinder. -->
+    <bool name="config_isCameraCompatControlForStretchedIssuesEnabled">false</bool>
+
     <!-- If true, hide the display cutout with display area -->
     <bool name="config_hideDisplayCutoutWithDisplayArea">false</bool>
 
@@ -5047,10 +5188,6 @@
 
     <!-- Whether to select voice/data/sms preference without user confirmation -->
     <bool name="config_voice_data_sms_auto_fallback">false</bool>
-
-    <!-- Whether to enable dynamic keyguard positioning for wide screen devices (e.g. only using
-         half of the screen, to be accessible using only one hand). -->
-    <bool name="config_enableDynamicKeyguardPositioning">false</bool>
 
     <!-- Whether to allow the caching of the SIM PIN for verification after unattended reboot -->
     <bool name="config_allow_pin_storage_for_unattended_reboot">true</bool>
@@ -5470,4 +5607,31 @@
     <string name="config_work_badge_path_24" translatable="false">
         M20,6h-4L16,4c0,-1.11 -0.89,-2 -2,-2h-4c-1.11,0 -2,0.89 -2,2v2L4,6c-1.11,0 -1.99,0.89 -1.99,2L2,19c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2L22,8c0,-1.11 -0.89,-2 -2,-2zM14,6h-4L10,4h4v2z
     </string>
+
+    <!-- GNSS configurations to override carrier config. Empty by default-->
+    <string-array name="config_gnssParameters" translatable="false">
+        <!-- Add configurations here, example: -->
+        <!-- <item>SUPL_HOST=supl.google.com</item> -->
+    </string-array>
+
+    <integer name="config_chooser_max_targets_per_row">4</integer>
+
+    <!-- Package that provides the supervised user creation flow. This package must include an
+         activity with an intent filter for {@link UserManager.ACTION_CREATE_SUPERVISED_USER}.
+         When this resource is defined, an extra button in user settings screen will be shown
+         with a title defined in @*android:string/supervised_user_creation_label
+         and an icon defined in @*android:drawable/ic_add_supervised_user.
+         That button will fire an intent targeted for this package with the mentioned action.
+         When this resource is empty, that button will not be shown. -->
+    <string name="config_supervisedUserCreationPackage" translatable="false"></string>
+
+    <!-- Determines whether SafetyCenter feature is enabled. -->
+    <bool name="config_enableSafetyCenter">true</bool>
+
+    <!-- Flag indicating if help links for Settings app should be enabled. -->
+    <bool name="config_settingsHelpLinksEnabled">false</bool>
+
+    <!-- Maximum time in millisecs for telephony should wait to deactivate data call
+         when user turned off mobile data or data roaming during CIWLAN -->
+    <integer name="config_maximumDelayTimeToDeactivateDataCall">7000</integer>
 </resources>

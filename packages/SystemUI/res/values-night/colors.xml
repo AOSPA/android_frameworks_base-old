@@ -65,13 +65,20 @@
     <!-- Media -->
     <color name="media_divider">#85ffffff</color>
 
+    <!-- media output dialog-->
+    <color name="media_dialog_background">@android:color/system_neutral1_900</color>
+    <color name="media_dialog_active_item_main_content">@android:color/system_accent2_800</color>
+    <color name="media_dialog_inactive_item_main_content">@android:color/system_accent1_100</color>
+    <color name="media_dialog_item_status">@android:color/system_accent1_100</color>
+    <color name="media_dialog_item_background">@android:color/system_neutral2_800</color>
+
     <!-- Biometric dialog colors -->
     <color name="biometric_dialog_gray">#ffcccccc</color>
     <color name="biometric_dialog_accent">@android:color/system_accent1_300</color>
     <color name="biometric_dialog_error">#fff28b82</color> <!-- red 300 -->
 
     <!-- UDFPS colors -->
-    <color name="udfps_enroll_icon">#ffffff</color> <!-- 100% white -->
+    <color name="udfps_enroll_icon">#7DA7F1</color>
 
     <color name="GM2_green_500">#FF41Af6A</color>
     <color name="GM2_blue_500">#5195EA</color>

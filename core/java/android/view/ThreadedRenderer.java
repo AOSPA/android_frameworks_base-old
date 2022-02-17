@@ -478,6 +478,19 @@ public final class ThreadedRenderer extends HardwareRenderer {
     }
 
     /**
+     * Remove a frame drawing callback that was added via
+     * {@link #registerRtFrameCallback(FrameDrawingCallback)}
+     *
+     * @param callback The callback to unregister.
+     */
+    void unregisterRtFrameCallback(@NonNull FrameDrawingCallback callback) {
+        if (mNextRtFrameCallbacks == null) {
+            return;
+        }
+        mNextRtFrameCallbacks.remove(callback);
+    }
+
+    /**
      * Destroys all hardware rendering resources associated with the specified
      * view hierarchy.
      *
@@ -613,7 +626,10 @@ public final class ThreadedRenderer extends HardwareRenderer {
         // If there's no arguments, eg 'dumpsys gfxinfo', then dump everything.
         // If there's a targetted package, eg 'dumpsys gfxinfo com.android.systemui', then only
         // dump the summary information
-        int flags = (args == null || args.length == 0) ? FLAG_DUMP_ALL : 0;
+        if (args == null || args.length == 0) {
+            return FLAG_DUMP_ALL;
+        }
+        int flags = 0;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "framestats":
@@ -676,9 +692,31 @@ public final class ThreadedRenderer extends HardwareRenderer {
         if (mNextRtFrameCallbacks != null) {
             final ArrayList<FrameDrawingCallback> frameCallbacks = mNextRtFrameCallbacks;
             mNextRtFrameCallbacks = null;
-            setFrameCallback(frame -> {
-                for (int i = 0; i < frameCallbacks.size(); ++i) {
-                    frameCallbacks.get(i).onFrameDraw(frame);
+            setFrameCallback(new FrameDrawingCallback() {
+                @Override
+                public void onFrameDraw(long frame) {
+                }
+
+                @Override
+                public FrameCommitCallback onFrameDraw(int syncResult, long frame) {
+                    ArrayList<FrameCommitCallback> frameCommitCallbacks = new ArrayList<>();
+                    for (int i = 0; i < frameCallbacks.size(); ++i) {
+                        FrameCommitCallback frameCommitCallback = frameCallbacks.get(i)
+                                .onFrameDraw(syncResult, frame);
+                        if (frameCommitCallback != null) {
+                            frameCommitCallbacks.add(frameCommitCallback);
+                        }
+                    }
+
+                    if (frameCommitCallbacks.isEmpty()) {
+                        return null;
+                    }
+
+                    return didProduceBuffer -> {
+                        for (int i = 0; i < frameCommitCallbacks.size(); ++i) {
+                            frameCommitCallbacks.get(i).onFrameCommit(didProduceBuffer);
+                        }
+                    };
                 }
             });
         }

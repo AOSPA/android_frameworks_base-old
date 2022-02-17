@@ -23,10 +23,19 @@ cc_library_shared {
     ],
 
     srcs: [
+        "AGnss.cpp",
+        "AGnssCallback.cpp",
         "GnssAntennaInfoCallback.cpp",
+        "GnssBatching.cpp",
+        "GnssBatchingCallback.cpp",
         "GnssConfiguration.cpp",
+        "GnssDebug.cpp",
+        "GnssGeofence.cpp",
+        "GnssGeofenceCallback.cpp",
         "GnssMeasurement.cpp",
         "GnssMeasurementCallback.cpp",
+        "GnssNavigationMessage.cpp",
+        "GnssNavigationMessageCallback.cpp",
         "Utils.cpp",
     ],
 }
