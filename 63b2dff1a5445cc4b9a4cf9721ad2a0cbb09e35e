@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "34a2f4e5_df72dd8a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2022-02-18T13:01:32Z",
+      "side": 1,
+      "message": "Requires changes in columbus jar.",
+      "revId": "63b2dff1a5445cc4b9a4cf9721ad2a0cbb09e35e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
