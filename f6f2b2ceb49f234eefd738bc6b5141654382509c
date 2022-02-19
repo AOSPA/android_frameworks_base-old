@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d3ec5ca1_807dcd4f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000062
+      },
+      "writtenOn": "2022-02-19T15:39:18Z",
+      "side": 1,
+      "message": "So it\u0027s enabled by default.\n\nI\u0027m fine with that, as everyone\u0027s using OLED. LCD device should opt-out.\n\n+1\nFeel free to merge after testing with before \u0026 after comparison and confirming pixels actually shift.",
+      "revId": "f6f2b2ceb49f234eefd738bc6b5141654382509c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
