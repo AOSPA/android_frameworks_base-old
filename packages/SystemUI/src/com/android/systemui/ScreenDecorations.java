@@ -167,6 +167,14 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private CameraAvailabilityListener.CameraTransitionCallback mCameraTransitionCallback =
             new CameraAvailabilityListener.CameraTransitionCallback() {
         @Override
+        public void onApplyUDCameraProtection() {
+        }
+
+        @Override
+        public void onHideUDCameraProtection() {
+        }
+
+        @Override
         public void onApplyCameraProtection(@NonNull Path protectionPath, @NonNull Rect bounds) {
             if (mCutoutViews == null) {
                 Log.w(TAG, "DisplayCutoutView do not initialized");
