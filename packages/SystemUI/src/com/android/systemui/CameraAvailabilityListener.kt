@@ -56,6 +56,18 @@ class CameraAvailabilityListener(
                         notifyCameraActive()
                     }
                 }
+
+                override fun onCameraAvailable(cameraId: String) {
+                    if (targetCameraId == cameraId) {
+                        notifyCameraInactive()
+                    }
+                }
+
+                override fun onCameraUnavailable(cameraId: String) {
+                    if (targetCameraId == cameraId) {
+                        notifyCameraActive()
+                    }
+                }
     }
 
     init {
@@ -103,17 +115,25 @@ class CameraAvailabilityListener(
     }
 
     private fun notifyCameraActive() {
-        listeners.forEach { it.onApplyCameraProtection(cutoutProtectionPath, cutoutBounds) }
+        listeners.forEach {
+            it.onApplyUDCameraProtection()
+            it.onApplyCameraProtection(cutoutProtectionPath, cutoutBounds)
+        }
     }
 
     private fun notifyCameraInactive() {
-        listeners.forEach { it.onHideCameraProtection() }
+        listeners.forEach {
+            it.onHideUDCameraProtection()
+            it.onHideCameraProtection()
+        }
     }
 
     /**
      * Callbacks to tell a listener that a relevant camera turned on and off.
      */
     interface CameraTransitionCallback {
+        fun onApplyUDCameraProtection()
+        fun onHideUDCameraProtection()
         fun onApplyCameraProtection(protectionPath: Path, bounds: Rect)
         fun onHideCameraProtection()
     }
