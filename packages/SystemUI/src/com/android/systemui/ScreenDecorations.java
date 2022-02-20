@@ -164,8 +164,18 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private int mStatusBarHeightPortrait;
     private int mStatusBarHeightLandscape;
 
+    private ImageView mUDCCutoutView;
+
     private CameraAvailabilityListener.CameraTransitionCallback mCameraTransitionCallback =
             new CameraAvailabilityListener.CameraTransitionCallback() {
+        @Override
+        public void onApplyUDCameraProtection() {
+        }
+
+        @Override
+        public void onHideUDCameraProtection() {
+        }
+
         @Override
         public void onApplyCameraProtection(@NonNull Path protectionPath, @NonNull Rect bounds) {
             if (mCutoutViews == null) {
@@ -363,6 +373,39 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         }
     }
 
+    private void setupUDCCutout() {
+        if (mUDCCutoutView == null) {
+            mUDCCutoutView = new ImageView(context);
+            mUDCCutoutView.setImageResource(R.drawable.udc_cutout);
+            mUDCCutoutView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            mUDCCutoutView.setForceDarkAllowed(false);
+
+            mWindowManager.addView(mUDCCutoutView, getUDCCutoutParams());
+        }
+    }
+
+    WindowManager.LayoutParams getUDCCutoutParams(int rotation) {
+        WindowManager.LayoutParams layoutParams = new WindowManager.LayoutParams(
+            WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.RGBA_8888
+        );
+
+        layoutParams.height = 0;
+        layoutParams.width = 0;
+
+        layoutParams.setTitle("CutoutRing");
+        layoutParams.gravity = getUDCCutoutGravity(rotation);
+        layoutParams.privateFlags |=
+                WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY
+                        | WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
+        layoutParams.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        layoutParams.setFitInsetsTypes(0);
+        layoutParams.setFitInsetsSides(0);
+        return layoutParams;
+    }
+
     @VisibleForTesting
     DisplayCutout getCutout() {
         return mContext.getDisplay().getCutout();
@@ -550,6 +593,22 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 return Gravity.LEFT;
             case BOUNDS_POSITION_RIGHT:
                 return Gravity.RIGHT;
+            default:
+                throw new IllegalArgumentException("unknown bound position: " + pos);
+        }
+    }
+
+    private int getUDCCutoutGravity(@BoundsPosition int pos) {
+        final int rotated = getBoundPositionFromRotation(pos, mRotation);
+        switch (rotated) {
+            case BOUNDS_POSITION_TOP:
+                return Gravity.CENTER | Gravity.TOP;
+            case BOUNDS_POSITION_BOTTOM:
+                return Gravity.CENTER | Gravity.BOTTOM;
+            case BOUNDS_POSITION_LEFT:
+                return Gravity.CENTER_VERTICAL | Gravity.LEFT;
+            case BOUNDS_POSITION_RIGHT:
+                return Gravity.CENTER_VERTICAL | Gravity.RIGHT;
             default:
                 throw new IllegalArgumentException("unknown bound position: " + pos);
         }
