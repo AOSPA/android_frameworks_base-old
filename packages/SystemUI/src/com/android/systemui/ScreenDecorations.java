@@ -164,8 +164,18 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private int mStatusBarHeightPortrait;
     private int mStatusBarHeightLandscape;
 
+    private ImageView mUDCCutoutView;
+
     private CameraAvailabilityListener.CameraTransitionCallback mCameraTransitionCallback =
             new CameraAvailabilityListener.CameraTransitionCallback() {
+        @Override
+        public void onApplyUDCameraProtection() {
+        }
+
+        @Override
+        public void onHideUDCameraProtection() {
+        }
+
         @Override
         public void onApplyCameraProtection(@NonNull Path protectionPath, @NonNull Rect bounds) {
             if (mCutoutViews == null) {
@@ -254,6 +264,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 R.bool.config_roundedCornerMultipleRadius);
         updateRoundedCornerRadii();
         setupDecorations();
+        setupUDCCutout();
         setupCameraListener();
 
         mDisplayListener = new DisplayManager.DisplayListener() {
@@ -360,6 +371,22 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
             mBroadcastDispatcher.unregisterReceiver(mUserSwitchIntentReceiver);
             mIsRegistered = false;
+        }
+    }
+
+    private void setupUDCCutout() {
+        if (mUDCCutoutView == null) {
+            mUDCCutoutView = new ImageView(context);
+            mUDCCutoutView.setImageResource(R.drawable.udc_cutout);
+            mUDCCutoutView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            mUDCCutoutView.setForceDarkAllowed(false);
+
+            mWindowManager.addView(mUDCCutoutView, getUDCCutoutParams(BOUNDS_POSITION_TOP));
+
+            updateUDCCutoutVisibility();
+        } else {
+            mWindowManager.removeViewImmediate(mUDCCutoutView);
+            mUDCCutoutView = null;
         }
     }
 
@@ -512,6 +539,27 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         return lp;
     }
 
+    WindowManager.LayoutParams getUDCCutoutParams(@BoundsPosition int pos) {
+        final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.RGBA_8888);
+        lp.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS
+                | WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY
+                | WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
+
+        lp.setTitle("udcCutout");
+        lp.height = 0;
+        lp.width = 0;
+        lp.x = getUDCCutoutXByPos(pos);
+        lp.y = getUDCCutoutYByPos(pos);
+        lp.gravity = getUDCCutoutGravity(pos);
+        lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        lp.setFitInsetsTypes(0 /* types */);
+        lp.setFitInsetsSides(0 /* sides */);
+        return lp;
+    }
+
     private int getWidthLayoutParamByPos(@BoundsPosition int pos) {
         final int rotatedPos = getBoundPositionFromRotation(pos, mRotation);
         return rotatedPos == BOUNDS_POSITION_TOP || rotatedPos == BOUNDS_POSITION_BOTTOM
@@ -522,6 +570,18 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         final int rotatedPos = getBoundPositionFromRotation(pos, mRotation);
         return rotatedPos == BOUNDS_POSITION_TOP || rotatedPos == BOUNDS_POSITION_BOTTOM
                 ? WRAP_CONTENT : MATCH_PARENT;
+    }
+
+    private int getUDCCutoutXByPos(@BoundsPosition int pos) {
+        final int rotatedPos = getBoundPositionFromRotation(pos, mRotation);
+        return rotatedPos == BOUNDS_POSITION_LEFT || rotatedPos == BOUNDS_POSITION_RIGHT
+                ? 20 : 0;
+    }
+
+    private int getUDCCutoutYByPos(@BoundsPosition int pos) {
+        final int rotatedPos = getBoundPositionFromRotation(pos, mRotation);
+        return rotatedPos == BOUNDS_POSITION_LEFT || rotatedPos == BOUNDS_POSITION_RIGHT 
+                ? 0 : 20;
     }
 
     private static String getWindowTitleByPos(@BoundsPosition int pos) {
@@ -550,6 +610,22 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 return Gravity.LEFT;
             case BOUNDS_POSITION_RIGHT:
                 return Gravity.RIGHT;
+            default:
+                throw new IllegalArgumentException("unknown bound position: " + pos);
+        }
+    }
+
+    private int getUDCCutoutGravity(@BoundsPosition int pos) {
+        final int rotated = getBoundPositionFromRotation(pos, mRotation);
+        switch (rotated) {
+            case BOUNDS_POSITION_TOP:
+                return Gravity.CENTER | Gravity.TOP;
+            case BOUNDS_POSITION_BOTTOM:
+                return Gravity.CENTER | Gravity.BOTTOM;
+            case BOUNDS_POSITION_LEFT:
+                return Gravity.CENTER_VERTICAL | Gravity.LEFT;
+            case BOUNDS_POSITION_RIGHT:
+                return Gravity.CENTER_VERTICAL | Gravity.RIGHT;
             default:
                 throw new IllegalArgumentException("unknown bound position: " + pos);
         }
@@ -629,7 +705,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             updateRoundedCornerRadii();
             if (DEBUG) Log.i(TAG, "onConfigChanged from rot " + oldRotation + " to " + mRotation);
             setupDecorations();
-            if (mOverlays != null) {
+            setupUDCCutout();
+            if (mOverlays != null || mUDCCutoutView != null) {
                 // Updating the layout params ensures that ViewRootImpl will call relayoutWindow(),
                 // which ensures that the forced seamless rotation will end, even if we updated
                 // the rotation before window manager was ready (and was still waiting for sending
@@ -655,8 +732,10 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         if (newRotation != mRotation) {
             mRotation = newRotation;
 
-            if (mOverlays != null) {
+            if (mOverlays != null || mUDCCutoutView != null) {
                 updateLayoutParams();
+            }
+            if (mOverlays != null) {
                 for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
                     if (mOverlays[i] == null) {
                         continue;
@@ -664,6 +743,12 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                     updateView(i);
                 }
             }
+
+        }
+    }
+
+    private void updateUDCCutoutVisibility() {
+        if (mUDCCutoutView != null) {
         }
     }
 
@@ -813,6 +898,11 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     }
 
     private void updateLayoutParams() {
+        if (mUDCCutoutView != null) {
+            for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
+                 mWindowManager.updateViewLayout(mUDCCutoutView, getUDCCutoutParams(i));
+            }
+        }
         if (mOverlays == null) {
             return;
         }
