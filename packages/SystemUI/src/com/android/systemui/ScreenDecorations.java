@@ -900,6 +900,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         private Display.Mode mDisplayMode = null;
         private final DisplayInfo mInfo = new DisplayInfo();
         private final Paint mPaint = new Paint();
+        private final Paint mProtectionPaint = new Paint();
         private final List<Rect> mBounds = new ArrayList();
         private final Rect mBoundingRect = new Rect();
         private final Path mBoundingPath = new Path();
@@ -958,17 +959,23 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             getLocationOnScreen(mLocation);
             canvas.translate(-mLocation[0], -mLocation[1]);
 
+            boolean hideBoundingPath = mContext.getResources().getBoolean(R.bool.config_hideCutoutBoundingPath);
+
             if (!mBoundingPath.isEmpty()) {
-                mPaint.setColor(mColor);
+                mPaint.setColor(hideBoundingPath ? Color.TRANSPARENT : mColor);
                 mPaint.setStyle(Paint.Style.FILL);
                 mPaint.setAntiAlias(true);
                 canvas.drawPath(mBoundingPath, mPaint);
             }
+
             if (mCameraProtectionProgress > HIDDEN_CAMERA_PROTECTION_SCALE
                     && !mProtectionRect.isEmpty()) {
+                mProtectionPaint.setColor(Color.BLACK);
+                mProtectionPaint.setStyle(Paint.Style.FILL);
+                mProtectionPaint.setAntiAlias(true);
                 canvas.scale(mCameraProtectionProgress, mCameraProtectionProgress,
                         mProtectionRect.centerX(), mProtectionRect.centerY());
-                canvas.drawPath(mProtectionPath, mPaint);
+                canvas.drawPath(mProtectionPath, mProtectionPaint);
             }
         }
 
