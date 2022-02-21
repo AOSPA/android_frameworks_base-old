@@ -24,4 +24,7 @@
     <!-- StatusBar burn-in protection -->
     <bool name="config_disableStatusBarBurnInProtection">false</bool>
 
+    <!-- Udfps display mode provider class name -->
+    <string name="config_udfpsDisplayModeProviderComponent">com.android.systemui.biometrics.DummyUdfpsDisplayModeProvider</string>
+
 </resources>
