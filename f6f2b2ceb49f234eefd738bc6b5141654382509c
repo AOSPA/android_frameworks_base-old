@@ -50,6 +50,41 @@
       "message": "Otherwise it works for both statusbar and navbar.",
       "revId": "f6f2b2ceb49f234eefd738bc6b5141654382509c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0b109b5a_5a6dfedf",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2022-02-21T08:12:31Z",
+      "side": 1,
+      "message": "lmk if we want to merge this after.",
+      "revId": "f6f2b2ceb49f234eefd738bc6b5141654382509c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "498b26a8_ddefb138",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2022-02-21T08:12:31Z",
+      "side": 1,
+      "message": "fingerprint icon shifts a bit when AOD is triggered, AFAIK. Otherwise, LGTM.",
+      "parentUuid": "821c5237_14f21f78",
+      "revId": "f6f2b2ceb49f234eefd738bc6b5141654382509c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
