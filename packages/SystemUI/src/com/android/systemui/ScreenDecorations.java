@@ -308,7 +308,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
                 rotatedPos = getBoundPositionFromRotation(i, mRotation);
                 if ((bounds != null && !bounds[rotatedPos].isEmpty())
-                        || shouldShowRoundedCorner(i)) {
+                        || shouldShowRoundedCorner(i) || hasUnderDisplayCamera()) {
                     createOverlay(i);
                 } else {
                     removeOverlay(i);
@@ -812,6 +812,14 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 com.android.internal.R.bool.config_fillMainBuiltInDisplayCutout);
     }
 
+    private boolean hasUnderDisplayCamera() {
+        return hasUnderDisplayCamera(mContext);
+    }
+
+    static boolean hasUnderDisplayCamera(Context context) {
+        return context.getResources().getBoolean(R.bool.config_deviceHasUnderDisplayCamera);
+    }
+
     private void updateLayoutParams() {
         if (mOverlays == null) {
             return;
@@ -1068,13 +1076,17 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             mPosition = getBoundPositionFromRotation(mInitialPosition, mRotation);
             requestLayout();
             getDisplay().getDisplayInfo(mInfo);
-            mBounds.clear();
-            mBoundingRect.setEmpty();
-            mBoundingPath.reset();
+            if (!hasUnderDisplayCamera(getContext())) {
+                mBounds.clear();
+                mBoundingRect.setEmpty();
+                mBoundingPath.reset();
+            }
             int newVisible;
             if (shouldDrawCutout(getContext()) && hasCutout()) {
-                mBounds.addAll(mInfo.displayCutout.getBoundingRects());
-                localBounds(mBoundingRect);
+                if (!hasUnderDisplayCamera(getContext())) {
+                    mBounds.addAll(mInfo.displayCutout.getBoundingRects());
+                    localBounds(mBoundingRect);
+                }
                 updateGravity();
                 updateBoundingPath();
                 invalidate();
@@ -1096,15 +1108,17 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             int dw = flipped ? lh : lw;
             int dh = flipped ? lw : lh;
 
-            Path path = DisplayCutout.pathFromResources(getResources(), dw, dh);
-            if (path != null) {
-                mBoundingPath.set(path);
-            } else {
-                mBoundingPath.reset();
-            }
             Matrix m = new Matrix();
             transformPhysicalToLogicalCoordinates(mInfo.rotation, dw, dh, m);
-            mBoundingPath.transform(m);
+            if (!hasUnderDisplayCamera(getContext())) {
+                Path path = DisplayCutout.pathFromResources(getResources(), dw, dh);
+                if (path != null) {
+                    mBoundingPath.set(path);
+                } else {
+                    mBoundingPath.reset();
+                }
+                mBoundingPath.transform(m);
+            }
             if (mProtectionPathOrig != null) {
                 // Reset the protection path so we don't aggregate rotations
                 mProtectionPath.set(mProtectionPathOrig);
@@ -1149,6 +1163,9 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         }
 
         private boolean hasCutout() {
+            if (hasUnderDisplayCamera(getContext())) {
+                return true;
+            }
             final DisplayCutout displayCutout = mInfo.displayCutout;
             if (displayCutout == null) {
                 return false;
@@ -1214,20 +1231,25 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         }
 
         private int getGravity(DisplayCutout displayCutout) {
+            boolean hasUnderDisplayCamera = hasUnderDisplayCamera(getContext());
             if (mPosition == BOUNDS_POSITION_LEFT) {
-                if (!displayCutout.getBoundingRectLeft().isEmpty()) {
+                if ((displayCutout != null && !displayCutout.getBoundingRectLeft().isEmpty())
+                        || hasUnderDisplayCamera) {
                     return Gravity.LEFT;
                 }
             } else if (mPosition == BOUNDS_POSITION_TOP) {
-                if (!displayCutout.getBoundingRectTop().isEmpty()) {
+                if ((displayCutout != null && !displayCutout.getBoundingRectTop().isEmpty())
+                        || hasUnderDisplayCamera) {
                     return Gravity.TOP;
                 }
             } else if (mPosition == BOUNDS_POSITION_BOTTOM) {
-                if (!displayCutout.getBoundingRectBottom().isEmpty()) {
+                if ((displayCutout != null && !displayCutout.getBoundingRectBottom().isEmpty())
+                        || hasUnderDisplayCamera) {
                     return Gravity.BOTTOM;
                 }
             } else if (mPosition == BOUNDS_POSITION_RIGHT) {
-                if (!displayCutout.getBoundingRectRight().isEmpty()) {
+                if ((displayCutout != null && !displayCutout.getBoundingRectRight().isEmpty())
+                        || hasUnderDisplayCamera) {
                     return Gravity.RIGHT;
                 }
             }
@@ -1236,7 +1258,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
         @Override
         public boolean shouldInterceptTouch() {
-            return mInfo.displayCutout != null && getVisibility() == VISIBLE;
+            return (hasUnderDisplayCamera(getContext()) || mInfo.displayCutout != null)
+                    && getVisibility() == VISIBLE;
         }
 
         @Override
