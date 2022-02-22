@@ -1187,8 +1187,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (mTriplePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING) {
             return 3;
         }
-        if (mDoublePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING ||
-                mTorchActionMode == 1) {
+        if (mDoublePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING) {
             return 2;
         }
         return 1;
@@ -2163,13 +2162,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         @Override
         void onMultiPress(long downTime, int count) {
-            if (mSingleKeyGestureDetector.beganFromNonInteractive() ||
-                         (mTorchActionMode != 0 && isFlashLightIsOn())) {
-                if (handleTorchPress(false)) {
-                    mSingleKeyGestureDetector.reset();
-                    return;
-                }
-            }
             powerPress(downTime, count, mSingleKeyGestureDetector.beganFromNonInteractive());
         }
     }
@@ -2183,11 +2175,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (mTorchActionMode == 2 && longpress) {
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
                     "Power - Long Press - Torch");
-            toggleCameraFlash();
-            return true;
-        } else if (mTorchActionMode == 1 && !longpress) {
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
-                      "Power - Double Press - Torch");
             toggleCameraFlash();
             return true;
         }
