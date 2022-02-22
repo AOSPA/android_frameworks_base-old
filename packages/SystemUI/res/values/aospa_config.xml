@@ -27,4 +27,6 @@
     <!-- Udfps display mode provider class name -->
     <string name="config_udfpsDisplayModeProviderComponent">com.android.systemui.biometrics.DummyUdfpsDisplayModeProvider</string>
 
+    <!-- Whether the device has camera underneath the display -->
+    <bool name="config_deviceHasUnderDisplayCamera">false</bool>
 </resources>
