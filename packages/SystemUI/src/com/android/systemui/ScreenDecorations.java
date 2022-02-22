@@ -165,6 +165,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     @Nullable
     private DelayableExecutor mExecutor;
     private Handler mHandler;
+    boolean mDeviceHasUdc;
     boolean mPendingConfigChange;
     @VisibleForTesting
     String mDisplayUniqueId;
@@ -423,6 +424,8 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
         mCutoutFactory = getCutoutFactory();
         mHwcScreenDecorationSupport = mContext.getDisplay().getDisplayDecorationSupport();
         updateHwLayerRoundedCornerDrawable();
+        mDeviceHasUdc = mContext.getResources().getBoolean(
+                R.bool.config_deviceHasUnderDisplayCamera);
         setupDecorations();
         setupCameraListener();
 
@@ -555,7 +558,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     }
 
     private void setupDecorationsInner() {
-        if (hasRoundedCorners() || shouldDrawCutout() || isPrivacyDotEnabled()
+        if (hasRoundedCorners() || shouldDrawCutout() || isPrivacyDotEnabled() || deviceHasUdc
                 || mFaceScanningFactory.getHasProviders()) {
 
             List<DecorProvider> decorProviders = getProviders(mHwcScreenDecorationSupport != null);
@@ -1279,15 +1282,19 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             mPosition = getBoundPositionFromRotation(mInitialPosition, mRotation);
             requestLayout();
             getDisplay().getDisplayInfo(displayInfo);
-            mBounds.clear();
-            mBoundingRect.setEmpty();
-            cutoutPath.reset();
+            if (!deviceHasUdc) {
+                mBounds.clear();
+                mBoundingRect.setEmpty();
+                cutoutPath.reset();
+            }
             int newVisible;
             if (shouldDrawCutout(getContext()) && hasCutout()) {
-                mBounds.addAll(displayInfo.displayCutout.getBoundingRects());
-                localBounds(mBoundingRect);
+                if (!deviceHasUdc) {
+                    mBounds.addAll(displayInfo.displayCutout.getBoundingRects());
+                    localBounds(mBoundingRect);
+                    updateBoundingPath();
+                }
                 updateGravity();
-                updateBoundingPath();
                 invalidate();
                 newVisible = VISIBLE;
             } else {
@@ -1315,7 +1322,8 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             LayoutParams lp = getLayoutParams();
             if (lp instanceof FrameLayout.LayoutParams) {
                 FrameLayout.LayoutParams flp = (FrameLayout.LayoutParams) lp;
-                int newGravity = getGravity(displayInfo.displayCutout);
+                int newGravity = !deviceHasUdc ? getGravity(displayInfo.displayCutout)
+                        : getUdcGravity();
                 if (flp.gravity != newGravity) {
                     flp.gravity = newGravity;
                     setLayoutParams(flp);
@@ -1324,6 +1332,10 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
         }
 
         private boolean hasCutout() {
+            if (deviceHasUdc) {
+                return true;
+            }
+
             final DisplayCutout displayCutout = displayInfo.displayCutout;
             if (displayCutout == null) {
                 return false;
@@ -1405,6 +1417,19 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
                 if (!displayCutout.getBoundingRectRight().isEmpty()) {
                     return Gravity.RIGHT;
                 }
+            }
+            return Gravity.NO_GRAVITY;
+        }
+
+        private int getUdcGravity() {
+            if (mPosition == BOUNDS_POSITION_LEFT) {
+                return Gravity.START;
+            } else if (mPosition == BOUNDS_POSITION_TOP) {
+                return Gravity.TOP;
+            } else if (mPosition == BOUNDS_POSITION_BOTTOM) {
+                return Gravity.BOTTOM;
+            } else if (mPosition == BOUNDS_POSITION_RIGHT) {
+                return Gravity.END;
             }
             return Gravity.NO_GRAVITY;
         }

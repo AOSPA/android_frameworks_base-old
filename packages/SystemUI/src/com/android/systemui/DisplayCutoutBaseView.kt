@@ -46,9 +46,13 @@ import com.android.systemui.animation.Interpolators
  */
 open class DisplayCutoutBaseView : View, RegionInterceptableView {
 
-    private var shouldDrawCutout: Boolean = DisplayCutout.getFillBuiltInDisplayCutout(
-        context.resources, context.display?.uniqueId
+    val deviceHasUdc: Boolean = context.resources.getBoolean(
+        R.bool.config_deviceHasUnderDisplayCamera
     )
+    private var shouldDrawCutout: Boolean =
+        if (!deviceHasUdc) DisplayCutout.getFillBuiltInDisplayCutout(
+            context.resources, context.display?.uniqueId
+        ) else deviceHasUdc
     private var displayUniqueId: String? = null
     private var displayMode: Display.Mode? = null
     protected val location = IntArray(2)
@@ -68,7 +72,8 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
     private val protectionRectOrig: RectF = RectF()
     private val protectionPathOrig: Path = Path()
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-    var cameraProtectionProgress: Float = HIDDEN_CAMERA_PROTECTION_SCALE
+    var hiddenCameraProtectionScale: Float = if (deviceHasUdc) 0.0f else 0.5f
+    var cameraProtectionProgress: Float = hiddenCameraProtectionScale
     private var cameraProtectionAnimator: ValueAnimator? = null
 
     constructor(context: Context) : super(context)
@@ -111,9 +116,9 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
     open fun updateDisplayUniqueId(newDisplayUniqueId: String?) {
         if (displayUniqueId != newDisplayUniqueId) {
             displayUniqueId = newDisplayUniqueId
-            shouldDrawCutout = DisplayCutout.getFillBuiltInDisplayCutout(
-                    context.resources, displayUniqueId
-            )
+            shouldDrawCutout = if (!deviceHasUdc) DisplayCutout.getFillBuiltInDisplayCutout(
+                context.resources, displayUniqueId
+            ) else deviceHasUdc
             invalidate()
         }
     }
@@ -145,7 +150,7 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
     }
 
     override fun shouldInterceptTouch(): Boolean {
-        return displayInfo.displayCutout != null && visibility == VISIBLE && shouldDrawCutout
+        return (deviceHasUdc || displayInfo.displayCutout != null) && visibility == VISIBLE && shouldDrawCutout
     }
 
     override fun getInterceptRegion(): Region? {
@@ -181,7 +186,7 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
     }
 
     protected open fun drawCutoutProtection(canvas: Canvas) {
-        if (cameraProtectionProgress > HIDDEN_CAMERA_PROTECTION_SCALE &&
+        if (cameraProtectionProgress > hiddenCameraProtectionScale &&
             !protectionRect.isEmpty
         ) {
             canvas.scale(
@@ -221,7 +226,7 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
         cameraProtectionAnimator?.cancel()
         cameraProtectionAnimator = ValueAnimator.ofFloat(
             cameraProtectionProgress,
-            if (showProtection) 1.0f else HIDDEN_CAMERA_PROTECTION_SCALE
+            if (showProtection) 1.0f else hiddenCameraProtectionScale
         ).setDuration(750)
         cameraProtectionAnimator?.interpolator = Interpolators.DECELERATE_QUINT
         cameraProtectionAnimator?.addUpdateListener(
@@ -298,8 +303,6 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
     }
 
     companion object {
-        const val HIDDEN_CAMERA_PROTECTION_SCALE = 0.5f
-
         @JvmStatic protected fun transformPhysicalToLogicalCoordinates(
             @Surface.Rotation rotation: Int,
             @Dimension physicalWidth: Int,
