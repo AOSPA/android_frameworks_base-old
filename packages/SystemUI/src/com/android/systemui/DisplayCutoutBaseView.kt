@@ -67,7 +67,8 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
     private val protectionRectOrig: RectF = RectF()
     private val protectionPathOrig: Path = Path()
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-    var cameraProtectionProgress: Float = HIDDEN_CAMERA_PROTECTION_SCALE
+    var cameraProtectionProgress: Float
+    var hiddenCameraProtectionScale: Float
     private var cameraProtectionAnimator: ValueAnimator? = null
 
     constructor(context: Context) : super(context)
@@ -170,7 +171,7 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
     }
 
     protected open fun drawCutoutProtection(canvas: Canvas) {
-        if (cameraProtectionProgress > HIDDEN_CAMERA_PROTECTION_SCALE &&
+        if (cameraProtectionProgress > hiddenCameraProtectionScale &&
                 !protectionRect.isEmpty) {
             canvas.scale(cameraProtectionProgress, cameraProtectionProgress,
                     protectionRect.centerX(), protectionRect.centerY())
@@ -206,7 +207,7 @@ open class DisplayCutoutBaseView : View, RegionInterceptableView {
         }
         cameraProtectionAnimator?.cancel()
         cameraProtectionAnimator = ValueAnimator.ofFloat(cameraProtectionProgress,
-                if (showProtection) 1.0f else HIDDEN_CAMERA_PROTECTION_SCALE).setDuration(750)
+                if (showProtection) 1.0f else hiddenCameraProtectionScale).setDuration(750)
         cameraProtectionAnimator?.interpolator = Interpolators.DECELERATE_QUINT
         cameraProtectionAnimator?.addUpdateListener(ValueAnimator.AnimatorUpdateListener {
             animation: ValueAnimator ->
