@@ -162,6 +162,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private SecureSetting mColorInversionSetting;
     private DelayableExecutor mExecutor;
     private Handler mHandler;
+    private boolean mDeviceHasUdc;
     private boolean mPendingRotationChange;
     private boolean mIsRoundedCornerMultipleRadius;
     private boolean mIsPrivacyDotEnabled;
@@ -259,6 +260,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         mIsPrivacyDotEnabled = mContext.getResources().getBoolean(R.bool.config_enablePrivacyDot);
         mWindowManager = mContext.getSystemService(WindowManager.class);
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
+        mDeviceHasUdc = mContext.getResources().getBoolean(
+                R.bool.config_deviceHasUnderDisplayCamera);
         updateRoundedCornerDrawable();
         updateRoundedCornerRadii();
         setupDecorations();
@@ -320,7 +323,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             final DisplayCutout cutout = getCutout();
             for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
                 if (shouldShowCutout(i, cutout) || shouldShowRoundedCorner(i, cutout)
-                        || shouldShowPrivacyDot(i, cutout)) {
+                        || shouldShowPrivacyDot(i, cutout) || mDeviceHasUdc) {
                     createOverlay(i, cutout);
                 } else {
                     removeOverlay(i);
@@ -1066,8 +1069,6 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     public static class DisplayCutoutView extends View implements DisplayManager.DisplayListener,
             RegionInterceptableView {
 
-        private static final float HIDDEN_CAMERA_PROTECTION_SCALE = 0.5f;
-
         private Display.Mode mDisplayMode = null;
         private final DisplayInfo mInfo = new DisplayInfo();
         private final Paint mPaint = new Paint();
@@ -1089,7 +1090,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         private int mRotation;
         private int mInitialPosition;
         private int mPosition;
-        private float mCameraProtectionProgress = HIDDEN_CAMERA_PROTECTION_SCALE;
+        private float mCameraProtectionProgress;
+        private float mHiddenCameraProtectionScale;
         private ValueAnimator mCameraProtectionAnimator;
 
         public DisplayCutoutView(Context context, @BoundsPosition int pos,
@@ -1102,6 +1104,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 getViewTreeObserver().addOnDrawListener(() -> Log.i(TAG,
                         getWindowTitleByPos(pos) + " drawn in rot " + mRotation));
             }
+            mHiddenCameraProtectionScale = mDecorations.mDeviceHasUdc ? 0.0f : 0.5f;
+            mCameraProtectionProgress = mHiddenCameraProtectionScale;
         }
 
         public void setColor(int color) {
@@ -1135,7 +1139,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 mPaint.setAntiAlias(true);
                 canvas.drawPath(mBoundingPath, mPaint);
             }
-            if (mCameraProtectionProgress > HIDDEN_CAMERA_PROTECTION_SCALE
+            if (mCameraProtectionProgress > mHiddenCameraProtectionScale
                     && !mProtectionRect.isEmpty()) {
                 canvas.scale(mCameraProtectionProgress, mCameraProtectionProgress,
                         mProtectionRect.centerX(), mProtectionRect.centerY());
@@ -1214,7 +1218,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 mCameraProtectionAnimator.cancel();
             }
             mCameraProtectionAnimator = ValueAnimator.ofFloat(mCameraProtectionProgress,
-                    mShowProtection ? 1.0f : HIDDEN_CAMERA_PROTECTION_SCALE).setDuration(750);
+                    mShowProtection ? 1.0f : mHiddenCameraProtectionScale).setDuration(750);
             mCameraProtectionAnimator.setInterpolator(Interpolators.DECELERATE_QUINT);
             mCameraProtectionAnimator.addUpdateListener(animation -> {
                 mCameraProtectionProgress = (float) animation.getAnimatedValue();
@@ -1239,13 +1243,17 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             mPosition = getBoundPositionFromRotation(mInitialPosition, mRotation);
             requestLayout();
             getDisplay().getDisplayInfo(mInfo);
-            mBounds.clear();
-            mBoundingRect.setEmpty();
-            mBoundingPath.reset();
+            if (!mDecorations.mDeviceHasUdc) {
+                mBounds.clear();
+                mBoundingRect.setEmpty();
+                mBoundingPath.reset();
+            }
             int newVisible;
             if (shouldDrawCutout(getContext()) && hasCutout()) {
-                mBounds.addAll(mInfo.displayCutout.getBoundingRects());
-                localBounds(mBoundingRect);
+                if (!mDecorations.mDeviceHasUdc) {
+                    mBounds.addAll(mInfo.displayCutout.getBoundingRects());
+                    localBounds(mBoundingRect);
+                }
                 updateGravity();
                 updateBoundingPath();
                 invalidate();
@@ -1267,16 +1275,20 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             int dw = flipped ? lh : lw;
             int dh = flipped ? lw : lh;
 
-            Path path = DisplayCutout.pathFromResources(
-                    getResources(), getDisplay().getUniqueId(), dw, dh);
-            if (path != null) {
-                mBoundingPath.set(path);
-            } else {
-                mBoundingPath.reset();
+            if (!mDecorations.mDeviceHasUdc) {
+                Path path = DisplayCutout.pathFromResources(
+                        getResources(), getDisplay().getUniqueId(), dw, dh);
+                if (path != null) {
+                    mBoundingPath.set(path);
+                } else {
+                    mBoundingPath.reset();
+                }
             }
+
             Matrix m = new Matrix();
             transformPhysicalToLogicalCoordinates(mInfo.rotation, dw, dh, m);
             mBoundingPath.transform(m);
+
             if (mProtectionPathOrig != null) {
                 // Reset the protection path so we don't aggregate rotations
                 mProtectionPath.set(mProtectionPathOrig);
@@ -1312,7 +1324,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             LayoutParams lp = getLayoutParams();
             if (lp instanceof FrameLayout.LayoutParams) {
                 FrameLayout.LayoutParams flp = (FrameLayout.LayoutParams) lp;
-                int newGravity = getGravity(mInfo.displayCutout);
+                int newGravity = !mDecorations.mDeviceHasUdc ? getGravity(mInfo.displayCutout)
+                        : getUdcGravity();
                 if (flp.gravity != newGravity) {
                     flp.gravity = newGravity;
                     setLayoutParams(flp);
@@ -1321,6 +1334,10 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         }
 
         private boolean hasCutout() {
+            if (mDecorations.mDeviceHasUdc) {
+                return true;
+            }
+
             final DisplayCutout displayCutout = mInfo.displayCutout;
             if (displayCutout == null) {
                 return false;
@@ -1406,9 +1423,23 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             return Gravity.NO_GRAVITY;
         }
 
+        private int getUdcGravity() {
+            if (mPosition == BOUNDS_POSITION_LEFT) {
+                return Gravity.START;
+            } else if (mPosition == BOUNDS_POSITION_TOP) {
+                return Gravity.TOP;
+            } else if (mPosition == BOUNDS_POSITION_BOTTOM) {
+                return Gravity.BOTTOM;
+            } else if (mPosition == BOUNDS_POSITION_RIGHT) {
+                return Gravity.END;
+            }
+            return Gravity.NO_GRAVITY;
+        }
+
         @Override
         public boolean shouldInterceptTouch() {
-            return mInfo.displayCutout != null && getVisibility() == VISIBLE;
+            return (mDecorations.mDeviceHasUdc || mInfo.displayCutout != null)
+                    && getVisibility() == VISIBLE;
         }
 
         @Override
