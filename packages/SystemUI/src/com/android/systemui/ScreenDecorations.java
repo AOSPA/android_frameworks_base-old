@@ -1224,6 +1224,8 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                 getViewTreeObserver().addOnDrawListener(() -> Log.i(TAG,
                         getWindowTitleByPos(pos) + " drawn in rot " + mRotation));
             }
+            mHiddenCameraProtectionScale = mDecorations.mDeviceHasUdc ? 0.0f : 0.5f;
+            mCameraProtectionProgress = mHiddenCameraProtectionScale;
         }
 
         public void setColor(int color) {
