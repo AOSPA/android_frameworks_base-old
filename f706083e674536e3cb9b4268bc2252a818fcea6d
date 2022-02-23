@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ac68d0cd_a5646fdf",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2022-02-23T08:38:45Z",
+      "side": 1,
+      "message": "Extended screenshot option with text wont fit on some devices since we have the delete option, so lets remove the text",
+      "revId": "f706083e674536e3cb9b4268bc2252a818fcea6d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
