@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4dcb2b33_c1e334af",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-02-26T10:16:11Z",
+      "side": 1,
+      "message": "I\u0027d prefer just overlay settingsprovider instead of a platform change ",
+      "revId": "a052439196633d7b4580d42b65e706f508d58ade",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
