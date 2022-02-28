@@ -16,6 +16,24 @@
       "message": "Why DC dimming?",
       "revId": "a699cbb59e2b4a3bee1d2b2ef70de7e47006910a",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "01395d4c_e396be0e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000173
+      },
+      "writtenOn": "2022-02-28T00:09:06Z",
+      "side": 1,
+      "message": "why not? something that some people find it useful and has native support on newer devices",
+      "parentUuid": "9bb65aa9_0ba35414",
+      "revId": "a699cbb59e2b4a3bee1d2b2ef70de7e47006910a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
