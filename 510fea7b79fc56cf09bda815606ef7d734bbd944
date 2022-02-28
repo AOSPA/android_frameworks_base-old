@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c7548f5f_ae9f24dc",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000715
+      },
+      "writtenOn": "2022-02-28T18:00:10Z",
+      "side": 1,
+      "message": "https://imgur.com/a/GabUI61 screenshot",
+      "revId": "510fea7b79fc56cf09bda815606ef7d734bbd944",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
