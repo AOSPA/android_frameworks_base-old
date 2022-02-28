@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c61f2f7f_985a9ed8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000715
+      },
+      "writtenOn": "2022-02-28T18:09:53Z",
+      "side": 1,
+      "message": "https://imgur.com/a/JERkmO7 visual change",
+      "revId": "ed5ceee744c32ee4ef3cd0d5f1dd70cbb85f6c38",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
