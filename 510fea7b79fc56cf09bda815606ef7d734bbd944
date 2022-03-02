@@ -16,6 +16,24 @@
       "message": "https://imgur.com/a/GabUI61 screenshot",
       "revId": "510fea7b79fc56cf09bda815606ef7d734bbd944",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "57b73806_3cb1c2d2",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-03-02T14:54:59Z",
+      "side": 1,
+      "message": "can you format codes as per AOSP guidelines ?",
+      "parentUuid": "c7548f5f_ae9f24dc",
+      "revId": "510fea7b79fc56cf09bda815606ef7d734bbd944",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
