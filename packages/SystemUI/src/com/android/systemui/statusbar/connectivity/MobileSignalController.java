@@ -423,7 +423,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
     private int getVolteResId() {
         int resId = 0;
-        int voiceNetTye = getVoiceNetworkType();
+        int voiceNetTye = mCurrentState.getVoiceNetworkType();
         if ( (mCurrentState.voiceCapable || mCurrentState.videoCapable)
                 &&  mCurrentState.imsRegistered ) {
             resId = R.drawable.ic_volte;
@@ -586,6 +586,14 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             typeIcon = getEnhancementDataRatIcon();
         }else if ( mConfig.enableDdsRatIconEnhancement ) {
             typeIcon = getEnhancementDdsRatIcon();
+        }
+
+        MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
+        if (mConfig.showVowifiIcon && vowifiIconGroup != null) {
+            typeIcon = vowifiIconGroup.dataType;
+            statusIcon = new IconState(true,
+                    ((mCurrentState.enabled && !mCurrentState.airplaneMode) ? statusIcon.icon : -1),
+                    statusIcon.contentDescription);
         }
 
         return new SbInfo(showTriangle, typeIcon, statusIcon);
@@ -1135,7 +1143,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
     private boolean isVowifiAvailable() {
         return mCurrentState.voiceCapable &&  mCurrentState.imsRegistered
-                && getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN;
+                && mCurrentState.getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN;
     }
 
     private MobileIconGroup getVowifiIconGroup() {
@@ -1160,6 +1168,9 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 + mConfig.enableDdsRatIconEnhancement + ",");
         pw.println("  mConfig.alwaysShowNetworkTypeIcon="
                 + mConfig.alwaysShowNetworkTypeIcon + ",");
+        pw.println("  mConfig.showVowifiIcon=" +  mConfig.showVowifiIcon + ",");
+        pw.println("  mConfig.showVolteIcon=" +  mConfig.showVolteIcon + ",");
+        pw.println("  isVolteSwitchOn=" + isVolteSwitchOn() + ",");
         pw.println("  mNetworkToIconLookup=" + mNetworkToIconLookup + ",");
         pw.println("  MobileStatusHistory");
         int size = 0;
