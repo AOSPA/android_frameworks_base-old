@@ -561,7 +561,8 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             boolean showDataIconStatusBar = (mCurrentState.dataConnected || dataDisabled)
                     && (mCurrentState.dataSim && mCurrentState.isDefault);
             typeIcon =
-                    (showDataIconStatusBar || mConfig.alwaysShowDataRatIcon) ? dataTypeIcon : 0;
+                    (showDataIconStatusBar || mConfig.alwaysShowDataRatIcon
+                            || mConfig.alwaysShowNetworkTypeIcon) ? dataTypeIcon : 0;
             showDataIconStatusBar |= mCurrentState.roaming;
             statusIcon = new IconState(
                     showDataIconStatusBar && !mCurrentState.airplaneMode,
@@ -574,10 +575,17 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                     getCurrentIconId(), contentDescription);
 
             boolean showDataIconInStatusBar =
-                    (mCurrentState.dataConnected && mCurrentState.isDefault) || dataDisabled;
+                    (mCurrentState.dataConnected && mCurrentState.isDefault
+                            || mConfig.alwaysShowNetworkTypeIcon) || dataDisabled;
             typeIcon =
                     (showDataIconInStatusBar || mConfig.alwaysShowDataRatIcon) ? dataTypeIcon : 0;
             showTriangle = mCurrentState.enabled && !mCurrentState.airplaneMode;
+        }
+
+        if ( mConfig.enableRatIconEnhancement ) {
+            typeIcon = getEnhancementDataRatIcon();
+        }else if ( mConfig.enableDdsRatIconEnhancement ) {
+            typeIcon = getEnhancementDdsRatIcon();
         }
 
         return new SbInfo(showTriangle, typeIcon, statusIcon);
@@ -944,27 +952,12 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
 
         if ( mConfig.alwaysShowNetworkTypeIcon ) {
-            if ( mFiveGState.isNrIconTypeValid() ) {
+            if(!mCurrentState.connected) {
+                mCurrentState.iconGroup = TelephonyIcons.UNKNOWN;
+            }else if (mFiveGState.isNrIconTypeValid()) {
                 mCurrentState.iconGroup = mFiveGState.getIconGroup();
             }else {
-                if (mCurrentState.connected) {
-                    if (isDataNetworkTypeAvailable()) {
-                        int type = mCurrentState.telephonyDisplayInfo.getOverrideNetworkType();
-                        if (type == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
-                                || type == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
-                                || type == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ) {
-                            iconKey = toIconKey(mCurrentState.telephonyDisplayInfo.getNetworkType());
-                        }else {
-                            iconKey = toDisplayIconKey(type);
-                        }
-                    } else {
-                        iconKey = toIconKey(getVoiceNetworkType());
-                    }
-                }else {
-                    iconKey = toIconKey(TelephonyManager.NETWORK_TYPE_UNKNOWN);
-                }
-                mCurrentState.iconGroup = mNetworkToIconLookup.getOrDefault(iconKey,
-                        mDefaultIcons);
+                mCurrentState.iconGroup = getNetworkTypeIconGroup();
             }
         }
         mCurrentState.mobileDataEnabled = mPhone.isDataEnabled();
@@ -1098,7 +1091,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 || overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ){
             int networkType = mCurrentState.telephonyDisplayInfo.getNetworkType();
             if (networkType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
-                networkType = getVoiceNetworkType();
+                networkType = mCurrentState.getVoiceNetworkType();
             }
             iconKey = toIconKey(networkType);
         } else{
@@ -1158,6 +1151,11 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         pw.println("  mProviderModelBehavior=" + mProviderModelBehavior + ",");
         pw.println("  mInflateSignalStrengths=" + mInflateSignalStrengths + ",");
         pw.println("  isDataDisabled=" + isDataDisabled() + ",");
+        pw.println("  mConfig.enableRatIconEnhancement=" + mConfig.enableRatIconEnhancement + ",");
+        pw.println("  mConfig.enableDdsRatIconEnhancement="
+                + mConfig.enableDdsRatIconEnhancement + ",");
+        pw.println("  mConfig.alwaysShowNetworkTypeIcon="
+                + mConfig.alwaysShowNetworkTypeIcon + ",");
         pw.println("  mNetworkToIconLookup=" + mNetworkToIconLookup + ",");
         pw.println("  MobileStatusHistory");
         int size = 0;

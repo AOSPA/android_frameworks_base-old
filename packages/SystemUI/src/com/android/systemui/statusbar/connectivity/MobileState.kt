@@ -135,6 +135,14 @@ internal class MobileState(
         return serviceState != null && serviceState!!.roaming
     }
 
+    fun getVoiceNetworkType(): Int {
+        return serviceState?.getVoiceNetworkType() ?: TelephonyManager.NETWORK_TYPE_UNKNOWN;
+    }
+
+    fun getDataNetworkType(): Int {
+        return serviceState?.getDataNetworkType() ?: TelephonyManager.NETWORK_TYPE_UNKNOWN;
+    }
+
     fun setFromMobileStatus(mobileStatus: MobileStatus) {
         activityIn = mobileStatus.activityIn
         activityOut = mobileStatus.activityOut
