@@ -122,7 +122,6 @@ class MediaCarouselController @Inject constructor(
     private val visualStabilityCallback: VisualStabilityManager.Callback
     private var needsReordering: Boolean = false
     private var keysNeedRemoval = mutableSetOf<String>()
-    private var bgColor = getBackgroundColor()
     protected var shouldScrollToActivePlayer: Boolean = false
     private var isRtl: Boolean = false
         set(value) {
@@ -144,12 +143,10 @@ class MediaCarouselController @Inject constructor(
         }
     private val configListener = object : ConfigurationController.ConfigurationListener {
         override fun onDensityOrFontScaleChanged() {
-            recreatePlayers()
             inflateSettingsButton()
         }
 
         override fun onOverlayChanged() {
-            recreatePlayers()
             inflateSettingsButton()
         }
 
@@ -159,7 +156,6 @@ class MediaCarouselController @Inject constructor(
         }
 
         override fun onUiModeChanged() {
-            recreatePlayers()
             inflateSettingsButton()
         }
     }
@@ -371,7 +367,6 @@ class MediaCarouselController @Inject constructor(
 
     // Returns true if new player is added
     private fun addOrUpdatePlayer(key: String, oldKey: String?, data: MediaData): Boolean {
-        val dataCopy = data.copy(backgroundColor = bgColor)
         MediaPlayerData.moveIfExists(oldKey, key)
         val existingPlayer = MediaPlayerData.getMediaPlayer(key)
         val curVisibleMediaKey = MediaPlayerData.playerKeys()
@@ -470,29 +465,6 @@ class MediaCarouselController @Inject constructor(
                 mediaManager.dismissSmartspaceRecommendation(key, delay = 0L)
             }
         }
-    }
-
-    private fun recreatePlayers() {
-        bgColor = getBackgroundColor()
-        pageIndicator.tintList = ColorStateList.valueOf(getForegroundColor())
-
-        MediaPlayerData.mediaData().forEach { (key, data, isSsMediaRec) ->
-            if (isSsMediaRec) {
-                val smartspaceMediaData = MediaPlayerData.smartspaceMediaData
-                removePlayer(key, dismissMediaData = false, dismissRecommendation = false)
-                smartspaceMediaData?.let {
-                    addSmartspaceMediaRecommendations(
-                            it.targetId, it, MediaPlayerData.shouldPrioritizeSs)
-                }
-            } else {
-                removePlayer(key, dismissMediaData = false, dismissRecommendation = false)
-                addOrUpdatePlayer(key = key, oldKey = null, data = data)
-            }
-        }
-    }
-
-    private fun getBackgroundColor(): Int {
-        return context.getColor(android.R.color.system_accent2_50)
     }
 
     private fun getForegroundColor(): Int {

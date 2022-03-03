@@ -29,6 +29,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import com.android.internal.graphics.ColorUtils
+import com.android.systemui.statusbar.notification.MediaNotificationProcessor
 import android.graphics.ImageDecoder
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
@@ -77,6 +80,10 @@ private val ART_URIS = arrayOf(
 private const val TAG = "MediaDataManager"
 private const val DEBUG = true
 private const val EXTRAS_SMARTSPACE_DISMISS_INTENT_KEY = "dismiss_intent"
+private const val DEFAULT_LUMINOSITY = 0.25f
+private const val LUMINOSITY_THRESHOLD = 0.05f
+private const val SATURATION_MULTIPLIER = 0.8f
+const val DEFAULT_COLOR = Color.DKGRAY
 
 private val LOADING = MediaData(-1, false, 0, null, null, null, null, null,
         emptyList(), emptyList(), "INVALID", null, null, null, true, null)
@@ -137,7 +144,8 @@ class MediaDataManager(
 
     private val themeText = com.android.settingslib.Utils.getColorAttr(context,
             com.android.internal.R.attr.textColorPrimary).defaultColor
-    private val bgColor = context.getColor(android.R.color.system_accent2_50)
+    private val bgColor = com.android.settingslib.Utils.getColorAttr(context,
+            com.android.internal.R.attr.colorBackground).defaultColor
 
     // Internal listeners are part of the internal pipeline. External listeners (those registered
     // with [MediaDeviceManager.addListener]) receive events after they have propagated through
@@ -504,6 +512,7 @@ class MediaDataManager(
         } else {
             null
         }
+        val bgColor = artworkBitmap?.let { computeBackgroundColor(it) } ?: DEFAULT_COLOR
 
         val mediaAction = getResumeMediaAction(resumeAction)
         val lastActive = systemClock.elapsedRealtime()
@@ -558,6 +567,7 @@ class MediaDataManager(
                 }
             }
         }
+        val bgColor = computeBackgroundColor(artworkBitmap)
 
         // App name
         val builder = Notification.Builder.recoverBuilder(context, notif)
@@ -699,6 +709,35 @@ class MediaDataManager(
             Log.e(TAG, "Unable to load bitmap", e)
             null
         }
+    }
+
+    private fun computeBackgroundColor(artworkBitmap: Bitmap?): Int {
+        var color = Color.WHITE
+        if (artworkBitmap != null && artworkBitmap.width > 1 && artworkBitmap.height > 1) {
+            // If we have valid art, get colors from that
+            val p = MediaNotificationProcessor.generateArtworkPaletteBuilder(artworkBitmap)
+                    .generate()
+            val swatch = MediaNotificationProcessor.findBackgroundSwatch(p)
+            color = swatch.rgb
+        } else {
+            return DEFAULT_COLOR
+        }
+        // Adapt background color, so it's always subdued and text is legible
+        val tmpHsl = floatArrayOf(0f, 0f, 0f)
+        ColorUtils.colorToHSL(color, tmpHsl)
+
+        val l = tmpHsl[2]
+        // Colors with very low luminosity can have any saturation. This means that changing the
+        // luminosity can make a black become red. Let's remove the saturation of very light or
+        // very dark colors to avoid this issue.
+        if (l < LUMINOSITY_THRESHOLD || l > 1f - LUMINOSITY_THRESHOLD) {
+            tmpHsl[1] = 0f
+        }
+        tmpHsl[1] *= SATURATION_MULTIPLIER
+        tmpHsl[2] = DEFAULT_LUMINOSITY
+
+        color = ColorUtils.HSLToColor(tmpHsl)
+        return color
     }
 
     private fun getResumeMediaAction(action: Runnable): MediaAction {
