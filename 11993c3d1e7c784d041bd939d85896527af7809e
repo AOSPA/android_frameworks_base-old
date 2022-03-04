@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a0aac0a7_bc9c8e82",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000650
+      },
+      "writtenOn": "2022-03-04T04:20:05Z",
+      "side": 1,
+      "message": "this commit require more commits in module connectivity https://github.com/pa-ginkgo/android_packages_modules_Connectivity.git and system/netd https://github.com/pa-ginkgo/android_system_netd.git \n\nvisuals: https://imgur.com/TPf2flp",
+      "revId": "11993c3d1e7c784d041bd939d85896527af7809e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
