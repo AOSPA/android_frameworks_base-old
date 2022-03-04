@@ -33,6 +33,41 @@
       "message": "this requires changes in packages_modules_Permission which would be overriden by partner_modules",
       "revId": "11993c3d1e7c784d041bd939d85896527af7809e",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "29a09db9_79b87469",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000650
+      },
+      "writtenOn": "2022-03-04T05:32:39Z",
+      "side": 1,
+      "message": "https://github.com/pa-ginkgo/android_packages_modules_Permission/commits/sapphire",
+      "parentUuid": "ce2009e2_c0ff34c8",
+      "revId": "11993c3d1e7c784d041bd939d85896527af7809e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6b1432af_03ded2e0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000650
+      },
+      "writtenOn": "2022-03-04T05:32:39Z",
+      "side": 1,
+      "message": "okie",
+      "revId": "11993c3d1e7c784d041bd939d85896527af7809e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
