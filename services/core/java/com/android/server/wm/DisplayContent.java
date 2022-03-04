@@ -122,6 +122,8 @@ import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_INPUT_TARGE
 import static com.android.server.wm.DisplayContentProto.INPUT_METHOD_TARGET;
 import static com.android.server.wm.DisplayContentProto.INSETS_SOURCE_PROVIDERS;
 import static com.android.server.wm.DisplayContentProto.IS_SLEEPING;
+import static com.android.server.wm.DisplayContentProto.KEEP_CLEAR_AREAS;
+import static com.android.server.wm.DisplayContentProto.MIN_SIZE_OF_RESIZEABLE_TASK_DP;
 import static com.android.server.wm.DisplayContentProto.OPENING_APPS;
 import static com.android.server.wm.DisplayContentProto.RESUMED_ACTIVITY;
 import static com.android.server.wm.DisplayContentProto.ROOT_DISPLAY_AREA;
@@ -169,6 +171,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
 import android.graphics.Insets;
+import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
@@ -320,6 +323,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * The last bounds of the DisplayArea to mirror.
      */
     private Rect mLastMirroredDisplayAreaBounds = null;
+
+    /**
+     * The default per Display minimal size of tasks. Calculated at construction.
+     */
+    int mMinSizeOfResizeableTaskDp = -1;
 
     // Contains all IME window containers. Note that the z-ordering of the IME windows will depend
     // on the IME target. We mainly have this container grouping so we can keep track of all the IME
@@ -545,7 +553,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /** The delay to avoid toggling the animation quickly. */
     private static final long FIXED_ROTATION_HIDE_ANIMATION_DEBOUNCE_DELAY_MS = 250;
-    private FadeRotationAnimationController mFadeRotationAnimationController;
+    private AsyncRotationController mAsyncRotationController;
 
     final FixedRotationTransitionListener mFixedRotationTransitionListener =
             new FixedRotationTransitionListener();
@@ -838,7 +846,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
             w.mSurfacePlacementNeeded = true;
             w.mLayoutNeeded = false;
-            w.prelayout();
             final boolean firstLayout = !w.isLaidOut();
             getDisplayPolicy().layoutWindowLw(w, null, mDisplayFrames);
             w.mLayoutSeq = mLayoutSeq;
@@ -881,7 +888,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
             w.mSurfacePlacementNeeded = true;
             w.mLayoutNeeded = false;
-            w.prelayout();
             getDisplayPolicy().layoutWindowLw(w, w.getParentWindow(), mDisplayFrames);
             w.mLayoutSeq = mLayoutSeq;
             if (DEBUG_LAYOUT) Slog.v(TAG, " LAYOUT: mFrame=" + w.getFrame()
@@ -1098,7 +1104,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         mInputMonitor = new InputMonitor(mWmService, this);
         mInsetsPolicy = new InsetsPolicy(mInsetsStateController, this);
-
+        mMinSizeOfResizeableTaskDp = getMinimalTaskSizeDp();
         if (DEBUG_DISPLAY) Slog.v(TAG_WM, "Creating display=" + display);
 
         mWmService.mDisplayWindowSettings.applySettingsToDisplayLocked(this);
@@ -1554,6 +1560,19 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return config;
     }
 
+    private int getMinimalTaskSizeDp() {
+        final Context displayConfigurationContext =
+                mAtmService.mContext.createConfigurationContext(getConfiguration());
+        final float minimalSize =
+                displayConfigurationContext.getResources().getDimension(
+                                com.android.internal.R.dimen.default_minimal_size_resizable_task);
+        if (Double.compare(mDisplayMetrics.density, 0.0) == 0) {
+            throw new IllegalArgumentException("Display with ID=" + getDisplayId() + "has invalid "
+                + "DisplayMetrics.density= 0.0");
+        }
+        return (int) (minimalSize / mDisplayMetrics.density);
+    }
+
     private boolean updateOrientation(boolean forceUpdate) {
         final int orientation = getOrientation();
         // The last orientation source is valid only after getOrientation.
@@ -1712,8 +1731,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     @VisibleForTesting
-    @Nullable FadeRotationAnimationController getFadeRotationAnimationController() {
-        return mFadeRotationAnimationController;
+    @Nullable AsyncRotationController getAsyncRotationController() {
+        return mAsyncRotationController;
     }
 
     void setFixedRotationLaunchingAppUnchecked(@Nullable ActivityRecord r) {
@@ -1723,13 +1742,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void setFixedRotationLaunchingAppUnchecked(@Nullable ActivityRecord r, int rotation) {
         if (mFixedRotationLaunchingApp == null && r != null) {
             mWmService.mDisplayNotificationController.dispatchFixedRotationStarted(this, rotation);
-            startFadeRotationAnimation(
+            startAsyncRotation(
                     // Delay the hide animation to avoid blinking by clicking navigation bar that
                     // may toggle fixed rotation in a short time.
                     r == mFixedRotationTransitionListener.mAnimatingRecents /* shouldDebounce */);
         } else if (mFixedRotationLaunchingApp != null && r == null) {
             mWmService.mDisplayNotificationController.dispatchFixedRotationFinished(this);
-            finishFadeRotationAnimationIfPossible();
+            finishAsyncRotationIfPossible();
         }
         mFixedRotationLaunchingApp = r;
     }
@@ -1842,9 +1861,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return mDisplayRotation.getRotation() != getWindowConfiguration().getRotation();
     }
 
-    private void startFadeRotationAnimationIfNeeded() {
+    private void startAsyncRotationIfNeeded() {
         if (isRotationChanging()) {
-            startFadeRotationAnimation(false /* shouldDebounce */);
+            startAsyncRotation(false /* shouldDebounce */);
         }
     }
 
@@ -1853,12 +1872,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      *
      * @return {@code true} if the animation is executed right now.
      */
-    private boolean startFadeRotationAnimation(boolean shouldDebounce) {
+    private boolean startAsyncRotation(boolean shouldDebounce) {
         if (shouldDebounce) {
             mWmService.mH.postDelayed(() -> {
                 synchronized (mWmService.mGlobalLock) {
                     if (mFixedRotationLaunchingApp != null
-                            && startFadeRotationAnimation(false /* shouldDebounce */)) {
+                            && startAsyncRotation(false /* shouldDebounce */)) {
                         // Apply the transaction so the animation leash can take effect immediately.
                         getPendingTransaction().apply();
                     }
@@ -1866,28 +1885,28 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }, FIXED_ROTATION_HIDE_ANIMATION_DEBOUNCE_DELAY_MS);
             return false;
         }
-        if (mFadeRotationAnimationController == null) {
-            mFadeRotationAnimationController = new FadeRotationAnimationController(this);
-            mFadeRotationAnimationController.hide();
+        if (mAsyncRotationController == null) {
+            mAsyncRotationController = new AsyncRotationController(this);
+            mAsyncRotationController.hide();
             return true;
         }
         return false;
     }
 
     /** Re-show the previously hidden windows if all seamless rotated windows are done. */
-    void finishFadeRotationAnimationIfPossible() {
-        final FadeRotationAnimationController controller = mFadeRotationAnimationController;
+    void finishAsyncRotationIfPossible() {
+        final AsyncRotationController controller = mAsyncRotationController;
         if (controller != null && !mDisplayRotation.hasSeamlessRotatingWindow()) {
             controller.show();
-            mFadeRotationAnimationController = null;
+            mAsyncRotationController = null;
         }
     }
 
     /** Shows the given window which may be hidden for screen rotation. */
-    void finishFadeRotationAnimation(WindowToken windowToken) {
-        final FadeRotationAnimationController controller = mFadeRotationAnimationController;
+    void finishAsyncRotation(WindowToken windowToken) {
+        final AsyncRotationController controller = mAsyncRotationController;
         if (controller != null && controller.show(windowToken)) {
-            mFadeRotationAnimationController = null;
+            mAsyncRotationController = null;
         }
     }
 
@@ -1897,7 +1916,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // The window should look no different before and after rotation.
             return false;
         }
-        final FadeRotationAnimationController controller = mFadeRotationAnimationController;
+        final AsyncRotationController controller = mAsyncRotationController;
         return controller == null || !controller.isHandledToken(w.mToken);
     }
 
@@ -2001,6 +2020,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     void configureDisplayPolicy() {
+        mRootWindowContainer.updateDisplayImePolicyCache();
         mDisplayPolicy.updateConfigurationAndScreenSizeDependentBehaviors();
         mDisplayRotation.configure(mBaseDisplayWidth, mBaseDisplayHeight);
     }
@@ -2710,6 +2730,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             //                    layout.
             mInsetsStateController.onDisplayInfoUpdated(false /* notifyInsetsChanged */);
         }
+        mMinSizeOfResizeableTaskDp = getMinimalTaskSizeDp();
         mInputMonitor.layoutInputConsumers(info.logicalWidth, info.logicalHeight);
         mDisplayPolicy.onDisplayInfoChanged(info);
     }
@@ -2718,6 +2739,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void onDisplayChanged(DisplayContent dc) {
         super.onDisplayChanged(dc);
         updateSystemGestureExclusionLimit();
+        updateKeepClearAreas();
     }
 
     void updateSystemGestureExclusionLimit() {
@@ -3204,7 +3226,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // Hide the windows which are not significant in rotation animation. So that the windows
         // don't need to block the unfreeze time.
         if (screenRotationAnimation != null && screenRotationAnimation.hasScreenshot()) {
-            startFadeRotationAnimationIfNeeded();
+            startAsyncRotationIfNeeded();
         }
     }
 
@@ -3226,7 +3248,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
             if (!controller.isCollecting(this)) {
                 controller.collect(this);
-                startFadeRotationAnimationIfNeeded();
+                startAsyncRotationIfNeeded();
             }
             return;
         }
@@ -3238,7 +3260,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mWmService.mLatencyTracker.onActionStart(ACTION_ROTATE_SCREEN);
                 controller.mTransitionMetricsReporter.associate(t,
                         startTime -> mWmService.mLatencyTracker.onActionEnd(ACTION_ROTATE_SCREEN));
-                startFadeRotationAnimation(false /* shouldDebounce */);
+                startAsyncRotation(false /* shouldDebounce */);
             }
             t.setKnownConfigChanges(this, changes);
         }
@@ -3270,6 +3292,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             screenRotationAnimation.dumpDebug(proto, SCREEN_ROTATION_ANIMATION);
         }
         mDisplayFrames.dumpDebug(proto, DISPLAY_FRAMES);
+        proto.write(MIN_SIZE_OF_RESIZEABLE_TASK_DP, mMinSizeOfResizeableTaskDp);
         if (mTransitionController.isShellTransitionsEnabled()) {
             mTransitionController.dumpDebugLegacy(proto, APP_TRANSITION);
         } else {
@@ -3327,6 +3350,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
         }
         proto.write(IME_POLICY, getImePolicy());
+        for (Rect r : getKeepClearAreas()) {
+            r.dumpDebug(proto, KEEP_CLEAR_AREAS);
+        }
         proto.end(token);
     }
 
@@ -3344,6 +3370,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         pw.print(subPrefix); pw.print("init="); pw.print(mInitialDisplayWidth); pw.print("x");
         pw.print(mInitialDisplayHeight); pw.print(" "); pw.print(mInitialDisplayDensity);
         pw.print("dpi");
+        pw.print(" mMinSizeOfResizeableTaskDp="); pw.print(mMinSizeOfResizeableTaskDp);
         if (mInitialDisplayWidth != mBaseDisplayWidth
                 || mInitialDisplayHeight != mBaseDisplayHeight
                 || mInitialDisplayDensity != mBaseDisplayDensity) {
@@ -3384,6 +3411,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             pw.println();
             pw.print("  mSystemGestureExclusion=");
             pw.println(mSystemGestureExclusion);
+        }
+
+        final List<Rect> keepClearAreas = getKeepClearAreas();
+        if (!keepClearAreas.isEmpty()) {
+            pw.println();
+            pw.print("  keepClearAreas=");
+            pw.println(keepClearAreas);
         }
 
         pw.println();
@@ -3613,6 +3647,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         adjustForImeIfNeeded();
+        updateKeepClearAreas();
 
         // We may need to schedule some toast windows to be removed. The toasts for an app that
         // does not have input focus are removed within a timeout to prevent apps to redress
@@ -3939,6 +3974,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     }
 
+    // IMPORTANT: When introducing new dependencies in this method, make sure that
+    // changes to those result in RootWindowContainer.updateDisplayImePolicyCache()
+    // being called.
     @DisplayImePolicy int getImePolicy() {
         if (!isTrusted()) {
             return DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
@@ -3967,8 +4005,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mInputMethodWindow.mToken.linkFixedRotationTransform(mImeLayeringTarget.mToken);
             // Hide the window until the rotation is done to avoid intermediate artifacts if the
             // parent surface of IME container is changed.
-            if (mFadeRotationAnimationController != null) {
-                mFadeRotationAnimationController.hideImmediately(mInputMethodWindow.mToken);
+            if (mAsyncRotationController != null) {
+                mAsyncRotationController.hideImmediately(mInputMethodWindow.mToken);
             }
         }
     }
@@ -3987,11 +4025,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (target == mImeLayeringTarget) {
             return;
         }
-        // Prepare the IME screenshot for the last IME target when its task is applying app
-        // transition. This is for the better IME transition to keep IME visibility when
-        // transitioning to the next task.
+        // If the IME target is the input target, before it changes, prepare the IME screenshot
+        // for the last IME target when its task is applying app transition. This is for the
+        // better IME transition to keep IME visibility when transitioning to the next task.
         if (mImeLayeringTarget != null && mImeLayeringTarget.isAnimating(PARENTS | TRANSITION,
-                ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_RECENTS)) {
+                ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_RECENTS)
+                && mImeLayeringTarget == mImeInputTarget) {
             attachAndShowImeScreenshotOnTarget();
         }
 
@@ -5477,19 +5516,28 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mSystemGestureExclusionListeners.unregister(listener);
     }
 
+    void updateKeepClearAreas() {
+        mWmService.mDisplayNotificationController.dispatchKeepClearAreasChanged(
+                this, getKeepClearAreas());
+    }
+
     /**
-     * @see IWindowManager#setForwardedInsets
+     * Returns all keep-clear areas from visible windows on this display.
      */
-    public void setForwardedInsets(Insets insets) {
-        if (insets == null) {
-            insets = Insets.NONE;
-        }
-        if (mDisplayPolicy.getForwardedInsets().equals(insets)) {
-            return;
-        }
-        mDisplayPolicy.setForwardedInsets(insets);
-        setLayoutNeeded();
-        mWmService.mWindowPlacerLocked.requestTraversal();
+    ArrayList<Rect> getKeepClearAreas() {
+        final ArrayList<Rect> keepClearAreas = new ArrayList<Rect>();
+        final Matrix tmpMatrix = new Matrix();
+        final float[] tmpFloat9 = new float[9];
+        forAllWindows(w -> {
+            if (w.isVisible() && !w.inPinnedWindowingMode()) {
+                keepClearAreas.addAll(w.getKeepClearAreas(tmpMatrix, tmpFloat9));
+            }
+
+            // We stop traversing when we reach the base of a fullscreen app.
+            return w.getWindowType() == TYPE_BASE_APPLICATION
+                    && w.getWindowingMode() == WINDOWING_MODE_FULLSCREEN;
+        }, true);
+        return keepClearAreas;
     }
 
     protected MetricsLogger getMetricsLogger() {

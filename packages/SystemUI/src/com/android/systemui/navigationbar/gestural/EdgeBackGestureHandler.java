@@ -36,6 +36,7 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.Trace;
 import android.provider.DeviceConfig;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -79,6 +80,7 @@ import com.android.systemui.shared.tracing.ProtoTraceable;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.tracing.nano.EdgeBackGestureHandlerProto;
 import com.android.systemui.tracing.nano.SystemUiTraceProto;
+import com.android.wm.shell.back.BackAnimation;
 
 import java.io.PrintWriter;
 import java.util.ArrayDeque;
@@ -231,6 +233,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
     private InputChannelCompat.InputEventReceiver mInputEventReceiver;
 
     private NavigationEdgeBackPlugin mEdgeBackPlugin;
+    private BackAnimation mBackAnimation;
     private int mLeftInset;
     private int mRightInset;
     private int mSysUiFlags;
@@ -494,7 +497,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
                     Choreographer.getInstance(), this::onInputEvent);
 
             // Add a nav bar panel window
-            setEdgeBackPlugin(new NavigationBarEdgePanel(mContext));
+            setEdgeBackPlugin(new NavigationBarEdgePanel(mContext, mBackAnimation));
             mPluginManager.addPluginListener(
                     this, NavigationEdgeBackPlugin.class, /*allowMultiple=*/ false);
         }
@@ -509,7 +512,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
 
     @Override
     public void onPluginDisconnected(NavigationEdgeBackPlugin plugin) {
-        setEdgeBackPlugin(new NavigationBarEdgePanel(mContext));
+        setEdgeBackPlugin(new NavigationBarEdgePanel(mContext, mBackAnimation));
     }
 
     private void setEdgeBackPlugin(NavigationEdgeBackPlugin edgeBackPlugin) {
@@ -576,7 +579,9 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
             mMLModelThreshold = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_SYSTEMUI,
                     SystemUiDeviceConfigFlags.BACK_GESTURE_ML_MODEL_THRESHOLD, 0.9f);
             if (mBackGestureTfClassifierProvider.isActive()) {
+                Trace.beginSection("EdgeBackGestureHandler#loadVocab");
                 mVocab = mBackGestureTfClassifierProvider.loadVocab(mContext.getAssets());
+                Trace.endSection();
                 mUseMLModel = true;
                 return;
             }
@@ -928,6 +933,10 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
             proto.edgeBackGestureHandler = new EdgeBackGestureHandlerProto();
         }
         proto.edgeBackGestureHandler.allowGesture = mAllowGesture;
+    }
+
+    public void setBackAnimation(BackAnimation backAnimation) {
+        mBackAnimation = backAnimation;
     }
 
     /**

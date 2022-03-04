@@ -163,7 +163,6 @@ import static com.android.server.wm.WindowStateProto.ANIMATOR;
 import static com.android.server.wm.WindowStateProto.ATTRIBUTES;
 import static com.android.server.wm.WindowStateProto.DESTROYING;
 import static com.android.server.wm.WindowStateProto.DISPLAY_ID;
-import static com.android.server.wm.WindowStateProto.FINISHED_SEAMLESS_ROTATION_FRAME;
 import static com.android.server.wm.WindowStateProto.FORCE_SEAMLESS_ROTATION;
 import static com.android.server.wm.WindowStateProto.GIVEN_CONTENT_INSETS;
 import static com.android.server.wm.WindowStateProto.GLOBAL_SCALE;
@@ -172,6 +171,7 @@ import static com.android.server.wm.WindowStateProto.HAS_SURFACE;
 import static com.android.server.wm.WindowStateProto.IS_ON_SCREEN;
 import static com.android.server.wm.WindowStateProto.IS_READY_FOR_DISPLAY;
 import static com.android.server.wm.WindowStateProto.IS_VISIBLE;
+import static com.android.server.wm.WindowStateProto.KEEP_CLEAR_AREAS;
 import static com.android.server.wm.WindowStateProto.PENDING_SEAMLESS_ROTATION;
 import static com.android.server.wm.WindowStateProto.REMOVED;
 import static com.android.server.wm.WindowStateProto.REMOVE_ON_EXIT;
@@ -196,6 +196,7 @@ import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Region;
 import android.gui.TouchOcclusionMode;
 import android.os.Binder;
@@ -378,7 +379,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     final boolean mForceSeamlesslyRotate;
     SeamlessRotator mPendingSeamlessRotate;
-    long mFinishSeamlessRotateFrameNumber;
 
     private RemoteCallbackList<IWindowFocusObserver> mFocusCallbacks;
 
@@ -442,9 +442,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     // Current transformation being applied.
     float mGlobalScale=1;
-    float mLastGlobalScale=1;
     float mInvGlobalScale=1;
-    float mOverrideScale = 1;
+    final float mOverrideScale;
     float mHScale=1, mVScale=1;
     float mLastHScale=1, mLastVScale=1;
 
@@ -471,6 +470,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * Coordinates are relative to the window's position.
      */
     private final List<Rect> mExclusionRects = new ArrayList<>();
+    /**
+     * List of rects which should ideally not be covered by floating windows like Pip.
+     *
+     * Coordinates are relative to the window's position.
+     */
+    private final List<Rect> mKeepClearAreas = new ArrayList<>();
 
     // 0 = left, 1 = right
     private final int[] mLastRequestedExclusionHeight = {0, 0};
@@ -698,11 +703,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * Used for testing because the real PowerManager is final.
      */
     private PowerManagerWrapper mPowerManagerWrapper;
-
-    /**
-     * A frame number in which changes requested in this layout will be rendered.
-     */
-    private long mFrameNumber = -1;
 
     private static final StringBuilder sTmpSB = new StringBuilder();
 
@@ -962,7 +962,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         mPendingSeamlessRotate.finish(t, this);
-        mFinishSeamlessRotateFrameNumber = getFrameNumber();
         mPendingSeamlessRotate = null;
 
         getDisplayContent().getDisplayRotation().markForSeamlessRotation(this,
@@ -1010,6 +1009,55 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mLastGrantedExclusionHeight[side] = granted;
             mLastRequestedExclusionHeight[side] = requested;
         }
+    }
+
+    /**
+     * @return a list of rects that should ideally not be covered by floating windows like pip.
+     *         The returned rect coordinates are relative to the display origin.
+     */
+    List<Rect> getKeepClearAreas() {
+        final Matrix tmpMatrix = new Matrix();
+        final float[] tmpFloat9 = new float[9];
+        return getKeepClearAreas(tmpMatrix, tmpFloat9);
+    }
+
+    /**
+     * @param tmpMatrix a temporary matrix to be used for transformations
+     * @param float9 a temporary array of 9 floats
+     *
+     * @return a list of rects that should ideally not be covered by floating windows like pip.
+     *         The returned rect coordinates are relative to the display origin.
+     */
+    List<Rect> getKeepClearAreas(Matrix tmpMatrix, float[] float9) {
+        getTransformationMatrix(float9, tmpMatrix);
+
+        // Translate all keep-clear rects to screen coordinates.
+        final List<Rect> transformedKeepClearAreas = new ArrayList<Rect>();
+        final RectF tmpRect = new RectF();
+        Rect curr;
+        for (Rect r : mKeepClearAreas) {
+            tmpRect.set(r);
+            tmpMatrix.mapRect(tmpRect);
+            curr = new Rect();
+            tmpRect.roundOut(curr);
+            transformedKeepClearAreas.add(curr);
+        }
+        return transformedKeepClearAreas;
+    }
+
+    /**
+     * @param keepClearAreas the new keep-clear areas for this window. The rects should be defined
+     *                       in window coordinate space
+     *
+     * @return true if there is a change in the list of keep-clear areas; false otherwise
+     */
+    boolean setKeepClearAreas(List<Rect> keepClearAreas) {
+        if (mKeepClearAreas.equals(keepClearAreas)) {
+            return false;
+        }
+        mKeepClearAreas.clear();
+        mKeepClearAreas.addAll(keepClearAreas);
+        return true;
     }
 
     interface PowerManagerWrapper {
@@ -1091,6 +1139,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mSubLayer = 0;
             mWinAnimator = null;
             mWpcForDisplayAreaConfigChanges = null;
+            mOverrideScale = 1f;
             return;
         }
         mDeathRecipient = deathRecipient;
@@ -1138,6 +1187,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mLayer = 0;
         mOverrideScale = mWmService.mAtmService.mCompatModePackages.getCompatScale(
                 mAttrs.packageName, s.mUid);
+        updateGlobalScale();
 
         // Make sure we initial all fields before adding to parentWindow, to prevent exception
         // during onDisplayChanged.
@@ -1167,6 +1217,23 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mSession.windowAddedLocked();
     }
 
+    boolean updateGlobalScale() {
+        if (hasCompatScale()) {
+            if (mOverrideScale != 1f) {
+                mGlobalScale = mToken.hasSizeCompatBounds()
+                        ? mToken.getSizeCompatScale() * mOverrideScale
+                        : mOverrideScale;
+            } else {
+                mGlobalScale = mToken.getSizeCompatScale();
+            }
+            mInvGlobalScale = 1f / mGlobalScale;
+            return true;
+        }
+
+        mGlobalScale = mInvGlobalScale = 1f;
+        return false;
+    }
+
     /**
      * @return {@code true} if the application runs in size compatibility mode or has an app level
      * scaling override set.
@@ -1175,7 +1242,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * @see ActivityRecord#hasSizeCompatBounds()
      */
     boolean hasCompatScale() {
-        return mOverrideScale != 1f || hasCompatScale(mAttrs, mActivityRecord);
+        return hasCompatScale(mAttrs, mActivityRecord, mOverrideScale);
     }
 
     /**
@@ -1183,11 +1250,16 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * @see android.content.res.CompatibilityInfo#supportsScreen
      * @see ActivityRecord#hasSizeCompatBounds()
      */
-    static boolean hasCompatScale(WindowManager.LayoutParams attrs, WindowToken windowToken) {
-        return (attrs.privateFlags & PRIVATE_FLAG_COMPATIBLE_WINDOW) != 0
-                || (windowToken != null && windowToken.hasSizeCompatBounds()
-                // Exclude starting window because it is not displayed by the application.
-                && attrs.type != TYPE_APPLICATION_STARTING);
+    static boolean hasCompatScale(WindowManager.LayoutParams attrs, WindowToken token,
+            float overrideScale) {
+        if ((attrs.privateFlags & PRIVATE_FLAG_COMPATIBLE_WINDOW) != 0) {
+            return true;
+        }
+        if (attrs.type == TYPE_APPLICATION_STARTING) {
+            // Exclude starting window because it is not displayed by the application.
+            return false;
+        }
+        return token != null && token.hasSizeCompatBounds() || overrideScale != 1f;
     }
 
     /**
@@ -1338,8 +1410,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mWindowFrames.mParentFrame;
     }
 
-    void getCompatFrameSize(Rect outFrame) {
-        outFrame.set(0, 0, mWindowFrames.mCompatFrame.width(), mWindowFrames.mCompatFrame.height());
+    Rect getCompatFrame() {
+        return mWindowFrames.mCompatFrame;
     }
 
     WindowManager.LayoutParams getAttrs() {
@@ -1483,7 +1555,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             }
         } else {
             // The orientation change is completed. If it was hidden by the animation, reshow it.
-            mDisplayContent.finishFadeRotationAnimation(mToken);
+            mDisplayContent.finishAsyncRotation(mToken);
         }
     }
 
@@ -1526,6 +1598,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return displayInfo;
         }
         return getDisplayContent().getDisplayInfo();
+    }
+
+    @Override
+    public Rect getMaxBounds() {
+        final Rect maxBounds = mToken.getFixedRotationTransformMaxBounds();
+        if (maxBounds != null) {
+            return maxBounds;
+        }
+        return super.getMaxBounds();
     }
 
     /**
@@ -1689,21 +1770,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     boolean hasAppShownWindows() {
         return mActivityRecord != null
                 && (mActivityRecord.firstWindowDrawn || mActivityRecord.startingDisplayed);
-    }
-
-    void prelayout() {
-        if (hasCompatScale()) {
-            if (mOverrideScale != 1f) {
-                mGlobalScale = mToken.hasSizeCompatBounds()
-                        ? mToken.getSizeCompatScale() * mOverrideScale
-                        : mOverrideScale;
-            } else {
-                mGlobalScale = mToken.getSizeCompatScale();
-            }
-            mInvGlobalScale = 1 / mGlobalScale;
-        } else {
-            mGlobalScale = mInvGlobalScale = 1;
-        }
     }
 
     @Override
@@ -2928,7 +2994,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         @Override
         public void binderDied() {
             try {
-                boolean resetSplitScreenResizing = false;
                 synchronized (mWmService.mGlobalLock) {
                     final WindowState win = mWmService
                             .windowForClientLocked(mSession, mClient, false);
@@ -2942,16 +3007,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     } else if (mHasSurface) {
                         Slog.e(TAG, "!!! LEAK !!! Window removed but surface still valid.");
                         WindowState.this.removeIfPossible();
-                    }
-                }
-                if (resetSplitScreenResizing) {
-                    try {
-                        // Note: this calls into ActivityManager, so we must *not* hold the window
-                        // manager lock while calling this.
-                        mWmService.mActivityTaskManager.setSplitScreenResizing(false);
-                    } catch (RemoteException e) {
-                        // Local call, shouldn't return RemoteException.
-                        throw e.rethrowAsRuntimeException();
                     }
                 }
             } catch (IllegalArgumentException ex) {
@@ -4059,10 +4114,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         proto.write(IS_ON_SCREEN, isOnScreen());
         proto.write(IS_VISIBLE, isVisible);
         proto.write(PENDING_SEAMLESS_ROTATION, mPendingSeamlessRotate != null);
-        proto.write(FINISHED_SEAMLESS_ROTATION_FRAME, mFinishSeamlessRotateFrameNumber);
         proto.write(FORCE_SEAMLESS_ROTATION, mForceSeamlesslyRotate);
         proto.write(HAS_COMPAT_SCALE, hasCompatScale());
         proto.write(GLOBAL_SCALE, mGlobalScale);
+        for (Rect r : getKeepClearAreas()) {
+            r.dumpDebug(proto, KEEP_CLEAR_AREAS);
+        }
         proto.end(token);
     }
 
@@ -4198,7 +4255,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         } else {
             pw.print("null");
         }
-        pw.println(" finishedFrameNumber=" + mFinishSeamlessRotateFrameNumber);
 
         if (mHScale != 1 || mVScale != 1) {
             pw.println(prefix + "mHScale=" + mHScale
@@ -4231,6 +4287,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
         pw.println(prefix + "isOnScreen=" + isOnScreen());
         pw.println(prefix + "isVisible=" + isVisible());
+        pw.println(prefix + "keepClearAreas=" + getKeepClearAreas());
         if (dumpAll) {
             final String visibilityString = mRequestedVisibilities.toString();
             if (!visibilityString.isEmpty()) {
@@ -5259,7 +5316,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mLastVScale != newVScale ) {
             getPendingTransaction().setMatrix(getSurfaceControl(),
                 newHScale, 0, 0, newVScale);
-            mLastGlobalScale = mGlobalScale;
             mLastHScale = newHScale;
             mLastVScale = newVScale;
         }
@@ -5567,16 +5623,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return target != null ? target.getWindow() : null;
     }
 
-    long getFrameNumber() {
-        // Return the frame number in which changes requested in this layout will be rendered or
-        // -1 if we do not expect the frame to be rendered.
-        return getFrame().isEmpty() ? -1 : mFrameNumber;
-    }
-
-    void setFrameNumber(long frameNumber) {
-        mFrameNumber = frameNumber;
-    }
-
     void forceReportingResized() {
         mWindowFrames.forceReportingResized();
     }
@@ -5763,10 +5809,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         boolean skipLayout = false;
         // Control the timing to switch the appearance of window with different rotations.
-        final FadeRotationAnimationController fadeRotationController =
-                mDisplayContent.getFadeRotationAnimationController();
-        if (fadeRotationController != null
-                && fadeRotationController.handleFinishDrawing(this, postDrawTransaction)) {
+        final AsyncRotationController asyncRotationController =
+                mDisplayContent.getAsyncRotationController();
+        if (asyncRotationController != null
+                && asyncRotationController.handleFinishDrawing(this, postDrawTransaction)) {
             // Consume the transaction because the controller will apply it with fade animation.
             // Layout is not needed because the window will be hidden by the fade leash. Clear
             // sync state because its sync transaction doesn't need to be merged to sync group.
@@ -5845,39 +5891,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     void requestRedrawForSync() {
         mRedrawForSyncReported = false;
-    }
-
-    void calculateSurfaceBounds(WindowManager.LayoutParams attrs, Rect outSize) {
-        outSize.setEmpty();
-        if ((attrs.flags & FLAG_SCALED) != 0) {
-            // For a scaled surface, we always want the requested size.
-            outSize.right = mRequestedWidth;
-            outSize.bottom = mRequestedHeight;
-        } else {
-            // When we're doing a drag-resizing, request a surface that's fullscreen size,
-            // so that we don't need to reallocate during the process. This also prevents
-            // buffer drops due to size mismatch.
-            if (isDragResizing()) {
-                final DisplayInfo displayInfo = getDisplayInfo();
-                outSize.right = displayInfo.logicalWidth;
-                outSize.bottom = displayInfo.logicalHeight;
-            } else {
-                getCompatFrameSize(outSize);
-            }
-        }
-
-        // This doesn't necessarily mean that there is an error in the system. The sizes might be
-        // incorrect, because it is before the first layout or draw.
-        if (outSize.width() < 1) {
-            outSize.right = 1;
-        }
-        if (outSize.height() < 1) {
-            outSize.bottom = 1;
-        }
-
-        // Adjust for surface insets.
-        outSize.inset(-attrs.surfaceInsets.left, -attrs.surfaceInsets.top,
-                -attrs.surfaceInsets.right, -attrs.surfaceInsets.bottom);
     }
 
     /**
@@ -5984,5 +5997,25 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     boolean isTrustedOverlay() {
         return mInputWindowHandle.isTrustedOverlay();
+    }
+
+    public boolean receiveFocusFromTapOutside() {
+        return canReceiveKeys(true);
+    }
+
+    @Override
+    public void handleTapOutsideFocusOutsideSelf() {
+        // Nothing to do here since raising the other window will naturally take care of
+        // us loosing focus
+    }
+
+    @Override
+    public void handleTapOutsideFocusInsideSelf() {
+        final DisplayContent displayContent = getDisplayContent();
+        if (!displayContent.isOnTop()) {
+            displayContent.getParent().positionChildAt(WindowContainer.POSITION_TOP, displayContent,
+                    true /* includingParents */);
+        }
+        mWmService.handleTaskFocusChange(getTask(), mActivityRecord);
     }
 }

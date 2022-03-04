@@ -105,6 +105,7 @@ import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.idle.IdleHostViewController;
 import com.android.systemui.idle.dagger.IdleViewComponent;
+import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.media.KeyguardMediaController;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.media.MediaHierarchyManager;
@@ -365,6 +366,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private QsFrameTranslateController mQsFrameTranslateController;
     @Mock
     private StatusBarWindowStateController mStatusBarWindowStateController;
+    @Mock
+    private KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
     private Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
@@ -550,6 +553,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mControlsComponent,
                 mInteractionJankMonitor,
                 mQsFrameTranslateController,
+                mKeyguardUnlockAnimationController,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
                 mStatusBar,

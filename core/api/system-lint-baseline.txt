@@ -98,6 +98,10 @@ MissingNullability: android.telephony.mbms.DownloadRequest.Builder#setServiceId(
 
 
 
+NoSettingsProvider: android.provider.Settings.Secure#FAST_PAIR_SCAN_ENABLED:
+    New setting keys are not allowed (Field: FAST_PAIR_SCAN_ENABLED); use getters/setters in relevant manager class
+
+
 OnNameExpected: android.service.smartspace.SmartspaceService#notifySmartspaceEvent(android.app.smartspace.SmartspaceSessionId, android.app.smartspace.SmartspaceTargetEvent):
     Methods implemented by developers should follow the on<Something> style, was `notifySmartspaceEvent`
 
@@ -108,6 +112,16 @@ ProtectedMember: android.service.contentcapture.ContentCaptureService#dump(java.
 
 ProtectedMember: android.service.notification.NotificationAssistantService#attachBaseContext(android.content.Context):
 
+
+
+RethrowRemoteException: android.app.WallpaperManager#getWallpaperDimAmount():
+    Methods calling system APIs should rethrow `RemoteException` as `RuntimeException` (but do not list it in the throws clause)
+RethrowRemoteException: android.app.WallpaperManager#getWallpaperDimmingAmount():
+    Methods calling system APIs should rethrow `RemoteException` as `RuntimeException` (but do not list it in the throws clause)
+RethrowRemoteException: android.app.WallpaperManager#setWallpaperDimAmount(float):
+    Methods calling system APIs should rethrow `RemoteException` as `RuntimeException` (but do not list it in the throws clause)
+RethrowRemoteException: android.app.WallpaperManager#setWallpaperDimmingAmount(float):
+    Methods calling system APIs should rethrow `RemoteException` as `RuntimeException` (but do not list it in the throws clause)
 
 
 SamShouldBeLast: android.accounts.AccountManager#addAccount(String, String, String[], android.os.Bundle, android.app.Activity, android.accounts.AccountManagerCallback<android.os.Bundle>, android.os.Handler):

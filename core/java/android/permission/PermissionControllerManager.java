@@ -128,6 +128,51 @@ public final class PermissionControllerManager {
     /** Count and app even if it is a system app. */
     public static final int COUNT_WHEN_SYSTEM = 2;
 
+    /** @hide */
+    @IntDef(prefix = { "HIBERNATION_ELIGIBILITY_"}, value = {
+            HIBERNATION_ELIGIBILITY_UNKNOWN,
+            HIBERNATION_ELIGIBILITY_ELIGIBLE,
+            HIBERNATION_ELIGIBILITY_EXEMPT_BY_SYSTEM,
+            HIBERNATION_ELIGIBILITY_EXEMPT_BY_USER,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface HibernationEligibilityFlag {}
+
+    /**
+     * Unknown whether package is eligible for hibernation.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int HIBERNATION_ELIGIBILITY_UNKNOWN = -1;
+
+    /**
+     * Package is eligible for app hibernation and may be hibernated when the job runs.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int HIBERNATION_ELIGIBILITY_ELIGIBLE = 0;
+
+    /**
+     * Package is not eligible for app hibernation because it is categorically exempt via the
+     * system.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int HIBERNATION_ELIGIBILITY_EXEMPT_BY_SYSTEM = 1;
+
+    /**
+     * Package is not eligible for app hibernation because it has been exempt by the user's
+     * preferences. Note that this should not be set if the package is exempt from hibernation by
+     * the system as the user preference would have no effect.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int HIBERNATION_ELIGIBILITY_EXEMPT_BY_USER = 2;
+
     /**
      * Callback for delivering the result of {@link #revokeRuntimePermissions}.
      */
@@ -819,6 +864,39 @@ public final class PermissionControllerManager {
     }
 
     /**
+     * Get the hibernation eligibility of a package. See {@link HibernationEligibilityFlag}.
+     *
+     * @param packageName package name to check eligibility
+     * @param executor executor to run callback on
+     * @param callback callback for when result is generated
+     */
+    @RequiresPermission(Manifest.permission.MANAGE_APP_HIBERNATION)
+    public void getHibernationEligibility(@NonNull String packageName,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull IntConsumer callback) {
+        checkNotNull(executor);
+        checkNotNull(callback);
+
+        mRemoteService.postAsync(service -> {
+            AndroidFuture<Integer> eligibilityResult = new AndroidFuture<>();
+            service.getHibernationEligibility(packageName, eligibilityResult);
+            return eligibilityResult;
+        }).whenCompleteAsync((eligibility, err) -> {
+            if (err != null) {
+                Log.e(TAG, "Error getting hibernation eligibility", err);
+                callback.accept(HIBERNATION_ELIGIBILITY_UNKNOWN);
+            } else {
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    callback.accept(eligibility);
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
+            }
+        }, executor);
+    }
+
+    /**
      * Triggers the revocation of one or more permissions for a package, under the following
      * conditions:
      * <ul>
@@ -835,17 +913,17 @@ public final class PermissionControllerManager {
      *
      * @param packageName The name of the package for which the permissions will be revoked.
      * @param permissions List of permissions to be revoked.
+     * @param callback Callback called when the revocation request has been completed.
      *
-     * @see Context#selfRevokePermissions(Collection)
+     * @see Context#revokeOwnPermissionsOnKill(Collection)
      *
      * @hide
      */
-    public void selfRevokePermissions(@NonNull String packageName,
-            @NonNull List<String> permissions) {
+    public void revokeOwnPermissionsOnKill(@NonNull String packageName,
+            @NonNull List<String> permissions, AndroidFuture<Void> callback) {
         mRemoteService.postAsync(service -> {
-            AndroidFuture<Void> future = new AndroidFuture<>();
-            service.selfRevokePermissions(packageName, permissions, future);
-            return future;
+            service.revokeOwnPermissionsOnKill(packageName, permissions, callback);
+            return callback;
         }).whenComplete((result, err) -> {
             if (err != null) {
                 Log.e(TAG, "Failed to self revoke " + String.join(",", permissions)

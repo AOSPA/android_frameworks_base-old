@@ -481,10 +481,18 @@ public class TvView extends ViewGroup {
     }
 
     /**
-     * Enables interactive app notification.
+     * Enables or disables interactive app notification.
+     *
+     * <p>This method enables or disables the event detection from the corresponding TV input. When
+     * it's enabled, the TV input service detects events related to interactive app, such as
+     * AIT (Application Information Table) and sends to TvView or the linked TV interactive app
+     * service.
+     *
      * @param enabled {@code true} if you want to enable interactive app notifications.
      *                {@code false} otherwise.
-     * @hide
+     *
+     * @see TvInputService.Session#notifyAitInfoUpdated(android.media.tv.AitInfo)
+     * @see android.media.tv.interactive.TvInteractiveAppView#setTvView(TvView)
      */
     public void setInteractiveAppNotificationEnabled(boolean enabled) {
         if (mSession != null) {
@@ -1062,12 +1070,11 @@ public class TvView extends ViewGroup {
         }
 
         /**
-         * This is called when the AIT info has been updated.
+         * This is called when the AIT (Application Information Table) info has been updated.
          *
          * @param aitInfo The current AIT info.
-         * @hide
          */
-        public void onAitInfoUpdated(String inputId, AitInfo aitInfo) {
+        public void onAitInfoUpdated(@NonNull String inputId, @NonNull AitInfo aitInfo) {
         }
 
         /**

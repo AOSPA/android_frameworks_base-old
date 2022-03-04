@@ -3347,6 +3347,14 @@
              <p>Note that this flag will only be respected if the View's Outline returns true from
              {@link android.graphics.Outline#canClip()}. -->
         <attr name="clipToOutline" format="boolean" />
+
+        <!-- <p> Sets a preference to keep the bounds of this view clear from floating windows
+            above this view's window. This informs the system that the view is considered a vital
+            area for the user and that ideally it should not be covered. Setting this is only
+            appropriate for UI where the user would likely take action to uncover it.
+            <p>The system will try to respect this, but when not possible will ignore it.
+            See {@link android.view.View#setPreferKeepClear}. -->
+        <attr name="preferKeepClear" format="boolean" />
     </declare-styleable>
 
     <!-- Attributes that can be assigned to a tag for a particular View. -->
@@ -5030,6 +5038,10 @@
         <attr name="fontFeatureSettings" format="string" />
         <!-- Font variation settings. -->
         <attr name="fontVariationSettings" format="string"/>
+        <!-- Specifies the strictness of line-breaking rules applied within an element. -->
+        <attr name="lineBreakStyle" />
+        <!-- Specifies the phrase-based breaking opportunities. -->
+        <attr name="lineBreakWordStyle" />
     </declare-styleable>
     <declare-styleable name="TextClock">
         <!-- Specifies the formatting pattern used to show the time and/or date
@@ -5427,6 +5439,13 @@
             <enum name="normal" value="2" />
             <!-- ndicates breaking text with the most strictest line-breaking rules. -->
             <enum name="strict" value="3" />
+        </attr>
+        <!-- Specify the phrase-based line break can be used when calculating the text wrapping.-->
+        <attr name="lineBreakWordStyle">
+            <!-- No line break word style specific. -->
+            <enum name="none" value="0" />
+            <!-- Specify the phrase based breaking. -->
+            <enum name="phrase" value="1" />
         </attr>
         <!-- Specify the type of auto-size. Note that this feature is not supported by EditText,
         works only for TextView. -->
@@ -9376,11 +9395,12 @@
         <attr name="canPauseRecording" format="boolean" />
     </declare-styleable>
 
-    <!-- Use <code>tv-iapp</code> as the root tag of the XML resource that describes a
-         {@link android.media.tv.interactive.TvIAppService}, which is referenced from its
-         {@link android.media.tv.interactive.TvIAppService#SERVICE_META_DATA} meta-data entry.
-         Described here are the attributes that can be included in that tag. -->
-    <declare-styleable name="TvIAppService">
+    <!-- Use <code>tv-interactive-app</code> as the root tag of the XML resource that describes a
+         {@link android.media.tv.interactive.TvInteractiveAppService}, which is referenced
+         from its
+         {@link android.media.tv.interactive.TvInteractiveAppService#SERVICE_META_DATA}
+         meta-data entry. Described here are the attributes that can be included in that tag. -->
+    <declare-styleable name="TvInteractiveAppService">
         <!-- The interactive app types that the TV interactive app service supports.
              Reference to a string array resource that describes the supported types,
              e.g. HbbTv, Ginga. -->

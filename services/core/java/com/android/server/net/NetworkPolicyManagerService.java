@@ -24,7 +24,6 @@ import static android.Manifest.permission.MANAGE_SUBSCRIPTION_PLANS;
 import static android.Manifest.permission.NETWORK_SETTINGS;
 import static android.Manifest.permission.NETWORK_STACK;
 import static android.Manifest.permission.OBSERVE_NETWORK_POLICY;
-import static android.Manifest.permission.READ_NETWORK_USAGE_HISTORY;
 import static android.Manifest.permission.READ_PHONE_STATE;
 import static android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE;
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
@@ -63,7 +62,6 @@ import static android.net.INetd.FIREWALL_RULE_DENY;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
-import static android.net.NetworkIdentity.OEM_NONE;
 import static android.net.NetworkPolicy.LIMIT_DISABLED;
 import static android.net.NetworkPolicy.SNOOZE_NEVER;
 import static android.net.NetworkPolicy.WARNING_DISABLED;
@@ -131,7 +129,6 @@ import static com.android.internal.util.XmlUtils.writeIntAttribute;
 import static com.android.internal.util.XmlUtils.writeLongAttribute;
 import static com.android.internal.util.XmlUtils.writeStringAttribute;
 import static com.android.net.module.util.NetworkStatsUtils.LIMIT_GLOBAL_ALERT;
-import static com.android.server.net.NetworkStatsService.ACTION_NETWORK_STATS_UPDATED;
 
 import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
 import static org.xmlpull.v1.XmlPullParser.END_TAG;
@@ -1011,10 +1008,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             userFilter.addAction(ACTION_USER_REMOVED);
             mContext.registerReceiver(mUserReceiver, userFilter, null, mHandler);
 
-            // listen for stats update events
-            final IntentFilter statsFilter = new IntentFilter(ACTION_NETWORK_STATS_UPDATED);
-            mContext.registerReceiver(
-                    mStatsReceiver, statsFilter, READ_NETWORK_USAGE_HISTORY, mHandler);
+            // listen for stats updated callbacks for interested network types.
+            mNetworkStats.registerUsageCallback(new NetworkTemplate.Builder(MATCH_MOBILE).build(),
+                    0 /* thresholdBytes */, new HandlerExecutor(mHandler), mStatsCallback);
+            mNetworkStats.registerUsageCallback(new NetworkTemplate.Builder(MATCH_WIFI).build(),
+                    0 /* thresholdBytes */, new HandlerExecutor(mHandler), mStatsCallback);
 
             // Listen for snooze from notifications
             mContext.registerReceiver(mSnoozeReceiver,
@@ -1215,19 +1213,16 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     };
 
     /**
-     * Receiver that watches for {@link NetworkStatsManager} updates, which we
-     * use to check against {@link NetworkPolicy#warningBytes}.
+     * Listener that watches for {@link NetworkStatsManager} updates, which
+     * NetworkPolicyManagerService uses to check against {@link NetworkPolicy#warningBytes}.
      */
-    private final NetworkStatsBroadcastReceiver mStatsReceiver =
-            new NetworkStatsBroadcastReceiver();
-    private class NetworkStatsBroadcastReceiver extends BroadcastReceiver {
-        private boolean mIsAnyIntentReceived = false;
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            // on background handler thread, and verified
-            // READ_NETWORK_USAGE_HISTORY permission above.
+    private final StatsCallback mStatsCallback = new StatsCallback();
+    private class StatsCallback extends NetworkStatsManager.UsageCallback {
+        private boolean mIsAnyCallbackReceived = false;
 
-            mIsAnyIntentReceived = true;
+        @Override
+        public void onThresholdReached(int networkType, String subscriberId) {
+            mIsAnyCallbackReceived = true;
 
             synchronized (mNetworkPoliciesSecondLock) {
                 updateNetworkRulesNL();
@@ -1237,11 +1232,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
 
         /**
-         * Return whether any {@code ACTION_NETWORK_STATS_UPDATED} intent is received.
+         * Return whether any callback is received.
          * Used to determine if NetworkStatsService is ready.
          */
-        public boolean isAnyIntentReceived() {
-            return mIsAnyIntentReceived;
+        public boolean isAnyCallbackReceived() {
+            return mIsAnyCallbackReceived;
         }
     };
 
@@ -1454,7 +1449,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
         // Skip if not ready. NetworkStatsService will block public API calls until it is
         // ready. To prevent NPMS be blocked on that, skip and fail fast instead.
-        if (!mStatsReceiver.isAnyIntentReceived()) return null;
+        if (!mStatsCallback.isAnyCallbackReceived()) return null;
 
         final List<NetworkStats.Bucket> stats = mDeps.getNetworkUidBytes(template, start, end);
         for (final NetworkStats.Bucket entry : stats) {
@@ -1498,13 +1493,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         for (int i = 0; i < mSubIdToSubscriberId.size(); i++) {
             final int subId = mSubIdToSubscriberId.keyAt(i);
             final String subscriberId = mSubIdToSubscriberId.valueAt(i);
-            final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
-                    TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true,
-                    true, OEM_NONE);
-            /* While OEM_NONE indicates "any non OEM managed network", OEM_NONE is meant to be a
-             * placeholder value here. The probeIdent is matched against a NetworkTemplate which
-             * should have its OEM managed value set to OEM_MANAGED_ALL, which will cause the
-             * template to match probeIdent without regard to OEM managed status. */
+            final NetworkIdentity probeIdent = new NetworkIdentity.Builder()
+                    .setType(TYPE_MOBILE)
+                    .setSubscriberId(subscriberId)
+                    .setMetered(true)
+                    .setDefaultNetwork(true).build();
             if (template.matches(probeIdent)) {
                 return subId;
             }
@@ -1737,9 +1730,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
         // find and update the carrier NetworkPolicy for this subscriber id
         boolean policyUpdated = false;
-        final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
-                TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true, true,
-                OEM_NONE);
+        final NetworkIdentity probeIdent = new NetworkIdentity.Builder()
+                .setType(TYPE_MOBILE)
+                .setSubscriberId(subscriberId)
+                .setMetered(true)
+                .setDefaultNetwork(true).build();
         for (int i = mNetworkPolicy.size() - 1; i >= 0; i--) {
             final NetworkTemplate template = mNetworkPolicy.keyAt(i);
             if (template.matches(probeIdent)) {
@@ -1967,10 +1962,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 for (int i = 0; i < mSubIdToSubscriberId.size(); i++) {
                     final int subId = mSubIdToSubscriberId.keyAt(i);
                     final String subscriberId = mSubIdToSubscriberId.valueAt(i);
-
-                    final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
-                            TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true,
-                            true, OEM_NONE);
+                    final NetworkIdentity probeIdent = new NetworkIdentity.Builder()
+                            .setType(TYPE_MOBILE)
+                            .setSubscriberId(subscriberId)
+                            .setMetered(true)
+                            .setDefaultNetwork(true).build();
                     // Template is matched when subscriber id matches.
                     if (template.matches(probeIdent)) {
                         matchingSubIds.add(subId);
@@ -2074,11 +2070,9 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         for (final NetworkStateSnapshot snapshot : snapshots) {
             mNetIdToSubId.put(snapshot.getNetwork().getNetId(), parseSubId(snapshot));
 
-            // Policies matched by NPMS only match by subscriber ID or by network ID. Thus subtype
-            // in the object created here is never used and its value doesn't matter, so use
-            // NETWORK_TYPE_UNKNOWN.
-            final NetworkIdentity ident = NetworkIdentity.buildNetworkIdentity(mContext, snapshot,
-                    true, TelephonyManager.NETWORK_TYPE_UNKNOWN /* subType */);
+            // Policies matched by NPMS only match by subscriber ID or by network ID.
+            final NetworkIdentity ident = new NetworkIdentity.Builder()
+                    .setNetworkStateSnapshot(snapshot).setDefaultNetwork(true).build();
             identified.put(snapshot, ident);
         }
 
@@ -2275,9 +2269,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     @GuardedBy("mNetworkPoliciesSecondLock")
     private boolean ensureActiveCarrierPolicyAL(int subId, String subscriberId) {
         // Poke around to see if we already have a policy
-        final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
-                TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true, true,
-                OEM_NONE);
+        final NetworkIdentity probeIdent = new NetworkIdentity.Builder()
+                .setType(TYPE_MOBILE)
+                .setSubscriberId(subscriberId)
+                .setMetered(true)
+                .setDefaultNetwork(true).build();
         for (int i = mNetworkPolicy.size() - 1; i >= 0; i--) {
             final NetworkTemplate template = mNetworkPolicy.keyAt(i);
             if (template.matches(probeIdent)) {
@@ -2687,7 +2683,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         final List<WifiConfiguration> configs = wm.getConfiguredNetworks();
         for (int i = 0; i < configs.size(); ++i) {
             final WifiConfiguration config = configs.get(i);
-            for (String key : config.getAllPersistableNetworkKeys()) {
+            for (String key : config.getAllNetworkKeys()) {
                 final Boolean metered = wifiNetworkKeys.get(key);
                 if (metered != null) {
                     Slog.d(TAG, "Found network " + key + "; upgrading metered hint");
@@ -3452,7 +3448,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      * {@link NetworkStatsProvider#onSetWarningAndLimit(String, long, long)}.
      */
     @Override
-    public void onStatsProviderWarningOrLimitReached() {
+    public void notifyStatsProviderWarningOrLimitReached() {
         enforceAnyPermissionOf(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
         // This API may be called before the system is ready.
         synchronized (mNetworkPoliciesSecondLock) {
@@ -5078,7 +5074,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     // make sure stats are recorded frequently enough; we aim
                     // for 2MB threshold for 2GB/month rules.
                     final long persistThreshold = lowestRule / 1000;
-                    mNetworkStats.advisePersistThreshold(persistThreshold);
+                    // TODO: Sync internal naming with the API surface.
+                    mNetworkStats.setDefaultGlobalAlert(persistThreshold);
                     return true;
                 }
                 case MSG_UPDATE_INTERFACE_QUOTAS: {
@@ -5449,7 +5446,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private long getTotalBytes(NetworkTemplate template, long start, long end) {
         // Skip if not ready. NetworkStatsService will block public API calls until it is
         // ready. To prevent NPMS be blocked on that, skip and fail fast instead.
-        if (!mStatsReceiver.isAnyIntentReceived()) return 0;
+        if (!mStatsCallback.isAnyCallbackReceived()) return 0;
         return mDeps.getNetworkTotalBytes(template, start, end);
     }
 

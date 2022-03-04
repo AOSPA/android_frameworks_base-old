@@ -296,6 +296,7 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.CLIPBOARD_SHOW_ACCESS_NOTIFICATIONS, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.NOTIFICATION_BUBBLES, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.LOCATION_TIME_ZONE_DETECTION_ENABLED, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.LOCATION_SHOW_SYSTEM_OPS, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.DEVICE_STATE_ROTATION_LOCK, value -> {
             if (TextUtils.isEmpty(value)) {
                 return true;
@@ -324,6 +325,7 @@ public class SecureSettingsValidators {
             return true;
         });
         VALIDATORS.put(Secure.ODI_CAPTIONS_VOLUME_UI_ENABLED, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.FAST_PAIR_SCAN_ENABLED, BOOLEAN_VALIDATOR);
 
     }
 }

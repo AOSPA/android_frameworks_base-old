@@ -523,6 +523,8 @@
     <string name="twilight_service">Twilight Service</string>
     <!-- Attribution for Gnss Time Update service. [CHAR LIMIT=NONE]-->
     <string name="gnss_time_update_service">GNSS Time Update Service</string>
+    <!-- Attribution for Device Policy Manager service. [CHAR LIMIT=NONE]-->
+    <string name="device_policy_manager_service">Device Policy Manager Service</string>
 
     <!-- Attribution for MusicRecognitionManagerService. [CHAR LIMIT=NONE]-->
     <string name="music_recognition_manager_service">Music Recognition Manager Service</string>
@@ -3278,6 +3280,11 @@
 
     <!-- Title for EditText context menu [CHAR LIMIT=20] -->
     <string name="editTextMenuTitle">Text actions</string>
+
+    <!-- Content description of the back button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="input_method_nav_back_button_desc">Back</string>
+    <!-- Content description of the switch input method button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="input_method_ime_switch_button_desc">Switch input method</string>
 
     <!-- If the device is getting low on internal storage, a notification is shown to the user.  This is the title of that notification. -->
     <string name="low_internal_storage_view_title">Storage space running out</string>

@@ -255,7 +255,8 @@ public class AudioSystem
             AUDIO_FORMAT_SBC,
             AUDIO_FORMAT_APTX,
             AUDIO_FORMAT_APTX_HD,
-            AUDIO_FORMAT_LDAC}
+            AUDIO_FORMAT_LDAC,
+            AUDIO_FORMAT_LC3}
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface AudioFormatNativeEnumForBtCodec {}
@@ -292,8 +293,7 @@ public class AudioSystem
                      return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_ADAPTIVE;
             case AUDIO_FORMAT_APTX_TWSP:
                      return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_TWSP;
-            case AUDIO_FORMAT_LC3:
-                     return BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3;
+            case AUDIO_FORMAT_LC3: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3;
             default:
                 Log.e(TAG, "Unknown audio format 0x" + Integer.toHexString(audioFormat)
                         + " for conversion to BT codec");
@@ -1006,6 +1006,8 @@ public class AudioSystem
     public static final int DEVICE_OUT_BLE_HEADSET = 0x20000000;
     /** @hide */
     public static final int DEVICE_OUT_BLE_SPEAKER = 0x20000001;
+    /** @hide */
+    public static final int DEVICE_OUT_BLE_BROADCAST = 0x20000002;
 
     /** @hide */
     public static final int DEVICE_OUT_DEFAULT = DEVICE_BIT_DEFAULT;
@@ -1066,6 +1068,7 @@ public class AudioSystem
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_ECHO_CANCELLER);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_BLE_HEADSET);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_BLE_SPEAKER);
+        DEVICE_OUT_ALL_SET.add(DEVICE_OUT_BLE_BROADCAST);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_DEFAULT);
 
         DEVICE_OUT_ALL_A2DP_SET = new HashSet<>();
@@ -1096,6 +1099,7 @@ public class AudioSystem
         DEVICE_OUT_ALL_BLE_SET = new HashSet<>();
         DEVICE_OUT_ALL_BLE_SET.add(DEVICE_OUT_BLE_HEADSET);
         DEVICE_OUT_ALL_BLE_SET.add(DEVICE_OUT_BLE_SPEAKER);
+        DEVICE_OUT_ALL_BLE_SET.add(DEVICE_OUT_BLE_BROADCAST);
     }
 
     // input devices
@@ -1279,6 +1283,7 @@ public class AudioSystem
     /** @hide */ public static final String DEVICE_OUT_ECHO_CANCELLER_NAME = "echo_canceller";
     /** @hide */ public static final String DEVICE_OUT_BLE_HEADSET_NAME = "ble_headset";
     /** @hide */ public static final String DEVICE_OUT_BLE_SPEAKER_NAME = "ble_speaker";
+    /** @hide */ public static final String DEVICE_OUT_BLE_BROADCAST_NAME = "ble_broadcast";
 
     /** @hide */ public static final String DEVICE_IN_COMMUNICATION_NAME = "communication";
     /** @hide */ public static final String DEVICE_IN_AMBIENT_NAME = "ambient";
@@ -1378,6 +1383,8 @@ public class AudioSystem
             return DEVICE_OUT_BLE_HEADSET_NAME;
         case DEVICE_OUT_BLE_SPEAKER:
             return DEVICE_OUT_BLE_SPEAKER_NAME;
+        case DEVICE_OUT_BLE_BROADCAST:
+            return DEVICE_OUT_BLE_BROADCAST_NAME;
         case DEVICE_OUT_DEFAULT:
         default:
             return "0x" + Integer.toHexString(device);

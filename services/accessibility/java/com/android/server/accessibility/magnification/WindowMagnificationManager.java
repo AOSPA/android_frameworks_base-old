@@ -318,6 +318,26 @@ public class WindowMagnificationManager implements
         mMagnificationFollowTypingEnabled = enabled;
     }
 
+    boolean isMagnificationFollowTypingEnabled() {
+        return mMagnificationFollowTypingEnabled;
+    }
+
+    /**
+     * Get the ID of the last service that changed the magnification config.
+     *
+     * @param displayId The logical display id.
+     * @return The id
+     */
+    public int getIdOfLastServiceToMagnify(int displayId) {
+        synchronized (mLock) {
+            final WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
+            if (magnifier != null) {
+                return magnifier.mIdOfLastServiceToControl;
+            }
+        }
+        return INVALID_SERVICE_ID;
+    }
+
     /**
      * Enable or disable tracking typing focus for the specific magnification window.
      *
@@ -466,6 +486,7 @@ public class WindowMagnificationManager implements
         boolean previousEnabled;
         synchronized (mLock) {
             if (mConnectionWrapper == null) {
+                Slog.w(TAG, "enableWindowMagnification failed: connection null");
                 return false;
             }
             WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
@@ -508,6 +529,7 @@ public class WindowMagnificationManager implements
         synchronized (mLock) {
             WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
             if (magnifier == null || mConnectionWrapper == null) {
+                Slog.w(TAG, "disableWindowMagnification failed: connection " + mConnectionWrapper);
                 return false;
             }
             disabled = magnifier.disableWindowMagnificationInternal(animationCallback);

@@ -592,7 +592,11 @@ public abstract class TvInputService extends Service {
             });
         }
 
-        /** @hide */
+        /**
+         * Informs the application that this session has been tuned to the given channel.
+         *
+         * @param channelUri The URI of the tuned channel.
+         */
         public void notifyTuned(@NonNull Uri channelUri) {
             executeOrPostRunnableOnMainThread(new Runnable() {
                 @MainThread
@@ -945,8 +949,13 @@ public abstract class TvInputService extends Service {
         }
 
         /**
-         * Notifies AIT info updated.
-         * @hide
+         * Informs the app that the AIT (Application Information Table) is updated.
+         *
+         * <p>This method should also be called when
+         * {@link #onSetInteractiveAppNotificationEnabled(boolean)} is called to send the first AIT
+         * info.
+         *
+         * @see #onSetInteractiveAppNotificationEnabled(boolean)
          */
         public void notifyAitInfoUpdated(@NonNull final AitInfo aitInfo) {
             executeOrPostRunnableOnMainThread(new Runnable() {
@@ -1198,8 +1207,16 @@ public abstract class TvInputService extends Service {
 
         /**
          * Enables or disables interactive app notification.
+         *
+         * <p>This method enables or disables the event detection from the corresponding TV input.
+         * When it's enabled, the TV input service detects events related to interactive app, such
+         * as AIT (Application Information Table) and sends to TvView or the linked TV interactive
+         * app service.
+         *
          * @param enabled {@code true} to enable, {@code false} to disable.
-         * @hide
+         *
+         * @see TvView#setInteractiveAppNotificationEnabled(boolean)
+         * @see Session#notifyAitInfoUpdated(android.media.tv.AitInfo)
          */
         public void onSetInteractiveAppNotificationEnabled(boolean enabled) {
         }

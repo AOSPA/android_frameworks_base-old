@@ -74,7 +74,6 @@ import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityTaskSupervisor.dumpHistoryList;
 import static com.android.server.wm.ActivityTaskSupervisor.printThisActivity;
 import static com.android.server.wm.KeyguardController.KEYGUARD_SLEEP_TOKEN_TAG;
-import static com.android.server.wm.RootWindowContainerProto.DEFAULT_MIN_SIZE_RESIZABLE_TASK;
 import static com.android.server.wm.RootWindowContainerProto.IS_HOME_RECENTS_COMPONENT;
 import static com.android.server.wm.RootWindowContainerProto.KEYGUARD_CONTROLLER;
 import static com.android.server.wm.RootWindowContainerProto.WINDOW_CONTAINER;
@@ -112,7 +111,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerInternal;
@@ -136,7 +134,6 @@ import android.service.voice.IVoiceInteractionSession;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.BoostFramework;
-import android.util.DisplayMetrics;
 import android.util.IntArray;
 import android.util.Pair;
 import android.util.Slog;
@@ -167,6 +164,7 @@ import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -994,6 +992,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         forAllDisplays(dc -> {
             dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
             dc.updateSystemGestureExclusion();
+            dc.updateKeepClearAreas();
             dc.updateTouchExcludeRegion();
         });
 
@@ -1226,11 +1225,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         pw.println(mTopFocusedDisplayId);
     }
 
-    void dumpDefaultMinSizeOfResizableTask(PrintWriter pw) {
-        pw.print("  mDefaultMinSizeOfResizeableTaskDp=");
-        pw.println(mDefaultMinSizeOfResizeableTaskDp);
-    }
-
     void dumpLayoutNeededDisplayIds(PrintWriter pw) {
         if (!isLayoutNeeded()) {
             return;
@@ -1277,7 +1271,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mTaskSupervisor.getKeyguardController().dumpDebug(proto, KEYGUARD_CONTROLLER);
         proto.write(IS_HOME_RECENTS_COMPONENT,
                 mTaskSupervisor.mRecentTasks.isRecentsComponentHomeActivity(mCurrentUser));
-        proto.write(DEFAULT_MIN_SIZE_RESIZABLE_TASK, mDefaultMinSizeOfResizeableTaskDp);
         proto.end(token);
     }
 
@@ -1365,7 +1358,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 mDefaultDisplay = displayContent;
             }
         }
-        calculateDefaultMinimalSizeOfResizeableTasks();
 
         final TaskDisplayArea defaultTaskDisplayArea = getDefaultTaskDisplayArea();
         defaultTaskDisplayArea.getOrCreateRootHomeTask(ON_TOP);
@@ -2638,7 +2630,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // Drop any cached DisplayInfos associated with this display id - the values are now
             // out of date given this display changed event.
             mWmService.mPossibleDisplayInfoMapper.removePossibleDisplayInfos(displayId);
+            updateDisplayImePolicyCache();
         }
+    }
+
+    void updateDisplayImePolicyCache() {
+        ArrayMap<Integer, Integer> displayImePolicyMap = new ArrayMap<>();
+        forAllDisplays(dc -> displayImePolicyMap.put(dc.getDisplayId(), dc.getImePolicy()));
+        mWmService.mDisplayImePolicyCache = Collections.unmodifiableMap(displayImePolicyMap);
     }
 
     /** Update lists of UIDs that are present on displays and have access to them. */
@@ -3576,17 +3575,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mService.startLaunchPowerMode(reason);
     }
 
-    // TODO(b/191434136): handle this properly when we add multi-window support on secondary
-    //  display.
-    private void calculateDefaultMinimalSizeOfResizeableTasks() {
-        final Resources res = mService.mContext.getResources();
-        final float minimalSize = res.getDimension(
-                com.android.internal.R.dimen.default_minimal_size_resizable_task);
-        final DisplayMetrics dm = res.getDisplayMetrics();
-
-        mDefaultMinSizeOfResizeableTaskDp = (int) (minimalSize / dm.density);
-    }
-
     /**
      * Dumps the activities matching the given {@param name} in the either the focused root task
      * or all visible root tasks if {@param dumpVisibleRootTasksOnly} is true.
@@ -3773,7 +3761,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
             try {
                 if (mTaskSupervisor.realStartActivityLocked(r, mApp,
-                        mTop == r && r.isFocusable() /* andResume */, true /* checkConfig */)) {
+                        mTop == r && r.getTask().canBeResumed(r) /* andResume */,
+                        true /* checkConfig */)) {
                     mHasActivityStarted = true;
                 }
             } catch (RemoteException e) {

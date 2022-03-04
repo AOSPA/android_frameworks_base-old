@@ -95,6 +95,7 @@ import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
 import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
+import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.COLOR_MODE_DEFAULT;
@@ -647,7 +648,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private boolean mOccludesParent;
 
     // The input dispatching timeout for this application token in milliseconds.
-    long mInputDispatchingTimeoutMillis;
+    long mInputDispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 
     private boolean mShowWhenLocked;
     private boolean mInheritShownWhenLocked;
@@ -1455,7 +1456,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (oldParent == null && newParent != null) {
             // First time we are adding the activity to the system.
             mVoiceInteraction = newTask.voiceSession != null;
-            mInputDispatchingTimeoutMillis = getInputDispatchingTimeoutMillisLocked(this);
 
             // TODO(b/36505427): Maybe this call should be moved inside
             // updateOverrideConfiguration()
@@ -2013,6 +2013,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             task.setRootProcess(proc);
         }
         proc.addActivityIfNeeded(this);
+        mInputDispatchingTimeoutMillis = getInputDispatchingTimeoutMillisLocked(this);
 
         // Update the associated task fragment after setting the process, since it's required for
         // filtering to only report activities that belong to the same process.
@@ -2783,9 +2784,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     boolean isResizeable() {
+        return isResizeable(/* checkPictureInPictureSupport */ true);
+    }
+
+    boolean isResizeable(boolean checkPictureInPictureSupport) {
         return mAtmService.mForceResizableActivities
                 || ActivityInfo.isResizeableMode(info.resizeMode)
-                || info.supportsPictureInPicture()
+                || (info.supportsPictureInPicture() && checkPictureInPictureSupport)
                 // If the activity can be embedded, it should inherit the bounds of task fragment.
                 || isEmbedded();
     }
@@ -3601,6 +3606,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             app.removeActivity(this, false /* keepAssociation */);
         }
         app = null;
+        mInputDispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
     }
 
     void makeFinishingLocked() {
@@ -7484,12 +7490,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @VisibleForTesting
     void clearSizeCompatMode() {
+        final float lastSizeCompatScale = mSizeCompatScale;
         mInSizeCompatModeForBounds = false;
         mSizeCompatScale = 1f;
         mSizeCompatBounds = null;
         mCompatDisplayInsets = null;
+        if (mSizeCompatScale != lastSizeCompatScale) {
+            forAllWindows(WindowState::updateGlobalScale, false /* traverseTopToBottom */);
+        }
 
-        onRequestedOverrideConfigurationChanged(getRequestedOverrideConfiguration());
+        // Clear config override in #updateCompatDisplayInsets().
+        onRequestedOverrideConfigurationChanged(EMPTY);
     }
 
     @Override
@@ -7804,10 +7815,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // orientation with insets applied.
             return;
         }
-        // Activity should be resizable if the task is.
+        // Not using Task#isResizeable() or ActivityRecord#isResizeable() directly because app
+        // compatibility testing showed that android:supportsPictureInPicture="true" alone is not
+        // sufficient signal for not letterboxing an app.
+        // TODO(214602463): Remove multi-window check since orientation and aspect ratio
+        // restrictions should always be applied in multi-window.
         final boolean isResizeable = task != null
-                ? task.isResizeable() || isResizeable()
-                : isResizeable();
+                // Activity should be resizable if the task is.
+                ? task.isResizeable(/* checkPictureInPictureSupport */ false)
+                        || isResizeable(/* checkPictureInPictureSupport */ false)
+                : isResizeable(/* checkPictureInPictureSupport */ false);
         if (WindowConfiguration.inMultiWindowMode(windowingMode) && isResizeable) {
             // Ignore orientation request for resizable apps in multi window.
             return;
@@ -8038,6 +8055,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final int contentH = resolvedAppBounds.height();
         final int viewportW = containerAppBounds.width();
         final int viewportH = containerAppBounds.height();
+        final float lastSizeCompatScale = mSizeCompatScale;
         // Only allow to scale down.
         mSizeCompatScale = (contentW <= viewportW && contentH <= viewportH)
                 ? 1f : Math.min((float) viewportW / contentW, (float) viewportH / contentH);
@@ -8055,6 +8073,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             mSizeCompatBounds.bottom += containerTopInset;
         } else {
             mSizeCompatBounds = null;
+        }
+        if (mSizeCompatScale != lastSizeCompatScale) {
+            forAllWindows(WindowState::updateGlobalScale, false /* traverseTopToBottom */);
         }
 
         // Vertically center within parent (bounds) - this is a UX choice and exclude the horizontal
@@ -8323,8 +8344,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final float maxAspectRatio = info.getMaxAspectRatio();
         final Task rootTask = getRootTask();
         final float minAspectRatio = getMinAspectRatio();
+        // Not using ActivityRecord#isResizeable() directly because app compatibility testing
+        // showed that android:supportsPictureInPicture="true" alone is not sufficient signal for
+        // not letterboxing an app.
+        // TODO(214602463): Remove multi-window check since orientation and aspect ratio
+        // restrictions should always be applied in multi-window.
         if (task == null || rootTask == null
-                || (inMultiWindowMode() && !shouldCreateCompatDisplayInsets()
+                || (inMultiWindowMode() && isResizeable(/* checkPictureInPictureSupport */ false)
                 && !fixedOrientationLetterboxed)
                 || (maxAspectRatio < 1 && minAspectRatio < 1 && desiredAspectRatio < 1)
                 || isInVrUiMode(getConfiguration())) {
