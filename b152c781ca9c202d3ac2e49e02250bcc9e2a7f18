@@ -16,6 +16,24 @@
       "message": "this isn\u0027t a thing we\u0027re used to allow users handle.",
       "revId": "b152c781ca9c202d3ac2e49e02250bcc9e2a7f18",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "afcbebf8_02120f16",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000760
+      },
+      "writtenOn": "2022-03-04T14:14:10Z",
+      "side": 1,
+      "message": "\u003e this isn\u0027t a thing we\u0027re used to allow users handle.\n\nhttps://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/21040\n\nhave a look at the comments mate",
+      "parentUuid": "5f343493_e6d27e96",
+      "revId": "b152c781ca9c202d3ac2e49e02250bcc9e2a7f18",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
