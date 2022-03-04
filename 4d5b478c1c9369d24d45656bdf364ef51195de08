@@ -16,6 +16,24 @@
       "message": "Invert this if check and it will be clean",
       "revId": "4d5b478c1c9369d24d45656bdf364ef51195de08",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3951d2a6_48871760",
+        "filename": "packages/SystemUI/src/com/android/systemui/doze/DozeSensors.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 214,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-03-04T06:58:53Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "eaeb4208_5e776ca2",
+      "revId": "4d5b478c1c9369d24d45656bdf364ef51195de08",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
