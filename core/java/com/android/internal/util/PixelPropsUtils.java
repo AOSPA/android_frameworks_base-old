@@ -41,9 +41,8 @@ public class PixelPropsUtils {
     private static final String[] extraPackagesToChange = {
         "com.android.chrome"
     };
-    private static final String[] packagesToChangeP5 = {
-        "com.google.android.tts",
-        "com.google.android.googlequicksearchbox"
+    private static final String[] packagesToChangeP6 = {
+        "com.google.android.gms"
     };
     private static final String[] packagesToChangeP1 = {
          "com.google.android.apps.photos"
@@ -95,12 +94,12 @@ public class PixelPropsUtils {
         if ((packageName.startsWith("com.google.") && !Arrays.asList(packagesToKeep).contains(packageName))
                 || Arrays.asList(extraPackagesToChange).contains(packageName)) {
             if (DEBUG) Log.d(TAG, "Defining props for: " + packageName);
-            if (Arrays.asList(packagesToChangeP5).contains(packageName)) {
-                propsToChange.putAll(propsToChangeP5);
+            if (Arrays.asList(packagesToChangeP6).contains(packageName)) {
+                propsToChange.putAll(propsToChangeP6);
             } else if (Arrays.asList(packagesToChangeP1).contains(packageName)) {
                 propsToChange.putAll(propsToChangeP1);
             } else {
-                propsToChange.putAll(propsToChangeP6);
+                propsToChange.putAll(propsToChangeP5);
             }
             for (Map.Entry<String, Object> prop : propsToChange.entrySet()) {
                 String key = prop.getKey();
