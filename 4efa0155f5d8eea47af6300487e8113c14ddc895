@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e9808896_0af0c898",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000062
+      },
+      "writtenOn": "2022-03-04T05:25:11Z",
+      "side": 1,
+      "message": "I get the security aspect of this, but imho this is annoying as hell.\n\nI\u0027d prefer having this as an option.",
+      "revId": "4efa0155f5d8eea47af6300487e8113c14ddc895",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
