@@ -323,7 +323,7 @@ public class BrightnessController implements ToggleSlider.Listener {
         mAutomaticAvailable = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_automatic_brightness_available);
         mBrightnessRampRate = mContext.getResources().getFloat(
-                com.android.internal.R.dimen.config_brightnessRampRateFastFloat);
+                com.android.internal.R.dimen.config_brightness_ramp_rate_fast);
 
         if (mIcon != null) {
             if (mAutomaticAvailable) {
