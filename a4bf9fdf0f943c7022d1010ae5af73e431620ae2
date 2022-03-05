@@ -16,6 +16,23 @@
       "message": "cts fail",
       "revId": "a4bf9fdf0f943c7022d1010ae5af73e431620ae2",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c21f3405_ac70d0d3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000101
+      },
+      "writtenOn": "2022-03-05T08:50:56Z",
+      "side": 1,
+      "message": "RIP Safetynet",
+      "revId": "a4bf9fdf0f943c7022d1010ae5af73e431620ae2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
