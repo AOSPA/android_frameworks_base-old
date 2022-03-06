@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "cf9dc6cb_e3b2852c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000650
+      },
+      "writtenOn": "2022-03-06T14:06:52Z",
+      "side": 1,
+      "message": "https://github.com/GrapheneOS/platform_packages_modules_Permission/commit/d02222d6ad032a12d0431de632bcf16fedd97cd0 this not needed with this?",
+      "revId": "4e34ce484b38c7cefcca9c0d9a47733cb035ba80",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
