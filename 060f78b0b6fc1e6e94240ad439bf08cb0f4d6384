@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "03ef4b00_abe9da0f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-03-06T04:37:37Z",
+      "side": 1,
+      "message": "let\u0027s fix builds until we find a proper solution for it ",
+      "revId": "060f78b0b6fc1e6e94240ad439bf08cb0f4d6384",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
