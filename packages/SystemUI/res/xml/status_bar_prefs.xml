@@ -94,9 +94,9 @@
         android:icon="@drawable/ic_statusbar_airplane" />
 
     <com.android.systemui.tuner.StatusBarSwitch
+        android:icon="@drawable/ic_statusbar_roaming"
         android:key="roaming"
-        android:title="@string/status_bar_roaming"
-        android:icon="@drawable/ic_statusbar_roaming" />
+        android:title="@string/status_bar_roaming" />
 
     <com.android.systemui.tuner.StatusBarSwitch
         android:key="vpn"
