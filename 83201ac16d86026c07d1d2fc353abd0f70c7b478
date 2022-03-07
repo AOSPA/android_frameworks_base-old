@@ -16,6 +16,24 @@
       "message": "is cts fine on latest patch?",
       "revId": "83201ac16d86026c07d1d2fc353abd0f70c7b478",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "17cb5caf_b835876f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-03-07T13:38:16Z",
+      "side": 1,
+      "message": "yes",
+      "parentUuid": "459d9d78_af223b15",
+      "revId": "83201ac16d86026c07d1d2fc353abd0f70c7b478",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
