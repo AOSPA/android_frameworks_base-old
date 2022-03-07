@@ -571,6 +571,31 @@ public abstract class AccessibilityService extends Service {
      */
     public static final int GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE = 15;
 
+    /**
+     * Action to trigger dpad up keyevent.
+     */
+    public static final int GLOBAL_ACTION_DPAD_UP = 16;
+
+    /**
+     * Action to trigger dpad down keyevent.
+     */
+    public static final int GLOBAL_ACTION_DPAD_DOWN = 17;
+
+    /**
+     * Action to trigger dpad left keyevent.
+     */
+    public static final int GLOBAL_ACTION_DPAD_LEFT = 18;
+
+    /**
+     * Action to trigger dpad right keyevent.
+     */
+    public static final int GLOBAL_ACTION_DPAD_RIGHT = 19;
+
+    /**
+     * Action to trigger dpad center keyevent.
+     */
+    public static final int GLOBAL_ACTION_DPAD_CENTER = 20;
+
     private static final String LOG_TAG = "AccessibilityService";
 
     /**
@@ -1400,7 +1425,9 @@ public abstract class AccessibilityService extends Service {
          * </p>
          *
          * @return the current magnification scale
+         * @deprecated Use {@link #getMagnificationConfig()} instead
          */
+        @Deprecated
         public float getScale() {
             final IAccessibilityServiceConnection connection =
                     AccessibilityInteractionClient.getInstance(mService).getConnection(
@@ -1435,7 +1462,9 @@ public abstract class AccessibilityService extends Service {
          *
          * @return the unscaled screen-relative X coordinate of the center of
          *         the magnified region
+         * @deprecated Use {@link #getMagnificationConfig()} instead
          */
+        @Deprecated
         public float getCenterX() {
             final IAccessibilityServiceConnection connection =
                     AccessibilityInteractionClient.getInstance(mService).getConnection(
@@ -1470,7 +1499,9 @@ public abstract class AccessibilityService extends Service {
          *
          * @return the unscaled screen-relative Y coordinate of the center of
          *         the magnified region
+         * @deprecated Use {@link #getMagnificationConfig()} instead
          */
+        @Deprecated
         public float getCenterY() {
             final IAccessibilityServiceConnection connection =
                     AccessibilityInteractionClient.getInstance(mService).getConnection(
@@ -1509,7 +1540,9 @@ public abstract class AccessibilityService extends Service {
          *
          * @return the region of the screen currently active for magnification, or an empty region
          * if magnification is not active.
+         * @deprecated Use {@link #getCurrentMagnificationRegion()} instead
          */
+        @Deprecated
         @NonNull
         public Region getMagnificationRegion() {
             final IAccessibilityServiceConnection connection =
@@ -1677,7 +1710,9 @@ public abstract class AccessibilityService extends Service {
          * @param animate {@code true} to animate from the current scale or
          *                {@code false} to set the scale immediately
          * @return {@code true} on success, {@code false} on failure
+         * @deprecated Use {@link #setMagnificationConfig(MagnificationConfig, boolean)} instead
          */
+        @Deprecated
         public boolean setScale(float scale, boolean animate) {
             final IAccessibilityServiceConnection connection =
                     AccessibilityInteractionClient.getInstance(mService).getConnection(
@@ -1717,7 +1752,9 @@ public abstract class AccessibilityService extends Service {
          * @param animate {@code true} to animate from the current viewport
          *                center or {@code false} to set the center immediately
          * @return {@code true} on success, {@code false} on failure
+         * @deprecated Use {@link #setMagnificationConfig(MagnificationConfig, boolean)} instead
          */
+        @Deprecated
         public boolean setCenter(float centerX, float centerY, boolean animate) {
             final IAccessibilityServiceConnection connection =
                     AccessibilityInteractionClient.getInstance(mService).getConnection(
@@ -1754,7 +1791,11 @@ public abstract class AccessibilityService extends Service {
              * magnification is focused
              * @param centerY the new Y coordinate, in unscaled coordinates, around which
              * magnification is focused
+             * @deprecated Override
+             * {@link #onMagnificationChanged(MagnificationController, Region, MagnificationConfig)}
+             * instead
              */
+            @Deprecated
             void onMagnificationChanged(@NonNull MagnificationController controller,
                     @NonNull Region region, float scale, float centerX, float centerY);
 
@@ -2312,10 +2353,16 @@ public abstract class AccessibilityService extends Service {
      * @param action The action to perform.
      * @return Whether the action was successfully performed.
      *
+     * Perform actions using ids like the id constants referenced below:
      * @see #GLOBAL_ACTION_BACK
      * @see #GLOBAL_ACTION_HOME
      * @see #GLOBAL_ACTION_NOTIFICATIONS
      * @see #GLOBAL_ACTION_RECENTS
+     * @see #GLOBAL_ACTION_DPAD_UP
+     * @see #GLOBAL_ACTION_DPAD_DOWN
+     * @see #GLOBAL_ACTION_DPAD_LEFT
+     * @see #GLOBAL_ACTION_DPAD_RIGHT
+     * @see #GLOBAL_ACTION_DPAD_CENTER
      */
     public final boolean performGlobalAction(int action) {
         IAccessibilityServiceConnection connection =
@@ -3067,6 +3114,33 @@ public abstract class AccessibilityService extends Service {
         if (connection != null) {
             try {
                 connection.setTouchExplorationPassthroughRegion(displayId, region);
+            } catch (RemoteException re) {
+                throw new RuntimeException(re);
+            }
+        }
+    }
+
+    /**
+     * Sets the system settings values that control the scaling factor for animations. The scale
+     * controls the animation playback speed for animations that respect these settings. Animations
+     * that do not respect the settings values will not be affected by this function. A lower scale
+     * value results in a faster speed. A value of <code>0</code> disables animations entirely. When
+     * animations are disabled services receive window change events more quickly which can reduce
+     * the potential by confusion by reducing the time during which windows are in transition.
+     *
+     * @see AccessibilityEvent#TYPE_WINDOWS_CHANGED
+     * @see AccessibilityEvent#TYPE_WINDOW_STATE_CHANGED
+     * @see android.provider.Settings.Global#WINDOW_ANIMATION_SCALE
+     * @see android.provider.Settings.Global#TRANSITION_ANIMATION_SCALE
+     * @see android.provider.Settings.Global#ANIMATOR_DURATION_SCALE
+     * @param scale The scaling factor for all animations.
+     */
+    public void setAnimationScale(float scale) {
+        final IAccessibilityServiceConnection connection =
+                AccessibilityInteractionClient.getInstance(this).getConnection(mConnectionId);
+        if (connection != null) {
+            try {
+                connection.setAnimationScale(scale);
             } catch (RemoteException re) {
                 throw new RuntimeException(re);
             }

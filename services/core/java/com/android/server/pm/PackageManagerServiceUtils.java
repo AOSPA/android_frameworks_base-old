@@ -43,6 +43,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ComponentInfo;
 import android.content.pm.PackageInfoLite;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.pm.PackagePartitions;
 import android.content.pm.ResolveInfo;
@@ -79,8 +80,8 @@ import android.util.Printer;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.content.NativeLibraryHelper;
-import com.android.internal.content.PackageHelper;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.HexDump;
@@ -463,30 +464,24 @@ public class PackageManagerServiceUtils {
      * <p>The rationale is that {@code disabledPkg} is a PackageSetting backed by xml files in /data
      * and is not tamperproof.
      */
-    private static boolean matchSignatureInSystem(PackageSetting pkgSetting,
-            PackageSetting disabledPkgSetting) {
-        if (pkgSetting.getSigningDetails().checkCapability(
+    private static boolean matchSignatureInSystem(@NonNull String packageName,
+            @NonNull SigningDetails signingDetails, PackageSetting disabledPkgSetting) {
+        if (signingDetails.checkCapability(
                 disabledPkgSetting.getSigningDetails(),
                 SigningDetails.CertCapabilities.INSTALLED_DATA)
                 || disabledPkgSetting.getSigningDetails().checkCapability(
-                pkgSetting.getSigningDetails(),
+                signingDetails,
                 SigningDetails.CertCapabilities.ROLLBACK)) {
             return true;
         } else {
             logCriticalInfo(Log.ERROR, "Updated system app mismatches cert on /system: " +
-                    pkgSetting.getPackageName());
+                    packageName);
             return false;
         }
     }
 
     /** Default is to not use fs-verity since it depends on kernel support. */
     private static final int FSVERITY_DISABLED = 0;
-
-    /**
-     * Experimental implementation targeting priv apps, with Android specific kernel patches to
-     * extend fs-verity.
-     */
-    private static final int FSVERITY_LEGACY = 1;
 
     /** Standard fs-verity. */
     private static final int FSVERITY_ENABLED = 2;
@@ -496,10 +491,6 @@ public class PackageManagerServiceUtils {
         return Build.VERSION.DEVICE_INITIAL_SDK_INT >= Build.VERSION_CODES.R
                 || SystemProperties.getInt("ro.apk_verity.mode", FSVERITY_DISABLED)
                         == FSVERITY_ENABLED;
-    }
-
-    static boolean isLegacyApkVerityEnabled() {
-        return SystemProperties.getInt("ro.apk_verity.mode", FSVERITY_DISABLED) == FSVERITY_LEGACY;
     }
 
     /** Returns true to force apk verification if the package is considered privileged. */
@@ -546,7 +537,8 @@ public class PackageManagerServiceUtils {
             }
 
             if (!match && isApkVerificationForced(disabledPkgSetting)) {
-                match = matchSignatureInSystem(pkgSetting, disabledPkgSetting);
+                match = matchSignatureInSystem(packageName, pkgSetting.getSigningDetails(),
+                        disabledPkgSetting);
             }
 
             if (!match && isRollback) {
@@ -814,27 +806,37 @@ public class PackageManagerServiceUtils {
         final PackageInfoLite ret = new PackageInfoLite();
         if (packagePath == null || pkg == null) {
             Slog.i(TAG, "Invalid package file " + packagePath);
-            ret.recommendedInstallLocation = PackageHelper.RECOMMEND_FAILED_INVALID_APK;
+            ret.recommendedInstallLocation = InstallLocationUtils.RECOMMEND_FAILED_INVALID_APK;
             return ret;
         }
 
         final File packageFile = new File(packagePath);
         final long sizeBytes;
         try {
-            sizeBytes = PackageHelper.calculateInstalledSize(pkg, abiOverride);
+            sizeBytes = InstallLocationUtils.calculateInstalledSize(pkg, abiOverride);
         } catch (IOException e) {
             if (!packageFile.exists()) {
-                ret.recommendedInstallLocation = PackageHelper.RECOMMEND_FAILED_INVALID_URI;
+                ret.recommendedInstallLocation = InstallLocationUtils.RECOMMEND_FAILED_INVALID_URI;
             } else {
-                ret.recommendedInstallLocation = PackageHelper.RECOMMEND_FAILED_INVALID_APK;
+                ret.recommendedInstallLocation = InstallLocationUtils.RECOMMEND_FAILED_INVALID_APK;
             }
 
             return ret;
         }
 
-        final int recommendedInstallLocation = PackageHelper.resolveInstallLocation(context,
-                pkg.getPackageName(), pkg.getInstallLocation(), sizeBytes, flags);
-
+        final PackageInstaller.SessionParams sessionParams = new PackageInstaller.SessionParams(
+                PackageInstaller.SessionParams.MODE_INVALID);
+        sessionParams.appPackageName = pkg.getPackageName();
+        sessionParams.installLocation = pkg.getInstallLocation();
+        sessionParams.sizeBytes = sizeBytes;
+        sessionParams.installFlags = flags;
+        final int recommendedInstallLocation;
+        try {
+            recommendedInstallLocation = InstallLocationUtils.resolveInstallLocation(context,
+                    sessionParams);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
         ret.packageName = pkg.getPackageName();
         ret.splitNames = pkg.getSplitNames();
         ret.versionCode = pkg.getVersionCode();
@@ -846,7 +848,6 @@ public class PackageManagerServiceUtils {
         ret.recommendedInstallLocation = recommendedInstallLocation;
         ret.multiArch = pkg.isMultiArch();
         ret.debuggable = pkg.isDebuggable();
-
         return ret;
     }
 
@@ -866,7 +867,7 @@ public class PackageManagerServiceUtils {
                 throw new PackageManagerException(result.getErrorCode(),
                         result.getErrorMessage(), result.getException());
             }
-            return PackageHelper.calculateInstalledSize(result.getResult(), abiOverride);
+            return InstallLocationUtils.calculateInstalledSize(result.getResult(), abiOverride);
         } catch (PackageManagerException | IOException e) {
             Slog.w(TAG, "Failed to calculate installed size: " + e);
             return -1;

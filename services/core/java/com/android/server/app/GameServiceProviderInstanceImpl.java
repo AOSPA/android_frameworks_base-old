@@ -16,13 +16,18 @@
 
 package com.android.server.app;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityTaskManager;
+import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
 import android.app.TaskStackListener;
 import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.RemoteException;
@@ -38,6 +43,7 @@ import android.service.games.IGameSession;
 import android.service.games.IGameSessionController;
 import android.service.games.IGameSessionService;
 import android.util.Slog;
+import android.view.SurfaceControl;
 import android.view.SurfaceControlViewHost.SurfacePackage;
 
 import com.android.internal.annotations.GuardedBy;
@@ -45,6 +51,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.infra.AndroidFuture;
 import com.android.internal.infra.ServiceConnector;
 import com.android.server.wm.WindowManagerInternal;
+import com.android.server.wm.WindowManagerInternal.TaskSystemBarsListener;
 import com.android.server.wm.WindowManagerService;
 
 import java.util.List;
@@ -56,6 +63,18 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
     private static final String TAG = "GameServiceProviderInstance";
     private static final int CREATE_GAME_SESSION_TIMEOUT_MS = 10_000;
     private static final boolean DEBUG = false;
+
+    private final TaskSystemBarsListener mTaskSystemBarsVisibilityListener =
+            new TaskSystemBarsListener() {
+                @Override
+                public void onTransientSystemBarsVisibilityChanged(
+                        int taskId,
+                        boolean visible,
+                        boolean wereRevealedFromSwipeOnSystemBar) {
+                    GameServiceProviderInstanceImpl.this.onTransientSystemBarsVisibilityChanged(
+                            taskId, visible, wereRevealedFromSwipeOnSystemBar);
+                }
+            };
 
     private final TaskStackListener mTaskStackListener = new TaskStackListener() {
         @Override
@@ -93,7 +112,10 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
     private final IGameServiceController mGameServiceController =
             new IGameServiceController.Stub() {
                 @Override
+                @RequiresPermission(Manifest.permission.MANAGE_GAME_ACTIVITY)
                 public void createGameSession(int taskId) {
+                    mContext.enforceCallingPermission(Manifest.permission.MANAGE_GAME_ACTIVITY,
+                            "createGameSession()");
                     mBackgroundExecutor.execute(() -> {
                         GameServiceProviderInstanceImpl.this.createGameSession(taskId);
                     });
@@ -110,12 +132,24 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
                                 gameScreenshotResultFuture);
                     });
                 }
+
+                @Override
+                @RequiresPermission(Manifest.permission.MANAGE_GAME_ACTIVITY)
+                public void restartGame(int taskId) {
+                    mContext.enforceCallingPermission(Manifest.permission.MANAGE_GAME_ACTIVITY,
+                            "restartGame()");
+                    mBackgroundExecutor.execute(() -> {
+                        GameServiceProviderInstanceImpl.this.restartGame(taskId);
+                    });
+                }
             };
 
     private final Object mLock = new Object();
     private final UserHandle mUserHandle;
     private final Executor mBackgroundExecutor;
+    private final Context mContext;
     private final GameClassifier mGameClassifier;
+    private final IActivityManager mActivityManager;
     private final IActivityTaskManager mActivityTaskManager;
     private final WindowManagerService mWindowManagerService;
     private final WindowManagerInternal mWindowManagerInternal;
@@ -131,7 +165,9 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
     GameServiceProviderInstanceImpl(
             @NonNull UserHandle userHandle,
             @NonNull Executor backgroundExecutor,
+            @NonNull Context context,
             @NonNull GameClassifier gameClassifier,
+            @NonNull IActivityManager activityManager,
             @NonNull IActivityTaskManager activityTaskManager,
             @NonNull WindowManagerService windowManagerService,
             @NonNull WindowManagerInternal windowManagerInternal,
@@ -139,7 +175,9 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
             @NonNull ServiceConnector<IGameSessionService> gameSessionServiceConnector) {
         mUserHandle = userHandle;
         mBackgroundExecutor = backgroundExecutor;
+        mContext = context;
         mGameClassifier = gameClassifier;
+        mActivityManager = activityManager;
         mActivityTaskManager = activityTaskManager;
         mWindowManagerService = windowManagerService;
         mWindowManagerInternal = windowManagerInternal;
@@ -179,6 +217,8 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to register task stack listener", e);
         }
+
+        mWindowManagerInternal.registerTaskSystemBarsListener(mTaskSystemBarsVisibilityListener);
     }
 
     @GuardedBy("mLock")
@@ -194,8 +234,11 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
             Slog.w(TAG, "Failed to unregister task stack listener", e);
         }
 
+        mWindowManagerInternal.unregisterTaskSystemBarsListener(
+                mTaskSystemBarsVisibilityListener);
+
         for (GameSessionRecord gameSessionRecord : mGameSessions.values()) {
-            destroyGameSessionFromRecord(gameSessionRecord);
+            destroyGameSessionFromRecordLocked(gameSessionRecord);
         }
         mGameSessions.clear();
 
@@ -283,6 +326,37 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
         }
     }
 
+    private void onTransientSystemBarsVisibilityChanged(
+            int taskId,
+            boolean visible,
+            boolean wereRevealedFromSwipeOnSystemBar) {
+        if (visible && !wereRevealedFromSwipeOnSystemBar) {
+            return;
+        }
+
+        GameSessionRecord gameSessionRecord;
+        synchronized (mLock) {
+            gameSessionRecord = mGameSessions.get(taskId);
+        }
+
+        if (gameSessionRecord == null) {
+            return;
+        }
+
+        IGameSession gameSession = gameSessionRecord.getGameSession();
+        if (gameSession == null) {
+            return;
+        }
+
+        try {
+            gameSession.onTransientSystemBarVisibilityFromRevealGestureChanged(visible);
+        } catch (RemoteException ex) {
+            Slog.w(TAG,
+                    "Failed to send transient system bars visibility from reveal gesture for task: "
+                            + taskId);
+        }
+    }
+
     private void createGameSession(int taskId) {
         synchronized (mLock) {
             createGameSessionLocked(taskId);
@@ -352,12 +426,12 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
                         }, mBackgroundExecutor);
 
         AndroidFuture<Void> unusedPostCreateGameSessionFuture =
-                mGameSessionServiceConnector.post(gameService -> {
+                mGameSessionServiceConnector.post(gameSessionService -> {
                     CreateGameSessionRequest createGameSessionRequest =
                             new CreateGameSessionRequest(
                                     taskId,
                                     existingGameSessionRecord.getComponentName().getPackageName());
-                    gameService.create(
+                    gameSessionService.create(
                             mGameSessionController,
                             createGameSessionRequest,
                             gameSessionViewHostConfiguration,
@@ -399,7 +473,7 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
         }
 
         try {
-            mWindowManagerInternal.addTaskOverlay(
+            mWindowManagerInternal.addTrustedTaskOverlay(
                     taskId,
                     createGameSessionResult.getSurfacePackage());
         } catch (IllegalArgumentException ex) {
@@ -437,14 +511,15 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
             }
             return;
         }
-        destroyGameSessionFromRecord(gameSessionRecord);
+        destroyGameSessionFromRecordLocked(gameSessionRecord);
     }
 
-    private void destroyGameSessionFromRecord(@NonNull GameSessionRecord gameSessionRecord) {
+    @GuardedBy("mLock")
+    private void destroyGameSessionFromRecordLocked(@NonNull GameSessionRecord gameSessionRecord) {
         SurfacePackage surfacePackage = gameSessionRecord.getSurfacePackage();
         if (surfacePackage != null) {
             try {
-                mWindowManagerInternal.removeTaskOverlay(
+                mWindowManagerInternal.removeTrustedTaskOverlay(
                         gameSessionRecord.getTaskId(),
                         surfacePackage);
             } catch (IllegalArgumentException ex) {
@@ -513,17 +588,29 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
 
     @VisibleForTesting
     void takeScreenshot(int taskId, @NonNull AndroidFuture callback) {
+        GameSessionRecord gameSessionRecord;
         synchronized (mLock) {
-            boolean isTaskAssociatedWithGameSession = mGameSessions.containsKey(taskId);
-            if (!isTaskAssociatedWithGameSession) {
+            gameSessionRecord = mGameSessions.get(taskId);
+            if (gameSessionRecord == null) {
                 Slog.w(TAG, "No game session found for id: " + taskId);
                 callback.complete(GameScreenshotResult.createInternalErrorResult());
                 return;
             }
         }
 
+        final SurfacePackage overlaySurfacePackage = gameSessionRecord.getSurfacePackage();
+        final SurfaceControl overlaySurfaceControl =
+                overlaySurfacePackage != null ? overlaySurfacePackage.getSurfaceControl() : null;
         mBackgroundExecutor.execute(() -> {
-            final Bitmap bitmap = mWindowManagerService.captureTaskBitmap(taskId);
+            final SurfaceControl.LayerCaptureArgs.Builder layerCaptureArgsBuilder =
+                    new SurfaceControl.LayerCaptureArgs.Builder(/* layer */ null);
+            if (overlaySurfaceControl != null) {
+                SurfaceControl[] excludeLayers = new SurfaceControl[1];
+                excludeLayers[0] = overlaySurfaceControl;
+                layerCaptureArgsBuilder.setExcludeLayers(excludeLayers);
+            }
+            final Bitmap bitmap = mWindowManagerService.captureTaskBitmap(taskId,
+                    layerCaptureArgsBuilder);
             if (bitmap == null) {
                 Slog.w(TAG, "Could not get bitmap for id: " + taskId);
                 callback.complete(GameScreenshotResult.createInternalErrorResult());
@@ -531,5 +618,28 @@ final class GameServiceProviderInstanceImpl implements GameServiceProviderInstan
                 callback.complete(GameScreenshotResult.createSuccessResult(bitmap));
             }
         });
+    }
+
+    private void restartGame(int taskId) {
+        String packageName;
+
+        synchronized (mLock) {
+            boolean isTaskAssociatedWithGameSession = mGameSessions.containsKey(taskId);
+            if (!isTaskAssociatedWithGameSession) {
+                return;
+            }
+
+            packageName = mGameSessions.get(taskId).getComponentName().getPackageName();
+        }
+
+        try {
+            mActivityManager.forceStopPackage(packageName, UserHandle.USER_CURRENT);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+
+        Intent launchIntent =
+                mContext.getPackageManager().getLaunchIntentForPackage(packageName);
+        mContext.startActivity(launchIntent);
     }
 }

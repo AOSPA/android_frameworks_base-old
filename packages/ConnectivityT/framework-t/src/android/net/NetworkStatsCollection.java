@@ -16,6 +16,7 @@
 
 package android.net;
 
+import static android.annotation.SystemApi.Client.MODULE_LIBRARIES;
 import static android.net.NetworkStats.DEFAULT_NETWORK_NO;
 import static android.net.NetworkStats.DEFAULT_NETWORK_YES;
 import static android.net.NetworkStats.IFACE_ALL;
@@ -34,6 +35,8 @@ import static com.android.net.module.util.NetworkStatsUtils.multiplySafeByRation
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
+import android.net.NetworkStatsHistory.Entry;
 import android.os.Binder;
 import android.service.NetworkStatsCollectionKeyProto;
 import android.service.NetworkStatsCollectionProto;
@@ -71,6 +74,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -80,7 +85,7 @@ import java.util.Set;
  *
  * @hide
  */
-// @SystemApi(client = MODULE_LIBRARIES)
+@SystemApi(client = MODULE_LIBRARIES)
 public class NetworkStatsCollection implements FileRotator.Reader, FileRotator.Writer {
     private static final String TAG = NetworkStatsCollection.class.getSimpleName();
     /** File header magic number: "ANET" */
@@ -727,19 +732,19 @@ public class NetworkStatsCollection implements FileRotator.Reader, FileRotator.W
         final long start = proto.start(tag);
 
         for (Key key : getSortedKeys()) {
-            final long startStats = proto.start(NetworkStatsCollectionProto.STATS);
+            final long startStats = proto.start(NetworkStatsCollectionProto.STATS_FIELD_NUMBER);
 
             // Key
-            final long startKey = proto.start(NetworkStatsCollectionStatsProto.KEY);
-            key.ident.dumpDebug(proto, NetworkStatsCollectionKeyProto.IDENTITY);
-            proto.write(NetworkStatsCollectionKeyProto.UID, key.uid);
-            proto.write(NetworkStatsCollectionKeyProto.SET, key.set);
-            proto.write(NetworkStatsCollectionKeyProto.TAG, key.tag);
+            final long startKey = proto.start(NetworkStatsCollectionStatsProto.KEY_FIELD_NUMBER);
+            key.ident.dumpDebug(proto, NetworkStatsCollectionKeyProto.IDENTITY_FIELD_NUMBER);
+            proto.write(NetworkStatsCollectionKeyProto.UID_FIELD_NUMBER, key.uid);
+            proto.write(NetworkStatsCollectionKeyProto.SET_FIELD_NUMBER, key.set);
+            proto.write(NetworkStatsCollectionKeyProto.TAG_FIELD_NUMBER, key.tag);
             proto.end(startKey);
 
             // Value
             final NetworkStatsHistory history = mStats.get(key);
-            history.dumpDebug(proto, NetworkStatsCollectionStatsProto.HISTORY);
+            history.dumpDebug(proto, NetworkStatsCollectionStatsProto.HISTORY_FIELD_NUMBER);
             proto.end(startStats);
         }
 
@@ -807,6 +812,71 @@ public class NetworkStatsCollection implements FileRotator.Reader, FileRotator.W
             }
         }
         return false;
+    }
+
+    /**
+     * Get the all historical stats of the collection {@link NetworkStatsCollection}.
+     *
+     * @return All {@link NetworkStatsHistory} in this collection.
+     */
+    @NonNull
+    public Map<Key, NetworkStatsHistory> getEntries() {
+        return new ArrayMap(mStats);
+    }
+
+    /**
+     * Builder class for {@link NetworkStatsCollection}.
+     */
+    public static final class Builder {
+        private final long mBucketDuration;
+        private final ArrayMap<Key, NetworkStatsHistory> mEntries = new ArrayMap<>();
+
+        /**
+         * Creates a new Builder with given bucket duration.
+         *
+         * @param bucketDuration Duration of the buckets of the object, in milliseconds.
+         */
+        public Builder(long bucketDuration) {
+            mBucketDuration = bucketDuration;
+        }
+
+        /**
+         * Add association of the history with the specified key in this map.
+         *
+         * @param key The object used to identify a network, see {@link Key}.
+         * @param history {@link NetworkStatsHistory} instance associated to the given {@link Key}.
+         * @return The builder object.
+         */
+        @NonNull
+        public NetworkStatsCollection.Builder addEntry(@NonNull Key key,
+                @NonNull NetworkStatsHistory history) {
+            Objects.requireNonNull(key);
+            Objects.requireNonNull(history);
+            final List<Entry> historyEntries = history.getEntries();
+
+            final NetworkStatsHistory.Builder historyBuilder =
+                    new NetworkStatsHistory.Builder(mBucketDuration, historyEntries.size());
+            for (Entry entry : historyEntries) {
+                historyBuilder.addEntry(entry);
+            }
+
+            mEntries.put(key, historyBuilder.build());
+            return this;
+        }
+
+        /**
+         * Builds the instance of the {@link NetworkStatsCollection}.
+         *
+         * @return the built instance of {@link NetworkStatsCollection}.
+         */
+        @NonNull
+        public NetworkStatsCollection build() {
+            final NetworkStatsCollection collection = new NetworkStatsCollection(mBucketDuration);
+            for (int i = 0; i < mEntries.size(); i++) {
+                collection.recordHistory(mEntries.keyAt(i), mEntries.valueAt(i));
+            }
+            return collection;
+        }
     }
 
     /**

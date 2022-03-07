@@ -212,13 +212,14 @@ void setMeasurementData(JNIEnv* env, jobject& callbacksObj, jobject clock,
     jobject gnssMeasurementsEventBuilderObject =
             env->NewObject(class_gnssMeasurementsEventBuilder,
                            method_gnssMeasurementsEventBuilderCtor);
-    env->CallObjectMethod(gnssMeasurementsEventBuilderObject,
-                          method_gnssMeasurementsEventBuilderSetClock, clock);
-    env->CallObjectMethod(gnssMeasurementsEventBuilderObject,
-                          method_gnssMeasurementsEventBuilderSetMeasurements, measurementArray);
-    env->CallObjectMethod(gnssMeasurementsEventBuilderObject,
-                          method_gnssMeasurementsEventBuilderSetGnssAutomaticGainControls,
-                          gnssAgcArray);
+    callObjectMethodIgnoringResult(env, gnssMeasurementsEventBuilderObject,
+                                   method_gnssMeasurementsEventBuilderSetClock, clock);
+    callObjectMethodIgnoringResult(env, gnssMeasurementsEventBuilderObject,
+                                   method_gnssMeasurementsEventBuilderSetMeasurements,
+                                   measurementArray);
+    callObjectMethodIgnoringResult(env, gnssMeasurementsEventBuilderObject,
+                                   method_gnssMeasurementsEventBuilderSetGnssAutomaticGainControls,
+                                   gnssAgcArray);
     jobject gnssMeasurementsEventObject =
             env->CallObjectMethod(gnssMeasurementsEventBuilderObject,
                                   method_gnssMeasurementsEventBuilderBuild);
@@ -359,9 +360,7 @@ void GnssMeasurementCallbackAidl::translateAndSetGnssData(const GnssData& data) 
     jobjectArray measurementArray = translateAllGnssMeasurements(env, data.measurements);
 
     jobjectArray gnssAgcArray = nullptr;
-    if (data.gnssAgcs.has_value()) {
-        gnssAgcArray = translateAllGnssAgcs(env, data.gnssAgcs.value());
-    }
+    gnssAgcArray = translateAllGnssAgcs(env, data.gnssAgcs);
     setMeasurementData(env, mCallbacksObj, clock, measurementArray, gnssAgcArray);
 
     env->DeleteLocalRef(clock);
@@ -410,24 +409,24 @@ void GnssMeasurementCallbackAidl::translateSingleGnssMeasurement(JNIEnv* env,
                                        satellitePvt.satClockInfo.satHardwareCodeBiasMeters,
                                        satellitePvt.satClockInfo.satTimeCorrectionMeters,
                                        satellitePvt.satClockInfo.satClkDriftMps);
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetPositionEcef, positionEcef);
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetVelocityEcef, velocityEcef);
-            env->CallObjectMethod(satellitePvtBuilderObject, method_satellitePvtBuilderSetClockInfo,
-                                  clockInfo);
+            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
+                                           method_satellitePvtBuilderSetPositionEcef, positionEcef);
+            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
+                                           method_satellitePvtBuilderSetVelocityEcef, velocityEcef);
+            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
+                                           method_satellitePvtBuilderSetClockInfo, clockInfo);
         }
 
         if (satFlags & SatellitePvt::HAS_IONO) {
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetIonoDelayMeters,
-                                  satellitePvt.ionoDelayMeters);
+            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
+                                           method_satellitePvtBuilderSetIonoDelayMeters,
+                                           satellitePvt.ionoDelayMeters);
         }
 
         if (satFlags & SatellitePvt::HAS_TROPO) {
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetTropoDelayMeters,
-                                  satellitePvt.tropoDelayMeters);
+            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
+                                           method_satellitePvtBuilderSetTropoDelayMeters,
+                                           satellitePvt.tropoDelayMeters);
         }
 
         jobject satellitePvtObject =
@@ -455,17 +454,19 @@ void GnssMeasurementCallbackAidl::translateSingleGnssMeasurement(JNIEnv* env,
             jobject correlationVectorBuilderObject =
                     env->NewObject(class_correlationVectorBuilder,
                                    method_correlationVectorBuilderCtor);
-            env->CallObjectMethod(correlationVectorBuilderObject,
-                                  method_correlationVectorBuilderSetMagnitude, magnitudeArray);
-            env->CallObjectMethod(correlationVectorBuilderObject,
-                                  method_correlationVectorBuilderSetFrequencyOffsetMetersPerSecond,
-                                  correlationVector.frequencyOffsetMps);
-            env->CallObjectMethod(correlationVectorBuilderObject,
-                                  method_correlationVectorBuilderSetSamplingStartMeters,
-                                  correlationVector.samplingStartM);
-            env->CallObjectMethod(correlationVectorBuilderObject,
-                                  method_correlationVectorBuilderSetSamplingWidthMeters,
-                                  correlationVector.samplingWidthM);
+            callObjectMethodIgnoringResult(env, correlationVectorBuilderObject,
+                                           method_correlationVectorBuilderSetMagnitude,
+                                           magnitudeArray);
+            callObjectMethodIgnoringResult(
+                    env, correlationVectorBuilderObject,
+                    method_correlationVectorBuilderSetFrequencyOffsetMetersPerSecond,
+                    correlationVector.frequencyOffsetMps);
+            callObjectMethodIgnoringResult(env, correlationVectorBuilderObject,
+                                           method_correlationVectorBuilderSetSamplingStartMeters,
+                                           correlationVector.samplingStartM);
+            callObjectMethodIgnoringResult(env, correlationVectorBuilderObject,
+                                           method_correlationVectorBuilderSetSamplingWidthMeters,
+                                           correlationVector.samplingWidthM);
             jobject correlationVectorObject =
                     env->CallObjectMethod(correlationVectorBuilderObject,
                                           method_correlationVectorBuilderBuild);
@@ -508,8 +509,8 @@ jobjectArray GnssMeasurementCallbackAidl::translateAllGnssMeasurements(
     return gnssMeasurementArray;
 }
 
-jobjectArray GnssMeasurementCallbackAidl::translateAllGnssAgcs(
-        JNIEnv* env, const std::vector<std::optional<GnssAgc>>& agcs) {
+jobjectArray GnssMeasurementCallbackAidl::translateAllGnssAgcs(JNIEnv* env,
+                                                               const std::vector<GnssAgc>& agcs) {
     if (agcs.size() == 0) {
         return nullptr;
     }
@@ -518,18 +519,17 @@ jobjectArray GnssMeasurementCallbackAidl::translateAllGnssAgcs(
             env->NewObjectArray(agcs.size(), class_gnssAgc, nullptr /* initialElement */);
 
     for (uint16_t i = 0; i < agcs.size(); ++i) {
-        if (!agcs[i].has_value()) {
-            continue;
-        }
-        const GnssAgc& gnssAgc = agcs[i].value();
+        const GnssAgc& gnssAgc = agcs[i];
 
         jobject agcBuilderObject = env->NewObject(class_gnssAgcBuilder, method_gnssAgcBuilderCtor);
-        env->CallObjectMethod(agcBuilderObject, method_gnssAgcBuilderSetLevelDb,
-                              gnssAgc.agcLevelDb);
-        env->CallObjectMethod(agcBuilderObject, method_gnssAgcBuilderSetConstellationType,
-                              (int)gnssAgc.constellation);
-        env->CallObjectMethod(agcBuilderObject, method_gnssAgcBuilderSetCarrierFrequencyHz,
-                              gnssAgc.carrierFrequencyHz);
+        callObjectMethodIgnoringResult(env, agcBuilderObject, method_gnssAgcBuilderSetLevelDb,
+                                       gnssAgc.agcLevelDb);
+        callObjectMethodIgnoringResult(env, agcBuilderObject,
+                                       method_gnssAgcBuilderSetConstellationType,
+                                       (int)gnssAgc.constellation);
+        callObjectMethodIgnoringResult(env, agcBuilderObject,
+                                       method_gnssAgcBuilderSetCarrierFrequencyHz,
+                                       gnssAgc.carrierFrequencyHz);
         jobject agcObject = env->CallObjectMethod(agcBuilderObject, method_gnssAgcBuilderBuild);
 
         env->SetObjectArrayElement(gnssAgcArray, i, agcObject);

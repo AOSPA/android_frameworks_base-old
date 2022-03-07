@@ -37,6 +37,7 @@ import android.annotation.TestApi;
 import android.annotation.UiContext;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.BroadcastOptions;
 import android.app.GameManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
@@ -407,6 +408,7 @@ public abstract class Context {
      * @hide
      */
     @SystemApi
+    @Deprecated
     public static final int BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND = 0x00040000;
 
     /**
@@ -420,12 +422,13 @@ public abstract class Context {
     public static final int BIND_SCHEDULE_LIKE_TOP_APP = 0x00080000;
 
     /**
-     * This flag has never been used.
+     * Flag for {@link #bindService}: allow background activity starts from the bound service's
+     * process.
+     * This flag is only respected if the caller is holding
+     * {@link android.Manifest.permission#START_ACTIVITIES_FROM_BACKGROUND}.
      * @hide
-     * @deprecated This flag has never been used.
      */
     @SystemApi
-    @Deprecated
     public static final int BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS = 0x00100000;
 
     /**
@@ -2260,6 +2263,27 @@ public abstract class Context {
     }
 
     /**
+     * Version of {@link #sendBroadcastMultiplePermissions(Intent, String[])} that allows you to
+     * specify the {@link android.app.BroadcastOptions}.
+     *
+     * @param intent The Intent to broadcast; all receivers matching this
+     *               Intent will receive the broadcast.
+     * @param receiverPermissions Array of names of permissions that a receiver must hold
+     *                            in order to receive your broadcast.
+     *                            If empty, no permissions are required.
+     * @param options Additional sending options, generated from a
+     *                {@link android.app.BroadcastOptions}.
+     * @see #sendBroadcastMultiplePermissions(Intent, String[])
+     * @see android.app.BroadcastOptions
+     * @hide
+     */
+    @SystemApi
+    public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions, @Nullable BroadcastOptions options) {
+       sendBroadcastMultiplePermissions(intent, receiverPermissions, options.toBundle());
+    }
+
+    /**
      * Broadcast the given intent to all interested BroadcastReceivers, allowing
      * an array of required permissions to be enforced.  This call is asynchronous; it returns
      * immediately, and you will continue executing while the receivers are run.  No results are
@@ -3866,7 +3890,6 @@ public abstract class Context {
             //@hide: SPEECH_RECOGNITION_SERVICE,
             UWB_SERVICE,
             MEDIA_METRICS_SERVICE,
-            SUPPLEMENTAL_PROCESS_SERVICE,
             //@hide: ATTESTATION_VERIFICATION_SERVICE,
             //@hide: SAFETY_CENTER_SERVICE,
     })
@@ -4979,6 +5002,18 @@ public abstract class Context {
     public static final String SMARTSPACE_SERVICE = "smartspace";
 
     /**
+     * Used for getting the cloudsearch service.
+     *
+     * <p><b>NOTE: </b> this service is optional; callers of
+     * {@code Context.getSystemServiceName(CLOUDSEARCH_SERVICE)} should check for {@code null}.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    @SystemApi
+    public static final String CLOUDSEARCH_SERVICE = "cloudsearch";
+
+    /**
      * Use with {@link #getSystemService(String)} to access the
      * {@link com.android.server.voiceinteraction.SoundTriggerService}.
      *
@@ -4995,6 +5030,20 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String SOUND_TRIGGER_MIDDLEWARE_SERVICE = "soundtrigger_middleware";
+
+    /**
+     * Used for getting the wallpaper effects generation service.
+     *
+     * <p><b>NOTE: </b> this service is optional; callers of
+     * {@code Context.getSystemServiceName(WALLPAPER_EFFECTS_GENERATION_SERVICE)} should check for
+     * {@code null}.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    @SystemApi
+    public static final String WALLPAPER_EFFECTS_GENERATION_SERVICE =
+            "wallpaper_effects_generation";
 
     /**
      * Used to access {@link MusicRecognitionManagerService}.
@@ -5091,6 +5140,16 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String DROPBOX_SERVICE = "dropbox";
+
+    /**
+     * System service name for BinaryTransparencyService. This is used to retrieve measurements
+     * pertaining to various pre-installed and system binaries on device for the purposes of
+     * providing transparency to the user.
+     *
+     * @hide
+     */
+    @SuppressLint("ServiceName")
+    public static final String BINARY_TRANSPARENCY_SERVICE = "transparency";
 
     /**
      * System service name for the DeviceIdleManager.
@@ -5614,6 +5673,15 @@ public abstract class Context {
     public static final String OVERLAY_SERVICE = "overlay";
 
     /**
+     * Use with {@link #getSystemService(String)} to manage resources.
+     *
+     * @see #getSystemService(String)
+     * @see com.android.server.resources.ResourcesManagerService
+     * @hide
+     */
+    public static final String RESOURCES_SERVICE = "resources";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {android.os.IIdmap2} for managing idmap files (used by overlay
      * packages).
@@ -5901,13 +5969,6 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String LOCALE_SERVICE = "locale";
-
-    /**
-     * Use with {@link #getSystemService(String)} to retrieve a Supplemental Process Manager.
-     *
-     * @see #getSystemService(String)
-     */
-    public static final String SUPPLEMENTAL_PROCESS_SERVICE = "supplemental_process";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
@@ -6443,15 +6504,26 @@ public abstract class Context {
      * <li>Each permission in {@code permissions} must be a runtime permission.
      * </ul>
      * <p>
-     * For every permission in {@code permissions}, the entire permission group it belongs to will
-     * be revoked. The revocation happens asynchronously and kills all processes running in the
-     * calling UID. It will be triggered once it is safe to do so. In particular, it will not be
-     * triggered as long as the package remains in the foreground, or has any active manifest
-     * components (e.g. when another app is accessing a content provider in the package).
+     * Background permissions which have no corresponding foreground permission still granted once
+     * the revocation is effective will also be revoked.
+     * <p>
+     * The revocation happens asynchronously and kills all processes running in the calling UID. It
+     * will be triggered once it is safe to do so. In particular, it will not be triggered as long
+     * as the package remains in the foreground, or has any active manifest components (e.g. when
+     * another app is accessing a content provider in the package).
      * <p>
      * If you want to revoke the permissions right away, you could call {@code System.exit()}, but
      * this could affect other apps that are accessing your app at the moment. For example, apps
      * accessing a content provider in your app will all crash.
+     * <p>
+     * Note that the settings UI shows a permission group as granted as long as at least one
+     * permission in the group is granted. If you want the user to observe the revocation in the
+     * settings, you should revoke every permission in the target group. To learn the current list
+     * of permissions in a group, you may use
+     * {@link PackageManager#getGroupOfPlatformPermission(String, Executor, Consumer)} and
+     * {@link PackageManager#getPlatformPermissionsForGroup(String, Executor, Consumer)}. This list
+     * of permissions may evolve over time, so it is recommended to check whether it contains any
+     * permission you wish to retain before trying to revoke an entire group.
      *
      * @param permissions Collection of permissions to be revoked.
      * @see PackageManager#getGroupOfPlatformPermission(String, Executor, Consumer)
@@ -6653,21 +6725,27 @@ public abstract class Context {
             @NonNull Configuration overrideConfiguration);
 
     /**
-     * Returns a new <code>Context</code> object from the current context but with resources
-     * adjusted to match the metrics of <code>display</code>. Each call to this method
+     * Returns a new {@code Context} object from the current context but with resources
+     * adjusted to match the metrics of {@code display}. Each call to this method
      * returns a new instance of a context object. Context objects are not shared; however,
      * common state (such as the {@link ClassLoader} and other resources for the same
-     * configuration) can be shared, so the <code>Context</code> itself is lightweight.
+     * configuration) can be shared, so the {@code Context} itself is lightweight.
+     *
+     * <p><b>Note:</b>
+     * This {@code Context} is <b>not</b> expected to be updated with new configuration if the
+     * underlying display configuration changes and the cached {@code Resources} it returns
+     * could be stale. It is suggested to use
+     * {@link android.hardware.display.DisplayManager.DisplayListener} to listen for
+     * changes and re-create an instance if necessary. </p>
      * <p>
+     * This {@code Context} is <b>not</b> a UI context, do not use it to access UI components
+     * or obtain a {@link WindowManager} instance.
+     * </p><p>
      * To obtain an instance of {@link WindowManager} configured to show windows on the given
      * display, call {@link #createWindowContext(int, Bundle)} on the returned display context,
      * then call {@link #getSystemService(String)} or {@link #getSystemService(Class)} on the
      * returned window context.
-     * <p>
-     * <b>Note:</b> The context returned by <code>createDisplayContext(Display)</code> is not a UI
-     * context. Do not access UI components or obtain a {@link WindowManager} from the context
-     * created by <code>createDisplayContext(Display)</code>.
-     *
+     * </p>
      * @param display The display to which the current context's resources are adjusted.
      *
      * @return A context for the display.

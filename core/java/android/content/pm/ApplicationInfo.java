@@ -19,6 +19,7 @@ package android.content.pm;
 import static android.os.Build.VERSION_CODES.DONUT;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
@@ -50,6 +51,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -2681,5 +2683,22 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public int getLocaleConfigRes() {
         return localeConfigRes;
     }
+
+    /**
+     *  List of all shared libraries this application is linked against. This
+     *  list will only be set if the {@link PackageManager#GET_SHARED_LIBRARY_FILES
+     *  PackageManager.GET_SHARED_LIBRARY_FILES} flag was used when retrieving the structure.
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public List<SharedLibraryInfo> getSharedLibraryInfos() {
+        if (sharedLibraryInfos == null) {
+            return Collections.EMPTY_LIST;
+        }
+        return sharedLibraryInfos;
+    }
+
     /** {@hide} */ public int canOverrideRes() { return overrideRes; }
 }

@@ -18,6 +18,7 @@ package android.app.admin;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.net.wifi.WifiSsid;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.ArraySet;
@@ -70,50 +71,37 @@ public final class WifiSsidPolicy implements Parcelable {
     public @interface WifiSsidPolicyType {}
 
     private @WifiSsidPolicyType int mPolicyType;
-    private ArraySet<String> mSsids;
+    private ArraySet<WifiSsid> mSsids;
 
-    private WifiSsidPolicy(@WifiSsidPolicyType int policyType, @NonNull Set<String> ssids) {
+    /**
+     * Create the Wi-Fi SSID Policy.
+     *
+     * @param policyType indicate whether the policy is an allowlist or a denylist
+     * @param ssids set of {@link WifiSsid}
+     * @throws IllegalArgumentException if the input ssids set is empty or the policyType is invalid
+     */
+    public WifiSsidPolicy(@WifiSsidPolicyType int policyType, @NonNull Set<WifiSsid> ssids) {
+        if (ssids.isEmpty()) {
+            throw new IllegalArgumentException("SSID list cannot be empty");
+        }
+        if (policyType != WIFI_SSID_POLICY_TYPE_ALLOWLIST
+                && policyType != WIFI_SSID_POLICY_TYPE_DENYLIST) {
+            throw new IllegalArgumentException("Invalid policy type");
+        }
         mPolicyType = policyType;
         mSsids = new ArraySet<>(ssids);
     }
 
     private WifiSsidPolicy(Parcel in) {
         mPolicyType = in.readInt();
-        mSsids = (ArraySet<String>) in.readArraySet(null);
-    }
-    /**
-     * Create the allowlist Wi-Fi SSID Policy.
-     *
-     * @param ssids allowlist of SSIDs in UTF-8 without double quotes format
-     * @throws IllegalArgumentException if the input ssids list is empty
-     */
-    @NonNull
-    public static WifiSsidPolicy createAllowlistPolicy(@NonNull Set<String> ssids) {
-        if (ssids.isEmpty()) {
-            throw new IllegalArgumentException("SSID list cannot be empty");
-        }
-        return new WifiSsidPolicy(WIFI_SSID_POLICY_TYPE_ALLOWLIST, ssids);
+        mSsids = (ArraySet<WifiSsid>) in.readArraySet(null);
     }
 
     /**
-     * Create the denylist Wi-Fi SSID Policy.
-     *
-     * @param ssids denylist of SSIDs in UTF-8 without double quotes format
-     * @throws IllegalArgumentException if the input ssids list is empty
+     * Returns the set of {@link WifiSsid}
      */
     @NonNull
-    public static WifiSsidPolicy createDenylistPolicy(@NonNull Set<String> ssids) {
-        if (ssids.isEmpty()) {
-            throw new IllegalArgumentException("SSID list cannot be empty");
-        }
-        return new WifiSsidPolicy(WIFI_SSID_POLICY_TYPE_DENYLIST, ssids);
-    }
-
-    /**
-     * Returns the set of SSIDs in UTF-8 without double quotes format.
-     */
-    @NonNull
-    public Set<String> getSsids() {
+    public Set<WifiSsid> getSsids() {
         return mSsids;
     }
 

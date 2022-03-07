@@ -28,6 +28,8 @@ import android.app.ambientcontext.AmbientContextManager;
 import android.app.ambientcontext.IAmbientContextEventObserver;
 import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
+import android.app.cloudsearch.CloudSearchManager;
+import android.app.cloudsearch.ICloudSearchManager;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
 import android.app.job.JobSchedulerFrameworkInitializer;
@@ -46,9 +48,10 @@ import android.app.timezonedetector.TimeZoneDetectorImpl;
 import android.app.trust.TrustManager;
 import android.app.usage.IStorageStatsManager;
 import android.app.usage.IUsageStatsManager;
-import android.app.usage.NetworkStatsManager;
 import android.app.usage.StorageStatsManager;
 import android.app.usage.UsageStatsManager;
+import android.app.wallpapereffectsgeneration.IWallpaperEffectsGenerationManager;
+import android.app.wallpapereffectsgeneration.WallpaperEffectsGenerationManager;
 import android.apphibernation.AppHibernationManager;
 import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothFrameworkInitializer;
@@ -135,12 +138,9 @@ import android.net.ConnectivityFrameworkInitializer;
 import android.net.ConnectivityFrameworkInitializerTiramisu;
 import android.net.EthernetManager;
 import android.net.IEthernetManager;
-import android.net.IIpSecService;
 import android.net.INetworkPolicyManager;
-import android.net.INetworkStatsService;
 import android.net.IPacProxyManager;
 import android.net.IVpnManager;
-import android.net.IpSecManager;
 import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
 import android.net.NetworkWatchlistManager;
@@ -213,6 +213,7 @@ import android.telecom.TelecomManager;
 import android.telephony.MmsManager;
 import android.telephony.TelephonyFrameworkInitializer;
 import android.telephony.TelephonyRegistryManager;
+import android.transparency.BinaryTransparencyManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
@@ -243,6 +244,7 @@ import com.android.internal.app.ISoundTriggerService;
 import com.android.internal.appwidget.IAppWidgetService;
 import com.android.internal.graphics.fonts.IFontManager;
 import com.android.internal.net.INetworkWatchlistManager;
+import com.android.internal.os.IBinaryTransparencyService;
 import com.android.internal.os.IDropBoxManagerService;
 import com.android.internal.policy.PhoneLayoutInflater;
 import com.android.internal.util.Preconditions;
@@ -435,15 +437,6 @@ public final class SystemServiceRegistry {
                 return new VcnManager(ctx, service);
             }});
 
-        registerService(Context.IPSEC_SERVICE, IpSecManager.class,
-                new CachedServiceFetcher<IpSecManager>() {
-            @Override
-            public IpSecManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getService(Context.IPSEC_SERVICE);
-                IIpSecService service = IIpSecService.Stub.asInterface(b);
-                return new IpSecManager(ctx, service);
-            }});
-
         registerService(Context.COUNTRY_DETECTOR, CountryDetector.class,
                 new StaticServiceFetcher<CountryDetector>() {
             @Override
@@ -492,6 +485,17 @@ public final class SystemServiceRegistry {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.DROPBOX_SERVICE);
                 IDropBoxManagerService service = IDropBoxManagerService.Stub.asInterface(b);
                 return new DropBoxManager(ctx, service);
+            }});
+
+        registerService(Context.BINARY_TRANSPARENCY_SERVICE, BinaryTransparencyManager.class,
+                new CachedServiceFetcher<BinaryTransparencyManager>() {
+            @Override
+            public BinaryTransparencyManager createService(ContextImpl ctx)
+                    throws ServiceNotFoundException {
+                IBinder b = ServiceManager.getServiceOrThrow(
+                        Context.BINARY_TRANSPARENCY_SERVICE);
+                IBinaryTransparencyService service = IBinaryTransparencyService.Stub.asInterface(b);
+                return new BinaryTransparencyManager(ctx, service);
             }});
 
         registerService(Context.INPUT_SERVICE, InputManager.class,
@@ -1007,27 +1011,15 @@ public final class SystemServiceRegistry {
                 return new UsageStatsManager(ctx.getOuterContext(), service);
             }});
 
-        registerService(Context.NETWORK_STATS_SERVICE, NetworkStatsManager.class,
-                new CachedServiceFetcher<NetworkStatsManager>() {
-            @Override
-            public NetworkStatsManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                // TODO: Replace with an initializer in the module, see
-                //  {@code ConnectivityFrameworkInitializer}.
-                final INetworkStatsService service = INetworkStatsService.Stub.asInterface(
-                        ServiceManager.getServiceOrThrow(Context.NETWORK_STATS_SERVICE));
-                return new NetworkStatsManager(ctx.getOuterContext(), service);
-            }});
-
         registerService(Context.PERSISTENT_DATA_BLOCK_SERVICE, PersistentDataBlockManager.class,
-                new CachedServiceFetcher<PersistentDataBlockManager>() {
+                new StaticServiceFetcher<PersistentDataBlockManager>() {
             @Override
-            public PersistentDataBlockManager createService(ContextImpl ctx)
-                    throws ServiceNotFoundException {
+            public PersistentDataBlockManager createService() throws ServiceNotFoundException {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.PERSISTENT_DATA_BLOCK_SERVICE);
                 IPersistentDataBlockService persistentDataBlockService =
                         IPersistentDataBlockService.Stub.asInterface(b);
                 if (persistentDataBlockService != null) {
-                    return new PersistentDataBlockManager(ctx, persistentDataBlockService);
+                    return new PersistentDataBlockManager(persistentDataBlockService);
                 } else {
                     // not supported
                     return null;
@@ -1248,6 +1240,17 @@ public final class SystemServiceRegistry {
                 }
             });
 
+        registerService(Context.CLOUDSEARCH_SERVICE, CloudSearchManager.class,
+            new CachedServiceFetcher<CloudSearchManager>() {
+                @Override
+                public CloudSearchManager createService(ContextImpl ctx)
+                    throws ServiceNotFoundException {
+                    IBinder b = ServiceManager.getService(Context.CLOUDSEARCH_SERVICE);
+                    return b == null ? null :
+                        new CloudSearchManager(ICloudSearchManager.Stub.asInterface(b));
+                }
+            });
+
         registerService(Context.APP_PREDICTION_SERVICE, AppPredictionManager.class,
                 new CachedServiceFetcher<AppPredictionManager>() {
             @Override
@@ -1269,6 +1272,20 @@ public final class SystemServiceRegistry {
                         IContentSuggestionsManager service =
                                 IContentSuggestionsManager.Stub.asInterface(b);
                         return new ContentSuggestionsManager(ctx.getUserId(), service);
+                    }
+                });
+
+        registerService(Context.WALLPAPER_EFFECTS_GENERATION_SERVICE,
+                WallpaperEffectsGenerationManager.class,
+                new CachedServiceFetcher<WallpaperEffectsGenerationManager>() {
+                    @Override
+                    public WallpaperEffectsGenerationManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getService(
+                                Context.WALLPAPER_EFFECTS_GENERATION_SERVICE);
+                        return b == null ? null :
+                                new WallpaperEffectsGenerationManager(
+                                        IWallpaperEffectsGenerationManager.Stub.asInterface(b));
                     }
                 });
 

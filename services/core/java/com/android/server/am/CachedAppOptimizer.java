@@ -1076,7 +1076,7 @@ public final class CachedAppOptimizer {
                 Slog.d(TAG_AM, "pid " + pid + " " + app.processName
                         + " received sync transactions while frozen, killing");
                 app.killLocked("Sync transaction while in frozen state",
-                        ApplicationExitInfo.REASON_OTHER,
+                        ApplicationExitInfo.REASON_FREEZER,
                         ApplicationExitInfo.SUBREASON_FREEZER_BINDER_TRANSACTION, true);
                 processKilled = true;
             }
@@ -1089,7 +1089,7 @@ public final class CachedAppOptimizer {
             Slog.d(TAG_AM, "Unable to query binder frozen info for pid " + pid + " "
                     + app.processName + ". Killing it. Exception: " + e);
             app.killLocked("Unable to query binder frozen stats",
-                    ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.REASON_FREEZER,
                     ApplicationExitInfo.SUBREASON_FREEZER_BINDER_IOCTL, true);
             processKilled = true;
         }
@@ -1106,7 +1106,7 @@ public final class CachedAppOptimizer {
             Slog.e(TAG_AM, "Unable to unfreeze binder for " + pid + " " + app.processName
                     + ". Killing it");
             app.killLocked("Unable to unfreeze",
-                    ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.REASON_FREEZER,
                     ApplicationExitInfo.SUBREASON_FREEZER_BINDER_IOCTL, true);
             return;
         }
@@ -1522,7 +1522,7 @@ public final class CachedAppOptimizer {
                     mFreezeHandler.post(() -> {
                         synchronized (mAm) {
                             proc.killLocked("Unable to freeze binder interface",
-                                    ApplicationExitInfo.REASON_OTHER,
+                                    ApplicationExitInfo.REASON_FREEZER,
                                     ApplicationExitInfo.SUBREASON_FREEZER_BINDER_IOCTL, true);
                         }
                     });
@@ -1576,7 +1576,7 @@ public final class CachedAppOptimizer {
                 mFreezeHandler.post(() -> {
                     synchronized (mAm) {
                         proc.killLocked("Unable to freeze binder interface",
-                                ApplicationExitInfo.REASON_OTHER,
+                                ApplicationExitInfo.REASON_FREEZER,
                                 ApplicationExitInfo.SUBREASON_FREEZER_BINDER_IOCTL, true);
                     }
                 });
