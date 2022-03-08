@@ -26,6 +26,7 @@ import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Point;
 import android.hardware.CameraStatus;
 import android.hardware.ICameraService;
 import android.hardware.ICameraServiceListener;
@@ -461,12 +462,14 @@ public final class CameraManager {
                     (DisplayManager) mContext.getSystemService(Context.DISPLAY_SERVICE);
             Display display = displayManager.getDisplay(Display.DEFAULT_DISPLAY);
             if (display != null) {
-                int width = display.getWidth();
-                int height = display.getHeight();
+                Point sz = new Point();
+                display.getRealSize(sz);
+                int width = sz.x;
+                int height = sz.y;
 
                 if (height > width) {
                     height = width;
-                    width = display.getHeight();
+                    width = sz.y;
                 }
 
                 ret = new Size(width, height);
@@ -474,7 +477,7 @@ public final class CameraManager {
                 Log.e(TAG, "Invalid default display!");
             }
         } catch (Exception e) {
-            Log.e(TAG, "getDisplaySize Failed. " + e.toString());
+            Log.e(TAG, "getDisplaySize Failed. " + e);
         }
 
         return ret;

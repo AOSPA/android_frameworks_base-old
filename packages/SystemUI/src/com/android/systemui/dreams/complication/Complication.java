@@ -154,6 +154,27 @@ public interface Complication {
     int CATEGORY_SYSTEM = 1 << 1;
 
     /**
+     * The type of dream complications which can be provided by a {@link Complication}.
+     */
+    @IntDef(prefix = {"COMPLICATION_TYPE_"}, flag = true, value = {
+            COMPLICATION_TYPE_NONE,
+            COMPLICATION_TYPE_TIME,
+            COMPLICATION_TYPE_DATE,
+            COMPLICATION_TYPE_WEATHER,
+            COMPLICATION_TYPE_AIR_QUALITY,
+            COMPLICATION_TYPE_CAST_INFO
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface ComplicationType {}
+
+    int COMPLICATION_TYPE_NONE = 0;
+    int COMPLICATION_TYPE_TIME = 1;
+    int COMPLICATION_TYPE_DATE = 1 << 1;
+    int COMPLICATION_TYPE_WEATHER = 1 << 2;
+    int COMPLICATION_TYPE_AIR_QUALITY = 1 << 3;
+    int COMPLICATION_TYPE_CAST_INFO = 1 << 4;
+
+    /**
      * The {@link Host} interface specifies a way a {@link Complication} to communicate with its
      * parent entity for information and actions.
      */
@@ -207,4 +228,15 @@ public interface Complication {
      * @return a {@link ViewHolder} for this {@link Complication} instance.
      */
     ViewHolder createView(ComplicationViewModel model);
+
+    /**
+     * Returns the types that must be present in order for this complication to participate on
+     * the dream overlay. By default, this method returns
+     * {@code Complication.COMPLICATION_TYPE_NONE} to indicate no types are required.
+     * @return
+     */
+    @Complication.ComplicationType
+    default int getRequiredTypeAvailability() {
+        return Complication.COMPLICATION_TYPE_NONE;
+    }
 }

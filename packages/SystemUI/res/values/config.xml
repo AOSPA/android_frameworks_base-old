@@ -82,7 +82,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,fgsmanager,color_correction
+        internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,color_correction
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -101,6 +101,9 @@
         <item>accessibility_display_inversion_enabled:inversion</item>
         <item>one_handed_mode_enabled:onehanded</item>
     </string-array>
+
+    <!-- Use collapsed layout for media player in landscape QQS -->
+    <bool name="config_quickSettingsMediaLandscapeCollapsed">true</bool>
 
     <!-- Show indicator for Wifi on but not connected. -->
     <bool name="config_showWifiIndicatorWhenEnabled">false</bool>
@@ -309,6 +312,7 @@
         <item>com.android.systemui.globalactions.GlobalActionsComponent</item>
         <item>com.android.systemui.ScreenDecorations</item>
         <item>com.android.systemui.biometrics.AuthController</item>
+        <item>com.android.systemui.log.SessionTracker</item>
         <item>com.android.systemui.SliceBroadcastRelayHandler</item>
         <item>com.android.systemui.statusbar.notification.InstantAppNotifier</item>
         <item>com.android.systemui.theme.ThemeOverlayController</item>
@@ -585,6 +589,9 @@
     <!-- Whether to use the split 2-column notification shade -->
     <bool name="config_use_split_notification_shade">false</bool>
 
+    <!-- Whether notification header should never show section headers. -->
+    <bool name="config_notification_never_show_section_headers">false</bool>
+
     <!-- Default udfps icon. Same path as ic_fingerprint.xml -->
     <string name="config_udfpsIcon" translatable="false">
         M25.5,16.3283C28.47,14.8433 31.9167,14 35.5834,14C39.2501,14 42.6968,14.8433 45.6668,16.3283
@@ -683,7 +690,7 @@
     <integer name="config_connectionMinDuration">1000</integer>
 
     <!-- Flag to activate notification to contents feature -->
-    <bool name="config_notificationToContents">false</bool>
+    <bool name="config_notificationToContents">true</bool>
 
     <!-- Respect drawable/rounded_secondary.xml intrinsic size for multiple radius corner path
          customization for secondary display-->

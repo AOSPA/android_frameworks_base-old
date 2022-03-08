@@ -113,7 +113,7 @@ interface IBatteryStats {
     void notePhoneOn();
     void notePhoneOff();
     void notePhoneSignalStrength(in SignalStrength signalStrength);
-    void notePhoneDataConnectionState(int dataType, boolean hasData, int serviceType);
+    void notePhoneDataConnectionState(int dataType, boolean hasData, int serviceType, int nrFrequency);
     void notePhoneState(int phoneState);
     void noteWifiOn();
     void noteWifiOff();
@@ -145,6 +145,8 @@ interface IBatteryStats {
     long getAwakeTimeBattery();
     long getAwakeTimePlugged();
 
+    void noteBluetoothOn(int uid, int reason, String packageName);
+    void noteBluetoothOff(int uid, int reason, String packageName);
     void noteBleScanStarted(in WorkSource ws, boolean isUnoptimized);
     void noteBleScanStopped(in WorkSource ws, boolean isUnoptimized);
     void noteBleScanReset();

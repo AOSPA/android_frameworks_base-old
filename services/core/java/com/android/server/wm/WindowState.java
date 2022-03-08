@@ -106,6 +106,7 @@ import static android.view.WindowManagerPolicyConstants.TYPE_LAYER_OFFSET;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BACK_PREVIEW;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
@@ -245,6 +246,7 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.window.ClientWindowFrames;
+import android.window.IOnBackInvokedCallback;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.KeyInterceptionInfo;
@@ -652,6 +654,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     private final Rect mTmpRect = new Rect();
     private final Point mTmpPoint = new Point();
+    private final Region mTmpRegion = new Region();
 
     private final Transaction mTmpTransaction;
 
@@ -843,6 +846,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             t.setPosition(mSurfaceControl, mSurfacePosition.x, mSurfacePosition.y);
         }
     };
+
+    /**
+     * @see #setOnBackInvokedCallback(IOnBackInvokedCallback)
+     */
+    private IOnBackInvokedCallback mOnBackInvokedCallback;
 
     @Override
     WindowState asWindowState() {
@@ -1058,6 +1066,22 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mKeepClearAreas.clear();
         mKeepClearAreas.addAll(keepClearAreas);
         return true;
+    }
+
+    /**
+     * Used by {@link android.window.WindowOnBackInvokedDispatcher} to set the callback to be
+     * called when a back navigation action is initiated.
+     * @see BackNavigationController
+     */
+    void setOnBackInvokedCallback(@Nullable IOnBackInvokedCallback onBackInvokedCallback) {
+        ProtoLog.d(WM_DEBUG_BACK_PREVIEW, "%s: Setting back callback %s",
+                this, onBackInvokedCallback);
+        mOnBackInvokedCallback = onBackInvokedCallback;
+    }
+
+    @Nullable
+    IOnBackInvokedCallback getOnBackInvokedCallback() {
+        return mOnBackInvokedCallback;
     }
 
     interface PowerManagerWrapper {
@@ -1729,20 +1753,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 rootTask.getDimBounds(mTmpRect);
             } else {
                 intersectWithRootTaskBounds = false;
-            }
-            if (inSplitScreenPrimaryWindowingMode()) {
-                // If this is in the primary split and the root home task is the top visible task in
-                // the secondary split, it means this is "minimized" and thus must prevent
-                // overlapping with home.
-                // TODO(b/158242495): get rid of this when drag/drop can use surface bounds.
-                final Task rootSecondary =
-                        task.getDisplayArea().getRootSplitScreenSecondaryTask();
-                if (rootSecondary.isActivityTypeHome() || rootSecondary.isActivityTypeRecents()) {
-                    final WindowContainer topTask = rootSecondary.getTopChild();
-                    if (topTask.isVisible()) {
-                        cutRect(mTmpRect, topTask.getBounds());
-                    }
-                }
             }
         }
 
@@ -2774,6 +2784,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 region.set(-dw, -dh, dw + dw, dh + dh);
             }
             subtractTouchExcludeRegionIfNeeded(region);
+
         } else {
             // Not modal
             getTouchableRegion(region);
@@ -2783,6 +2794,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final Rect frame = mWindowFrames.mFrame;
         if (frame.left != 0 || frame.top != 0) {
             region.translate(-frame.left, -frame.top);
+        }
+        if (modal && mTouchableInsets == TOUCHABLE_INSETS_REGION) {
+            // The client gave us a touchable region and so first
+            // we calculate the untouchable region, then punch that out of our
+            // expanded modal region.
+            mTmpRegion.set(0, 0, frame.right, frame.bottom);
+            mTmpRegion.op(mGivenTouchableRegion, Region.Op.DIFFERENCE);
+            region.op(mTmpRegion, Region.Op.DIFFERENCE);
         }
 
         // TODO(b/139804591): sizecompat layout needs to be reworked. Currently mFrame is post-
@@ -3852,6 +3871,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to deliver inset state change w=" + this, e);
         }
+        final WindowContainer p = getParent();
+        if (p != null) {
+            p.updateOverlayInsetsState(this);
+        }
     }
 
     @Override
@@ -4704,14 +4727,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (!isImeLayeringTarget()) {
             return false;
         }
-        // If we are in split screen which case we process the IME at the DisplayContent level to
-        // ensure it is above the docked divider.
-        // i.e. Like {@link DisplayContent.ImeContainer#skipImeWindowsDuringTraversal}, the IME
-        // window will be ignored to traverse when the IME target is still in split-screen mode.
-        if (mDisplayContent.getDefaultTaskDisplayArea().isSplitScreenModeActivated()
-                && getTask() != null) {
-            return false;
-        }
         // Note that we don't process IME window if the IME input target is not on the screen.
         // In case some unexpected IME visibility cases happen like starting the remote
         // animation on the keyguard but seeing the IME window that originally on the app
@@ -4895,18 +4910,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             if (hasSurface) {
                 mWmService.mDestroySurface.add(this);
             }
+            if (mRemoveOnExit) {
+                mWmService.mPendingRemove.add(this);
+                mRemoveOnExit = false;
+            }
         }
         mAnimatingExit = false;
         getDisplayContent().mWallpaperController.hideWallpapers(this);
-    }
-
-    @Override
-    boolean handleCompleteDeferredRemoval() {
-        if (mRemoveOnExit) {
-            mRemoveOnExit = false;
-            removeImmediately();
-        }
-        return super.handleCompleteDeferredRemoval();
     }
 
     boolean clearAnimatingFlags() {
@@ -5409,17 +5419,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     ? mStartingData.mAssociatedTask.getBounds()
                     : parentWindowContainer.getBounds();
             outPoint.offset(-parentBounds.left, -parentBounds.top);
-        }
-
-        Task rootTask = getRootTask();
-
-        // If we have root task outsets, that means the top-left
-        // will be outset, and we need to inset ourselves
-        // to account for it. If we actually have shadows we will
-        // then un-inset ourselves by the surfaceInsets.
-        if (rootTask != null) {
-            final int outset = rootTask.getTaskOutset();
-            outPoint.offset(outset, outset);
         }
 
         // The surface size is larger than the window if the window has positive surface insets.
@@ -6017,5 +6016,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     true /* includingParents */);
         }
         mWmService.handleTaskFocusChange(getTask(), mActivityRecord);
+    }
+
+    void clearClientTouchableRegion() {
+        mTouchableInsets = ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_FRAME;
+        mGivenTouchableRegion.setEmpty();
     }
 }

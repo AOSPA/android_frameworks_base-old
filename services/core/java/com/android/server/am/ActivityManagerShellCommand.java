@@ -98,6 +98,7 @@ import android.util.DebugUtils;
 import android.util.DisplayMetrics;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
+import android.window.SplashScreen;
 
 import com.android.internal.compat.CompatibilityChangeConfig;
 import com.android.internal.util.HexDump;
@@ -178,6 +179,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     private boolean mIsLockTask;
     private boolean mAsync;
     private BroadcastOptions mBroadcastOptions;
+    private boolean mShowSplashScreen;
 
     final boolean mDumping;
 
@@ -238,8 +240,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runBugReport(pw);
                 case "force-stop":
                     return runForceStop(pw);
-                case "stop-fgs":
-                    return runStopForegroundServices(pw);
+                case "stop-app":
+                    return runStopApp(pw);
                 case "fgs-notification-rate-limit":
                     return runFgsNotificationRateLimit(pw);
                 case "crash":
@@ -336,6 +338,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runGetIsolatedProcesses(pw);
                 case "set-stop-user-on-switch":
                     return runSetStopUserOnSwitch(pw);
+                case "set-bg-abusive-uids":
+                    return runSetBgAbusiveUids(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -428,6 +432,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     mBroadcastOptions.setBackgroundActivityStartsAllowed(true);
                 } else if (opt.equals("--async")) {
                     mAsync = true;
+                } else if (opt.equals("--splashscreen-show-icon")) {
+                    mShowSplashScreen = true;
                 } else {
                     return false;
                 }
@@ -565,6 +571,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     options = ActivityOptions.makeBasic();
                 }
                 options.setLockTaskEnabled(true);
+            }
+            if (mShowSplashScreen) {
+                if (options == null) {
+                    options = ActivityOptions.makeBasic();
+                }
+                options.setSplashScreenStyle(SplashScreen.SPLASH_SCREEN_STYLE_ICON);
             }
             if (mWaitOption) {
                 result = mInternal.startActivityAndWait(null, SHELL_PACKAGE_NAME, null, intent,
@@ -1118,7 +1130,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    int runStopForegroundServices(PrintWriter pw) throws RemoteException {
+    int runStopApp(PrintWriter pw) throws RemoteException {
         int userId = UserHandle.USER_SYSTEM;
 
         String opt;
@@ -1130,7 +1142,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 return -1;
             }
         }
-        mInterface.makeServicesNonForeground(getNextArgRequired(), userId);
+        mInterface.stopAppForUser(getNextArgRequired(), userId);
         return 0;
     }
 
@@ -3215,6 +3227,43 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    // TODO(b/203105544) STOPSHIP - For debugging only, to be removed before shipping.
+    private int runSetBgAbusiveUids(PrintWriter pw) throws RemoteException {
+        final String arg = getNextArg();
+        final AppBatteryTracker batteryTracker =
+                mInternal.mAppRestrictionController.getAppStateTracker(AppBatteryTracker.class);
+        if (batteryTracker == null) {
+            getErrPrintWriter().println("Unable to get bg battery tracker");
+            return -1;
+        }
+        if (arg == null) {
+            batteryTracker.mDebugUidPercentages.clear();
+            return 0;
+        }
+        String[] pairs = arg.split(",");
+        int[] uids = new int[pairs.length];
+        double[] values = new double[pairs.length];
+        try {
+            for (int i = 0; i < pairs.length; i++) {
+                String[] pair = pairs[i].split("=");
+                if (pair.length != 2) {
+                    getErrPrintWriter().println("Malformed input");
+                    return -1;
+                }
+                uids[i] = Integer.parseInt(pair[0]);
+                values[i] = Double.parseDouble(pair[1]);
+            }
+        } catch (NumberFormatException e) {
+            getErrPrintWriter().println("Malformed input");
+            return -1;
+        }
+        batteryTracker.mDebugUidPercentages.clear();
+        for (int i = 0; i < pairs.length; i++) {
+            batteryTracker.mDebugUidPercentages.put(uids[i], values[i]);
+        }
+        return 0;
+    }
+
     private Resources getResources(PrintWriter pw) throws RemoteException {
         // system resources does not contain all the device configuration, construct it manually.
         Configuration config = mInterface.getConfiguration();
@@ -3301,6 +3350,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --windowingMode <WINDOWING_MODE>: The windowing mode to launch the activity into.");
             pw.println("      --activityType <ACTIVITY_TYPE>: The activity type to launch the activity as.");
             pw.println("      --display <DISPLAY_ID>: The display to launch the activity into.");
+            pw.println("      --splashscreen-icon: Show the splash screen icon on launch.");
             pw.println("  start-service [--user <USER_ID> | current] <INTENT>");
             pw.println("      Start a Service.  Options are:");
             pw.println("      --user <USER_ID> | current: Specify which user to run as; if not");
@@ -3551,6 +3601,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("         Sets whether the current user (and its profiles) should be stopped"
                     + " when switching to a different user.");
             pw.println("         Without arguments, it resets to the value defined by platform.");
+            pw.println("  set-bg-abusive-uids [uid=percentage][,uid=percentage...]");
+            pw.println("         Force setting the battery usage of the given UID.");
             pw.println();
             Intent.printIntentArgsHelp(pw, "");
         }

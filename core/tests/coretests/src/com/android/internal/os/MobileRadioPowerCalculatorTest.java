@@ -16,6 +16,9 @@
 
 package com.android.internal.os;
 
+import static android.net.NetworkStats.DEFAULT_NETWORK_NO;
+import static android.net.NetworkStats.METERED_NO;
+import static android.net.NetworkStats.ROAMING_NO;
 import static android.os.BatteryStats.POWER_DATA_UNAVAILABLE;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -94,7 +97,8 @@ public class MobileRadioPowerCalculatorTest {
 
         // Note application network activity
         NetworkStats networkStats = new NetworkStats(10000, 1)
-                .insertEntry("cellular", APP_UID, 0, 0, 1000, 100, 2000, 20, 100);
+                .addEntry(new NetworkStats.Entry("cellular", APP_UID, 0, 0,
+                        METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO, 1000, 100, 2000, 20, 100));
         mStatsRule.setNetworkStats(networkStats);
 
         ModemActivityInfo mai = new ModemActivityInfo(10000, 2000, 3000,
@@ -102,7 +106,7 @@ public class MobileRadioPowerCalculatorTest {
         stats.noteModemControllerActivity(mai, POWER_DATA_UNAVAILABLE, 10000, 10000,
                 mNetworkStatsManager);
 
-        mStatsRule.setTime(12_000_000, 12_000_000);
+        mStatsRule.setTime(12_000, 12_000);
 
         MobileRadioPowerCalculator calculator =
                 new MobileRadioPowerCalculator(mStatsRule.getPowerProfile());
@@ -160,7 +164,8 @@ public class MobileRadioPowerCalculatorTest {
 
         // Note application network activity
         mStatsRule.setNetworkStats(new NetworkStats(10000, 1)
-                .insertEntry("cellular", APP_UID, 0, 0, 1000, 100, 2000, 20, 100));
+                .addEntry(new NetworkStats.Entry("cellular", APP_UID, 0, 0,
+                    METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO, 1000, 100, 2000, 20, 100)));
 
         stats.noteModemControllerActivity(null, POWER_DATA_UNAVAILABLE, 10000, 10000,
                 mNetworkStatsManager);
@@ -169,7 +174,8 @@ public class MobileRadioPowerCalculatorTest {
                 BatteryStats.Uid.PROCESS_STATE_BACKGROUND, 11000);
 
         mStatsRule.setNetworkStats(new NetworkStats(12000, 1)
-                .insertEntry("cellular", APP_UID, 0, 0, 1000, 250, 2000, 80, 200));
+                .addEntry(new NetworkStats.Entry("cellular", APP_UID, 0, 0,
+                    METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO, 1000, 250, 2000, 80, 200)));
 
         stats.noteModemControllerActivity(null, POWER_DATA_UNAVAILABLE, 12000, 12000,
                 mNetworkStatsManager);
@@ -241,14 +247,15 @@ public class MobileRadioPowerCalculatorTest {
 
         // Note application network activity
         NetworkStats networkStats = new NetworkStats(10000, 1)
-                .insertEntry("cellular", APP_UID, 0, 0, 1000, 100, 2000, 20, 100);
+                .addEntry(new NetworkStats.Entry("cellular", APP_UID, 0, 0,
+                        METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO, 1000, 100, 2000, 20, 100));
         mStatsRule.setNetworkStats(networkStats);
 
         ModemActivityInfo mai = new ModemActivityInfo(10000, 2000, 3000,
                 new int[]{100, 200, 300, 400, 500}, 600);
         stats.noteModemControllerActivity(mai, 10_000_000, 10000, 10000, mNetworkStatsManager);
 
-        mStatsRule.setTime(12_000_000, 12_000_000);
+        mStatsRule.setTime(12_000, 12_000);
 
         MobileRadioPowerCalculator calculator =
                 new MobileRadioPowerCalculator(mStatsRule.getPowerProfile());
@@ -306,7 +313,8 @@ public class MobileRadioPowerCalculatorTest {
 
         // Note application network activity
         mStatsRule.setNetworkStats(new NetworkStats(10000, 1)
-                .insertEntry("cellular", APP_UID, 0, 0, 1000, 100, 2000, 20, 100));
+                .addEntry(new NetworkStats.Entry("cellular", APP_UID, 0, 0,
+                    METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO, 1000, 100, 2000, 20, 100)));
 
         stats.noteModemControllerActivity(null, 10_000_000, 10000, 10000, mNetworkStatsManager);
 
@@ -314,7 +322,8 @@ public class MobileRadioPowerCalculatorTest {
                 BatteryStats.Uid.PROCESS_STATE_BACKGROUND, 11000);
 
         mStatsRule.setNetworkStats(new NetworkStats(12000, 1)
-                .insertEntry("cellular", APP_UID, 0, 0, 1000, 250, 2000, 80, 200));
+                .addEntry(new NetworkStats.Entry("cellular", APP_UID, 0, 0,
+                    METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO, 1000, 250, 2000, 80, 200)));
 
         stats.noteModemControllerActivity(null, 15_000_000, 12000, 12000, mNetworkStatsManager);
 

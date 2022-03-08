@@ -46,11 +46,14 @@ import com.android.keyguard.KeyguardDisplayManager;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.mediator.ScreenOnCoordinator;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollectorFake;
+import com.android.systemui.dreams.DreamOverlayStateController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
+import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.ScreenOffAnimationController;
@@ -70,6 +73,8 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import dagger.Lazy;
 
 @RunWith(AndroidTestingRunner.class)
 @RunWithLooper
@@ -97,6 +102,9 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private @Mock ScreenOffAnimationController mScreenOffAnimationController;
     private @Mock InteractionJankMonitor mInteractionJankMonitor;
     private @Mock ScreenOnCoordinator mScreenOnCoordinator;
+    private @Mock Lazy<NotificationShadeWindowController> mNotificationShadeWindowControllerLazy;
+    private @Mock DreamOverlayStateController mDreamOverlayStateController;
+    private @Mock ActivityLaunchAnimator mActivityLaunchAnimator;
     private @Mock FoldAodAnimationController mFoldAodAnimationController;
     private @Mock UnfoldLightRevealOverlayAnimation mUnfoldAnimation;
     private DeviceConfigProxy mDeviceConfig = new DeviceConfigProxyFake();
@@ -191,7 +199,10 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
                 mScreenOffAnimationController,
                 () -> mNotificationShadeDepthController,
                 mScreenOnCoordinator,
-                mInteractionJankMonitor);
+                mInteractionJankMonitor,
+                mDreamOverlayStateController,
+                mNotificationShadeWindowControllerLazy,
+                () -> mActivityLaunchAnimator);
         mViewMediator.start();
     }
 }

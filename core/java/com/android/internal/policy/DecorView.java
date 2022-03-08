@@ -87,7 +87,6 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
-import android.view.OnBackInvokedDispatcher;
 import android.view.PendingInsetsController;
 import android.view.ThreadedRenderer;
 import android.view.View;
@@ -109,7 +108,6 @@ import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.widget.FrameLayout;
 import android.widget.PopupWindow;
-import android.window.WindowOnBackInvokedDispatcher;
 
 import com.android.internal.R;
 import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
@@ -285,6 +283,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     private Insets mBackgroundInsets = Insets.NONE;
     private Insets mLastBackgroundInsets = Insets.NONE;
     private boolean mDrawLegacyNavigationBarBackground;
+    private boolean mDrawLegacyNavigationBarBackgroundHandled;
 
     private PendingInsetsController mPendingInsetsController = new PendingInsetsController();
 
@@ -296,7 +295,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         return true;
     };
     private Consumer<Boolean> mCrossWindowBlurEnabledListener;
-    private final WindowOnBackInvokedDispatcher mOnBackInvokedDispatcher;
 
     DecorView(Context context, int featureId, PhoneWindow window,
             WindowManager.LayoutParams params) {
@@ -325,7 +323,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         initResizingPaints();
 
         mLegacyNavigationBarBackgroundPaint.setColor(Color.BLACK);
-        mOnBackInvokedDispatcher = new WindowOnBackInvokedDispatcher();
     }
 
     void setBackgroundFallback(@Nullable Drawable fallbackDrawable) {
@@ -1034,6 +1031,9 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     @Override
     public void onSystemBarAppearanceChanged(@WindowInsetsController.Appearance int appearance) {
         updateColorViews(null /* insets */, true /* animate */);
+        if (mWindow != null) {
+            mWindow.dispatchOnSystemBarAppearanceChanged(appearance);
+        }
     }
 
     @Override
@@ -1168,6 +1168,9 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             mDrawLegacyNavigationBarBackground = mNavigationColorViewState.visible
                     && (mWindow.getAttributes().flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) == 0;
             if (oldDrawLegacy != mDrawLegacyNavigationBarBackground) {
+                mDrawLegacyNavigationBarBackgroundHandled =
+                        mWindow.onDrawLegacyNavigationBarBackgroundChanged(
+                                mDrawLegacyNavigationBarBackground);
                 if (viewRoot != null) {
                     viewRoot.requestInvalidateRootRenderNode();
                 }
@@ -1260,7 +1263,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             }
         }
 
-        if (forceConsumingNavBar) {
+        if (forceConsumingNavBar && !mDrawLegacyNavigationBarBackgroundHandled) {
             mBackgroundInsets = Insets.of(mLastLeftInset, 0, mLastRightInset, mLastBottomInset);
         } else {
             mBackgroundInsets = Insets.NONE;
@@ -1873,7 +1876,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         }
 
         mPendingInsetsController.detach();
-        mOnBackInvokedDispatcher.detachFromWindow();
     }
 
     @Override
@@ -1916,11 +1918,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     @Override
     public PendingInsetsController providePendingInsetsController() {
         return mPendingInsetsController;
-    }
-
-    @Override
-    public WindowOnBackInvokedDispatcher provideWindowOnBackInvokedDispatcher() {
-        return mOnBackInvokedDispatcher;
     }
 
     private ActionMode createActionMode(
@@ -2377,7 +2374,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
                 }
             }
         }
-        mOnBackInvokedDispatcher.clear();
     }
 
     @Override
@@ -2485,7 +2481,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     }
 
     private void drawLegacyNavigationBarBackground(RecordingCanvas canvas) {
-        if (!mDrawLegacyNavigationBarBackground) {
+        if (!mDrawLegacyNavigationBarBackground || mDrawLegacyNavigationBarBackgroundHandled) {
             return;
         }
         View v = mNavigationColorViewState.view;
@@ -2657,15 +2653,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         } else {
             return mPendingInsetsController;
         }
-    }
-
-    /**
-     * Returns the {@link OnBackInvokedDispatcher} on the decor view.
-     */
-    @Override
-    @Nullable
-    public OnBackInvokedDispatcher getOnBackInvokedDispatcher() {
-        return mOnBackInvokedDispatcher;
     }
 
     @Override

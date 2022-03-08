@@ -19,22 +19,50 @@ package com.android.server.biometrics.sensors;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.hardware.biometrics.BiometricsProtoEnums;
+import android.hardware.biometrics.common.OperationContext;
 import android.os.IBinder;
+
+import com.android.server.biometrics.log.BiometricContext;
+import com.android.server.biometrics.log.BiometricLogger;
+
+import java.util.function.Supplier;
 
 /**
  * Abstract {@link BaseClientMonitor} implementation that supports HAL operations.
  * @param <T> HAL template
  */
 public abstract class HalClientMonitor<T> extends BaseClientMonitor {
+    
+    @NonNull
+    protected final Supplier<T> mLazyDaemon;
+
+    @NonNull
+    private final OperationContext mOperationContext = new OperationContext();
+
     /**
-     * Interface that allows ClientMonitor subclasses to retrieve a fresh instance to the HAL.
+     * @param context    system_server context
+     * @param lazyDaemon pointer for lazy retrieval of the HAL
+     * @param token      a unique token for the client
+     * @param listener   recipient of related events (e.g. authentication)
+     * @param userId     target user id for operation
+     * @param owner      name of the client that owns this
+     * @param cookie     BiometricPrompt authentication cookie (to be moved into a subclass soon)
+     * @param sensorId   ID of the sensor that the operation should be requested of
+     * @param biometricLogger framework stats logger
+     * @param biometricContext system context metadata
      */
-    public interface LazyDaemon<T> {
-        /**
-         * @return A fresh instance to the biometric HAL
-         */
-        T getDaemon();
+    public HalClientMonitor(@NonNull Context context, @NonNull Supplier<T> lazyDaemon,
+            @Nullable IBinder token, @Nullable ClientMonitorCallbackConverter listener, int userId,
+            @NonNull String owner, int cookie, int sensorId,
+            @NonNull BiometricLogger biometricLogger, @NonNull BiometricContext biometricContext) {
+        super(context, token, listener, userId, owner, cookie, sensorId,
+                biometricLogger, biometricContext);
+        mLazyDaemon = lazyDaemon;
+    }
+
+    @Nullable
+    public T getFreshDaemon() {
+        return mLazyDaemon.get();
     }
 
     /**
@@ -49,33 +77,28 @@ public abstract class HalClientMonitor<T> extends BaseClientMonitor {
      */
     public abstract void unableToStart();
 
-    @NonNull
-    protected final LazyDaemon<T> mLazyDaemon;
+    @Override
+    public void destroy() {
+        super.destroy();
 
-    /**
-     * @param context    system_server context
-     * @param lazyDaemon pointer for lazy retrieval of the HAL
-     * @param token      a unique token for the client
-     * @param listener   recipient of related events (e.g. authentication)
-     * @param userId     target user id for operation
-     * @param owner      name of the client that owns this
-     * @param cookie     BiometricPrompt authentication cookie (to be moved into a subclass soon)
-     * @param sensorId   ID of the sensor that the operation should be requested of
-     * @param statsModality One of {@link BiometricsProtoEnums} MODALITY_* constants
-     * @param statsAction   One of {@link BiometricsProtoEnums} ACTION_* constants
-     * @param statsClient   One of {@link BiometricsProtoEnums} CLIENT_* constants
-     */
-    public HalClientMonitor(@NonNull Context context, @NonNull LazyDaemon<T> lazyDaemon,
-            @Nullable IBinder token, @Nullable ClientMonitorCallbackConverter listener, int userId,
-            @NonNull String owner, int cookie, int sensorId, int statsModality, int statsAction,
-            int statsClient) {
-        super(context, token, listener, userId, owner, cookie, sensorId, statsModality,
-                statsAction, statsClient);
-        mLazyDaemon = lazyDaemon;
+        // subclasses should do this earlier in most cases, but ensure it happens now
+        unsubscribeBiometricContext();
     }
 
-    @Nullable
-    public T getFreshDaemon() {
-        return mLazyDaemon.getDaemon();
+    protected OperationContext getOperationContext() {
+        return getBiometricContext().updateContext(mOperationContext, isCryptoOperation());
+    }
+
+    protected ClientMonitorCallback getBiometricContextUnsubscriber() {
+        return new ClientMonitorCallback() {
+            @Override
+            public void onClientFinished(@NonNull BaseClientMonitor monitor, boolean success) {
+                unsubscribeBiometricContext();
+            }
+        };
+    }
+
+    protected void unsubscribeBiometricContext() {
+        getBiometricContext().unsubscribe(mOperationContext);
     }
 }

@@ -482,8 +482,8 @@ public class NetworkPolicyManager {
      * @param networkTypes the network types this override applies to. If no
      *            network types are specified, override values will be ignored.
      *            {@see TelephonyManager#getAllNetworkTypes()}
-     * @param timeoutMillis the timeout after which the requested override will
-     *            be automatically cleared, or {@code 0} to leave in the
+     * @param expirationDurationMillis the duration after which the requested override
+     *            will be automatically cleared, or {@code 0} to leave in the
      *            requested state until explicitly cleared, or the next reboot,
      *            whichever happens first
      * @param callingPackage the name of the package making the call.
@@ -491,11 +491,11 @@ public class NetworkPolicyManager {
      */
     public void setSubscriptionOverride(int subId, @SubscriptionOverrideMask int overrideMask,
             @SubscriptionOverrideMask int overrideValue,
-            @NonNull @Annotation.NetworkType int[] networkTypes, long timeoutMillis,
+            @NonNull @Annotation.NetworkType int[] networkTypes, long expirationDurationMillis,
             @NonNull String callingPackage) {
         try {
             mService.setSubscriptionOverride(subId, overrideMask, overrideValue, networkTypes,
-                    timeoutMillis, callingPackage);
+                    expirationDurationMillis, callingPackage);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -506,13 +506,16 @@ public class NetworkPolicyManager {
      *
      * @param subId the subscriber this relationship applies to.
      * @param plans the list of plans.
+     * @param expirationDurationMillis the duration after which the subscription plans
+     *            will be automatically cleared, or {@code 0} to leave the plans until
+     *            explicitly cleared, or the next reboot, whichever happens first
      * @param callingPackage the name of the package making the call
      * @hide
      */
     public void setSubscriptionPlans(int subId, @NonNull SubscriptionPlan[] plans,
-            @NonNull String callingPackage) {
+            long expirationDurationMillis, @NonNull String callingPackage) {
         try {
-            mService.setSubscriptionPlans(subId, plans, callingPackage);
+            mService.setSubscriptionPlans(subId, plans, expirationDurationMillis, callingPackage);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -523,9 +526,11 @@ public class NetworkPolicyManager {
      *
      * @param subId the subscriber to get the subscription plans for.
      * @param callingPackage the name of the package making the call.
+     * @return the active {@link SubscriptionPlan}s for the given subscription id, or
+     *         {@code null} if not found.
      * @hide
      */
-    @NonNull
+    @Nullable
     public SubscriptionPlan[] getSubscriptionPlans(int subId, @NonNull String callingPackage) {
         try {
             return mService.getSubscriptionPlans(subId, callingPackage);
@@ -538,7 +543,7 @@ public class NetworkPolicyManager {
      * Get subscription plan for the given networkTemplate.
      *
      * @param template the networkTemplate to get the subscription plan for.
-     * @return the active {@link SubscriptionPlan} for the given template, or
+     * @return the active {@link SubscriptionPlan}s for the given template, or
      *         {@code null} if not found.
      * @hide
      */

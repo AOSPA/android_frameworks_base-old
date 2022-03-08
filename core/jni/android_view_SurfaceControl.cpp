@@ -104,6 +104,7 @@ static struct {
     jfieldID hdrCapabilities;
     jfieldID autoLowLatencyModeSupported;
     jfieldID gameContentTypeSupported;
+    jfieldID preferredBootDisplayMode;
 } gDynamicDisplayInfoClassInfo;
 
 static struct {
@@ -953,6 +954,11 @@ static void nativeSetDropInputMode(JNIEnv* env, jclass clazz, jlong transactionO
     transaction->setDropInputMode(ctrl, static_cast<gui::DropInputMode>(mode));
 }
 
+static void nativeSanitize(JNIEnv* env, jclass clazz, jlong transactionObj) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    transaction->sanitize();
+}
+
 static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
     const auto displayIds = SurfaceComposerClient::getPhysicalDisplayIds();
     jlongArray array = env->NewLongArray(displayIds.size());
@@ -1296,6 +1302,9 @@ static jobject nativeGetDynamicDisplayInfo(JNIEnv* env, jclass clazz, jobject to
 
     env->SetBooleanField(object, gDynamicDisplayInfoClassInfo.gameContentTypeSupported,
                          info.gameContentTypeSupported);
+
+    env->SetIntField(object, gDynamicDisplayInfoClassInfo.preferredBootDisplayMode,
+                     info.preferredBootDisplayMode);
     return object;
 }
 
@@ -1631,6 +1640,27 @@ static void nativeOverrideHdrTypes(JNIEnv* env, jclass clazz, jobject tokenObjec
         jniThrowExceptionFmt(env, "java/lang/SecurityException",
                              "ACCESS_SURFACE_FLINGER is missing");
     }
+}
+
+static jboolean nativeGetBootDisplayModeSupport(JNIEnv* env, jclass clazz) {
+    bool isBootDisplayModeSupported = false;
+    SurfaceComposerClient::getBootDisplayModeSupport(&isBootDisplayModeSupported);
+    return static_cast<jboolean>(isBootDisplayModeSupported);
+}
+
+static void nativeSetBootDisplayMode(JNIEnv* env, jclass clazz, jobject tokenObject,
+                                     jint displayModId) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObject));
+    if (token == NULL) return;
+
+    SurfaceComposerClient::setBootDisplayMode(token, displayModId);
+}
+
+static void nativeClearBootDisplayMode(JNIEnv* env, jclass clazz, jobject tokenObject) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObject));
+    if (token == NULL) return;
+
+    SurfaceComposerClient::clearBootDisplayMode(token);
 }
 
 static void nativeSetAutoLowLatencyMode(JNIEnv* env, jclass clazz, jobject tokenObject, jboolean on) {
@@ -2041,6 +2071,12 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetDisplayNativePrimaries },
     {"nativeSetActiveColorMode", "(Landroid/os/IBinder;I)Z",
             (void*)nativeSetActiveColorMode},
+     {"nativeGetBootDisplayModeSupport", "()Z",
+                (void*)nativeGetBootDisplayModeSupport },
+    {"nativeSetBootDisplayMode", "(Landroid/os/IBinder;I)V",
+            (void*)nativeSetBootDisplayMode },
+    {"nativeClearBootDisplayMode", "(Landroid/os/IBinder;)V",
+            (void*)nativeClearBootDisplayMode },
     {"nativeSetAutoLowLatencyMode", "(Landroid/os/IBinder;Z)V",
             (void*)nativeSetAutoLowLatencyMode },
     {"nativeSetGameContentType", "(Landroid/os/IBinder;Z)V",
@@ -2132,8 +2168,10 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetLayerId },
     {"nativeSetDropInputMode", "(JJI)V",
              (void*)nativeSetDropInputMode },
-    {"nativeAddTransactionCommittedListener", "(JLandroid/view/TransactionCommittedListener;)V",
+    {"nativeAddTransactionCommittedListener", "(JLandroid/view/SurfaceControl$TransactionCommittedListener;)V",
             (void*) nativeAddTransactionCommittedListener },
+    {"nativeSanitize", "(J)V",
+            (void*) nativeSanitize }
         // clang-format on
 };
 
@@ -2177,6 +2215,8 @@ int register_android_view_SurfaceControl(JNIEnv* env)
             GetFieldIDOrDie(env, dynamicInfoClazz, "autoLowLatencyModeSupported", "Z");
     gDynamicDisplayInfoClassInfo.gameContentTypeSupported =
             GetFieldIDOrDie(env, dynamicInfoClazz, "gameContentTypeSupported", "Z");
+    gDynamicDisplayInfoClassInfo.preferredBootDisplayMode =
+            GetFieldIDOrDie(env, dynamicInfoClazz, "preferredBootDisplayMode", "I");
 
     jclass modeClazz = FindClassOrDie(env, "android/view/SurfaceControl$DisplayMode");
     gDisplayModeClassInfo.clazz = MakeGlobalRefOrDie(env, modeClazz);
@@ -2353,7 +2393,7 @@ int register_android_view_SurfaceControl(JNIEnv* env)
                              "([Landroid/view/SurfaceControl$JankData;)V");
 
     jclass transactionCommittedListenerClazz =
-            FindClassOrDie(env, "android/view/TransactionCommittedListener");
+            FindClassOrDie(env, "android/view/SurfaceControl$TransactionCommittedListener");
     gTransactionCommittedListenerClassInfo.clazz =
             MakeGlobalRefOrDie(env, transactionCommittedListenerClazz);
     gTransactionCommittedListenerClassInfo.onTransactionCommitted =

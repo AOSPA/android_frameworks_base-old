@@ -17,6 +17,10 @@
 package android.app;
 
 import static android.annotation.Dimension.DP;
+import static android.app.admin.DevicePolicyResources.Drawables.Source.NOTIFICATION;
+import static android.app.admin.DevicePolicyResources.Drawables.Style.SOLID_COLORED;
+import static android.app.admin.DevicePolicyResources.Drawables.UNDEFINED;
+import static android.app.admin.DevicePolicyResources.Drawables.WORK_PROFILE_ICON;
 import static android.graphics.drawable.Icon.TYPE_URI;
 import static android.graphics.drawable.Icon.TYPE_URI_ADAPTIVE_BITMAP;
 
@@ -39,6 +43,7 @@ import android.annotation.StyleableRes;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.app.admin.DevicePolicyManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
@@ -71,6 +76,7 @@ import android.os.Parcelable;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.text.BidiFormatter;
 import android.text.SpannableStringBuilder;
@@ -5046,6 +5052,18 @@ public class Notification implements Parcelable
             }
             // Note: This assumes that the current user can read the profile badge of the
             // originating user.
+            DevicePolicyManager dpm = mContext.getSystemService(DevicePolicyManager.class);
+            return dpm.getDrawable(
+                    getUpdatableProfileBadgeId(), SOLID_COLORED, NOTIFICATION,
+                    this::getDefaultProfileBadgeDrawable);
+        }
+
+        private String getUpdatableProfileBadgeId() {
+            return mContext.getSystemService(UserManager.class).isManagedProfile()
+                    ? WORK_PROFILE_ICON : UNDEFINED;
+        }
+
+        private Drawable getDefaultProfileBadgeDrawable() {
             return mContext.getPackageManager().getUserBadgeForDensityNoBackground(
                     new UserHandle(mContext.getUserId()), 0);
         }
@@ -6712,6 +6730,18 @@ public class Notification implements Parcelable
             return;
         }
         boolean isLowRam = ActivityManager.isLowRamDeviceStatic();
+
+        if (mSmallIcon != null
+                // Only bitmap icons can be downscaled.
+                && (mSmallIcon.getType() == Icon.TYPE_BITMAP
+                        || mSmallIcon.getType() == Icon.TYPE_ADAPTIVE_BITMAP)) {
+            Resources resources = context.getResources();
+            int maxSize = resources.getDimensionPixelSize(
+                    isLowRam ? R.dimen.notification_small_icon_size_low_ram
+                            : R.dimen.notification_small_icon_size);
+            mSmallIcon.scaleDownIfNecessary(maxSize, maxSize);
+        }
+
         if (mLargeIcon != null || largeIcon != null) {
             Resources resources = context.getResources();
             Class<? extends Style> style = getNotificationStyle();

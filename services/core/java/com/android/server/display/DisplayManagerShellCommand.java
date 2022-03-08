@@ -68,6 +68,8 @@ class DisplayManagerShellCommand extends ShellCommand {
                 return clearUserPreferredDisplayMode();
             case "get-user-preferred-display-mode":
                 return getUserPreferredDisplayMode();
+            case "get-active-display-mode-at-start":
+                return getActiveDisplayModeAtStart();
             case "set-match-content-frame-rate-pref":
                 return setMatchContentFrameRateUserPreference();
             case "get-match-content-frame-rate-pref":
@@ -125,6 +127,9 @@ class DisplayManagerShellCommand extends ShellCommand {
         pw.println("    Returns the user preferred display mode or null if no mode is set by user."
                 + "If DISPLAY_ID is passed, the mode for display with id = DISPLAY_ID is "
                 + "returned, else global display mode is returned.");
+        pw.println("  get-active-display-mode-at-start DISPLAY_ID");
+        pw.println("    Returns the display mode which was found at boot time of display with "
+                + "id = DISPLAY_ID");
         pw.println("  set-match-content-frame-rate-pref PREFERENCE");
         pw.println("    Sets the match content frame rate preference as PREFERENCE ");
         pw.println("  get-match-content-frame-rate-pref");
@@ -298,6 +303,30 @@ class DisplayManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int getActiveDisplayModeAtStart() {
+        final String displayIdText = getNextArg();
+        if (displayIdText == null) {
+            getErrPrintWriter().println("Error: no displayId specified");
+            return 1;
+        }
+        final int displayId;
+        try {
+            displayId = Integer.parseInt(displayIdText);
+        } catch (NumberFormatException e) {
+            getErrPrintWriter().println("Error: invalid displayId");
+            return 1;
+        }
+
+        Display.Mode mode = mService.getActiveDisplayModeAtStart(displayId);
+        if (mode == null) {
+            getOutPrintWriter().println("Boot display mode: null");
+            return 0;
+        }
+        getOutPrintWriter().println("Boot display mode: " + mode.getPhysicalWidth() + " "
+                + mode.getPhysicalHeight() + " " + mode.getRefreshRate());
+        return 0;
+    }
+
     private int setMatchContentFrameRateUserPreference() {
         final String matchContentFrameRatePrefText = getNextArg();
         if (matchContentFrameRatePrefText == null) {
@@ -335,7 +364,7 @@ class DisplayManagerShellCommand extends ShellCommand {
     }
 
     private int setUserDisabledHdrTypes() {
-        final String[] userDisabledHdrTypesText = getAllArgs();
+        String[] userDisabledHdrTypesText = peekRemainingArgs();
         if (userDisabledHdrTypesText == null) {
             getErrPrintWriter().println("Error: no userDisabledHdrTypes specified");
             return 1;
@@ -351,7 +380,6 @@ class DisplayManagerShellCommand extends ShellCommand {
             getErrPrintWriter().println("Error: invalid format of userDisabledHdrTypes");
             return 1;
         }
-
         final Context context = mService.getContext();
         final DisplayManager dm = context.getSystemService(DisplayManager.class);
         dm.setUserDisabledHdrTypes(userDisabledHdrTypes);

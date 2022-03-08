@@ -989,6 +989,29 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mWmService.checkDrawnWindowsLocked();
         }
 
+        final int N = mWmService.mPendingRemove.size();
+        if (N > 0) {
+            if (mWmService.mPendingRemoveTmp.length < N) {
+                mWmService.mPendingRemoveTmp = new WindowState[N + 10];
+            }
+            mWmService.mPendingRemove.toArray(mWmService.mPendingRemoveTmp);
+            mWmService.mPendingRemove.clear();
+            ArrayList<DisplayContent> displayList = new ArrayList();
+            for (i = 0; i < N; i++) {
+                final WindowState w = mWmService.mPendingRemoveTmp[i];
+                w.removeImmediately();
+                final DisplayContent displayContent = w.getDisplayContent();
+                if (displayContent != null && !displayList.contains(displayContent)) {
+                    displayList.add(displayContent);
+                }
+            }
+
+            for (int j = displayList.size() - 1; j >= 0; --j) {
+                final DisplayContent dc = displayList.get(j);
+                dc.assignWindowLayers(true /*setLayoutNeeded*/);
+            }
+        }
+
         forAllDisplays(dc -> {
             dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
             dc.updateSystemGestureExclusion();
@@ -1915,10 +1938,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final Task topFocusedRootTask = getTopDisplayFocusedRootTask();
         final int focusRootTaskId = topFocusedRootTask != null
                 ? topFocusedRootTask.getRootTaskId() : INVALID_TASK_ID;
-        // We dismiss the docked root task whenever we switch users.
-        if (getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
-            getDefaultTaskDisplayArea().onSplitScreenModeDismissed();
-        }
         // Also dismiss the pinned root task whenever we switch users. Removing the pinned root task
         // will also cause all tasks to be moved to the fullscreen root task at a position that is
         // appropriate.
@@ -2873,8 +2892,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     Task getLaunchRootTask(@Nullable ActivityRecord r, @Nullable ActivityOptions options,
             @Nullable Task candidateTask, boolean onTop) {
         return getLaunchRootTask(r, options, candidateTask, null /* sourceTask */, onTop,
-                null /* launchParams */, 0 /* launchFlags */, -1 /* no realCallingPid */,
-                -1 /* no realCallingUid */);
+                null /* launchParams */, 0 /* launchFlags */);
     }
 
     /**
@@ -2893,8 +2911,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     Task getLaunchRootTask(@Nullable ActivityRecord r,
             @Nullable ActivityOptions options, @Nullable Task candidateTask,
             @Nullable Task sourceTask, boolean onTop,
-            @Nullable LaunchParamsController.LaunchParams launchParams, int launchFlags,
-            int realCallingPid, int realCallingUid) {
+            @Nullable LaunchParamsController.LaunchParams launchParams, int launchFlags) {
         int taskId = INVALID_TASK_ID;
         int displayId = INVALID_DISPLAY;
         TaskDisplayArea taskDisplayArea = null;
@@ -2943,11 +2960,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         if (taskDisplayArea != null) {
             final int tdaDisplayId = taskDisplayArea.getDisplayId();
-            final boolean canLaunchOnDisplayFromStartRequest =
-                    realCallingPid != 0 && realCallingUid > 0 && r != null
-                            && mTaskSupervisor.canPlaceEntityOnDisplay(tdaDisplayId,
-                            realCallingPid, realCallingUid, r.info);
-            if (canLaunchOnDisplayFromStartRequest || canLaunchOnDisplay(r, tdaDisplayId)) {
+            if (canLaunchOnDisplay(r, tdaDisplayId)) {
                 if (r != null) {
                     final Task result = getValidLaunchRootTaskInTaskDisplayArea(
                             taskDisplayArea, r, candidateTask, options, launchParams);
@@ -2980,8 +2993,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             container = rootTask.getDisplayArea();
             if (container != null && canLaunchOnDisplay(r, container.mDisplayContent.mDisplayId)) {
                 if (windowingMode == WindowConfiguration.WINDOWING_MODE_UNDEFINED) {
-                    windowingMode = container.resolveWindowingMode(r, options, candidateTask,
-                            activityType);
+                    windowingMode = container.resolveWindowingMode(r, options, candidateTask);
                 }
                 // Always allow organized tasks that created by organizer since the activity type
                 // of an organized task is decided by the activity type of its top child, which
@@ -2997,8 +3009,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 || !canLaunchOnDisplay(r, container.mDisplayContent.mDisplayId)) {
             container = getDefaultTaskDisplayArea();
             if (windowingMode == WindowConfiguration.WINDOWING_MODE_UNDEFINED) {
-                windowingMode = container.resolveWindowingMode(r, options, candidateTask,
-                        activityType);
+                windowingMode = container.resolveWindowingMode(r, options, candidateTask);
             }
         }
 
@@ -3060,8 +3071,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             windowingMode = options != null ? options.getLaunchWindowingMode()
                     : r.getWindowingMode();
         }
-        windowingMode = taskDisplayArea.validateWindowingMode(windowingMode, r, candidateTask,
-                r.getActivityType());
+        windowingMode = taskDisplayArea.validateWindowingMode(windowingMode, r, candidateTask);
 
         // Return the topmost valid root task on the display.
         final int targetWindowingMode = windowingMode;

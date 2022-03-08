@@ -23,7 +23,6 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.annotation.IntDef;
 import android.app.Dialog;
-import android.content.Context;
 import android.graphics.Rect;
 import android.os.Debug;
 import android.os.IBinder;
@@ -47,6 +46,7 @@ final class SoftInputWindow extends Dialog {
 
     private final KeyEvent.DispatcherState mDispatcherState;
     private final Rect mBounds = new Rect();
+    private final InputMethodService mService;
 
     @Retention(SOURCE)
     @IntDef(value = {WindowState.TOKEN_PENDING, WindowState.TOKEN_SET,
@@ -120,7 +120,7 @@ final class SoftInputWindow extends Dialog {
     /**
      * Create a SoftInputWindow that uses a custom style.
      *
-     * @param context The Context in which the DockWindow should run. In
+     * @param service The {@link InputMethodService} in which the DockWindow should run. In
      *        particular, it uses the window manager and theme from this context
      *        to present its UI.
      * @param theme A style resource describing the theme to use for the window.
@@ -129,8 +129,10 @@ final class SoftInputWindow extends Dialog {
      *        using styles. This theme is applied on top of the current theme in
      *        <var>context</var>. If 0, the default dialog theme will be used.
      */
-    SoftInputWindow(Context context, int theme, KeyEvent.DispatcherState dispatcherState) {
-        super(context, theme);
+    SoftInputWindow(InputMethodService service, int theme,
+            KeyEvent.DispatcherState dispatcherState) {
+        super(service, theme);
+        mService = service;
         mDispatcherState = dispatcherState;
     }
 

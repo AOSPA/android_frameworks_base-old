@@ -16,23 +16,38 @@
 
 package android.inputmethodservice;
 
+import static android.content.Intent.ACTION_OVERLAY_CHANGED;
+import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+
+import android.animation.ValueAnimator;
+import android.annotation.FloatRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.StatusBarManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.inputmethodservice.navigationbar.NavigationBarFrame;
 import android.inputmethodservice.navigationbar.NavigationBarView;
+import android.os.PatternMatcher;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController.Appearance;
 import android.view.WindowManagerPolicyConstants;
+import android.view.animation.Interpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 
 import java.util.Objects;
@@ -51,6 +66,9 @@ final class NavigationBarController {
                 @NonNull ViewTreeObserver.InternalInsetsInfo dest) {
         }
 
+        default void onSoftInputWindowCreated(@NonNull SoftInputWindow softInputWindow) {
+        }
+
         default void onViewInitialized() {
         }
 
@@ -58,6 +76,10 @@ final class NavigationBarController {
         }
 
         default void onDestroy() {
+        }
+
+        default void setShouldShowImeSwitcherWhenImeIsShown(
+                boolean shouldShowImeSwitcherWhenImeIsShown) {
         }
 
         default String toDebugString() {
@@ -80,6 +102,10 @@ final class NavigationBarController {
         mImpl.updateTouchableInsets(originalInsets, dest);
     }
 
+    void onSoftInputWindowCreated(@NonNull SoftInputWindow softInputWindow) {
+        mImpl.onSoftInputWindowCreated(softInputWindow);
+    }
+
     void onViewInitialized() {
         mImpl.onViewInitialized();
     }
@@ -92,11 +118,21 @@ final class NavigationBarController {
         mImpl.onDestroy();
     }
 
+    void setShouldShowImeSwitcherWhenImeIsShown(boolean shouldShowImeSwitcherWhenImeIsShown) {
+        mImpl.setShouldShowImeSwitcherWhenImeIsShown(shouldShowImeSwitcherWhenImeIsShown);
+    }
+
     String toDebugString() {
         return mImpl.toDebugString();
     }
 
-    private static final class Impl implements Callback {
+    private static final class Impl implements Callback, Window.DecorCallback {
+        private static final int DEFAULT_COLOR_ADAPT_TRANSITION_TIME = 1700;
+
+        // Copied from com.android.systemui.animation.Interpolators#LEGACY_DECELERATE
+        private static final Interpolator LEGACY_DECELERATE =
+                new PathInterpolator(0f, 0f, 0.2f, 1f);
+
         @NonNull
         private final InputMethodService mService;
 
@@ -108,6 +144,22 @@ final class NavigationBarController {
         private NavigationBarFrame mNavigationBarFrame;
         @Nullable
         Insets mLastInsets;
+
+        @Nullable
+        private BroadcastReceiver mSystemOverlayChangedReceiver;
+
+        private boolean mShouldShowImeSwitcherWhenImeIsShown;
+
+        @Appearance
+        private int mAppearance;
+
+        @FloatRange(from = 0.0f, to = 1.0f)
+        private float mDarkIntensity;
+
+        @Nullable
+        private ValueAnimator mTintAnimator;
+
+        private boolean mDrawLegacyNavigationBarBackground;
 
         Impl(@NonNull InputMethodService inputMethodService) {
             mService = inputMethodService;
@@ -134,6 +186,9 @@ final class NavigationBarController {
 
         private void installNavigationBarFrameIfNecessary() {
             if (!mRenderGesturalNavButtons) {
+                return;
+            }
+            if (mNavigationBarFrame != null) {
                 return;
             }
             final View rawDecorView = mService.mWindow.getWindow().getDecorView();
@@ -163,7 +218,9 @@ final class NavigationBarController {
                     // TODO(b/213337792): Support InputMethodService#setBackDisposition().
                     // TODO(b/213337792): Set NAVIGATION_HINT_IME_SHOWN only when necessary.
                     final int hints = StatusBarManager.NAVIGATION_HINT_BACK_ALT
-                            | StatusBarManager.NAVIGATION_HINT_IME_SHOWN;
+                            | (mShouldShowImeSwitcherWhenImeIsShown
+                                    ? StatusBarManager.NAVIGATION_HINT_IME_SWITCHER_SHOWN
+                                    : 0);
                     navigationBarView.setNavigationIconHints(hints);
                 }
             } else {
@@ -172,7 +229,25 @@ final class NavigationBarController {
                 mLastInsets = systemInsets;
             }
 
-            mNavigationBarFrame.setBackground(null);
+            if (mDrawLegacyNavigationBarBackground) {
+                mNavigationBarFrame.setBackgroundColor(Color.BLACK);
+            } else {
+                mNavigationBarFrame.setBackground(null);
+            }
+
+            setIconTintInternal(calculateTargetDarkIntensity(mAppearance,
+                    mDrawLegacyNavigationBarBackground));
+        }
+
+        private void uninstallNavigationBarFrameIfNecessary() {
+            if (mNavigationBarFrame == null) {
+                return;
+            }
+            final ViewParent parent = mNavigationBarFrame.getParent();
+            if (parent instanceof ViewGroup) {
+                ((ViewGroup) parent).removeView(mNavigationBarFrame);
+            }
+            mNavigationBarFrame = null;
         }
 
         @Override
@@ -241,32 +316,48 @@ final class NavigationBarController {
                 }
                 final boolean insetChanged = !Objects.equals(systemInsets, mLastInsets);
                 if (zOrderChanged || insetChanged) {
-                    final NavigationBarFrame that = mNavigationBarFrame;
-                    that.post(() -> {
-                        if (!that.isAttachedToWindow()) {
-                            return;
-                        }
-                        final Insets currentSystemInsets = getSystemInsets();
-                        if (!Objects.equals(currentSystemInsets, mLastInsets)) {
-                            that.setLayoutParams(
-                                    new FrameLayout.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            currentSystemInsets.bottom, Gravity.BOTTOM));
-                            mLastInsets = currentSystemInsets;
-                        }
-                        if (decor instanceof ViewGroup) {
-                            ViewGroup decorGroup = (ViewGroup) decor;
-                            final View navbarBackgroundView =
-                                    window.getNavigationBarBackgroundView();
-                            if (navbarBackgroundView != null
-                                    && decorGroup.indexOfChild(navbarBackgroundView)
-                                    > decorGroup.indexOfChild(that)) {
-                                decorGroup.bringChildToFront(that);
-                            }
-                        }
-                    });
+                    scheduleRelayout();
                 }
             }
+        }
+
+        private void scheduleRelayout() {
+            // Capture the current frame object in case the object is replaced or cleared later.
+            final NavigationBarFrame frame = mNavigationBarFrame;
+            frame.post(() -> {
+                if (mDestroyed) {
+                    return;
+                }
+                if (!frame.isAttachedToWindow()) {
+                    return;
+                }
+                final Window window = mService.mWindow.getWindow();
+                if (window == null) {
+                    return;
+                }
+                final View decor = window.peekDecorView();
+                if (decor == null) {
+                    return;
+                }
+                if (!(decor instanceof ViewGroup)) {
+                    return;
+                }
+                final ViewGroup decorGroup = (ViewGroup) decor;
+                final Insets currentSystemInsets = getSystemInsets();
+                if (!Objects.equals(currentSystemInsets, mLastInsets)) {
+                    frame.setLayoutParams(new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            currentSystemInsets.bottom, Gravity.BOTTOM));
+                    mLastInsets = currentSystemInsets;
+                }
+                final View navbarBackgroundView =
+                        window.getNavigationBarBackgroundView();
+                if (navbarBackgroundView != null
+                        && decorGroup.indexOfChild(navbarBackgroundView)
+                        > decorGroup.indexOfChild(frame)) {
+                    decorGroup.bringChildToFront(frame);
+                }
+            });
         }
 
         private boolean isGesturalNavigationEnabled() {
@@ -279,16 +370,54 @@ final class NavigationBarController {
         }
 
         @Override
+        public void onSoftInputWindowCreated(@NonNull SoftInputWindow softInputWindow) {
+            final Window window = softInputWindow.getWindow();
+            mAppearance = window.getSystemBarAppearance();
+            window.setDecorCallback(this);
+        }
+
+        @Override
         public void onViewInitialized() {
             if (mDestroyed) {
                 return;
             }
             mRenderGesturalNavButtons = isGesturalNavigationEnabled();
+            if (mSystemOverlayChangedReceiver == null) {
+                final IntentFilter intentFilter = new IntentFilter(ACTION_OVERLAY_CHANGED);
+                intentFilter.addDataScheme(IntentFilter.SCHEME_PACKAGE);
+                intentFilter.addDataSchemeSpecificPart("android", PatternMatcher.PATTERN_LITERAL);
+                mSystemOverlayChangedReceiver = new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        if (mDestroyed) {
+                            return;
+                        }
+                        mRenderGesturalNavButtons = isGesturalNavigationEnabled();
+                        if (mRenderGesturalNavButtons) {
+                            installNavigationBarFrameIfNecessary();
+                        } else {
+                            uninstallNavigationBarFrameIfNecessary();
+                        }
+                    }
+                };
+                mService.registerReceiver(mSystemOverlayChangedReceiver, intentFilter);
+            }
             installNavigationBarFrameIfNecessary();
         }
 
         @Override
         public void onDestroy() {
+            if (mDestroyed) {
+                return;
+            }
+            if (mTintAnimator != null) {
+                mTintAnimator.cancel();
+                mTintAnimator = null;
+            }
+            if (mSystemOverlayChangedReceiver != null) {
+                mService.unregisterReceiver(mSystemOverlayChangedReceiver);
+                mSystemOverlayChangedReceiver = null;
+            }
             mDestroyed = true;
         }
 
@@ -321,8 +450,110 @@ final class NavigationBarController {
         }
 
         @Override
+        public void setShouldShowImeSwitcherWhenImeIsShown(
+                boolean shouldShowImeSwitcherWhenImeIsShown) {
+            if (mDestroyed) {
+                return;
+            }
+            if (mShouldShowImeSwitcherWhenImeIsShown == shouldShowImeSwitcherWhenImeIsShown) {
+                return;
+            }
+            mShouldShowImeSwitcherWhenImeIsShown = shouldShowImeSwitcherWhenImeIsShown;
+
+            if (mNavigationBarFrame == null) {
+                return;
+            }
+            final NavigationBarView navigationBarView =
+                    mNavigationBarFrame.findViewByPredicate(NavigationBarView.class::isInstance);
+            if (navigationBarView == null) {
+                return;
+            }
+            final int hints = StatusBarManager.NAVIGATION_HINT_BACK_ALT
+                    | (shouldShowImeSwitcherWhenImeIsShown
+                    ? StatusBarManager.NAVIGATION_HINT_IME_SWITCHER_SHOWN : 0);
+            navigationBarView.setNavigationIconHints(hints);
+        }
+
+        @Override
+        public void onSystemBarAppearanceChanged(@Appearance int appearance) {
+            if (mDestroyed) {
+                return;
+            }
+
+            mAppearance = appearance;
+
+            if (mNavigationBarFrame == null) {
+                return;
+            }
+
+            final float targetDarkIntensity = calculateTargetDarkIntensity(mAppearance,
+                    mDrawLegacyNavigationBarBackground);
+
+            if (mTintAnimator != null) {
+                mTintAnimator.cancel();
+            }
+            mTintAnimator = ValueAnimator.ofFloat(mDarkIntensity, targetDarkIntensity);
+            mTintAnimator.addUpdateListener(
+                    animation -> setIconTintInternal((Float) animation.getAnimatedValue()));
+            mTintAnimator.setDuration(DEFAULT_COLOR_ADAPT_TRANSITION_TIME);
+            mTintAnimator.setStartDelay(0);
+            mTintAnimator.setInterpolator(LEGACY_DECELERATE);
+            mTintAnimator.start();
+        }
+
+        private void setIconTintInternal(float darkIntensity) {
+            mDarkIntensity = darkIntensity;
+            if (mNavigationBarFrame == null) {
+                return;
+            }
+            final NavigationBarView navigationBarView =
+                    mNavigationBarFrame.findViewByPredicate(NavigationBarView.class::isInstance);
+            if (navigationBarView == null) {
+                return;
+            }
+            navigationBarView.setDarkIntensity(darkIntensity);
+        }
+
+        @FloatRange(from = 0.0f, to = 1.0f)
+        private static float calculateTargetDarkIntensity(@Appearance int appearance,
+                boolean drawLegacyNavigationBarBackground) {
+            final boolean lightNavBar = !drawLegacyNavigationBarBackground
+                    && (appearance & APPEARANCE_LIGHT_NAVIGATION_BARS) != 0;
+            return lightNavBar ? 1.0f : 0.0f;
+        }
+
+        @Override
+        public boolean onDrawLegacyNavigationBarBackgroundChanged(
+                boolean drawLegacyNavigationBarBackground) {
+            if (mDestroyed) {
+                return false;
+            }
+
+            if (drawLegacyNavigationBarBackground != mDrawLegacyNavigationBarBackground) {
+                mDrawLegacyNavigationBarBackground = drawLegacyNavigationBarBackground;
+                if (mNavigationBarFrame != null) {
+                    if (mDrawLegacyNavigationBarBackground) {
+                        mNavigationBarFrame.setBackgroundColor(Color.BLACK);
+                    } else {
+                        mNavigationBarFrame.setBackground(null);
+                    }
+                    scheduleRelayout();
+                }
+                onSystemBarAppearanceChanged(mAppearance);
+            }
+            return drawLegacyNavigationBarBackground;
+        }
+
+        @Override
         public String toDebugString() {
-            return "{mRenderGesturalNavButtons=" + mRenderGesturalNavButtons + "}";
+            return "{mRenderGesturalNavButtons=" + mRenderGesturalNavButtons
+                    + " mNavigationBarFrame=" + mNavigationBarFrame
+                    + " mShouldShowImeSwitcherWhenImeIsShown="
+                    + mShouldShowImeSwitcherWhenImeIsShown
+                    + " mAppearance=0x" + Integer.toHexString(mAppearance)
+                    + " mDarkIntensity=" + mDarkIntensity
+                    + " mDrawLegacyNavigationBarBackground=" + mDrawLegacyNavigationBarBackground
+                    + "}";
         }
     }
 }
