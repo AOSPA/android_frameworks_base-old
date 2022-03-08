@@ -75,6 +75,10 @@ public class ComplicationCollectionLiveDataTest extends SysuiTestCase {
             callbackCaptor.getValue().onComplicationsChanged();
 
             verifyUpdate(observer, complications);
+
+            callbackCaptor.getValue().onAvailableComplicationTypesChanged();
+
+            verifyUpdate(observer, complications);
         });
     }
 
@@ -85,7 +89,9 @@ public class ComplicationCollectionLiveDataTest extends SysuiTestCase {
 
         verify(observer).onChanged(collectionCaptor.capture());
 
-        assertThat(collectionCaptor.getValue().equals(targetCollection)).isTrue();
+        final Collection collection =  collectionCaptor.getValue();
+        assertThat(collection.containsAll(targetCollection)
+                && targetCollection.containsAll(collection)).isTrue();
         Mockito.clearInvocations(observer);
     }
 }

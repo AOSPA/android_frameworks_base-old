@@ -26,9 +26,15 @@ import com.android.systemui.accessibility.WindowMagnification;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.clipboardoverlay.ClipboardListener;
 import com.android.systemui.dreams.DreamOverlayRegistrant;
+import com.android.systemui.dreams.SmartSpaceComplication;
+import com.android.systemui.dreams.complication.DreamClockDateComplication;
+import com.android.systemui.dreams.complication.DreamClockTimeComplication;
+import com.android.systemui.dreams.complication.DreamWeatherComplication;
 import com.android.systemui.globalactions.GlobalActionsComponent;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
+import com.android.systemui.log.SessionTracker;
+import com.android.systemui.media.dream.MediaDreamSentinel;
 import com.android.systemui.media.systemsounds.HomeSoundEffectController;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.privacy.television.TvOngoingPrivacyChip;
@@ -65,6 +71,12 @@ public abstract class SystemUIBinder {
     @IntoMap
     @ClassKey(AuthController.class)
     public abstract CoreStartable bindAuthController(AuthController service);
+
+    /** Inject into SessionTracker. */
+    @Binds
+    @IntoMap
+    @ClassKey(SessionTracker.class)
+    public abstract CoreStartable bindSessionTracker(SessionTracker service);
 
     /** Inject into GarbageMonitor.Service. */
     @Binds
@@ -211,4 +223,39 @@ public abstract class SystemUIBinder {
     @ClassKey(DreamOverlayRegistrant.class)
     public abstract CoreStartable bindDreamOverlayRegistrant(
             DreamOverlayRegistrant dreamOverlayRegistrant);
+
+    /** Inject into SmartSpaceComplication.Registrant */
+    @Binds
+    @IntoMap
+    @ClassKey(SmartSpaceComplication.Registrant.class)
+    public abstract CoreStartable bindSmartSpaceComplicationRegistrant(
+            SmartSpaceComplication.Registrant registrant);
+
+    /** Inject into MediaDreamSentinel. */
+    @Binds
+    @IntoMap
+    @ClassKey(MediaDreamSentinel.class)
+    public abstract CoreStartable bindMediaDreamSentinel(
+            MediaDreamSentinel sentinel);
+
+    /** Inject into DreamClockTimeComplication.Registrant */
+    @Binds
+    @IntoMap
+    @ClassKey(DreamClockTimeComplication.Registrant.class)
+    public abstract CoreStartable bindDreamClockTimeComplicationRegistrant(
+            DreamClockTimeComplication.Registrant registrant);
+
+    /** Inject into DreamClockDateComplication.Registrant */
+    @Binds
+    @IntoMap
+    @ClassKey(DreamClockDateComplication.Registrant.class)
+    public abstract CoreStartable bindDreamClockDateComplicationRegistrant(
+            DreamClockDateComplication.Registrant registrant);
+
+    /** Inject into DreamWeatherComplication.Registrant */
+    @Binds
+    @IntoMap
+    @ClassKey(DreamWeatherComplication.Registrant.class)
+    public abstract CoreStartable bindDreamWeatherComplicationRegistrant(
+            DreamWeatherComplication.Registrant registrant);
 }

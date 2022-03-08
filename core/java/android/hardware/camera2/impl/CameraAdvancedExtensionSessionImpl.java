@@ -22,6 +22,7 @@ import android.annotation.RequiresPermission;
 import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
+import android.hardware.SyncFence;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -58,7 +59,6 @@ import android.media.ImageReader;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.Size;
@@ -105,7 +105,7 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
     @RequiresPermission(android.Manifest.permission.CAMERA)
     public static CameraAdvancedExtensionSessionImpl createCameraAdvancedExtensionSession(
             @NonNull CameraDevice cameraDevice, @NonNull Context ctx,
-            @NonNull ExtensionSessionConfiguration config)
+            @NonNull ExtensionSessionConfiguration config, int sessionId)
             throws CameraAccessException, RemoteException {
         long clientId = CameraExtensionCharacteristics.registerClient(ctx);
         if (clientId < 0) {
@@ -134,6 +134,11 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
             if (c.getDynamicRangeProfile() != DynamicRangeProfiles.STANDARD) {
                 throw new IllegalArgumentException("Unsupported dynamic range profile: " +
                         c.getDynamicRangeProfile());
+            }
+            if (c.getStreamUseCase() !=
+                    CameraCharacteristics.SCALER_AVAILABLE_STREAM_USE_CASES_DEFAULT) {
+                throw new IllegalArgumentException("Unsupported stream use case: " +
+                        c.getStreamUseCase());
             }
         }
 
@@ -817,12 +822,13 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
 
             ParcelImage parcelImage = new ParcelImage();
             parcelImage.buffer = img.getHardwareBuffer();
-            if (img.getFenceFd() >= 0) {
-                try {
-                    parcelImage.fence = ParcelFileDescriptor.fromFd(img.getFenceFd());
-                } catch (IOException e) {
-                    Log.e(TAG,"Failed to parcel buffer fence!");
+            try {
+                SyncFence fd = img.getFence();
+                if (fd.isValid()) {
+                    parcelImage.fence = fd.getFdDup();
                 }
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to parcel buffer fence!");
             }
             parcelImage.width = img.getWidth();
             parcelImage.height = img.getHeight();

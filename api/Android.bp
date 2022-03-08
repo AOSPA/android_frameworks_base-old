@@ -110,12 +110,12 @@ combined_apis {
         "art.module.public.api",
         "conscrypt.module.public.api",
         "framework-appsearch",
+        "framework-bluetooth",
         "framework-connectivity",
         "framework-connectivity-tiramisu",
         "framework-graphics",
         "framework-media",
         "framework-mediaprovider",
-        "framework-nearby",
         "framework-permission",
         "framework-permission-s",
         "framework-scheduling",
@@ -128,6 +128,7 @@ combined_apis {
         "i18n.module.public.api",
     ],
     conditional_bootclasspath: [
+        "framework-auxiliary",
         "framework-supplementalapi",
     ],
     system_server_classpath: [

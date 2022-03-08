@@ -98,7 +98,7 @@ import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
 
-import com.android.internal.content.PackageHelper;
+import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
@@ -593,7 +593,7 @@ class PackageManagerShellCommand extends ShellCommand {
                         null /* splitApkPaths */, null /* splitRevisionCodes */,
                         apkLite.getTargetSdkVersion(), null /* requiredSplitTypes */,
                         null /* splitTypes */);
-                sessionSize += PackageHelper.calculateInstalledSize(pkgLite,
+                sessionSize += InstallLocationUtils.calculateInstalledSize(pkgLite,
                         params.sessionParams.abiOverride, fd.getFileDescriptor());
             } catch (IOException e) {
                 getErrPrintWriter().println("Error: Failed to parse APK file: " + inPath);
@@ -922,7 +922,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 final List<SharedLibraryInfo> libs = libsSlice.getList();
                 for (int l = 0, lsize = libs.size(); l < lsize; ++l) {
                     SharedLibraryInfo lib = libs.get(l);
-                    if (lib.getType() == SharedLibraryInfo.TYPE_SDK) {
+                    if (lib.getType() == SharedLibraryInfo.TYPE_SDK_PACKAGE) {
                         name = lib.getName() + ":" + lib.getLongVersion();
                         break;
                     }
@@ -1649,11 +1649,11 @@ class PackageManagerShellCommand extends ShellCommand {
     private int runGetInstallLocation() throws RemoteException {
         int loc = mInterface.getInstallLocation();
         String locStr = "invalid";
-        if (loc == PackageHelper.APP_INSTALL_AUTO) {
+        if (loc == InstallLocationUtils.APP_INSTALL_AUTO) {
             locStr = "auto";
-        } else if (loc == PackageHelper.APP_INSTALL_INTERNAL) {
+        } else if (loc == InstallLocationUtils.APP_INSTALL_INTERNAL) {
             locStr = "internal";
-        } else if (loc == PackageHelper.APP_INSTALL_EXTERNAL) {
+        } else if (loc == InstallLocationUtils.APP_INSTALL_EXTERNAL) {
             locStr = "external";
         }
         getOutPrintWriter().println(loc + "[" + locStr + "]");
@@ -2903,6 +2903,8 @@ class PackageManagerShellCommand extends ShellCommand {
         params.sessionParams = sessionParams;
         // Allowlist all permissions by default
         sessionParams.installFlags |= PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
+        // Set package source to other by default
+        sessionParams.setPackageSource(PackageInstaller.PACKAGE_SOURCE_OTHER);
 
         String opt;
         boolean replaceExisting = true;
@@ -3563,18 +3565,27 @@ class PackageManagerShellCommand extends ShellCommand {
             }
             final LocalIntentReceiver receiver = new LocalIntentReceiver();
             session.commit(receiver.getIntentSender());
-            final Intent result = receiver.getResult();
-            final int status = result.getIntExtra(PackageInstaller.EXTRA_STATUS,
-                    PackageInstaller.STATUS_FAILURE);
-            if (status == PackageInstaller.STATUS_SUCCESS) {
+            if (!session.isStaged()) {
+                final Intent result = receiver.getResult();
+                final int status = result.getIntExtra(PackageInstaller.EXTRA_STATUS,
+                        PackageInstaller.STATUS_FAILURE);
+                if (status == PackageInstaller.STATUS_SUCCESS) {
+                    if (logSuccess) {
+                        pw.println("Success");
+                    }
+                } else {
+                    pw.println("Failure ["
+                            + result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) + "]");
+                }
+                return status;
+            } else {
+                // Return immediately without retrieving the result. The caller will decide
+                // whether to wait for the session to become ready.
                 if (logSuccess) {
                     pw.println("Success");
                 }
-            } else {
-                pw.println("Failure ["
-                        + result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) + "]");
+                return PackageInstaller.STATUS_SUCCESS;
             }
-            return status;
         } finally {
             IoUtils.closeQuietly(session);
         }

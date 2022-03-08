@@ -144,6 +144,7 @@ import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.policy.ForceShowNavigationBarSettingsObserver;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
 import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.policy.SystemBarUtils;
@@ -398,6 +399,9 @@ public class DisplayPolicy {
     private final GestureNavigationSettingsObserver mGestureNavigationSettingsObserver;
 
     private final WindowManagerInternal.AppTransitionListener mAppTransitionListener;
+
+    private final ForceShowNavigationBarSettingsObserver mForceShowNavigationBarSettingsObserver;
+    private boolean mForceShowNavigationBarEnabled;
 
     private class PolicyHandler extends Handler {
 
@@ -807,6 +811,18 @@ public class DisplayPolicy {
             }
         });
         mHandler.post(mGestureNavigationSettingsObserver::register);
+
+        mForceShowNavigationBarSettingsObserver = new ForceShowNavigationBarSettingsObserver(
+                mHandler, mContext);
+        mForceShowNavigationBarSettingsObserver.setOnChangeRunnable(() -> {
+            synchronized (mLock) {
+                mForceShowNavigationBarEnabled =
+                        mForceShowNavigationBarSettingsObserver.isEnabled();
+                updateSystemBarAttributes();
+            }
+        });
+        mForceShowNavigationBarEnabled = mForceShowNavigationBarSettingsObserver.isEnabled();
+        mHandler.post(mForceShowNavigationBarSettingsObserver::register);
     }
 
     /**
@@ -944,6 +960,10 @@ public class DisplayPolicy {
 
     public boolean isWindowManagerDrawComplete() {
         return mWindowManagerDrawComplete;
+    }
+
+    public boolean isForceShowNavigationBarEnabled() {
+        return mForceShowNavigationBarEnabled;
     }
 
     public ScreenOnListener getScreenOnListener() {
@@ -2910,6 +2930,8 @@ public class DisplayPolicy {
         }
         pw.print(prefix); pw.print("mTopIsFullscreen="); pw.println(mTopIsFullscreen);
         pw.print(prefix); pw.print("mForceStatusBar="); pw.print(mForceStatusBar);
+        pw.print(prefix); pw.print("mForceShowNavigationBarEnabled=");
+        pw.print(mForceShowNavigationBarEnabled);
         pw.print(" mAllowLockscreenWhenOn="); pw.println(mAllowLockscreenWhenOn);
         pw.print(prefix); pw.print("mRemoteInsetsControllerControlsSystemBars=");
         pw.println(mDisplayContent.getInsetsPolicy().getRemoteInsetsControllerControlsSystemBars());
@@ -2987,6 +3009,7 @@ public class DisplayPolicy {
     void release() {
         mDisplayContent.mTransitionController.unregisterLegacyListener(mAppTransitionListener);
         mHandler.post(mGestureNavigationSettingsObserver::unregister);
+        mHandler.post(mForceShowNavigationBarSettingsObserver::unregister);
         mImmersiveModeConfirmation.release();
     }
 

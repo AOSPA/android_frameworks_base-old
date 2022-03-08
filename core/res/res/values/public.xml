@@ -3255,10 +3255,25 @@
     <public name="showClockAndComplications" />
     <!-- @hide @SystemApi -->
     <public name="gameSessionService" />
+    <public name="supportsBatteryGameMode" />
+    <public name="supportsPerformanceGameMode" />
+    <public name="allowGameAngleDriver" />
+    <public name="allowGameDownscaling" />
+    <public name="allowGameFpsOverride" />
     <public name="localeConfig" />
     <public name="showBackground" />
+    <public name="useTargetActivityForQuickAccess"/>
     <public name="inheritKeyStoreKeys" />
     <public name="preferKeepClear" />
+    <public name="autoHandwritingEnabled" />
+    <public name="fromExtendLeft" />
+    <public name="fromExtendTop" />
+    <public name="fromExtendRight" />
+    <public name="fromExtendBottom" />
+    <public name="toExtendLeft" />
+    <public name="toExtendTop" />
+    <public name="toExtendRight" />
+    <public name="toExtendBottom" />
   </staging-public-group>
 
   <staging-public-group type="id" first-id="0x01de0000">
@@ -3267,6 +3282,8 @@
     <public name="accessibilityActionSwipeUp" />
     <public name="accessibilityActionSwipeDown" />
     <public name="accessibilityActionShowSuggestions" />
+    <public name="inputExtractAction" />
+    <public name="inputExtractAccessories" />
   </staging-public-group>
 
   <staging-public-group type="style" first-id="0x01dd0000">

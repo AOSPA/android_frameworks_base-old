@@ -85,7 +85,7 @@ import android.media.AudioPlaybackConfiguration;
 import android.media.AudioRecordingConfiguration;
 import android.media.AudioRoutesInfo;
 import android.media.AudioSystem;
-import android.media.BtProfileConnectionInfo;
+import android.media.BluetoothProfileConnectionInfo;
 import android.media.IAudioFocusDispatcher;
 import android.media.IAudioModeDispatcher;
 import android.media.IAudioRoutesObserver;
@@ -609,7 +609,6 @@ public class AudioService extends IAudioService.Stub
 
     // Devices for which the volume is fixed (volume is either max or muted)
     Set<Integer> mFixedVolumeDevices = new HashSet<>(Arrays.asList(
-            AudioSystem.DEVICE_OUT_DGTL_DOCK_HEADSET,
             AudioSystem.DEVICE_OUT_ANLG_DOCK_HEADSET,
             AudioSystem.DEVICE_OUT_AUX_LINE));
     // Devices for which the volume is always max, no volume panel
@@ -6430,23 +6429,23 @@ public class AudioService extends IAudioService.Stub
     /**
      * see AudioManager.setWiredDeviceConnectionState()
      */
-    public void setWiredDeviceConnectionState(int type,
-            @ConnectionState int state, String address, String name,
-            String caller) {
+    public void setWiredDeviceConnectionState(AudioDeviceAttributes attributes,
+            @ConnectionState int state, String caller) {
         enforceModifyAudioRoutingPermission();
         if (state != CONNECTION_STATE_CONNECTED
                 && state != CONNECTION_STATE_DISCONNECTED) {
             throw new IllegalArgumentException("Invalid state " + state);
         }
         new MediaMetrics.Item(mMetricsId + "setWiredDeviceConnectionState")
-                .set(MediaMetrics.Property.ADDRESS, address)
+                .set(MediaMetrics.Property.ADDRESS, attributes.getAddress())
                 .set(MediaMetrics.Property.CLIENT_NAME, caller)
-                .set(MediaMetrics.Property.DEVICE, AudioSystem.getDeviceName(type))
-                .set(MediaMetrics.Property.NAME, name)
+                .set(MediaMetrics.Property.DEVICE,
+                        AudioSystem.getDeviceName(attributes.getInternalType()))
+                .set(MediaMetrics.Property.NAME, attributes.getName())
                 .set(MediaMetrics.Property.STATE,
                         state == CONNECTION_STATE_CONNECTED ? "connected" : "disconnected")
                 .record();
-        mDeviceBroker.setWiredDeviceConnectionState(type, state, address, name, caller);
+        mDeviceBroker.setWiredDeviceConnectionState(attributes, state, caller);
     }
 
     /** @see AudioManager#setTestDeviceConnectionState(AudioDeviceAttributes, boolean) */
@@ -6493,14 +6492,14 @@ public class AudioService extends IAudioService.Stub
      * See AudioManager.handleBluetoothActiveDeviceChanged(...)
      */
     public void handleBluetoothActiveDeviceChanged(BluetoothDevice newDevice,
-            BluetoothDevice previousDevice, @NonNull BtProfileConnectionInfo info) {
+            BluetoothDevice previousDevice, @NonNull BluetoothProfileConnectionInfo info) {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.BLUETOOTH_STACK)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Bluetooth is the only caller allowed");
         }
         if (info == null) {
-            throw new IllegalArgumentException("Illegal null BtProfileConnectionInfo for device "
-                    + previousDevice + " -> " + newDevice);
+            throw new IllegalArgumentException("Illegal null BluetoothProfileConnectionInfo for"
+                    + " device " + previousDevice + " -> " + newDevice);
         }
         final int profile = info.getProfile();
         if (profile != BluetoothProfile.A2DP && profile != BluetoothProfile.A2DP_SINK
@@ -6540,7 +6539,7 @@ public class AudioService extends IAudioService.Stub
             throw new IllegalArgumentException("Invalid state " + state);
         }
         mDeviceBroker.queueOnBluetoothActiveDeviceChanged(
-                  new AudioDeviceBroker.BtDeviceChangedData(device, device, new BtProfileConnectionInfo(profile), "AudioService"));
+                  new AudioDeviceBroker.BtDeviceChangedData(device, device, new BluetoothProfileConnectionInfo(profile), "AudioService"));
     }
 
     private static final Set<Integer> DEVICE_MEDIA_UNMUTED_ON_PLUG_SET;

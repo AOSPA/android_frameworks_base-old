@@ -18,25 +18,25 @@
 //#define LOG_NDEBUG 0
 
 #define LOG_TAG "AudioSystem-JNI"
-#include <utils/Log.h>
-
-#include <sstream>
-#include <vector>
-#include <jni.h>
-#include <nativehelper/JNIHelp.h>
-#include "core_jni_helpers.h"
-
 #include <android/media/AudioVibratorInfo.h>
 #include <android/media/INativeSpatializerCallback.h>
 #include <android/media/ISpatializer.h>
+#include <android_os_Parcel.h>
 #include <audiomanager/AudioManager.h>
+#include <jni.h>
 #include <media/AudioContainers.h>
 #include <media/AudioPolicy.h>
 #include <media/AudioSystem.h>
 #include <media/MicrophoneInfo.h>
+#include <nativehelper/JNIHelp.h>
 #include <nativehelper/ScopedLocalRef.h>
 #include <system/audio.h>
 #include <system/audio_policy.h>
+#include <utils/Log.h>
+
+#include <sstream>
+#include <vector>
+
 #include "android_media_AudioAttributes.h"
 #include "android_media_AudioDescriptor.h"
 #include "android_media_AudioDeviceAttributes.h"
@@ -46,6 +46,7 @@
 #include "android_media_AudioProfile.h"
 #include "android_media_MicrophoneInfo.h"
 #include "android_util_Binder.h"
+#include "core_jni_helpers.h"
 
 // ----------------------------------------------------------------------------
 
@@ -204,6 +205,12 @@ jclass gClsAudioRecordRoutingProxy;
 
 jclass gAudioProfileClass;
 jmethodID gAudioProfileCstor;
+static struct {
+    jfieldID mSamplingRates;
+    jfieldID mChannelMasks;
+    jfieldID mChannelIndexMasks;
+    jfieldID mEncapsulationType;
+} gAudioProfileFields;
 
 jclass gVibratorClass;
 static struct {
@@ -578,18 +585,26 @@ android_media_AudioSystem_routing_callback()
     env->DeleteLocalRef(clazz);
 }
 
-static jint
-android_media_AudioSystem_setDeviceConnectionState(JNIEnv *env, jobject thiz, jint device, jint state, jstring device_address, jstring device_name,
-                                                   jint codec)
-{
-    const char *c_address = env->GetStringUTFChars(device_address, NULL);
-    const char *c_name = env->GetStringUTFChars(device_name, NULL);
-    int status = check_AudioSystem_Command(AudioSystem::setDeviceConnectionState(static_cast <audio_devices_t>(device),
-                                          static_cast <audio_policy_dev_state_t>(state),
-                                          c_address, c_name,
-                                          static_cast <audio_format_t>(codec)));
-    env->ReleaseStringUTFChars(device_address, c_address);
-    env->ReleaseStringUTFChars(device_name, c_name);
+static jint android_media_AudioSystem_setDeviceConnectionState(JNIEnv *env, jobject thiz,
+                                                               jint state, jobject jParcel,
+                                                               jint codec) {
+    int status;
+    if (Parcel *parcel = parcelForJavaObject(env, jParcel); parcel != nullptr) {
+        android::media::audio::common::AudioPort port{};
+        if (status_t statusOfParcel = port.readFromParcel(parcel); statusOfParcel == OK) {
+            status = check_AudioSystem_Command(
+                    AudioSystem::setDeviceConnectionState(static_cast<audio_policy_dev_state_t>(
+                                                                  state),
+                                                          port,
+                                                          static_cast<audio_format_t>(codec)));
+        } else {
+            ALOGE("Failed to read from parcel: %s", statusToString(statusOfParcel).c_str());
+            status = kAudioStatusError;
+        }
+    } else {
+        ALOGE("Failed to retrieve the native parcel from Java parcel");
+        status = kAudioStatusError;
+    }
     return (jint) status;
 }
 
@@ -1236,6 +1251,65 @@ static bool isAudioPortArrayCountOutOfBounds(const struct audio_port_v7 *nAudioP
     return false;
 }
 
+static jint convertAudioProfileFromNative(JNIEnv *env, jobject *jAudioProfile,
+                                          const audio_profile *nAudioProfile, bool useInMask) {
+    size_t numPositionMasks = 0;
+    size_t numIndexMasks = 0;
+
+    // count up how many masks are positional and indexed
+    for (size_t index = 0; index < nAudioProfile->num_channel_masks; index++) {
+        const audio_channel_mask_t mask = nAudioProfile->channel_masks[index];
+        if (audio_channel_mask_get_representation(mask) == AUDIO_CHANNEL_REPRESENTATION_INDEX) {
+            numIndexMasks++;
+        } else {
+            numPositionMasks++;
+        }
+    }
+
+    ScopedLocalRef<jintArray> jSamplingRates(env,
+                                             env->NewIntArray(nAudioProfile->num_sample_rates));
+    ScopedLocalRef<jintArray> jChannelMasks(env, env->NewIntArray(numPositionMasks));
+    ScopedLocalRef<jintArray> jChannelIndexMasks(env, env->NewIntArray(numIndexMasks));
+    if (!jSamplingRates.get() || !jChannelMasks.get() || !jChannelIndexMasks.get()) {
+        return AUDIO_JAVA_ERROR;
+    }
+
+    if (nAudioProfile->num_sample_rates) {
+        env->SetIntArrayRegion(jSamplingRates.get(), 0 /*start*/, nAudioProfile->num_sample_rates,
+                               (jint *)nAudioProfile->sample_rates);
+    }
+
+    // put the masks in the output arrays
+    for (size_t maskIndex = 0, posMaskIndex = 0, indexedMaskIndex = 0;
+         maskIndex < nAudioProfile->num_channel_masks; maskIndex++) {
+        const audio_channel_mask_t mask = nAudioProfile->channel_masks[maskIndex];
+        if (audio_channel_mask_get_representation(mask) == AUDIO_CHANNEL_REPRESENTATION_INDEX) {
+            jint jMask = audio_channel_mask_get_bits(mask);
+            env->SetIntArrayRegion(jChannelIndexMasks.get(), indexedMaskIndex++, 1, &jMask);
+        } else {
+            jint jMask = useInMask ? inChannelMaskFromNative(mask) : outChannelMaskFromNative(mask);
+            env->SetIntArrayRegion(jChannelMasks.get(), posMaskIndex++, 1, &jMask);
+        }
+    }
+
+    int encapsulationType;
+    if (audioEncapsulationTypeFromNative(nAudioProfile->encapsulation_type, &encapsulationType) !=
+        NO_ERROR) {
+        ALOGW("Unknown encapsulation type for JAVA API: %u", nAudioProfile->encapsulation_type);
+    }
+
+    *jAudioProfile =
+            env->NewObject(gAudioProfileClass, gAudioProfileCstor,
+                           audioFormatFromNative(nAudioProfile->format), jSamplingRates.get(),
+                           jChannelMasks.get(), jChannelIndexMasks.get(), encapsulationType);
+
+    if (*jAudioProfile == nullptr) {
+        return AUDIO_JAVA_ERROR;
+    }
+
+    return AUDIO_JAVA_SUCCESS;
+}
+
 static jint convertAudioPortFromNative(JNIEnv *env, jobject *jAudioPort,
                                        const struct audio_port_v7 *nAudioPort) {
     jint jStatus = (jint)AUDIO_JAVA_SUCCESS;
@@ -1281,80 +1355,49 @@ static jint convertAudioPortFromNative(JNIEnv *env, jobject *jAudioPort,
         jStatus = (jint)AUDIO_JAVA_ERROR;
         goto exit;
     }
+
     for (size_t i = 0; i < nAudioPort->num_audio_profiles; ++i) {
-        size_t numPositionMasks = 0;
-        size_t numIndexMasks = 0;
-        // count up how many masks are positional and indexed
-        for (size_t index = 0; index < nAudioPort->audio_profiles[i].num_channel_masks; index++) {
-            const audio_channel_mask_t mask = nAudioPort->audio_profiles[i].channel_masks[index];
-            if (audio_channel_mask_get_representation(mask) == AUDIO_CHANNEL_REPRESENTATION_INDEX) {
-                numIndexMasks++;
-            } else {
-                numPositionMasks++;
-            }
-        }
-
-        ScopedLocalRef<jintArray> jSamplingRates(env,
-                                                 env->NewIntArray(nAudioPort->audio_profiles[i]
-                                                                          .num_sample_rates));
-        ScopedLocalRef<jintArray> jChannelMasks(env, env->NewIntArray(numPositionMasks));
-        ScopedLocalRef<jintArray> jChannelIndexMasks(env, env->NewIntArray(numIndexMasks));
-        if (!jSamplingRates.get() || !jChannelMasks.get() || !jChannelIndexMasks.get()) {
+        jobject jAudioProfile = nullptr;
+        jStatus = convertAudioProfileFromNative(env, &jAudioProfile, &nAudioPort->audio_profiles[i],
+                                                useInMask);
+        if (jStatus != NO_ERROR) {
             jStatus = (jint)AUDIO_JAVA_ERROR;
             goto exit;
         }
+        env->CallBooleanMethod(jAudioProfiles, gArrayListMethods.add, jAudioProfile);
 
-        if (nAudioPort->audio_profiles[i].num_sample_rates) {
-            env->SetIntArrayRegion(jSamplingRates.get(), 0 /*start*/,
-                                   nAudioPort->audio_profiles[i].num_sample_rates,
-                                   (jint *)nAudioPort->audio_profiles[i].sample_rates);
-        }
-
-        // put the masks in the output arrays
-        for (size_t maskIndex = 0, posMaskIndex = 0, indexedMaskIndex = 0;
-             maskIndex < nAudioPort->audio_profiles[i].num_channel_masks; maskIndex++) {
-            const audio_channel_mask_t mask =
-                    nAudioPort->audio_profiles[i].channel_masks[maskIndex];
-            if (audio_channel_mask_get_representation(mask) == AUDIO_CHANNEL_REPRESENTATION_INDEX) {
-                jint jMask = audio_channel_mask_get_bits(mask);
-                env->SetIntArrayRegion(jChannelIndexMasks.get(), indexedMaskIndex++, 1, &jMask);
-            } else {
-                jint jMask =
-                        useInMask ? inChannelMaskFromNative(mask) : outChannelMaskFromNative(mask);
-                env->SetIntArrayRegion(jChannelMasks.get(), posMaskIndex++, 1, &jMask);
-            }
-        }
-
-        int encapsulationType;
-        if (audioEncapsulationTypeFromNative(nAudioPort->audio_profiles[i].encapsulation_type,
-                                             &encapsulationType) != NO_ERROR) {
-            ALOGW("Unknown encapsualtion type for JAVA API: %u",
-                  nAudioPort->audio_profiles[i].encapsulation_type);
-            continue;
-        }
-
-        ScopedLocalRef<jobject>
-                jAudioProfile(env,
-                              env->NewObject(gAudioProfileClass, gAudioProfileCstor,
-                                             audioFormatFromNative(
-                                                     nAudioPort->audio_profiles[i].format),
-                                             jSamplingRates.get(), jChannelMasks.get(),
-                                             jChannelIndexMasks.get(), encapsulationType));
-        if (jAudioProfile == nullptr) {
-            jStatus = (jint)AUDIO_JAVA_ERROR;
-            goto exit;
-        }
-        env->CallBooleanMethod(jAudioProfiles, gArrayListMethods.add, jAudioProfile.get());
         if (nAudioPort->audio_profiles[i].format == AUDIO_FORMAT_PCM_FLOAT) {
             hasFloat = true;
         } else if (jPcmFloatProfileFromExtendedInteger.get() == nullptr &&
                    audio_is_linear_pcm(nAudioPort->audio_profiles[i].format) &&
                    audio_bytes_per_sample(nAudioPort->audio_profiles[i].format) > 2) {
+            ScopedLocalRef<jintArray>
+                    jSamplingRates(env,
+                                   (jintArray)
+                                           env->GetObjectField(jAudioProfile,
+                                                               gAudioProfileFields.mSamplingRates));
+            ScopedLocalRef<jintArray>
+                    jChannelMasks(env,
+                                  (jintArray)
+                                          env->GetObjectField(jAudioProfile,
+                                                              gAudioProfileFields.mChannelMasks));
+            ScopedLocalRef<jintArray>
+                    jChannelIndexMasks(env,
+                                       (jintArray)env->GetObjectField(jAudioProfile,
+                                                                      gAudioProfileFields
+                                                                              .mChannelIndexMasks));
+            int encapsulationType =
+                    env->GetIntField(jAudioProfile, gAudioProfileFields.mEncapsulationType);
+
             jPcmFloatProfileFromExtendedInteger.reset(
                     env->NewObject(gAudioProfileClass, gAudioProfileCstor,
                                    audioFormatFromNative(AUDIO_FORMAT_PCM_FLOAT),
                                    jSamplingRates.get(), jChannelMasks.get(),
                                    jChannelIndexMasks.get(), encapsulationType));
+        }
+
+        if (jAudioProfile != nullptr) {
+            env->DeleteLocalRef(jAudioProfile);
         }
     }
     if (!hasFloat && jPcmFloatProfileFromExtendedInteger.get() != nullptr) {
@@ -2479,6 +2522,10 @@ android_media_AudioSystem_isHapticPlaybackSupported(JNIEnv *env, jobject thiz)
     return AudioSystem::isHapticPlaybackSupported();
 }
 
+static jboolean android_media_AudioSystem_isUltrasoundSupported(JNIEnv *env, jobject thiz) {
+    return AudioSystem::isUltrasoundSupported();
+}
+
 static jint android_media_AudioSystem_setSupportedSystemUsages(JNIEnv *env, jobject thiz,
                                                                jintArray systemUsages) {
     std::vector<audio_usage_t> nativeSystemUsagesVector;
@@ -2814,6 +2861,50 @@ static jint android_media_AudioSystem_getDirectPlaybackSupport(JNIEnv *env, jobj
     return convertAudioDirectModeFromNative(directMode);
 }
 
+static jint android_media_AudioSystem_getDirectProfilesForAttributes(JNIEnv *env, jobject thiz,
+                                                                     jobject jAudioAttributes,
+                                                                     jobject jAudioProfilesList) {
+    ALOGV("getDirectProfilesForAttributes");
+
+    if (jAudioAttributes == nullptr) {
+        ALOGE("jAudioAttributes is NULL");
+        return (jint)AUDIO_JAVA_BAD_VALUE;
+    }
+    if (jAudioProfilesList == nullptr) {
+        ALOGE("jAudioProfilesList is NULL");
+        return (jint)AUDIO_JAVA_BAD_VALUE;
+    }
+    if (!env->IsInstanceOf(jAudioProfilesList, gArrayListClass)) {
+        ALOGE("jAudioProfilesList not an ArrayList");
+        return (jint)AUDIO_JAVA_BAD_VALUE;
+    }
+
+    JNIAudioAttributeHelper::UniqueAaPtr paa = JNIAudioAttributeHelper::makeUnique();
+    jint jStatus = JNIAudioAttributeHelper::nativeFromJava(env, jAudioAttributes, paa.get());
+    if (jStatus != (jint)AUDIO_JAVA_SUCCESS) {
+        return jStatus;
+    }
+
+    std::vector<audio_profile> audioProfiles;
+    status_t status = AudioSystem::getDirectProfilesForAttributes(paa.get(), &audioProfiles);
+    if (status != NO_ERROR) {
+        ALOGE("AudioSystem::getDirectProfilesForAttributes error %d", status);
+        jStatus = nativeToJavaStatus(status);
+        return jStatus;
+    }
+
+    for (const auto &audioProfile : audioProfiles) {
+        jobject jAudioProfile;
+        jStatus = convertAudioProfileFromNative(env, &jAudioProfile, &audioProfile, false);
+        if (jStatus != AUDIO_JAVA_SUCCESS) {
+            return jStatus;
+        }
+        env->CallBooleanMethod(jAudioProfilesList, gArrayListMethods.add, jAudioProfile);
+        env->DeleteLocalRef(jAudioProfile);
+    }
+    return jStatus;
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gMethods[] =
@@ -2830,7 +2921,7 @@ static const JNINativeMethod gMethods[] =
          {"newAudioSessionId", "()I", (void *)android_media_AudioSystem_newAudioSessionId},
          {"newAudioPlayerId", "()I", (void *)android_media_AudioSystem_newAudioPlayerId},
          {"newAudioRecorderId", "()I", (void *)android_media_AudioSystem_newAudioRecorderId},
-         {"setDeviceConnectionState", "(IILjava/lang/String;Ljava/lang/String;I)I",
+         {"setDeviceConnectionState", "(ILandroid/os/Parcel;I)I",
           (void *)android_media_AudioSystem_setDeviceConnectionState},
          {"getDeviceConnectionState", "(ILjava/lang/String;)I",
           (void *)android_media_AudioSystem_getDeviceConnectionState},
@@ -2915,6 +3006,7 @@ static const JNINativeMethod gMethods[] =
          {"setA11yServicesUids", "([I)I", (void *)android_media_AudioSystem_setA11yServicesUids},
          {"isHapticPlaybackSupported", "()Z",
           (void *)android_media_AudioSystem_isHapticPlaybackSupported},
+         {"isUltrasoundSupported", "()Z", (void *)android_media_AudioSystem_isUltrasoundSupported},
          {"getHwOffloadFormatsSupportedForBluetoothMedia", "(ILjava/util/ArrayList;)I",
           (void *)android_media_AudioSystem_getHwOffloadFormatsSupportedForBluetoothMedia},
          {"setSupportedSystemUsages", "([I)I",
@@ -2960,7 +3052,10 @@ static const JNINativeMethod gMethods[] =
           (void *)android_media_AudioSystem_canBeSpatialized},
          {"getDirectPlaybackSupport",
           "(Landroid/media/AudioFormat;Landroid/media/AudioAttributes;)I",
-          (void *)android_media_AudioSystem_getDirectPlaybackSupport}};
+          (void *)android_media_AudioSystem_getDirectPlaybackSupport},
+         {"getDirectProfilesForAttributes",
+          "(Landroid/media/AudioAttributes;Ljava/util/ArrayList;)I",
+          (void *)android_media_AudioSystem_getDirectProfilesForAttributes}};
 
 static const JNINativeMethod gEventHandlerMethods[] = {
     {"native_setup",
@@ -3174,6 +3269,14 @@ int register_android_media_AudioSystem(JNIEnv *env)
     jclass audioProfileClass = FindClassOrDie(env, "android/media/AudioProfile");
     gAudioProfileClass = MakeGlobalRefOrDie(env, audioProfileClass);
     gAudioProfileCstor = GetMethodIDOrDie(env, audioProfileClass, "<init>", "(I[I[I[II)V");
+    gAudioProfileFields.mSamplingRates =
+            GetFieldIDOrDie(env, audioProfileClass, "mSamplingRates", "[I");
+    gAudioProfileFields.mChannelMasks =
+            GetFieldIDOrDie(env, audioProfileClass, "mChannelMasks", "[I");
+    gAudioProfileFields.mChannelIndexMasks =
+            GetFieldIDOrDie(env, audioProfileClass, "mChannelIndexMasks", "[I");
+    gAudioProfileFields.mEncapsulationType =
+            GetFieldIDOrDie(env, audioProfileClass, "mEncapsulationType", "I");
 
     jclass audioDescriptorClass = FindClassOrDie(env, "android/media/AudioDescriptor");
     gAudioDescriptorClass = MakeGlobalRefOrDie(env, audioDescriptorClass);

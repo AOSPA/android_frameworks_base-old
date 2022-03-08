@@ -37,7 +37,6 @@
 #include <android/hardware/gnss/BnGnssPsdsCallback.h>
 #include <android/hardware/gnss/measurement_corrections/1.0/IMeasurementCorrections.h>
 #include <android/hardware/gnss/measurement_corrections/1.1/IMeasurementCorrections.h>
-#include <android/hardware/gnss/visibility_control/1.0/IGnssVisibilityControl.h>
 #include <binder/IServiceManager.h>
 #include <nativehelper/JNIHelp.h>
 #include <pthread.h>
@@ -59,6 +58,7 @@
 #include "gnss/GnssGeofence.h"
 #include "gnss/GnssMeasurement.h"
 #include "gnss/GnssNavigationMessage.h"
+#include "gnss/GnssVisibilityControl.h"
 #include "gnss/Utils.h"
 #include "hardware_legacy/power.h"
 #include "jni.h"
@@ -162,9 +162,6 @@ using IMeasurementCorrections_V1_1 = android::hardware::gnss::measurement_correc
 using android::hardware::gnss::measurement_corrections::V1_0::IMeasurementCorrectionsCallback;
 using android::hardware::gnss::measurement_corrections::V1_0::GnssSingleSatCorrectionFlags;
 
-using android::hardware::gnss::visibility_control::V1_0::IGnssVisibilityControl;
-using android::hardware::gnss::visibility_control::V1_0::IGnssVisibilityControlCallback;
-
 using android::hardware::gnss::BlocklistedSource;
 using android::hardware::gnss::GnssConstellationType;
 using android::hardware::gnss::GnssPowerStats;
@@ -210,7 +207,6 @@ sp<IGnssNi> gnssNiIface = nullptr;
 sp<IGnssPowerIndication> gnssPowerIndicationIface = nullptr;
 sp<IMeasurementCorrections_V1_0> gnssCorrectionsIface_V1_0 = nullptr;
 sp<IMeasurementCorrections_V1_1> gnssCorrectionsIface_V1_1 = nullptr;
-sp<IGnssVisibilityControl> gnssVisibilityControlIface = nullptr;
 sp<IGnssAntennaInfo> gnssAntennaInfoIface = nullptr;
 
 std::unique_ptr<GnssConfigurationInterface> gnssConfigurationIface = nullptr;
@@ -221,6 +217,7 @@ std::unique_ptr<android::gnss::GnssGeofenceInterface> gnssGeofencingIface = null
 std::unique_ptr<android::gnss::AGnssInterface> agnssIface = nullptr;
 std::unique_ptr<android::gnss::GnssDebugInterface> gnssDebugIface = nullptr;
 std::unique_ptr<android::gnss::AGnssRilInterface> agnssRilIface = nullptr;
+std::unique_ptr<android::gnss::GnssVisibilityControlInterface> gnssVisibilityControlIface = nullptr;
 
 #define WAKE_LOCK_NAME  "GPS"
 
@@ -243,6 +240,9 @@ bool hasLatLong(const GnssLocation_V1_0& location) {
 bool hasLatLong(const GnssLocation_V2_0& location) {
     return hasLatLong(location.v1_0);
 }
+
+bool isSvStatusRegistered = false;
+bool isNmeaRegistered = false;
 
 }  // namespace
 
@@ -505,6 +505,13 @@ uint32_t GnssCallback::getConstellationType(
 
 template <class T_list, class T_sv_info>
 Return<void> GnssCallback::gnssSvStatusCbImpl(const T_list& svStatus) {
+    // In HIDL or AIDL v1, if no listener is registered, do not report svInfoList to the framework.
+    if (gnssHalAidl == nullptr || gnssHalAidl->getInterfaceVersion() <= 1) {
+        if (!isSvStatusRegistered) {
+            return Void();
+        }
+    }
+
     JNIEnv* env = getJniEnv();
 
     uint32_t listSize = getGnssSvInfoListSize(svStatus);
@@ -566,8 +573,12 @@ Return<void> GnssCallback::gnssSvStatusCbImpl(const T_list& svStatus) {
     return Void();
 }
 
-Return<void> GnssCallback::gnssNmeaCb(
-    int64_t timestamp, const ::android::hardware::hidl_string& nmea) {
+Return<void> GnssCallback::gnssNmeaCb(int64_t timestamp,
+                                      const ::android::hardware::hidl_string& nmea) {
+    // In HIDL, if no listener is registered, do not report nmea to the framework.
+    if (!isNmeaRegistered) {
+        return Void();
+    }
     JNIEnv* env = getJniEnv();
     /*
      * The Java code will call back to read these values.
@@ -680,6 +691,12 @@ Status GnssCallbackAidl::gnssLocationCb(const GnssLocationAidl& location) {
 }
 
 Status GnssCallbackAidl::gnssNmeaCb(const int64_t timestamp, const std::string& nmea) {
+    // In AIDL v1, if no listener is registered, do not report nmea to the framework.
+    if (gnssHalAidl != nullptr && gnssHalAidl->getInterfaceVersion() <= 1) {
+        if (!isNmeaRegistered) {
+            return Status::ok();
+        }
+    }
     JNIEnv* env = getJniEnv();
     /*
      * The Java code will call back to read these values.
@@ -858,54 +875,6 @@ Return<void> GnssNiCallback::niNotifyCb(
     return Void();
 }
 
-/*
- * GnssVisibilityControlCallback implements callback methods of IGnssVisibilityControlCallback.hal.
- */
-struct GnssVisibilityControlCallback : public IGnssVisibilityControlCallback {
-    Return<void> nfwNotifyCb(const IGnssVisibilityControlCallback::NfwNotification& notification)
-            override;
-    Return<bool> isInEmergencySession() override;
-};
-
-Return<void> GnssVisibilityControlCallback::nfwNotifyCb(
-        const IGnssVisibilityControlCallback::NfwNotification& notification) {
-    JNIEnv* env = getJniEnv();
-    jstring proxyAppPackageName = env->NewStringUTF(notification.proxyAppPackageName.c_str());
-    jstring otherProtocolStackName = env->NewStringUTF(notification.otherProtocolStackName.c_str());
-    jstring requestorId = env->NewStringUTF(notification.requestorId.c_str());
-
-    if (proxyAppPackageName && otherProtocolStackName && requestorId) {
-        env->CallVoidMethod(mCallbacksObj, method_reportNfwNotification, proxyAppPackageName,
-                            notification.protocolStack, otherProtocolStackName,
-                            notification.requestor, requestorId, notification.responseType,
-                            notification.inEmergencyMode, notification.isCachedLocation);
-    } else {
-        ALOGE("%s: OOM Error\n", __func__);
-    }
-
-    if (requestorId) {
-        env->DeleteLocalRef(requestorId);
-    }
-
-    if (otherProtocolStackName) {
-        env->DeleteLocalRef(otherProtocolStackName);
-    }
-
-    if (proxyAppPackageName) {
-        env->DeleteLocalRef(proxyAppPackageName);
-    }
-
-    checkAndClearExceptionFromCallback(env, __FUNCTION__);
-    return Void();
-}
-
-Return<bool> GnssVisibilityControlCallback::isInEmergencySession() {
-    JNIEnv* env = getJniEnv();
-    auto result = env->CallBooleanMethod(mCallbacksObj, method_isInEmergencySession);
-    checkAndClearExceptionFromCallback(env, __FUNCTION__);
-    return result;
-}
-
 /* Initializes the GNSS service handle. */
 static void android_location_gnss_hal_GnssNative_set_gps_service_handle() {
     gnssHalAidl = waitForVintfService<IGnssAidl>();
@@ -1040,6 +1009,7 @@ static void android_location_gnss_hal_GnssNative_class_init_once(JNIEnv* env, jc
     gnss::GnssGeofence_class_init_once(env, clazz);
     gnss::GnssMeasurement_class_init_once(env, clazz);
     gnss::GnssNavigationMessage_class_init_once(env, clazz);
+    gnss::GnssVisibilityControl_class_init_once(env, clazz);
     gnss::AGnss_class_init_once(env, clazz);
     gnss::AGnssRil_class_init_once(env, clazz);
     gnss::Utils_class_init_once(env);
@@ -1322,12 +1292,21 @@ static void android_location_gnss_hal_GnssNative_init_once(JNIEnv* env, jobject 
         }
     }
 
-    if (gnssHal_V2_0 != nullptr) {
-        auto gnssVisibilityControl = gnssHal_V2_0->getExtensionVisibilityControl();
-        if (!gnssVisibilityControl.isOk()) {
-            ALOGD("Unable to get a handle to GnssVisibilityControl interface");
-        } else {
-            gnssVisibilityControlIface = gnssVisibilityControl;
+    if (gnssHalAidl != nullptr && gnssHalAidl->getInterfaceVersion() >= 2) {
+        sp<android::hardware::gnss::visibility_control::IGnssVisibilityControl>
+                gnssVisibilityControlAidl;
+        auto status = gnssHalAidl->getExtensionGnssVisibilityControl(&gnssVisibilityControlAidl);
+        if (checkAidlStatus(status,
+                            "Unable to get a handle to GnssVisibilityControl AIDL interface.")) {
+            gnssVisibilityControlIface =
+                    std::make_unique<gnss::GnssVisibilityControlAidl>(gnssVisibilityControlAidl);
+        }
+    } else if (gnssHal_V2_0 != nullptr) {
+        auto gnssVisibilityControlHidl = gnssHal_V2_0->getExtensionVisibilityControl();
+        if (checkHidlReturn(gnssVisibilityControlHidl,
+                            "Unable to get a handle to GnssVisibilityControl HIDL interface")) {
+            gnssVisibilityControlIface =
+                    std::make_unique<gnss::GnssVisibilityControlHidl>(gnssVisibilityControlHidl);
         }
     }
 
@@ -1452,12 +1431,12 @@ static jboolean android_location_gnss_hal_GnssNative_init(JNIEnv* /* env */, jcl
         ALOGI("Unable to initialize IAGnssRil interface.");
     }
 
-    // Set IGnssVisibilityControl.hal callback.
+    // Set IGnssVisibilityControl callback.
     if (gnssVisibilityControlIface != nullptr) {
-        sp<IGnssVisibilityControlCallback> gnssVisibilityControlCbIface =
-                new GnssVisibilityControlCallback();
-        auto result = gnssVisibilityControlIface->setCallback(gnssVisibilityControlCbIface);
-        checkHidlReturn(result, "IGnssVisibilityControl setCallback() failed.");
+        gnssVisibilityControlIface->setCallback(
+                std::make_unique<gnss::GnssVisibilityControlCallback>());
+    } else {
+        ALOGI("Unable to initialize IGnssVisibilityControl interface.");
     }
 
     // Set IMeasurementCorrections.hal callback.
@@ -1504,11 +1483,14 @@ static jboolean android_location_gnss_hal_GnssNative_set_position_mode(
         JNIEnv* /* env */, jclass, jint mode, jint recurrence, jint min_interval,
         jint preferred_accuracy, jint preferred_time, jboolean low_power_mode) {
     if (gnssHalAidl != nullptr && gnssHalAidl->getInterfaceVersion() >= 2) {
-        auto status = gnssHalAidl->setPositionMode(static_cast<IGnssAidl::GnssPositionMode>(mode),
-                                                   static_cast<IGnssAidl::GnssPositionRecurrence>(
-                                                           recurrence),
-                                                   min_interval, preferred_accuracy, preferred_time,
-                                                   low_power_mode);
+        IGnssAidl::PositionModeOptions options;
+        options.mode = static_cast<IGnssAidl::GnssPositionMode>(mode);
+        options.recurrence = static_cast<IGnssAidl::GnssPositionRecurrence>(recurrence);
+        options.minIntervalMs = min_interval;
+        options.preferredAccuracyMeters = preferred_accuracy;
+        options.preferredTimeMs = preferred_time;
+        options.lowPowerMode = low_power_mode;
+        auto status = gnssHalAidl->setPositionMode(options);
         return checkAidlStatus(status, "IGnssAidl setPositionMode() failed.");
     }
 
@@ -1557,6 +1539,58 @@ static jboolean android_location_gnss_hal_GnssNative_stop(JNIEnv* /* env */, jcl
 
     auto result = gnssHal->stop();
     return checkHidlReturn(result, "IGnss stop() failed.");
+}
+
+static jboolean android_location_gnss_hal_GnssNative_start_sv_status_collection(JNIEnv* /* env */,
+                                                                                jclass) {
+    isSvStatusRegistered = true;
+    if (gnssHalAidl != nullptr && gnssHalAidl->getInterfaceVersion() >= 2) {
+        auto status = gnssHalAidl->startSvStatus();
+        return checkAidlStatus(status, "IGnssAidl startSvStatus() failed.");
+    }
+    if (gnssHal == nullptr) {
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
+}
+
+static jboolean android_location_gnss_hal_GnssNative_stop_sv_status_collection(JNIEnv* /* env */,
+                                                                               jclass) {
+    isSvStatusRegistered = false;
+    if (gnssHalAidl != nullptr && gnssHalAidl->getInterfaceVersion() >= 2) {
+        auto status = gnssHalAidl->stopSvStatus();
+        return checkAidlStatus(status, "IGnssAidl stopSvStatus() failed.");
+    }
+    if (gnssHal == nullptr) {
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
+}
+
+static jboolean android_location_gnss_hal_GnssNative_start_nmea_message_collection(
+        JNIEnv* /* env */, jclass) {
+    isNmeaRegistered = true;
+    if (gnssHalAidl != nullptr && gnssHalAidl->getInterfaceVersion() >= 2) {
+        auto status = gnssHalAidl->startNmea();
+        return checkAidlStatus(status, "IGnssAidl startNmea() failed.");
+    }
+    if (gnssHal == nullptr) {
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
+}
+
+static jboolean android_location_gnss_hal_GnssNative_stop_nmea_message_collection(JNIEnv* /* env */,
+                                                                                  jclass) {
+    isNmeaRegistered = false;
+    if (gnssHalAidl != nullptr && gnssHalAidl->getInterfaceVersion() >= 2) {
+        auto status = gnssHalAidl->stopNmea();
+        return checkAidlStatus(status, "IGnssAidl stopNmea() failed.");
+    }
+    if (gnssHal == nullptr) {
+        return JNI_FALSE;
+    }
+    return JNI_TRUE;
 }
 
 static void android_location_gnss_hal_GnssNative_delete_aiding_data(JNIEnv* /* env */, jclass,
@@ -1986,7 +2020,7 @@ static SingleSatCorrection_V1_0 getSingleSatCorrection_1_0_withoutConstellation(
     jfloat eplMeters = env->CallFloatMethod(singleSatCorrectionObj, method_correctionSatEpl);
     jfloat eplUncMeters = env->CallFloatMethod(singleSatCorrectionObj, method_correctionSatEplUnc);
     uint16_t corrFlags = static_cast<uint16_t>(correctionFlags);
-    jobject reflectingPlaneObj;
+    jobject reflectingPlaneObj = nullptr;
     bool has_ref_plane = (corrFlags & GnssSingleSatCorrectionFlags::HAS_REFLECTING_PLANE) != 0;
     if (has_ref_plane) {
         reflectingPlaneObj =
@@ -2010,6 +2044,7 @@ static SingleSatCorrection_V1_0 getSingleSatCorrection_1_0_withoutConstellation(
                 .azimuthDegrees = azimuthDegreeRefPlane,
         };
     }
+    env->DeleteLocalRef(reflectingPlaneObj);
 
     SingleSatCorrection_V1_0 singleSatCorrection = {
             .singleSatCorrectionFlags = corrFlags,
@@ -2041,6 +2076,7 @@ static void getSingleSatCorrectionList_1_1(JNIEnv* env, jobject singleSatCorrect
         };
 
         list[i] = singleSatCorrection_1_1;
+        env->DeleteLocalRef(singleSatCorrectionObj);
     }
 }
 
@@ -2058,6 +2094,7 @@ static void getSingleSatCorrectionList_1_0(JNIEnv* env, jobject singleSatCorrect
         singleSatCorrection.constellation = static_cast<GnssConstellationType_V1_0>(constType),
 
         list[i] = singleSatCorrection;
+        env->DeleteLocalRef(singleSatCorrectionObj);
     }
 }
 
@@ -2128,6 +2165,7 @@ static jboolean android_location_gnss_hal_GnssNative_inject_measurement_correcti
 
     hidl_vec<SingleSatCorrection_V1_0> list(len);
     getSingleSatCorrectionList_1_0(env, singleSatCorrectionList, list);
+    env->DeleteLocalRef(singleSatCorrectionList);
     measurementCorrections_1_0.satCorrections = list;
 
     auto result = gnssCorrectionsIface_V1_0->setCorrections(measurementCorrections_1_0);
@@ -2301,17 +2339,7 @@ static jboolean android_location_GnssVisibilityControl_enable_nfw_location_acces
         ALOGI("IGnssVisibilityControl interface not available.");
         return JNI_FALSE;
     }
-
-    const jsize length = env->GetArrayLength(proxyApps);
-    hidl_vec<hidl_string> hidlProxyApps(length);
-    for (int i = 0; i < length; ++i) {
-        jstring proxyApp = (jstring) (env->GetObjectArrayElement(proxyApps, i));
-        ScopedJniString jniProxyApp(env, proxyApp);
-        hidlProxyApps[i] = jniProxyApp;
-    }
-
-    auto result = gnssVisibilityControlIface->enableNfwLocationAccess(hidlProxyApps);
-    return checkHidlReturn(result, "IGnssVisibilityControl enableNfwLocationAccess() failed.");
+    return gnssVisibilityControlIface->enableNfwLocationAccess(env, proxyApps);
 }
 
 static const JNINativeMethod sCoreMethods[] = {
@@ -2362,6 +2390,16 @@ static const JNINativeMethod sLocationProviderMethods[] = {
         {"native_is_gnss_visibility_control_supported", "()Z",
          reinterpret_cast<void*>(
                  android_location_gnss_hal_GnssNative_is_gnss_visibility_control_supported)},
+        {"native_start_sv_status_collection", "()Z",
+         reinterpret_cast<void*>(android_location_gnss_hal_GnssNative_start_sv_status_collection)},
+        {"native_stop_sv_status_collection", "()Z",
+         reinterpret_cast<void*>(android_location_gnss_hal_GnssNative_stop_sv_status_collection)},
+        {"native_start_nmea_message_collection", "()Z",
+         reinterpret_cast<void*>(
+                 android_location_gnss_hal_GnssNative_start_nmea_message_collection)},
+        {"native_stop_nmea_message_collection", "()Z",
+         reinterpret_cast<void*>(
+                 android_location_gnss_hal_GnssNative_stop_nmea_message_collection)},
 };
 
 static const JNINativeMethod sBatchingMethods[] = {

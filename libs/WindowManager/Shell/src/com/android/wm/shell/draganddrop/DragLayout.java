@@ -24,7 +24,6 @@ import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSIT
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
@@ -103,7 +102,7 @@ public class DragLayout extends LinearLayout {
                 MATCH_PARENT));
         ((LayoutParams) mDropZoneView1.getLayoutParams()).weight = 1;
         ((LayoutParams) mDropZoneView2.getLayoutParams()).weight = 1;
-        updateContainerMargins();
+        updateContainerMargins(getResources().getConfiguration().orientation);
     }
 
     @Override
@@ -128,20 +127,18 @@ public class DragLayout extends LinearLayout {
     }
 
     public void onConfigChanged(Configuration newConfig) {
-        final int orientation = getResources().getConfiguration().orientation;
-        if (orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
                 && getOrientation() != HORIZONTAL) {
             setOrientation(LinearLayout.HORIZONTAL);
-            updateContainerMargins();
-        } else if (orientation == Configuration.ORIENTATION_PORTRAIT
+            updateContainerMargins(newConfig.orientation);
+        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT
                 && getOrientation() != VERTICAL) {
             setOrientation(LinearLayout.VERTICAL);
-            updateContainerMargins();
+            updateContainerMargins(newConfig.orientation);
         }
     }
 
-    private void updateContainerMargins() {
-        final int orientation = getResources().getConfiguration().orientation;
+    private void updateContainerMargins(int orientation) {
         final float halfMargin = mDisplayMargin / 2f;
         if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
             mDropZoneView1.setContainerMargin(
@@ -154,10 +151,6 @@ public class DragLayout extends LinearLayout {
             mDropZoneView2.setContainerMargin(
                     mDisplayMargin, halfMargin, mDisplayMargin, mDisplayMargin);
         }
-    }
-
-    public boolean hasDropTarget() {
-        return mCurrentTarget != null;
     }
 
     public boolean hasDropped() {
@@ -271,6 +264,9 @@ public class DragLayout extends LinearLayout {
      * Updates the visible drop target as the user drags.
      */
     public void update(DragEvent event) {
+        if (mHasDropped) {
+            return;
+        }
         // Find containing region, if the same as mCurrentRegion, then skip, otherwise, animate the
         // visibility of the current region
         DragAndDropPolicy.Target target = mPolicy.getTargetAtLocation(
@@ -286,7 +282,8 @@ public class DragLayout extends LinearLayout {
                 animateHighlight(target);
             } else {
                 // Switching between targets
-                animateHighlight(target);
+                mDropZoneView1.animateSwitch();
+                mDropZoneView2.animateSwitch();
             }
             mCurrentTarget = target;
         }
@@ -323,7 +320,7 @@ public class DragLayout extends LinearLayout {
                 : DISABLE_NONE);
         mDropZoneView1.setShowingMargin(visible);
         mDropZoneView2.setShowingMargin(visible);
-        ObjectAnimator animator = mDropZoneView1.getAnimator();
+        Animator animator = mDropZoneView1.getAnimator();
         if (animCompleteCallback != null) {
             if (animator != null) {
                 animator.addListener(new AnimatorListenerAdapter() {
@@ -343,17 +340,11 @@ public class DragLayout extends LinearLayout {
         if (target.type == DragAndDropPolicy.Target.TYPE_SPLIT_LEFT
                 || target.type == DragAndDropPolicy.Target.TYPE_SPLIT_TOP) {
             mDropZoneView1.setShowingHighlight(true);
-            mDropZoneView1.setShowingSplash(false);
-
             mDropZoneView2.setShowingHighlight(false);
-            mDropZoneView2.setShowingSplash(true);
         } else if (target.type == DragAndDropPolicy.Target.TYPE_SPLIT_RIGHT
                 || target.type == DragAndDropPolicy.Target.TYPE_SPLIT_BOTTOM) {
             mDropZoneView1.setShowingHighlight(false);
-            mDropZoneView1.setShowingSplash(true);
-
             mDropZoneView2.setShowingHighlight(true);
-            mDropZoneView2.setShowingSplash(false);
         }
     }
 

@@ -28,6 +28,14 @@ import static android.app.admin.DevicePolicyManager.ID_TYPE_BASE_INFO;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_IMEI;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_MEID;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_SERIAL;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_BLOCK_ACTIVITY_START_IN_TASK;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_HOME;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_NONE;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_OVERVIEW;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_HIGH;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_LOW;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_MEDIUM;
@@ -42,6 +50,7 @@ import static android.app.admin.PasswordMetrics.computeForPasswordOrPin;
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_DIRECT_BOOT_AWARE;
 import static android.net.ConnectivityManager.PROFILE_NETWORK_PREFERENCE_DEFAULT;
 import static android.net.ConnectivityManager.PROFILE_NETWORK_PREFERENCE_ENTERPRISE;
+import static android.net.ConnectivityManager.PROFILE_NETWORK_PREFERENCE_ENTERPRISE_NO_FALLBACK;
 import static android.net.InetAddresses.parseNumericAddress;
 import static android.net.NetworkCapabilities.NET_ENTERPRISE_ID_1;
 
@@ -94,11 +103,13 @@ import android.app.admin.DevicePolicyManagerInternal;
 import android.app.admin.DevicePolicyManagerLiteInternal;
 import android.app.admin.FactoryResetProtectionPolicy;
 import android.app.admin.PasswordMetrics;
+import android.app.admin.PreferentialNetworkServiceConfig;
 import android.app.admin.SystemUpdatePolicy;
 import android.app.admin.WifiSsidPolicy;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -109,6 +120,7 @@ import android.graphics.Color;
 import android.hardware.usb.UsbManager;
 import android.net.ProfileNetworkPreference;
 import android.net.Uri;
+import android.net.wifi.WifiSsid;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -136,6 +148,9 @@ import com.android.internal.widget.LockscreenCredential;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.devicepolicy.DevicePolicyManagerService.RestrictionsListener;
+import com.android.server.pm.RestrictionsSet;
+import com.android.server.pm.UserManagerInternal;
+import com.android.server.pm.UserRestrictionsUtils;
 
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
@@ -150,6 +165,7 @@ import org.mockito.stubbing.Answer;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -280,6 +296,14 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         mIsAutomotive = mContext.getPackageManager()
                 .hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE);
+
+        final String TEST_STRING = "{count, plural,\n"
+                + "        =1    {Test for exactly 1 cert out of 4}\n"
+                + "        other {Test for exactly # certs out of 4}\n"
+                + "}";
+        doReturn(TEST_STRING)
+                .when(mContext.resources)
+                .getString(R.string.ssl_ca_cert_warning);
     }
 
     private TransferOwnershipMetadataManager getMockTransferMetadataManager() {
@@ -1782,9 +1806,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         StringParceledListSlice oneCert = asSlice(new String[] {"1"});
         StringParceledListSlice fourCerts = asSlice(new String[] {"1", "2", "3", "4"});
 
-        final String TEST_STRING = "Test for exactly 2 certs out of 4";
-        doReturn(TEST_STRING).when(mContext.resources).getQuantityText(anyInt(), eq(2));
-
         // Given that we have exactly one certificate installed,
         when(getServices().keyChainConnection.getService().getUserCaAliases()).thenReturn(oneCert);
         // when that certificate is approved,
@@ -1800,9 +1821,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         dpms.approveCaCert(fourCerts.getList().get(0), userId, true);
         dpms.approveCaCert(fourCerts.getList().get(1), userId, true);
         // a notification should be shown saying that there are two certificates left to approve.
+        final String TEST_STRING_RESULT = "Test for exactly 2 certs out of 4";
         verify(getServices().notificationManager, timeout(1000))
                 .notifyAsUser(anyString(), anyInt(), argThat(hasExtra(EXTRA_TITLE,
-                        TEST_STRING
+                        TEST_STRING_RESULT
                 )), eq(user));
     }
 
@@ -4142,6 +4164,164 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         preferences2.add(preferenceDetails);
         verify(getServices().connectivityManager, times(1))
                 .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences2,
+                        null, null);
+    }
+
+    @Test
+    public void testSetPreferentialNetworkServiceConfig_noProfileOwner() throws Exception {
+        assertExpectException(SecurityException.class, null,
+                () -> dpm.setPreferentialNetworkServiceConfig(
+                        PreferentialNetworkServiceConfig.DEFAULT));
+    }
+
+    @Test
+    public void testIsPreferentialNetworkServiceEnabled_noProfileOwner() throws Exception {
+        assertExpectException(SecurityException.class, null,
+                () -> dpm.isPreferentialNetworkServiceEnabled());
+    }
+
+    @Test
+    public void testSetPreferentialNetworkServiceConfig_invalidConfig() throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        PreferentialNetworkServiceConfig.Builder preferentialNetworkServiceConfigBuilder =
+                new PreferentialNetworkServiceConfig.Builder();
+        assertExpectException(NullPointerException.class, null,
+                () -> preferentialNetworkServiceConfigBuilder.setIncludedUids(null));
+        assertExpectException(NullPointerException.class, null,
+                () -> preferentialNetworkServiceConfigBuilder.setExcludedUids(null));
+        assertExpectException(IllegalArgumentException.class, null,
+                () -> preferentialNetworkServiceConfigBuilder.setNetworkId(6));
+        int[] includedUids = new int[]{1, 2};
+        int[] excludedUids = new int[]{3, 4};
+        preferentialNetworkServiceConfigBuilder.setIncludedUids(includedUids);
+        preferentialNetworkServiceConfigBuilder.setExcludedUids(excludedUids);
+
+        assertExpectException(IllegalStateException.class, null,
+                () -> preferentialNetworkServiceConfigBuilder.build());
+    }
+
+    @Test
+    public void testSetPreferentialNetworkServiceConfig_defaultPreference() throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        dpm.setPreferentialNetworkServiceConfig(PreferentialNetworkServiceConfig.DEFAULT);
+        assertThat(dpm.isPreferentialNetworkServiceEnabled()).isFalse();
+        assertThat(dpm.getPreferentialNetworkServiceConfig()
+                .isEnabled()).isFalse();
+
+        ProfileNetworkPreference preferenceDetails =
+                new ProfileNetworkPreference.Builder()
+                        .setPreference(PROFILE_NETWORK_PREFERENCE_DEFAULT)
+                        .build();
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences,
+                        null, null);
+    }
+
+    @Test
+    public void testSetPreferentialNetworkServiceConfig_enterprisePreference() throws Exception {
+        PreferentialNetworkServiceConfig preferentialNetworkServiceConfigEnabled =
+                (new PreferentialNetworkServiceConfig.Builder())
+                        .setEnabled(true)
+                        .setNetworkId(NET_ENTERPRISE_ID_1)
+                        .build();
+
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        dpm.setPreferentialNetworkServiceConfig(preferentialNetworkServiceConfigEnabled);
+        assertThat(dpm.getPreferentialNetworkServiceConfig()
+                .isEnabled()).isTrue();
+        ProfileNetworkPreference preferenceDetails =
+                new ProfileNetworkPreference.Builder()
+                        .setPreference(PROFILE_NETWORK_PREFERENCE_ENTERPRISE)
+                        .setPreferenceEnterpriseId(NET_ENTERPRISE_ID_1)
+                        .build();
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences,
+                        null, null);
+    }
+
+    @Test
+    public void testSetPreferentialNetworkServiceConfig_enterprisePreferenceIncludedUids()
+            throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        PreferentialNetworkServiceConfig preferentialNetworkServiceConfigEnabled =
+                (new PreferentialNetworkServiceConfig.Builder())
+                        .setEnabled(true)
+                        .setNetworkId(NET_ENTERPRISE_ID_1)
+                        .setFallbackToDefaultConnectionAllowed(false)
+                        .setIncludedUids(new int[]{1, 2})
+                        .build();
+        dpm.setPreferentialNetworkServiceConfig(preferentialNetworkServiceConfigEnabled);
+        assertThat(dpm.getPreferentialNetworkServiceConfig()
+                .isEnabled()).isTrue();
+        List<Integer> includedList = new ArrayList<>();
+        includedList.add(1);
+        includedList.add(2);
+        ProfileNetworkPreference preferenceDetails =
+                new ProfileNetworkPreference.Builder()
+                        .setPreference(PROFILE_NETWORK_PREFERENCE_ENTERPRISE_NO_FALLBACK)
+                        .setPreferenceEnterpriseId(NET_ENTERPRISE_ID_1)
+                        .setIncludedUids(includedList)
+                        .build();
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences,
+                        null, null);
+    }
+
+    @Test
+    public void testSetPreferentialNetworkServiceConfig_enterprisePreferenceExcludedUids()
+            throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+
+        PreferentialNetworkServiceConfig preferentialNetworkServiceConfigEnabled =
+                (new PreferentialNetworkServiceConfig.Builder())
+                        .setEnabled(true)
+                        .setNetworkId(NET_ENTERPRISE_ID_1)
+                        .setFallbackToDefaultConnectionAllowed(false)
+                        .setExcludedUids(new int[]{1, 2})
+                        .build();
+
+        dpm.setPreferentialNetworkServiceConfig(preferentialNetworkServiceConfigEnabled);
+        assertThat(dpm.getPreferentialNetworkServiceConfig()
+                .isEnabled()).isTrue();
+        List<Integer> excludedUids = new ArrayList<>();
+        excludedUids.add(1);
+        excludedUids.add(2);
+        ProfileNetworkPreference preferenceDetails =
+                new ProfileNetworkPreference.Builder()
+                        .setPreference(PROFILE_NETWORK_PREFERENCE_ENTERPRISE_NO_FALLBACK)
+                        .setPreferenceEnterpriseId(NET_ENTERPRISE_ID_1)
+                        .setExcludedUids(excludedUids)
+                        .build();
+        List<ProfileNetworkPreference> preferences = new ArrayList<>();
+        preferences.clear();
+        preferences.add(preferenceDetails);
+        verify(getServices().connectivityManager, times(1))
+                .setProfileNetworkPreferences(UserHandle.of(managedProfileUserId), preferences,
                         null, null);
     }
 
@@ -7559,30 +7739,20 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
 
-        int returnedDeviceOwnerType = dpm.getDeviceOwnerType(admin1);
-        assertThat(dpms.mOwners.hasDeviceOwner()).isTrue();
-        assertThat(returnedDeviceOwnerType).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
-
+        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
         initializeDpms();
-
-        returnedDeviceOwnerType = dpm.getDeviceOwnerType(admin1);
-        assertThat(dpms.mOwners.hasDeviceOwner()).isTrue();
-        assertThat(returnedDeviceOwnerType).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
     }
 
     @Test
-    public void testSetDeviceOwnerType_asDeviceOwner_throwsExceptionWhenSetDeviceOwnerTypeAgain()
+    public void testSetDeviceOwnerType_asDeviceOwner_setDeviceOwnerTypeTwice_success()
             throws Exception {
         setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_DEFAULT);
 
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
 
-        int returnedDeviceOwnerType = dpm.getDeviceOwnerType(admin1);
-        assertThat(dpms.mOwners.hasDeviceOwner()).isTrue();
-        assertThat(returnedDeviceOwnerType).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
-
-        assertThrows(IllegalStateException.class,
-                () -> dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_DEFAULT));
+        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
     }
 
     @Test
@@ -7595,6 +7765,322 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         setDeviceOwner();
 
         assertThrows(IllegalStateException.class, () -> dpm.getDeviceOwnerType(admin2));
+    }
+
+    @Test
+    public void testSetUserRestriction_financeDo_invalidRestrictions_restrictionNotSet()
+            throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        for (String restriction : UserRestrictionsUtils.USER_RESTRICTIONS) {
+            if (!UserRestrictionsUtils.canFinancedDeviceOwnerChange(restriction)) {
+                assertNoDeviceOwnerRestrictions();
+                assertExpectException(SecurityException.class, /* messageRegex= */ null,
+                        () -> dpm.addUserRestriction(admin1, restriction));
+
+                verify(getServices().userManagerInternal, never())
+                        .setDevicePolicyUserRestrictions(anyInt(), any(), any(), anyBoolean());
+                DpmTestUtils.assertRestrictions(new Bundle(), dpm.getUserRestrictions(admin1));
+            }
+        }
+    }
+
+    @Test
+    public void testSetUserRestriction_financeDo_validRestrictions_setsRestriction()
+            throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        for (String restriction : UserRestrictionsUtils.USER_RESTRICTIONS) {
+            if (UserRestrictionsUtils.canFinancedDeviceOwnerChange(restriction)) {
+                assertNoDeviceOwnerRestrictions();
+                dpm.addUserRestriction(admin1, restriction);
+
+                Bundle globalRestrictions =
+                        dpms.getDeviceOwnerAdminLocked().getGlobalUserRestrictions(
+                                UserManagerInternal.OWNER_TYPE_DEVICE_OWNER);
+                RestrictionsSet localRestrictions = new RestrictionsSet();
+                localRestrictions.updateRestrictions(
+                        UserHandle.USER_SYSTEM,
+                        dpms.getDeviceOwnerAdminLocked().getLocalUserRestrictions(
+                                UserManagerInternal.OWNER_TYPE_DEVICE_OWNER));
+                verify(getServices().userManagerInternal)
+                        .setDevicePolicyUserRestrictions(eq(UserHandle.USER_SYSTEM),
+                                MockUtils.checkUserRestrictions(globalRestrictions),
+                                MockUtils.checkUserRestrictions(
+                                        UserHandle.USER_SYSTEM, localRestrictions),
+                                eq(true));
+                reset(getServices().userManagerInternal);
+
+                DpmTestUtils.assertRestrictions(DpmTestUtils.newRestrictions(restriction),
+                        dpm.getUserRestrictions(admin1));
+
+                dpm.clearUserRestriction(admin1, restriction);
+                reset(getServices().userManagerInternal);
+            }
+        }
+    }
+
+    @Test
+    public void testSetLockTaskFeatures_financeDo_validLockTaskFeatures_lockTaskFeaturesSet()
+            throws Exception {
+        int validLockTaskFeatures = LOCK_TASK_FEATURE_SYSTEM_INFO | LOCK_TASK_FEATURE_KEYGUARD
+                | LOCK_TASK_FEATURE_HOME | LOCK_TASK_FEATURE_GLOBAL_ACTIONS
+                | LOCK_TASK_FEATURE_NOTIFICATIONS;
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.setLockTaskFeatures(admin1, validLockTaskFeatures);
+
+        verify(getServices().iactivityTaskManager)
+                .updateLockTaskFeatures(eq(UserHandle.USER_SYSTEM), eq(validLockTaskFeatures));
+    }
+
+    @Test
+    public void testSetLockTaskFeatures_financeDo_invalidLockTaskFeatures_throwsException()
+            throws Exception {
+        int invalidLockTaskFeatures = LOCK_TASK_FEATURE_NONE | LOCK_TASK_FEATURE_OVERVIEW
+                | LOCK_TASK_FEATURE_HOME | LOCK_TASK_FEATURE_BLOCK_ACTIVITY_START_IN_TASK;
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+        // Called during setup.
+        verify(getServices().iactivityTaskManager).updateLockTaskFeatures(anyInt(), anyInt());
+
+        assertExpectException(SecurityException.class, /* messageRegex= */ null,
+                () -> dpm.setLockTaskFeatures(admin1, invalidLockTaskFeatures));
+
+        verifyNoMoreInteractions(getServices().iactivityTaskManager);
+    }
+
+    @Test
+    public void testIsUninstallBlocked_financeDo_success() throws Exception {
+        String packageName = "com.android.foo.package";
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+        when(getServices().ipackageManager.getBlockUninstallForUser(
+                eq(packageName), eq(UserHandle.USER_SYSTEM)))
+                .thenReturn(true);
+
+        assertThat(dpm.isUninstallBlocked(admin1, packageName)).isTrue();
+    }
+
+    @Test
+    public void testSetUninstallBlocked_financeDo_success() throws Exception {
+        String packageName = "com.android.foo.package";
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.setUninstallBlocked(admin1, packageName, false);
+
+        verify(getServices().ipackageManager)
+                .setBlockUninstallForUser(eq(packageName), eq(false),
+                        eq(UserHandle.USER_SYSTEM));
+    }
+
+    @Test
+    public void testSetUserControlDisabledPackages_financeDo_success() throws Exception {
+        List<String> packages = new ArrayList<>();
+        packages.add("com.android.foo.package");
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.setUserControlDisabledPackages(admin1, packages);
+
+        verify(getServices().packageManagerInternal)
+                .setDeviceOwnerProtectedPackages(eq(admin1.getPackageName()), eq(packages));
+    }
+
+    @Test
+    public void testGetUserControlDisabledPackages_financeDo_success() throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        assertThat(dpm.getUserControlDisabledPackages(admin1)).isEmpty();
+    }
+
+    @Test
+    public void testSetOrganizationName_financeDo_success() throws Exception {
+        String organizationName = "Test Organization";
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.setOrganizationName(admin1, organizationName);
+
+        assertThat(dpm.getDeviceOwnerOrganizationName()).isEqualTo(organizationName);
+    }
+
+    @Test
+    public void testSetShortSupportMessage_financeDo_success() throws Exception {
+        String supportMessage = "Test short support message";
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.setShortSupportMessage(admin1, supportMessage);
+
+        assertThat(dpm.getShortSupportMessage(admin1)).isEqualTo(supportMessage);
+    }
+
+    @Test
+    public void testIsBackupServiceEnabled_financeDo_success() throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+        when(getServices().ibackupManager.isBackupServiceActive(eq(UserHandle.USER_SYSTEM)))
+                .thenReturn(true);
+
+        assertThat(dpm.isBackupServiceEnabled(admin1)).isTrue();
+    }
+
+    @Test
+    public void testSetBackupServiceEnabled_financeDo_success() throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.setBackupServiceEnabled(admin1, true);
+
+        verify(getServices().ibackupManager)
+                .setBackupServiceActive(eq(UserHandle.USER_SYSTEM), eq(true));
+    }
+
+    @Test
+    public void testIsLockTaskPermitted_financeDo_success() throws Exception {
+        String packageName = "com.android.foo.package";
+        mockPolicyExemptApps(packageName);
+        mockVendorPolicyExemptApps();
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        assertThat(dpm.isLockTaskPermitted(packageName)).isTrue();
+    }
+
+    @Test
+    public void testSetLockTaskPackages_financeDo_success() throws Exception {
+        String[] packages = {"com.android.foo.package"};
+        mockEmptyPolicyExemptApps();
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.setLockTaskPackages(admin1, packages);
+
+        verify(getServices().iactivityManager)
+                .updateLockTaskPackages(eq(UserHandle.USER_SYSTEM), eq(packages));
+    }
+
+    @Test
+    public void testAddPersistentPreferredActivity_financeDo_success() throws Exception {
+        IntentFilter filter = new IntentFilter();
+        ComponentName target = new ComponentName(admin2.getPackageName(), "test.class");
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.addPersistentPreferredActivity(admin1, filter, target);
+
+        verify(getServices().ipackageManager)
+                .addPersistentPreferredActivity(eq(filter), eq(target), eq(UserHandle.USER_SYSTEM));
+        verify(getServices().ipackageManager)
+                .flushPackageRestrictionsAsUser(eq(UserHandle.USER_SYSTEM));
+    }
+
+    @Test
+    public void testClearPackagePersistentPreferredActvities_financeDo_success() throws Exception {
+        String packageName = admin2.getPackageName();
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.clearPackagePersistentPreferredActivities(admin1, packageName);
+
+        verify(getServices().ipackageManager)
+                .clearPackagePersistentPreferredActivities(
+                        eq(packageName), eq(UserHandle.USER_SYSTEM));
+        verify(getServices().ipackageManager)
+                .flushPackageRestrictionsAsUser(eq(UserHandle.USER_SYSTEM));
+    }
+
+    @Test
+    public void testWipeData_financeDo_success() throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+        when(getServices().userManager.getUserRestrictionSource(
+                UserManager.DISALLOW_FACTORY_RESET,
+                UserHandle.SYSTEM))
+                .thenReturn(UserManager.RESTRICTION_SOURCE_DEVICE_OWNER);
+        when(mMockContext.getResources()
+                .getString(R.string.work_profile_deleted_description_dpm_wipe))
+                .thenReturn("Test string");
+
+        dpm.wipeData(0);
+
+        verifyRebootWipeUserData(/* wipeEuicc= */ false);
+    }
+
+    @Test
+    public void testIsDeviceOwnerApp_financeDo_success() throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        assertThat(dpm.isDeviceOwnerApp(admin1.getPackageName())).isTrue();
+    }
+
+    @Test
+    public void testClearDeviceOwnerApp_financeDo_success() throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        dpm.clearDeviceOwnerApp(admin1.getPackageName());
+
+        assertThat(dpm.getDeviceOwnerComponentOnAnyUser()).isNull();
+        assertThat(dpm.isAdminActiveAsUser(admin1, UserHandle.USER_SYSTEM)).isFalse();
+        verify(mMockContext.spiedContext, times(2))
+                .sendBroadcastAsUser(
+                        MockUtils.checkIntentAction(
+                                DevicePolicyManager.ACTION_DEVICE_OWNER_CHANGED),
+                        eq(UserHandle.SYSTEM));
+    }
+
+    @Test
+    public void testSetPermissionGrantState_financeDo_notReadPhoneStatePermission_throwsException()
+            throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        assertExpectException(SecurityException.class, /* messageRegex= */ null,
+                () -> dpm.setPermissionGrantState(admin1, admin1.getPackageName(),
+                        permission.READ_CALENDAR,
+                        DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED));
+    }
+
+    @Test
+    public void testSetPermissionGrantState_financeDo_grantPermissionToNonDeviceOwnerPackage_throwsException()
+            throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        assertExpectException(SecurityException.class, /* messageRegex= */ null,
+                () -> dpm.setPermissionGrantState(admin1, "com.android.foo.package",
+                        permission.READ_PHONE_STATE,
+                        DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED));
+    }
+
+    @Test
+    public void testGetPermissionGrantState_financeDo_notReadPhoneStatePermission_throwsException()
+            throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        assertExpectException(SecurityException.class, /* messageRegex= */ null,
+                () -> dpm.getPermissionGrantState(admin1, admin1.getPackageName(),
+                        permission.READ_CALENDAR));
+    }
+
+    @Test
+    public void testGetPermissionGrantState_financeDo_notDeviceOwnerPackage_throwsException()
+            throws Exception {
+        setDeviceOwner();
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        assertExpectException(SecurityException.class, /* messageRegex= */ null,
+                () -> dpm.getPermissionGrantState(admin1, "com.android.foo.package",
+                        permission.READ_PHONE_STATE));
     }
 
     @Test
@@ -7876,8 +8362,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
     @Test
     public void testSetSsidAllowlist_noDeviceOwnerOrPoOfOrgOwnedDevice() {
-        final Set<String> ssids = Collections.singleton("ssid1");
-        WifiSsidPolicy policy = WifiSsidPolicy.createAllowlistPolicy(ssids);
+        final Set<WifiSsid> ssids = new ArraySet<>(
+                Arrays.asList(WifiSsid.fromBytes("ssid1".getBytes(StandardCharsets.UTF_8))));
+        WifiSsidPolicy policy = new WifiSsidPolicy(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_ALLOWLIST, ssids);
         assertThrows(SecurityException.class, () -> dpm.setWifiSsidPolicy(policy));
     }
 
@@ -7885,8 +8373,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testSetSsidAllowlist_asDeviceOwner() throws Exception {
         setDeviceOwner();
 
-        final Set<String> ssids = Collections.singleton("ssid1");
-        WifiSsidPolicy policy = WifiSsidPolicy.createAllowlistPolicy(ssids);
+        final Set<WifiSsid> ssids = new ArraySet<>(
+                Arrays.asList(WifiSsid.fromBytes("ssid1".getBytes(StandardCharsets.UTF_8))));
+        WifiSsidPolicy policy = new WifiSsidPolicy(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_ALLOWLIST, ssids);
         dpm.setWifiSsidPolicy(policy);
         assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
         assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
@@ -7901,8 +8391,12 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         configureProfileOwnerOfOrgOwnedDevice(admin1, managedProfileUserId);
         mContext.binder.callingUid = managedProfileAdminUid;
 
-        final Set<String> ssids = new ArraySet<>(Arrays.asList("ssid1", "ssid2", "ssid3"));
-        WifiSsidPolicy policy = WifiSsidPolicy.createAllowlistPolicy(ssids);
+        final Set<WifiSsid> ssids = new ArraySet<>(
+                Arrays.asList(WifiSsid.fromBytes("ssid1".getBytes(StandardCharsets.UTF_8)),
+                        WifiSsid.fromBytes("ssid2".getBytes(StandardCharsets.UTF_8)),
+                        WifiSsid.fromBytes("ssid3".getBytes(StandardCharsets.UTF_8))));
+        WifiSsidPolicy policy = new WifiSsidPolicy(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_ALLOWLIST, ssids);
         dpm.setWifiSsidPolicy(policy);
         assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
         assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
@@ -7913,15 +8407,17 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testSetSsidAllowlist_emptyList() throws Exception {
         setDeviceOwner();
 
-        final Set<String> ssids = new ArraySet<>();
+        final Set<WifiSsid> ssids = new ArraySet<>();
         assertThrows(IllegalArgumentException.class,
-                () -> WifiSsidPolicy.createAllowlistPolicy(ssids));
+                () -> new WifiSsidPolicy(WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_ALLOWLIST, ssids));
     }
 
     @Test
     public void testSetSsidDenylist_noDeviceOwnerOrPoOfOrgOwnedDevice() {
-        final Set<String> ssids = Collections.singleton("ssid1");
-        WifiSsidPolicy policy = WifiSsidPolicy.createDenylistPolicy(ssids);
+        final Set<WifiSsid> ssids = new ArraySet<>(
+                Arrays.asList(WifiSsid.fromBytes("ssid1".getBytes(StandardCharsets.UTF_8))));
+        WifiSsidPolicy policy = new WifiSsidPolicy(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_DENYLIST, ssids);
         assertThrows(SecurityException.class, () -> dpm.setWifiSsidPolicy(policy));
     }
 
@@ -7929,8 +8425,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testSetSsidDenylist_asDeviceOwner() throws Exception {
         setDeviceOwner();
 
-        final Set<String> ssids = Collections.singleton("ssid1");
-        WifiSsidPolicy policy = WifiSsidPolicy.createDenylistPolicy(ssids);
+        final Set<WifiSsid> ssids = new ArraySet<>(
+                Arrays.asList(WifiSsid.fromBytes("ssid1".getBytes(StandardCharsets.UTF_8))));
+        WifiSsidPolicy policy = new WifiSsidPolicy(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_DENYLIST, ssids);
         dpm.setWifiSsidPolicy(policy);
         assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
         assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
@@ -7945,8 +8443,12 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         configureProfileOwnerOfOrgOwnedDevice(admin1, managedProfileUserId);
         mContext.binder.callingUid = managedProfileAdminUid;
 
-        final Set<String> ssids = new ArraySet<>(Arrays.asList("ssid1", "ssid2", "ssid3"));
-        WifiSsidPolicy policy = WifiSsidPolicy.createDenylistPolicy(ssids);
+        final Set<WifiSsid> ssids = new ArraySet<>(
+                Arrays.asList(WifiSsid.fromBytes("ssid1".getBytes(StandardCharsets.UTF_8)),
+                        WifiSsid.fromBytes("ssid2".getBytes(StandardCharsets.UTF_8)),
+                        WifiSsid.fromBytes("ssid3".getBytes(StandardCharsets.UTF_8))));
+        WifiSsidPolicy policy = new WifiSsidPolicy(
+                WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_DENYLIST, ssids);
         dpm.setWifiSsidPolicy(policy);
         assertThat(dpm.getWifiSsidPolicy().getSsids()).isEqualTo(ssids);
         assertThat(dpm.getWifiSsidPolicy().getPolicyType()).isEqualTo(
@@ -7957,9 +8459,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     public void testSetSsidDenylist_emptyList() throws Exception {
         setDeviceOwner();
 
-        final Set<String> ssids = new ArraySet<>();
+        final Set<WifiSsid> ssids = new ArraySet<>();
         assertThrows(IllegalArgumentException.class,
-                () -> WifiSsidPolicy.createDenylistPolicy(ssids));
+                () -> new WifiSsidPolicy(WifiSsidPolicy.WIFI_SSID_POLICY_TYPE_DENYLIST, ssids));
     }
 
     @Test

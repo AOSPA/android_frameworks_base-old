@@ -87,6 +87,7 @@ import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.demomode.DemoModeController;
+import com.android.systemui.dreams.DreamOverlayStateController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.fragments.FragmentService;
@@ -285,6 +286,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private NotifLiveDataStore mNotifLiveDataStore;
     @Mock private InteractionJankMonitor mJankMonitor;
     @Mock private DeviceStateManager mDeviceStateManager;
+    @Mock private DreamOverlayStateController mDreamOverlayStateController;
     private ShadeController mShadeController;
     private final FakeSystemClock mFakeSystemClock = new FakeSystemClock();
     private FakeExecutor mMainExecutor = new FakeExecutor(mFakeSystemClock);
@@ -367,6 +369,10 @@ public class StatusBarTest extends SysuiTestCase {
         when(mStatusBarComponentFactory.create()).thenReturn(mStatusBarComponent);
         when(mStatusBarComponent.getNotificationShadeWindowViewController()).thenReturn(
                 mNotificationShadeWindowViewController);
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(mNotificationShadeWindowController).batchApplyWindowLayoutParams(any());
 
         mShadeController = new ShadeControllerImpl(mCommandQueue,
                 mStatusBarStateController, mNotificationShadeWindowController,
@@ -470,7 +476,8 @@ public class StatusBarTest extends SysuiTestCase {
                 mActivityLaunchAnimator,
                 mNotifPipelineFlags,
                 mJankMonitor,
-                mDeviceStateManager);
+                mDeviceStateManager,
+                mDreamOverlayStateController);
         when(mKeyguardViewMediator.registerStatusBar(
                 any(StatusBar.class),
                 any(NotificationPanelViewController.class),
@@ -878,15 +885,6 @@ public class StatusBarTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetState_changesIsFullScreenUserSwitcherState() {
-        mStatusBar.setBarStateForTest(StatusBarState.KEYGUARD);
-        assertFalse(mStatusBar.isFullScreenUserSwitcherState());
-
-        mStatusBar.setBarStateForTest(StatusBarState.FULLSCREEN_USER_SWITCHER);
-        assertTrue(mStatusBar.isFullScreenUserSwitcherState());
-    }
-
-    @Test
     public void testShowKeyguardImplementation_setsState() {
         when(mLockscreenUserManager.getCurrentProfiles()).thenReturn(new SparseArray<>());
 
@@ -896,12 +894,6 @@ public class StatusBarTest extends SysuiTestCase {
         mStatusBar.showKeyguardImpl();
         verify(mStatusBarStateController).setState(
                 eq(StatusBarState.KEYGUARD), eq(false) /* force */);
-
-        // If useFullscreenUserSwitcher is true, state is set to FULLSCREEN_USER_SWITCHER.
-        when(mUserSwitcherController.useFullscreenUserSwitcher()).thenReturn(true);
-        mStatusBar.showKeyguardImpl();
-        verify(mStatusBarStateController).setState(
-                eq(StatusBarState.FULLSCREEN_USER_SWITCHER), eq(false) /* force */);
     }
 
     @Test

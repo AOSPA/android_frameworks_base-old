@@ -1,6 +1,8 @@
 package com.android.systemui.statusbar.phone
 
 import android.view.WindowInsets
+import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.flags.Flags
 import com.android.systemui.navigationbar.NavigationModeController
 import com.android.systemui.plugins.qs.QS
 import com.android.systemui.plugins.qs.QSContainerController
@@ -14,7 +16,8 @@ import javax.inject.Inject
 class NotificationsQSContainerController @Inject constructor(
     view: NotificationsQuickSettingsContainer,
     private val navigationModeController: NavigationModeController,
-    private val overviewProxyService: OverviewProxyService
+    private val overviewProxyService: OverviewProxyService,
+    private val featureFlags: FeatureFlags
 ) : ViewController<NotificationsQuickSettingsContainer>(view), QSContainerController {
 
     var qsExpanded = false
@@ -63,7 +66,7 @@ class NotificationsQSContainerController @Inject constructor(
     }
 
     public override fun onViewAttached() {
-        notificationsBottomMargin = mView.defaultNotificationsMarginBottom
+        updateMargins()
         overviewProxyService.addCallback(taskbarVisibilityListener)
         mView.setInsetsChangedListener(windowInsetsListener)
         mView.setQSFragmentAttachedListener { qs: QS -> qs.setContainerController(this) }
@@ -73,6 +76,10 @@ class NotificationsQSContainerController @Inject constructor(
         overviewProxyService.removeCallback(taskbarVisibilityListener)
         mView.removeOnInsetsChangedListener()
         mView.removeQSFragmentAttachedListener()
+    }
+
+    fun updateMargins() {
+        notificationsBottomMargin = mView.defaultNotificationsMarginBottom
     }
 
     override fun setCustomizerAnimating(animating: Boolean) {
@@ -104,7 +111,11 @@ class NotificationsQSContainerController @Inject constructor(
         }
         mView.setPadding(0, 0, 0, containerPadding)
         mView.setNotificationsMarginBottom(notificationsMargin)
-        mView.setQSScrollPaddingBottom(qsScrollPaddingBottom)
+        if (featureFlags.isEnabled(Flags.NEW_FOOTER)) {
+            mView.setQSContainerPaddingBottom(notificationsMargin)
+        } else {
+            mView.setQSScrollPaddingBottom(qsScrollPaddingBottom)
+        }
     }
 
     private fun calculateBottomSpacing(): Pair<Int, Int> {
