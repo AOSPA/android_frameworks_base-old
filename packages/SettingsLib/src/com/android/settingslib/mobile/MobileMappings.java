@@ -257,6 +257,8 @@ public class MobileMappings {
                     SystemProperties.getBoolean("persist.sysui.rat_icon_enhancement", false);
             config.enableDdsRatIconEnhancement =
                     SystemProperties.getBoolean("persist.sysui.dds_rat_icon_enhancement", false);
+            config.showVowifiIcon |=
+                    SystemProperties.getBoolean("persist.sysui.enable_vowifi_icon", false);
 
             return config;
         }
