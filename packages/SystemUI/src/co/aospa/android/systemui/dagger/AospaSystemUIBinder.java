@@ -25,7 +25,6 @@ import com.android.systemui.theme.ThemeOverlayController;
 import com.google.android.systemui.columbus.ColumbusTargetRequestService;
 
 import co.aospa.android.systemui.AospaServices;
-import co.aospa.android.systemui.theme.AospaThemeOverlayController;
 
 import dagger.Binds;
 import dagger.Module;

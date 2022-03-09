@@ -25,7 +25,6 @@ import androidx.annotation.Nullable;
 import co.aospa.android.systemui.AospaServices;
 import co.aospa.android.systemui.assist.AssistManagerGoogle;
 import co.aospa.android.systemui.smartspace.KeyguardSmartspaceController;
-import co.aospa.android.systemui.theme.AospaThemeOverlayController;
 
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.app.AssistUtils;
@@ -282,9 +281,6 @@ public abstract class AospaSystemUIModule {
 
     @Binds
     abstract DozeHost provideDozeHost(DozeServiceHost dozeServiceHost);
-
-    @Binds
-    abstract ThemeOverlayController provideThemeOverlayController(AospaThemeOverlayController themeOverlayController);
 
     @Provides
     @SysUISingleton
