@@ -2036,7 +2036,6 @@ public final class ViewRootImpl implements ViewParent,
                 mWindowAttributes.format);
             return;
         }
-        ScrollOptimizer.setBLASTBufferQueue(mBlastBufferQueue);
 
         // If the SurfaceControl has been updated, destroy and recreate the BBQ to reset the BQ and
         // BBQ states.
@@ -2045,6 +2044,7 @@ public final class ViewRootImpl implements ViewParent,
         }
         mBlastBufferQueue = new BLASTBufferQueue(mTag, mSurfaceControl,
                 mSurfaceSize.x, mSurfaceSize.y, mWindowAttributes.format);
+        ScrollOptimizer.setBLASTBufferQueue(mBlastBufferQueue);
         Surface blastSurface = mBlastBufferQueue.createSurface();
         // Only call transferFrom if the surface has changed to prevent inc the generation ID and
         // causing EGL resources to be recreated.
