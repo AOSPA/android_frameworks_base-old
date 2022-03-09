@@ -55,8 +55,8 @@ import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
-import com.android.systemui.power.PowerUI;
 import com.android.systemui.power.PowerNotificationWarnings;
+import com.android.systemui.power.dagger.PowerModule;
 import com.android.systemui.qs.dagger.QSModule;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
 import com.android.systemui.recents.OverviewProxyService;
@@ -98,6 +98,7 @@ import com.android.systemui.telephony.TelephonyListenerManager;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.sensors.ProximitySensor;
+import com.android.systemui.volume.dagger.VolumeModule;
 
 import com.google.android.systemui.assist.GoogleAssistLogger;
 import com.google.android.systemui.assist.OpaEnabledDispatcher;
@@ -158,7 +159,9 @@ import dagger.multibindings.ElementsIntoSet;
 
 @Module(includes = {
         MediaModule.class,
-        QSModule.class
+        PowerModule.class,
+        QSModule.class,
+        VolumeModule.class
 })
 public abstract class AospaSystemUIModule {
 
@@ -250,12 +253,6 @@ public abstract class AospaSystemUIModule {
                 groupManager, configurationController);
     }
 
-    @SysUISingleton
-    @Provides
-    static PowerUI.WarningsUI provideWarningsUi(PowerNotificationWarnings controllerImpl) {
-        return controllerImpl;
-    }
-
     @Binds
     abstract HeadsUpManager bindHeadsUpManagerPhone(HeadsUpManagerPhone headsUpManagerPhone);
 
@@ -266,9 +263,13 @@ public abstract class AospaSystemUIModule {
         return new Recents(context, recentsImplementation, commandQueue);
     }
 
-    @Binds
-    abstract DeviceProvisionedController bindDeviceProvisionedController(
-            DeviceProvisionedControllerImpl deviceProvisionedController);
+    @SysUISingleton
+    @Provides
+    static DeviceProvisionedController bindDeviceProvisionedController(
+            DeviceProvisionedControllerImpl deviceProvisionedController) {
+        deviceProvisionedController.init();
+        return deviceProvisionedController;
+    }
 
     @Binds
     abstract KeyguardViewController bindKeyguardViewController(
