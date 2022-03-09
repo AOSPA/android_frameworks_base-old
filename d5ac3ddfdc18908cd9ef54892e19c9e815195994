@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a28daa16_e09797ab",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000101
+      },
+      "writtenOn": "2022-03-09T16:44:06Z",
+      "side": 1,
+      "message": "Imo this should be squashed with the drop commit",
+      "revId": "d5ac3ddfdc18908cd9ef54892e19c9e815195994",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
