@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "01518908_eb393b73",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000765
+      },
+      "writtenOn": "2022-03-09T20:37:52Z",
+      "side": 1,
+      "message": "It works on my device.",
+      "revId": "6f3a658add7caf7724fe42c475aca52cad2a0f54",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
