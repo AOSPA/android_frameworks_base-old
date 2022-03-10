@@ -883,26 +883,25 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         if (mCurrentState.connected) {
             mCurrentState.level = getSignalLevel(mCurrentState.signalStrength);
             if (mConfig.showRsrpSignalLevelforLTE) {
-                // TODO(b/214591923)
-                // if (DEBUG) {
-                //     Log.d(mTag, "updateTelephony CS:" + mServiceState.getVoiceNetworkType()
-                //             + "/" + TelephonyManager.getNetworkTypeName(
-                //             mServiceState.getVoiceNetworkType())
-                //             + ", PS:" + mServiceState.getDataNetworkType()
-                //             + "/"+ TelephonyManager.getNetworkTypeName(
-                //             mServiceState.getDataNetworkType()));
-                // }
-                // int dataType = mServiceState.getDataNetworkType();
-                // if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
-                //         dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
-                //     mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
-                // }else if ( dataType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
-                //     int voiceType = mServiceState.getVoiceNetworkType();
-                //     if (voiceType == TelephonyManager.NETWORK_TYPE_LTE ||
-                //             voiceType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
-                //         mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
-                //     }
-                // }
+                 if (DEBUG) {
+                     Log.d(mTag, "updateTelephony CS:" + mCurrentState.getVoiceNetworkType()
+                             + "/" + TelephonyManager.getNetworkTypeName(
+                             mCurrentState.getVoiceNetworkType())
+                             + ", PS:" + mCurrentState.getDataNetworkType()
+                             + "/"+ TelephonyManager.getNetworkTypeName(
+                             mCurrentState.getDataNetworkType()));
+                 }
+                 int dataType = mCurrentState.getDataNetworkType();
+                 if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
+                         dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                     mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
+                 } else if (dataType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                     int voiceType = mCurrentState.getVoiceNetworkType();
+                     if (voiceType == TelephonyManager.NETWORK_TYPE_LTE ||
+                             voiceType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                         mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
+                     }
+                 }
             }
         }
 
@@ -1029,6 +1028,11 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     }
 
     private int getAlternateLteLevel(SignalStrength signalStrength) {
+        if (signalStrength == null) {
+            Log.e(mTag, "getAlternateLteLevel signalStrength is null");
+            return 0;
+        }
+
         int lteRsrp = signalStrength.getLteDbm();
         if ( lteRsrp == SignalStrength.INVALID ) {
             int signalStrengthLevel = signalStrength.getLevel();
