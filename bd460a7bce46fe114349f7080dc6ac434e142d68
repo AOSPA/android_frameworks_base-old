@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d363b0ce_b4078756",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000765
+      },
+      "writtenOn": "2022-03-10T08:53:40Z",
+      "side": 1,
+      "message": "It works now without bugs. Recents are closing and openinng normally.",
+      "revId": "bd460a7bce46fe114349f7080dc6ac434e142d68",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
