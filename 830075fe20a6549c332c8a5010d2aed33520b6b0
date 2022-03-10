@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "11d01649_d7d3c66f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-03-10T09:11:45Z",
+      "side": 1,
+      "message": "+1 is in behalf of tdrkDev",
+      "revId": "830075fe20a6549c332c8a5010d2aed33520b6b0",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
