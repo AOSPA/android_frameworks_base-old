@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "53097f6f_67e8e982",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000062
+      },
+      "writtenOn": "2022-03-10T16:11:07Z",
+      "side": 1,
+      "message": "This obviously doesn\u0027t make sense for production hardware/firmware, but for custom ROMs (unlocking bootloader and using insecure recovery, etc), I think this is a reasonable pick for development and releasing stuffs.\n\nWill merge this if there are no objections.",
+      "revId": "e5b051f339b39d89167964a9dcae8781a5382572",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
