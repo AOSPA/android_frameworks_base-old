@@ -75,6 +75,7 @@ import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
 import android.permission.PermissionManager;
 import android.telephony.TelephonyManager;
+import android.telephony.UiccCardInfo;
 import android.telephony.gba.GbaService;
 import android.telephony.ims.ImsService;
 import android.telephony.ims.ProvisioningManager;
@@ -3185,6 +3186,13 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_SENSOR_HINGE_ANGLE = "android.hardware.sensor.hinge_angle";
 
+     /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device includes a heading sensor.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_SENSOR_HEADING = "android.hardware.sensor.heading";
+
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports exposing head tracker sensors from peripheral
@@ -3263,6 +3271,20 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_TELEPHONY_EUICC = "android.hardware.telephony.euicc";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
+     * supports multiple enabled profiles on eUICCs.
+     *
+     * <p>Devices declaring this feature must have an implementation of the
+     *  {@link UiccCardInfo#getPorts},
+     *  {@link UiccCardInfo#isMultipleEnabledProfilesSupported} and
+     *  {@link android.telephony.euicc.EuiccManager#switchToSubscription (with portIndex)}.
+     *
+     * This feature should only be defined if {@link #FEATURE_TELEPHONY_EUICC} have been defined.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_TELEPHONY_EUICC_MEP = "android.hardware.telephony.euicc.mep";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
@@ -3772,6 +3794,16 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_PICTURE_IN_PICTURE = "android.software.picture_in_picture";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports expanded picture-in-picture multi-window mode.
+     *
+     * @see android.app.PictureInPictureParams.Builder#setExpandedAspectRatio
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_EXPANDED_PICTURE_IN_PICTURE
+            = "android.software.expanded_picture_in_picture";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
@@ -4318,6 +4350,21 @@ public abstract class PackageManager {
     @SystemApi
     public static final String EXTRA_REQUEST_PERMISSIONS_RESULTS
             = "android.content.pm.extra.REQUEST_PERMISSIONS_RESULTS";
+
+    /**
+     * Indicates that the package requesting permissions has legacy access for some permissions,
+     * or had it, but it was recently revoked. These request dialogs may show different text,
+     * indicating that the app is requesting continued access to a permission. Will be cleared
+     * from any permission request intent, if set by a non-system server app.
+     * <p>
+     * <strong>Type:</strong> String[]
+     * </p>
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_REQUEST_PERMISSIONS_LEGACY_ACCESS_PERMISSION_NAMES
+            = "android.content.pm.extra.REQUEST_PERMISSIONS_LEGACY_ACCESS_PERMISSION_NAMES";
 
     /**
      * String extra for {@link PackageInstallObserver} in the 'extras' Bundle in case of
@@ -7988,6 +8035,7 @@ public abstract class PackageManager {
             return PackageParser.generatePackageInfo(pkg, null, (int) flagsBits, 0, 0, null,
                     FrameworkPackageUserState.DEFAULT);
         } catch (PackageParser.PackageParserException e) {
+            Log.w(TAG, "Failure to parse package archive", e);
             return null;
         }
     }

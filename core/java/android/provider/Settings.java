@@ -24,7 +24,6 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
-import android.annotation.StringDef;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
@@ -2128,7 +2127,7 @@ public final class Settings {
     /**
      * Intent extra: The id of a setting restricted by supervisors.
      * <p>
-     * Type: String with a value from the SupervisorVerificationSetting annotation below.
+     * Type: Integer with a value from the SupervisorVerificationSetting annotation below.
      * <ul>
      * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_UNKNOWN}
      * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS}
@@ -2141,20 +2140,19 @@ public final class Settings {
     /**
      * Unknown setting.
      */
-    public static final String SUPERVISOR_VERIFICATION_SETTING_UNKNOWN = "";
+    public static final int SUPERVISOR_VERIFICATION_SETTING_UNKNOWN = 0;
 
     /**
      * Biometric settings for supervisors.
      */
-    public static final String SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS =
-            "supervisor_restricted_biometrics_controller";
+    public static final int SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS = 1;
 
     /**
      * Keys for {@link #EXTRA_SUPERVISOR_RESTRICTED_SETTING_KEY}.
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
-    @StringDef(prefix = { "SUPERVISOR_VERIFICATION_SETTING_" }, value = {
+    @IntDef(prefix = { "SUPERVISOR_VERIFICATION_SETTING_" }, value = {
             SUPERVISOR_VERIFICATION_SETTING_UNKNOWN,
             SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS,
     })
@@ -4508,6 +4506,13 @@ public final class Settings {
          */
         @Readable
         public static final String SCREEN_OFF_TIMEOUT = "screen_off_timeout";
+
+        /**
+         * The amount of time in milliseconds before the device goes to sleep or begins to dream
+         * after a period of inactivity while it is docked.
+         * @hide
+         */
+        public static final String SCREEN_OFF_TIMEOUT_DOCKED = "screen_off_timeout_docked";
 
         /**
          * The screen backlight brightness between 0 and 255.
@@ -10325,6 +10330,34 @@ public final class Settings {
                 "nearby_fast_pair_settings_devices_component";
 
         /**
+         * Current provider of the component for requesting ambient context consent.
+         * Default value in @string/config_defaultAmbientContextConsentComponent.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String AMBIENT_CONTEXT_CONSENT_COMPONENT =
+                "ambient_context_consent_component";
+
+        /**
+         * Current provider of the intent extra key for the caller's package name while
+         * requesting ambient context consent.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String AMBIENT_CONTEXT_PACKAGE_NAME_EXTRA_KEY =
+                "ambient_context_package_name_key";
+
+        /**
+         * Current provider of the intent extra key for the event code int array while
+         * requesting ambient context consent.
+         * Default value in @string/config_ambientContextEventArrayExtraKey.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String AMBIENT_CONTEXT_EVENT_ARRAY_EXTRA_KEY =
+                "ambient_context_event_array_key";
+
+        /**
          * Controls whether aware is enabled.
          * @hide
          */
@@ -10683,6 +10716,19 @@ public final class Settings {
          */
         public static final String HDMI_CEC_SET_MENU_LANGUAGE_DENYLIST =
                 "hdmi_cec_set_menu_language_denylist";
+
+        /**
+         * Whether the Taskbar Education is about to be shown or is currently showing.
+         *
+         * <p>1 if true, 0 or unset otherwise.
+         *
+         * <p>This setting is used to inform other components that the Taskbar Education is
+         * currently showing, which can prevent them from showing something else to the user.
+         *
+         * @hide
+         */
+        public static final String LAUNCHER_TASKBAR_EDUCATION_SHOWING =
+                "launcher_taskbar_education_showing";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -11692,8 +11738,8 @@ public final class Settings {
                 "night_display_forced_auto_mode_available";
 
         /**
-         * If UTC time between two NITZ signals is greater than this value then the second signal
-         * cannot be ignored.
+         * If Unix epoch time between two NITZ signals is greater than this value then the second
+         * signal cannot be ignored.
          *
          * <p>This value is in milliseconds. It is used for telephony-based time and time zone
          * detection.
@@ -16846,6 +16892,14 @@ public final class Settings {
          */
         public static final String WATCHDOG_TIMEOUT_MILLIS =
                 "system_server_watchdog_timeout_ms";
+
+        /**
+         * Whether to enable managed device provisioning via the role holder.
+         *
+         * @hide
+         */
+        public static final String MANAGED_PROVISIONING_DEFER_PROVISIONING_TO_ROLE_HOLDER =
+                "managed_provisioning_defer_provisioning_to_role_holder";
 
         /**
          * Settings migrated from Wear OS settings provider.

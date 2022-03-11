@@ -508,6 +508,12 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
             AndroidPackage::shouldInheritKeyStoreKeys,
             ParsingPackage::setInheritKeyStoreKeys,
             true
+        ),
+        getter(AndroidPackage::getKnownActivityEmbeddingCerts, setOf("TESTEMBEDDINGCERT")),
+        getSetByValue(
+            AndroidPackage::isOnBackInvokedCallbackEnabled,
+            ParsingPackage::setOnBackInvokedCallbackEnabled,
+            true
         )
     )
 

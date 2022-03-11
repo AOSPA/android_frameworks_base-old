@@ -1724,6 +1724,13 @@ public final class ProcessList {
             return Zygote.MEMORY_TAG_LEVEL_NONE;
         }
 
+        String defaultLevel = SystemProperties.get("persist.arm64.memtag.app_default");
+        if ("sync".equals(defaultLevel)) {
+            return Zygote.MEMORY_TAG_LEVEL_SYNC;
+        } else if ("async".equals(defaultLevel)) {
+            return Zygote.MEMORY_TAG_LEVEL_ASYNC;
+        }
+
         // Check to see that the compat feature for TBI is enabled.
         if (mPlatformCompat.isChangeEnabled(NATIVE_HEAP_POINTER_TAGGING, app.info)) {
             return Zygote.MEMORY_TAG_LEVEL_TBI;
@@ -1924,7 +1931,7 @@ public final class ProcessList {
             if ((app.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL) != 0) {
                 runtimeFlags |= Zygote.PROFILE_FROM_SHELL;
             }
-            if ((app.info.privateFlagsExt & ApplicationInfo.PRIVATE_FLAG_EXT_PROFILEABLE) != 0) {
+            if (app.info.isProfileable()) {
                 runtimeFlags |= Zygote.PROFILEABLE;
             }
             if ("1".equals(SystemProperties.get("debug.checkjni"))) {
@@ -2541,6 +2548,7 @@ public final class ProcessList {
     ProcessRecord startProcessLocked(String processName, ApplicationInfo info,
             boolean knownToBeDead, int intentFlags, HostingRecord hostingRecord,
             int zygotePolicyFlags, boolean allowWhileBooting, boolean isolated, int isolatedUid,
+            boolean supplemental, int supplementalUid,
             String abiOverride, String entryPoint, String[] entryPointArgs, Runnable crashHandler) {
         long startTime = SystemClock.uptimeMillis();
         ProcessRecord app;
@@ -2634,7 +2642,8 @@ public final class ProcessList {
 
         if (app == null) {
             checkSlow(startTime, "startProcess: creating new process record");
-            app = newProcessRecordLocked(info, processName, isolated, isolatedUid, hostingRecord);
+            app = newProcessRecordLocked(info, processName, isolated, isolatedUid, supplemental,
+                    supplementalUid, hostingRecord);
             if (app == null) {
                 Slog.w(TAG, "Failed making new process record for "
                         + processName + "/" + info.uid + " isolated=" + isolated);
@@ -3129,10 +3138,14 @@ public final class ProcessList {
 
     @GuardedBy("mService")
     ProcessRecord newProcessRecordLocked(ApplicationInfo info, String customProcess,
-            boolean isolated, int isolatedUid, HostingRecord hostingRecord) {
+            boolean isolated, int isolatedUid, boolean supplemental, int supplementalUid,
+            HostingRecord hostingRecord) {
         String proc = customProcess != null ? customProcess : info.processName;
         final int userId = UserHandle.getUserId(info.uid);
         int uid = info.uid;
+        if (supplemental) {
+            uid = supplementalUid;
+        }
         if (isolated) {
             if (isolatedUid == 0) {
                 IsolatedUidRange uidRange = getOrCreateIsolatedUidRangeLocked(info, hostingRecord);

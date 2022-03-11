@@ -97,6 +97,7 @@ import android.content.ClipData;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Insets;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -3221,7 +3222,8 @@ public interface WindowManager extends ViewManager {
 
         /**
          * The window is allowed to extend into the {@link DisplayCutout} area, only if the
-         * {@link DisplayCutout} is fully contained within a system bar. Otherwise, the window is
+         * {@link DisplayCutout} is fully contained within a system bar or the {@link DisplayCutout}
+         * is not deeper than 16 dp, but this depends on the OEM choice. Otherwise, the window is
          * laid out such that it does not overlap with the {@link DisplayCutout} area.
          *
          * <p>
@@ -3236,6 +3238,13 @@ public interface WindowManager extends ViewManager {
          * The usual precautions for not overlapping with the status and navigation bar are
          * sufficient for ensuring that no important content overlaps with the DisplayCutout.
          *
+         * <p>
+         * Note: OEMs can have an option to allow the window to always extend into the
+         * {@link DisplayCutout} area, no matter the cutout flag set, when the {@link DisplayCutout}
+         * is on the different side from system bars, only if the {@link DisplayCutout} overlaps at
+         * most 16dp with the windows.
+         * In such case, OEMs must provide an opt-in/out affordance for users.
+         *
          * @see DisplayCutout
          * @see WindowInsets
          * @see #layoutInDisplayCutoutMode
@@ -3248,8 +3257,16 @@ public interface WindowManager extends ViewManager {
          * The window is always allowed to extend into the {@link DisplayCutout} areas on the short
          * edges of the screen.
          *
+         * <p>
          * The window will never extend into a {@link DisplayCutout} area on the long edges of the
-         * screen.
+         * screen, unless the {@link DisplayCutout} is not deeper than 16 dp, but this depends on
+         * the OEM choice.
+         *
+         * <p>
+         * Note: OEMs can have an option to allow the window to extend into the
+         * {@link DisplayCutout} area on the long edge side, only if the cutout overlaps at most
+         * 16dp with the windows. In such case, OEMs must provide an opt-in/out affordance for
+         * users.
          *
          * <p>
          * The window must make sure that no important content overlaps with the
@@ -4864,21 +4881,24 @@ public interface WindowManager extends ViewManager {
      * Registers the frame rate per second count callback for one given task ID.
      * Each callback can only register for receiving FPS callback for one task id until unregister
      * is called. If there's no task associated with the given task id,
-     * {@link IllegalArgumentException} will be thrown. If a task id destroyed after a callback is
-     * registered, the registered callback will not be unregistered until
-     * {@link #unregisterTaskFpsCallback(TaskFpsCallback))} is called
+     * {@link IllegalArgumentException} will be thrown. Registered callbacks should always be
+     * unregistered via {@link #unregisterTaskFpsCallback(TaskFpsCallback)}
+     * even when the task id has been destroyed.
+     *
      * @param taskId task id of the task.
+     * @param executor Executor to execute the callback.
      * @param callback callback to be registered.
      *
      * @hide
      */
     @SystemApi
     default void registerTaskFpsCallback(@IntRange(from = 0) int taskId,
+            @NonNull Executor executor,
             @NonNull TaskFpsCallback callback) {}
 
     /**
      * Unregisters the frame rate per second count callback which was registered with
-     * {@link #registerTaskFpsCallback(int,TaskFpsCallback)}.
+     * {@link #registerTaskFpsCallback(Executor, int, TaskFpsCallback)}.
      *
      * @param callback callback to be unregistered.
      *
@@ -4886,4 +4906,21 @@ public interface WindowManager extends ViewManager {
      */
     @SystemApi
     default void unregisterTaskFpsCallback(@NonNull TaskFpsCallback callback) {}
+
+    /**
+     * Take a snapshot using the same path that's used for Recents. This is used for Testing only.
+     *
+     * @param taskId to take the snapshot of
+     *
+     * @return a bitmap of the screenshot or {@code null} if it was unable to screenshot. The
+     * screenshot can fail if the taskId is invalid or if there's no SurfaceControl associated with
+     * that task.
+     *
+     * @hide
+     */
+    @TestApi
+    @Nullable
+    default Bitmap snapshotTaskForRecents(@IntRange(from = 0) int taskId) {
+        return null;
+    }
 }

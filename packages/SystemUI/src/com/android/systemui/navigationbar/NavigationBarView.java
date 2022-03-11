@@ -125,6 +125,7 @@ public class NavigationBarView extends FrameLayout implements
     int mDisabledFlags = 0;
     int mNavigationIconHints = 0;
     private int mNavBarMode;
+    private boolean mImeDrawsImeNavBar;
 
     private final Region mTmpRegion = new Region();
     private final int[] mTmpPosition = new int[2];
@@ -273,11 +274,21 @@ public class NavigationBarView extends FrameLayout implements
             };
 
     private final OnComputeInternalInsetsListener mOnComputeInternalInsetsListener = info -> {
-        // When the nav bar is in 2-button or 3-button mode, or when IME is visible in fully
-        // gestural mode, the entire nav bar should be touchable.
+        // When the nav bar is in 2-button or 3-button mode, or when the back button is force-shown
+        // while in gesture nav in SUW, the entire nav bar should be touchable.
         if (!mEdgeBackGestureHandler.isHandlingGestures()) {
-            info.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_FRAME);
-            return;
+            // We're in 2/3 button mode OR back button force-shown in SUW
+            if (!mImeVisible) {
+                // IME not showing, take all touches
+                info.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_FRAME);
+                return;
+            }
+  
+            if (!isImeRenderingNavButtons()) {
+                // IME showing but not drawing any buttons, take all touches
+                info.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_FRAME);
+                return;     
+            }
         }
 
         // When in gestural and the IME is showing, don't use the nearest region since it will take
@@ -324,6 +335,7 @@ public class NavigationBarView extends FrameLayout implements
         mIsVertical = false;
         mLongClickableAccessibilityButton = false;
         mNavBarMode = Dependency.get(NavigationModeController.class).addListener(this);
+        mImeDrawsImeNavBar = Dependency.get(NavigationModeController.class).getImeDrawsImeNavBar();
 
         mSysUiFlagContainer = Dependency.get(SysUiState.class);
         // Set up the context group of buttons
@@ -773,14 +785,10 @@ public class NavigationBarView extends FrameLayout implements
 
         updateRecentsIcon();
 
-        boolean isImeRenderingNavButtons = isGesturalMode(mNavBarMode)
-                && mImeCanRenderGesturalNavButtons
-                && (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_IME_SHOWN) != 0;
-
         // Update IME button visibility, a11y and rotate button always overrides the appearance
         boolean disableImeSwitcher =
                 (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_IME_SWITCHER_SHOWN) == 0
-                || isImeRenderingNavButtons;
+                || isImeRenderingNavButtons();
         mContextualButtonGroup.setButtonVisibility(R.id.ime_switcher, !disableImeSwitcher);
 
         mBarTransitions.reapplyDarkIntensity();
@@ -797,7 +805,7 @@ public class NavigationBarView extends FrameLayout implements
 
         boolean disableBack = !useAltBack && (mEdgeBackGestureHandler.isHandlingGestures()
                 || ((mDisabledFlags & View.STATUS_BAR_DISABLE_BACK) != 0))
-                || isImeRenderingNavButtons;
+                || isImeRenderingNavButtons();
 
         // When screen pinning, don't hide back and home when connected service or back and
         // recents buttons when disconnected from launcher service in screen pinning mode,
@@ -828,6 +836,15 @@ public class NavigationBarView extends FrameLayout implements
         getRecentsButton().setVisibility(disableRecent  ? View.INVISIBLE : View.VISIBLE);
         getHomeHandle().setVisibility(disableHomeHandle ? View.INVISIBLE : View.VISIBLE);
         notifyActiveTouchRegions();
+    }
+
+    /**
+     * Returns whether the IME is currently visible and drawing the nav buttons.
+     */
+    private boolean isImeRenderingNavButtons() {
+        return mImeDrawsImeNavBar
+                && mImeCanRenderGesturalNavButtons
+                && (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_IME_SHOWN) != 0;
     }
 
     @VisibleForTesting
@@ -966,6 +983,7 @@ public class NavigationBarView extends FrameLayout implements
     @Override
     public void onNavigationModeChanged(int mode) {
         mNavBarMode = mode;
+        mImeDrawsImeNavBar = Dependency.get(NavigationModeController.class).getImeDrawsImeNavBar();
         mBarTransitions.onNavigationModeChanged(mNavBarMode);
         mEdgeBackGestureHandler.onNavigationModeChanged(mNavBarMode);
         updateRotationButton();

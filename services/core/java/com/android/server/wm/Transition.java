@@ -158,8 +158,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     /** The final animation targets derived from participants after promotion. */
     private ArrayList<WindowContainer> mTargets;
 
-    /** The main display running this transition. */
-    private DisplayContent mTargetDisplay;
+    /** The displays that this transition is running on. */
+    private final ArrayList<DisplayContent> mTargetDisplays = new ArrayList<>();
 
     /**
      * Set of participating windowtokens (activity/wallpaper) which are visible at the end of
@@ -207,6 +207,16 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
     boolean isTransientLaunch(@NonNull ActivityRecord activity) {
         return mTransientLaunches != null && mTransientLaunches.contains(activity);
+    }
+
+    boolean isOnDisplay(@NonNull DisplayContent dc) {
+        return mTargetDisplays.contains(dc);
+    }
+
+    void setSeamlessRotation(@NonNull WindowContainer wc) {
+        final ChangeInfo info = mChanges.get(wc);
+        if (info == null) return;
+        info.mFlags = info.mFlags | ChangeInfo.FLAG_SEAMLESS_ROTATION;
     }
 
     @VisibleForTesting
@@ -274,6 +284,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             mChanges.put(wc, info);
         }
         mParticipants.add(wc);
+        if (wc.getDisplayContent() != null && !mTargetDisplays.contains(wc.getDisplayContent())) {
+            mTargetDisplays.add(wc.getDisplayContent());
+        }
         if (info.mShowWallpaper) {
             // Collect the wallpaper token (for isWallpaper(wc)) so it is part of the sync set.
             final WindowState wallpaper =
@@ -446,9 +459,19 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 // activity in a bad state.
                 if (!visibleAtTransitionEnd && !ar.isVisibleRequested()) {
                     boolean commitVisibility = true;
-                    if (ar.getDeferHidingClient() && ar.getTask() != null) {
+                    if (ar.isVisible() && ar.getTask() != null) {
                         if (ar.pictureInPictureArgs != null
                                 && ar.pictureInPictureArgs.isAutoEnterEnabled()) {
+                            if (mTransientLaunches != null) {
+                                for (int j = 0; j < mTransientLaunches.size(); ++j) {
+                                    if (mTransientLaunches.valueAt(j).isVisibleRequested()) {
+                                        // force enable pip-on-task-switch now that we've committed
+                                        // to actually launching to the transient activity.
+                                        ar.supportsEnterPipOnTaskSwitch = true;
+                                        break;
+                                    }
+                                }
+                            }
                             mController.mAtm.enterPictureInPictureMode(ar, ar.pictureInPictureArgs);
                             // Avoid commit visibility to false here, or else we will get a sudden
                             // "flash" / surface going invisible for a split second.
@@ -510,15 +533,23 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             dc.getInputMonitor().setActiveRecents(null /* activity */, null /* layer */);
         }
 
-        final AsyncRotationController asyncRotationController =
-                mTargetDisplay.getAsyncRotationController();
-        if (asyncRotationController != null) {
-            asyncRotationController.onTransitionFinished();
-        }
-        // Transient-launch activities cannot be IME target (WindowState#canBeImeTarget),
-        // so re-compute in case the IME target is changed after transition.
-        if (mTransientLaunches != null) {
-            mTargetDisplay.computeImeTarget(true /* updateImeTarget */);
+        for (int i = 0; i < mTargetDisplays.size(); ++i) {
+            final DisplayContent dc = mTargetDisplays.get(i);
+            final AsyncRotationController asyncRotationController = dc.getAsyncRotationController();
+            if (asyncRotationController != null) {
+                asyncRotationController.onTransitionFinished();
+            }
+            if (mTransientLaunches != null) {
+                // Transient-launch activities cannot be IME target (WindowState#canBeImeTarget),
+                // so re-compute in case the IME target is changed after transition.
+                for (int t = 0; t < mTransientLaunches.size(); ++t) {
+                    if (mTransientLaunches.valueAt(t).getDisplayContent() == dc) {
+                        dc.computeImeTarget(true /* updateImeTarget */);
+                        break;
+                    }
+                }
+            }
+            dc.handleCompleteDeferredRemoval();
         }
     }
 
@@ -529,10 +560,10 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             throw new IllegalStateException("Too late to abort.");
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Aborting Transition: %d", mSyncId);
-        mController.dispatchLegacyAppTransitionCancelled();
         mState = STATE_ABORT;
         // Syncengine abort will call through to onTransactionReady()
         mSyncEngine.abort(mSyncId);
+        mController.dispatchLegacyAppTransitionCancelled();
     }
 
     void setRemoteTransition(RemoteTransition remoteTransition) {
@@ -549,19 +580,13 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             Slog.e(TAG, "Unexpected Sync ID " + syncId + ". Expected " + mSyncId);
             return;
         }
-        boolean hasWallpaper = false;
-        DisplayContent dc = null;
-        for (int i = mParticipants.size() - 1; i >= 0; --i) {
-            final WindowContainer<?> wc = mParticipants.valueAt(i);
-            if (dc == null && wc.mDisplayContent != null) {
-                dc = wc.mDisplayContent;
-            }
-            if (!hasWallpaper && isWallpaper(wc)) {
-                hasWallpaper = true;
-            }
+        if (mTargetDisplays.isEmpty()) {
+            mTargetDisplays.add(mController.mAtm.mRootWindowContainer.getDefaultDisplay());
         }
-        if (dc == null) dc = mController.mAtm.mRootWindowContainer.getDefaultDisplay();
-        mTargetDisplay = dc;
+        // While there can be multiple DC's involved. For now, we just use the first one as
+        // the "primary" one for most things. Eventually, this will need to change, but, for the
+        // time being, we don't have full cross-display transitions so it isn't a problem.
+        final DisplayContent dc = mTargetDisplays.get(0);
 
         if (mState == STATE_ABORT) {
             mController.abort(this);
@@ -571,8 +596,11 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             return;
         }
         // Ensure that wallpaper visibility is updated with the latest wallpaper target.
-        if (hasWallpaper) {
-            dc.mWallpaperController.adjustWallpaperWindows();
+        for (int i = mParticipants.size() - 1; i >= 0; --i) {
+            final WindowContainer<?> wc = mParticipants.valueAt(i);
+            if (isWallpaper(wc) && wc.getDisplayContent() != null) {
+                wc.getDisplayContent().mWallpaperController.adjustWallpaperWindows();
+            }
         }
 
         mState = STATE_PLAYING;
@@ -819,7 +847,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         // the bottom of the screen, so we need to animate it.
         for (int i = 0; i < mTargets.size(); ++i) {
             final Task task = mTargets.get(i).asTask();
-            if (task == null || !task.isHomeOrRecentsRootTask()) continue;
+            if (task == null || !task.isActivityTypeHomeOrRecents()) continue;
             animate = task.isVisibleRequested();
             break;
         }
@@ -1122,6 +1150,15 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             // hardware-screen-level surfaces.
             return asDC.getWindowingLayer();
         }
+        if (!wc.mTransitionController.useShellTransitionsRotation()) {
+            final WindowToken asToken = wc.asWindowToken();
+            if (asToken != null) {
+                // WindowTokens can have a fixed-rotation applied to them. In the current
+                // implementation this fact is hidden from the player, so we must create a leash.
+                final SurfaceControl leash = asToken.getOrCreateFixedRotationLeash();
+                if (leash != null) return leash;
+            }
+        }
         return wc.getSurfaceControl();
     }
 
@@ -1224,6 +1261,23 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 final ActivityRecord topMostActivity = task.getTopMostActivity();
                 change.setAllowEnterPip(topMostActivity != null
                         && topMostActivity.checkEnterPictureInPictureAppOpsState());
+                final ActivityRecord topRunningActivity = task.topRunningActivity();
+                if (topRunningActivity != null && task.mDisplayContent != null
+                        // Display won't be rotated for multi window Task, so the fixed rotation
+                        // won't be applied. This can happen when the windowing mode is changed
+                        // before the previous fixed rotation is applied.
+                        && !task.inMultiWindowMode()) {
+                    // If Activity is in fixed rotation, its will be applied with the next rotation,
+                    // when the Task is still in the previous rotation.
+                    final int taskRotation = task.getWindowConfiguration().getDisplayRotation();
+                    final int activityRotation = topRunningActivity.getWindowConfiguration()
+                            .getDisplayRotation();
+                    if (taskRotation != activityRotation) {
+                        change.setEndFixedRotation(activityRotation);
+                    }
+                }
+            } else if ((info.mFlags & ChangeInfo.FLAG_SEAMLESS_ROTATION) != 0) {
+                change.setRotationAnimation(ROTATION_ANIMATION_SEAMLESS);
             }
             final ActivityRecord activityRecord = target.asActivityRecord();
             if (activityRecord != null) {
@@ -1337,6 +1391,21 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
     @VisibleForTesting
     static class ChangeInfo {
+        private static final int FLAG_NONE = 0;
+
+        /**
+         * When set, the associated WindowContainer has been explicitly requested to be a
+         * seamless rotation. This is currently only used by DisplayContent during fixed-rotation.
+         */
+        private static final int FLAG_SEAMLESS_ROTATION = 1;
+
+        @IntDef(prefix = { "FLAG_" }, value = {
+                FLAG_NONE,
+                FLAG_SEAMLESS_ROTATION
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        @interface Flag {}
+
         // Usually "post" change state.
         WindowContainer mParent;
 
@@ -1349,6 +1418,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         boolean mShowWallpaper;
         int mRotation = ROTATION_UNDEFINED;
         @ActivityInfo.Config int mKnownConfigChanges;
+
+        /** These are just extra info. They aren't used for change-detection. */
+        @Flag int mFlags = FLAG_NONE;
 
         ChangeInfo(@NonNull WindowContainer origState) {
             mVisible = origState.isVisibleRequested();

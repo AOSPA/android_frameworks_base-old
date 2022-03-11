@@ -128,8 +128,10 @@ interface IActivityTaskManager {
             int callingUid, in Intent intent, in String resolvedType,
             in IVoiceInteractionSession session, in IVoiceInteractor interactor, int flags,
             in ProfilerInfo profilerInfo, in Bundle options, int userId);
+    String getVoiceInteractorPackageName(in IBinder callingVoiceInteractor);
     int startAssistantActivity(in String callingPackage, in String callingFeatureId, int callingPid,
             int callingUid, in Intent intent, in String resolvedType, in Bundle options, int userId);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.MANAGE_GAME_ACTIVITY)")
     int startActivityFromGameSession(IApplicationThread caller, in String callingPackage,
             in String callingFeatureId, int callingPid, int callingUid, in Intent intent,
             int taskId, int userId);

@@ -94,6 +94,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     final boolean exported; // from ServiceInfo.exported
     final Runnable restarter; // used to schedule retries of starting the service
     final long createRealTime;  // when this service was created
+    final boolean supplemental; // whether this is a supplemental service
+    final int supplementedAppUid; // the app uid for which this supplemental service is running
     final ArrayMap<Intent.FilterComparison, IntentBindRecord> bindings
             = new ArrayMap<Intent.FilterComparison, IntentBindRecord>();
                             // All active bindings to the service.
@@ -571,13 +573,13 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             Intent.FilterComparison intent, ServiceInfo sInfo, boolean callerIsFg,
             Runnable restarter) {
         this(ams, name, instanceName, definingPackageName, definingUid, intent, sInfo, callerIsFg,
-                restarter, false);
+                restarter, null, 0);
     }
 
     ServiceRecord(ActivityManagerService ams, ComponentName name,
             ComponentName instanceName, String definingPackageName, int definingUid,
             Intent.FilterComparison intent, ServiceInfo sInfo, boolean callerIsFg,
-            Runnable restarter, boolean isSupplementalProcessService) {
+            Runnable restarter, String supplementalProcessName, int supplementedAppUid) {
         this.ams = ams;
         this.name = name;
         this.instanceName = instanceName;
@@ -588,9 +590,12 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         serviceInfo = sInfo;
         appInfo = sInfo.applicationInfo;
         packageName = sInfo.applicationInfo.packageName;
-        if ((sInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0
-                || isSupplementalProcessService) {
+        supplemental = supplementalProcessName != null;
+        this.supplementedAppUid = supplementedAppUid;
+        if ((sInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0) {
             processName = sInfo.processName + ":" + instanceName.getClassName();
+        } else if (supplementalProcessName != null) {
+            processName = supplementalProcessName;
         } else {
             processName = sInfo.processName;
         }
@@ -1093,6 +1098,10 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                                 userId);
 
                         foregroundNoti = localForegroundNoti; // save it for amending next time
+
+                        signalForegroundServiceNotification(packageName, appInfo.uid,
+                                localForegroundId);
+
                     } catch (RuntimeException e) {
                         Slog.w(TAG, "Error showing notification for service", e);
                         // If it gave us a garbage notification, it doesn't
@@ -1126,8 +1135,19 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                 } catch (RuntimeException e) {
                     Slog.w(TAG, "Error canceling notification for service", e);
                 }
+                signalForegroundServiceNotification(packageName, appInfo.uid, -localForegroundId);
             }
         });
+    }
+
+    private void signalForegroundServiceNotification(String packageName, int uid,
+            int foregroundId) {
+        synchronized (ams) {
+            for (int i = ams.mForegroundServiceStateListeners.size() - 1; i >= 0; i--) {
+                ams.mForegroundServiceStateListeners.get(i).onForegroundServiceNotificationUpdated(
+                        packageName, appInfo.uid, foregroundId);
+            }
+        }
     }
 
     public void stripForegroundServiceFlagFromNotification() {

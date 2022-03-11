@@ -37,4 +37,15 @@ class MediaFlags @Inject constructor(private val featureFlags: FeatureFlags) {
         return featureFlags.isEnabled(Flags.MEDIA_SESSION_ACTIONS) &&
             featureFlags.isEnabled(Flags.MEDIA_SESSION_LAYOUT)
     }
+
+    /**
+     * Check whether we support displaying information about mute await connections.
+     */
+    fun areMuteAwaitConnectionsEnabled() = featureFlags.isEnabled(Flags.MEDIA_MUTE_AWAIT)
+
+    /**
+     * Check whether we enable support for nearby media devices. See
+     * [android.app.StatusBarManager.registerNearbyMediaDevicesProvider] for more information.
+     */
+    fun areNearbyMediaDevicesEnabled() = featureFlags.isEnabled(Flags.MEDIA_NEARBY_DEVICES)
 }

@@ -148,6 +148,8 @@ import com.android.server.locksettings.SyntheticPasswordManager.AuthenticationTo
 import com.android.server.locksettings.SyntheticPasswordManager.TokenType;
 import com.android.server.locksettings.recoverablekeystore.RecoverableKeyStoreManager;
 import com.android.server.pm.UserManagerInternal;
+import com.android.server.utils.Watchable;
+import com.android.server.utils.Watcher;
 import com.android.server.wm.WindowManagerInternal;
 
 import libcore.util.HexEncoding;
@@ -231,6 +233,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     protected final Handler mHandler;
     @VisibleForTesting
     protected final LockSettingsStorage mStorage;
+    private final Watcher mStorageWatcher;
     private final LockSettingsStrongAuth mStrongAuth;
     private final SynchronizedStrongAuthTracker mStrongAuthTracker;
     private final BiometricDeferredQueue mBiometricDeferredQueue;
@@ -576,6 +579,12 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
     }
 
+    private class StorageWatcher extends Watcher {
+        public void onChange(Watchable what) {
+            LockSettingsService.this.onChange();
+        }
+    }
+
     public LockSettingsService(Context context) {
         this(new Injector(context));
     }
@@ -617,6 +626,16 @@ public class LockSettingsService extends ILockSettings.Stub {
                 mStorage);
 
         LocalServices.addService(LockSettingsInternal.class, new LocalService());
+
+        mStorageWatcher = new StorageWatcher();
+        mStorage.registerObserver(mStorageWatcher);
+    }
+
+    /**
+     * Invalidate caches if the storage has changed.
+     */
+    private void onChange() {
+        LockPatternUtils.invalidateCredentialTypeCache();
     }
 
     /**
@@ -1281,6 +1300,11 @@ public class LockSettingsService extends ILockSettings.Stub {
                 DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED, userId);
     }
 
+    /**
+     * This API is cached; whenever the result would change,
+     * {@link com.android.internal.widget.LockPatternUtils#invalidateCredentialTypeCache}
+     * must be called.
+     */
     @Override
     public int getCredentialType(int userId) {
         checkPasswordHavePermission(userId);
@@ -1735,7 +1759,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                     return false;
                 }
                 setSeparateProfileChallengeEnabledLocked(userId, true, /* unused */ null);
-                notifyPasswordChanged(userId);
+                notifyPasswordChanged(credential, userId);
             }
             if (isCredentialSharedWithParent(userId)) {
                 // Make sure the profile doesn't get locked straight after setting work challenge.
@@ -2536,9 +2560,11 @@ public class LockSettingsService extends ILockSettings.Stub {
      * Call after {@link #setUserPasswordMetrics} so metrics are updated before
      * reporting the password changed.
      */
-    private void notifyPasswordChanged(@UserIdInt int userId) {
+    private void notifyPasswordChanged(LockscreenCredential newCredential, @UserIdInt int userId) {
         mHandler.post(() -> {
-            mInjector.getDevicePolicyManager().reportPasswordChanged(userId);
+            mInjector.getDevicePolicyManager().reportPasswordChanged(
+                    PasswordMetrics.computeForCredential(newCredential),
+                    userId);
             LocalServices.getService(WindowManagerInternal.class).reportPasswordChanged(userId);
         });
     }
@@ -3473,7 +3499,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 // the caller like DPMS), otherwise it can lead to deadlock.
                 mHandler.post(() -> unlockUser(userId, null));
             }
-            notifyPasswordChanged(userId);
+            notifyPasswordChanged(credential, userId);
             notifySeparateProfileChallengeChanged(userId);
         }
         return result;

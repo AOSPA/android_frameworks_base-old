@@ -178,12 +178,20 @@ public final class PermissionHelper {
             boolean userSet, boolean reviewRequired) {
         assertFlag();
         final long callingId = Binder.clearCallingIdentity();
+        // Do not change fixed permissions, and do not change non-user set permissions that are
+        // granted by default, or granted by role.
+        if (isPermissionFixed(packageName, userId)
+                || (isPermissionGrantedByDefaultOrRole(packageName, userId) && !userSet)) {
+            return;
+        }
         try {
-            if (grant) {
+            boolean currentlyGranted = mPmi.checkPermission(packageName, NOTIFICATION_PERMISSION,
+                    userId) != PackageManager.PERMISSION_DENIED;
+            if (grant && !reviewRequired && !currentlyGranted) {
                 mPermManager.grantRuntimePermission(packageName, NOTIFICATION_PERMISSION, userId);
-            } else {
-                mPermManager.revokeRuntimePermission(packageName, NOTIFICATION_PERMISSION, userId,
-                        TAG);
+            } else if (!grant && currentlyGranted) {
+                mPermManager.revokeRuntimePermission(packageName, NOTIFICATION_PERMISSION,
+                        userId, TAG);
             }
             if (userSet) {
                 mPermManager.updatePermissionFlags(packageName, NOTIFICATION_PERMISSION,
@@ -210,8 +218,10 @@ public final class PermissionHelper {
         if (pkgPerm == null || pkgPerm.packageName == null) {
             return;
         }
-        setNotificationPermission(pkgPerm.packageName, pkgPerm.userId, pkgPerm.granted,
-                pkgPerm.userSet, !pkgPerm.userSet);
+        if (!isPermissionFixed(pkgPerm.packageName, pkgPerm.userId)) {
+            setNotificationPermission(pkgPerm.packageName, pkgPerm.userId, pkgPerm.granted,
+                    pkgPerm.userSet, !pkgPerm.userSet);
+        }
     }
 
     public boolean isPermissionFixed(String packageName, @UserIdInt int userId) {
@@ -239,7 +249,26 @@ public final class PermissionHelper {
             try {
                 int flags = mPermManager.getPermissionFlags(packageName, NOTIFICATION_PERMISSION,
                         userId);
-                return (flags & PackageManager.FLAG_PERMISSION_USER_SET) != 0;
+                return (flags & (PackageManager.FLAG_PERMISSION_USER_SET
+                        | PackageManager.FLAG_PERMISSION_USER_FIXED)) != 0;
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Could not reach system server", e);
+            }
+            return false;
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
+    }
+
+    boolean isPermissionGrantedByDefaultOrRole(String packageName, @UserIdInt int userId) {
+        assertFlag();
+        final long callingId = Binder.clearCallingIdentity();
+        try {
+            try {
+                int flags = mPermManager.getPermissionFlags(packageName, NOTIFICATION_PERMISSION,
+                        userId);
+                return (flags & (PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT
+                        | PackageManager.FLAG_PERMISSION_GRANTED_BY_ROLE)) != 0;
             } catch (RemoteException e) {
                 Slog.e(TAG, "Could not reach system server", e);
             }

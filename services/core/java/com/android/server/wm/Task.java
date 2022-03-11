@@ -139,6 +139,7 @@ import static java.lang.Integer.MAX_VALUE;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RecentTaskInfo.PersistedTaskSnapshotData;
@@ -1596,19 +1597,23 @@ class Task extends TaskFragment {
     }
 
     /** Completely remove all activities associated with an existing task. */
-    void performClearTask(String reason) {
+    void removeActivities(String reason, boolean excludingTaskOverlay) {
         clearPinnedTaskIfNeed();
         // Broken down into to cases to avoid object create due to capturing mStack.
         if (getRootTask() == null) {
             forAllActivities((r) -> {
-                if (r.finishing) return;
+                if (r.finishing || (excludingTaskOverlay && r.isTaskOverlay())) {
+                    return;
+                }
                 // Task was restored from persistent storage.
                 r.takeFromHistory();
                 removeChild(r, reason);
             });
         } else {
             forAllActivities((r) -> {
-                if (r.finishing) return;
+                if (r.finishing || (excludingTaskOverlay && r.isTaskOverlay())) {
+                    return;
+                }
                 // Prevent the transition from being executed too early if the top activity is
                 // resumed but the mVisibleRequested of any other activity is true, the transition
                 // should wait until next activity resumed.
@@ -1625,26 +1630,24 @@ class Task extends TaskFragment {
     /**
      * Completely remove all activities associated with an existing task.
      */
-    void performClearTaskLocked() {
+    void performClearTaskForReuse(boolean excludingTaskOverlay) {
         mReuseTask = true;
         mTaskSupervisor.beginDeferResume();
         try {
-            performClearTask("clear-task-all");
+            removeActivities("clear-task-all", excludingTaskOverlay);
         } finally {
             mTaskSupervisor.endDeferResume();
             mReuseTask = false;
         }
     }
 
-    ActivityRecord performClearTaskForReuseLocked(ActivityRecord newR, int launchFlags) {
-        mReuseTask = true;
+    ActivityRecord performClearTop(ActivityRecord newR, int launchFlags) {
         mTaskSupervisor.beginDeferResume();
         final ActivityRecord result;
         try {
-            result = performClearTaskLocked(newR, launchFlags);
+            result = clearTopActivities(newR, launchFlags);
         } finally {
             mTaskSupervisor.endDeferResume();
-            mReuseTask = false;
         }
         return result;
     }
@@ -1660,7 +1663,7 @@ class Task extends TaskFragment {
      * @return Returns the old activity that should be continued to be used,
      * or {@code null} if none was found.
      */
-    private ActivityRecord performClearTaskLocked(ActivityRecord newR, int launchFlags) {
+    private ActivityRecord clearTopActivities(ActivityRecord newR, int launchFlags) {
         final ActivityRecord r = findActivityInHistory(newR.mActivityComponent);
         if (r == null) return null;
 
@@ -1687,7 +1690,7 @@ class Task extends TaskFragment {
         // Stop operation once we reach the boundary activity.
         if (r == boundaryActivity) return true;
 
-        if (!r.finishing) {
+        if (!r.finishing && !r.isTaskOverlay()) {
             final ActivityOptions opts = r.getOptions();
             if (opts != null) {
                 r.clearOptionsAnimation();
@@ -2724,7 +2727,7 @@ class Task extends TaskFragment {
         // they extend past their root task and sysui uses the root task surface to control
         // cropping.
         // TODO(b/158242495): get rid of this when drag/drop can use surface bounds.
-        if (isActivityTypeHome() || isActivityTypeRecents()) {
+        if (isActivityTypeHomeOrRecents()) {
             // Make sure this is the top-most non-organizer root task (if not top-most, it means
             // another translucent task could be above this, so this needs to stay cropped.
             final Task rootTask = getRootTask();
@@ -2837,7 +2840,7 @@ class Task extends TaskFragment {
         TaskTransitionSpec spec = mWmService.mTaskTransitionSpec;
         if (spec != null) {
             for (@InsetsState.InternalInsetsType int insetType : spec.animationBoundInsets) {
-                InsetsSourceProvider insetProvider = getDisplayContent()
+                WindowContainerInsetsSourceProvider insetProvider = getDisplayContent()
                         .getInsetsStateController()
                         .getSourceProvider(insetType);
 
@@ -3319,7 +3322,7 @@ class Task extends TaskFragment {
         if (control != null) {
             // We let the transition to be controlled by RecentsAnimation, and callback task's
             // RemoteAnimationTarget for remote runner to animate.
-            if (enter && !isHomeOrRecentsRootTask()) {
+            if (enter && !isActivityTypeHomeOrRecents()) {
                 ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
                         "applyAnimationUnchecked, control: %s, task: %s, transit: %s",
                         control, asTask(), AppTransition.appTransitionOldToString(transit));
@@ -3410,6 +3413,13 @@ class Task extends TaskFragment {
         info.positionInParent = getRelativePosition();
 
         info.pictureInPictureParams = getPictureInPictureParams(top);
+        info.preferDockBigOverlays = getPreferDockBigOverlays();
+        if (info.pictureInPictureParams != null
+                && info.pictureInPictureParams.isLaunchIntoPip()
+                && top.getTopMostActivity().getLastParentBeforePip() != null) {
+            info.launchIntoPipHostTaskId =
+                    top.getTopMostActivity().getLastParentBeforePip().mTaskId;
+        }
         info.displayCutoutInsets = top != null ? top.getDisplayCutoutInsets() : null;
         info.topActivityInfo = mReuseActivitiesReport.top != null
                 ? mReuseActivitiesReport.top.info
@@ -3454,6 +3464,11 @@ class Task extends TaskFragment {
         final ActivityRecord topMostActivity = top.getTopMostActivity();
         return (topMostActivity == null || topMostActivity.pictureInPictureArgs.empty())
                 ? null : new PictureInPictureParams(topMostActivity.pictureInPictureArgs);
+    }
+
+    private boolean getPreferDockBigOverlays() {
+        final ActivityRecord topMostActivity = getTopMostActivity();
+        return topMostActivity != null && topMostActivity.preferDockBigOverlays;
     }
 
     Rect getDisplayCutoutInsets() {
@@ -4349,6 +4364,10 @@ class Task extends TaskFragment {
         }
     }
 
+    void onPreferDockBigOverlaysChanged() {
+        dispatchTaskInfoChangedIfNeeded(true /* force */);
+    }
+
     /** Called when the top activity in the Root Task enters or exits size compat mode. */
     void onSizeCompatActivityChanged() {
         // Trigger TaskInfoChanged to update the size compat restart button.
@@ -4602,10 +4621,6 @@ class Task extends TaskFragment {
         // windows that are no longer visible.
         mRootWindowContainer.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
                 !PRESERVE_WINDOWS);
-    }
-
-    final boolean isHomeOrRecentsRootTask() {
-        return isActivityTypeHome() || isActivityTypeRecents();
     }
 
     final boolean isOnHomeDisplay() {
@@ -5060,7 +5075,7 @@ class Task extends TaskFragment {
 
         // The transition animation and starting window are not needed if {@code allowMoveToFront}
         // is false, because the activity won't be visible.
-        if ((!isHomeOrRecentsRootTask() || hasActivity()) && allowMoveToFront) {
+        if ((!isActivityTypeHomeOrRecents() || hasActivity()) && allowMoveToFront) {
             final DisplayContent dc = mDisplayContent;
             if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION,
                     "Prepare open transition: starting " + r);
@@ -5153,10 +5168,13 @@ class Task extends TaskFragment {
             // Ensure that we do not trigger entering PiP an activity on the root pinned task
             return false;
         }
+        final boolean isTransient = opts != null && opts.getTransientLaunch();
         final Task targetRootTask = toFrontTask != null
                 ? toFrontTask.getRootTask() : toFrontActivity.getRootTask();
-        if (targetRootTask != null && targetRootTask.isActivityTypeAssistant()) {
-            // Ensure the task/activity being brought forward is not the assistant
+        if (targetRootTask != null && (targetRootTask.isActivityTypeAssistant() || isTransient)) {
+            // Ensure the task/activity being brought forward is not the assistant and is not
+            // transient. In the case of transient-launch, we want to wait until the end of the
+            // transition and only allow switch if the transient launch was committed.
             return false;
         }
         return true;
@@ -5692,7 +5710,7 @@ class Task extends TaskFragment {
         }
     }
 
-    ArrayList<ActivityRecord> getDumpActivitiesLocked(String name) {
+    ArrayList<ActivityRecord> getDumpActivitiesLocked(String name, @UserIdInt int userId) {
         ArrayList<ActivityRecord> activities = new ArrayList<>();
 
         if ("all".equals(name)) {
@@ -5712,7 +5730,13 @@ class Task extends TaskFragment {
                 }
             });
         }
-
+        if (userId != UserHandle.USER_ALL) {
+            for (int i = activities.size() - 1; i >= 0; --i) {
+                if (activities.get(i).mUserId != userId) {
+                    activities.remove(i);
+                }
+            }
+        }
         return activities;
     }
 
@@ -6033,9 +6057,9 @@ class Task extends TaskFragment {
     }
 
     /**
-     * Sets the current picture-in-picture aspect ratio.
+     * Sets the current picture-in-picture aspect ratios.
      */
-    void setPictureInPictureAspectRatio(float aspectRatio) {
+    void setPictureInPictureAspectRatio(float aspectRatio, float expandedAspectRatio) {
         if (!mWmService.mAtmService.mSupportsPictureInPicture) {
             return;
         }
@@ -6052,16 +6076,21 @@ class Task extends TaskFragment {
         final PinnedTaskController pinnedTaskController =
                 getDisplayContent().getPinnedTaskController();
 
-        if (Float.compare(aspectRatio, pinnedTaskController.getAspectRatio()) == 0) {
-            return;
-        }
-
         // Notify the pinned stack controller about aspect ratio change.
         // This would result a callback delivered from SystemUI to WM to start animation,
         // if the bounds are ought to be altered due to aspect ratio change.
-        pinnedTaskController.setAspectRatio(
-                pinnedTaskController.isValidPictureInPictureAspectRatio(aspectRatio)
-                        ? aspectRatio : -1f);
+        if (Float.compare(aspectRatio, pinnedTaskController.getAspectRatio()) != 0) {
+            pinnedTaskController.setAspectRatio(
+                    pinnedTaskController.isValidPictureInPictureAspectRatio(aspectRatio)
+                            ? aspectRatio : -1f);
+        }
+
+        if (mWmService.mAtmService.mSupportsExpandedPictureInPicture && Float.compare(
+                expandedAspectRatio, pinnedTaskController.getExpandedAspectRatio()) != 0) {
+            pinnedTaskController.setExpandedAspectRatio(pinnedTaskController
+                    .isValidExpandedPictureInPictureAspectRatio(expandedAspectRatio)
+                    ? expandedAspectRatio : 0f);
+        }
     }
 
     /**
@@ -6588,8 +6617,7 @@ class Task extends TaskFragment {
             return;
         }
         if (mOverlayHost != null) {
-            final InsetsState s = getDisplayContent().getInsetsPolicy()
-                .getInsetsForWindow(originalChange, true);
+            final InsetsState s = originalChange.getInsetsState(true);
             getBounds(mTmpRect);
             mOverlayHost.dispatchInsetsChanged(s, mTmpRect);
         }

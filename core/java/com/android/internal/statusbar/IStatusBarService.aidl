@@ -24,6 +24,7 @@ import android.hardware.biometrics.IBiometricContextListener;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
 import android.hardware.fingerprint.IUdfpsHbmListener;
+import android.media.INearbyMediaDevicesProvider;
 import android.media.MediaRoute2Info;
 import android.net.Uri;
 import android.os.Bundle;
@@ -102,6 +103,9 @@ interface IStatusBarService
     void shutdown();
     void reboot(boolean safeMode);
 
+    /** just restarts android without rebooting device. Used for some feature flags. */
+    void restart();
+
     void addTile(in ComponentName tile);
     void remTile(in ComponentName tile);
     void clickTile(in ComponentName tile);
@@ -171,20 +175,20 @@ interface IStatusBarService
     void cancelRequestAddTile(in String packageName);
 
     /**
-    * Overrides the navigation bar mode.
+    * Sets the navigation bar mode.
     *
-    * @param navBarModeOverride the mode of the navigation bar override to be set.
+    * @param navBarMode the mode of the navigation bar to be set.
     *
     * @hide
     */
-    void setNavBarModeOverride(int navBarModeOverride);
+    void setNavBarMode(int navBarMode);
 
     /**
-    * Gets the navigation bar mode override.
+    * Gets the navigation bar mode.
     *
     * @hide
     */
-    int getNavBarModeOverride();
+    int getNavBarMode();
 
     /**
     * Register a listener for certain sessions. Each session may be guarded by its own permission.
@@ -208,5 +212,13 @@ interface IStatusBarService
     /** Notifies System UI about an update to the media tap-to-transfer receiver state. */
     void updateMediaTapToTransferReceiverDisplay(
         int displayState,
-        in MediaRoute2Info routeInfo);
+        in MediaRoute2Info routeInfo,
+        in Icon appIcon,
+        in CharSequence appName);
+
+    /** Registers a nearby media devices provider. */
+    void registerNearbyMediaDevicesProvider(in INearbyMediaDevicesProvider provider);
+
+    /** Unregisters a nearby media devices provider. */
+    void unregisterNearbyMediaDevicesProvider(in INearbyMediaDevicesProvider provider);
 }

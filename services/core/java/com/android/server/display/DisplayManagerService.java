@@ -78,6 +78,7 @@ import android.hardware.display.IDisplayManagerCallback;
 import android.hardware.display.IVirtualDisplayCallback;
 import android.hardware.display.VirtualDisplayConfig;
 import android.hardware.display.WifiDisplayStatus;
+import android.hardware.graphics.common.DisplayDecorationSupport;
 import android.hardware.input.InputManagerInternal;
 import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
@@ -204,8 +205,8 @@ public final class DisplayManagerService extends SystemService {
     private static final String PROP_DEFAULT_DISPLAY_TOP_INSET = "persist.sys.displayinset.top";
     private static final long WAIT_FOR_DEFAULT_DISPLAY_TIMEOUT = 10000;
     // This value needs to be in sync with the threshold
-    // in RefreshRateConfigs::getFrameRateDivider.
-    private static final float THRESHOLD_FOR_REFRESH_RATES_DIVIDERS = 0.0009f;
+    // in RefreshRateConfigs::getFrameRateDivisor.
+    private static final float THRESHOLD_FOR_REFRESH_RATES_DIVISORS = 0.0009f;
 
     private static final int MSG_REGISTER_DEFAULT_DISPLAY_ADAPTERS = 1;
     private static final int MSG_REGISTER_ADDITIONAL_DISPLAY_ADAPTERS = 2;
@@ -905,13 +906,13 @@ public final class DisplayManagerService extends SystemService {
             return info;
         }
 
-        // Override the refresh rate only if it is a divider of the current
+        // Override the refresh rate only if it is a divisor of the current
         // refresh rate. This calculation needs to be in sync with the native code
-        // in RefreshRateConfigs::getFrameRateDivider
+        // in RefreshRateConfigs::getFrameRateDivisor
         Display.Mode currentMode = info.getMode();
         float numPeriods = currentMode.getRefreshRate() / frameRateHz;
         float numPeriodsRound = Math.round(numPeriods);
-        if (Math.abs(numPeriods - numPeriodsRound) > THRESHOLD_FOR_REFRESH_RATES_DIVIDERS) {
+        if (Math.abs(numPeriods - numPeriodsRound) > THRESHOLD_FOR_REFRESH_RATES_DIVISORS) {
             return info;
         }
         frameRateHz = currentMode.getRefreshRate() / numPeriodsRound;
@@ -923,9 +924,9 @@ public final class DisplayManagerService extends SystemService {
                 continue;
             }
 
-            if (mode.getRefreshRate() >= frameRateHz - THRESHOLD_FOR_REFRESH_RATES_DIVIDERS
+            if (mode.getRefreshRate() >= frameRateHz - THRESHOLD_FOR_REFRESH_RATES_DIVISORS
                     && mode.getRefreshRate()
-                    <= frameRateHz + THRESHOLD_FOR_REFRESH_RATES_DIVIDERS) {
+                    <= frameRateHz + THRESHOLD_FOR_REFRESH_RATES_DIVISORS) {
                 if (DEBUG) {
                     Slog.d(TAG, "found matching modeId " + mode.getModeId());
                 }
@@ -1871,10 +1872,10 @@ public final class DisplayManagerService extends SystemService {
         return mDisplayModeDirector.getModeSwitchingType();
     }
 
-    private boolean getDisplayDecorationSupportInternal(int displayId) {
+    private DisplayDecorationSupport getDisplayDecorationSupportInternal(int displayId) {
         final IBinder displayToken = getDisplayToken(displayId);
         if (null == displayToken) {
-            return false;
+            return null;
         }
         return SurfaceControl.getDisplayDecorationSupport(displayToken);
     }
@@ -3572,7 +3573,7 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
-        public boolean getDisplayDecorationSupport(int displayId) {
+        public DisplayDecorationSupport getDisplayDecorationSupport(int displayId) {
             final long token = Binder.clearCallingIdentity();
             try {
                 return getDisplayDecorationSupportInternal(displayId);

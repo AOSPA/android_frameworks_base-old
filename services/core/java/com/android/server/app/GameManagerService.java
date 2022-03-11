@@ -17,8 +17,8 @@
 package com.android.server.app;
 
 import static android.content.Intent.ACTION_PACKAGE_ADDED;
-import static android.content.Intent.ACTION_PACKAGE_CHANGED;
 import static android.content.Intent.ACTION_PACKAGE_REMOVED;
+import static android.content.Intent.EXTRA_REPLACING;
 
 import static com.android.internal.R.styleable.GameModeConfig_allowGameAngleDriver;
 import static com.android.internal.R.styleable.GameModeConfig_allowGameDownscaling;
@@ -90,6 +90,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.compat.CompatibilityOverrideConfig;
 import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.os.BackgroundThread;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.SystemService;
@@ -159,7 +160,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_GAME_SERVICE)) {
             mGameServiceController = new GameServiceController(
-                    BackgroundThread.getExecutor(),
+                    context, BackgroundThread.getExecutor(),
                     new GameServiceProviderSelectorImpl(
                             context.getResources(),
                             context.getPackageManager()),
@@ -268,16 +269,34 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     break;
                 }
                 case SET_GAME_STATE: {
-                    if (mPowerManagerInternal == null) {
-                        final Bundle data = msg.getData();
-                        Slog.d(TAG, "Error setting loading mode for package "
-                                + data.getString(PACKAGE_NAME_MSG_KEY)
-                                + " and userId " + data.getInt(USER_ID_MSG_KEY));
-                        break;
-                    }
                     final GameState gameState = (GameState) msg.obj;
                     final boolean isLoading = gameState.isLoading();
-                    mPowerManagerInternal.setPowerMode(Mode.GAME_LOADING, isLoading);
+                    final Bundle data = msg.getData();
+                    final String packageName = data.getString(PACKAGE_NAME_MSG_KEY);
+                    final int userId = data.getInt(USER_ID_MSG_KEY);
+
+                    // Restrict to games only. Requires performance mode to be enabled.
+                    final boolean boostEnabled =
+                            getGameMode(packageName, userId) == GameManager.GAME_MODE_PERFORMANCE;
+                    int uid;
+                    try {
+                        uid = mPackageManager.getPackageUidAsUser(packageName, userId);
+                    } catch (NameNotFoundException e) {
+                        Slog.v(TAG, "Failed to get package metadata");
+                        uid = -1;
+                    }
+                    FrameworkStatsLog.write(FrameworkStatsLog.GAME_STATE_CHANGED, packageName, uid,
+                            boostEnabled, gameStateModeToStatsdGameState(gameState.getMode()),
+                            isLoading, gameState.getLabel(), gameState.getQuality());
+
+                    if (boostEnabled) {
+                        if (mPowerManagerInternal == null) {
+                            Slog.d(TAG, "Error setting loading mode for package " + packageName
+                                    + " and userId " + userId);
+                            break;
+                        }
+                        mPowerManagerInternal.setPowerMode(Mode.GAME_LOADING, isLoading);
+                    }
                     break;
                 }
             }
@@ -376,9 +395,10 @@ public final class GameManagerService extends IGameManagerService.Stub {
 
     /**
      * Called by games to communicate the current state to the platform.
+     *
      * @param packageName The client package name.
-     * @param gameState An object set to the current state.
-     * @param userId The user associated with this state.
+     * @param gameState   An object set to the current state.
+     * @param userId      The user associated with this state.
      */
     public void setGameState(String packageName, @NonNull GameState gameState,
             @UserIdInt int userId) {
@@ -386,12 +406,6 @@ public final class GameManagerService extends IGameManagerService.Stub {
             // Restrict to games only.
             return;
         }
-
-        if (getGameMode(packageName, userId) != GameManager.GAME_MODE_PERFORMANCE) {
-            // Requires performance mode to be enabled.
-            return;
-        }
-
         final Message msg = mHandler.obtainMessage(SET_GAME_STATE);
         final Bundle data = new Bundle();
         data.putString(PACKAGE_NAME_MSG_KEY, packageName);
@@ -1373,7 +1387,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
      * @hide
      */
     @VisibleForTesting
-    void updateConfigsForUser(@UserIdInt int userId, String ...packageNames) {
+    void updateConfigsForUser(@UserIdInt int userId, String... packageNames) {
         try {
             synchronized (mDeviceConfigLock) {
                 for (final String packageName : packageNames) {
@@ -1442,7 +1456,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
         final List<PackageInfo> packages =
                 mPackageManager.getInstalledPackagesAsUser(0, userId);
         return packages.stream().filter(e -> e.applicationInfo != null && e.applicationInfo.category
-                == ApplicationInfo.CATEGORY_GAME)
+                        == ApplicationInfo.CATEGORY_GAME)
                 .map(e -> e.packageName)
                 .toArray(String[]::new);
     }
@@ -1467,7 +1481,6 @@ public final class GameManagerService extends IGameManagerService.Stub {
     private void registerPackageReceiver() {
         final IntentFilter packageFilter = new IntentFilter();
         packageFilter.addAction(ACTION_PACKAGE_ADDED);
-        packageFilter.addAction(ACTION_PACKAGE_CHANGED);
         packageFilter.addAction(ACTION_PACKAGE_REMOVED);
         packageFilter.addDataScheme("package");
         final BroadcastReceiver packageReceiver = new BroadcastReceiver() {
@@ -1492,16 +1505,29 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     }
                     switch (intent.getAction()) {
                         case ACTION_PACKAGE_ADDED:
-                        case ACTION_PACKAGE_CHANGED:
                             updateConfigsForUser(userId, packageName);
                             break;
                         case ACTION_PACKAGE_REMOVED:
                             disableCompatScale(packageName);
-                            synchronized (mOverrideConfigLock) {
-                                mOverrideConfigs.remove(packageName);
-                            }
-                            synchronized (mDeviceConfigLock) {
-                                mConfigs.remove(packageName);
+                            // If EXTRA_REPLACING is true, it means there will be an
+                            // ACTION_PACKAGE_ADDED triggered after this because this
+                            // is an updated package that gets installed. Hence, disable
+                            // resolution downscaling effort but avoid removing the server
+                            // or commandline overriding configurations because those will
+                            // not change but the package game mode configurations may change
+                            // which may opt in and/or opt out some game mode configurations.
+                            if (!intent.getBooleanExtra(EXTRA_REPLACING, false)) {
+                                synchronized (mOverrideConfigLock) {
+                                    mOverrideConfigs.remove(packageName);
+                                }
+                                synchronized (mDeviceConfigLock) {
+                                    mConfigs.remove(packageName);
+                                }
+                                synchronized (mLock) {
+                                    if (mSettings.containsKey(userId)) {
+                                        mSettings.get(userId).removeGame(packageName);
+                                    }
+                                }
                             }
                             break;
                         default:
@@ -1528,6 +1554,22 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     .append("\nConfig: ").append(mConfigs.get(key).toString()).append("\n]");
         }
         return out.toString();
+    }
+
+    private static int gameStateModeToStatsdGameState(int mode) {
+        switch (mode) {
+            case GameState.MODE_NONE:
+                return FrameworkStatsLog.GAME_STATE_CHANGED__STATE__MODE_NONE;
+            case GameState.MODE_GAMEPLAY_INTERRUPTIBLE:
+                return FrameworkStatsLog.GAME_STATE_CHANGED__STATE__MODE_GAMEPLAY_INTERRUPTIBLE;
+            case GameState.MODE_GAMEPLAY_UNINTERRUPTIBLE:
+                return FrameworkStatsLog.GAME_STATE_CHANGED__STATE__MODE_GAMEPLAY_UNINTERRUPTIBLE;
+            case GameState.MODE_CONTENT:
+                return FrameworkStatsLog.GAME_STATE_CHANGED__STATE__MODE_CONTENT;
+            case GameState.MODE_UNKNOWN:
+            default:
+                return FrameworkStatsLog.GAME_STATE_CHANGED__STATE__MODE_UNKNOWN;
+        }
     }
 
     private static ServiceThread createServiceThread() {

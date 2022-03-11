@@ -27,10 +27,10 @@ import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_2BUTTON;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.SOME_AUTH_REQUIRED_AFTER_USER_REQUEST;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_NOT_REQUIRED;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_USER_LOCKDOWN;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_GLOBAL_ACTIONS_SHOWING;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.Dialog;
@@ -76,8 +76,10 @@ import android.view.GestureDetector;
 import android.view.IWindowManager;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -109,11 +111,11 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.MultiListLayout;
 import com.android.systemui.MultiListLayout.MultiListAdapter;
 import com.android.systemui.animation.DialogLaunchAnimator;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
 import com.android.systemui.scrim.ScrimDrawable;
@@ -121,7 +123,6 @@ import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
-import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -196,7 +197,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
     private final TelecomManager mTelecomManager;
     private final MetricsLogger mMetricsLogger;
     private final UiEventLogger mUiEventLogger;
-    private final SysUiState mSysUiState;
 
     // Used for RingerModeTracker
     private final LifecycleRegistry mLifecycle = new LifecycleRegistry(this);
@@ -237,7 +237,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
     protected Handler mMainHandler;
     private int mSmallestScreenWidthDp;
     private final Optional<StatusBar> mStatusBarOptional;
-    private final SystemUIDialogManager mDialogManager;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final DialogLaunchAnimator mDialogLaunchAnimator;
 
@@ -343,13 +342,11 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             @Background Executor backgroundExecutor,
             UiEventLogger uiEventLogger,
             RingerModeTracker ringerModeTracker,
-            SysUiState sysUiState,
             @Main Handler handler,
             PackageManager packageManager,
             Optional<StatusBar> statusBarOptional,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
-            DialogLaunchAnimator dialogLaunchAnimator,
-            SystemUIDialogManager dialogManager) {
+            DialogLaunchAnimator dialogLaunchAnimator) {
         mContext = context;
         mWindowManagerFuncs = windowManagerFuncs;
         mAudioManager = audioManager;
@@ -375,13 +372,11 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         mIWindowManager = iWindowManager;
         mBackgroundExecutor = backgroundExecutor;
         mRingerModeTracker = ringerModeTracker;
-        mSysUiState = sysUiState;
         mMainHandler = handler;
         mSmallestScreenWidthDp = resources.getConfiguration().smallestScreenWidthDp;
         mStatusBarOptional = statusBarOptional;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mDialogLaunchAnimator = dialogLaunchAnimator;
-        mDialogManager = dialogManager;
 
         // receive broadcasts
         IntentFilter filter = new IntentFilter();
@@ -678,11 +673,10 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
 
         ActionsDialogLite dialog = new ActionsDialogLite(mContext,
                 com.android.systemui.R.style.Theme_SystemUI_Dialog_GlobalActionsLite,
-                mAdapter, mOverflowAdapter, mSysuiColorExtractor,
-                mStatusBarService, mNotificationShadeWindowController,
-                mSysUiState, this::onRefresh, mKeyguardShowing, mPowerAdapter, mUiEventLogger,
-                mStatusBarOptional, mKeyguardUpdateMonitor, mLockPatternUtils,
-                mDialogManager);
+                mAdapter, mOverflowAdapter, mSysuiColorExtractor, mStatusBarService,
+                mNotificationShadeWindowController, this::onRefresh, mKeyguardShowing,
+                mPowerAdapter, mUiEventLogger, mStatusBarOptional, mKeyguardUpdateMonitor,
+                mLockPatternUtils);
 
         dialog.setOnDismissListener(this);
         dialog.setOnShowListener(this);
@@ -2161,7 +2155,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         private boolean mKeyguardShowing;
         protected float mScrimAlpha;
         protected final NotificationShadeWindowController mNotificationShadeWindowController;
-        protected final SysUiState mSysUiState;
         private ListPopupWindow mOverflowPopup;
         private Dialog mPowerOptionsDialog;
         protected final Runnable mOnRefreshCallback;
@@ -2170,6 +2163,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         private Optional<StatusBar> mStatusBarOptional;
         private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
         private LockPatternUtils mLockPatternUtils;
+        private float mWindowDimAmount;
 
         protected ViewGroup mContainer;
 
@@ -2221,15 +2215,13 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 MyOverflowAdapter overflowAdapter,
                 SysuiColorExtractor sysuiColorExtractor, IStatusBarService statusBarService,
                 NotificationShadeWindowController notificationShadeWindowController,
-                SysUiState sysuiState, Runnable onRefreshCallback, boolean keyguardShowing,
+                Runnable onRefreshCallback, boolean keyguardShowing,
                 MyPowerOptionsAdapter powerAdapter, UiEventLogger uiEventLogger,
-                Optional<StatusBar> statusBarOptional,
-                KeyguardUpdateMonitor keyguardUpdateMonitor, LockPatternUtils lockPatternUtils,
-                SystemUIDialogManager systemUiDialogManager) {
+                Optional<StatusBar> statusBarOptional, KeyguardUpdateMonitor keyguardUpdateMonitor,
+                LockPatternUtils lockPatternUtils) {
             // We set dismissOnDeviceLock to false because we have a custom broadcast receiver to
             // dismiss this dialog when the device is locked.
-            super(context, themeRes, false /* dismissOnDeviceLock */,
-                    systemUiDialogManager);
+            super(context, themeRes, false /* dismissOnDeviceLock */);
             mContext = context;
             mAdapter = adapter;
             mOverflowAdapter = overflowAdapter;
@@ -2237,7 +2229,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             mColorExtractor = sysuiColorExtractor;
             mStatusBarService = statusBarService;
             mNotificationShadeWindowController = notificationShadeWindowController;
-            mSysUiState = sysuiState;
             mOnRefreshCallback = onRefreshCallback;
             mKeyguardShowing = keyguardShowing;
             mUiEventLogger = uiEventLogger;
@@ -2251,6 +2242,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         protected void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
             initializeLayout();
+            mWindowDimAmount = getWindow().getAttributes().dimAmount;
         }
 
         @Override
@@ -2457,8 +2449,96 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         public void show() {
             super.show();
             mNotificationShadeWindowController.setRequestTopUi(true, TAG);
-            mSysUiState.setFlag(SYSUI_STATE_GLOBAL_ACTIONS_SHOWING, true)
-                    .commitUpdate(mContext.getDisplayId());
+
+            // By default this dialog windowAnimationStyle is null, and therefore windowAnimations
+            // should be equal to 0 which means we need to animate the dialog in-window. If it's not
+            // equal to 0, it means it has been overridden to animate (e.g. by the
+            // DialogLaunchAnimator) so we don't run the animation.
+            boolean shouldAnimateInWindow = getWindow().getAttributes().windowAnimations == 0;
+            if (shouldAnimateInWindow) {
+                startAnimation(true /* isEnter */, null /* then */);
+
+                // Override the dialog dismiss so that we can animate in-window before dismissing
+                // the dialog.
+                setDismissOverride(() -> {
+                    startAnimation(false /* isEnter */, /* then */ () -> {
+                        setDismissOverride(null);
+
+                        // Hide then dismiss to instantly dismiss.
+                        hide();
+                        dismiss();
+                    });
+                });
+            }
+        }
+
+        /** Run either the enter or exit animation, then run {@code then}. */
+        private void startAnimation(boolean isEnter, @Nullable Runnable then) {
+            ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+
+            // Note: these specs should be the same as in popup_enter_material and
+            // popup_exit_material.
+            float translationPx;
+            Resources resources = getContext().getResources();
+            if (isEnter) {
+                translationPx = resources.getDimension(R.dimen.popup_enter_animation_from_y_delta);
+                animator.setInterpolator(Interpolators.STANDARD);
+                animator.setDuration(resources.getInteger(R.integer.config_activityDefaultDur));
+            } else {
+                translationPx = resources.getDimension(R.dimen.popup_exit_animation_to_y_delta);
+                animator.setInterpolator(Interpolators.STANDARD_ACCELERATE);
+                animator.setDuration(resources.getInteger(R.integer.config_activityShortDur));
+            }
+
+            Window window = getWindow();
+            int rotation = window.getWindowManager().getDefaultDisplay().getRotation();
+
+            animator.addUpdateListener(valueAnimator -> {
+                float progress = (float) valueAnimator.getAnimatedValue();
+
+                float alpha = isEnter ? progress : 1 - progress;
+                mGlobalActionsLayout.setAlpha(alpha);
+                window.setDimAmount(mWindowDimAmount * alpha);
+
+                // TODO(b/213872558): Support devices that don't have their power button on the
+                // right.
+                float translation =
+                        isEnter ? translationPx * (1 - progress) : translationPx * progress;
+                switch (rotation) {
+                    case Surface.ROTATION_0:
+                        mGlobalActionsLayout.setTranslationX(translation);
+                        break;
+                    case Surface.ROTATION_90:
+                        mGlobalActionsLayout.setTranslationY(-translation);
+                        break;
+                    case Surface.ROTATION_180:
+                        mGlobalActionsLayout.setTranslationX(-translation);
+                        break;
+                    case Surface.ROTATION_270:
+                        mGlobalActionsLayout.setTranslationY(translation);
+                        break;
+                }
+            });
+
+            animator.addListener(new AnimatorListenerAdapter() {
+                private int mPreviousLayerType;
+
+                @Override
+                public void onAnimationStart(Animator animation, boolean isReverse) {
+                    mPreviousLayerType = mGlobalActionsLayout.getLayerType();
+                    mGlobalActionsLayout.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    mGlobalActionsLayout.setLayerType(mPreviousLayerType, null);
+                    if (then != null) {
+                        then.run();
+                    }
+                }
+            });
+
+            animator.start();
         }
 
         @Override
@@ -2467,9 +2547,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             dismissPowerOptions();
 
             mNotificationShadeWindowController.setRequestTopUi(false, TAG);
-            mSysUiState.setFlag(SYSUI_STATE_GLOBAL_ACTIONS_SHOWING, false)
-                    .commitUpdate(mContext.getDisplayId());
-
             super.dismiss();
         }
 

@@ -22,10 +22,15 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.annotation.VisibleForTesting
 import com.android.internal.widget.CachingIconView
 import com.android.systemui.R
+import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.statusbar.gesture.TapGestureDetector
+import com.android.systemui.util.concurrency.DelayableExecutor
 
 /**
  * A superclass controller that provides common functionality for showing chips on the sender device
@@ -35,8 +40,10 @@ import com.android.systemui.R
  * gets displayed to the user.
  */
 abstract class MediaTttChipControllerCommon<T : MediaTttChipState>(
-    private val context: Context,
+    internal val context: Context,
     private val windowManager: WindowManager,
+    @Main private val mainExecutor: DelayableExecutor,
+    private val tapGestureDetector: TapGestureDetector,
     @LayoutRes private val chipLayoutRes: Int
 ) {
     /** The window layout parameters we'll use when attaching the view to a window. */
@@ -47,13 +54,16 @@ abstract class MediaTttChipControllerCommon<T : MediaTttChipState>(
         gravity = Gravity.TOP.or(Gravity.CENTER_HORIZONTAL)
         type = WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY
         flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-        title = "Media Tap-To-Transfer Chip View"
+        title = WINDOW_TITLE
         format = PixelFormat.TRANSLUCENT
         setTrustedOverlay()
     }
 
     /** The chip view currently being displayed. Null if the chip is not being displayed. */
     var chipView: ViewGroup? = null
+
+    /** A [Runnable] that, when run, will cancel the pending timeout of the chip. */
+    var cancelChipViewTimeout: Runnable? = null
 
     /**
      * Displays the chip with the current state.
@@ -74,10 +84,14 @@ abstract class MediaTttChipControllerCommon<T : MediaTttChipState>(
 
         // Add view if necessary
         if (oldChipView == null) {
+            tapGestureDetector.addOnGestureDetectedCallback(TAG, this::removeChip)
             windowManager.addView(chipView, windowLayoutParams)
         }
-    }
 
+        // Cancel and re-set the chip timeout each time we get a new state.
+        cancelChipViewTimeout?.run()
+        cancelChipViewTimeout = mainExecutor.executeDelayed(this::removeChip, TIMEOUT_MILLIS)
+    }
 
     /** Hides the chip. */
     fun removeChip() {
@@ -85,6 +99,7 @@ abstract class MediaTttChipControllerCommon<T : MediaTttChipState>(
         //  TransferTriggered state: Once the user has initiated the transfer, they should be able
         //  to move away from the receiver device but still see the status of the transfer.
         if (chipView == null) { return }
+        tapGestureDetector.removeOnGestureDetectedCallback(TAG)
         windowManager.removeView(chipView)
         chipView = null
     }
@@ -100,9 +115,23 @@ abstract class MediaTttChipControllerCommon<T : MediaTttChipState>(
      * This is in the common superclass since both the sender and the receiver show an icon.
      */
     internal fun setIcon(chipState: T, currentChipView: ViewGroup) {
-        currentChipView.findViewById<CachingIconView>(R.id.app_icon).apply {
-            this.setImageDrawable(chipState.appIconDrawable)
-            this.contentDescription = chipState.appIconContentDescription
+        val appIconView = currentChipView.requireViewById<CachingIconView>(R.id.app_icon)
+        appIconView.contentDescription = chipState.getAppName(context)
+
+        val appIcon = chipState.getAppIcon(context)
+        val visibility = if (appIcon != null) {
+            View.VISIBLE
+        } else {
+            View.GONE
         }
+        appIconView.setImageDrawable(appIcon)
+        appIconView.visibility = visibility
     }
 }
+
+// Used in CTS tests UpdateMediaTapToTransferSenderDisplayTest and
+// UpdateMediaTapToTransferReceiverDisplayTest
+private const val WINDOW_TITLE = "Media Transfer Chip View"
+private val TAG = MediaTttChipControllerCommon::class.simpleName!!
+@VisibleForTesting
+const val TIMEOUT_MILLIS = 3000L

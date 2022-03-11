@@ -69,6 +69,7 @@ import android.view.InputChannel;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
 import android.view.InsetsVisibilities;
+import android.view.OnBackInvokedDispatcher;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import android.view.View;
@@ -837,7 +838,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     @Override
     public void grantInputChannel(int displayId, SurfaceControl surface,
             IWindow window, IBinder hostInputToken, int flags, int privateFlags, int type,
-            IBinder focusGrantToken, InputChannel outInputChannel) {
+            IBinder focusGrantToken, String inputHandleName, InputChannel outInputChannel) {
         if (hostInputToken == null && !mCanAddInternalSystemWindow) {
             // Callers without INTERNAL_SYSTEM_WINDOW permission cannot grant input channel to
             // embedded windows without providing a host window input token
@@ -853,7 +854,8 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         try {
             mService.grantInputChannel(this, mUid, mPid, displayId, surface, window, hostInputToken,
                     flags, mCanAddInternalSystemWindow ? privateFlags : 0,
-                    mCanAddInternalSystemWindow ? type : 0, focusGrantToken, outInputChannel);
+                    mCanAddInternalSystemWindow ? type : 0, focusGrantToken, inputHandleName,
+                    outInputChannel);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -904,15 +906,17 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public void setOnBackInvokedCallback(IWindow window,
-            IOnBackInvokedCallback onBackInvokedCallback) throws RemoteException {
+    public void setOnBackInvokedCallback(
+            IWindow window,
+            IOnBackInvokedCallback onBackInvokedCallback,
+            @OnBackInvokedDispatcher.Priority int priority) throws RemoteException {
         synchronized (mService.mGlobalLock) {
             WindowState windowState = mService.windowForClientLocked(this, window, false);
             if (windowState == null) {
                 Slog.e(TAG_WM,
                         "setOnBackInvokedCallback(): Can't find window state for window:" + window);
             } else {
-                windowState.setOnBackInvokedCallback(onBackInvokedCallback);
+                windowState.setOnBackInvokedCallback(onBackInvokedCallback, priority);
             }
         }
     }

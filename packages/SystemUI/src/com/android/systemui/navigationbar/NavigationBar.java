@@ -440,7 +440,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                         mHomeButtonLongPressDurationMs = Optional.of(
                             properties.getLong(HOME_BUTTON_LONG_PRESS_DURATION_MS, 0)
                         ).filter(duration -> duration != 0);
-                        reconfigureHomeLongClick();
+                        if (mNavigationBarView != null) {
+                            reconfigureHomeLongClick();
+                        }
                     }
                 }
             };
@@ -542,13 +544,15 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         return mNavigationBarView;
     }
 
-    public View createView(Bundle savedState) {
+    public View createView(Bundle savedState, boolean initialVisibility) {
         mFrame = (NavigationBarFrame) LayoutInflater.from(mContext).inflate(
                 R.layout.navigation_bar_window, null);
         View barView = LayoutInflater.from(mFrame.getContext()).inflate(
                 R.layout.navigation_bar, mFrame);
         barView.addOnAttachStateChangeListener(this);
         mNavigationBarView = barView.findViewById(R.id.navigation_bar_view);
+
+        mNavigationBarView.setVisibility(initialVisibility ? View.VISIBLE : View.INVISIBLE);
 
         if (DEBUG) Log.v(TAG, "addNavigationBar: about to add " + barView);
         mWindowManager.addView(mFrame,

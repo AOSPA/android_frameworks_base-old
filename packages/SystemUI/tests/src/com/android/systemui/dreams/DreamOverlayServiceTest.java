@@ -31,14 +31,14 @@ import android.testing.AndroidTestingRunner;
 import android.view.WindowManager;
 import android.view.WindowManagerImpl;
 
+import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
 import androidx.test.filters.SmallTest;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
-import com.android.settingslib.dream.DreamBackend;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.dreams.complication.Complication;
+import com.android.systemui.dreams.complication.DreamPreviewComplication;
 import com.android.systemui.dreams.dagger.DreamOverlayComponent;
 import com.android.systemui.dreams.touch.DreamOverlayTouchMonitor;
 import com.android.systemui.util.concurrency.FakeExecutor;
@@ -51,10 +51,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -101,7 +97,7 @@ public class DreamOverlayServiceTest extends SysuiTestCase {
     DreamOverlayStateController mStateController;
 
     @Mock
-    DreamBackend mDreamBackend;
+    DreamPreviewComplication mPreviewComplication;
 
     DreamOverlayService mService;
 
@@ -118,8 +114,6 @@ public class DreamOverlayServiceTest extends SysuiTestCase {
                 .thenReturn(mLifecycleRegistry);
         when(mDreamOverlayComponent.getDreamOverlayTouchMonitor())
                 .thenReturn(mDreamOverlayTouchMonitor);
-        when(mDreamOverlayComponent.getDreamBackend())
-                .thenReturn(mDreamBackend);
         when(mDreamOverlayComponentFactory
                 .create(any(), any()))
                 .thenReturn(mDreamOverlayComponent);
@@ -129,7 +123,8 @@ public class DreamOverlayServiceTest extends SysuiTestCase {
         mService = new DreamOverlayService(mContext, mMainExecutor,
                 mDreamOverlayComponentFactory,
                 mStateController,
-                mKeyguardUpdateMonitor);
+                mKeyguardUpdateMonitor,
+                mPreviewComplication);
     }
 
     @Test
@@ -173,22 +168,37 @@ public class DreamOverlayServiceTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetAvailableComplicationTypes() throws Exception {
-        final Set<Integer> enabledComplications = new HashSet<>(
-                Arrays.asList(DreamBackend.COMPLICATION_TYPE_TIME,
-                        DreamBackend.COMPLICATION_TYPE_DATE,
-                        DreamBackend.COMPLICATION_TYPE_WEATHER));
-        when(mDreamBackend.getEnabledComplications()).thenReturn(enabledComplications);
+    public void testPreviewModeFalseByDefault() {
+        mService.onBind(new Intent());
 
-        final IBinder proxy = mService.onBind(new Intent());
-        final IDreamOverlay overlay = IDreamOverlay.Stub.asInterface(proxy);
+        assertThat(mService.isPreviewMode()).isFalse();
+    }
 
-        overlay.startDream(mWindowParams, mDreamOverlayCallback);
+    @Test
+    public void testPreviewModeSetByIntentExtra() {
+        final Intent intent = new Intent();
+        intent.putExtra(DreamService.EXTRA_IS_PREVIEW, true);
+        mService.onBind(intent);
+
+        assertThat(mService.isPreviewMode()).isTrue();
+    }
+
+    @Test
+    public void testDreamLabel() {
+        final Intent intent = new Intent();
+        intent.putExtra(DreamService.EXTRA_DREAM_LABEL, "TestDream");
+        mService.onBind(intent);
+
+        assertThat(mService.getDreamLabel()).isEqualTo("TestDream");
+    }
+
+    @Test
+    public void testDestroy() {
+        mService.onDestroy();
         mMainExecutor.runAllReady();
 
-        final int expectedTypes =
-                Complication.COMPLICATION_TYPE_TIME | Complication.COMPLICATION_TYPE_DATE
-                        | Complication.COMPLICATION_TYPE_WEATHER;
-        verify(mStateController).setAvailableComplicationTypes(expectedTypes);
+        verify(mKeyguardUpdateMonitor).removeCallback(any());
+        verify(mLifecycleRegistry).setCurrentState(Lifecycle.State.DESTROYED);
+        verify(mStateController).setOverlayActive(false);
     }
 }

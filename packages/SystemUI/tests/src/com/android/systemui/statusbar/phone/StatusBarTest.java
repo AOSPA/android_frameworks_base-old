@@ -116,6 +116,7 @@ import com.android.systemui.statusbar.OperatorNameViewController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
+import com.android.systemui.statusbar.charging.WiredChargingRippleController;
 import com.android.systemui.statusbar.connectivity.NetworkController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
@@ -130,6 +131,7 @@ import com.android.systemui.statusbar.notification.collection.legacy.VisualStabi
 import com.android.systemui.statusbar.notification.collection.render.NotifShadeEventSource;
 import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
+import com.android.systemui.statusbar.notification.interruption.NotificationInterruptLogger;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.logging.NotificationPanelLoggerFake;
@@ -287,6 +289,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private InteractionJankMonitor mJankMonitor;
     @Mock private DeviceStateManager mDeviceStateManager;
     @Mock private DreamOverlayStateController mDreamOverlayStateController;
+    @Mock private WiredChargingRippleController mWiredChargingRippleController;
     private ShadeController mShadeController;
     private final FakeSystemClock mFakeSystemClock = new FakeSystemClock();
     private FakeExecutor mMainExecutor = new FakeExecutor(mFakeSystemClock);
@@ -309,6 +312,7 @@ public class StatusBarTest extends SysuiTestCase {
                         mPowerManager,
                         mDreamManager, mAmbientDisplayConfiguration, mNotificationFilter,
                         mStatusBarStateController, mBatteryController, mHeadsUpManager,
+                        mock(NotificationInterruptLogger.class),
                         new Handler(TestableLooper.get(this).getLooper()));
 
         mContext.addMockSystemService(TrustManager.class, mock(TrustManager.class));
@@ -377,7 +381,7 @@ public class StatusBarTest extends SysuiTestCase {
         mShadeController = new ShadeControllerImpl(mCommandQueue,
                 mStatusBarStateController, mNotificationShadeWindowController,
                 mStatusBarKeyguardViewManager, mContext.getSystemService(WindowManager.class),
-                () -> Optional.of(mStatusBar), () -> mAssistManager, Optional.of(mBubbles));
+                () -> Optional.of(mStatusBar), () -> mAssistManager);
 
         when(mOperatorNameViewControllerFactory.create(any()))
                 .thenReturn(mOperatorNameViewController);
@@ -477,7 +481,8 @@ public class StatusBarTest extends SysuiTestCase {
                 mNotifPipelineFlags,
                 mJankMonitor,
                 mDeviceStateManager,
-                mDreamOverlayStateController);
+                mDreamOverlayStateController,
+                mWiredChargingRippleController);
         when(mKeyguardViewMediator.registerStatusBar(
                 any(StatusBar.class),
                 any(NotificationPanelViewController.class),
@@ -994,9 +999,10 @@ public class StatusBarTest extends SysuiTestCase {
                 StatusBarStateController controller,
                 BatteryController batteryController,
                 HeadsUpManager headsUpManager,
+                NotificationInterruptLogger logger,
                 Handler mainHandler) {
             super(contentResolver, powerManager, dreamManager, ambientDisplayConfiguration, filter,
-                    batteryController, controller, headsUpManager, mainHandler);
+                    batteryController, controller, headsUpManager, logger, mainHandler);
             mUseHeadsUp = true;
         }
     }
