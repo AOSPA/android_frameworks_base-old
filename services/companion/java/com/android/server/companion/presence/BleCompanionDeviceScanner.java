@@ -228,11 +228,23 @@ class BleCompanionDeviceScanner implements AssociationStore.OnChangeListener {
 
         if (DEBUG) Log.i(TAG, "stopScan()");
         if (!mScanning) {
-            Log.d(TAG, "  > not scanning.");
+            if (DEBUG) Log.d(TAG, "  > not scanning.");
             return;
         }
+        // mScanCallback is non-null here - it cannot be null when mScanning is true.
 
-        mBleScanner.stopScan(mScanCallback);
+        // BluetoothLeScanner will throw an IllegalStateException if stopScan() is called while LE
+        // is not enabled.
+        if (mBtAdapter.isLeEnabled()) {
+            try {
+                mBleScanner.stopScan(mScanCallback);
+            } catch (RuntimeException e) {
+                // Just to be sure not to crash system server here if BluetoothLeScanner throws
+                // another RuntimeException.
+                Slog.w(TAG, "Exception while stopping BLE scanning", e);
+            }
+        }
+
         mScanning = false;
     }
 

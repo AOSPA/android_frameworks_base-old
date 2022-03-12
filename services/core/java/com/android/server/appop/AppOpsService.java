@@ -179,6 +179,8 @@ import com.android.server.SystemServiceManager;
 import com.android.server.pm.PackageList;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 
+import dalvik.annotation.optimization.NeverCompile;
+
 import libcore.util.EmptyArray;
 
 import org.json.JSONException;
@@ -4549,6 +4551,26 @@ public class AppOpsService extends IAppOpsService.Stub {
             return new PackageVerificationResult(null,
                     /* isAttributionTagValid */ true);
         }
+        if (Process.isSupplemental(uid)) {
+            // Supplemental processes run in their own UID range, but their associated
+            // UID for checks should always be the UID of the supplemental package.
+            // TODO: We will need to modify the callers of this function instead, so
+            // modifications and checks against the app ops state are done with the
+            // correct UID.
+            try {
+                final PackageManager pm = mContext.getPackageManager();
+                final String supplementalPackageName = pm.getSupplementalProcessPackageName();
+                if (Objects.equals(packageName, supplementalPackageName)) {
+                    int supplementalAppId = pm.getPackageUid(supplementalPackageName,
+                            PackageManager.PackageInfoFlags.of(0));
+                    uid = UserHandle.getUid(UserHandle.getUserId(uid), supplementalAppId);
+                }
+            } catch (PackageManager.NameNotFoundException e) {
+                // Shouldn't happen for the supplemental package
+                e.printStackTrace();
+            }
+        }
+
 
         // Do not check if uid/packageName/attributionTag is already known.
         synchronized (this) {
@@ -5882,6 +5904,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
     }
 
+    @NeverCompile // Avoid size overhead of debugging code.
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) return;

@@ -23,7 +23,6 @@ import static android.view.WindowManagerPolicyConstants.APPLICATION_PANEL_SUBLAY
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.CompatibilityInfo.Translator;
 import android.graphics.BLASTBufferQueue;
@@ -42,7 +41,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.SurfaceControl.Transaction;
@@ -135,7 +133,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     private boolean mDisableBackgroundLayer = false;
 
     /**
-     * We use this lock to protect access to mSurfaceControl and 
+     * We use this lock to protect access to mSurfaceControl and
      * SurfaceViewPositionUpdateListener#mPositionChangedTransaction. Both are accessed on the UI
      * thread and the render thread.
      */
@@ -376,11 +374,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     private void updateSurfaceAlpha() {
-        if (!mUseAlpha) {
-            if (DEBUG) {
-                Log.d(TAG, System.identityHashCode(this)
-                        + " updateSurfaceAlpha: setUseAlpha() is not called, ignored.");
-            }
+        if (!mUseAlpha || !mHaveFrame || mSurfaceControl == null) {
             return;
         }
         final float viewAlpha = getAlpha();
@@ -389,88 +383,16 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                     + " updateSurfaceAlpha:"
                     + " translucent color is not supported for a surface placed z-below.");
         }
-        if (!mHaveFrame) {
-            if (DEBUG) {
-                Log.d(TAG, System.identityHashCode(this)
-                        + " updateSurfaceAlpha: has no surface.");
-            }
-            return;
-        }
         final ViewRootImpl viewRoot = getViewRootImpl();
         if (viewRoot == null) {
-            if (DEBUG) {
-                Log.d(TAG, System.identityHashCode(this)
-                        + " updateSurfaceAlpha: ViewRootImpl not available.");
-            }
-            return;
-        }
-        if (mSurfaceControl == null) {
-            if (DEBUG) {
-                Log.d(TAG, System.identityHashCode(this)
-                        + "updateSurfaceAlpha:"
-                        + " surface is not yet created, or already released.");
-            }
-            return;
-        }
-        final Surface parent = viewRoot.mSurface;
-        if (parent == null || !parent.isValid()) {
-            if (DEBUG) {
-                Log.d(TAG, System.identityHashCode(this)
-                        + " updateSurfaceAlpha: ViewRootImpl has no valid surface");
-            }
             return;
         }
         final float alpha = getFixedAlpha();
         if (alpha != mSurfaceAlpha) {
-            if (isHardwareAccelerated()) {
-                /*
-                 * Schedule a callback that reflects an alpha value onto the underlying surfaces.
-                 * This gets called on a RenderThread worker thread, so members accessed here must
-                 * be protected by a lock.
-                 */
-                viewRoot.registerRtFrameCallback(frame -> {
-                    try {
-                        synchronized (mSurfaceControlLock) {
-                            if (!parent.isValid()) {
-                                if (DEBUG) {
-                                    Log.d(TAG, System.identityHashCode(this)
-                                            + " updateSurfaceAlpha RT:"
-                                            + " ViewRootImpl has no valid surface");
-                                }
-                                return;
-                            }
-                            if (mSurfaceControl == null) {
-                                if (DEBUG) {
-                                    Log.d(TAG, System.identityHashCode(this)
-                                            + "updateSurfaceAlpha RT:"
-                                            + " mSurfaceControl has already released");
-                                }
-                                return;
-                            }
-                            if (DEBUG) {
-                                Log.d(TAG, System.identityHashCode(this)
-                                        + " updateSurfaceAlpha RT: set alpha=" + alpha);
-                            }
-
-                            mFrameCallbackTransaction.setAlpha(mSurfaceControl, alpha);
-                            applyOrMergeTransaction(mFrameCallbackTransaction, frame);
-                        }
-                        // It's possible that mSurfaceControl is released in the UI thread before
-                        // the transaction completes. If that happens, an exception is thrown, which
-                        // must be caught immediately.
-                    } catch (Exception e) {
-                        Log.e(TAG, System.identityHashCode(this)
-                                + "updateSurfaceAlpha RT: Exception during surface transaction", e);
-                    }
-                });
-                damageInParent();
-            } else {
-                if (DEBUG) {
-                    Log.d(TAG, System.identityHashCode(this)
-                            + " updateSurfaceAlpha: set alpha=" + alpha);
-                }
-                mTmpTransaction.setAlpha(mSurfaceControl, alpha).apply();
-            }
+            final Transaction transaction = new Transaction();
+            transaction.setAlpha(mSurfaceControl, alpha);
+            viewRoot.applyTransactionOnDraw(transaction);
+            damageInParent();
             mSurfaceAlpha = alpha;
         }
     }
@@ -527,20 +449,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         mRequestedVisible = false;
 
         updateSurface();
-        tryReleaseSurfaces();
-
-        // We don't release this as part of releaseSurfaces as
-        // that is also called on transient visibility changes. We can't
-        // recreate this Surface, so only release it when we are fully
-        // detached.
-        if (mSurfacePackage != null) {
-            final SurfaceControl sc = mSurfacePackage.getSurfaceControl();
-            if (sc != null && sc.isValid()) {
-                mTmpTransaction.reparent(sc, null).apply();
-            }
-            mSurfacePackage.release();
-            mSurfacePackage = null;
-        }
+        releaseSurfaces(true /* releaseSurfacePackage*/);
 
         mHaveFrame = false;
         super.onDetachedFromWindow();
@@ -633,7 +542,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     public void setClipBounds(Rect clipBounds) {
         super.setClipBounds(clipBounds);
 
-        if (!mClipSurfaceToBounds) {
+        if (!mClipSurfaceToBounds || mSurfaceControl == null) {
             return;
         }
 
@@ -643,18 +552,15 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             invalidate();
         }
 
-        if (mSurfaceControl != null) {
-            if (mClipBounds != null) {
-                mTmpRect.set(mClipBounds);
-            } else {
-                mTmpRect.set(0, 0, mSurfaceWidth, mSurfaceHeight);
-            }
-            SyncRtSurfaceTransactionApplier applier = new SyncRtSurfaceTransactionApplier(this);
-            applier.scheduleApply(
-                    new SyncRtSurfaceTransactionApplier.SurfaceParams.Builder(mSurfaceControl)
-                            .withWindowCrop(mTmpRect)
-                            .build());
+        if (mClipBounds != null) {
+            mTmpRect.set(mClipBounds);
+        } else {
+            mTmpRect.set(0, 0, mSurfaceWidth, mSurfaceHeight);
         }
+        final Transaction transaction = new Transaction();
+        transaction.setWindowCrop(mSurfaceControl, mTmpRect);
+        applyTransactionOnVriDraw(transaction);
+        invalidate();
     }
 
     private void clearSurfaceViewPort(Canvas canvas) {
@@ -790,37 +696,10 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         if (viewRoot == null) {
             return true;
         }
-        final Surface parent = viewRoot.mSurface;
-        if (parent == null || !parent.isValid()) {
-            return true;
-        }
-
-        /*
-         * Schedule a callback that reflects an alpha value onto the underlying surfaces.
-         * This gets called on a RenderThread worker thread, so members accessed here must
-         * be protected by a lock.
-         */
-        viewRoot.registerRtFrameCallback(frame -> {
-            try {
-                synchronized (mSurfaceControlLock) {
-                    if (!parent.isValid() || mSurfaceControl == null) {
-                        return;
-                    }
-
-                    updateRelativeZ(mFrameCallbackTransaction);
-                    applyOrMergeTransaction(mFrameCallbackTransaction, frame);
-                }
-                // It's possible that mSurfaceControl is released in the UI thread before
-                // the transaction completes. If that happens, an exception is thrown, which
-                // must be caught immediately.
-             } catch (Exception e) {
-                Log.e(TAG, System.identityHashCode(this)
-                        + "setZOrderOnTop RT: Exception during surface transaction", e);
-            }
-        });
-
+        final Transaction transaction = new SurfaceControl.Transaction();
+        updateRelativeZ(transaction);
+        viewRoot.applyTransactionOnDraw(transaction);
         invalidate();
-
         return true;
     }
 
@@ -891,7 +770,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         return t;
     }
 
-    private void tryReleaseSurfaces() {
+    private void releaseSurfaces(boolean releaseSurfacePackage) {
         mSurfaceAlpha = 1f;
 
         synchronized (mSurfaceControlLock) {
@@ -901,32 +780,28 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                 mBlastBufferQueue = null;
             }
 
-            ViewRootImpl viewRoot = getViewRootImpl();
             Transaction transaction = new Transaction();
-            releaseSurfaces(transaction);
-            if (viewRoot != null) {
-                viewRoot.applyTransactionOnDraw(transaction);
-            } else {
-                transaction.apply();
+            if (mSurfaceControl != null) {
+                transaction.remove(mSurfaceControl);
+                mSurfaceControl = null;
             }
+            if (mBackgroundControl != null) {
+                transaction.remove(mBackgroundControl);
+                mBackgroundControl = null;
+            }
+            if (mBlastSurfaceControl != null) {
+                transaction.remove(mBlastSurfaceControl);
+                mBlastSurfaceControl = null;
+            }
+
+            if (releaseSurfacePackage && mSurfacePackage != null) {
+                mSurfacePackage.release();
+                mSurfacePackage = null;
+            }
+
+            applyTransactionOnVriDraw(transaction);
         }
     }
-
-    private void releaseSurfaces(Transaction transaction) {
-        if (mSurfaceControl != null) {
-            transaction.remove(mSurfaceControl);
-            mSurfaceControl = null;
-        }
-        if (mBackgroundControl != null) {
-            transaction.remove(mBackgroundControl);
-            mBackgroundControl = null;
-        }
-        if (mBlastSurfaceControl != null) {
-            transaction.remove(mBlastSurfaceControl);
-            mBlastSurfaceControl = null;
-        }
-    }
-
 
     // The position update listener is used to safely share the surface size between render thread
     // workers and the UI thread. Both threads need to know the surface size to determine the scale.
@@ -1068,7 +943,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
         if (viewRoot.mSurface == null || !viewRoot.mSurface.isValid()) {
             notifySurfaceDestroyed();
-            tryReleaseSurfaces();
+            releaseSurfaces(false /* releaseSurfacePackage*/);
             return;
         }
 
@@ -1209,7 +1084,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                 } finally {
                     mIsCreating = false;
                     if (mSurfaceControl != null && !mSurfaceCreated) {
-                        tryReleaseSurfaces();
+                        releaseSurfaces(false /* releaseSurfacePackage*/);
                     }
                 }
             } catch (Exception ex) {
@@ -1344,17 +1219,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     /**
-     * A place to over-ride for applying child-surface transactions.
-     * These can be synchronized with the viewroot surface using deferTransaction.
-     *
-     * Called from RenderWorker while UI thread is paused.
-     * @hide
-     */
-    protected void applyChildSurfaceTransaction_renderWorker(SurfaceControl.Transaction t,
-            Surface viewRootSurface, long nextViewRootFrameNumber) {
-    }
-
-    /**
      * Sets the surface position and scale. Can be called on
      * the UI thread as well as on the renderer thread.
      *
@@ -1461,11 +1325,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                                     / (float) mRtSurfaceHeight /*postScaleY*/);
                     if (mViewVisibility) {
                         mPositionChangedTransaction.show(mSurfaceControl);
-                    }
-                    final ViewRootImpl viewRoot = getViewRootImpl();
-                    if (viewRoot != null) {
-                        applyChildSurfaceTransaction_renderWorker(mPositionChangedTransaction,
-                                viewRoot.mSurface, frameNumber);
                     }
                     applyOrMergeTransaction(mPositionChangedTransaction, frameNumber);
                     mPendingTransaction = false;
@@ -1855,43 +1714,19 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
      * @param p The SurfacePackage to embed.
      */
     public void setChildSurfacePackage(@NonNull SurfaceControlViewHost.SurfacePackage p) {
-        setChildSurfacePackage(p, false /* applyTransactionOnDraw */);
-    }
-
-    /**
-     * Similar to setChildSurfacePackage, but using the BLAST queue so the transaction can be
-     * synchronized with the ViewRootImpl frame.
-     * @hide
-     */
-    public void setChildSurfacePackageOnDraw(
-            @NonNull SurfaceControlViewHost.SurfacePackage p) {
-        setChildSurfacePackage(p, true /* applyTransactionOnDraw */);
-    }
-
-    /**
-     * @param applyTransactionOnDraw Whether to apply transaction at onDraw or immediately.
-     */
-    private void setChildSurfacePackage(
-            @NonNull SurfaceControlViewHost.SurfacePackage p, boolean applyTransactionOnDraw) {
         final SurfaceControl lastSc = mSurfacePackage != null ?
                 mSurfacePackage.getSurfaceControl() : null;
+        final SurfaceControl.Transaction transaction = new Transaction();
         if (mSurfaceControl != null) {
             if (lastSc != null) {
-                mTmpTransaction.reparent(lastSc, null);
+                transaction.reparent(lastSc, null);
                 mSurfacePackage.release();
             }
-            reparentSurfacePackage(mTmpTransaction, p);
-            applyTransaction(applyTransactionOnDraw);
+            reparentSurfacePackage(transaction, p);
+            applyTransactionOnVriDraw(transaction);
         }
         mSurfacePackage = p;
-    }
-
-    private void applyTransaction(boolean applyTransactionOnDraw) {
-        if (applyTransactionOnDraw) {
-            getViewRootImpl().applyTransactionOnDraw(mTmpTransaction);
-        } else {
-            mTmpTransaction.apply();
-        }
+        invalidate();
     }
 
     private void reparentSurfacePackage(SurfaceControl.Transaction t,
@@ -1994,4 +1829,13 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         }
     }
 
+    private void applyTransactionOnVriDraw(Transaction t) {
+        final ViewRootImpl viewRoot = getViewRootImpl();
+        if (viewRoot != null) {
+            // If we are using BLAST, merge the transaction with the viewroot buffer transaction.
+            viewRoot.applyTransactionOnDraw(t);
+        } else {
+            t.apply();
+        }
+    }
 }

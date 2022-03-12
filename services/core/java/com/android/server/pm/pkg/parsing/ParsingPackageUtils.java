@@ -30,6 +30,8 @@ import static android.os.Build.VERSION_CODES.DONUT;
 import static android.os.Build.VERSION_CODES.O;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 
+import static com.android.server.pm.pkg.parsing.ParsingUtils.parseKnownActivityEmbeddingCerts;
+
 import android.annotation.AnyRes;
 import android.annotation.CheckResult;
 import android.annotation.IntDef;
@@ -2009,6 +2011,19 @@ public class ParsingPackageUtils {
                                 .AndroidManifestApplication_requestForegroundServiceExemption,
                         false));
             }
+            final ParseResult<Set<String>> knownActivityEmbeddingCertsResult =
+                    parseKnownActivityEmbeddingCerts(sa, res,
+                            R.styleable.AndroidManifestApplication_knownActivityEmbeddingCerts,
+                            input);
+            if (knownActivityEmbeddingCertsResult.isError()) {
+                return input.error(knownActivityEmbeddingCertsResult);
+            } else {
+                final Set<String> knownActivityEmbeddingCerts = knownActivityEmbeddingCertsResult
+                        .getResult();
+                if (knownActivityEmbeddingCerts != null) {
+                    pkg.setKnownActivityEmbeddingCerts(knownActivityEmbeddingCerts);
+                }
+            }
         } finally {
             sa.recycle();
         }
@@ -2187,8 +2202,9 @@ public class ParsingPackageUtils {
                 .setAutoRevokePermissions(anInt(R.styleable.AndroidManifestApplication_autoRevokePermissions, sa))
                 .setAttributionsAreUserVisible(bool(false, R.styleable.AndroidManifestApplication_attributionsAreUserVisible, sa))
                 .setResetEnabledSettingsOnAppDataCleared(bool(false,
-                    R.styleable.AndroidManifestApplication_resetEnabledSettingsOnAppDataCleared,
-                    sa))
+                        R.styleable.AndroidManifestApplication_resetEnabledSettingsOnAppDataCleared,
+                        sa))
+                .setOnBackInvokedCallbackEnabled(bool(false, R.styleable.AndroidManifestApplication_enableOnBackInvokedCallback, sa))
                 // targetSdkVersion gated
                 .setAllowAudioPlaybackCapture(bool(targetSdk >= Build.VERSION_CODES.Q, R.styleable.AndroidManifestApplication_allowAudioPlaybackCapture, sa))
                 .setBaseHardwareAccelerated(bool(targetSdk >= Build.VERSION_CODES.ICE_CREAM_SANDWICH, R.styleable.AndroidManifestApplication_hardwareAccelerated, sa))

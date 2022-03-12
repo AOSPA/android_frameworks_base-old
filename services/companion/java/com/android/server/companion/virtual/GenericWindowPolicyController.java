@@ -37,16 +37,31 @@ import android.util.Slog;
 import android.view.Display;
 import android.window.DisplayWindowPolicyController;
 
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.app.BlockedAppStreamingActivity;
+
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 
 /**
  * A controller to control the policies of the windows that can be displayed on the virtual display.
  */
-class GenericWindowPolicyController extends DisplayWindowPolicyController {
+public class GenericWindowPolicyController extends DisplayWindowPolicyController {
 
-    private static final String TAG = "VirtualDeviceManager";
+    private static final String TAG = "GenericWindowPolicyController";
+
+    /** Interface to listen running applications change on virtual display. */
+    public interface RunningAppsChangedListener {
+        /**
+         * Notifies the running applications change.
+         */
+        void onRunningAppsChanged(ArraySet<Integer> runningUids);
+    }
+
+    private static final ComponentName BLOCKED_APP_STREAMING_COMPONENT =
+            new ComponentName("android", BlockedAppStreamingActivity.class.getName());
 
     /**
      * If required, allow the secure activity to display on remote device since
@@ -61,11 +76,17 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
     private final ArraySet<ComponentName> mAllowedActivities;
     @Nullable
     private final ArraySet<ComponentName> mBlockedActivities;
+    private final Object mGenericWindowPolicyControllerLock = new Object();
+    private Consumer<ActivityInfo> mActivityBlockedCallback;
 
     @NonNull
+    @GuardedBy("mGenericWindowPolicyControllerLock")
     final ArraySet<Integer> mRunningUids = new ArraySet<>();
     @Nullable private final ActivityListener mActivityListener;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
+
+    @Nullable
+    private RunningAppsChangedListener mRunningAppsChangedListener;
 
     /**
      * Creates a window policy controller that is generic to the different use cases of virtual
@@ -77,16 +98,23 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
      * @param activityListener Activity listener to listen for activity changes. The display ID
      *   is not populated in this callback and is always {@link Display#INVALID_DISPLAY}.
      */
-    GenericWindowPolicyController(int windowFlags, int systemWindowFlags,
+    public GenericWindowPolicyController(int windowFlags, int systemWindowFlags,
             @NonNull ArraySet<UserHandle> allowedUsers,
             @Nullable Set<ComponentName> allowedActivities,
             @Nullable Set<ComponentName> blockedActivities,
-            @NonNull ActivityListener activityListener) {
+            @NonNull ActivityListener activityListener,
+            @NonNull Consumer<ActivityInfo> activityBlockedCallback) {
         mAllowedUsers = allowedUsers;
         mAllowedActivities = allowedActivities == null ? null : new ArraySet<>(allowedActivities);
         mBlockedActivities = blockedActivities == null ? null : new ArraySet<>(blockedActivities);
+        mActivityBlockedCallback = activityBlockedCallback;
         setInterestedWindowFlags(windowFlags, systemWindowFlags);
         mActivityListener = activityListener;
+    }
+
+    /** Sets listener for running applications change. */
+    public void setRunningAppsChangedListener(@Nullable RunningAppsChangedListener listener) {
+        mRunningAppsChangedListener = listener;
     }
 
     @Override
@@ -96,6 +124,7 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
         for (int i = 0; i < activityCount; i++) {
             final ActivityInfo aInfo = activities.get(i);
             if (!canContainActivity(aInfo, /* windowFlags= */ 0, /* systemWindowFlags= */ 0)) {
+                mActivityBlockedCallback.accept(aInfo);
                 return false;
             }
         }
@@ -105,7 +134,11 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
     @Override
     public boolean keepActivityOnWindowFlagsChanged(ActivityInfo activityInfo, int windowFlags,
             int systemWindowFlags) {
-        return canContainActivity(activityInfo, windowFlags, systemWindowFlags);
+        if (!canContainActivity(activityInfo, windowFlags, systemWindowFlags)) {
+            mActivityBlockedCallback.accept(activityInfo);
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -119,11 +152,16 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
 
     @Override
     public void onRunningAppsChanged(ArraySet<Integer> runningUids) {
-        mRunningUids.clear();
-        mRunningUids.addAll(runningUids);
-        if (mActivityListener != null && mRunningUids.isEmpty()) {
-            // Post callback on the main thread so it doesn't block activity launching
-            mHandler.post(() -> mActivityListener.onDisplayEmpty(Display.INVALID_DISPLAY));
+        synchronized (mGenericWindowPolicyControllerLock) {
+            mRunningUids.clear();
+            mRunningUids.addAll(runningUids);
+            if (mActivityListener != null && mRunningUids.isEmpty()) {
+                // Post callback on the main thread so it doesn't block activity launching
+                mHandler.post(() -> mActivityListener.onDisplayEmpty(Display.INVALID_DISPLAY));
+            }
+        }
+        if (mRunningAppsChangedListener != null) {
+            mRunningAppsChangedListener.onRunningAppsChanged(runningUids);
         }
     }
 
@@ -132,7 +170,9 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
      * this controller.
      */
     boolean containsUid(int uid) {
-        return mRunningUids.contains(uid);
+        synchronized (mGenericWindowPolicyControllerLock) {
+            return mRunningUids.contains(uid);
+        }
     }
 
     private boolean canContainActivity(ActivityInfo activityInfo, int windowFlags,
@@ -140,22 +180,23 @@ class GenericWindowPolicyController extends DisplayWindowPolicyController {
         if ((activityInfo.flags & FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES) == 0) {
             return false;
         }
+        ComponentName activityComponent = activityInfo.getComponentName();
+        if (BLOCKED_APP_STREAMING_COMPONENT.equals(activityComponent)) {
+            // The error dialog alerting users that streaming is blocked is always allowed.
+            return true;
+        }
         final UserHandle activityUser =
                 UserHandle.getUserHandleForUid(activityInfo.applicationInfo.uid);
         if (!mAllowedUsers.contains(activityUser)) {
             Slog.d(TAG, "Virtual device activity not allowed from user " + activityUser);
             return false;
         }
-        if (mBlockedActivities != null
-                && mBlockedActivities.contains(activityInfo.getComponentName())) {
-            Slog.d(TAG,
-                    "Virtual device blocking launch of " + activityInfo.getComponentName());
+        if (mBlockedActivities != null && mBlockedActivities.contains(activityComponent)) {
+            Slog.d(TAG, "Virtual device blocking launch of " + activityComponent);
             return false;
         }
-        if (mAllowedActivities != null
-                && !mAllowedActivities.contains(activityInfo.getComponentName())) {
-            Slog.d(TAG,
-                    activityInfo.getComponentName() + " is not in the allowed list.");
+        if (mAllowedActivities != null && !mAllowedActivities.contains(activityComponent)) {
+            Slog.d(TAG, activityComponent + " is not in the allowed list.");
             return false;
         }
         if (!CompatChanges.isChangeEnabled(ALLOW_SECURE_ACTIVITY_DISPLAY_ON_REMOTE_DEVICE,

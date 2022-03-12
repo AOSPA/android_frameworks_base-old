@@ -18,6 +18,7 @@ package android.view;
 
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.internal.policy.IKeyguardLockedStateListener;
 import com.android.internal.policy.IShortcutService;
 
 import android.app.IAssistDataReceiver;
@@ -65,7 +66,7 @@ import android.view.WindowManager;
 import android.view.SurfaceControl;
 import android.view.displayhash.DisplayHash;
 import android.view.displayhash.VerifiedDisplayHash;
-import android.window.IOnFpsCallbackListener;
+import android.window.ITaskFpsCallback;
 
 /**
  * System private interface to the window manager.
@@ -198,6 +199,9 @@ interface IWindowManager
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean isKeyguardSecure(int userId);
     void dismissKeyguard(IKeyguardDismissCallback callback, CharSequence message);
+
+    void addKeyguardLockedStateListener(in IKeyguardLockedStateListener listener);
+    void removeKeyguardLockedStateListener(in IKeyguardLockedStateListener listener);
 
     // Requires INTERACT_ACROSS_USERS_FULL permission
     void setSwitchingUser(boolean switching);
@@ -926,19 +930,29 @@ interface IWindowManager
      * registered, the registered callback will not be unregistered until
      * {@link unregisterTaskFpsCallback()} is called
      * @param taskId task id of the task.
-     * @param listener listener to be registered.
+     * @param callback callback to be registered.
      *
      * @hide
      */
-    void registerTaskFpsCallback(in int taskId, in IOnFpsCallbackListener listener);
+    void registerTaskFpsCallback(in int taskId, in ITaskFpsCallback callback);
 
     /**
      * Unregisters the frame rate per second count callback which was registered with
      * {@link #registerTaskFpsCallback(int,TaskFpsCallback)}.
      *
-     * @param listener listener to be unregistered.
+     * @param callback callback to be unregistered.
      *
      * @hide
      */
-    void unregisterTaskFpsCallback(in IOnFpsCallbackListener listener);
+    void unregisterTaskFpsCallback(in ITaskFpsCallback listener);
+
+    /**
+     * Take a snapshot using the same path that's used for Recents. This is used for Testing only.
+     *
+     * @param taskId to take the snapshot of
+     *
+     * Returns a bitmap of the screenshot or {@code null} if it was unable to screenshot.
+     * @hide
+     */
+    Bitmap snapshotTaskForRecents(int taskId);
 }

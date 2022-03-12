@@ -310,6 +310,10 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         return mPipTransitionState.isInPip();
     }
 
+    private boolean isLaunchIntoPipTask() {
+        return mPictureInPictureParams != null && mPictureInPictureParams.isLaunchIntoPip();
+    }
+
     /**
      * Returns whether the entry animation is waiting to be started.
      */
@@ -369,11 +373,10 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         return mLeash;
     }
 
-    private void setBoundsStateForEntry(ComponentName componentName, PictureInPictureParams params,
-            ActivityInfo activityInfo) {
-        mPipBoundsState.setBoundsStateForEntry(componentName,
-                mPipBoundsAlgorithm.getAspectRatioOrDefault(params),
-                mPipBoundsAlgorithm.getMinimalSize(activityInfo));
+    private void setBoundsStateForEntry(ComponentName componentName,
+            PictureInPictureParams params, ActivityInfo activityInfo) {
+        mPipBoundsState.setBoundsStateForEntry(componentName, activityInfo, params,
+                mPipBoundsAlgorithm);
     }
 
     /**
@@ -398,6 +401,10 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         }
 
         final WindowContainerTransaction wct = new WindowContainerTransaction();
+        if (isLaunchIntoPipTask()) {
+            exitLaunchIntoPipTask(wct);
+            return;
+        }
 
         if (ENABLE_SHELL_TRANSITIONS) {
             if (requestEnterSplit && mSplitScreenOptional.isPresent()) {
@@ -467,6 +474,14 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
                 animator.applySurfaceControlTransaction(mLeash, t, FRACTION_START);
             }
         });
+    }
+
+    private void exitLaunchIntoPipTask(WindowContainerTransaction wct) {
+        wct.startTask(mTaskInfo.launchIntoPipHostTaskId, null /* ActivityOptions */);
+        mTaskOrganizer.applyTransaction(wct);
+
+        // Remove the PiP with fade-out animation right after the host Task is brought to front.
+        removePip();
     }
 
     private void applyWindowingModeChangeOnExit(WindowContainerTransaction wct, int direction) {
@@ -564,6 +579,13 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             Log.d(TAG, "Alpha animation is expired. Use bounds animation.");
             mOneShotAnimationType = ANIM_TYPE_BOUNDS;
         }
+
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+            // For Shell transition, we will animate the window in PipTransition#startAnimation
+            // instead of #onTaskAppeared.
+            return;
+        }
+
         if (mWaitForFixedRotation) {
             onTaskAppearedWithFixedRotation();
             return;
@@ -572,15 +594,6 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         final Rect destinationBounds = mPipBoundsAlgorithm.getEntryDestinationBounds();
         Objects.requireNonNull(destinationBounds, "Missing destination bounds");
         final Rect currentBounds = mTaskInfo.configuration.windowConfiguration.getBounds();
-
-        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
-            if (mOneShotAnimationType == ANIM_TYPE_BOUNDS) {
-                mPipMenuController.attach(mLeash);
-            } else if (mOneShotAnimationType == ANIM_TYPE_ALPHA) {
-                mOneShotAnimationType = ANIM_TYPE_BOUNDS;
-            }
-            return;
-        }
 
         if (mOneShotAnimationType == ANIM_TYPE_BOUNDS) {
             mPipMenuController.attach(mLeash);
@@ -730,7 +743,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     }
 
     /**
-     * Note that dismissing PiP is now originated from SystemUI, see {@link #exitPip(int)}.
+     * Note that dismissing PiP is now originated from SystemUI, see {@link #exitPip(int, boolean)}.
      * Meanwhile this callback is invoked whenever the task is removed. For instance:
      *   - as a result of removeRootTasksInWindowingModes from WM
      *   - activity itself is died
@@ -814,6 +827,16 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mNextRotation = newRotation;
         mWaitForFixedRotation = true;
 
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+            // The fixed rotation will also be included in the transition info. However, if it is
+            // not a PIP transition (such as open another app to different orientation),
+            // PIP transition handler may not be aware of the fixed rotation start.
+            // Notify the PIP transition handler so that it can fade out the PIP window early for
+            // fixed transition of other windows.
+            mPipTransitionController.onFixedRotationStarted();
+            return;
+        }
+
         if (mPipTransitionState.isInPip()) {
             // Fade out the existing PiP to avoid jump cut during seamless rotation.
             fadeExistingPip(false /* show */);
@@ -823,6 +846,10 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     @Override
     public void onFixedRotationFinished(int displayId) {
         if (!mWaitForFixedRotation) {
+            return;
+        }
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+            clearWaitForFixedRotation();
             return;
         }
         if (mPipTransitionState.getTransitionState() == PipTransitionState.TASK_APPEARED) {

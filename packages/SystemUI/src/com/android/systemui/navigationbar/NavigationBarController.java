@@ -31,6 +31,7 @@ import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
@@ -58,6 +59,7 @@ import com.android.systemui.statusbar.CommandQueue.Callbacks;
 import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.BarTransitions.TransitionMode;
 import com.android.systemui.statusbar.phone.LightBarController;
+import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.wm.shell.back.BackAnimation;
 import com.android.wm.shell.pip.Pip;
@@ -84,6 +86,7 @@ public class NavigationBarController implements
     private final NavigationBar.Factory mNavigationBarFactory;
     private final DisplayManager mDisplayManager;
     private final TaskbarDelegate mTaskbarDelegate;
+    private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private int mNavMode;
     @VisibleForTesting boolean mIsTablet;
 
@@ -107,6 +110,7 @@ public class NavigationBarController implements
             NavBarHelper navBarHelper,
             TaskbarDelegate taskbarDelegate,
             NavigationBar.Factory navigationBarFactory,
+            StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             DumpManager dumpManager,
             AutoHideController autoHideController,
             LightBarController lightBarController,
@@ -121,6 +125,7 @@ public class NavigationBarController implements
         mConfigChanges.applyNewConfig(mContext.getResources());
         mNavMode = navigationModeController.addListener(this);
         mTaskbarDelegate = taskbarDelegate;
+        mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mTaskbarDelegate.setDependencies(commandQueue, overviewProxyService,
                 navBarHelper, navigationModeController, sysUiFlagsContainer,
                 dumpManager, autoHideController, lightBarController, pipOptional,
@@ -215,9 +220,11 @@ public class NavigationBarController implements
     /** @return {@code true} if taskbar is enabled, false otherwise */
     private boolean initializeTaskbarIfNecessary() {
         if (mIsTablet) {
+            Trace.beginSection("NavigationBarController#initializeTaskbarIfNecessary");
             // Remove navigation bar when taskbar is showing
             removeNavigationBar(mContext.getDisplayId());
             mTaskbarDelegate.init(mContext.getDisplayId());
+            Trace.endSection();
         } else {
             mTaskbarDelegate.destroy();
         }
@@ -320,7 +327,8 @@ public class NavigationBarController implements
 
         mNavigationBars.put(displayId, navBar);
 
-        View navigationBarView = navBar.createView(savedState);
+        boolean navBarVisible = mStatusBarKeyguardViewManager.isNavBarVisible();
+        View navigationBarView = navBar.createView(savedState, navBarVisible);
         navigationBarView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {

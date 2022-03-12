@@ -245,6 +245,13 @@ static struct {
     jmethodID onTransactionCommitted;
 } gTransactionCommittedListenerClassInfo;
 
+static struct {
+    jclass clazz;
+    jmethodID ctor;
+    jfieldID format;
+    jfieldID alphaInterpretation;
+} gDisplayDecorationSupportInfo;
+
 class JNamedColorSpace {
 public:
     // ColorSpace.Named.SRGB.ordinal() = 0;
@@ -260,15 +267,6 @@ constexpr jint fromDataspaceToNamedColorSpaceValue(const ui::Dataspace dataspace
             return JNamedColorSpace::DISPLAY_P3;
         default:
             return JNamedColorSpace::SRGB;
-    }
-}
-
-constexpr ui::Dataspace fromNamedColorSpaceValueToDataspace(const jint colorSpace) {
-    switch (colorSpace) {
-        case JNamedColorSpace::DISPLAY_P3:
-            return ui::Dataspace::DISPLAY_P3;
-        default:
-            return ui::Dataspace::V0_SRGB;
     }
 }
 
@@ -627,12 +625,16 @@ static void nativeSetGeometry(JNIEnv* env, jclass clazz, jlong transactionObj, j
 }
 
 static void nativeSetBuffer(JNIEnv* env, jclass clazz, jlong transactionObj, jlong nativeObject,
-                            jobject bufferObject) {
+                            jobject bufferObject, jlong fencePtr) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
     sp<GraphicBuffer> graphicBuffer(GraphicBuffer::fromAHardwareBuffer(
             android_hardware_HardwareBuffer_getNativeHardwareBuffer(env, bufferObject)));
-    transaction->setBuffer(ctrl, graphicBuffer);
+    std::optional<sp<Fence>> optFence = std::nullopt;
+    if (fencePtr != 0) {
+        optFence = sp<Fence>{reinterpret_cast<Fence*>(fencePtr)};
+    }
+    transaction->setBuffer(ctrl, graphicBuffer, optFence);
 }
 
 static void nativeSetBufferTransform(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -645,11 +647,11 @@ static void nativeSetBufferTransform(JNIEnv* env, jclass clazz, jlong transactio
     transaction->setTransformToDisplayInverse(ctrl, transformToInverseDisplay);
 }
 
-static void nativeSetColorSpace(JNIEnv* env, jclass clazz, jlong transactionObj, jlong nativeObject,
-                                jint colorSpace) {
+static void nativeSetDataSpace(JNIEnv* env, jclass clazz, jlong transactionObj, jlong nativeObject,
+                               jint dataSpace) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
-    ui::Dataspace dataspace = fromNamedColorSpaceValueToDataspace(colorSpace);
+    ui::Dataspace dataspace = static_cast<ui::Dataspace>(dataSpace);
     transaction->setDataspace(ctrl, dataspace);
 }
 
@@ -1801,13 +1803,29 @@ static void nativeSetGlobalShadowSettings(JNIEnv* env, jclass clazz, jfloatArray
     client->setGlobalShadowSettings(ambientColor, spotColor, lightPosY, lightPosZ, lightRadius);
 }
 
-static jboolean nativeGetDisplayDecorationSupport(JNIEnv* env, jclass clazz,
-        jobject displayTokenObject) {
+static jobject nativeGetDisplayDecorationSupport(JNIEnv* env, jclass clazz,
+                                                 jobject displayTokenObject) {
     sp<IBinder> displayToken(ibinderForJavaObject(env, displayTokenObject));
     if (displayToken == nullptr) {
-        return JNI_FALSE;
+        return nullptr;
     }
-    return static_cast<jboolean>(SurfaceComposerClient::getDisplayDecorationSupport(displayToken));
+    const auto support = SurfaceComposerClient::getDisplayDecorationSupport(displayToken);
+    if (!support) {
+        return nullptr;
+    }
+
+    jobject jDisplayDecorationSupport =
+            env->NewObject(gDisplayDecorationSupportInfo.clazz, gDisplayDecorationSupportInfo.ctor);
+    if (jDisplayDecorationSupport == nullptr) {
+        jniThrowException(env, "java/lang/OutOfMemoryError", nullptr);
+        return nullptr;
+    }
+
+    env->SetIntField(jDisplayDecorationSupport, gDisplayDecorationSupportInfo.format,
+                     static_cast<jint>(support.value().format));
+    env->SetIntField(jDisplayDecorationSupport, gDisplayDecorationSupportInfo.alphaInterpretation,
+                     static_cast<jint>(support.value().alphaInterpretation));
+    return jDisplayDecorationSupport;
 }
 
 static jlong nativeGetHandle(JNIEnv* env, jclass clazz, jlong nativeObject) {
@@ -2119,11 +2137,11 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetDisplayedContentSample },
     {"nativeSetGeometry", "(JJLandroid/graphics/Rect;Landroid/graphics/Rect;J)V",
             (void*)nativeSetGeometry },
-    {"nativeSetBuffer", "(JJLandroid/hardware/HardwareBuffer;)V",
+    {"nativeSetBuffer", "(JJLandroid/hardware/HardwareBuffer;J)V",
             (void*)nativeSetBuffer },
     {"nativeSetBufferTransform", "(JJI)V", (void*) nativeSetBufferTransform},
-    {"nativeSetColorSpace", "(JJI)V",
-            (void*)nativeSetColorSpace },
+    {"nativeSetDataSpace", "(JJI)V",
+            (void*)nativeSetDataSpace },
     {"nativeSyncInputWindows", "(J)V",
             (void*)nativeSyncInputWindows },
     {"nativeGetDisplayBrightnessSupport", "(Landroid/os/IBinder;)Z",
@@ -2140,7 +2158,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeMirrorSurface },
     {"nativeSetGlobalShadowSettings", "([F[FFFF)V",
             (void*)nativeSetGlobalShadowSettings },
-    {"nativeGetDisplayDecorationSupport", "(Landroid/os/IBinder;)Z",
+    {"nativeGetDisplayDecorationSupport",
+            "(Landroid/os/IBinder;)Landroid/hardware/graphics/common/DisplayDecorationSupport;",
             (void*)nativeGetDisplayDecorationSupport},
     {"nativeGetHandle", "(J)J",
             (void*)nativeGetHandle },
@@ -2399,6 +2418,17 @@ int register_android_view_SurfaceControl(JNIEnv* env)
     gTransactionCommittedListenerClassInfo.onTransactionCommitted =
             GetMethodIDOrDie(env, transactionCommittedListenerClazz, "onTransactionCommitted",
                              "()V");
+
+    jclass displayDecorationSupportClazz =
+            FindClassOrDie(env, "android/hardware/graphics/common/DisplayDecorationSupport");
+    gDisplayDecorationSupportInfo.clazz = MakeGlobalRefOrDie(env, displayDecorationSupportClazz);
+    gDisplayDecorationSupportInfo.ctor =
+            GetMethodIDOrDie(env, displayDecorationSupportClazz, "<init>", "()V");
+    gDisplayDecorationSupportInfo.format =
+            GetFieldIDOrDie(env, displayDecorationSupportClazz, "format", "I");
+    gDisplayDecorationSupportInfo.alphaInterpretation =
+            GetFieldIDOrDie(env, displayDecorationSupportClazz, "alphaInterpretation", "I");
+
     return err;
 }
 

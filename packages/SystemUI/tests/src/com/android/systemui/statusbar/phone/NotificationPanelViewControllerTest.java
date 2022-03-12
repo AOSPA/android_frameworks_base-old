@@ -101,16 +101,14 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentService;
-import com.android.systemui.idle.IdleHostViewController;
-import com.android.systemui.idle.dagger.IdleViewComponent;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.media.KeyguardMediaController;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.media.MediaHierarchyManager;
+import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.qrcodescanner.controller.QRCodeScannerController;
-import com.android.systemui.qs.QSDetailDisplayer;
 import com.android.systemui.screenrecord.RecordingController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.KeyguardAffordanceView;
@@ -267,14 +265,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock
     private KeyguardUserSwitcherController mKeyguardUserSwitcherController;
     @Mock
-    private IdleViewComponent.Factory mIdleViewComponentFactory;
-    @Mock
-    private IdleViewComponent mIdleViewComponent;
-    @Mock
-    private IdleHostViewController mIdleHostViewController;
-    @Mock
-    private QSDetailDisplayer mQSDetailDisplayer;
-    @Mock
     private KeyguardStatusViewComponent mKeyguardStatusViewComponent;
     @Mock
     private KeyguardStatusBarViewComponent.Factory mKeyguardStatusBarViewComponentFactory;
@@ -369,6 +359,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
     @Mock
     private NotificationShadeWindowController mNotificationShadeWindowController;
+    @Mock
+    private SysUiState mSysUiState;
     private Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
@@ -478,10 +470,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 .thenReturn(mCommunalViewComponent);
         when(mCommunalViewComponent.getCommunalHostViewController())
                 .thenReturn(mCommunalHostViewController);
-        when(mIdleViewComponentFactory.build(any()))
-                .thenReturn(mIdleViewComponent);
-        when(mIdleViewComponent.getIdleHostViewController())
-                .thenReturn(mIdleHostViewController);
         when(mLayoutInflater.inflate(eq(R.layout.keyguard_status_view), any(), anyBoolean()))
                 .thenReturn(mKeyguardStatusView);
         when(mLayoutInflater.inflate(eq(R.layout.keyguard_user_switcher), any(), anyBoolean()))
@@ -526,9 +514,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mKeyguardUserSwitcherComponentFactory,
                 mKeyguardStatusBarViewComponentFactory,
                 mCommunalViewComponentFactory,
-                mIdleViewComponentFactory,
                 mLockscreenShadeTransitionController,
-                mQSDetailDisplayer,
                 mGroupManager,
                 mNotificationAreaController,
                 mAuthController,
@@ -558,6 +544,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mControlsComponent,
                 mInteractionJankMonitor,
                 mQsFrameTranslateController,
+                mSysUiState,
                 mKeyguardUnlockAnimationController,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(

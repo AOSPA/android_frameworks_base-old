@@ -40,6 +40,7 @@ import static com.android.systemui.statusbar.phone.BarTransitions.MODE_OPAQUE;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_SEMI_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.TransitionMode;
+import static com.android.wm.shell.transition.Transitions.ENABLE_SHELL_TRANSITIONS;
 
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -139,6 +140,7 @@ import com.android.systemui.R;
 import com.android.systemui.accessibility.floatingmenu.AccessibilityFloatingMenuController;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.DelegateLaunchAnimatorController;
+import com.android.systemui.animation.RemoteTransitionAdapter;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.biometrics.AuthRippleController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -201,6 +203,7 @@ import com.android.systemui.statusbar.PowerButtonReveal;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
+import com.android.systemui.statusbar.charging.WiredChargingRippleController;
 import com.android.systemui.statusbar.connectivity.NetworkController;
 import com.android.systemui.statusbar.core.StatusBarInitializer;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
@@ -267,6 +270,7 @@ public class StatusBar extends CoreStartable implements
     protected static final int MSG_DISMISS_KEYBOARD_SHORTCUTS_MENU = 1027;
 
     // Should match the values in PhoneWindowManager
+    public static final String SYSTEM_DIALOG_REASON_KEY = "reason";
     public static final String SYSTEM_DIALOG_REASON_RECENT_APPS = "recentapps";
     public static final String SYSTEM_DIALOG_REASON_DREAM = "dream";
     static public final String SYSTEM_DIALOG_REASON_SCREENSHOT = "screenshot";
@@ -341,6 +345,7 @@ public class StatusBar extends CoreStartable implements
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
     private final DreamOverlayStateController mDreamOverlayStateController;
     private StatusBarCommandQueueCallbacks mCommandQueueCallbacks;
+    private float mTransitionToFullShadeProgress = 0f;
 
     void onStatusBarWindowStateChanged(@WindowVisibleState int state) {
         updateBubblesVisibility();
@@ -784,7 +789,8 @@ public class StatusBar extends CoreStartable implements
             NotifPipelineFlags notifPipelineFlags,
             InteractionJankMonitor jankMonitor,
             DeviceStateManager deviceStateManager,
-            DreamOverlayStateController dreamOverlayStateController) {
+            DreamOverlayStateController dreamOverlayStateController,
+            WiredChargingRippleController wiredChargingRippleController) {
         super(context);
         mNotificationsController = notificationsController;
         mFragmentService = fragmentService;
@@ -910,6 +916,7 @@ public class StatusBar extends CoreStartable implements
 
         deviceStateManager.registerCallback(mMainExecutor,
                 new FoldStateListener(mContext, this::onFoldedStateChanged));
+        wiredChargingRippleController.registerCallbacks();
     }
 
     @Override
@@ -1108,6 +1115,12 @@ public class StatusBar extends CoreStartable implements
     }
 
     private void onFoldedStateChanged(boolean isFolded, boolean willGoToSleep) {
+        Trace.beginSection("StatusBar#onFoldedStateChanged");
+        onFoldedStateChangedInternal(isFolded, willGoToSleep);
+        Trace.endSection();
+    }
+
+    private void onFoldedStateChangedInternal(boolean isFolded, boolean willGoToSleep) {
         // Folded state changes are followed by a screen off event.
         // By default turning off the screen also closes the shade.
         // We want to make sure that the shade status is kept after
@@ -1185,10 +1198,11 @@ public class StatusBar extends CoreStartable implements
                 });
         initializer.initializeStatusBar(mStatusBarComponent);
 
-        mHeadsUpManager.setup(mVisualStabilityManager);
         mStatusBarTouchableRegionManager.setup(this, mNotificationShadeWindowView);
         mHeadsUpManager.addListener(mNotificationPanelViewController.getOnHeadsUpChangedListener());
-        mHeadsUpManager.addListener(mVisualStabilityManager);
+        if (!mNotifPipelineFlags.isNewPipelineEnabled()) {
+            mHeadsUpManager.addListener(mVisualStabilityManager);
+        }
         mNotificationPanelViewController.setHeadsUpManager(mHeadsUpManager);
 
         createNavigationBar(result);
@@ -2571,9 +2585,9 @@ public class StatusBar extends CoreStartable implements
             return controllerFromStatusBar.get();
         }
 
-        if (dismissShade && rootView == mNotificationShadeWindowView) {
-            // We are animating a view in the shade. We have to make sure that we collapse it when
-            // the animation ends or is cancelled.
+        if (dismissShade) {
+            // If the view is not in the status bar, then we are animating a view in the shade.
+            // We have to make sure that we collapse it when the animation ends or is cancelled.
             return new StatusBarLaunchAnimatorController(animationController, this,
                     true /* isLaunchForActivity */);
         }
@@ -2648,15 +2662,12 @@ public class StatusBar extends CoreStartable implements
             Trace.beginSection("StatusBar#onReceive");
             if (DEBUG) Log.v(TAG, "onReceive: " + intent);
             String action = intent.getAction();
+            String reason = intent.getStringExtra(SYSTEM_DIALOG_REASON_KEY);
             if (Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(action)) {
                 KeyboardShortcuts.dismiss();
                 mRemoteInputManager.closeRemoteInputs();
-                if (mBubblesOptional.isPresent() && mBubblesOptional.get().isStackExpanded()) {
-                    mBubblesOptional.get().collapseStack();
-                }
                 if (mLockscreenUserManager.isCurrentProfile(getSendingUserId())) {
                     int flags = CommandQueue.FLAG_EXCLUDE_NONE;
-                    String reason = intent.getStringExtra("reason");
                     if (reason != null) {
                         if (reason.equals(SYSTEM_DIALOG_REASON_RECENT_APPS)) {
                             flags |= CommandQueue.FLAG_EXCLUDE_RECENTS_PANEL;
@@ -2671,19 +2682,13 @@ public class StatusBar extends CoreStartable implements
                     }
                     mShadeController.animateCollapsePanels(flags);
                 }
-            }
-            else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+            } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 if (mNotificationShadeWindowController != null) {
                     mNotificationShadeWindowController.setNotTouchable(false);
                 }
-                if (mBubblesOptional.isPresent() && mBubblesOptional.get().isStackExpanded()) {
-                    // Post to main thread, since updating the UI.
-                    mMainExecutor.execute(() -> mBubblesOptional.get().collapseStack());
-                }
                 finishBarAnimations();
                 resetUserExpandedStates();
-            }
-            else if (DevicePolicyManager.ACTION_SHOW_DEVICE_MONITORING_DIALOG.equals(action)) {
+            } else if (DevicePolicyManager.ACTION_SHOW_DEVICE_MONITORING_DIALOG.equals(action)) {
                 mQSPanelController.showDeviceMonitoringDialog();
             }
             Trace.endSection();
@@ -3669,6 +3674,7 @@ public class StatusBar extends CoreStartable implements
 
         @Override
         public void onScreenTurnedOff() {
+            Trace.beginSection("StatusBar#onScreenTurnedOff");
             mDozeServiceHost.updateDozing();
             mFalsingCollector.onScreenOff();
             mScrimController.onScreenTurnedOff();
@@ -3677,6 +3683,7 @@ public class StatusBar extends CoreStartable implements
                 mCloseQsBeforeScreenOff = false;
             }
             updateIsKeyguard();
+            Trace.endSection();
         }
     };
 
@@ -3764,6 +3771,15 @@ public class StatusBar extends CoreStartable implements
         updateScrimController();
     }
 
+    /**
+     * Set the amount of progress we are currently in if we're transitioning to the full shade.
+     * 0.0f means we're not transitioning yet, while 1 means we're all the way in the full
+     * shade.
+     */
+    public void setTransitionToFullShadeProgress(float transitionToFullShadeProgress) {
+        mTransitionToFullShadeProgress = transitionToFullShadeProgress;
+    }
+
     @VisibleForTesting
     public void updateScrimController() {
         Trace.beginSection("StatusBar#updateScrimController");
@@ -3782,7 +3798,8 @@ public class StatusBar extends CoreStartable implements
         mScrimController.setLaunchingAffordanceWithPreview(launchingAffordanceWithPreview);
 
         if (mStatusBarKeyguardViewManager.isShowingAlternateAuth()) {
-            if (mState == StatusBarState.SHADE || mState == StatusBarState.SHADE_LOCKED) {
+            if (mState == StatusBarState.SHADE || mState == StatusBarState.SHADE_LOCKED
+                    || mTransitionToFullShadeProgress > 0f) {
                 mScrimController.transitionTo(ScrimState.AUTH_SCRIMMED_SHADE);
             } else {
                 mScrimController.transitionTo(ScrimState.AUTH_SCRIMMED);
@@ -4087,7 +4104,12 @@ public class StatusBar extends CoreStartable implements
             @Nullable RemoteAnimationAdapter animationAdapter) {
         ActivityOptions options;
         if (animationAdapter != null) {
-            options = ActivityOptions.makeRemoteAnimation(animationAdapter);
+            if (ENABLE_SHELL_TRANSITIONS) {
+                options = ActivityOptions.makeRemoteTransition(
+                        RemoteTransitionAdapter.adaptRemoteAnimation(animationAdapter));
+            } else {
+                options = ActivityOptions.makeRemoteAnimation(animationAdapter);
+            }
         } else {
             options = ActivityOptions.makeBasic();
         }

@@ -16,6 +16,7 @@
 
 package com.android.systemui.dreams;
 
+import android.service.dreams.DreamService;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -49,6 +50,7 @@ public class DreamOverlayStateController implements
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     public static final int STATE_DREAM_OVERLAY_ACTIVE = 1 << 0;
+    public static final int STATE_PREVIEW_MODE = 1 << 1;
 
     private static final int OP_CLEAR_STATE = 1;
     private static final int OP_SET_STATE = 2;
@@ -83,6 +85,8 @@ public class DreamOverlayStateController implements
 
     @Complication.ComplicationType
     private int mAvailableComplicationTypes = Complication.COMPLICATION_TYPE_NONE;
+
+    private boolean mShouldShowComplications = DreamService.DEFAULT_SHOW_COMPLICATIONS;
 
     private final Collection<Complication> mComplications = new HashSet();
 
@@ -131,7 +135,12 @@ public class DreamOverlayStateController implements
                 .filter(complication -> {
                     @Complication.ComplicationType
                     final int requiredTypes = complication.getRequiredTypeAvailability();
-                    return (requiredTypes & getAvailableComplicationTypes()) == requiredTypes;
+                    // If it should show complications, show ones whose required types are
+                    // available. Otherwise, only show ones that don't require types.
+                    if (mShouldShowComplications) {
+                        return (requiredTypes & getAvailableComplicationTypes()) == requiredTypes;
+                    }
+                    return requiredTypes == Complication.COMPLICATION_TYPE_NONE;
                 })
                 .collect(Collectors.toCollection(HashSet::new))
                 : mComplications);
@@ -221,7 +230,38 @@ public class DreamOverlayStateController implements
     public void setAvailableComplicationTypes(@Complication.ComplicationType int types) {
         mExecutor.execute(() -> {
             mAvailableComplicationTypes = types;
-            mCallbacks.forEach(callback -> callback.onAvailableComplicationTypesChanged());
+            mCallbacks.forEach(Callback::onAvailableComplicationTypesChanged);
         });
+    }
+
+    /**
+     * Returns whether the dream overlay should show complications.
+     */
+    public boolean getShouldShowComplications() {
+        return mShouldShowComplications;
+    }
+
+    /**
+     * Sets whether the dream overlay should show complications.
+     */
+    public void setShouldShowComplications(boolean shouldShowComplications) {
+        mExecutor.execute(() -> {
+            mShouldShowComplications = shouldShowComplications;
+            mCallbacks.forEach(Callback::onAvailableComplicationTypesChanged);
+        });
+    }
+
+    /**
+     * Sets whether the dream is running in preview mode.
+     */
+    public void setPreviewMode(boolean isPreviewMode) {
+        modifyState(isPreviewMode ? OP_SET_STATE : OP_CLEAR_STATE, STATE_PREVIEW_MODE);
+    }
+
+    /**
+     * Returns whether the dream is running in preview mode.
+     */
+    public boolean isPreviewMode() {
+        return containsState(STATE_PREVIEW_MODE);
     }
 }

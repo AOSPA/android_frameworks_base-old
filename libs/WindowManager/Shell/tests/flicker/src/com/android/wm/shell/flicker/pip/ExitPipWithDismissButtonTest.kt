@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
@@ -67,33 +68,22 @@ class ExitPipWithDismissButtonTest(testSpec: FlickerTestParameter) : ExitPipTran
             }
         }
 
-    @FlakyTest
-    @Test
-    fun runPresubmitAssertion() {
-        flickerRule.checkPresubmitAssertions()
-    }
-
-    @FlakyTest
-    @Test
-    fun runPostsubmitAssertion() {
-        flickerRule.checkPostsubmitAssertions()
-    }
-
-    @FlakyTest
-    @Test
-    fun runFlakyAssertion() {
-        flickerRule.checkFlakyAssertions()
-    }
-
     /** {@inheritDoc}  */
     @FlakyTest(bugId = 206753786)
     @Test
     override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
-    /** {@inheritDoc}  */
-    @FlakyTest(bugId = 215869110)
+    /**
+     * Checks that the focus changes between the pip menu window and the launcher when clicking the
+     * dismiss button on pip menu to close the pip window.
+     */
+    @Presubmit
     @Test
-    override fun focusDoesNotChange() = super.focusDoesNotChange()
+    fun focusDoesNotChange() {
+        testSpec.assertEventLog {
+            this.focusChanges("PipMenuView", "NexusLauncherActivity")
+        }
+    }
 
     companion object {
         /**
@@ -107,7 +97,7 @@ class ExitPipWithDismissButtonTest(testSpec: FlickerTestParameter) : ExitPipTran
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                     .getConfigNonRotationTests(supportedRotations = listOf(Surface.ROTATION_0),
-                            repetitions = 5)
+                            repetitions = 3)
         }
     }
 }

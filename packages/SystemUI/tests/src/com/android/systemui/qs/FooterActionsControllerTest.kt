@@ -12,7 +12,6 @@ import androidx.test.filters.SmallTest
 import com.android.internal.logging.MetricsLogger
 import com.android.internal.logging.UiEventLogger
 import com.android.internal.logging.testing.FakeMetricsLogger
-import com.android.systemui.Dependency
 import com.android.systemui.R
 import com.android.systemui.classifier.FalsingManagerFake
 import com.android.systemui.flags.FeatureFlags
@@ -23,9 +22,7 @@ import com.android.systemui.settings.UserTracker
 import com.android.systemui.statusbar.phone.MultiUserSwitchController
 import com.android.systemui.statusbar.policy.DeviceProvisionedController
 import com.android.systemui.statusbar.policy.UserInfoController
-import com.android.systemui.tuner.TunerService
 import com.android.systemui.util.settings.FakeSettings
-import com.android.systemui.utils.leaks.FakeTunerService
 import com.android.systemui.utils.leaks.LeakCheckedTest
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -64,6 +61,10 @@ class FooterActionsControllerTest : LeakCheckedTest() {
     private lateinit var uiEventLogger: UiEventLogger
     @Mock
     private lateinit var featureFlags: FeatureFlags
+    @Mock
+    private lateinit var securityFooterController: QSSecurityFooter
+    @Mock
+    private lateinit var fgsManagerController: QSFgsManagerFooter
 
     private lateinit var controller: FooterActionsController
 
@@ -78,8 +79,6 @@ class FooterActionsControllerTest : LeakCheckedTest() {
         MockitoAnnotations.initMocks(this)
         testableLooper = TestableLooper.get(this)
         fakeSettings = FakeSettings()
-        injectLeakCheckedDependencies(*LeakCheckedTest.ALL_SUPPORTED_CLASSES)
-        val fakeTunerService = Dependency.get(TunerService::class.java) as FakeTunerService
 
         whenever(multiUserSwitchControllerFactory.create(any()))
                 .thenReturn(multiUserSwitchController)
@@ -90,9 +89,9 @@ class FooterActionsControllerTest : LeakCheckedTest() {
 
         controller = FooterActionsController(view, multiUserSwitchControllerFactory,
                 activityStarter, userManager, userTracker, userInfoController,
-                deviceProvisionedController, falsingManager, metricsLogger, fakeTunerService,
-                globalActionsDialog, uiEventLogger, showPMLiteButton = true, fakeSettings,
-                Handler(testableLooper.looper), featureFlags)
+                deviceProvisionedController, securityFooterController, fgsManagerController,
+                falsingManager, metricsLogger, globalActionsDialog, uiEventLogger,
+                showPMLiteButton = true, fakeSettings, Handler(testableLooper.looper), featureFlags)
         controller.init()
         ViewUtils.attachView(view)
         // View looper is the testable looper associated with the test
@@ -101,7 +100,9 @@ class FooterActionsControllerTest : LeakCheckedTest() {
 
     @After
     fun tearDown() {
-        ViewUtils.detachView(view)
+        if (view.isAttachedToWindow) {
+            ViewUtils.detachView(view)
+        }
     }
 
     @Test
@@ -140,8 +141,7 @@ class FooterActionsControllerTest : LeakCheckedTest() {
 
     @Test
     fun testMultiUserSwitchUpdatedWhenSettingChanged() {
-        // When expanded, listening is true
-        controller.setListening(true)
+        // Always listening to setting while View is attached
         testableLooper.processAllMessages()
 
         val multiUserSwitch = view.requireViewById<View>(R.id.multi_user_switch)
@@ -156,5 +156,25 @@ class FooterActionsControllerTest : LeakCheckedTest() {
         testableLooper.processAllMessages()
 
         assertThat(multiUserSwitch.visibility).isEqualTo(View.VISIBLE)
+    }
+
+    @Test
+    fun testMultiUserSettingNotListenedAfterDetach() {
+        testableLooper.processAllMessages()
+
+        val multiUserSwitch = view.requireViewById<View>(R.id.multi_user_switch)
+        assertThat(multiUserSwitch.visibility).isNotEqualTo(View.VISIBLE)
+
+        ViewUtils.detachView(view)
+
+        // The setting is only used as an indicator for whether the view should refresh. The actual
+        // value of the setting is ignored; isMultiUserEnabled is the source of truth
+        whenever(multiUserSwitchController.isMultiUserEnabled).thenReturn(true)
+
+        // Changing the value of USER_SWITCHER_ENABLED should cause the view to update
+        fakeSettings.putIntForUser(Settings.Global.USER_SWITCHER_ENABLED, 1, userTracker.userId)
+        testableLooper.processAllMessages()
+
+        assertThat(multiUserSwitch.visibility).isNotEqualTo(View.VISIBLE)
     }
 }

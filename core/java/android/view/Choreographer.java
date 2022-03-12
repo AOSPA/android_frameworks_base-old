@@ -525,9 +525,9 @@ public final class Choreographer {
      *
      * @param callback The extended frame callback to run during the next frame.
      *
-     * @see #removeExtendedFrameCallback
+     * @see #removeVsyncCallback
      */
-    public void postExtendedFrameCallback(@NonNull ExtendedFrameCallback callback) {
+    public void postVsyncCallback(@NonNull VsyncCallback callback) {
         if (callback == null) {
             throw new IllegalArgumentException("callback must not be null");
         }
@@ -629,9 +629,9 @@ public final class Choreographer {
      *
      * @param callback The extended frame callback to remove.
      *
-     * @see #postExtendedFrameCallback
+     * @see #postVsyncCallback
      */
-    public void removeExtendedFrameCallback(@Nullable ExtendedFrameCallback callback) {
+    public void removeVsyncCallback(@Nullable VsyncCallback callback) {
         if (callback == null) {
             throw new IllegalArgumentException("callback must not be null");
         }
@@ -1103,7 +1103,7 @@ public final class Choreographer {
          * The time in {@link System#nanoTime()} timebase which this frame is expected to be
          * presented.
          */
-        public long getExpectedPresentTimeNanos() {
+        public long getExpectedPresentationTimeNanos() {
             return mExpectedPresentTimeNanos;
         }
 
@@ -1116,7 +1116,7 @@ public final class Choreographer {
     }
 
     /**
-     * The payload for {@link ExtendedFrameCallback} which includes frame information such as when
+     * The payload for {@link VsyncCallback} which includes frame information such as when
      * the frame started being rendered, and multiple possible frame timelines and their
      * information including deadline and expected present time.
      */
@@ -1183,7 +1183,7 @@ public final class Choreographer {
      *
      * @see FrameCallback
      */
-    public interface ExtendedFrameCallback {
+    public interface VsyncCallback {
         /**
          * Called when a new display frame is being rendered.
          *
@@ -1297,7 +1297,7 @@ public final class Choreographer {
 
         void run(FrameData frameData) {
             if (token == EXTENDED_FRAME_CALLBACK_TOKEN) {
-                ((ExtendedFrameCallback) action).onVsync(frameData);
+                ((VsyncCallback) action).onVsync(frameData);
             } else {
                 run(frameData.getFrameTimeNanos());
             }

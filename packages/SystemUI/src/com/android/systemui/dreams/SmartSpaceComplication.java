@@ -59,13 +59,26 @@ public class SmartSpaceComplication implements Complication {
 
         @Override
         public void start() {
-            if (mSmartSpaceController.isEnabled()) {
+            addOrRemoveOverlay();
+            mDreamOverlayStateController.addCallback(new DreamOverlayStateController.Callback() {
+                @Override
+                public void onStateChanged() {
+                    addOrRemoveOverlay();
+                }
+            });
+        }
+
+        private void addOrRemoveOverlay() {
+            if (mDreamOverlayStateController.isPreviewMode()) {
+                mDreamOverlayStateController.removeComplication(mComplication);
+            } else if (mSmartSpaceController.isEnabled()) {
                 mDreamOverlayStateController.addComplication(mComplication);
             }
         }
     }
 
     private static class SmartSpaceComplicationViewHolder implements ViewHolder {
+        private static final int SMARTSPACE_COMPLICATION_WEIGHT = 10;
         private final LockscreenSmartspaceController mSmartSpaceController;
         private final Context mContext;
 
@@ -92,7 +105,7 @@ public class SmartSpaceComplication implements Complication {
             return new ComplicationLayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT,
                     ComplicationLayoutParams.POSITION_TOP | ComplicationLayoutParams.POSITION_START,
                     ComplicationLayoutParams.DIRECTION_DOWN,
-                    0, true);
+                    SMARTSPACE_COMPLICATION_WEIGHT, true);
         }
     }
 

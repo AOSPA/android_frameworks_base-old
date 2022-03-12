@@ -37,6 +37,7 @@ import android.companion.AssociationRequest;
 import android.companion.CompanionDeviceManager;
 import android.companion.IAssociationRequestCallback;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.MacAddress;
 import android.os.Bundle;
 import android.os.Handler;
@@ -46,10 +47,13 @@ import android.text.Spanned;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import java.util.List;
 
 /**
  *  A CompanionDevice activity response for showing the available
@@ -67,6 +71,9 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     private static final String EXTRA_APPLICATION_CALLBACK = "application_callback";
     private static final String EXTRA_ASSOCIATION_REQUEST = "association_request";
     private static final String EXTRA_RESULT_RECEIVER = "result_receiver";
+
+    // Activity result: Internal Error.
+    private static final int RESULT_INTERNAL_ERROR = 2;
 
     // AssociationRequestsProcessor -> UI
     private static final int RESULT_CODE_ASSOCIATION_CREATED = 0;
@@ -92,9 +99,9 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     // regular.
     private Button mButtonAllow;
 
-    // The list is only shown for multiple-device regular association request, after at least one
-    // matching device is found.
-    private @Nullable ListView mListView;
+    // The recycler view is only shown for multiple-device regular association request, after
+    // at least one matching device is found.
+    private @Nullable RecyclerView mRecyclerView;
     private @Nullable DeviceListAdapter mAdapter;
 
     // The flag used to prevent double taps, that may lead to sending several requests for creating
@@ -188,26 +195,36 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     private void initUI() {
         if (DEBUG) Log.d(TAG, "initUI(), request=" + mRequest);
 
+        final String packageName = mRequest.getPackageName();
+        final int userId = mRequest.getUserId();
+        final CharSequence appLabel;
+
+        try {
+            appLabel = getApplicationLabel(this, packageName, userId);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.w(TAG, "Package u" + userId + "/" + packageName + " not found.");
+
+            CompanionDeviceDiscoveryService.stop(this);
+            setResultAndFinish(null, RESULT_INTERNAL_ERROR);
+            return;
+        }
+
         setContentView(R.layout.activity_confirmation);
 
         mTitle = findViewById(R.id.title);
         mSummary = findViewById(R.id.summary);
 
-        mListView = findViewById(R.id.device_list);
-        mListView.setOnItemClickListener((av, iv, position, id) -> onListItemClick(position));
+        mRecyclerView = findViewById(R.id.device_list);
+        mAdapter = new DeviceListAdapter(this, this::onListItemClick);
 
         mButtonAllow = findViewById(R.id.btn_positive);
         mButtonAllow.setOnClickListener(this::onPositiveButtonClick);
         findViewById(R.id.btn_negative).setOnClickListener(this::onNegativeButtonClick);
 
-        final CharSequence appLabel = getApplicationLabel(this, mRequest.getPackageName());
         if (mRequest.isSelfManaged()) {
             initUiForSelfManagedAssociation(appLabel);
         } else if (mRequest.isSingleDevice()) {
-            // TODO(b/211722613)
-            // Treat singleDevice as the multipleDevices for now
-            // initUiForSingleDevice(appLabel);
-            initUiForMultipleDevices(appLabel);
+            initUiForSingleDevice(appLabel);
         } else {
             initUiForMultipleDevices(appLabel);
         }
@@ -221,12 +238,6 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     }
 
     private void onUserSelectedDevice(@NonNull DeviceFilterPair<?> selectedDevice) {
-        if (mSelectedDevice != null) {
-            if (DEBUG) Log.w(TAG, "Already selected.");
-            return;
-        }
-        mSelectedDevice = requireNonNull(selectedDevice);
-
         final MacAddress macAddress = selectedDevice.getMacAddress();
         onAssociationApproved(macAddress);
     }
@@ -262,7 +273,7 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         if (DEBUG) Log.i(TAG, "onAssociationCreated(), association=" + association);
 
         // Don't need to notify the app, CdmService has already done that. Just finish.
-        setResultAndFinish(association);
+        setResultAndFinish(association, RESULT_OK);
     }
 
     private void cancel(boolean discoveryTimeout) {
@@ -289,10 +300,10 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         }
 
         // ... then set result and finish ("sending" onActivityResult()).
-        setResultAndFinish(null);
+        setResultAndFinish(null, RESULT_CANCELED);
     }
 
-    private void setResultAndFinish(@Nullable AssociationInfo association) {
+    private void setResultAndFinish(@Nullable AssociationInfo association, int resultCode) {
         if (DEBUG) Log.i(TAG, "setResultAndFinish(), association=" + association);
 
         final Intent data = new Intent();
@@ -302,7 +313,7 @@ public class CompanionDeviceActivity extends AppCompatActivity {
                 data.putExtra(CompanionDeviceManager.EXTRA_DEVICE, mSelectedDevice.getDevice());
             }
         }
-        setResult(association != null ? RESULT_OK : RESULT_CANCELED, data);
+        setResult(resultCode, data);
 
         finish();
     }
@@ -340,19 +351,32 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         mTitle.setText(title);
         mSummary.setText(summary);
 
-        mListView.setVisibility(View.GONE);
+        mRecyclerView.setVisibility(View.GONE);
     }
 
     private void initUiForSingleDevice(CharSequence appLabel) {
         if (DEBUG) Log.i(TAG, "initUiFor_SingleDevice()");
 
-        // TODO: use real name
-        final String deviceName = "<device>";
         final String deviceProfile = mRequest.getDeviceProfile();
 
+        CompanionDeviceDiscoveryService.getScanResult().observe(this,
+                deviceFilterPairs -> updateSingleDeviceUi(
+                        deviceFilterPairs, deviceProfile, appLabel));
+
+        mRecyclerView.setVisibility(View.GONE);
+    }
+
+    private void updateSingleDeviceUi(List<DeviceFilterPair<?>> deviceFilterPairs,
+            String deviceProfile, CharSequence appLabel) {
+        // Ignore "empty" scan reports.
+        if (deviceFilterPairs.isEmpty()) return;
+        mSelectedDevice = requireNonNull(deviceFilterPairs.get(0));
+
+        final String deviceName = mSelectedDevice.getDisplayName();
         final Spanned title = getHtmlFromResources(
                 this, R.string.confirmation_title, appLabel, deviceName);
         final Spanned summary;
+
         if (deviceProfile == null) {
             summary = getHtmlFromResources(this, R.string.summary_generic);
         } else if (deviceProfile.equals(DEVICE_PROFILE_WATCH)) {
@@ -363,8 +387,6 @@ public class CompanionDeviceActivity extends AppCompatActivity {
 
         mTitle.setText(title);
         mSummary.setText(summary);
-
-        mListView.setVisibility(View.GONE);
     }
 
     private void initUiForMultipleDevices(CharSequence appLabel) {
@@ -389,10 +411,12 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         mTitle.setText(title);
         mSummary.setText(summary);
 
-        mAdapter = new DeviceListAdapter(this);
+        mAdapter = new DeviceListAdapter(this, this::onListItemClick);
 
         // TODO: hide the list and show a spinner until a first device matching device is found.
-        mListView.setAdapter(mAdapter);
+        mRecyclerView.setAdapter(mAdapter);
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+
         CompanionDeviceDiscoveryService.getScanResult().observe(
                 /* lifecycleOwner */ this,
                 /* observer */ mAdapter);
@@ -405,6 +429,16 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         if (DEBUG) Log.d(TAG, "onListItemClick() " + position);
 
         final DeviceFilterPair<?> selectedDevice = mAdapter.getItem(position);
+
+        if (mSelectedDevice != null) {
+            if (DEBUG) Log.w(TAG, "Already selected.");
+            return;
+        }
+        // Notify the adapter to highlight the selected item.
+        mAdapter.setSelectedPosition(position);
+
+        mSelectedDevice = requireNonNull(selectedDevice);
+
         onUserSelectedDevice(selectedDevice);
     }
 
@@ -417,9 +451,7 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         if (mRequest.isSelfManaged()) {
             onAssociationApproved(null);
         } else {
-            // TODO(b/211722613): call onUserSelectedDevice().
-            throw new UnsupportedOperationException(
-                    "isSingleDevice() requests are not supported yet.");
+            onUserSelectedDevice(mSelectedDevice);
         }
     }
 

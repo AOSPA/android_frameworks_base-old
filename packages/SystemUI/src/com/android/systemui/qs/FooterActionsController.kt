@@ -22,14 +22,14 @@ import android.os.UserManager
 import android.provider.Settings
 import android.provider.Settings.Global.USER_SWITCHER_ENABLED
 import android.view.View
-import android.widget.Toast
+import android.view.ViewGroup
+import android.widget.LinearLayout
 import androidx.annotation.VisibleForTesting
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.MetricsLogger
 import com.android.internal.logging.UiEventLogger
 import com.android.internal.logging.nano.MetricsProto
 import com.android.keyguard.KeyguardUpdateMonitor
-import com.android.settingslib.Utils
 import com.android.systemui.R
 import com.android.systemui.animation.ActivityLaunchAnimator
 import com.android.systemui.flags.FeatureFlags
@@ -45,7 +45,7 @@ import com.android.systemui.statusbar.phone.SettingsButton
 import com.android.systemui.statusbar.policy.DeviceProvisionedController
 import com.android.systemui.statusbar.policy.UserInfoController
 import com.android.systemui.statusbar.policy.UserInfoController.OnUserInfoChangedListener
-import com.android.systemui.tuner.TunerService
+import com.android.systemui.util.DualHeightHorizontalLinearLayout
 import com.android.systemui.util.ViewController
 import com.android.systemui.util.settings.GlobalSettings
 import javax.inject.Inject
@@ -57,7 +57,7 @@ import javax.inject.Named
  * determined by [buttonsVisibleState]
  */
 @QSScope
-class FooterActionsController @Inject constructor(
+internal class FooterActionsController @Inject constructor(
     view: FooterActionsView,
     multiUserSwitchControllerFactory: MultiUserSwitchController.Factory,
     private val activityStarter: ActivityStarter,
@@ -65,9 +65,10 @@ class FooterActionsController @Inject constructor(
     private val userTracker: UserTracker,
     private val userInfoController: UserInfoController,
     private val deviceProvisionedController: DeviceProvisionedController,
+    private val securityFooterController: QSSecurityFooter,
+    private val fgsManagerFooterController: QSFgsManagerFooter,
     private val falsingManager: FalsingManager,
     private val metricsLogger: MetricsLogger,
-    private val tunerService: TunerService,
     private val globalActionsDialog: GlobalActionsDialogLite,
     private val uiEventLogger: UiEventLogger,
     @Named(PM_LITE_ENABLED) private val showPMLiteButton: Boolean,
@@ -90,15 +91,15 @@ class FooterActionsController @Inject constructor(
             updateVisibility()
         }
 
-    init {
-        view.elevation = resources.displayMetrics.density * 4f
-        view.setBackgroundColor(Utils.getColorAttrDefaultColor(context, R.attr.underSurfaceColor))
-    }
-
     private val settingsButton: SettingsButton = view.findViewById(R.id.settings_button)
     private val settingsButtonContainer: View? = view.findViewById(R.id.settings_button_container)
+    private val securityFootersContainer: ViewGroup? =
+        view.findViewById(R.id.security_footers_container)
     private val powerMenuLite: View = view.findViewById(R.id.pm_lite)
     private val multiUserSwitchController = multiUserSwitchControllerFactory.create(view)
+    private val securityFootersSeparator = View(context).apply {
+        visibility = View.GONE
+    }
 
     private val onUserInfoChangedListener = OnUserInfoChangedListener { _, picture, _ ->
         val isGuestUser: Boolean = userManager.isGuestUser(KeyguardUpdateMonitor.getCurrentUser())
@@ -127,22 +128,7 @@ class FooterActionsController @Inject constructor(
                 return@OnClickListener
             }
             metricsLogger.action(MetricsProto.MetricsEvent.ACTION_QS_EXPANDED_SETTINGS_LAUNCH)
-            if (settingsButton.isTunerClick) {
-                activityStarter.postQSRunnableDismissingKeyguard {
-                    if (isTunerEnabled()) {
-                        tunerService.showResetRequest {
-                            // Relaunch settings so that the tuner disappears.
-                            startSettingsActivity()
-                        }
-                    } else {
-                        Toast.makeText(context, R.string.tuner_toast, Toast.LENGTH_LONG).show()
-                        tunerService.isTunerEnabled = true
-                    }
-                    startSettingsActivity()
-                }
-            } else {
-                startSettingsActivity()
-            }
+            startSettingsActivity()
         } else if (v === powerMenuLite) {
             uiEventLogger.log(GlobalActionsDialogLite.GlobalActionsEvent.GA_OPEN_QS)
             globalActionsDialog.showOrHideDialog(false, true, v)
@@ -151,6 +137,7 @@ class FooterActionsController @Inject constructor(
 
     override fun onInit() {
         multiUserSwitchController.init()
+        fgsManagerFooterController.init()
     }
 
     private fun updateVisibility() {
@@ -178,15 +165,58 @@ class FooterActionsController @Inject constructor(
             powerMenuLite.visibility = View.GONE
         }
         settingsButton.setOnClickListener(onClickListener)
+        multiUserSetting.isListening = true
+        if (featureFlags.isEnabled(Flags.NEW_FOOTER)) {
+            val securityFooter = securityFooterController.view as DualHeightHorizontalLinearLayout
+            securityFootersContainer?.addView(securityFooter)
+            val separatorWidth = resources.getDimensionPixelSize(R.dimen.new_qs_footer_action_inset)
+            securityFootersContainer?.addView(securityFootersSeparator, separatorWidth, 1)
+            reformatForNewFooter(securityFooter)
+            val fgsFooter = fgsManagerFooterController.view
+            securityFootersContainer?.addView(fgsFooter)
+            (fgsFooter.layoutParams as LinearLayout.LayoutParams).apply {
+                width = 0
+                weight = 1f
+            }
+
+            val visibilityListener =
+                VisibilityChangedDispatcher.OnVisibilityChangedListener { visibility ->
+                    if (visibility == View.GONE) {
+                        securityFootersSeparator.visibility = View.GONE
+                    } else if (securityFooter.visibility == View.VISIBLE &&
+                        fgsFooter.visibility == View.VISIBLE) {
+                        securityFootersSeparator.visibility = View.VISIBLE
+                    } else {
+                        securityFootersSeparator.visibility = View.GONE
+                    }
+                    fgsManagerFooterController
+                        .setCollapsed(securityFooter.visibility == View.VISIBLE)
+                }
+            securityFooterController.setOnVisibilityChangedListener(visibilityListener)
+            fgsManagerFooterController.setOnVisibilityChangedListener(visibilityListener)
+        }
         updateView()
     }
 
+    private fun reformatForNewFooter(view: DualHeightHorizontalLinearLayout) {
+        // This is only necessary while things are flagged as the view could be attached in two
+        // different locations.
+        (view.layoutParams as LinearLayout.LayoutParams).apply {
+            bottomMargin = 0
+            width = 0
+            weight = 1f
+            marginEnd = resources.getDimensionPixelSize(R.dimen.new_qs_footer_action_inset)
+        }
+        view.alwaysSingleLine = true
+    }
+
     private fun updateView() {
-        mView.updateEverything(isTunerEnabled(), multiUserSwitchController.isMultiUserEnabled)
+        mView.updateEverything(multiUserSwitchController.isMultiUserEnabled)
     }
 
     override fun onViewDetached() {
         setListening(false)
+        multiUserSetting.isListening = false
     }
 
     fun setListening(listening: Boolean) {
@@ -194,17 +224,20 @@ class FooterActionsController @Inject constructor(
             return
         }
         this.listening = listening
-        multiUserSetting.isListening = listening
         if (this.listening) {
             userInfoController.addCallback(onUserInfoChangedListener)
             updateView()
         } else {
             userInfoController.removeCallback(onUserInfoChangedListener)
         }
+        if (featureFlags.isEnabled(Flags.NEW_FOOTER)) {
+            fgsManagerFooterController.setListening(listening)
+            securityFooterController.setListening(listening)
+        }
     }
 
     fun disable(state2: Int) {
-        mView.disable(state2, isTunerEnabled(), multiUserSwitchController.isMultiUserEnabled)
+        mView.disable(state2, multiUserSwitchController.isMultiUserEnabled)
     }
 
     fun setExpansion(headerExpansionFraction: Float) {
@@ -225,6 +258,4 @@ class FooterActionsController @Inject constructor(
     fun setKeyguardShowing(showing: Boolean) {
         setExpansion(lastExpansion)
     }
-
-    private fun isTunerEnabled() = tunerService.isTunerEnabled
 }

@@ -16,6 +16,12 @@
 
 package android.permission;
 
+import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_ROLE;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_SYSTEM_FIXED;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
 import static android.os.Build.VERSION_CODES.S;
 
 import android.Manifest;
@@ -107,6 +113,16 @@ public final class PermissionManager {
     public static final int PERMISSION_HARD_DENIED = 2;
 
     /**
+     * The set of flags that indicate that a permission state has been explicitly set
+     *
+     * @hide
+     */
+    public static final int EXPLICIT_SET_FLAGS = FLAG_PERMISSION_USER_SET
+            | FLAG_PERMISSION_USER_FIXED | FLAG_PERMISSION_POLICY_FIXED
+            | FLAG_PERMISSION_SYSTEM_FIXED | FLAG_PERMISSION_GRANTED_BY_DEFAULT
+            | FLAG_PERMISSION_GRANTED_BY_ROLE;
+
+    /**
      * Activity action: Launch UI to review permission decisions.
      * <p>
      * <strong>Important:</strong>You must protect the activity that handles this action with the
@@ -176,6 +192,17 @@ public final class PermissionManager {
      * @hide
      */
     public static final boolean DEBUG_TRACE_PERMISSION_UPDATES = false;
+
+    /**
+     * Intent extra: List of PermissionGroupUsages
+     * <p>
+     * Type: {@code List<PermissionGroupUsage>}
+     * </p>
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_PERMISSION_USAGES =
+            "android.permission.extra.PERMISSION_USAGES";
 
     private final @NonNull Context mContext;
 
@@ -1092,7 +1119,7 @@ public final class PermissionManager {
     @TestApi
     @NonNull
     @RequiresPermission(Manifest.permission.GET_APP_OPS_STATS)
-    public List<PermGroupUsage> getIndicatorAppOpUsageData() {
+    public List<PermissionGroupUsage> getIndicatorAppOpUsageData() {
         return getIndicatorAppOpUsageData(new AudioManager().isMicrophoneMute());
     }
 
@@ -1106,7 +1133,7 @@ public final class PermissionManager {
     @TestApi
     @NonNull
     @RequiresPermission(Manifest.permission.GET_APP_OPS_STATS)
-    public List<PermGroupUsage> getIndicatorAppOpUsageData(boolean micMuted) {
+    public List<PermissionGroupUsage> getIndicatorAppOpUsageData(boolean micMuted) {
         // Lazily initialize the usage helper
         initializeUsageHelper();
         return mUsageHelper.getOpUsageData(micMuted);
@@ -1447,6 +1474,7 @@ public final class PermissionManager {
      * @hide
      */
     @TestApi
+    @RequiresPermission(Manifest.permission.REVOKE_POST_NOTIFICATIONS_WITHOUT_KILL)
     public void revokePostNotificationPermissionWithoutKillForTest(@NonNull String packageName,
             int userId) {
         try {

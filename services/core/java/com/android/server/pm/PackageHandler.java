@@ -313,6 +313,8 @@ final class PackageHandler extends Handler {
             }
             case INSTANT_APP_RESOLUTION_PHASE_TWO: {
                 InstantAppResolver.doInstantAppResolutionPhaseTwo(mPm.mContext,
+                        mPm.snapshotComputer(),
+                        mPm.mUserManager,
                         mPm.mInstantAppResolverConnection,
                         (InstantAppRequest) msg.obj,
                         mPm.mInstantAppInstallerActivity,
@@ -380,6 +382,7 @@ final class PackageHandler extends Handler {
             case PRUNE_UNUSED_STATIC_SHARED_LIBRARIES: {
                 try {
                     mPm.mInjector.getSharedLibrariesImpl().pruneUnusedStaticSharedLibraries(
+                            mPm.snapshotComputer(),
                             Long.MAX_VALUE,
                             Settings.Global.getLong(mPm.mContext.getContentResolver(),
                                     Settings.Global.UNUSED_STATIC_SHARED_LIB_MIN_CACHE_PERIOD,

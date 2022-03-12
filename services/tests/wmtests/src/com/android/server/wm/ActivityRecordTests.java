@@ -109,6 +109,7 @@ import static org.mockito.Mockito.never;
 
 import android.app.ActivityOptions;
 import android.app.ICompatCameraControlCallback;
+import android.app.PictureInPictureParams;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.DestroyActivityItem;
@@ -121,6 +122,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PersistableBundle;
@@ -2199,6 +2201,20 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(activity.supportsPictureInPicture());
     }
 
+    @Test
+    public void testLaunchIntoPip() {
+        final PictureInPictureParams params = new PictureInPictureParams.Builder()
+                .build();
+        final ActivityOptions opts = ActivityOptions.makeLaunchIntoPip(params);
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setLaunchIntoPipActivityOptions(opts)
+                .build();
+
+        // Verify the pictureInPictureArgs is set on the new Activity
+        assertNotNull(activity.pictureInPictureArgs);
+        assertTrue(activity.pictureInPictureArgs.isLaunchIntoPip());
+    }
+
     private void verifyProcessInfoUpdate(ActivityRecord activity, State state,
             boolean shouldUpdate, boolean activityChange) {
         reset(activity.app);
@@ -3043,7 +3059,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         mDisplayContent.setImeLayeringTarget(app);
         mDisplayContent.updateImeInputAndControlTarget(app);
 
-        InsetsState state = mDisplayContent.getInsetsPolicy().getInsetsForWindow(app);
+        InsetsState state = app.getInsetsState();
         assertFalse(state.getSource(ITYPE_IME).isVisible());
         assertTrue(state.getSource(ITYPE_IME).getFrame().isEmpty());
 
@@ -3063,7 +3079,7 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Verify when IME is visible and the app can receive the right IME insets from policy.
         makeWindowVisibleAndDrawn(app, mImeWindow);
-        state = mDisplayContent.getInsetsPolicy().getInsetsForWindow(app);
+        state = app.getInsetsState();
         assertTrue(state.getSource(ITYPE_IME).isVisible());
         assertEquals(state.getSource(ITYPE_IME).getFrame(), imeSource.getFrame());
     }
@@ -3075,7 +3091,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final WindowState app1 = createWindow(null, TYPE_APPLICATION, "app1");
         final WindowState app2 = createWindow(null, TYPE_APPLICATION, "app2");
 
-        mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_IME).setWindow(
+        mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_IME).setWindowContainer(
                 mImeWindow, null, null);
         mImeWindow.getControllableInsetProvider().setServerVisible(true);
 
@@ -3109,7 +3125,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(app2.mActivityRecord.mImeInsetsFrozenUntilStartInput);
         verify(app2.mClient, atLeastOnce()).insetsChanged(insetsStateCaptor.capture(), anyBoolean(),
                 anyBoolean());
-        assertFalse(insetsStateCaptor.getAllValues().get(0).peekSource(ITYPE_IME).isVisible());
+        assertFalse(app2.getInsetsState().getSource(ITYPE_IME).isVisible());
     }
 
     @Test
@@ -3356,6 +3372,29 @@ public class ActivityRecordTests extends WindowTestsBase {
                 null);
         assertEquals(DEFAULT_DISPATCHING_TIMEOUT_MILLIS,
                 noProcActivity.mInputDispatchingTimeoutMillis);
+    }
+
+    @Test
+    public void testEnsureActivitiesVisibleAnotherUserTasks() {
+        // Create an activity with hierarchy:
+        //    RootTask
+        //       - TaskFragment
+        //          - Activity
+        DisplayContent display = createNewDisplay();
+        Task rootTask = createTask(display);
+        ActivityRecord activity = createActivityRecord(rootTask);
+        final TaskFragment taskFragment = new TaskFragment(mAtm, new Binder(),
+                true /* createdByOrganizer */, true /* isEmbedded */);
+        activity.getTask().addChild(taskFragment, POSITION_TOP);
+        activity.reparent(taskFragment, POSITION_TOP);
+
+        // Ensure the activity visibility is updated even it is not shown to current user.
+        activity.mVisibleRequested = true;
+        doReturn(false).when(activity).showToCurrentUser();
+        spyOn(taskFragment);
+        doReturn(false).when(taskFragment).shouldBeVisible(any());
+        display.ensureActivitiesVisible(null, 0, false, false);
+        assertFalse(activity.mVisibleRequested);
     }
 
     private ICompatCameraControlCallback getCompatCameraControlCallback() {
