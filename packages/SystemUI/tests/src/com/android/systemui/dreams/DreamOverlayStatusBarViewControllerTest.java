@@ -29,8 +29,7 @@ import android.testing.AndroidTestingRunner;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.battery.BatteryMeterViewController;
-import com.android.systemui.statusbar.policy.BatteryController;
+import com.android.systemui.touch.TouchInsetManager;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -46,37 +45,21 @@ public class DreamOverlayStatusBarViewControllerTest extends SysuiTestCase {
     @Mock
     DreamOverlayStatusBarView mView;
     @Mock
-    BatteryController mBatteryController;
-    @Mock
-    BatteryMeterViewController mBatteryMeterViewController;
-    @Mock
     ConnectivityManager mConnectivityManager;
     @Mock
     NetworkCapabilities mNetworkCapabilities;
     @Mock
     Network mNetwork;
+    @Mock
+    TouchInsetManager.TouchInsetSession mTouchSession;
 
     DreamOverlayStatusBarViewController mController;
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        mController = new DreamOverlayStatusBarViewController(
-                mContext, mView, mBatteryController, mBatteryMeterViewController,
-                mConnectivityManager);
-    }
-
-    @Test
-    public void testOnInitInitializesControllers() {
-        mController.onInit();
-        verify(mBatteryMeterViewController).init();
-    }
-
-    @Test
-    public void testOnViewAttachedAddsBatteryControllerCallback() {
-        mController.onViewAttached();
-        verify(mBatteryController)
-                .addCallback(any(BatteryController.BatteryStateChangeCallback.class));
+        mController = new DreamOverlayStatusBarViewController(mView, mConnectivityManager,
+                mTouchSession);
     }
 
     @Test
@@ -113,37 +96,10 @@ public class DreamOverlayStatusBarViewControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testOnViewDetachedRemovesBatteryControllerCallback() {
-        mController.onViewDetached();
-        verify(mBatteryController)
-                .removeCallback(any(BatteryController.BatteryStateChangeCallback.class));
-    }
-
-    @Test
     public void testOnViewDetachedUnregistersNetworkCallback() {
         mController.onViewDetached();
         verify(mConnectivityManager)
                 .unregisterNetworkCallback(any(ConnectivityManager.NetworkCallback.class));
-    }
-
-    @Test
-    public void testBatteryPercentTextShownWhenBatteryLevelChangesWhileCharging() {
-        final ArgumentCaptor<BatteryController.BatteryStateChangeCallback> callbackCapture =
-                ArgumentCaptor.forClass(BatteryController.BatteryStateChangeCallback.class);
-        mController.onViewAttached();
-        verify(mBatteryController).addCallback(callbackCapture.capture());
-        callbackCapture.getValue().onBatteryLevelChanged(1, true, true);
-        verify(mView).showBatteryPercentText(true);
-    }
-
-    @Test
-    public void testBatteryPercentTextHiddenWhenBatteryLevelChangesWhileNotCharging() {
-        final ArgumentCaptor<BatteryController.BatteryStateChangeCallback> callbackCapture =
-                ArgumentCaptor.forClass(BatteryController.BatteryStateChangeCallback.class);
-        mController.onViewAttached();
-        verify(mBatteryController).addCallback(callbackCapture.capture());
-        callbackCapture.getValue().onBatteryLevelChanged(1, true, false);
-        verify(mView).showBatteryPercentText(false);
     }
 
     @Test

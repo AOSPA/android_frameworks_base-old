@@ -346,7 +346,7 @@ public class InputMethodService extends AbstractInputMethodService {
      */
     @AnyThread
     public static boolean canImeRenderGesturalNavButtons() {
-        return SystemProperties.getBoolean(PROP_CAN_RENDER_GESTURAL_NAV_BUTTONS, true);
+        return SystemProperties.getBoolean(PROP_CAN_RENDER_GESTURAL_NAV_BUTTONS, false);
     }
 
     /**
@@ -578,6 +578,7 @@ public class InputMethodService extends AbstractInputMethodService {
     private boolean mImeSurfaceScheduledForRemoval;
     private ImsConfigurationTracker mConfigTracker = new ImsConfigurationTracker();
     private boolean mDestroyed;
+    private boolean mOnPreparedStylusHwCalled;
 
     /** Stylus handwriting Ink window.  */
     private InkWindow mInkWindow;
@@ -919,9 +920,10 @@ public class InputMethodService extends AbstractInputMethodService {
                 Log.d(TAG, "Input should have started before starting Stylus handwriting.");
                 return;
             }
-            if (!mInkWindow.isInitialized()) {
+            if (!mOnPreparedStylusHwCalled) {
                 // prepare hasn't been called by Stylus HOVER.
                 onPrepareStylusHandwriting();
+                mOnPreparedStylusHwCalled = true;
             }
             if (onStartStylusHandwriting()) {
                 mPrivOps.onStylusHandwritingReady(requestId);
@@ -976,6 +978,7 @@ public class InputMethodService extends AbstractInputMethodService {
         public void initInkWindow() {
             mInkWindow.initOnly();
             onPrepareStylusHandwriting();
+            mOnPreparedStylusHwCalled = true;
         }
 
         /**
@@ -985,24 +988,6 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public void changeInputMethodSubtype(InputMethodSubtype subtype) {
             dispatchOnCurrentInputMethodSubtypeChanged(subtype);
-        }
-
-        /**
-         * {@inheritDoc}
-         * @hide
-         */
-        @Override
-        public void setCurrentShowInputToken(IBinder showInputToken) {
-            mCurShowInputToken = showInputToken;
-        }
-
-        /**
-         * {@inheritDoc}
-         * @hide
-         */
-        @Override
-        public void setCurrentHideInputToken(IBinder hideInputToken) {
-            mCurHideInputToken = hideInputToken;
         }
     }
 
@@ -2354,7 +2339,7 @@ public class InputMethodService extends AbstractInputMethodService {
 
     /**
      * Called to prepare stylus handwriting.
-     * The system calls this before the first {@link #onStartStylusHandwriting} request.
+     * The system calls this before the {@link #onStartStylusHandwriting} request.
      *
      * <p>Note: The system tries to call this as early as possible, when it detects that
      * handwriting stylus input is imminent. However, that a subsequent call to
@@ -2438,6 +2423,7 @@ public class InputMethodService extends AbstractInputMethodService {
         mInkWindow.hide(false /* remove */);
 
         mPrivOps.finishStylusHandwriting(requestId);
+        mOnPreparedStylusHwCalled = false;
         onFinishStylusHandwriting();
     }
 

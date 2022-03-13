@@ -87,6 +87,7 @@ import com.android.server.lights.LightsManager;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.power.PowerManagerService.BatteryReceiver;
 import com.android.server.power.PowerManagerService.BinderService;
+import com.android.server.power.PowerManagerService.DockReceiver;
 import com.android.server.power.PowerManagerService.Injector;
 import com.android.server.power.PowerManagerService.NativeWrapper;
 import com.android.server.power.PowerManagerService.UserSwitchedReceiver;
@@ -152,6 +153,7 @@ public class PowerManagerServiceTest {
     private Resources mResourcesSpy;
     private OffsettableClock mClock;
     private TestLooper mTestLooper;
+    private DockReceiver mDockReceiver;
 
     private static class IntentFilterMatcher implements ArgumentMatcher<IntentFilter> {
         private final IntentFilter mFilter;
@@ -319,7 +321,7 @@ public class PowerManagerServiceTest {
     }
 
     private void startSystem() {
-        mService.systemReady();
+        mService.onBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
 
         // Grab the BatteryReceiver
         ArgumentCaptor<BatteryReceiver> batCaptor = ArgumentCaptor.forClass(BatteryReceiver.class);
@@ -336,6 +338,14 @@ public class PowerManagerServiceTest {
         verify(mContextSpy).registerReceiver(userSwitchedCaptor.capture(),
                 argThat(new IntentFilterMatcher(usFilter)), isNull(), isA(Handler.class));
         mUserSwitchedReceiver = userSwitchedCaptor.getValue();
+
+        // Grab the DockReceiver
+        ArgumentCaptor<DockReceiver> dockReceiverCaptor =
+                ArgumentCaptor.forClass(DockReceiver.class);
+        IntentFilter dockFilter = new IntentFilter(Intent.ACTION_DOCK_EVENT);
+        verify(mContextSpy).registerReceiver(dockReceiverCaptor.capture(),
+                argThat(new IntentFilterMatcher(dockFilter)), isNull(), isA(Handler.class));
+        mDockReceiver = dockReceiverCaptor.getValue();
 
         mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
     }
@@ -385,6 +395,16 @@ public class PowerManagerServiceTest {
                 .thenReturn(minimumScreenOffTimeoutConfigMillis);
     }
 
+    private void setScreenOffTimeout(int screenOffTimeoutMillis) {
+        Settings.System.putInt(mContextSpy.getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT,
+                screenOffTimeoutMillis);
+    }
+
+    private void setScreenOffTimeoutDocked(int screenOffTimeoutMillis) {
+        Settings.System.putInt(mContextSpy.getContentResolver(),
+                Settings.System.SCREEN_OFF_TIMEOUT_DOCKED, screenOffTimeoutMillis);
+    }
+
     private void advanceTime(long timeMs) {
         mClock.fastForward(timeMs);
         mTestLooper.dispatchAll();
@@ -419,7 +439,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testGetDesiredScreenPolicy_WithVR() {
         createService();
-        mService.systemReady();
+        startSystem();
         // Brighten up the screen
         mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_AWAKE, 0, 0, 0, 0,
                 null, null);
@@ -607,8 +627,7 @@ public class PowerManagerServiceTest {
     public void testWasDeviceIdleFor_true() {
         int interval = 1000;
         createService();
-        mService.systemReady();
-        mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
+        startSystem();
         mService.onUserActivity();
         advanceTime(interval + 1 /* just a little more */);
         assertThat(mService.wasDeviceIdleForInternal(interval)).isTrue();
@@ -618,8 +637,7 @@ public class PowerManagerServiceTest {
     public void testWasDeviceIdleFor_false() {
         int interval = 1000;
         createService();
-        mService.systemReady();
-        mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
+        startSystem();
         mService.onUserActivity();
         assertThat(mService.wasDeviceIdleForInternal(interval)).isFalse();
     }
@@ -627,8 +645,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testForceSuspend_putsDeviceToSleep() {
         createService();
-        mService.systemReady();
-        mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
+        startSystem();
 
         // Verify that we start awake
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
@@ -673,8 +690,7 @@ public class PowerManagerServiceTest {
         //
         // TEST STARTS HERE
         //
-        mService.systemReady();
-        mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
+        startSystem();
 
         // Verify that we start awake
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
@@ -772,7 +788,7 @@ public class PowerManagerServiceTest {
         createService();
         assertTrue(isAcquired[0]);
 
-        mService.systemReady();
+        mService.onBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
         assertTrue(isAcquired[0]);
 
         mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
@@ -880,6 +896,71 @@ public class PowerManagerServiceTest {
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
         assertThat(mService.getBinderServiceInstance().getLastSleepReason()).isEqualTo(
                 PowerManager.GO_TO_SLEEP_REASON_INATTENTIVE);
+    }
+
+    @Test
+    public void testScreenOffTimeout_goesToSleepAfterTimeout() {
+        final DisplayInfo info = new DisplayInfo();
+        info.displayGroupId = Display.DEFAULT_DISPLAY_GROUP;
+        when(mDisplayManagerInternalMock.getDisplayInfo(Display.DEFAULT_DISPLAY)).thenReturn(info);
+
+        setMinimumScreenOffTimeoutConfig(10);
+        setScreenOffTimeout(10);
+
+        createService();
+        startSystem();
+
+        mService.getBinderServiceInstance().userActivity(Display.DEFAULT_DISPLAY, mClock.now(),
+                PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        advanceTime(15);
+        assertThat(mService.getGlobalWakefulnessLocked()).isNotEqualTo(WAKEFULNESS_AWAKE);
+    }
+
+    @Test
+    public void testScreenOffTimeout_usesRegularTimeoutWhenNotDocked() {
+        final DisplayInfo info = new DisplayInfo();
+        info.displayGroupId = Display.DEFAULT_DISPLAY_GROUP;
+        when(mDisplayManagerInternalMock.getDisplayInfo(Display.DEFAULT_DISPLAY)).thenReturn(info);
+
+        setMinimumScreenOffTimeoutConfig(10);
+        setScreenOffTimeout(10);
+        setScreenOffTimeoutDocked(30);
+
+        createService();
+        startSystem();
+
+        mService.getBinderServiceInstance().userActivity(Display.DEFAULT_DISPLAY, mClock.now(),
+                PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        advanceTime(15);
+        assertThat(mService.getGlobalWakefulnessLocked()).isNotEqualTo(WAKEFULNESS_AWAKE);
+    }
+
+    @Test
+    public void testScreenOffTimeout_usesDockedTimeoutWhenDocked() {
+        final DisplayInfo info = new DisplayInfo();
+        info.displayGroupId = Display.DEFAULT_DISPLAY_GROUP;
+        when(mDisplayManagerInternalMock.getDisplayInfo(Display.DEFAULT_DISPLAY)).thenReturn(info);
+
+        setMinimumScreenOffTimeoutConfig(10);
+        setScreenOffTimeout(10);
+        setScreenOffTimeoutDocked(30);
+
+        createService();
+        startSystem();
+
+        mService.getBinderServiceInstance().userActivity(Display.DEFAULT_DISPLAY, mClock.now(),
+                PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
+        mDockReceiver.onReceive(mContextSpy,
+                new Intent(Intent.ACTION_DOCK_EVENT).putExtra(Intent.EXTRA_DOCK_STATE,
+                        Intent.EXTRA_DOCK_STATE_DESK));
+
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        advanceTime(15);
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        advanceTime(20);
+        assertThat(mService.getGlobalWakefulnessLocked()).isNotEqualTo(WAKEFULNESS_AWAKE);
     }
 
     @Test
@@ -1146,7 +1227,7 @@ public class PowerManagerServiceTest {
     public void testQuiescentBoot_WakeKeyBeforeBootCompleted_AwakeAfterBootCompleted() {
         when(mSystemPropertiesMock.get(eq(SYSTEM_PROPERTY_QUIESCENT), any())).thenReturn("1");
         createService();
-        mService.systemReady();
+        startSystem();
 
         mService.getBinderServiceInstance().wakeUp(mClock.now(),
                 PowerManager.WAKE_REASON_UNKNOWN, "testing IPowerManager.wakeUp()", "pkg.name");
@@ -1359,7 +1440,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testSetPowerBoost_redirectsCallToNativeWrapper() {
         createService();
-        mService.systemReady();
+        startSystem();
 
         mService.getBinderServiceInstance().setPowerBoost(Boost.INTERACTION, 1234);
 
@@ -1369,7 +1450,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testSetPowerMode_redirectsCallToNativeWrapper() {
         createService();
-        mService.systemReady();
+        startSystem();
 
         // Enabled launch boost in BatterySaverController to allow setting launch mode.
         when(mBatterySaverControllerMock.isLaunchBoostDisabled()).thenReturn(false);
@@ -1385,7 +1466,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testSetPowerMode_withLaunchBoostDisabledAndModeLaunch_ignoresCallToEnable() {
         createService();
-        mService.systemReady();
+        startSystem();
 
         // Disables launch boost in BatterySaverController.
         when(mBatterySaverControllerMock.isLaunchBoostDisabled()).thenReturn(true);
@@ -1401,7 +1482,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testSetPowerModeChecked_returnsNativeCallResult() {
         createService();
-        mService.systemReady();
+        startSystem();
 
         // Disables launch boost in BatterySaverController.
         when(mBatterySaverControllerMock.isLaunchBoostDisabled()).thenReturn(true);
@@ -1564,7 +1645,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testGetFullPowerSavePolicy_returnsStateMachineResult() {
         createService();
-        mService.systemReady();
+        startSystem();
         BatterySaverPolicyConfig mockReturnConfig = new BatterySaverPolicyConfig.Builder().build();
         when(mBatterySaverStateMachineMock.getFullBatterySaverPolicy())
                 .thenReturn(mockReturnConfig);
@@ -1579,7 +1660,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testSetFullPowerSavePolicy_callsStateMachine() {
         createService();
-        mService.systemReady();
+        startSystem();
         BatterySaverPolicyConfig mockSetPolicyConfig =
                 new BatterySaverPolicyConfig.Builder().build();
         when(mBatterySaverStateMachineMock.setFullBatterySaverPolicy(any())).thenReturn(true);
@@ -1593,7 +1674,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testLowPowerStandby_whenInactive_FgsWakeLockEnabled() {
         createService();
-        mService.systemReady();
+        startSystem();
         WakeLock wakeLock = acquireWakeLock("fgsWakeLock", PowerManager.PARTIAL_WAKE_LOCK);
         mService.updateUidProcStateInternal(wakeLock.mOwnerUid, PROCESS_STATE_FOREGROUND_SERVICE);
         mService.setDeviceIdleModeInternal(true);
@@ -1604,7 +1685,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testLowPowerStandby_whenActive_FgsWakeLockDisabled() {
         createService();
-        mService.systemReady();
+        startSystem();
         WakeLock wakeLock = acquireWakeLock("fgsWakeLock", PowerManager.PARTIAL_WAKE_LOCK);
         mService.updateUidProcStateInternal(wakeLock.mOwnerUid, PROCESS_STATE_FOREGROUND_SERVICE);
         mService.setDeviceIdleModeInternal(true);
@@ -1616,7 +1697,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testLowPowerStandby_whenActive_FgsWakeLockEnabledIfAllowlisted() {
         createService();
-        mService.systemReady();
+        startSystem();
         WakeLock wakeLock = acquireWakeLock("fgsWakeLock", PowerManager.PARTIAL_WAKE_LOCK);
         mService.updateUidProcStateInternal(wakeLock.mOwnerUid, PROCESS_STATE_FOREGROUND_SERVICE);
         mService.setDeviceIdleModeInternal(true);
@@ -1629,7 +1710,7 @@ public class PowerManagerServiceTest {
     @Test
     public void testLowPowerStandby_whenActive_BoundTopWakeLockDisabled() {
         createService();
-        mService.systemReady();
+        startSystem();
         WakeLock wakeLock = acquireWakeLock("BoundTopWakeLock", PowerManager.PARTIAL_WAKE_LOCK);
         mService.updateUidProcStateInternal(wakeLock.mOwnerUid, PROCESS_STATE_BOUND_TOP);
         mService.setDeviceIdleModeInternal(true);

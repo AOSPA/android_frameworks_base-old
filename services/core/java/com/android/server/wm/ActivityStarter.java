@@ -1840,7 +1840,7 @@ class ActivityStarter {
 
         if (!mAvoidMoveToFront && mDoResume) {
             mTargetRootTask.getRootTask().moveToFront("reuseOrNewTask", targetTask);
-            if (!mTargetRootTask.isTopRootTaskInDisplayArea() && mService.mInternal.isDreaming()
+            if (!mTargetRootTask.isTopRootTaskInDisplayArea() && mService.isDreaming()
                     && !dreamStopping) {
                 // Launching underneath dream activity (fullscreen, always-on-top). Run the launch-
                 // -behind transition so the Activity gets created and starts in visible state.
@@ -1915,6 +1915,14 @@ class ActivityStarter {
         mSupervisor.mRecentTasks.add(startedTask);
         mSupervisor.handleNonResizableTaskIfNeeded(startedTask,
                 mPreferredWindowingMode, mPreferredTaskDisplayArea, mTargetRootTask);
+
+        // If Activity's launching into PiP, move the mStartActivity immediately to pinned mode.
+        // Note that mStartActivity and source should be in the same Task at this point.
+        if (mOptions != null && mOptions.isLaunchIntoPip()
+                && sourceRecord != null && sourceRecord.getTask() == mStartActivity.getTask()) {
+            mRootWindowContainer.moveActivityToPinnedRootTask(mStartActivity,
+                    sourceRecord, "launch-into-pip");
+        }
 
         return START_SUCCESS;
     }
@@ -2023,8 +2031,8 @@ class ActivityStarter {
      * @param targetTask the target task for launching activity, which could be different from
      *                   the one who hosting the embedding.
      */
-    private boolean canEmbedActivity(@NonNull TaskFragment taskFragment, ActivityRecord starting,
-            boolean newTask, Task targetTask) {
+    private boolean canEmbedActivity(@NonNull TaskFragment taskFragment,
+            @NonNull ActivityRecord starting, boolean newTask, Task targetTask) {
         final Task hostTask = taskFragment.getTask();
         if (hostTask == null) {
             return false;
@@ -2036,8 +2044,7 @@ class ActivityStarter {
             return true;
         }
 
-        // Not allowed embedding an activity of another app.
-        if (hostUid != starting.getUid()) {
+        if (!taskFragment.isAllowedToEmbedActivity(starting)) {
             return false;
         }
 
@@ -2120,7 +2127,7 @@ class ActivityStarter {
 
         // At this point we are certain we want the task moved to the front. If we need to dismiss
         // any other always-on-top root tasks, now is the time to do it.
-        if (targetTaskTop.canTurnScreenOn() && mService.mInternal.isDreaming()) {
+        if (targetTaskTop.canTurnScreenOn() && mService.isDreaming()) {
             targetTaskTop.mTaskSupervisor.wakeUp("recycleTask#turnScreenOnFlag");
         }
 
@@ -2209,8 +2216,9 @@ class ActivityStarter {
             // removed from calling performClearTaskLocked (For example, if it is being brought out
             // of history or if it is finished immediately), thus disassociating the task. Also note
             // that mReuseTask is reset as a result of {@link Task#performClearTaskLocked}
-            // launching another activity.
-            targetTask.performClearTaskLocked();
+            // launching another activity. Keep the task-overlay activity because the targetTask
+            // will be reused to launch new activity.
+            targetTask.performClearTaskForReuse(true /* excludingTaskOverlay*/);
             targetTask.setIntent(mStartActivity);
             mAddingToTask = true;
         } else if ((mLaunchFlags & FLAG_ACTIVITY_CLEAR_TOP) != 0
@@ -2220,8 +2228,7 @@ class ActivityStarter {
             // In this situation we want to remove all activities from the task up to the one
             // being started. In most cases this means we are resetting the task to its initial
             // state.
-            final ActivityRecord top = targetTask.performClearTaskForReuseLocked(mStartActivity,
-                    mLaunchFlags);
+            final ActivityRecord top = targetTask.performClearTop(mStartActivity, mLaunchFlags);
 
             if (top != null) {
                 if (top.isRootOfTask()) {

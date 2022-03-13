@@ -49,8 +49,10 @@ import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.pkg.AndroidPackageApi;
 import com.android.server.pm.pkg.PackageState;
 import com.android.server.pm.pkg.PackageStateInternal;
+import com.android.server.pm.pkg.SharedUserApi;
 import com.android.server.pm.pkg.component.ParsedMainComponent;
 import com.android.server.pm.pkg.mutate.PackageStateMutator;
+import com.android.server.pm.snapshot.PackageDataSnapshot;
 
 import java.io.IOException;
 import java.lang.annotation.Retention;
@@ -65,7 +67,7 @@ import java.util.function.Consumer;
  *
  * @hide Only for use within the system server.
  */
-public abstract class PackageManagerInternal implements PackageSettingsSnapshotProvider {
+public abstract class PackageManagerInternal {
     @IntDef(prefix = "PACKAGE_", value = {
             PACKAGE_SYSTEM,
             PACKAGE_SETUP_WIZARD,
@@ -717,7 +719,8 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
     /**
      * Returns a package object for the disabled system package name.
      */
-    public abstract @Nullable PackageSetting getDisabledSystemPackage(@NonNull String packageName);
+    public abstract @Nullable PackageStateInternal getDisabledSystemPackage(
+            @NonNull String packageName);
 
     /**
      * Returns the package name for the disabled system package.
@@ -1262,6 +1265,21 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
             boolean migrateAppsData);
 
     /**
+     * Returns an array of PackageStateInternal that are all part of a shared user setting which is
+     * denoted by the app ID. Returns an empty set if the shared user setting doesn't exist or does
+     * not contain any package.
+     */
+    @NonNull
+    public abstract ArraySet<PackageStateInternal> getSharedUserPackages(int sharedUserAppId);
+
+    /**
+     * Returns the SharedUserApi denoted by the app ID of the shared user setting. Returns null if
+     * the corresponding shared user setting doesn't exist.
+     */
+    @Nullable
+    public abstract SharedUserApi getSharedUserApi(int sharedUserAppId);
+
+    /**
      * Initiates a package state mutation request, returning the current state as known by
      * PackageManager. This allows the later commit request to compare the initial values and
      * determine if any state was changed or any packages were updated since the whole request
@@ -1318,4 +1336,12 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
     public abstract PackageStateMutator.Result commitPackageStateMutation(
             @Nullable PackageStateMutator.InitialState state,
             @NonNull Consumer<PackageStateMutator> consumer);
+
+    /**
+     * @return package data snapshot for use with other PackageManager infrastructure. This should
+     * only be used as a parameter passed to another PM related class. Do not call methods on this
+     * directly.
+     */
+    @NonNull
+    public abstract PackageDataSnapshot snapshot();
 }

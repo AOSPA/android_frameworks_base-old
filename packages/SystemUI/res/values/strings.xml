@@ -609,8 +609,6 @@
     <string name="quick_settings_inversion_label">Color inversion</string>
     <!-- QuickSettings: Label for the toggle that controls whether display color correction is enabled. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_color_correction_label">Color correction</string>
-    <!-- QuickSettings: Control panel: Label for button that navigates to settings. [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_more_settings">More settings</string>
     <!-- QuickSettings: Control panel: Label for button that navigates to user settings. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_more_user_settings">User settings</string>
     <!-- QuickSettings: Control panel: Label for button that dismisses control panel. [CHAR LIMIT=NONE] -->
@@ -1213,9 +1211,6 @@
     <!-- Alarm template for far alarms [CHAR LIMIT=25] -->
     <string name="alarm_template_far">on <xliff:g id="when" example="Fri 7:00 AM">%1$s</xliff:g></string>
 
-    <!-- Accessibility label for Quick Settings detail screens [CHAR LIMIT=NONE] -->
-    <string name="accessibility_quick_settings_detail">Quick Settings, <xliff:g id="title" example="Wi-Fi">%s</xliff:g>.</string>
-
     <!-- Accessibility label for hotspot icon [CHAR LIMIT=NONE] -->
     <string name="accessibility_status_bar_hotspot">Hotspot</string>
 
@@ -1731,11 +1726,6 @@
     <string name="data_connection_no_internet">No internet</string>
 
     <!-- accessibility label for quick settings items that open a details page [CHAR LIMIT=NONE] -->
-    <string name="accessibility_quick_settings_open_details">Open details.</string>
-
-    <!-- accessibility label for quick settings items that are currently disabled. Must have a reason [CHAR LIMIT=NONE] -->
-
-    <!-- accessibility label for quick settings items that open a details page [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_open_settings">Open <xliff:g name="page" example="Bluetooth">%s</xliff:g> settings.</string>
 
     <!-- accessibility label for button to edit quick settings [CHAR LIMIT=NONE] -->
@@ -1992,6 +1982,12 @@
     <!-- Text for privacy dialog, indicating that an app (or multiple) is using an op on behalf of another [CHAR LIMIT=NONE] -->
     <string name="ongoing_privacy_dialog_attribution_text">(through <xliff:g id="application name(s)" example="Maps, and Assistant">%s</xliff:g>)</string>
 
+    <!-- Text for privacy dialog, displaying just the subattribution label [CHAR LIMIT=NONE] -->
+    <string name="ongoing_privacy_dialog_attribution_label">(<xliff:g id="attribution_label" example="For Wallet">%s</xliff:g>)</string>
+
+    <!-- Text for privacy dialog, displaying both subattribution and proxy label [CHAR LIMIT=NONE] -->
+    <string name="ongoing_privacy_dialog_attribution_proxy_label">(<xliff:g id="attribution_label" example="For Wallet">%1$s</xliff:g>  \u2022 <xliff:g id="proxy_label" example="Maps, and Assistant">%2$s</xliff:g>)</string>
+
     <!-- Text for camera app op [CHAR LIMIT=20]-->
     <string name="privacy_type_camera">camera</string>
 
@@ -2215,6 +2211,11 @@
     <string name="media_output_dialog_connect_failed">Can\'t switch. Tap to try again.</string>
     <!-- Title for pairing item [CHAR LIMIT=60] -->
     <string name="media_output_dialog_pairing_new">Pair new device</string>
+    <!-- Title for launch app [CHAR LIMIT=60] -->
+    <string name="media_output_dialog_launch_app_text">To cast this session, please open the app.</string>
+    <!-- App name when can't get app name [CHAR LIMIT=60] -->
+    <string name="media_output_dialog_unknown_launch_app_name">Unknown app</string>
+
 
     <!-- Label for clip data when copying the build number off QS [CHAR LIMIT=NONE]-->
     <string name="build_number_clip_data_label">Build number</string>
@@ -2375,6 +2376,9 @@
         <item quantity="one"><xliff:g id="count" example="1">%s</xliff:g> active app</item>
         <item quantity="other"><xliff:g id="count" example="2">%s</xliff:g> active apps</item>
     </plurals>
+    <!-- Content description for a dot indicator in the running application indicating that there
+    is new information [CHAR LIMIT=NONE] -->
+    <string name="fgs_dot_content_description">New information</string>
     <!-- Title for dialog listing applications currently running [CHAR LIMIT=NONE]-->
     <string name="fgs_manager_dialog_title">Active apps</string>
     <!-- Label of the button to stop an app from running [CHAR LIMIT=12]-->
@@ -2390,4 +2394,33 @@
     <string name="clipboard_edit_source">From <xliff:g id="appName" example="Gmail">%1$s</xliff:g></string>
     <!-- Label for button to dismiss clipboard overlay [CHAR LIMIT=NONE] -->
     <string name="clipboard_dismiss_description">Dismiss copy UI</string>
+    <!-- Label for button to edit text that was copied to the clipboard [CHAR LIMIT=NONE] -->
+    <string name="clipboard_edit_text_description">Edit copied text</string>
+    <!-- Label for button to edit an image that was copied to the clipboard [CHAR LIMIT=NONE] -->
+    <string name="clipboard_edit_image_description">Edit copied image</string>
+    <!-- Label for button to send copied content to a nearby device [CHAR LIMIT=NONE] -->
+    <string name="clipboard_send_nearby_description">Send to nearby device</string>
+
+    <!-- Generic "add" string [CHAR LIMIT=NONE] -->
+    <string name="add">Add</string>
+    <!-- Add supervised user -->
+    <string name="add_user_supervised" translatable="false">@*android:string/supervised_user_creation_label</string>
+    <!-- Manage users - For system user management [CHAR LIMIT=40]  -->
+    <string name="manage_users">Manage users</string>
+
+    <!-- Toast shown when a notification does not support dragging to split [CHAR LIMIT=NONE] -->
+    <string name="drag_split_not_supported">This notification does not support dragging to Splitscreen.</string>
+
+    <!-- Content description for the Wi-Fi off icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_wifi_off">Wi\u2011Fi unavailable</string>
+    <!-- Content description for the priority mode icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_priority_mode">Priority mode</string>
+    <!-- Content description for the alarm set icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_alarm_set">Alarm set</string>
+    <!-- Content description for the assistant guest mode enabled icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_assistant_guest_mode_enabled">Assistant guest mode enabled</string>
+    <!-- Content description for the camera and mic off icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_camera_mic_off">Camera and mic are off</string>
+    <!-- Content description for the camera and mic off icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_notification_indicator">There are notifications</string>
 </resources>

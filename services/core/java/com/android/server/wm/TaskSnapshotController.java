@@ -196,15 +196,21 @@ class TaskSnapshotController {
         snapshotTasks(tasks, false /* allowSnapshotHome */);
     }
 
-    void recordTaskSnapshot(Task task, boolean allowSnapshotHome) {
+    /**
+     * This is different than {@link #recordTaskSnapshot(Task, boolean)} because it doesn't store
+     * the snapshot to the cache and returns the TaskSnapshot immediately.
+     *
+     * This is only used for testing so the snapshot content can be verified.
+     */
+    @VisibleForTesting
+    TaskSnapshot captureTaskSnapshot(Task task, boolean snapshotHome) {
         final TaskSnapshot snapshot;
-        final boolean snapshotHome = allowSnapshotHome && task.isActivityTypeHome();
         if (snapshotHome) {
             snapshot = snapshotTask(task);
         } else {
             switch (getSnapshotMode(task)) {
                 case SNAPSHOT_MODE_NONE:
-                    return;
+                    return null;
                 case SNAPSHOT_MODE_APP_THEME:
                     snapshot = drawAppThemeSnapshot(task);
                     break;
@@ -216,19 +222,27 @@ class TaskSnapshotController {
                     break;
             }
         }
-        if (snapshot != null) {
-            final HardwareBuffer buffer = snapshot.getHardwareBuffer();
-            if (buffer.getWidth() == 0 || buffer.getHeight() == 0) {
-                buffer.close();
-                Slog.e(TAG, "Invalid task snapshot dimensions " + buffer.getWidth() + "x"
-                        + buffer.getHeight());
-            } else {
-                mCache.putSnapshot(task, snapshot);
-                // Don't persist or notify the change for the temporal snapshot.
-                if (!snapshotHome) {
-                    mPersister.persistSnapshot(task.mTaskId, task.mUserId, snapshot);
-                    task.onSnapshotChanged(snapshot);
-                }
+        return snapshot;
+    }
+
+    void recordTaskSnapshot(Task task, boolean allowSnapshotHome) {
+        final boolean snapshotHome = allowSnapshotHome && task.isActivityTypeHome();
+        final TaskSnapshot snapshot = captureTaskSnapshot(task, snapshotHome);
+        if (snapshot == null) {
+            return;
+        }
+
+        final HardwareBuffer buffer = snapshot.getHardwareBuffer();
+        if (buffer.getWidth() == 0 || buffer.getHeight() == 0) {
+            buffer.close();
+            Slog.e(TAG, "Invalid task snapshot dimensions " + buffer.getWidth() + "x"
+                    + buffer.getHeight());
+        } else {
+            mCache.putSnapshot(task, snapshot);
+            // Don't persist or notify the change for the temporal snapshot.
+            if (!snapshotHome) {
+                mPersister.persistSnapshot(task.mTaskId, task.mUserId, snapshot);
+                task.onSnapshotChanged(snapshot);
             }
         }
     }
@@ -296,7 +310,7 @@ class TaskSnapshotController {
         }
         final ActivityRecord activity = result.first;
         final WindowState mainWindow = result.second;
-        final Rect contentInsets = getSystemBarInsets(task.getBounds(),
+        final Rect contentInsets = getSystemBarInsets(mainWindow.getFrame(),
                 mainWindow.getInsetsStateWithVisibilityOverride());
         final Rect letterboxInsets = activity.getLetterboxInsets();
         InsetUtils.addInsets(contentInsets, letterboxInsets);
@@ -561,7 +575,7 @@ class TaskSnapshotController {
         final LayoutParams attrs = mainWindow.getAttrs();
         final Rect taskBounds = task.getBounds();
         final InsetsState insetsState = mainWindow.getInsetsStateWithVisibilityOverride();
-        final Rect systemBarInsets = getSystemBarInsets(taskBounds, insetsState);
+        final Rect systemBarInsets = getSystemBarInsets(mainWindow.getFrame(), insetsState);
         final SystemBarBackgroundPainter decorPainter = new SystemBarBackgroundPainter(attrs.flags,
                 attrs.privateFlags, attrs.insetsFlags.appearance, task.getTaskDescription(),
                 mHighResTaskSnapshotScale, insetsState);

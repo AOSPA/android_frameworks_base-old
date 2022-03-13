@@ -39,7 +39,6 @@ import com.android.systemui.util.mockito.nullable
 import com.android.systemui.util.time.FakeSystemClock
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import org.mockito.Mock
 import org.mockito.Mockito.verify
@@ -49,7 +48,6 @@ import java.io.StringWriter
 import java.util.concurrent.Executor
 
 @SmallTest
-@Ignore("b/216286227")
 class MediaTttCommandLineHelperTest : SysuiTestCase() {
 
     private val inlineExecutor = Executor { command -> command.run() }
@@ -203,7 +201,9 @@ class MediaTttCommandLineHelperTest : SysuiTestCase() {
 
         verify(statusBarManager).updateMediaTapToTransferReceiverDisplay(
             eq(StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_CLOSE_TO_SENDER),
-            any()
+            any(),
+            nullable(),
+            nullable()
         )
     }
 
@@ -213,7 +213,9 @@ class MediaTttCommandLineHelperTest : SysuiTestCase() {
 
         verify(statusBarManager).updateMediaTapToTransferReceiverDisplay(
             eq(StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_FAR_FROM_SENDER),
-            any()
+            any(),
+            nullable(),
+            nullable()
         )
     }
 

@@ -350,6 +350,10 @@ public class ActivityOptions extends ComponentOptions {
     /** See {@link #setTransientLaunch()}. */
     private static final String KEY_TRANSIENT_LAUNCH = "android.activity.transientLaunch";
 
+    /** see {@link #makeLaunchIntoPip(PictureInPictureParams)}. */
+    private static final String KEY_LAUNCH_INTO_PIP_PARAMS =
+            "android.activity.launchIntoPipParams";
+
     /**
      * @see #setLaunchCookie
      * @hide
@@ -444,6 +448,7 @@ public class ActivityOptions extends ComponentOptions {
     private boolean mRemoveWithTaskOrganizer;
     private boolean mLaunchedFromBubble;
     private boolean mTransientLaunch;
+    private PictureInPictureParams mLaunchIntoPipParams;
 
     /**
      * Create an ActivityOptions specifying a custom animation to run when
@@ -1106,6 +1111,24 @@ public class ActivityOptions extends ComponentOptions {
         return opts;
     }
 
+    /**
+     * Creates an {@link ActivityOptions} instance that launch into picture-in-picture.
+     * This is normally used by a Host activity to start another activity that will directly enter
+     * picture-in-picture upon its creation.
+     * @param pictureInPictureParams {@link PictureInPictureParams} for launching the Activity to
+     *                               picture-in-picture mode.
+     */
+    @NonNull
+    public static ActivityOptions makeLaunchIntoPip(
+            @NonNull PictureInPictureParams pictureInPictureParams) {
+        final ActivityOptions opts = new ActivityOptions();
+        opts.mLaunchIntoPipParams = new PictureInPictureParams.Builder(pictureInPictureParams)
+                .setIsLaunchIntoPip(true)
+                .build();
+        opts.mLaunchBounds = new Rect(pictureInPictureParams.getSourceRectHint());
+        return opts;
+    }
+
     /** @hide */
     public boolean getLaunchTaskBehind() {
         return mAnimationType == ANIM_LAUNCH_TASK_BEHIND;
@@ -1121,7 +1144,7 @@ public class ActivityOptions extends ComponentOptions {
 
         mPackageName = opts.getString(KEY_PACKAGE_NAME);
         try {
-            mUsageTimeReport = opts.getParcelable(KEY_USAGE_TIME_REPORT);
+            mUsageTimeReport = opts.getParcelable(KEY_USAGE_TIME_REPORT, PendingIntent.class);
         } catch (RuntimeException e) {
             Slog.w(TAG, e);
         }
@@ -1219,6 +1242,7 @@ public class ActivityOptions extends ComponentOptions {
         mLaunchedFromBubble = opts.getBoolean(KEY_LAUNCHED_FROM_BUBBLE);
         mTransientLaunch = opts.getBoolean(KEY_TRANSIENT_LAUNCH);
         mSplashScreenStyle = opts.getInt(KEY_SPLASH_SCREEN_STYLE);
+        mLaunchIntoPipParams = opts.getParcelable(KEY_LAUNCH_INTO_PIP_PARAMS);
     }
 
     /**
@@ -1429,7 +1453,6 @@ public class ActivityOptions extends ComponentOptions {
     /**
      * Gets the style can be used for cold-launching an activity.
      * @see #setSplashScreenStyle(int)
-     * @hide
      */
     public @SplashScreen.SplashScreenStyle int getSplashScreenStyle() {
         return mSplashScreenStyle;
@@ -1555,6 +1578,23 @@ public class ActivityOptions extends ComponentOptions {
     @TestApi
     public void setLaunchWindowingMode(int windowingMode) {
         mLaunchWindowingMode = windowingMode;
+    }
+
+    /**
+     * @return {@link PictureInPictureParams} used to launch into PiP mode.
+     * @hide
+     */
+    public PictureInPictureParams getLaunchIntoPipParams() {
+        return mLaunchIntoPipParams;
+    }
+
+    /**
+     * @return {@code true} if this instance is used to launch into PiP mode.
+     * @hide
+     */
+    public boolean isLaunchIntoPip() {
+        return mLaunchIntoPipParams != null
+                && mLaunchIntoPipParams.isLaunchIntoPip();
     }
 
     /** @hide */
@@ -1868,6 +1908,7 @@ public class ActivityOptions extends ComponentOptions {
         mAnimationFinishedListener = otherOptions.mAnimationFinishedListener;
         mSpecsFuture = otherOptions.mSpecsFuture;
         mRemoteAnimationAdapter = otherOptions.mRemoteAnimationAdapter;
+        mLaunchIntoPipParams = otherOptions.mLaunchIntoPipParams;
     }
 
     /**
@@ -2039,6 +2080,9 @@ public class ActivityOptions extends ComponentOptions {
         }
         if (mSplashScreenStyle != 0) {
             b.putInt(KEY_SPLASH_SCREEN_STYLE, mSplashScreenStyle);
+        }
+        if (mLaunchIntoPipParams != null) {
+            b.putParcelable(KEY_LAUNCH_INTO_PIP_PARAMS, mLaunchIntoPipParams);
         }
         return b;
     }

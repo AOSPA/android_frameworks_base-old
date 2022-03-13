@@ -115,7 +115,6 @@ import com.android.keyguard.dagger.KeyguardStatusBarViewComponent;
 import com.android.keyguard.dagger.KeyguardStatusViewComponent;
 import com.android.keyguard.dagger.KeyguardUserSwitcherComponent;
 import com.android.systemui.DejankUtils;
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.Interpolators;
@@ -138,9 +137,6 @@ import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.fragments.FragmentHostManager.FragmentListener;
 import com.android.systemui.fragments.FragmentService;
-import com.android.systemui.idle.IdleHostView;
-import com.android.systemui.idle.IdleHostViewController;
-import com.android.systemui.idle.dagger.IdleViewComponent;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.media.KeyguardMediaController;
 import com.android.systemui.media.MediaDataManager;
@@ -149,12 +145,10 @@ import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.FalsingManager.FalsingTapListener;
-import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.qrcodescanner.controller.QRCodeScannerController;
-import com.android.systemui.qs.QSDetailDisplayer;
 import com.android.systemui.screenrecord.RecordingController;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.CommandQueue;
@@ -327,8 +321,6 @@ public class NotificationPanelViewController extends PanelViewController
     private final KeyguardQsUserSwitchComponent.Factory mKeyguardQsUserSwitchComponentFactory;
     private final KeyguardUserSwitcherComponent.Factory mKeyguardUserSwitcherComponentFactory;
     private final KeyguardStatusBarViewComponent.Factory mKeyguardStatusBarViewComponentFactory;
-    private final IdleViewComponent.Factory mIdleViewComponentFactory;
-    private final QSDetailDisplayer mQSDetailDisplayer;
     private final FragmentService mFragmentService;
     private final ScrimController mScrimController;
     private final PrivacyDotViewController mPrivacyDotViewController;
@@ -362,8 +354,6 @@ public class NotificationPanelViewController extends PanelViewController
     @Nullable
     private CommunalHostViewController mCommunalViewController;
     private KeyguardStatusViewController mKeyguardStatusViewController;
-    @Nullable
-    private IdleHostViewController mIdleHostViewController;
     private LockIconViewController mLockIconViewController;
     private NotificationsQuickSettingsContainer mNotificationContainerParent;
     private NotificationsQSContainerController mNotificationsQSContainerController;
@@ -378,7 +368,6 @@ public class NotificationPanelViewController extends PanelViewController
     private VelocityTracker mQsVelocityTracker;
     private boolean mQsTracking;
 
-    private IdleHostView mIdleHostView;
     private CommunalHostView mCommunalView;
 
     /**
@@ -777,9 +766,7 @@ public class NotificationPanelViewController extends PanelViewController
             KeyguardUserSwitcherComponent.Factory keyguardUserSwitcherComponentFactory,
             KeyguardStatusBarViewComponent.Factory keyguardStatusBarViewComponentFactory,
             CommunalViewComponent.Factory communalViewComponentFactory,
-            IdleViewComponent.Factory idleViewComponentFactory,
             LockscreenShadeTransitionController lockscreenShadeTransitionController,
-            QSDetailDisplayer qsDetailDisplayer,
             NotificationGroupManagerLegacy groupManager,
             NotificationIconAreaController notificationIconAreaController,
             AuthController authController,
@@ -809,6 +796,7 @@ public class NotificationPanelViewController extends PanelViewController
             ControlsComponent controlsComponent,
             InteractionJankMonitor interactionJankMonitor,
             QsFrameTranslateController qsFrameTranslateController,
+            SysUiState sysUiState,
             KeyguardUnlockAnimationController keyguardUnlockAnimationController,
             EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         super(view,
@@ -849,13 +837,11 @@ public class NotificationPanelViewController extends PanelViewController
         mCommunalViewComponentFactory = communalViewComponentFactory;
         mKeyguardStatusViewComponentFactory = keyguardStatusViewComponentFactory;
         mKeyguardStatusBarViewComponentFactory = keyguardStatusBarViewComponentFactory;
-        mIdleViewComponentFactory = idleViewComponentFactory;
         mDepthController = notificationShadeDepthController;
         mContentResolver = contentResolver;
         mKeyguardQsUserSwitchComponentFactory = keyguardQsUserSwitchComponentFactory;
         mKeyguardUserSwitcherComponentFactory = keyguardUserSwitcherComponentFactory;
         mEmergencyButtonControllerFactory = emergencyButtonControllerFactory;
-        mQSDetailDisplayer = qsDetailDisplayer;
         mFragmentService = fragmentService;
         mSettingsChangeObserver = new SettingsChangeObserver(handler);
         mShouldUseSplitNotificationShade =
@@ -883,8 +869,7 @@ public class NotificationPanelViewController extends PanelViewController
         mUiExecutor = uiExecutor;
         mSecureSettings = secureSettings;
         mInteractionJankMonitor = interactionJankMonitor;
-        // TODO: inject via dagger instead of Dependency
-        mSysUiState = Dependency.get(SysUiState.class);
+        mSysUiState = sysUiState;
         pulseExpansionHandler.setPulseExpandAbortListener(() -> {
             if (mQs != null) {
                 mQs.animateHeaderSlidingOut();
@@ -979,7 +964,6 @@ public class NotificationPanelViewController extends PanelViewController
     private void onFinishInflate() {
         loadDimens();
         mKeyguardStatusBar = mView.findViewById(R.id.keyguard_header);
-        mIdleHostView = mView.findViewById(R.id.idle_host_view);
         mCommunalView = mView.findViewById(R.id.communal_host);
 
         FrameLayout userAvatarContainer = null;
@@ -1002,12 +986,6 @@ public class NotificationPanelViewController extends PanelViewController
                         .getKeyguardStatusBarViewController();
         mKeyguardStatusBarViewController.init();
 
-        if (mIdleHostView != null) {
-            IdleViewComponent idleViewComponent = mIdleViewComponentFactory.build(mIdleHostView);
-            mIdleHostViewController = idleViewComponent.getIdleHostViewController();
-            mIdleHostViewController.init();
-        }
-
         if (mCommunalView != null) {
             CommunalViewComponent communalViewComponent =
                     mCommunalViewComponentFactory.build(mCommunalView);
@@ -1021,7 +999,6 @@ public class NotificationPanelViewController extends PanelViewController
                 mView.findViewById(R.id.keyguard_status_view),
                 userAvatarContainer,
                 keyguardUserSwitcherView,
-                mIdleHostView,
                 mCommunalView);
 
         NotificationStackScrollLayout stackScrollLayout = mView.findViewById(
@@ -1114,20 +1091,12 @@ public class NotificationPanelViewController extends PanelViewController
     private void updateViewControllers(KeyguardStatusView keyguardStatusView,
             FrameLayout userAvatarView,
             KeyguardUserSwitcherView keyguardUserSwitcherView,
-            IdleHostView idleHostView,
             CommunalHostView communalView) {
         // Re-associate the KeyguardStatusViewController
         KeyguardStatusViewComponent statusViewComponent =
                 mKeyguardStatusViewComponentFactory.build(keyguardStatusView);
         mKeyguardStatusViewController = statusViewComponent.getKeyguardStatusViewController();
         mKeyguardStatusViewController.init();
-
-        if (idleHostView != null && idleHostView != mIdleHostView) {
-            mIdleHostView = idleHostView;
-            IdleViewComponent idleViewComponent = mIdleViewComponentFactory.build(idleHostView);
-            mIdleHostViewController = idleViewComponent.getIdleHostViewController();
-            mIdleHostViewController.init();
-        }
 
         if (mKeyguardUserSwitcherController != null) {
             // Try to close the switcher so that callbacks are triggered if necessary.
@@ -1144,7 +1113,6 @@ public class NotificationPanelViewController extends PanelViewController
                     mKeyguardQsUserSwitchComponentFactory.build(userAvatarView);
             mKeyguardQsUserSwitchController =
                     userSwitcherComponent.getKeyguardQsUserSwitchController();
-            mKeyguardQsUserSwitchController.setNotificationPanelViewController(this);
             mKeyguardQsUserSwitchController.init();
             mKeyguardStatusBarViewController.setKeyguardUserSwitcherEnabled(true);
         } else if (keyguardUserSwitcherView != null) {
@@ -1301,7 +1269,7 @@ public class NotificationPanelViewController extends PanelViewController
                         showKeyguardUserSwitcher /* enabled */);
 
         updateViewControllers(mView.findViewById(R.id.keyguard_status_view), userAvatarView,
-                keyguardUserSwitcherView, mView.findViewById(R.id.idle_host_view), mCommunalView);
+                keyguardUserSwitcherView, mCommunalView);
 
         // Update keyguard bottom area
         int index = mView.indexOfChild(mKeyguardBottomArea);
@@ -1588,6 +1556,7 @@ public class NotificationPanelViewController extends PanelViewController
 
             constraintSet.applyTo(mNotificationContainerParent);
         }
+        mKeyguardUnfoldTransition.ifPresent(t -> t.setStatusViewCentered(mStatusViewCentered));
     }
 
     /**
@@ -1856,18 +1825,6 @@ public class NotificationPanelViewController extends PanelViewController
         } else {
             traceQsJank(true /* startTracing */, false /* wasCancelled */);
             flingSettings(0 /* velocity */, FLING_EXPAND);
-        }
-    }
-
-    public void expandWithQsDetail(DetailAdapter qsDetailAdapter) {
-        traceQsJank(true /* startTracing */, false /* wasCancelled */);
-        flingSettings(0 /* velocity */, FLING_EXPAND);
-        // When expanding with a panel, there's no meaningful touch point to correspond to. Set the
-        // origin to somewhere above the screen. This is used for animations.
-        int x = mQsFrame.getWidth() / 2;
-        mQSDetailDisplayer.showDetailAdapter(qsDetailAdapter, x, -getHeight());
-        if (mAccessibilityManager.isEnabled()) {
-            mView.setAccessibilityPaneTitle(determineAccessibilityPaneTitle());
         }
     }
 

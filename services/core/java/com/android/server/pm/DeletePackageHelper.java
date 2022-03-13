@@ -223,8 +223,12 @@ final class DeletePackageHelper {
                         deleteFlags | PackageManager.DELETE_CHATTY, info, true);
             }
             if (res && pkg != null) {
+                final boolean packageInstalledForSomeUsers;
+                synchronized (mPm.mLock) {
+                    packageInstalledForSomeUsers = mPm.mPackages.get(pkg.getPackageName()) != null;
+                }
                 mPm.mInstantAppRegistry.onPackageUninstalled(pkg, uninstalledPs,
-                        info.mRemovedUsers);
+                        info.mRemovedUsers, packageInstalledForSomeUsers);
             }
             synchronized (mPm.mLock) {
                 if (res) {
@@ -460,7 +464,8 @@ final class DeletePackageHelper {
         }
         for (final int affectedUserId : affectedUserIds) {
             if (hadSuspendAppsPermission.get(affectedUserId)) {
-                mPm.unsuspendForSuspendingPackage(packageName, affectedUserId);
+                mPm.unsuspendForSuspendingPackage(mPm.snapshotComputer(), packageName,
+                        affectedUserId);
                 mPm.removeAllDistractingPackageRestrictions(affectedUserId);
             }
         }
@@ -474,13 +479,14 @@ final class DeletePackageHelper {
     private void clearPackageStateForUserLIF(PackageSetting ps, int userId,
             PackageRemovedInfo outInfo, int flags) {
         final AndroidPackage pkg;
+        final SharedUserSetting sus;
         synchronized (mPm.mLock) {
             pkg = mPm.mPackages.get(ps.getPackageName());
+            sus = mPm.mSettings.getSharedUserSettingLPr(ps);
         }
 
         mAppDataHelper.destroyAppProfilesLIF(pkg);
 
-        final SharedUserSetting sus = ps.getSharedUser();
         final List<AndroidPackage> sharedUserPkgs =
                 sus != null ? sus.getPackages() : Collections.emptyList();
         final PreferredActivityHelper preferredActivityHelper = new PreferredActivityHelper(mPm);

@@ -26,6 +26,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.os.Handler;
 import android.util.Log;
+import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
@@ -117,6 +118,13 @@ class CompanionApplicationController {
 
             serviceConnectors = CollectionUtils.map(companionServices, componentName ->
                             new CompanionDeviceServiceConnector(mContext, userId, componentName));
+
+            if (serviceConnectors.isEmpty()) {
+                Slog.e(TAG, "Can't find CompanionDeviceService implementer in package: "
+                        + packageName + ". Please check if they are correctly declared.");
+                return;
+            }
+
             mBoundCompanionApplications.setValueForPackage(userId, packageName, serviceConnectors);
         }
 
