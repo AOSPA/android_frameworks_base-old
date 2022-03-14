@@ -37,6 +37,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.keyguard.dagger.KeyguardBouncerScope;
+import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
@@ -176,6 +177,9 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
     }
 
     private void requestCellInfoUpdate(){
+        if(!getContext().getResources().getBoolean(R.bool.kg_hide_emgcy_btn_when_oos)) {
+            return;
+        }
         TelephonyManager tmWithoutSim = mTelephonyManager
                 .createForSubscriptionId(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
         try {
@@ -195,7 +199,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
                             updateEmergencyCallButton();
                         }
                     });
-        } catch (IllegalStateException exception) {
+        } catch (Exception exception) {
             Log.e(LOG_TAG, "Fail to call TelephonyManager.requestCellInfoUpdate ", exception);
         }
     }

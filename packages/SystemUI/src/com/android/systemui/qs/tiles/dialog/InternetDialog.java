@@ -378,7 +378,8 @@ public class InternetDialog extends SystemUIDialog implements
 
     private void setMobileDataLayout(boolean isCarrierNetworkConnected) {
         if (mInternetDialogController.isAirplaneModeEnabled()
-                || !mInternetDialogController.hasCarrier()) {
+                || !mInternetDialogController.hasCarrier()
+                || mInternetDialogController.isInCallOnNonDds()) {
             mMobileNetworkLayout.setVisibility(View.GONE);
         } else {
             mMobileDataToggle.setChecked(mInternetDialogController.isMobileDataEnabled());
@@ -616,6 +617,11 @@ public class InternetDialog extends SystemUIDialog implements
             mAdapter.notifyDataSetChanged();
             updateDialog(false /* shouldUpdateMobileNetwork */);
         });
+    }
+
+    @Override
+    public void onNonDdsCallStateChanged() {
+        mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }
 
     @Override

@@ -226,6 +226,7 @@ public class DisplayPolicy {
     private final ScreenshotHelper mScreenshotHelper;
 
     private static boolean SCROLL_BOOST_SS_ENABLE = false;
+    private static boolean DRAG_PLH_ENABLE = false;
     private static boolean isLowRAM = false;
 
     /*
@@ -475,7 +476,7 @@ public class DisplayPolicy {
                 : service.mContext.createDisplayContext(displayContent.getDisplay());
         mUiContext = displayContent.isDefaultDisplay ? service.mAtmService.mUiContext
                 : service.mAtmService.mSystemThread
-                        .createSystemUiContext(displayContent.getDisplayId());
+                        .getSystemUiContext(displayContent.getDisplayId());
         mDisplayContent = displayContent;
         mLock = service.getWindowManagerLock();
 
@@ -496,8 +497,10 @@ public class DisplayPolicy {
             mScreenOnFully = true;
         }
 
-        if (mPerf != null)
-                SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
+        if (mPerf != null) {
+            SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
+            DRAG_PLH_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.perf.dplh", "false"));
+        }
         isLowRAM = SystemProperties.getBoolean("ro.config.low_ram", false);
 
         final Looper looper = UiThread.getHandler().getLooper();
@@ -649,9 +652,15 @@ public class DisplayPolicy {
                         }
                         isGame = isTopAppGame(currentPackage, mPerfBoostDrag);
                         if (!isGame && started) {
+                            if (DRAG_PLH_ENABLE) {
+                                mPerfBoostDrag.perfEvent(BoostFramework.VENDOR_HINT_DRAG_START, currentPackage);
+                            }
                             mPerfBoostDrag.perfHint(BoostFramework.VENDOR_HINT_DRAG_BOOST,
                                             currentPackage, -1, 1);
                         } else {
+                            if (DRAG_PLH_ENABLE) {
+                                mPerfBoostDrag.perfEvent(BoostFramework.VENDOR_HINT_DRAG_END, currentPackage);
+                            }
                             mPerfBoostDrag.perfLockRelease();
                         }
                     }
@@ -2254,7 +2263,8 @@ public class DisplayPolicy {
         // user's package info (see ContextImpl.createDisplayContext)
         final LoadedApk pi = ActivityThread.currentActivityThread().getPackageInfo(
                 uiContext.getPackageName(), null, 0, userId);
-        mCurrentUserResources = ResourcesManager.getInstance().getResources(null,
+        mCurrentUserResources = ResourcesManager.getInstance().getResources(
+                uiContext.getWindowContextToken(),
                 pi.getResDir(),
                 null /* splitResDirs */,
                 pi.getOverlayDirs(),

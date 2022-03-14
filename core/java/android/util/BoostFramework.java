@@ -99,6 +99,8 @@ public class BoostFramework {
     //perf events
     public static final int VENDOR_HINT_FIRST_DRAW = 0x00001042;
     public static final int VENDOR_HINT_TAP_EVENT = 0x00001043;
+    public static final int VENDOR_HINT_DRAG_START = 0x00001051;
+    public static final int VENDOR_HINT_DRAG_END = 0x00001052;
     //feedback hints
     public static final int VENDOR_FEEDBACK_WORKLOAD_TYPE = 0x00001601;
     public static final int VENDOR_FEEDBACK_LAUNCH_END_POINT = 0x00001602;
