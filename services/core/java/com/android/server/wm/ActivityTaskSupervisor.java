@@ -649,15 +649,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     void reportActivityLaunched(boolean timeout, ActivityRecord r, long totalTime,
             @WaitResult.LaunchState int launchState) {
         boolean changed = false;
-        if (totalTime > 0) {
-            if (mPerfBoost != null) {
-                if (r.app != null) {
-                    mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW,
-                        r.packageName, r.app.getPid(),
-                        BoostFramework.Draw.EVENT_TYPE_V1);
-                }
-            }
-        }
         for (int i = mWaitingActivityLaunched.size() - 1; i >= 0; i--) {
             final WaitInfo info = mWaitingActivityLaunched.get(i);
             if (!info.matches(r)) {
@@ -1972,9 +1963,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 mIsPerfBoostAcquired = true;
             // Start IOP
             if (r.info.applicationInfo != null && r.info.applicationInfo.sourceDir != null) {
-                mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                       r.info.applicationInfo.sourceDir.substring(0,
-                        r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+                if (mPerfBoost.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mPerfBoost.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                        mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+                           r.info.applicationInfo.sourceDir.substring(0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+                }
             }
         }
     }
@@ -2808,7 +2801,12 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             }
             if (mUxPerf != null
                    && trimLevel < ProcessStats.ADJ_MEM_FACTOR_CRITICAL) {
-                res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
+                if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
+                } else {
+                    res = mUxPerf.perfSyncRequest(BoostFramework.VENDOR_FEEDBACK_PA_FW);
+                }
                 if (res == null)
                     return null;
                 String[] p_apps = res.split("/");

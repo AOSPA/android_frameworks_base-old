@@ -1101,12 +1101,15 @@ class ActivityMetricsLogger {
         if (mPerfBoost != null) {
             if (info.processRecord != null) {
                 mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName,
-                    info.processRecord.getPid(), BoostFramework.Draw.EVENT_TYPE_V1);
+                    info.processRecord.getPid(), info.windowsDrawnDelayMs);
             }
         }
 
         if (mUxPerf != null) {
-            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
+            if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
+            }
         }
 
         Log.i(TAG, sb.toString());
@@ -1125,7 +1128,10 @@ class ActivityMetricsLogger {
                     isGame = 1;
                 }
             }
-            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
+            if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
+            }
         }
 
         if (mLaunchedActivity.mPerf != null && mLaunchedActivity.perfActivityBoostHandler > 0) {
