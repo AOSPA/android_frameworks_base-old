@@ -375,6 +375,15 @@ public class InternetDialog extends SystemUIDialog implements
                 mInternetDialogController.hasEthernet() ? View.VISIBLE : View.GONE);
     }
 
+    /**
+     * Do not allow the user to disable mobile data of DDS while there is an active
+     * call on the nDDS.
+     */
+    private boolean shouldDisallowUserToDisableMobileData() {
+        return mInternetDialogController.isMobileDataEnabled()
+                && !mInternetDialogController.isNonDdsCallStateIdle();
+    }
+
     private void setMobileDataLayout(boolean activeNetworkIsCellular,
             boolean isCarrierNetworkActive) {
         boolean isNetworkConnected = activeNetworkIsCellular || isCarrierNetworkActive;
@@ -390,6 +399,12 @@ public class InternetDialog extends SystemUIDialog implements
                 && (!isWifiEnabled || !isCarrierNetworkActive)) {
             mMobileNetworkLayout.setVisibility(View.GONE);
         } else {
+            if (shouldDisallowUserToDisableMobileData()) {
+                Log.d(TAG, "Do not allow mobile data switch to be turned off");
+                mMobileDataToggle.setEnabled(false);
+            } else {
+                mMobileDataToggle.setEnabled(true);
+            }
             mMobileNetworkLayout.setVisibility(View.VISIBLE);
             mMobileDataToggle.setChecked(mInternetDialogController.isMobileDataEnabled());
             mMobileTitleText.setText(getMobileNetworkTitle());
@@ -558,6 +573,9 @@ public class InternetDialog extends SystemUIDialog implements
     }
 
     String getMobileNetworkSummary() {
+        if (shouldDisallowUserToDisableMobileData()) {
+            return mContext.getString(R.string.mobile_data_summary_not_allowed_to_disable_data);
+        }
         return mInternetDialogController.getMobileNetworkSummary();
     }
 
@@ -676,6 +694,11 @@ public class InternetDialog extends SystemUIDialog implements
 
     @Override
     public void onDisplayInfoChanged(TelephonyDisplayInfo telephonyDisplayInfo) {
+        mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
+    }
+
+    @Override
+    public void onNonDdsCallStateChanged(int callState) {
         mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }
 
