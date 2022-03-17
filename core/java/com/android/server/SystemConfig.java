@@ -34,6 +34,7 @@ import android.os.Trace;
 import android.os.incremental.IncrementalManager;
 import android.os.storage.StorageManager;
 import android.permission.PermissionManager.SplitPermissionInfo;
+import android.sysprop.ApexProperties;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -671,6 +672,7 @@ public class SystemConfig {
             readPermissions(parser, Environment.buildPath(f, "etc", "permissions"),
                     apexPermissionFlag);
         }
+        pruneVendorApexPrivappAllowlists();
     }
 
     @VisibleForTesting
@@ -1186,7 +1188,8 @@ public class SystemConfig {
                             boolean systemExt = permFile.toPath().startsWith(
                                     Environment.getSystemExtDirectory().toPath() + "/");
                             boolean apex = permFile.toPath().startsWith(
-                                    Environment.getApexDirectory().toPath() + "/");
+                                    Environment.getApexDirectory().toPath() + "/")
+                                    && ApexProperties.updatable().orElse(false);
                             if (vendor) {
                                 readPrivAppPermissions(parser, mVendorPrivAppPermissions,
                                         mVendorPrivAppDenyPermissions);
@@ -1197,7 +1200,8 @@ public class SystemConfig {
                                 readPrivAppPermissions(parser, mSystemExtPrivAppPermissions,
                                         mSystemExtPrivAppDenyPermissions);
                             } else if (apex) {
-                                readApexPrivAppPermissions(parser, permFile);
+                                readApexPrivAppPermissions(parser, permFile,
+                                        Environment.getApexDirectory().toPath());
                             } else {
                                 readPrivAppPermissions(parser, mPrivAppPermissions,
                                         mPrivAppDenyPermissions);
@@ -1547,6 +1551,21 @@ public class SystemConfig {
         }
     }
 
+    /**
+     * Prunes out any privileged permission allowlists bundled in vendor apexes.
+     */
+    @VisibleForTesting
+    public void pruneVendorApexPrivappAllowlists() {
+        for (String moduleName: mAllowedVendorApexes.keySet()) {
+            if (mApexPrivAppPermissions.containsKey(moduleName)
+                    || mApexPrivAppDenyPermissions.containsKey(moduleName)) {
+                Slog.w(TAG, moduleName + " is a vendor apex, ignore its priv-app allowlist");
+                mApexPrivAppPermissions.remove(moduleName);
+                mApexPrivAppDenyPermissions.remove(moduleName);
+            }
+        }
+    }
+
     private void readInstallInUserType(XmlPullParser parser,
             Map<String, Set<String>> doInstallMap,
             Map<String, Set<String>> nonInstallMap)
@@ -1757,8 +1776,7 @@ public class SystemConfig {
     /**
      * Returns the module name for a file in the apex module's partition.
      */
-    private String getApexModuleNameFromFilePath(Path path) {
-        final Path apexDirectoryPath = Environment.getApexDirectory().toPath();
+    private String getApexModuleNameFromFilePath(Path path, Path apexDirectoryPath) {
         if (!path.startsWith(apexDirectoryPath)) {
             throw new IllegalArgumentException("File " + path + " is not part of an APEX.");
         }
@@ -1770,9 +1788,14 @@ public class SystemConfig {
         return path.getName(apexDirectoryPath.getNameCount()).toString();
     }
 
-    private void readApexPrivAppPermissions(XmlPullParser parser, File permFile)
-            throws IOException, XmlPullParserException {
-        final String moduleName = getApexModuleNameFromFilePath(permFile.toPath());
+    /**
+     * Reads the contents of the privileged permission allowlist stored inside an APEX.
+     */
+    @VisibleForTesting
+    public void readApexPrivAppPermissions(XmlPullParser parser, File permFile,
+            Path apexDirectoryPath) throws IOException, XmlPullParserException {
+        final String moduleName =
+                getApexModuleNameFromFilePath(permFile.toPath(), apexDirectoryPath);
         final ArrayMap<String, ArraySet<String>> privAppPermissions;
         if (mApexPrivAppPermissions.containsKey(moduleName)) {
             privAppPermissions = mApexPrivAppPermissions.get(moduleName);

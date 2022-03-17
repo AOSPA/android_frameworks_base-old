@@ -41,6 +41,7 @@ import android.app.usage.UsageStatsManagerInternal;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.IPackageManager;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
@@ -217,8 +218,6 @@ import dalvik.system.VMRuntime;
 import dalvik.system.PathClassLoader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-
-import com.google.android.startop.iorap.IorapForwardingService;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -424,8 +423,10 @@ public final class SystemServer implements Dumpable {
     private static final String BLUETOOTH_SERVICE_CLASS =
             "com.android.server.bluetooth.BluetoothService";
 
-    private static final String SUPPLEMENTALPROCESS_SERVICE_CLASS =
-            "com.android.server.supplementalprocess.SupplementalProcessManagerService$Lifecycle";
+    private static final String SDK_SANDBOX_MANAGER_SERVICE_CLASS =
+            "com.android.server.sdksandbox.SdkSandboxManagerService$Lifecycle";
+    private static final String AD_SERVICES_MANAGER_SERVICE_CLASS =
+            "com.android.server.adservices.AdServicesManagerService$Lifecycle";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -1229,12 +1230,15 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(domainVerificationService);
         t.traceEnd();
 
+        IPackageManager iPackageManager;
         t.traceBegin("StartPackageManagerService");
         try {
             Watchdog.getInstance().pauseWatchingCurrentThread("packagemanagermain");
-            mPackageManagerService = PackageManagerService.main(mSystemContext, installer,
-                    domainVerificationService, mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF,
-                    mOnlyCore);
+            Pair<PackageManagerService, IPackageManager> pmsPair = PackageManagerService.main(
+                    mSystemContext, installer, domainVerificationService,
+                    mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF, mOnlyCore);
+            mPackageManagerService = pmsPair.first;
+            iPackageManager = pmsPair.second;
         } finally {
             Watchdog.getInstance().resumeWatchingCurrentThread("packagemanagermain");
         }
@@ -1242,7 +1246,7 @@ public final class SystemServer implements Dumpable {
         // Now that the package manager has started, register the dex load reporter to capture any
         // dex files loaded by system server.
         // These dex files will be optimized by the BackgroundDexOptService.
-        SystemServerDexLoadReporter.configureSystemServerDexReporter(mPackageManagerService);
+        SystemServerDexLoadReporter.configureSystemServerDexReporter(iPackageManager);
 
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
@@ -1647,10 +1651,6 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("PinnerService");
             mSystemServiceManager.startService(PinnerService.class);
-            t.traceEnd();
-
-            t.traceBegin("IorapForwardingService");
-            mSystemServiceManager.startService(IorapForwardingService.class);
             t.traceEnd();
 
             mSystemServiceManager.startService(ActivityTriggerService.class);
@@ -2639,9 +2639,14 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(IncidentCompanionService.class);
         t.traceEnd();
 
-        // Supplemental Process
-        t.traceBegin("StartSupplementalProcessManagerService");
-        mSystemServiceManager.startService(SUPPLEMENTALPROCESS_SERVICE_CLASS);
+        // SdkSandboxManagerService
+        t.traceBegin("StarSdkSandboxManagerService");
+        mSystemServiceManager.startService(SDK_SANDBOX_MANAGER_SERVICE_CLASS);
+        t.traceEnd();
+
+        // AdServicesManagerService (PP API service)
+        t.traceBegin("StartAdServicesManagerService");
+        mSystemServiceManager.startService(AD_SERVICES_MANAGER_SERVICE_CLASS);
         t.traceEnd();
 
         if (safeMode) {

@@ -494,7 +494,6 @@ public class ParsingPackageImpl implements ParsingPackage, ParsingPackageHidden,
                 ATTRIBUTIONS_ARE_USER_VISIBLE,
                 RESET_ENABLED_SETTINGS_ON_APP_DATA_CLEARED,
                 SDK_LIBRARY,
-                INHERIT_KEYSTORE_KEYS,
         })
         public @interface Values {}
         private static final long EXTERNAL_STORAGE = 1L;
@@ -547,8 +546,8 @@ public class ParsingPackageImpl implements ParsingPackage, ParsingPackageHidden,
         private static final long ATTRIBUTIONS_ARE_USER_VISIBLE = 1L << 47;
         private static final long RESET_ENABLED_SETTINGS_ON_APP_DATA_CLEARED = 1L << 48;
         private static final long SDK_LIBRARY = 1L << 49;
-        private static final long INHERIT_KEYSTORE_KEYS = 1L << 50;
-        private static final long ENABLE_ON_BACK_INVOKED_CALLBACK = 1L << 51;
+        private static final long ENABLE_ON_BACK_INVOKED_CALLBACK = 1L << 50;
+        private static final long LEAVING_SHARED_UID = 1L << 51;
     }
 
     private ParsingPackageImpl setBoolean(@Booleans.Values long flag, boolean value) {
@@ -2393,13 +2392,13 @@ public class ParsingPackageImpl implements ParsingPackage, ParsingPackageHidden,
     }
 
     @Override
-    public boolean shouldInheritKeyStoreKeys() {
-        return getBoolean(Booleans.INHERIT_KEYSTORE_KEYS);
+    public boolean isOnBackInvokedCallbackEnabled() {
+        return getBoolean(Booleans.ENABLE_ON_BACK_INVOKED_CALLBACK);
     }
 
     @Override
-    public boolean isOnBackInvokedCallbackEnabled() {
-        return getBoolean(Booleans.ENABLE_ON_BACK_INVOKED_CALLBACK);
+    public boolean isLeavingSharedUid() {
+        return getBoolean(Booleans.LEAVING_SHARED_UID);
     }
 
     @Override
@@ -2546,8 +2545,8 @@ public class ParsingPackageImpl implements ParsingPackage, ParsingPackageHidden,
     }
 
     @Override
-    public ParsingPackageImpl setInheritKeyStoreKeys(boolean value) {
-        return setBoolean(Booleans.INHERIT_KEYSTORE_KEYS, value);
+    public ParsingPackageImpl setLeavingSharedUid(boolean value) {
+        return setBoolean(Booleans.LEAVING_SHARED_UID, value);
     }
 
     @Override

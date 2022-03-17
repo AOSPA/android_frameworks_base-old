@@ -238,6 +238,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         AndroidPackage::isVendor,
         AndroidPackage::isVisibleToInstantApps,
         AndroidPackage::isVmSafeMode,
+        AndroidPackage::isLeavingSharedUid,
         AndroidPackage::isResetEnabledSettingsOnAppDataCleared,
         AndroidPackage::getMaxAspectRatio,
         AndroidPackage::getMinAspectRatio,
@@ -503,11 +504,6 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
                     PackageManager.Property::getString
                 )
             }
-        ),
-        getSetByValue(
-            AndroidPackage::shouldInheritKeyStoreKeys,
-            ParsingPackage::setInheritKeyStoreKeys,
-            true
         ),
         getter(AndroidPackage::getKnownActivityEmbeddingCerts, setOf("TESTEMBEDDINGCERT")),
         getSetByValue(

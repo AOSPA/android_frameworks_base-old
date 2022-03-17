@@ -79,6 +79,7 @@ import static android.os.Process.ZYGOTE_POLICY_FLAG_LATENCY_SENSITIVE;
 import static android.os.Process.ZYGOTE_POLICY_FLAG_SYSTEM_PROCESS;
 import static android.os.Process.ZYGOTE_PROCESS;
 import static android.os.Process.getTotalMemory;
+import static android.os.Process.isSdkSandboxUid;
 import static android.os.Process.isThreadInProcess;
 import static android.os.Process.killProcess;
 import static android.os.Process.killProcessQuiet;
@@ -2812,13 +2813,13 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @GuardedBy("this")
-    final ProcessRecord startSupplementalProcessLocked(String processName,
+    final ProcessRecord startSdkSandboxProcessLocked(String processName,
             ApplicationInfo info, boolean knownToBeDead, int intentFlags,
-            HostingRecord hostingRecord, int zygotePolicyFlags, int supplementalUid) {
+            HostingRecord hostingRecord, int zygotePolicyFlags, int sdkSandboxUid) {
         return mProcessList.startProcessLocked(processName, info, knownToBeDead, intentFlags,
                 hostingRecord, zygotePolicyFlags, false /* allowWhileBooting */,
                 false /* isolated */, 0 /* isolatedUid */,
-                true /* supplemental */, supplementalUid,
+                true /* isSdkSandbox */, sdkSandboxUid,
                 null /* ABI override */, null /* entryPoint */,
                 null /* entryPointArgs */, null /* crashHandler */);
     }
@@ -2830,7 +2831,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             boolean isolated) {
         return mProcessList.startProcessLocked(processName, info, knownToBeDead, intentFlags,
                 hostingRecord, zygotePolicyFlags, allowWhileBooting, isolated, 0 /* isolatedUid */,
-                false /* supplemental */, 0 /* supplementalUid */,
+                false /* isSdkSandbox */, 0 /* sdkSandboxClientdAppUid */,
                 null /* ABI override */, null /* entryPoint */,
                 null /* entryPointArgs */, null /* crashHandler */);
     }
@@ -3848,7 +3849,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     synchronized (mProcLock) {
                         mProcessList.killPackageProcessesLSP(packageName, appId, targetUserId,
                                 ProcessList.SERVICE_ADJ, ApplicationExitInfo.REASON_USER_REQUESTED,
-                                ApplicationExitInfo.SUBREASON_UNKNOWN, "kill background");
+                                ApplicationExitInfo.SUBREASON_KILL_BACKGROUND, "kill background");
                     }
                 }
             }
@@ -3878,7 +3879,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     mProcessList.killPackageProcessesLSP(null /* packageName */, -1 /* appId */,
                             UserHandle.USER_ALL, ProcessList.CACHED_APP_MIN_ADJ,
                             ApplicationExitInfo.REASON_USER_REQUESTED,
-                            ApplicationExitInfo.SUBREASON_UNKNOWN,
+                            ApplicationExitInfo.SUBREASON_KILL_BACKGROUND,
                             "kill all background");
                 }
 
@@ -4420,7 +4421,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         ProcessList.INVALID_ADJ, true, false, true,
                         false, true /* setRemoved */, false,
                         ApplicationExitInfo.REASON_USER_REQUESTED,
-                        ApplicationExitInfo.SUBREASON_UNKNOWN,
+                        ApplicationExitInfo.SUBREASON_STOP_APP,
                         "fully stop " + packageName + "/" + userId + " by user request");
             }
 
@@ -4473,7 +4474,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     evenPersistent, true /* setRemoved */, uninstalling,
                     packageName == null ? ApplicationExitInfo.REASON_USER_STOPPED
                     : ApplicationExitInfo.REASON_USER_REQUESTED,
-                    ApplicationExitInfo.SUBREASON_UNKNOWN,
+                    ApplicationExitInfo.SUBREASON_FORCE_STOP,
                     (packageName == null ? ("stop user " + userId) : ("stop " + packageName))
                     + " due to " + reason);
         }
@@ -8645,6 +8646,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (process.info.isInstantApp()) {
                 sb.append("Instant-App: true\n");
             }
+            if (isSdkSandboxUid(process.uid)) {
+                sb.append("SdkSandbox: true\n");
+            }
         }
     }
 
@@ -9239,10 +9243,14 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             mComponentAliasResolver.dump(pw);
         }
-        if (dumpAll) {
-            pw.println("-------------------------------------------------------------------------------");
-            mAppRestrictionController.dump(pw, "");
-        }
+    }
+
+    /**
+     * Dump the app restriction controller, it's required not to hold the global lock here.
+     */
+    private void dumpAppRestrictionController(PrintWriter pw) {
+        pw.println("-------------------------------------------------------------------------------");
+        mAppRestrictionController.dump(pw, "");
     }
 
     /**
@@ -9598,6 +9606,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                             dumpNormalPriority, dumpAppId, false /* dumpProxies */);
                 }
             }
+            if (dumpAll) {
+                dumpAppRestrictionController(pw);
+            }
         }
         Binder.restoreCallingIdentity(origId);
     }
@@ -9829,7 +9840,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (info.deniedPermissions != null) {
                         for (int j = 0; j < info.deniedPermissions.size(); j++) {
                             pw.print("      deny: ");
-                            pw.println(info.deniedPermissions.valueAt(i));
+                            pw.println(info.deniedPermissions.valueAt(j));
                         }
                     }
                 }
@@ -12495,7 +12506,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private int bindServiceInstance(IApplicationThread caller, IBinder token, Intent service,
             String resolvedType, IServiceConnection connection, int flags, String instanceName,
-            boolean isSupplementalProcessService, int supplementedAppUid, String callingPackage,
+            boolean isSdkSandboxService, int sdkSandboxClientdAppUid, String callingPackage,
             int userId)
             throws TransactionTooLargeException {
         enforceNotIsolatedCaller("bindService");
@@ -12509,7 +12520,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new IllegalArgumentException("callingPackage cannot be null");
         }
 
-        if (isSupplementalProcessService && instanceName == null) {
+        if (isSdkSandboxService && instanceName == null) {
             throw new IllegalArgumentException("No instance name provided for isolated process");
         }
 
@@ -12525,10 +12536,19 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
-        synchronized(this) {
-            return mServices.bindServiceLocked(caller, token, service, resolvedType, connection,
-                    flags, instanceName, isSupplementalProcessService, supplementedAppUid,
-                    callingPackage, userId);
+        try {
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                final ComponentName cn = service.getComponent();
+                Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "bindService:"
+                        + (cn != null ? cn.toShortString() : service.getAction()));
+            }
+            synchronized (this) {
+                return mServices.bindServiceLocked(caller, token, service, resolvedType, connection,
+                        flags, instanceName, isSdkSandboxService, sdkSandboxClientdAppUid,
+                        callingPackage, userId);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
@@ -13685,6 +13705,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                                                 intent.getIntExtra(Intent.EXTRA_UID, -1)),
                                                 false, true, true, false, fullUninstall, userId,
                                                 removed ? "pkg removed" : "pkg changed");
+                                        getPackageManagerInternal()
+                                                .onPackageProcessKilledForUninstall(ssp);
                                     } else {
                                         // Kill any app zygotes always, since they can't fork new
                                         // processes with references to the old code
@@ -13720,7 +13742,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                                     UserHandle.getAppId(extraUid),
                                                     userId, ProcessList.INVALID_ADJ,
                                                     ApplicationExitInfo.REASON_USER_REQUESTED,
-                                                    ApplicationExitInfo.SUBREASON_UNKNOWN,
+                                                    ApplicationExitInfo.SUBREASON_PACKAGE_UPDATE,
                                                     "change " + ssp);
                                         }
                                     }
@@ -14436,7 +14458,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             int match = mContext.getPackageManager().checkSignatures(
                     ii.targetPackage, ii.packageName);
             if (match < 0 && match != PackageManager.SIGNATURE_FIRST_NOT_SIGNED) {
-                if (Build.IS_DEBUGGABLE && (flags & INSTR_FLAG_ALWAYS_CHECK_SIGNATURE) == 0) {
+                if (Build.IS_DEBUGGABLE && (callingUid == Process.ROOT_UID)
+                        && (flags & INSTR_FLAG_ALWAYS_CHECK_SIGNATURE) == 0) {
                     Slog.w(TAG, "Instrumentation test " + ii.packageName
                             + " doesn't have a signature matching the target " + ii.targetPackage
                             + ", which would not be allowed on the production Android builds");
@@ -16104,7 +16127,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public boolean bindSupplementalProcessService(Intent service, ServiceConnection conn,
+        public boolean bindSdkSandboxService(Intent service, ServiceConnection conn,
                 int userAppUid, String processName, int flags) throws RemoteException {
             if (service == null) {
                 throw new IllegalArgumentException("intent is null");
@@ -16453,7 +16476,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (pr.mState.getSetSchedGroup() == ProcessList.SCHED_GROUP_BACKGROUND
                             && pr.mReceivers.numberOfCurReceivers() == 0) {
                         pr.killLocked("remove task", ApplicationExitInfo.REASON_USER_REQUESTED,
-                                ApplicationExitInfo.SUBREASON_UNKNOWN, true);
+                                ApplicationExitInfo.SUBREASON_REMOVE_TASK, true);
                     } else {
                         // We delay killing processes that are not in the background or running a
                         // receiver.
@@ -17090,7 +17113,17 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void addPendingTopUid(int uid, int pid) {
-            mPendingStartActivityUids.add(uid, pid);
+            final boolean isNewPending = mPendingStartActivityUids.add(uid, pid);
+            // If the next top activity is in cached and frozen mode, WM should raise its priority
+            // to unfreeze it. This is done by calling AMS.updateOomAdj that will lower its oom adj.
+            // However, WM cannot hold the AMS clock here so the updateOomAdj operation is performed
+            // in a separate thread asynchronously. Therefore WM can't guarantee AMS will unfreeze
+            // next top activity on time. This race will fail the following binder transactions WM
+            // sends to the activity. After this race issue between WM/ATMS and AMS is solved, this
+            // workaround can be removed. (b/213288355)
+            if (isNewPending && mOomAdjuster != null) { // It can be null in unit test.
+                mOomAdjuster.mCachedAppOptimizer.unfreezeProcess(pid);
+            }
         }
 
         @Override

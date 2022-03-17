@@ -120,9 +120,6 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.MotionEvent;
-import android.view.OnBackInvokedCallback;
-import android.view.OnBackInvokedDispatcher;
-import android.view.OnBackInvokedDispatcherOwner;
 import android.view.RemoteAnimationDefinition;
 import android.view.SearchEvent;
 import android.view.View;
@@ -149,6 +146,9 @@ import android.view.translation.UiTranslationSpec;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
+import android.window.OnBackInvokedDispatcherOwner;
 import android.window.SplashScreen;
 import android.window.WindowOnBackInvokedDispatcher;
 
@@ -7416,7 +7416,6 @@ public class Activity extends ContextThemeWrapper
                     } else {
                         mDumpableContainer.listDumpables(prefix, writer);
                     }
-                    mDumpableContainer.listDumpables(prefix, writer);
                     return;
                 case DUMP_ARG_DUMP_DUMPABLE:
                     if (args.length == 1) {

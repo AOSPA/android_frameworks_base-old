@@ -22,8 +22,8 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.phone.LSShadeTransitionLogger
 import com.android.systemui.statusbar.phone.NotificationPanelViewController
 import com.android.systemui.statusbar.phone.ScrimController
-import com.android.systemui.statusbar.phone.StatusBar
-import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.systemui.statusbar.phone.CentralSurfaces
+import com.android.systemui.statusbar.policy.FakeConfigurationController
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -66,16 +66,17 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
     @Mock lateinit var wakefulnessLifecycle: WakefulnessLifecycle
     @Mock lateinit var mediaHierarchyManager: MediaHierarchyManager
     @Mock lateinit var scrimController: ScrimController
-    @Mock lateinit var configurationController: ConfigurationController
     @Mock lateinit var falsingManager: FalsingManager
     @Mock lateinit var notificationPanelController: NotificationPanelViewController
     @Mock lateinit var nsslController: NotificationStackScrollLayoutController
     @Mock lateinit var depthController: NotificationShadeDepthController
     @Mock lateinit var stackscroller: NotificationStackScrollLayout
     @Mock lateinit var expandHelperCallback: ExpandHelper.Callback
-    @Mock lateinit var statusbar: StatusBar
+    @Mock lateinit var mCentralSurfaces: CentralSurfaces
     @Mock lateinit var qS: QS
     @JvmField @Rule val mockito = MockitoJUnit.rule()
+
+    private val configurationController = FakeConfigurationController()
 
     @Before
     fun setup() {
@@ -86,6 +87,8 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         row = helper.createRow()
         context.getOrCreateTestableResources()
                 .addOverride(R.bool.config_use_split_notification_shade, false)
+        context.getOrCreateTestableResources()
+            .addOverride(R.dimen.lockscreen_shade_depth_controller_transition_distance, 100)
         transitionController = LockscreenShadeTransitionController(
             statusBarStateController = statusbarStateController,
             logger = logger,
@@ -105,7 +108,7 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         whenever(nsslController.view).thenReturn(stackscroller)
         whenever(nsslController.expandHelperCallback).thenReturn(expandHelperCallback)
         transitionController.notificationPanelController = notificationPanelController
-        transitionController.statusbar = statusbar
+        transitionController.centralSurfaces = mCentralSurfaces
         transitionController.qS = qS
         transitionController.setStackScroller(nsslController)
         whenever(statusbarStateController.state).thenReturn(StatusBarState.KEYGUARD)
@@ -117,7 +120,7 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         whenever(lockScreenUserManager.isLockscreenPublicMode(anyInt())).thenReturn(true)
         whenever(falsingCollector.shouldEnforceBouncer()).thenReturn(false)
         whenever(keyguardBypassController.bypassEnabled).thenReturn(false)
-        clearInvocations(statusbar)
+        clearInvocations(mCentralSurfaces)
     }
 
     @After
@@ -174,7 +177,7 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
 
     @Test
     fun testDontGoWhenShadeDisabled() {
-        whenever(statusbar.isShadeDisabled).thenReturn(true)
+        whenever(mCentralSurfaces.isShadeDisabled).thenReturn(true)
         transitionController.goToLockedShade(null)
         verify(statusbarStateController, never()).setState(anyInt())
     }
@@ -193,7 +196,7 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         transitionController.goToLockedShade(null)
         verify(statusbarStateController, never()).setState(anyInt())
         verify(statusbarStateController).setLeaveOpenOnKeyguardHide(true)
-        verify(statusbar).showBouncerWithDimissAndCancelIfKeyguard(anyObject(), anyObject())
+        verify(mCentralSurfaces).showBouncerWithDimissAndCancelIfKeyguard(anyObject(), anyObject())
     }
 
     @Test
@@ -202,7 +205,7 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
         transitionController.goToLockedShade(null)
         verify(statusbarStateController, never()).setState(anyInt())
         verify(statusbarStateController).setLeaveOpenOnKeyguardHide(true)
-        verify(statusbar).showBouncerWithDimissAndCancelIfKeyguard(anyObject(), anyObject())
+        verify(mCentralSurfaces).showBouncerWithDimissAndCancelIfKeyguard(anyObject(), anyObject())
     }
 
     @Test
@@ -243,5 +246,39 @@ class LockscreenShadeTransitionControllerTest : SysuiTestCase() {
                 anyBoolean(), anyLong())
         verify(qS).setTransitionToFullShadeAmount(anyFloat(), anyFloat())
         verify(depthController).transitionToFullShadeProgress = anyFloat()
+    }
+
+    @Test
+    fun testDragDownAmount_depthDistanceIsZero_doesNotSetProgress() {
+        context.getOrCreateTestableResources()
+            .addOverride(R.dimen.lockscreen_shade_depth_controller_transition_distance, 0)
+        configurationController.notifyConfigurationChanged()
+
+        transitionController.dragDownAmount = 10f
+
+        verify(depthController, never()).transitionToFullShadeProgress
+    }
+
+    @Test
+    fun setDragDownAmount_setsValueOnMediaHierarchyManager() {
+        transitionController.dragDownAmount = 10f
+
+        verify(mediaHierarchyManager).setTransitionToFullShadeAmount(10f)
+    }
+
+    @Test
+    fun setDragDownAmount_inSplitShade_setsValueOnMediaHierarchyManager() {
+        enableSplitShade()
+
+        transitionController.dragDownAmount = 10f
+
+        verify(mediaHierarchyManager).setTransitionToFullShadeAmount(10f)
+    }
+
+    private fun enableSplitShade() {
+        context.getOrCreateTestableResources().addOverride(
+            R.bool.config_use_split_notification_shade, true
+        )
+        configurationController.notifyConfigurationChanged()
     }
 }

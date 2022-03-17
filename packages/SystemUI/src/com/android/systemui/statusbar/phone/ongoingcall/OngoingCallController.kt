@@ -21,7 +21,8 @@ import android.app.IActivityManager
 import android.app.IUidObserver
 import android.app.Notification
 import android.app.Notification.CallStyle.CALL_TYPE_ONGOING
-import android.content.Intent
+import android.app.PendingIntent
+import android.content.Context
 import android.util.Log
 import android.view.View
 import androidx.annotation.VisibleForTesting
@@ -52,6 +53,7 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class OngoingCallController @Inject constructor(
+    private val context: Context,
     private val notifCollection: CommonNotifCollection,
     private val ongoingCallFlags: OngoingCallFlags,
     private val systemClock: SystemClock,
@@ -67,13 +69,10 @@ class OngoingCallController @Inject constructor(
     private var isFullscreen: Boolean = false
     /** Non-null if there's an active call notification. */
     private var callNotificationInfo: CallNotificationInfo? = null
-    /** True if the application managing the call is visible to the user. */
-    private var isCallAppVisible: Boolean = false
     private var chipView: View? = null
-    private var uidObserver: IUidObserver.Stub? = null
 
     private val mListeners: MutableList<OngoingCallListener> = mutableListOf()
-
+    private val uidObserver = CallAppUidObserver()
     private val notifListener = object : NotifCollectionListener {
         // Temporary workaround for b/178406514 for testing purposes.
         //
@@ -96,7 +95,7 @@ class OngoingCallController @Inject constructor(
                 val newOngoingCallInfo = CallNotificationInfo(
                         entry.sbn.key,
                         entry.sbn.notification.`when`,
-                        entry.sbn.notification.contentIntent?.intent,
+                        entry.sbn.notification.contentIntent,
                         entry.sbn.uid,
                         entry.sbn.notification.extras.getInt(
                                 Notification.EXTRA_CALL_TYPE, -1) == CALL_TYPE_ONGOING,
@@ -158,7 +157,7 @@ class OngoingCallController @Inject constructor(
     fun hasOngoingCall(): Boolean {
         return callNotificationInfo?.isOngoing == true &&
                 // When the user is in the phone app, don't show the chip.
-                !isCallAppVisible
+                !uidObserver.isCallAppVisible
     }
 
     override fun addCallback(listener: OngoingCallListener) {
@@ -194,7 +193,7 @@ class OngoingCallController @Inject constructor(
             }
             updateChipClickListener()
 
-            setUpUidObserver(currentCallNotificationInfo)
+            uidObserver.registerWithUid(currentCallNotificationInfo.uid)
             if (!currentCallNotificationInfo.statusBarSwipedAway) {
                 statusBarWindowController.ifPresent {
                     it.setOngoingProcessRequiresStatusBarVisible(true)
@@ -228,69 +227,12 @@ class OngoingCallController @Inject constructor(
                     logger.logChipClicked()
                     activityStarter.postStartActivityDismissingKeyguard(
                         intent,
-                        0,
                         ActivityLaunchAnimator.Controller.fromView(
                             backgroundView,
                             InteractionJankMonitor.CUJ_STATUS_BAR_APP_LAUNCH_FROM_CALL_CHIP)
                     )
                 }
             }
-        }
-    }
-
-    /**
-     * Sets up an [IUidObserver] to monitor the status of the application managing the ongoing call.
-     */
-    private fun setUpUidObserver(currentCallNotificationInfo: CallNotificationInfo) {
-        try {
-            isCallAppVisible = isProcessVisibleToUser(
-                    iActivityManager.getUidProcessState(currentCallNotificationInfo.uid, null)
-            )
-        } catch (se: SecurityException) {
-            Log.e(TAG, "Security exception when trying to get process state: $se")
-            return
-        }
-
-        if (uidObserver != null) {
-            iActivityManager.unregisterUidObserver(uidObserver)
-        }
-
-        uidObserver = object : IUidObserver.Stub() {
-            override fun onUidStateChanged(
-                uid: Int,
-                procState: Int,
-                procStateSeq: Long,
-                capability: Int
-            ) {
-                if (uid == currentCallNotificationInfo.uid) {
-                    val oldIsCallAppVisible = isCallAppVisible
-                    isCallAppVisible = isProcessVisibleToUser(procState)
-                    if (oldIsCallAppVisible != isCallAppVisible) {
-                        // Animations may be run as a result of the call's state change, so ensure
-                        // the listener is notified on the main thread.
-                        mainExecutor.execute {
-                            mListeners.forEach { l -> l.onOngoingCallStateChanged(animate = true) }
-                        }
-                    }
-                }
-            }
-
-            override fun onUidGone(uid: Int, disabled: Boolean) {}
-            override fun onUidActive(uid: Int) {}
-            override fun onUidIdle(uid: Int, disabled: Boolean) {}
-            override fun onUidCachedChanged(uid: Int, cached: Boolean) {}
-        }
-
-        try {
-            iActivityManager.registerUidObserver(
-                uidObserver,
-                ActivityManager.UID_OBSERVER_PROCSTATE,
-                ActivityManager.PROCESS_STATE_UNKNOWN,
-                null
-            )
-        } catch (se: SecurityException) {
-            Log.e(TAG, "Security exception when trying to register uid observer: $se")
-            return
         }
     }
 
@@ -306,7 +248,7 @@ class OngoingCallController @Inject constructor(
             swipeStatusBarAwayGestureHandler.ifPresent { it.removeOnGestureDetectedCallback(TAG) }
         } else {
             swipeStatusBarAwayGestureHandler.ifPresent {
-                it.addOnGestureDetectedCallback(TAG, this::onSwipeAwayGestureDetected)
+                it.addOnGestureDetectedCallback(TAG) { _ -> onSwipeAwayGestureDetected() }
             }
         }
     }
@@ -317,9 +259,7 @@ class OngoingCallController @Inject constructor(
         statusBarWindowController.ifPresent { it.setOngoingProcessRequiresStatusBarVisible(false) }
         swipeStatusBarAwayGestureHandler.ifPresent { it.removeOnGestureDetectedCallback(TAG) }
         mListeners.forEach { l -> l.onOngoingCallStateChanged(animate = true) }
-        if (uidObserver != null) {
-            iActivityManager.unregisterUidObserver(uidObserver)
-        }
+        uidObserver.unregister()
     }
 
     /** Tear down anything related to the chip view to prevent leaks. */
@@ -360,7 +300,7 @@ class OngoingCallController @Inject constructor(
     private data class CallNotificationInfo(
         val key: String,
         val callStartTime: Long,
-        val intent: Intent?,
+        val intent: PendingIntent?,
         val uid: Int,
         /** True if the call is currently ongoing (as opposed to incoming, screening, etc.). */
         val isOngoing: Boolean,
@@ -376,7 +316,84 @@ class OngoingCallController @Inject constructor(
 
     override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
         pw.println("Active call notification: $callNotificationInfo")
-        pw.println("Call app visible: $isCallAppVisible")
+        pw.println("Call app visible: ${uidObserver.isCallAppVisible}")
+    }
+
+    /** Our implementation of a [IUidObserver]. */
+    inner class CallAppUidObserver : IUidObserver.Stub() {
+        /** True if the application managing the call is visible to the user. */
+        var isCallAppVisible: Boolean = false
+            private set
+
+        /** The UID of the application managing the call. Null if there is no active call. */
+        private var callAppUid: Int? = null
+
+        /**
+         * True if this observer is currently registered with the activity manager and false
+         * otherwise.
+         */
+        private var isRegistered = false
+
+
+        /** Register this observer with the activity manager and the given [uid]. */
+        fun registerWithUid(uid: Int) {
+            if (callAppUid == uid) {
+                return
+            }
+            callAppUid = uid
+
+            try {
+                isCallAppVisible = isProcessVisibleToUser(
+                    iActivityManager.getUidProcessState(uid, context.opPackageName)
+                )
+                if (isRegistered) {
+                    return
+                }
+                iActivityManager.registerUidObserver(
+                    uidObserver,
+                    ActivityManager.UID_OBSERVER_PROCSTATE,
+                    ActivityManager.PROCESS_STATE_UNKNOWN,
+                    context.opPackageName
+                )
+                isRegistered = true
+            } catch (se: SecurityException) {
+                Log.e(TAG, "Security exception when trying to set up uid observer: $se")
+            }
+        }
+
+        /** Unregister this observer with the activity manager. */
+        fun unregister() {
+            callAppUid = null
+            isRegistered = false
+            iActivityManager.unregisterUidObserver(uidObserver)
+        }
+
+        override fun onUidStateChanged(
+            uid: Int,
+            procState: Int,
+            procStateSeq: Long,
+            capability: Int
+        ) {
+            val currentCallAppUid = callAppUid ?: return
+            if (uid != currentCallAppUid) {
+                return
+            }
+
+            val oldIsCallAppVisible = isCallAppVisible
+            isCallAppVisible = isProcessVisibleToUser(procState)
+            if (oldIsCallAppVisible != isCallAppVisible) {
+                // Animations may be run as a result of the call's state change, so ensure
+                // the listener is notified on the main thread.
+                mainExecutor.execute {
+                    mListeners.forEach { l -> l.onOngoingCallStateChanged(animate = true) }
+                }
+            }
+        }
+
+        override fun onUidGone(uid: Int, disabled: Boolean) {}
+        override fun onUidActive(uid: Int) {}
+        override fun onUidIdle(uid: Int, disabled: Boolean) {}
+        override fun onUidCachedChanged(uid: Int, cached: Boolean) {}
     }
 }
 

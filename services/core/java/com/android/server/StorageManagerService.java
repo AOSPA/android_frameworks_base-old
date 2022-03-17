@@ -75,7 +75,6 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.ProviderInfo;
 import android.content.pm.UserInfo;
-import android.content.res.Configuration;
 import android.content.res.ObbInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
@@ -124,7 +123,6 @@ import android.provider.Downloads;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.service.storage.ExternalStorageService;
-import android.sysprop.VoldProperties;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArrayMap;
@@ -177,9 +175,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
-import java.math.BigInteger;
-import java.security.GeneralSecurityException;
-import java.security.spec.KeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -198,10 +193,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
 
 /**
  * Service responsible for various storage media. Connects to {@code vold} to
@@ -1415,39 +1406,6 @@ class StorageManagerService extends IStorageManager.Stub
     private void handleDaemonConnected() {
         initIfBootedAndConnected();
         resetIfBootedAndConnected();
-
-        // On an encrypted device we can't see system properties yet, so pull
-        // the system locale out of the mount service.
-        if ("".equals(VoldProperties.encrypt_progress().orElse(""))) {
-            copyLocaleFromMountService();
-        }
-    }
-
-    private void copyLocaleFromMountService() {
-        String systemLocale;
-        try {
-            systemLocale = getField(StorageManager.SYSTEM_LOCALE_KEY);
-        } catch (RemoteException e) {
-            return;
-        }
-        if (TextUtils.isEmpty(systemLocale)) {
-            return;
-        }
-
-        Slog.d(TAG, "Got locale " + systemLocale + " from mount service");
-        Locale locale = Locale.forLanguageTag(systemLocale);
-        Configuration config = new Configuration();
-        config.setLocale(locale);
-        try {
-            ActivityManager.getService().updatePersistentConfigurationWithAttribution(config,
-                    mContext.getOpPackageName(), mContext.getAttributionTag());
-        } catch (RemoteException e) {
-            Slog.e(TAG, "Error setting system locale from mount service", e);
-        }
-
-        // Temporary workaround for http://b/17945169.
-        Slog.d(TAG, "Setting system properties to " + systemLocale + " from mount service");
-        SystemProperties.set("persist.sys.locale", locale.toLanguageTag());
     }
 
     private final IVoldListener mListener = new IVoldListener.Stub() {
@@ -3131,8 +3089,8 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     @Override
-    public void mountObb(String rawPath, String canonicalPath, String key,
-            IObbActionListener token, int nonce, ObbInfo obbInfo) {
+    public void mountObb(String rawPath, String canonicalPath, IObbActionListener token,
+            int nonce, ObbInfo obbInfo) {
         Objects.requireNonNull(rawPath, "rawPath cannot be null");
         Objects.requireNonNull(canonicalPath, "canonicalPath cannot be null");
         Objects.requireNonNull(token, "token cannot be null");
@@ -3141,7 +3099,7 @@ class StorageManagerService extends IStorageManager.Stub
         final int callingUid = Binder.getCallingUid();
         final ObbState obbState = new ObbState(rawPath, canonicalPath,
                 callingUid, token, nonce, null);
-        final ObbAction action = new MountObbAction(obbState, key, callingUid, obbInfo);
+        final ObbAction action = new MountObbAction(obbState, callingUid, obbInfo);
         mObbActionHandler.sendMessage(mObbActionHandler.obtainMessage(OBB_RUN_ACTION, action));
 
         if (DEBUG_OBB)
@@ -3694,11 +3652,20 @@ class StorageManagerService extends IStorageManager.Stub
                     mInstaller.tryMountDataMirror(volumeUuid);
                 }
             }
-        } catch (RemoteException | Installer.InstallerException e) {
+        } catch (Exception e) {
             Slog.wtf(TAG, e);
             // Make sure to re-throw this exception; we must not ignore failure
             // to prepare the user storage as it could indicate that encryption
             // wasn't successfully set up.
+            //
+            // Very unfortunately, these errors need to be ignored for broken
+            // users that already existed on-disk from older Android versions.
+            UserManagerInternal umInternal = LocalServices.getService(UserManagerInternal.class);
+            if (umInternal.shouldIgnorePrepareStorageErrors(userId)) {
+                Slog.wtf(TAG, "ignoring error preparing storage for existing user " + userId
+                        + "; device may be insecure!");
+                return;
+            }
             throw new RuntimeException(e);
         }
     }
@@ -4603,13 +4570,11 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     class MountObbAction extends ObbAction {
-        private final String mKey;
         private final int mCallingUid;
         private ObbInfo mObbInfo;
 
-        MountObbAction(ObbState obbState, String key, int callingUid, ObbInfo obbInfo) {
+        MountObbAction(ObbState obbState, int callingUid, ObbInfo obbInfo) {
             super(obbState);
-            mKey = key;
             mCallingUid = callingUid;
             mObbInfo = obbInfo;
         }
@@ -4632,29 +4597,8 @@ class StorageManagerService extends IStorageManager.Stub
                         "Attempt to mount OBB which is already mounted: " + mObbInfo.filename);
             }
 
-            final String hashedKey;
-            final String binderKey;
-            if (mKey == null) {
-                hashedKey = "none";
-                binderKey = "";
-            } else {
-                try {
-                    SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-
-                    KeySpec ks = new PBEKeySpec(mKey.toCharArray(), mObbInfo.salt,
-                            PBKDF2_HASH_ROUNDS, CRYPTO_ALGORITHM_KEY_SIZE);
-                    SecretKey key = factory.generateSecret(ks);
-                    BigInteger bi = new BigInteger(key.getEncoded());
-                    hashedKey = bi.toString(16);
-                    binderKey = hashedKey;
-                } catch (GeneralSecurityException e) {
-                    throw new ObbException(ERROR_INTERNAL, e);
-                }
-            }
-
             try {
-                mObbState.volId = mVold.createObb(mObbState.canonicalPath, binderKey,
-                        mObbState.ownerGid);
+                mObbState.volId = mVold.createObb(mObbState.canonicalPath, mObbState.ownerGid);
                 mVold.mount(mObbState.volId, 0, -1, null);
 
                 if (DEBUG_OBB)
@@ -4764,7 +4708,7 @@ class StorageManagerService extends IStorageManager.Stub
     private int getMountModeInternal(int uid, String packageName) {
         try {
             // Get some easy cases out of the way first
-            if (Process.isIsolated(uid) || Process.isSupplemental(uid)) {
+            if (Process.isIsolated(uid) || Process.isSdkSandboxUid(uid)) {
                 return StorageManager.MOUNT_MODE_EXTERNAL_NONE;
             }
 

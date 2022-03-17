@@ -25,6 +25,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
+import android.os.Handler;
 import android.text.Html;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -35,6 +36,8 @@ import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.wifi.WifiStatusTracker;
 import com.android.systemui.R;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.util.Assert;
 
 import java.io.PrintWriter;
@@ -59,12 +62,14 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
             NetworkControllerImpl networkController,
             WifiManager wifiManager,
             ConnectivityManager connectivityManager,
-            NetworkScoreManager networkScoreManager) {
+            NetworkScoreManager networkScoreManager,
+            @Main Handler handler,
+            @Background Handler backgroundHandler) {
         super("WifiSignalController", context, NetworkCapabilities.TRANSPORT_WIFI,
                 callbackHandler, networkController);
         mWifiManager = wifiManager;
         mWifiTracker = new WifiStatusTracker(mContext, wifiManager, networkScoreManager,
-                connectivityManager, this::handleStatusUpdated);
+                connectivityManager, this::handleStatusUpdated, handler, backgroundHandler);
         mWifiTracker.setListening(true);
         mHasMobileDataFeature = hasMobileDataFeature;
         if (wifiManager != null) {
