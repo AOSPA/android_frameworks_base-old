@@ -29,7 +29,6 @@ import android.compat.annotation.ChangeId;
 import android.compat.annotation.Disabled;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.storage.StorageManager;
@@ -101,6 +100,7 @@ public class Environment {
     private static final File DIR_ANDROID_EXPAND = getDirectory(ENV_ANDROID_EXPAND, "/mnt/expand");
     private static final File DIR_ANDROID_STORAGE = getDirectory(ENV_ANDROID_STORAGE, "/storage");
     private static final File DIR_DOWNLOAD_CACHE = getDirectory(ENV_DOWNLOAD_CACHE, "/cache");
+    private static final File DIR_METADATA = new File("/metadata");
     private static final File DIR_OEM_ROOT = getDirectory(ENV_OEM_ROOT, "/oem");
     private static final File DIR_ODM_ROOT = getDirectory(ENV_ODM_ROOT, "/odm");
     private static final File DIR_VENDOR_ROOT = getDirectory(ENV_VENDOR_ROOT, "/vendor");
@@ -1098,6 +1098,15 @@ public class Environment {
     }
 
     /**
+     * Return the metadata directory.
+     *
+     * @hide
+     */
+    public static @NonNull File getMetadataDirectory() {
+        return DIR_METADATA;
+    }
+
+    /**
      * Unknown storage state, such as when a path isn't backed by known storage
      * media.
      *
@@ -1333,7 +1342,7 @@ public class Environment {
         final Context context = AppGlobals.getInitialApplication();
         final int uid = context.getApplicationInfo().uid;
         // Isolated processes and Instant apps are never allowed to be in scoped storage
-        if (Process.isIsolated(uid) || Process.isSupplemental(uid)) {
+        if (Process.isIsolated(uid) || Process.isSdkSandboxUid(uid)) {
             return false;
         }
 

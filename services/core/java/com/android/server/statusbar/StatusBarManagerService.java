@@ -638,12 +638,14 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         }
 
         @Override
-        public void requestWindowMagnificationConnection(boolean request) {
+        public boolean requestWindowMagnificationConnection(boolean request) {
             if (mBar != null) {
                 try {
                     mBar.requestWindowMagnificationConnection(request);
+                    return true;
                 } catch (RemoteException ex) { }
             }
+            return false;
         }
 
         @Override
@@ -857,11 +859,11 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     }
 
     @Override
-    public void onBiometricAuthenticated() {
+    public void onBiometricAuthenticated(@Modality int modality) {
         enforceBiometricDialog();
         if (mBar != null) {
             try {
-                mBar.onBiometricAuthenticated();
+                mBar.onBiometricAuthenticated(modality);
             } catch (RemoteException ex) {
             }
         }
@@ -1953,8 +1955,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     public void setNavBarMode(@NavBarMode int navBarMode) {
         enforceStatusBar();
         if (navBarMode != NAV_BAR_MODE_DEFAULT && navBarMode != NAV_BAR_MODE_KIDS) {
-            throw new UnsupportedOperationException(
-                    "Supplied navBarMode not supported: " + navBarMode);
+            throw new IllegalArgumentException("Supplied navBarMode not supported: " + navBarMode);
         }
 
         final int userId = mCurrentUserId;
@@ -1962,6 +1963,8 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         try {
             Settings.Secure.putIntForUser(mContext.getContentResolver(),
                     Settings.Secure.NAV_BAR_KIDS_MODE, navBarMode, userId);
+            Settings.Secure.putIntForUser(mContext.getContentResolver(),
+                    Settings.Secure.NAV_BAR_FORCE_VISIBLE, navBarMode, userId);
 
             IOverlayManager overlayManager = getOverlayManager();
             if (overlayManager != null && navBarMode == NAV_BAR_MODE_KIDS

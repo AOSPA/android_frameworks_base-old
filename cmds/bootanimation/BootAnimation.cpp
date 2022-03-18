@@ -777,6 +777,7 @@ bool BootAnimation::threadLoop() {
     // We have no bootanimation file, so we use the stock android logo
     // animation.
     if (mZipFileName.isEmpty()) {
+        ALOGD("No animation file");
         result = android();
     } else {
         result = movie();
@@ -1489,6 +1490,10 @@ bool BootAnimation::playAnimation(const Animation& animation) {
                     part.backgroundColor[2],
                     1.0f);
 
+            ALOGD("Playing files = %s/%s, Requested repeat = %d, playUntilComplete = %s",
+                    animation.fileName.string(), part.path.string(), part.count,
+                    part.playUntilComplete ? "true" : "false");
+
             // For the last animation, if we have progress indicator from
             // the system, display it.
             int currentProgress = android::base::GetIntProperty(PROGRESS_PROP_NAME, 0);
@@ -1622,6 +1627,9 @@ bool BootAnimation::playAnimation(const Animation& animation) {
         }
     }
 
+    ALOGD("%sAnimationShownTiming End time: %" PRId64 "ms", mShuttingDown ? "Shutdown" : "Boot",
+            elapsedRealtime());
+
     return true;
 }
 
@@ -1696,6 +1704,8 @@ BootAnimation::Animation* BootAnimation::loadAnimation(const String8& fn) {
             fn.string(), strerror(errno));
         return nullptr;
     }
+
+    ALOGD("%s is loaded successfully", fn.string());
 
     Animation *animation =  new Animation;
     animation->fileName = fn;

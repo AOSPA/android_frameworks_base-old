@@ -407,6 +407,13 @@ public final class DeviceConfig {
     public static final String NAMESPACE_SCHEDULER = "scheduler";
 
     /**
+     * Namespace for all SdkSandbox related features.
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_SDK_SANDBOX = "sdk_sandbox";
+
+    /**
      * Namespace for settings statistics features.
      *
      * @hide
@@ -464,11 +471,11 @@ public final class DeviceConfig {
     public static final String NAMESPACE_STORAGE_NATIVE_BOOT = "storage_native_boot";
 
     /**
-     * Namespace for all Supplemental Api related features.
+     * Namespace for all AdServices related features.
      * @hide
      */
     @SystemApi
-    public static final String NAMESPACE_SUPPLEMENTAL_API = "supplemental_api";
+    public static final String NAMESPACE_ADSERVICES = "adservices";
 
     /**
      * Namespace for all SurfaceFlinger features that are used at the native level.
@@ -586,7 +593,7 @@ public final class DeviceConfig {
     @NonNull
     private static final List<String> PUBLIC_NAMESPACES =
             Arrays.asList(NAMESPACE_TEXTCLASSIFIER, NAMESPACE_RUNTIME, NAMESPACE_STATSD_JAVA,
-                    NAMESPACE_STATSD_JAVA_BOOT, NAMESPACE_SELECTION_TOOLBAR);
+                    NAMESPACE_STATSD_JAVA_BOOT, NAMESPACE_SELECTION_TOOLBAR, NAMESPACE_AUTOFILL);
     /**
      * Privacy related properties definitions.
      *

@@ -304,7 +304,8 @@ final class DexOptHelper {
     /*package*/ boolean performDexOpt(DexoptOptions options) {
         if (mPm.getInstantAppPackageName(Binder.getCallingUid()) != null) {
             return false;
-        } else if (mPm.isInstantApp(options.getPackageName(), UserHandle.getCallingUserId())) {
+        } else if (mPm.mIPackageManager.isInstantApp(options.getPackageName(),
+                UserHandle.getCallingUserId())) {
             return false;
         }
 
@@ -460,7 +461,8 @@ final class DexOptHelper {
                 | DexoptOptions.DEXOPT_CHECK_FOR_PROFILES_UPDATES
                 | DexoptOptions.DEXOPT_BOOT_COMPLETE
                 | (force ? DexoptOptions.DEXOPT_FORCE : 0);
-        return performDexOpt(new DexoptOptions(packageName, compilerFilter, flags));
+        return performDexOpt(new DexoptOptions(packageName, REASON_CMDLINE,
+                compilerFilter, null /* splitName */, flags));
     }
 
     // Sort apps by importance for dexopt ordering. Important apps are given

@@ -29,6 +29,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.PINNED_WINDOWING_MODE_ELEVATION_IN_DIP;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.app.WindowConfiguration.activityTypeToString;
@@ -512,13 +513,6 @@ class Task extends TaskFragment {
      * {@code true} to prevent double traversal of {@link #mChildren} in a loop.
      */
     boolean mInRemoveTask;
-
-    // When non-null, this is a transaction that will get applied on the next frame returned after
-    // a relayout is requested from the client. While this is only valid on a leaf task; since the
-    // transaction can effect an ancestor task, this also needs to keep track of the ancestor task
-    // that this transaction manipulates because deferUntilFrame acts on individual surfaces.
-    SurfaceControl.Transaction mMainWindowSizeChangeTransaction;
-    Task mMainWindowSizeChangeTask;
 
     private final AnimatingActivityRegistry mAnimatingActivityRegistry =
             new AnimatingActivityRegistry();
@@ -1542,7 +1536,7 @@ class Task extends TaskFragment {
                 mTaskSupervisor.removeTask(this, false /* killProcess */,
                         !REMOVE_FROM_RECENTS, reason);
             }
-        } else if (!mReuseTask && !mCreatedByOrganizer) {
+        } else if (!mReuseTask && shouldRemoveSelfOnLastChildRemoval()) {
             // Remove entire task if it doesn't have any activity left and it isn't marked for reuse
             // or created by task organizer.
             if (!isRootTask()) {
@@ -1733,6 +1727,13 @@ class Task extends TaskFragment {
         final Task topTask = getTopMostTask();
         return super.supportsSplitScreenWindowingMode()
                 && (topTask == null || topTask.supportsSplitScreenWindowingModeInner(tda));
+    }
+
+    /** Returns {@code true} if this task is currently in split-screen. */
+    boolean inSplitScreen() {
+        return getWindowingMode() == WINDOWING_MODE_MULTI_WINDOW
+                && getRootTask() != null
+                && getRootTask().getAdjacentTaskFragment() != null;
     }
 
     private boolean supportsSplitScreenWindowingModeInner(@Nullable TaskDisplayArea tda) {
@@ -2048,8 +2049,10 @@ class Task extends TaskFragment {
         Rect outOverrideBounds = getResolvedOverrideConfiguration().windowConfiguration.getBounds();
 
         if (windowingMode == WINDOWING_MODE_FULLSCREEN) {
-            // Use empty bounds to indicate "fill parent".
-            outOverrideBounds.setEmpty();
+            if (!mCreatedByOrganizer) {
+                // Use empty bounds to indicate "fill parent".
+                outOverrideBounds.setEmpty();
+            }
             // The bounds for fullscreen mode shouldn't be adjusted by minimal size. Otherwise if
             // the parent or display is smaller than the size, the content may be cropped.
             return;
@@ -3305,7 +3308,7 @@ class Task extends TaskFragment {
         // We intend to let organizer manage task visibility but it doesn't
         // have enough information until we finish shell transitions.
         // In the mean time we do an easy fix here.
-        final boolean show = isVisible() || isAnimating(TRANSITION | PARENTS);
+        final boolean show = isVisible() || isAnimating(TRANSITION | PARENTS | CHILDREN);
         if (mSurfaceControl != null) {
             if (show != mLastSurfaceShowing) {
                 getSyncTransaction().setVisibility(mSurfaceControl, show);
@@ -4292,7 +4295,7 @@ class Task extends TaskFragment {
     /**
      * @return true if the task is currently focused.
      */
-    private boolean isFocused() {
+    boolean isFocused() {
         if (mDisplayContent == null || mDisplayContent.mFocusedApp == null) {
             return false;
         }
@@ -4395,17 +4398,16 @@ class Task extends TaskFragment {
             leaf.setMainWindowSizeChangeTransaction(t, origin);
             return;
         }
-        mMainWindowSizeChangeTransaction = t;
-        mMainWindowSizeChangeTask = t == null ? null : origin;
+        final WindowState w = getTopVisibleAppMainWindow();
+        if (w != null) {
+            w.applyWithNextDraw((d) -> {
+                d.merge(t);
+            });
+        } else {
+            t.apply();
+        }
     }
 
-    SurfaceControl.Transaction getMainWindowSizeChangeTransaction() {
-        return mMainWindowSizeChangeTransaction;
-    }
-
-    Task getMainWindowSizeChangeTask() {
-        return mMainWindowSizeChangeTask;
-    }
 
     void setActivityWindowingMode(int windowingMode) {
         PooledConsumer c = PooledLambda.obtainConsumer(ActivityRecord::setWindowingMode,
@@ -6036,9 +6038,6 @@ class Task extends TaskFragment {
     }
 
     boolean shouldIgnoreInput() {
-        if (inSplitScreenPrimaryWindowingMode() && !isFocusable()) {
-            return true;
-        }
         if (mAtmService.mHasLeanbackFeature && inPinnedWindowingMode()
                 && !isFocusedRootTaskOnDisplay()) {
             // Preventing Picture-in-Picture root task from receiving input on TVs.

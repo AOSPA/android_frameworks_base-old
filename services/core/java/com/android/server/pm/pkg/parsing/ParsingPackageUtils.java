@@ -91,6 +91,7 @@ import com.android.internal.R;
 import com.android.internal.os.ClassLoaderFactory;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.XmlUtils;
+import com.android.server.pm.SharedUidMigration;
 import com.android.server.pm.permission.CompatibilityPermissionInfo;
 import com.android.server.pm.pkg.component.ComponentMutateUtils;
 import com.android.server.pm.pkg.component.ComponentParseUtils;
@@ -893,9 +894,7 @@ public class ParsingPackageUtils {
                 .setTargetSandboxVersion(anInteger(PARSE_DEFAULT_TARGET_SANDBOX,
                         R.styleable.AndroidManifest_targetSandboxVersion, sa))
                 /* Set the global "on SD card" flag */
-                .setExternalStorage((flags & PARSE_EXTERNAL_STORAGE) != 0)
-                .setInheritKeyStoreKeys(bool(false,
-                        R.styleable.AndroidManifest_inheritKeyStoreKeys, sa));
+                .setExternalStorage((flags & PARSE_EXTERNAL_STORAGE) != 0);
 
         boolean foundApp = false;
         final int depth = parser.getDepth();
@@ -1032,11 +1031,6 @@ public class ParsingPackageUtils {
 
     private static ParseResult<ParsingPackage> parseSharedUser(ParseInput input,
             ParsingPackage pkg, TypedArray sa) {
-        int maxSdkVersion = anInteger(0, R.styleable.AndroidManifest_sharedUserMaxSdkVersion, sa);
-        if ((maxSdkVersion != 0) && maxSdkVersion < Build.VERSION.RESOURCES_SDK_INT) {
-            return input.success(pkg);
-        }
-
         String str = nonConfigString(0, R.styleable.AndroidManifest_sharedUserId, sa);
         if (TextUtils.isEmpty(str)) {
             return input.success(pkg);
@@ -1052,7 +1046,14 @@ public class ParsingPackageUtils {
             }
         }
 
+        boolean leaving = false;
+        if (!SharedUidMigration.isDisabled()) {
+            int max = anInteger(0, R.styleable.AndroidManifest_sharedUserMaxSdkVersion, sa);
+            leaving = (max != 0) && (max < Build.VERSION.RESOURCES_SDK_INT);
+        }
+
         return input.success(pkg
+                .setLeavingSharedUid(leaving)
                 .setSharedUserId(str.intern())
                 .setSharedUserLabel(resId(R.styleable.AndroidManifest_sharedUserLabel, sa)));
     }

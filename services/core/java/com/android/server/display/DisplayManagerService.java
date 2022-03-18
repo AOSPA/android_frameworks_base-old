@@ -2276,13 +2276,12 @@ public final class DisplayManagerService extends SystemService {
         final DisplayDeviceInfo info = device.getDisplayDeviceInfoLocked();
         final boolean ownContent = (info.flags & DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY) != 0;
 
-        // Mirror the part of WM hierarchy that corresponds to the provided window token.
-        IBinder windowTokenClientToMirror = device.getWindowTokenClientToMirrorLocked();
-
         // Find the logical display that the display device is showing.
         // Certain displays only ever show their own content.
         LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
-        if (!ownContent && windowTokenClientToMirror == null) {
+        // Proceed with display-managed mirroring only if window manager will not be handling it.
+        if (!ownContent && !device.isWindowManagerMirroringLocked()) {
+            // Only mirror the display if content recording is not taking place in WM.
             if (display != null && !display.hasContentLocked()) {
                 // If the display does not have any content of its own, then
                 // automatically mirror the requested logical display contents if possible.
@@ -2482,7 +2481,7 @@ public final class DisplayManagerService extends SystemService {
             pw.println("  mMinimumBrightnessCurve=" + mMinimumBrightnessCurve);
 
             if (mUserPreferredMode != null) {
-                pw.println(mUserPreferredMode);
+                pw.println(" mUserPreferredMode=" + mUserPreferredMode);
             }
 
             pw.println();
@@ -2601,7 +2600,7 @@ public final class DisplayManagerService extends SystemService {
 
         boolean getAllowNonNativeRefreshRateOverride() {
             return DisplayProperties
-                    .debug_allow_non_native_refresh_rate_override().orElse(false);
+                    .debug_allow_non_native_refresh_rate_override().orElse(true);
         }
 
         @NonNull
@@ -3886,23 +3885,11 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override
-        public IBinder getWindowTokenClientToMirror(int displayId) {
-            final DisplayDevice device;
-            synchronized (mSyncRoot) {
-                device = getDeviceForDisplayLocked(displayId);
-                if (device == null) {
-                    return null;
-                }
-            }
-            return device.getWindowTokenClientToMirrorLocked();
-        }
-
-        @Override
-        public void setWindowTokenClientToMirror(int displayId, IBinder windowToken) {
+        public void setWindowManagerMirroring(int displayId, boolean isMirroring) {
             synchronized (mSyncRoot) {
                 final DisplayDevice device = getDeviceForDisplayLocked(displayId);
                 if (device != null) {
-                    device.setWindowTokenClientToMirrorLocked(windowToken);
+                    device.setWindowManagerMirroringLocked(isMirroring);
                 }
             }
         }
@@ -3974,11 +3961,21 @@ public final class DisplayManagerService extends SystemService {
      * Listens to changes in device state and reports the state to LogicalDisplayMapper.
      */
     class DeviceStateListener implements DeviceStateManager.DeviceStateCallback {
+        // Base state corresponds to the physical state of the device
+        private int mBaseState = DeviceStateManager.INVALID_DEVICE_STATE;
+
         @Override
         public void onStateChanged(int deviceState) {
+            boolean isDeviceStateOverrideActive = deviceState != mBaseState;
             synchronized (mSyncRoot) {
-                mLogicalDisplayMapper.setDeviceStateLocked(deviceState);
+                mLogicalDisplayMapper
+                        .setDeviceStateLocked(deviceState, isDeviceStateOverrideActive);
             }
+        }
+
+        @Override
+        public void onBaseStateChanged(int state) {
+            mBaseState = state;
         }
     };
 

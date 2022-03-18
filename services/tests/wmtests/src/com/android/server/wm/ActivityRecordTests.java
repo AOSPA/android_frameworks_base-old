@@ -24,6 +24,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
+import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
@@ -54,6 +55,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_OLD_ACTIVITY_OPEN;
+import static android.view.WindowManager.TRANSIT_PIP;
 import static android.window.StartingWindowInfo.TYPE_PARAMETER_LEGACY_SPLASH_SCREEN;
 
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
@@ -2215,6 +2217,19 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertTrue(activity.pictureInPictureArgs.isLaunchIntoPip());
     }
 
+    @Test
+    public void testTransferLaunchCookieWhenFinishing() {
+        final ActivityRecord activity1 = createActivityWithTask();
+        final Binder launchCookie = new Binder();
+        activity1.mLaunchCookie = launchCookie;
+        final ActivityRecord activity2 = createActivityRecord(activity1.getTask());
+        activity1.setState(PAUSED, "test");
+        activity1.makeFinishingLocked();
+
+        assertEquals(launchCookie, activity2.mLaunchCookie);
+        assertNull(activity1.mLaunchCookie);
+    }
+
     private void verifyProcessInfoUpdate(ActivityRecord activity, State state,
             boolean shouldUpdate, boolean activityChange) {
         reset(activity.app);
@@ -2623,14 +2638,14 @@ public class ActivityRecordTests extends WindowTestsBase {
                 .setTask(sourceRecord.getTask()).build();
         secondRecord.showStartingWindow(null /* prev */, true /* newTask */, false,
                 true /* startActivity */, sourceRecord);
-        assertFalse(secondRecord.mSplashScreenStyleEmpty);
+        assertFalse(secondRecord.mSplashScreenStyleSolidColor);
         secondRecord.onStartingWindowDrawn();
 
         final ActivityRecord finalRecord = new ActivityBuilder(mAtm)
                 .setTask(sourceRecord.getTask()).build();
         finalRecord.showStartingWindow(null /* prev */, true /* newTask */, false,
                 true /* startActivity */, secondRecord);
-        assertTrue(finalRecord.mSplashScreenStyleEmpty);
+        assertTrue(finalRecord.mSplashScreenStyleSolidColor);
     }
 
     @Test
@@ -3395,6 +3410,24 @@ public class ActivityRecordTests extends WindowTestsBase {
         doReturn(false).when(taskFragment).shouldBeVisible(any());
         display.ensureActivitiesVisible(null, 0, false, false);
         assertFalse(activity.mVisibleRequested);
+    }
+
+    @Test
+    public void testShellTransitionTaskWindowingModeChange() {
+        final ActivityRecord activity = createActivityWithTask();
+        final Task task = activity.getTask();
+        task.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+
+        assertTrue(activity.isVisible());
+        assertTrue(activity.isVisibleRequested());
+        assertEquals(WINDOWING_MODE_FULLSCREEN, activity.getWindowingMode());
+
+        registerTestTransitionPlayer();
+        task.mTransitionController.requestTransitionIfNeeded(TRANSIT_PIP, task);
+        task.setWindowingMode(WINDOWING_MODE_PINNED);
+
+        // Collect activity in the transition if the Task windowing mode is going to change.
+        assertTrue(activity.inTransition());
     }
 
     private ICompatCameraControlCallback getCompatCameraControlCallback() {

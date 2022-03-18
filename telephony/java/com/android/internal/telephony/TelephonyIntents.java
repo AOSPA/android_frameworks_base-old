@@ -323,26 +323,6 @@ public class TelephonyIntents {
             "android.intent.action.USER_ACTIVITY_NOTIFICATION";
 
     /**
-     * <p>Broadcast sent to show Emergency notification due to Voice Over Wifi availability
-     *
-     * <p class="note">
-     * You can <em>not</em> receive this through components declared
-     * in manifests, only by explicitly registering for it with
-     * {@link android.content.Context#registerReceiver(android.content.BroadcastReceiver,
-     * android.content.IntentFilter) Context.registerReceiver()}.
-     *
-     * <p class="note">
-     * Requires no permission.
-     *
-     * <p class="note">This is a protected intent that can only be sent
-     * by the system.
-     *
-     * @hide
-     */
-    public static final String ACTION_VOWIFI_ENABLED
-            = "org.codeaurora.telephony.VOWIFI_ENABLED";
-
-    /**
      * Kept for backwards compatibility.
      * @deprecated @see TelephonyManager#ACTION_CARRIER_SIGNAL_REDIRECTED
      */
@@ -444,4 +424,24 @@ public class TelephonyIntents {
      */
     @Deprecated
     public static final String EXTRA_DEFAULT_NETWORK_AVAILABLE = "defaultNetworkAvailable";
+
+    /**
+     * <p>Broadcast sent to show Emergency notification due to Voice Over Wifi availability
+     *
+     * <p class="note">
+     * You can <em>not</em> receive this through components declared
+     * in manifests, only by explicitly registering for it with
+     * {@link android.content.Context#registerReceiver(android.content.BroadcastReceiver,
+     * android.content.IntentFilter) Context.registerReceiver()}.
+     *
+     * <p class="note">
+     * Requires no permission.
+     *
+     * <p class="note">This is a protected intent that can only be sent
+     * by the system.
+     *
+     * @hide
+     */
+    public static final String ACTION_VOWIFI_ENABLED
+            = "com.android.internal.telephony.ACTION_VOWIFI_ENABLED";
 }

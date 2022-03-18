@@ -209,6 +209,9 @@ class ActivityStarter {
     private boolean mAvoidMoveToFront;
     private boolean mFrozeTaskList;
     private boolean mTransientLaunch;
+    // The task which was above the targetTask before starting this activity. null if the targetTask
+    // was already on top or if the activity is in a new task.
+    private Task mPriorAboveTask;
 
     // We must track when we deliver the new intent since multiple code paths invoke
     // {@link #deliverNewIntent}. This is due to early returns in the code path. This flag is used
@@ -1670,7 +1673,8 @@ class ActivityStarter {
                 if (isTransient) {
                     // `r` isn't guaranteed to be the actual relevant activity, so we must wait
                     // until after we launched to identify the relevant activity.
-                    transitionController.setTransientLaunch(mLastStartActivityRecord);
+                    transitionController.setTransientLaunch(mLastStartActivityRecord,
+                            mPriorAboveTask);
                 }
                 if (newTransition != null) {
                     transitionController.requestStartTransition(newTransition,
@@ -1789,6 +1793,10 @@ class ActivityStarter {
             return startResult;
         }
 
+        if (targetTask != null) {
+            mPriorAboveTask = TaskDisplayArea.getRootTaskAbove(targetTask.getRootTask());
+        }
+
         final ActivityRecord targetTaskTop = newTask
                 ? null : targetTask.getTopNonFinishingActivity();
         if (targetTaskTop != null) {
@@ -1812,7 +1820,8 @@ class ActivityStarter {
         }
 
         if (mTargetRootTask == null) {
-            mTargetRootTask = getLaunchRootTask(mStartActivity, mLaunchFlags, targetTask, mOptions);
+            mTargetRootTask = getOrCreateRootTask(mStartActivity, mLaunchFlags, targetTask,
+                    mOptions);
         }
         if (newTask) {
             final Task taskToAffiliate = (mLaunchTaskBehind && mSourceRecord != null)
@@ -1937,7 +1946,7 @@ class ActivityStarter {
         } else if (mInTask != null) {
             return mInTask;
         } else {
-            final Task rootTask = getLaunchRootTask(mStartActivity, mLaunchFlags, null /* task */,
+            final Task rootTask = getOrCreateRootTask(mStartActivity, mLaunchFlags, null /* task */,
                     mOptions);
             final ActivityRecord top = rootTask.getTopNonFinishingActivity();
             if (top != null) {
@@ -2245,7 +2254,7 @@ class ActivityStarter {
                 if (targetTask.getRootTask() == null) {
                     // Target root task got cleared when we all activities were removed above.
                     // Go ahead and reset it.
-                    mTargetRootTask = getLaunchRootTask(mStartActivity, mLaunchFlags,
+                    mTargetRootTask = getOrCreateRootTask(mStartActivity, mLaunchFlags,
                         null /* task */, mOptions);
                     mTargetRootTask.addChild(targetTask, !mLaunchTaskBehind /* toTop */,
                             (mStartActivity.info.flags & FLAG_SHOW_FOR_ALL_USERS) != 0);
@@ -2707,10 +2716,11 @@ class ActivityStarter {
                 // launched into the same root task.
                 mTargetRootTask = Task.fromWindowContainerToken(mSourceRecord.mLaunchRootTask);
             } else {
-                final Task launchRootTask =
-                        getLaunchRootTask(mStartActivity, mLaunchFlags, intentTask, mOptions);
+                final Task rootTask =
+                        getOrCreateRootTask(mStartActivity, mLaunchFlags, intentTask, mOptions);
+                // TODO(b/184806710): #getOrCreateRootTask should never return null?
                 mTargetRootTask =
-                        launchRootTask != null ? launchRootTask : intentActivity.getRootTask();
+                        rootTask != null ? rootTask : intentActivity.getRootTask();
             }
         }
 
@@ -2957,7 +2967,7 @@ class ActivityStarter {
         return launchFlags;
     }
 
-    private Task getLaunchRootTask(ActivityRecord r, int launchFlags, Task task,
+    private Task getOrCreateRootTask(ActivityRecord r, int launchFlags, Task task,
             ActivityOptions aOptions) {
         // We are reusing a task, keep the root task!
         if (mReuseTask != null) {
@@ -2966,7 +2976,7 @@ class ActivityStarter {
 
         final boolean onTop =
                 (aOptions == null || !aOptions.getAvoidMoveToFront()) && !mLaunchTaskBehind;
-        return mRootWindowContainer.getLaunchRootTask(r, aOptions, task, mSourceRootTask, onTop,
+        return mRootWindowContainer.getOrCreateRootTask(r, aOptions, task, mSourceRootTask, onTop,
                 mLaunchParams, launchFlags);
     }
 

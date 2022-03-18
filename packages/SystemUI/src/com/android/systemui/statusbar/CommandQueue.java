@@ -23,7 +23,7 @@ import static android.inputmethodservice.InputMethodService.IME_INVISIBLE;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
-import static com.android.systemui.statusbar.phone.StatusBar.ONLY_CORE_APPS;
+import static com.android.systemui.statusbar.phone.CentralSurfaces.ONLY_CORE_APPS;
 
 import android.annotation.Nullable;
 import android.app.ITransientNotificationCallback;
@@ -310,11 +310,11 @@ public class CommandQueue extends IStatusBar.Stub implements
                 long requestId, @BiometricMultiSensorMode int multiSensorConfig) {
         }
 
-        /** @see IStatusBar#onBiometricAuthenticated() */
-        default void onBiometricAuthenticated() {
+        /** @see IStatusBar#onBiometricAuthenticated(int) */
+        default void onBiometricAuthenticated(@Modality int modality) {
         }
 
-        /** @see IStatusBar#onBiometricHelp(String) */
+        /** @see IStatusBar#onBiometricHelp(int, String) */
         default void onBiometricHelp(@Modality int modality, String message) {
         }
 
@@ -963,9 +963,11 @@ public class CommandQueue extends IStatusBar.Stub implements
     }
 
     @Override
-    public void onBiometricAuthenticated() {
+    public void onBiometricAuthenticated(@Modality int modality) {
         synchronized (mLock) {
-            mHandler.obtainMessage(MSG_BIOMETRIC_AUTHENTICATED).sendToTarget();
+            SomeArgs args = SomeArgs.obtain();
+            args.argi1 = modality;
+            mHandler.obtainMessage(MSG_BIOMETRIC_AUTHENTICATED, args).sendToTarget();
         }
     }
 
@@ -1465,9 +1467,11 @@ public class CommandQueue extends IStatusBar.Stub implements
                     break;
                 }
                 case MSG_BIOMETRIC_AUTHENTICATED: {
+                    SomeArgs someArgs = (SomeArgs) msg.obj;
                     for (int i = 0; i < mCallbacks.size(); i++) {
-                        mCallbacks.get(i).onBiometricAuthenticated();
+                        mCallbacks.get(i).onBiometricAuthenticated(someArgs.argi1 /* modality */);
                     }
+                    someArgs.recycle();
                     break;
                 }
                 case MSG_BIOMETRIC_HELP: {
