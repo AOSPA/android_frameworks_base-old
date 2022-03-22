@@ -46,7 +46,7 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.android.internal.content.PackageHelper;
+import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.RILConstants;
 import com.android.internal.util.XmlUtils;
@@ -783,7 +783,7 @@ class DatabaseHelper extends SQLiteOpenHelper {
                         + " VALUES(?,?);");
                 loadSetting(stmt, Global.SET_INSTALL_LOCATION, 0);
                 loadSetting(stmt, Global.DEFAULT_INSTALL_LOCATION,
-                        PackageHelper.APP_INSTALL_AUTO);
+                        InstallLocationUtils.APP_INSTALL_AUTO);
                 db.setTransactionSuccessful();
              } finally {
                  db.endTransaction();
@@ -1176,8 +1176,6 @@ class DatabaseHelper extends SQLiteOpenHelper {
                         com.android.internal.R.bool.config_dreamsActivatedOnDockByDefault);
                 loadBooleanSetting(stmt, Settings.Secure.SCREENSAVER_ACTIVATE_ON_SLEEP,
                         com.android.internal.R.bool.config_dreamsActivatedOnSleepByDefault);
-                loadStringSetting(stmt, Settings.Secure.SCREENSAVER_COMPONENTS,
-                        com.android.internal.R.string.config_dreamsDefaultComponent);
                 loadStringSetting(stmt, Settings.Secure.SCREENSAVER_DEFAULT_COMPONENT,
                         com.android.internal.R.string.config_dreamsDefaultComponent);
 
@@ -2367,8 +2365,6 @@ class DatabaseHelper extends SQLiteOpenHelper {
                     com.android.internal.R.bool.config_dreamsActivatedOnDockByDefault);
             loadBooleanSetting(stmt, Settings.Secure.SCREENSAVER_ACTIVATE_ON_SLEEP,
                     com.android.internal.R.bool.config_dreamsActivatedOnSleepByDefault);
-            loadStringSetting(stmt, Settings.Secure.SCREENSAVER_COMPONENTS,
-                    com.android.internal.R.string.config_dreamsDefaultComponent);
             loadStringSetting(stmt, Settings.Secure.SCREENSAVER_DEFAULT_COMPONENT,
                     com.android.internal.R.string.config_dreamsDefaultComponent);
 
@@ -2543,7 +2539,7 @@ class DatabaseHelper extends SQLiteOpenHelper {
 
             loadSetting(stmt, Settings.Global.SET_INSTALL_LOCATION, 0);
             loadSetting(stmt, Settings.Global.DEFAULT_INSTALL_LOCATION,
-                    PackageHelper.APP_INSTALL_AUTO);
+                    InstallLocationUtils.APP_INSTALL_AUTO);
 
             // Set default cdma emergency tone
             loadSetting(stmt, Settings.Global.EMERGENCY_TONE, 0);

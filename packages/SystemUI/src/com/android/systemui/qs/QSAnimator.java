@@ -14,9 +14,6 @@
 
 package com.android.systemui.qs;
 
-import static com.android.systemui.qs.dagger.QSFragmentModule.QQS_FOOTER;
-import static com.android.systemui.qs.dagger.QSFragmentModule.QS_FOOTER;
-
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.util.Log;
@@ -49,7 +46,6 @@ import java.util.List;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
-import javax.inject.Named;
 
 /** */
 @QSScope
@@ -85,10 +81,9 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     private final QSPanelController mQsPanelController;
     private final QuickQSPanelController mQuickQSPanelController;
     private final QuickStatusBarHeader mQuickStatusBarHeader;
+    private final QSFgsManagerFooter mFgsManagerFooter;
     private final QSSecurityFooter mSecurityFooter;
     private final QS mQs;
-    private final View mQSFooterActions;
-    private final View mQQSFooterActions;
 
     @Nullable
     private PagedTileLayout mPagedLayout;
@@ -151,17 +146,15 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     public QSAnimator(QS qs, QuickQSPanel quickPanel, QuickStatusBarHeader quickStatusBarHeader,
             QSPanelController qsPanelController,
             QuickQSPanelController quickQSPanelController, QSTileHost qsTileHost,
-            QSSecurityFooter securityFooter, @Main Executor executor, TunerService tunerService,
-            QSExpansionPathInterpolator qsExpansionPathInterpolator,
-            @Named(QS_FOOTER) FooterActionsView qsFooterActionsView,
-            @Named(QQS_FOOTER) FooterActionsView qqsFooterActionsView) {
+            QSFgsManagerFooter fgsManagerFooter, QSSecurityFooter securityFooter,
+            @Main Executor executor, TunerService tunerService,
+            QSExpansionPathInterpolator qsExpansionPathInterpolator) {
         mQs = qs;
         mQuickQsPanel = quickPanel;
         mQsPanelController = qsPanelController;
         mQuickQSPanelController = quickQSPanelController;
         mQuickStatusBarHeader = quickStatusBarHeader;
-        mQQSFooterActions = qqsFooterActionsView;
-        mQSFooterActions = qsFooterActionsView;
+        mFgsManagerFooter = fgsManagerFooter;
         mSecurityFooter = securityFooter;
         mHost = qsTileHost;
         mExecutor = executor;
@@ -473,14 +466,9 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                     .setListener(this)
                     .build();
 
-            if (mQQSFooterActions.getVisibility() != View.GONE) {
-                // only when qqs footer is present (which means split shade mode) it needs to
-                // be animated
-                updateQQSFooterAnimation();
-            }
-
             // Fade in the security footer and the divider as we reach the final position
             Builder builder = new Builder().setStartDelay(EXPANDED_TILE_DELAY);
+            builder.addFloat(mFgsManagerFooter.getView(), "alpha", 0, 1);
             builder.addFloat(mSecurityFooter.getView(), "alpha", 0, 1);
             if (mQsPanelController.shouldUseHorizontalLayout()
                     && mQsPanelController.mMediaHost.hostView != null) {
@@ -490,6 +478,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                 mQsPanelController.mMediaHost.hostView.setAlpha(1.0f);
             }
             mAllPagesDelayedAnimator = builder.build();
+            mAllViews.add(mFgsManagerFooter.getView());
             mAllViews.add(mSecurityFooter.getView());
             translationYBuilder.setInterpolator(mQSExpansionPathInterpolator.getYInterpolator());
             qqsTranslationYBuilder.setInterpolator(mQSExpansionPathInterpolator.getYInterpolator());
@@ -620,14 +609,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         } else {
             mBrightnessAnimator = null;
         }
-    }
-
-    private void updateQQSFooterAnimation() {
-        int translationY = getRelativeTranslationY(mQSFooterActions, mQQSFooterActions);
-        mQQSFooterActionsAnimator = new TouchAnimator.Builder()
-                .addFloat(mQQSFooterActions, "translationY", 0, translationY)
-                .build();
-        mAnimatedQsViews.add(mQSFooterActions);
     }
 
     private int getRelativeTranslationY(View view1, View view2) {

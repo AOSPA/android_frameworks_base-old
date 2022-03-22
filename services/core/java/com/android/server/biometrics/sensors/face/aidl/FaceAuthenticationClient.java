@@ -25,10 +25,8 @@ import android.hardware.SensorPrivacyManager;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricFaceConstants;
-import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.common.ICancellationSignal;
 import android.hardware.biometrics.face.IFace;
-import android.hardware.biometrics.face.ISession;
 import android.hardware.face.FaceAuthenticationFrame;
 import android.hardware.face.FaceManager;
 import android.os.IBinder;
@@ -36,7 +34,10 @@ import android.os.RemoteException;
 import android.util.Slog;
 
 import com.android.internal.R;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.biometrics.Utils;
+import com.android.server.biometrics.log.BiometricContext;
+import com.android.server.biometrics.log.BiometricLogger;
 import com.android.server.biometrics.sensors.AuthenticationClient;
 import com.android.server.biometrics.sensors.BiometricNotificationUtils;
 import com.android.server.biometrics.sensors.ClientMonitorCallback;
@@ -48,11 +49,13 @@ import com.android.server.biometrics.sensors.LockoutTracker;
 import com.android.server.biometrics.sensors.face.UsageStats;
 
 import java.util.ArrayList;
+import java.util.function.Supplier;
 
 /**
  * Face-specific authentication client for the {@link IFace} AIDL HAL interface.
  */
-class FaceAuthenticationClient extends AuthenticationClient<ISession> implements LockoutConsumer {
+class FaceAuthenticationClient extends AuthenticationClient<AidlSession>
+        implements LockoutConsumer {
     private static final String TAG = "FaceAuthenticationClient";
 
     @NonNull private final UsageStats mUsageStats;
@@ -69,23 +72,40 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
     @FaceManager.FaceAcquired private int mLastAcquire = FaceManager.FACE_ACQUIRED_UNKNOWN;
 
     FaceAuthenticationClient(@NonNull Context context,
-            @NonNull LazyDaemon<ISession> lazyDaemon,
+            @NonNull Supplier<AidlSession> lazyDaemon,
             @NonNull IBinder token, long requestId,
             @NonNull ClientMonitorCallbackConverter listener, int targetUserId, long operationId,
             boolean restricted, String owner, int cookie, boolean requireConfirmation, int sensorId,
-            boolean isStrongBiometric, int statsClient, @NonNull UsageStats usageStats,
+            @NonNull BiometricLogger logger, @NonNull BiometricContext biometricContext,
+            boolean isStrongBiometric, @NonNull UsageStats usageStats,
             @NonNull LockoutCache lockoutCache, boolean allowBackgroundAuthentication,
             boolean isKeyguardBypassEnabled) {
+        this(context, lazyDaemon, token, requestId, listener, targetUserId, operationId,
+                restricted, owner, cookie, requireConfirmation, sensorId, logger, biometricContext,
+                isStrongBiometric, usageStats, lockoutCache, allowBackgroundAuthentication,
+                isKeyguardBypassEnabled, context.getSystemService(SensorPrivacyManager.class));
+    }
+
+    @VisibleForTesting
+    FaceAuthenticationClient(@NonNull Context context,
+            @NonNull Supplier<AidlSession> lazyDaemon,
+            @NonNull IBinder token, long requestId,
+            @NonNull ClientMonitorCallbackConverter listener, int targetUserId, long operationId,
+            boolean restricted, String owner, int cookie, boolean requireConfirmation, int sensorId,
+            @NonNull BiometricLogger logger, @NonNull BiometricContext biometricContext,
+            boolean isStrongBiometric, @NonNull UsageStats usageStats,
+            @NonNull LockoutCache lockoutCache, boolean allowBackgroundAuthentication,
+            boolean isKeyguardBypassEnabled, SensorPrivacyManager sensorPrivacyManager) {
         super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted,
-                owner, cookie, requireConfirmation, sensorId, isStrongBiometric,
-                BiometricsProtoEnums.MODALITY_FACE, statsClient, null /* taskStackListener */,
-                lockoutCache, allowBackgroundAuthentication, true /* shouldVibrate */,
+                owner, cookie, requireConfirmation, sensorId, logger, biometricContext,
+                isStrongBiometric, null /* taskStackListener */, lockoutCache,
+                allowBackgroundAuthentication, true /* shouldVibrate */,
                 isKeyguardBypassEnabled);
         setRequestId(requestId);
         mUsageStats = usageStats;
         mLockoutCache = lockoutCache;
         mNotificationManager = context.getSystemService(NotificationManager.class);
-        mSensorPrivacyManager = context.getSystemService(SensorPrivacyManager.class);
+        mSensorPrivacyManager = sensorPrivacyManager;
 
         final Resources resources = getContext().getResources();
         mBiometricPromptIgnoreList = resources.getIntArray(
@@ -122,12 +142,23 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
                         0 /* vendorCode */);
                 mCallback.onClientFinished(this, false /* success */);
             } else {
-                mCancellationSignal = getFreshDaemon().authenticate(mOperationId);
+                mCancellationSignal = doAuthenticate();
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "Remote exception when requesting auth", e);
             onError(BiometricFaceConstants.FACE_ERROR_HW_UNAVAILABLE, 0 /* vendorCode */);
             mCallback.onClientFinished(this, false /* success */);
+        }
+    }
+
+    private ICancellationSignal doAuthenticate() throws RemoteException {
+        final AidlSession session = getFreshDaemon();
+
+        if (session.hasContextMethods()) {
+            return session.getSession().authenticateWithContext(
+                    mOperationId, getOperationContext());
+        } else {
+            return session.getSession().authenticate(mOperationId);
         }
     }
 
@@ -244,8 +275,8 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_TIMED);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT;
-        getLogger().logOnError(getContext(), error, 0 /* vendorCode */,
-                isCryptoOperation(), getTargetUserId());
+        getLogger().logOnError(getContext(), getOperationContext(),
+                error, 0 /* vendorCode */, getTargetUserId());
 
         try {
             getListener().onError(getSensorId(), getCookie(), error, 0 /* vendorCode */);
@@ -260,8 +291,8 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_PERMANENT);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT_PERMANENT;
-        getLogger().logOnError(getContext(), error, 0 /* vendorCode */,
-                isCryptoOperation(), getTargetUserId());
+        getLogger().logOnError(getContext(), getOperationContext(),
+                error, 0 /* vendorCode */, getTargetUserId());
 
         try {
             getListener().onError(getSensorId(), getCookie(), error, 0 /* vendorCode */);

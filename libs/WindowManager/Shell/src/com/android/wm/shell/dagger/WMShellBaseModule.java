@@ -471,9 +471,10 @@ public abstract class WMShellBaseModule {
     static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
             DisplayController displayController, Context context,
             @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler,
             @ShellAnimationThread ShellExecutor animExecutor) {
         return new Transitions(organizer, pool, displayController, context, mainExecutor,
-                animExecutor);
+                mainHandler, animExecutor);
     }
 
     @WMSingleton
@@ -695,11 +696,12 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<BackAnimationController> provideBackAnimationController(
+            Context context,
             @ShellMainThread ShellExecutor shellExecutor
     ) {
         if (BackAnimationController.IS_ENABLED) {
             return Optional.of(
-                    new BackAnimationController(shellExecutor));
+                    new BackAnimationController(shellExecutor, context));
         }
         return Optional.empty();
     }

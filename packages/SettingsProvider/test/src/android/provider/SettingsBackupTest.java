@@ -226,7 +226,6 @@ public class SettingsBackupTest {
                     Settings.Global.DEVELOPMENT_FORCE_RTL,
                     Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW,
                     Settings.Global.DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR,
-                    Settings.Global.DEVELOPMENT_USE_BLAST_ADAPTER_SV,
                     Settings.Global.DEVELOPMENT_USE_BLAST_ADAPTER_VR,
                     Settings.Global.DEVELOPMENT_WM_DISPLAY_SETTINGS_PATH,
                     Settings.Global.DEVICE_DEMO_MODE,
@@ -326,6 +325,8 @@ public class SettingsBackupTest {
                     Settings.Global.LOW_POWER_MODE_TRIGGER_LEVEL_MAX,
                     Settings.Global.LOW_POWER_MODE_STICKY,
                     Settings.Global.LOW_POWER_MODE_SUGGESTION_PARAMS,
+                    Settings.Global.LOW_POWER_STANDBY_ACTIVE_DURING_MAINTENANCE,
+                    Settings.Global.LOW_POWER_STANDBY_ENABLED,
                     Settings.Global.LTE_SERVICE_FORCED,
                     Settings.Global.LID_BEHAVIOR,
                     Settings.Global.MAX_ERROR_BYTES_PREFIX,
@@ -592,6 +593,7 @@ public class SettingsBackupTest {
                     Settings.Global.APP_INTEGRITY_VERIFICATION_TIMEOUT,
                     Settings.Global.KEY_CHORD_POWER_VOLUME_UP,
                     Settings.Global.CLOCKWORK_HOME_READY,
+                    Settings.Global.WATCHDOG_TIMEOUT_MILLIS,
                     Settings.Global.Wearable.BATTERY_SAVER_MODE,
                     Settings.Global.Wearable.COMBINED_LOCATION_ENABLED,
                     Settings.Global.Wearable.HAS_PAY_TOKENS,
@@ -656,7 +658,9 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_PACKAGE,
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_MAIN_ACTIVITY,
                     Settings.Global.Wearable.CLOCKWORK_LONG_PRESS_TO_ASSISTANT_ENABLED,
-                    Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER);
+                    Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER,
+                    Settings.Global.Wearable.WET_MODE_ON,
+                    Settings.Global.Wearable.COOLDOWN_MODE_ON);
 
     private static final Set<String> BACKUP_DENY_LIST_SECURE_SETTINGS =
              newHashSet(

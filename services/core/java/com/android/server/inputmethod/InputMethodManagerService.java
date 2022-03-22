@@ -160,7 +160,6 @@ import com.android.internal.inputmethod.StartInputReason;
 import com.android.internal.inputmethod.UnbindReason;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
-import com.android.internal.os.HandlerCaller;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.util.DumpUtils;
@@ -197,6 +196,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -204,7 +204,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * This class provides a system service that manages input methods.
  */
-public class InputMethodManagerService extends IInputMethodManager.Stub
+public final class InputMethodManagerService extends IInputMethodManager.Stub
         implements Handler.Callback {
     static final boolean DEBUG = false;
     static final String TAG = "InputMethodManagerService";
@@ -223,6 +223,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private static final int MSG_REMOVE_IME_SURFACE = 1060;
     private static final int MSG_REMOVE_IME_SURFACE_FROM_WINDOW = 1061;
     private static final int MSG_UPDATE_IME_WINDOW_STATUS = 1070;
+
+    private static final int MSG_RESET_HANDWRITING = 1090;
+    private static final int MSG_START_HANDWRITING = 1100;
 
     private static final int MSG_UNBIND_CLIENT = 3000;
     private static final int MSG_BIND_CLIENT = 3010;
@@ -270,7 +273,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     final WindowManagerInternal mWindowManagerInternal;
     final PackageManagerInternal mPackageManagerInternal;
     final InputManagerInternal mInputManagerInternal;
-    private final HandlerCaller mCaller;
     final boolean mHasFeature;
     private final ArrayMap<String, List<InputMethodSubtype>> mAdditionalSubtypeMap =
             new ArrayMap<>();
@@ -301,12 +303,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private int mMethodMapUpdateCount = 0;
 
     /**
-     * Tracks requestIds for Stylus handwriting mode.
-     */
-    @GuardedBy("ImfLock.class")
-    private int mHwRequestId = 0;
-
-    /**
      * The display id for which the latest startInput was called.
      */
     @GuardedBy("ImfLock.class")
@@ -325,6 +321,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private final PendingIntent mImeSwitchPendingIntent;
     private boolean mShowOngoingImeSwitcherForPhones;
     private boolean mNotificationShown;
+    @GuardedBy("ImfLock.class")
+    private final HandwritingModeController mHwController;
 
     static class SessionState {
         final ClientState client;
@@ -1497,8 +1495,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
         @Override
         public void onStart() {
-            LocalServices.addService(InputMethodManagerInternal.class,
-                    new LocalServiceImpl(mService));
+            mService.publishLocalService();
             publishBinderService(Context.INPUT_METHOD_SERVICE, mService, false /*allowIsolated*/,
                     DUMP_FLAG_PRIORITY_CRITICAL | DUMP_FLAG_PRIORITY_NORMAL | DUMP_FLAG_PROTO);
         }
@@ -1526,8 +1523,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @Override
         public void onUserUnlocking(@NonNull TargetUser user) {
             // Called on ActivityManager thread.
-            mService.mHandler.sendMessage(mService.mHandler.obtainMessage(MSG_SYSTEM_UNLOCK_USER,
-                    /* arg1= */ user.getUserIdentifier(), /* arg2= */ 0));
+            mService.mHandler.obtainMessage(MSG_SYSTEM_UNLOCK_USER, user.getUserIdentifier(), 0)
+                    .sendToTarget();
         }
     }
 
@@ -1587,8 +1584,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mImeDisplayValidator = mWindowManagerInternal::getDisplayImePolicy;
-        mCaller = new HandlerCaller(context, thread.getLooper(), this::handleMessage,
-                true /*asyncHandler*/);
         mAppOpsManager = mContext.getSystemService(AppOpsManager.class);
         mUserManager = mContext.getSystemService(UserManager.class);
         mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
@@ -1640,6 +1635,19 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         mBindingController = new InputMethodBindingController(this);
         mPreventImeStartupUnlessTextEditor = mRes.getBoolean(
                 com.android.internal.R.bool.config_preventImeStartupUnlessTextEditor);
+        mHwController = new HandwritingModeController(thread.getLooper(),
+                new InkWindowInitializer());
+    }
+
+    private final class InkWindowInitializer implements Runnable {
+        public void run() {
+            synchronized (ImfLock.class) {
+                IInputMethodInvoker curMethod = getCurMethodLocked();
+                if (curMethod != null) {
+                    curMethod.initInkWindow();
+                }
+            }
+        }
     }
 
     @GuardedBy("ImfLock.class")
@@ -2199,6 +2207,24 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
+    @NonNull
+    private Message obtainMessageOO(int what, Object arg1, Object arg2) {
+        final SomeArgs args = SomeArgs.obtain();
+        args.arg1 = arg1;
+        args.arg2 = arg2;
+        return mHandler.obtainMessage(what, 0, 0, args);
+    }
+
+    @NonNull
+    private Message obtainMessageIIIO(int what, int argi1, int argi2, int argi3, Object arg1) {
+        final SomeArgs args = SomeArgs.obtain();
+        args.arg1 = arg1;
+        args.argi1 = argi1;
+        args.argi2 = argi2;
+        args.argi3 = argi3;
+        return mHandler.obtainMessage(what, 0, 0, args);
+    }
+
     private void executeOrSendMessage(IInputMethodClient target, Message msg) {
          if (target.asBinder() instanceof Binder) {
              // This is supposed to be emulating the one-way semantics when the IME client is
@@ -2207,7 +2233,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
              // We probably should create a simple wrapper of IInputMethodClient as the first step
              // to get rid of executeOrSendMessage() then should prohibit system_server to be the
              // IME client for long term.
-             mCaller.sendMessage(msg);
+             msg.sendToTarget();
          } else {
              handleMessage(msg);
              msg.recycle();
@@ -2229,7 +2255,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
             scheduleSetActiveToClient(mCurClient, false /* active */, false /* fullscreen */,
                     false /* reportToImeController */);
-            executeOrSendMessage(mCurClient.client, mCaller.obtainMessageIIO(
+            executeOrSendMessage(mCurClient.client, mHandler.obtainMessage(
                     MSG_UNBIND_CLIENT, getSequenceNumberLocked(), unbindClientReason,
                     mCurClient.client));
             mCurClient.sessionRequested = false;
@@ -2298,10 +2324,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     true /* direct */);
         }
 
+        final boolean shouldShowImeSwitcherWhenImeIsShown =
+                shouldShowImeSwitcherWhenImeIsShownLocked();
         final SessionState session = mCurClient.curSession;
         setEnabledSessionLocked(session);
-        session.method.startInput(startInputToken, mCurInputContext, mCurAttribute, restarting);
-
+        session.method.startInput(startInputToken, mCurInputContext, mCurAttribute, restarting,
+                shouldShowImeSwitcherWhenImeIsShown);
         if (mShowRequested) {
             if (DEBUG) Slog.v(TAG, "Attach new input asks to show input");
             showCurrentInputLocked(mCurFocusedWindow, getAppShowFlagsLocked(), null,
@@ -2501,13 +2529,19 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     + mCurTokenDisplayId);
         }
         inputMethod.initializeInternal(token, new InputMethodPrivilegedOperationsImpl(this, token),
-                configChanges, supportStylusHw);
+                configChanges, supportStylusHw, shouldShowImeSwitcherWhenImeIsShownLocked());
+    }
+
+    @AnyThread
+    void scheduleResetStylusHandwriting() {
+        mHandler.obtainMessage(MSG_RESET_HANDWRITING).sendToTarget();
     }
 
     @AnyThread
     void scheduleNotifyImeUidToAudioService(int uid) {
-        mCaller.removeMessages(MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE);
-        mCaller.obtainMessageI(MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE, uid).sendToTarget();
+        mHandler.removeMessages(MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE);
+        mHandler.obtainMessage(MSG_NOTIFY_IME_UID_TO_AUDIO_SERVICE, uid, 0 /* unused */)
+                .sendToTarget();
     }
 
     @BinderThread
@@ -2532,7 +2566,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         InputBindResult res = attachNewInputLocked(
                                 StartInputReason.SESSION_CREATED_BY_IME, true);
                         if (res.method != null) {
-                            executeOrSendMessage(mCurClient.client, mCaller.obtainMessageOO(
+                            executeOrSendMessage(mCurClient.client, obtainMessageOO(
                                     MSG_BIND_CLIENT, mCurClient.client, res));
                         }
                         return;
@@ -2695,6 +2729,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         if (mStatusBar != null) {
             mStatusBar.setIconVisibility(mSlotIme, false);
         }
+    }
+
+    @GuardedBy("ImfLock.class")
+    boolean shouldShowImeSwitcherWhenImeIsShownLocked() {
+        return shouldShowImeSwitcherLocked(
+                InputMethodService.IME_ACTIVE | InputMethodService.IME_VISIBLE);
     }
 
     @GuardedBy("ImfLock.class")
@@ -2957,6 +2997,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         // the same enabled IMEs list.
         mSwitchingController.resetCircularListLocked(mContext);
 
+        sendShouldShowImeSwitcherWhenImeIsShownLocked();
     }
 
     @GuardedBy("ImfLock.class")
@@ -3045,6 +3086,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
+    @BinderThread
     @Override
     public void startStylusHandwriting(IInputMethodClient client) {
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMMS.startStylusHandwriting");
@@ -3059,18 +3101,21 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             final long ident = Binder.clearCallingIdentity();
             try {
                 if (!canInteractWithImeLocked(uid, client, "startStylusHandwriting")) {
-                    Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
                     return;
                 }
                 if (!mBindingController.supportsStylusHandwriting()) {
                     Slog.w(TAG, "Stylus HW unsupported by IME. Ignoring startStylusHandwriting()");
-                    Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+                    return;
+                }
+                final OptionalInt requestId = mHwController.getCurrentRequestId();
+                if (!requestId.isPresent()) {
+                    Slog.e(TAG, "Stylus handwriting was not initialized.");
                     return;
                 }
                 if (DEBUG) Slog.v(TAG, "Client requesting Stylus Handwriting to be started");
                 final IInputMethodInvoker curMethod = getCurMethodLocked();
                 if (curMethod != null) {
-                    curMethod.canStartStylusHandwriting(++mHwRequestId);
+                    curMethod.canStartStylusHandwriting(requestId.getAsInt());
                 }
             } finally {
                 Binder.restoreCallingIdentity(ident);
@@ -3637,9 +3682,10 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
             // Always call subtype picker, because subtype picker is a superset of input method
             // picker.
-            mHandler.sendMessage(mCaller.obtainMessageII(
-                    MSG_SHOW_IM_SUBTYPE_PICKER, auxiliarySubtypeMode,
-                    (mCurClient != null) ? mCurClient.selfReportedDisplayId : DEFAULT_DISPLAY));
+            final int displayId =
+                    (mCurClient != null) ? mCurClient.selfReportedDisplayId : DEFAULT_DISPLAY;
+            mHandler.obtainMessage(MSG_SHOW_IM_SUBTYPE_PICKER, auxiliarySubtypeMode, displayId)
+                    .sendToTarget();
         }
     }
 
@@ -3654,8 +3700,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
         // Always call subtype picker, because subtype picker is a superset of input method
         // picker.
-        mHandler.sendMessage(mCaller.obtainMessageII(
-                MSG_SHOW_IM_SUBTYPE_PICKER, auxiliarySubtypeMode, displayId));
+        mHandler.obtainMessage(MSG_SHOW_IM_SUBTYPE_PICKER, auxiliarySubtypeMode, displayId)
+                .sendToTarget();
     }
 
     /**
@@ -3912,7 +3958,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     @Override
     public void removeImeSurface() {
         mContext.enforceCallingPermission(Manifest.permission.INTERNAL_SYSTEM_WINDOW, null);
-        mHandler.sendMessage(mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE));
+        mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE).sendToTarget();
     }
 
     @Override
@@ -4102,6 +4148,18 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
+    @BinderThread
+    private void finishStylusHandwriting(int requestId) {
+        synchronized (ImfLock.class) {
+            final OptionalInt curRequest = mHwController.getCurrentRequestId();
+            if (!curRequest.isPresent() || curRequest.getAsInt() != requestId) {
+                Slog.w(TAG, "IME requested to finish handwriting with a mismatched requestId: "
+                        + requestId);
+            }
+            scheduleResetStylusHandwriting();
+        }
+    }
+
     @GuardedBy("ImfLock.class")
     private void setInputMethodWithSubtypeIdLocked(IBinder token, String id, int subtypeId) {
         if (token == null) {
@@ -4258,6 +4316,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 updateImeWindowStatus(msg.arg1 == 1);
                 return true;
             }
+
             // ---------------------------------------------------------
 
             case MSG_UNBIND_CLIENT:
@@ -4318,6 +4377,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             // --------------------------------------------------------------
             case MSG_HARD_KEYBOARD_SWITCH_CHANGED:
                 mMenuController.handleHardKeyboardStatusChange(msg.arg1 == 1);
+                synchronized (ImfLock.class) {
+                    sendShouldShowImeSwitcherWhenImeIsShownLocked();
+                }
                 return true;
             case MSG_SYSTEM_UNLOCK_USER: {
                 final int userId = msg.arg1;
@@ -4342,21 +4404,47 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 }
                 return true;
             }
+
+            case MSG_RESET_HANDWRITING: {
+                synchronized (ImfLock.class) {
+                    if (mBindingController.supportsStylusHandwriting()
+                            && getCurMethodLocked() != null) {
+                        mHwController.initializeHandwritingSpy(mCurTokenDisplayId);
+                    } else {
+                        mHwController.reset();
+                    }
+                }
+                return true;
+            }
+            case MSG_START_HANDWRITING:
+                synchronized (ImfLock.class) {
+                    IInputMethodInvoker curMethod = getCurMethodLocked();
+                    if (curMethod == null) {
+                        return true;
+                    }
+                    final HandwritingModeController.HandwritingSession session =
+                            mHwController.startHandwritingSession(msg.arg1);
+                    if (session == null) {
+                        Slog.e(TAG,
+                                "Failed to start handwriting session for requestId: " + msg.arg1);
+                        return true;
+                    }
+
+                    if (!curMethod.startStylusHandwriting(session.getRequestId(),
+                            session.getHandwritingChannel(), session.getRecordedEvents())) {
+                        // When failed to issue IPCs, re-initialize handwriting state.
+                        Slog.w(TAG, "Resetting handwriting mode.");
+                        mHwController.initializeHandwritingSpy(mCurTokenDisplayId);
+                    }
+                }
+                return true;
         }
         return false;
     }
 
     @BinderThread
     private void onStylusHandwritingReady(int requestId) {
-        synchronized (ImfLock.class) {
-            if (mHwRequestId != requestId) {
-                // obsolete request
-                return;
-            }
-
-            // TODO: replace null  with actual Channel, MotionEvents
-            getCurMethodLocked().startStylusHandwriting(null, null);
-        }
+        mHandler.obtainMessage(MSG_START_HANDWRITING, requestId, 0 /* unused */).sendToTarget();
     }
 
     private void handleSetInteractive(final boolean interactive) {
@@ -4380,8 +4468,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     private void scheduleSetActiveToClient(ClientState state, boolean active, boolean fullscreen,
             boolean reportToImeController) {
-        executeOrSendMessage(state.client, mCaller.obtainMessageIIIIO(MSG_SET_ACTIVE,
-                active ? 1 : 0, fullscreen ? 1 : 0, reportToImeController ? 1 : 0, 0, state));
+        executeOrSendMessage(state.client, obtainMessageIIIO(MSG_SET_ACTIVE,
+                active ? 1 : 0, fullscreen ? 1 : 0, reportToImeController ? 1 : 0, state));
     }
 
     @GuardedBy("ImfLock.class")
@@ -4562,10 +4650,23 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         // the same enabled IMEs list.
         mSwitchingController.resetCircularListLocked(mContext);
 
+        sendShouldShowImeSwitcherWhenImeIsShownLocked();
+
         // Notify InputMethodListListeners of the new installed InputMethods.
         final List<InputMethodInfo> inputMethodList = new ArrayList<>(mMethodList);
         mHandler.obtainMessage(MSG_DISPATCH_ON_INPUT_METHOD_LIST_UPDATED,
                 mSettings.getCurrentUserId(), 0 /* unused */, inputMethodList).sendToTarget();
+    }
+
+    @GuardedBy("ImfLock.class")
+    void sendShouldShowImeSwitcherWhenImeIsShownLocked() {
+        final IInputMethodInvoker curMethod = mBindingController.getCurMethod();
+        if (curMethod == null) {
+            // No need to send the data if the IME is not yet bound.
+            return;
+        }
+        curMethod.onShouldShowImeSwitcherWhenImeIsShownChanged(
+                shouldShowImeSwitcherWhenImeIsShownLocked());
     }
 
     @GuardedBy("ImfLock.class")
@@ -4764,26 +4865,6 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         return mCurrentSubtype;
     }
 
-    private List<InputMethodInfo> getInputMethodListAsUser(@UserIdInt int userId) {
-        synchronized (ImfLock.class) {
-            return getInputMethodListLocked(userId, DirectBootAwareness.AUTO);
-        }
-    }
-
-    private List<InputMethodInfo> getEnabledInputMethodListAsUser(@UserIdInt int userId) {
-        synchronized (ImfLock.class) {
-            return getEnabledInputMethodListLocked(userId);
-        }
-    }
-
-    private void onCreateInlineSuggestionsRequest(@UserIdInt int userId,
-            InlineSuggestionsRequestInfo requestInfo,
-            IInlineSuggestionsRequestCallback callback) {
-        synchronized (ImfLock.class) {
-            onCreateInlineSuggestionsRequestLocked(userId, requestInfo, callback);
-        }
-    }
-
     private ArrayMap<String, InputMethodInfo> queryMethodMapForUser(@UserIdInt int userId) {
         final ArrayMap<String, InputMethodInfo> methodMap = new ArrayMap<>();
         final ArrayList<InputMethodInfo> methodList = new ArrayList<>();
@@ -4795,163 +4876,154 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         return methodMap;
     }
 
-    private boolean switchToInputMethod(String imeId, @UserIdInt int userId) {
-        synchronized (ImfLock.class) {
-            if (userId == mSettings.getCurrentUserId()) {
-                if (!mMethodMap.containsKey(imeId)
-                        || !mSettings.getEnabledInputMethodListLocked()
-                                .contains(mMethodMap.get(imeId))) {
-                    return false; // IME is not found or not enabled.
-                }
-                setInputMethodLocked(imeId, NOT_A_SUBTYPE_ID);
-                return true;
-            }
-            final ArrayMap<String, InputMethodInfo> methodMap = queryMethodMapForUser(userId);
-            final InputMethodSettings settings = new InputMethodSettings(
-                    mContext.getResources(), mContext.getContentResolver(), methodMap,
-                    userId, false);
-            if (!methodMap.containsKey(imeId)
-                    || !settings.getEnabledInputMethodListLocked()
-                            .contains(methodMap.get(imeId))) {
+    @GuardedBy("ImfLock.class")
+    private boolean switchToInputMethodLocked(String imeId, @UserIdInt int userId) {
+        if (userId == mSettings.getCurrentUserId()) {
+            if (!mMethodMap.containsKey(imeId)
+                    || !mSettings.getEnabledInputMethodListLocked()
+                            .contains(mMethodMap.get(imeId))) {
                 return false; // IME is not found or not enabled.
             }
-            settings.putSelectedInputMethod(imeId);
-            settings.putSelectedSubtype(NOT_A_SUBTYPE_ID);
+            setInputMethodLocked(imeId, NOT_A_SUBTYPE_ID);
             return true;
         }
+        final ArrayMap<String, InputMethodInfo> methodMap = queryMethodMapForUser(userId);
+        final InputMethodSettings settings = new InputMethodSettings(
+                mContext.getResources(), mContext.getContentResolver(), methodMap,
+                userId, false);
+        if (!methodMap.containsKey(imeId)
+                || !settings.getEnabledInputMethodListLocked()
+                        .contains(methodMap.get(imeId))) {
+            return false; // IME is not found or not enabled.
+        }
+        settings.putSelectedInputMethod(imeId);
+        settings.putSelectedSubtype(NOT_A_SUBTYPE_ID);
+        return true;
     }
 
-    private boolean setInputMethodEnabled(String imeId, boolean enabled, @UserIdInt int userId) {
-        synchronized (ImfLock.class) {
-            if (userId == mSettings.getCurrentUserId()) {
-                if (!mMethodMap.containsKey(imeId)) {
-                    return false; // IME is not found.
-                }
-                setInputMethodEnabledLocked(imeId, enabled);
-                return true;
-            }
-            final ArrayMap<String, InputMethodInfo> methodMap = queryMethodMapForUser(userId);
-            final InputMethodSettings settings = new InputMethodSettings(
-                    mContext.getResources(), mContext.getContentResolver(), methodMap,
-                    userId, false);
-            if (!methodMap.containsKey(imeId)) {
-                return false; // IME is not found.
-            }
-            if (enabled) {
-                if (!settings.getEnabledInputMethodListLocked().contains(methodMap.get(imeId))) {
-                    settings.appendAndPutEnabledInputMethodLocked(imeId, false);
-                }
-            } else {
-                settings.buildAndPutEnabledInputMethodsStrRemovingIdLocked(
-                        new StringBuilder(),
-                        settings.getEnabledInputMethodsAndSubtypeListLocked(), imeId);
-            }
-            return true;
-        }
+    private void publishLocalService() {
+        LocalServices.addService(InputMethodManagerInternal.class, new LocalServiceImpl());
     }
 
-    private boolean transferTouchFocusToImeWindow(@NonNull IBinder sourceInputToken,
-            int displayId) {
-        //TODO(b/150843766): Check if Input Token is valid.
-        final IBinder curHostInputToken;
-        synchronized (ImfLock.class) {
-            if (displayId != mCurTokenDisplayId || mCurHostInputToken == null) {
-                return false;
-            }
-            curHostInputToken = mCurHostInputToken;
-        }
-        return mInputManagerInternal.transferTouchFocus(sourceInputToken, curHostInputToken);
-    }
-
-    private void reportImeControl(@Nullable IBinder windowToken, boolean imeParentChanged) {
-        synchronized (ImfLock.class) {
-            if (mCurFocusedWindow != windowToken) {
-                // mCurPerceptible was set by the focused window, but it is no longer in control,
-                // so we reset mCurPerceptible.
-                mCurPerceptible = true;
-            }
-            if (imeParentChanged) {
-                // Hide the IME method menu earlier when the IME surface parent will change in
-                // case seeing the dialog dismiss flickering during the next focused window
-                // starting the input connection.
-                mMenuController.hideInputMethodMenu();
-            }
-        }
-    }
-
-    private static final class LocalServiceImpl extends InputMethodManagerInternal {
-        @NonNull
-        private final InputMethodManagerService mService;
-
-        LocalServiceImpl(@NonNull InputMethodManagerService service) {
-            mService = service;
-        }
+    private final class LocalServiceImpl extends InputMethodManagerInternal {
 
         @Override
         public void setInteractive(boolean interactive) {
             // Do everything in handler so as not to block the caller.
-            mService.mHandler.obtainMessage(MSG_SET_INTERACTIVE, interactive ? 1 : 0, 0)
-                    .sendToTarget();
+            mHandler.obtainMessage(MSG_SET_INTERACTIVE, interactive ? 1 : 0, 0).sendToTarget();
         }
 
         @Override
         public void hideCurrentInputMethod(@SoftInputShowHideReason int reason) {
-            mService.mHandler.removeMessages(MSG_HIDE_CURRENT_INPUT_METHOD);
-            mService.mHandler.obtainMessage(MSG_HIDE_CURRENT_INPUT_METHOD, reason).sendToTarget();
+            mHandler.removeMessages(MSG_HIDE_CURRENT_INPUT_METHOD);
+            mHandler.obtainMessage(MSG_HIDE_CURRENT_INPUT_METHOD, reason).sendToTarget();
         }
 
         @Override
-        public List<InputMethodInfo> getInputMethodListAsUser(int userId) {
-            return mService.getInputMethodListAsUser(userId);
+        public List<InputMethodInfo> getInputMethodListAsUser(@UserIdInt int userId) {
+            synchronized (ImfLock.class) {
+                return getInputMethodListLocked(userId, DirectBootAwareness.AUTO);
+            }
         }
 
         @Override
-        public List<InputMethodInfo> getEnabledInputMethodListAsUser(int userId) {
-            return mService.getEnabledInputMethodListAsUser(userId);
+        public List<InputMethodInfo> getEnabledInputMethodListAsUser(@UserIdInt int userId) {
+            synchronized (ImfLock.class) {
+                return getEnabledInputMethodListLocked(userId);
+            }
         }
 
         @Override
-        public void onCreateInlineSuggestionsRequest(int userId,
+        public void onCreateInlineSuggestionsRequest(@UserIdInt int userId,
                 InlineSuggestionsRequestInfo requestInfo, IInlineSuggestionsRequestCallback cb) {
-            mService.onCreateInlineSuggestionsRequest(userId, requestInfo, cb);
+            synchronized (ImfLock.class) {
+                onCreateInlineSuggestionsRequestLocked(userId, requestInfo, cb);
+            }
         }
 
         @Override
-        public boolean switchToInputMethod(String imeId, int userId) {
-            return mService.switchToInputMethod(imeId, userId);
+        public boolean switchToInputMethod(String imeId, @UserIdInt int userId) {
+            synchronized (ImfLock.class) {
+                return switchToInputMethodLocked(imeId, userId);
+            }
         }
 
         @Override
-        public boolean setInputMethodEnabled(String imeId, boolean enabled, int userId) {
-            return mService.setInputMethodEnabled(imeId, enabled, userId);
+        public boolean setInputMethodEnabled(String imeId, boolean enabled, @UserIdInt int userId) {
+            synchronized (ImfLock.class) {
+                if (userId == mSettings.getCurrentUserId()) {
+                    if (!mMethodMap.containsKey(imeId)) {
+                        return false; // IME is not found.
+                    }
+                    setInputMethodEnabledLocked(imeId, enabled);
+                    return true;
+                }
+                final ArrayMap<String, InputMethodInfo> methodMap = queryMethodMapForUser(userId);
+                final InputMethodSettings settings = new InputMethodSettings(
+                        mContext.getResources(), mContext.getContentResolver(), methodMap,
+                        userId, false);
+                if (!methodMap.containsKey(imeId)) {
+                    return false; // IME is not found.
+                }
+                if (enabled) {
+                    if (!settings.getEnabledInputMethodListLocked().contains(
+                            methodMap.get(imeId))) {
+                        settings.appendAndPutEnabledInputMethodLocked(imeId, false);
+                    }
+                } else {
+                    settings.buildAndPutEnabledInputMethodsStrRemovingIdLocked(
+                            new StringBuilder(),
+                            settings.getEnabledInputMethodsAndSubtypeListLocked(), imeId);
+                }
+                return true;
+            }
         }
 
         @Override
         public void registerInputMethodListListener(InputMethodListListener listener) {
-            mService.mInputMethodListListeners.addIfAbsent(listener);
+            mInputMethodListListeners.addIfAbsent(listener);
         }
 
         @Override
         public boolean transferTouchFocusToImeWindow(@NonNull IBinder sourceInputToken,
                 int displayId) {
-            return mService.transferTouchFocusToImeWindow(sourceInputToken, displayId);
+            //TODO(b/150843766): Check if Input Token is valid.
+            final IBinder curHostInputToken;
+            synchronized (ImfLock.class) {
+                if (displayId != mCurTokenDisplayId || mCurHostInputToken == null) {
+                    return false;
+                }
+                curHostInputToken = mCurHostInputToken;
+            }
+            return mInputManagerInternal.transferTouchFocus(sourceInputToken, curHostInputToken);
         }
 
         @Override
         public void reportImeControl(@Nullable IBinder windowToken, boolean imeParentChanged) {
-            mService.reportImeControl(windowToken, imeParentChanged);
+            synchronized (ImfLock.class) {
+                if (mCurFocusedWindow != windowToken) {
+                    // mCurPerceptible was set by the focused window, but it is no longer in
+                    // control, so we reset mCurPerceptible.
+                    mCurPerceptible = true;
+                }
+                if (imeParentChanged) {
+                    // Hide the IME method menu earlier when the IME surface parent will change in
+                    // case seeing the dialog dismiss flickering during the next focused window
+                    // starting the input connection.
+                    mMenuController.hideInputMethodMenu();
+                }
+            }
         }
 
         @Override
         public void removeImeSurface() {
-            mService.mHandler.sendMessage(mService.mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE));
+            mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE).sendToTarget();
         }
 
         @Override
         public void updateImeWindowStatus(boolean disableImeIcon) {
-            mService.mHandler.sendMessage(
-                    mService.mHandler.obtainMessage(MSG_UPDATE_IME_WINDOW_STATUS,
-                            disableImeIcon ? 1 : 0, 0));
+            mHandler.obtainMessage(MSG_UPDATE_IME_WINDOW_STATUS, disableImeIcon ? 1 : 0, 0)
+                    .sendToTarget();
         }
     }
 
@@ -5017,8 +5089,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
             if (mCurClient != null && mCurClient.client != null) {
                 mInFullscreenMode = fullscreen;
-                executeOrSendMessage(mCurClient.client, mCaller.obtainMessageIO(
-                        MSG_REPORT_FULLSCREEN_MODE, fullscreen ? 1 : 0, mCurClient));
+                executeOrSendMessage(mCurClient.client, mHandler.obtainMessage(
+                        MSG_REPORT_FULLSCREEN_MODE, fullscreen ? 1 : 0, 0 /* unused */,
+                        mCurClient));
             }
         }
     }
@@ -5587,7 +5660,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 if (!userHasDebugPriv(userId, shellCommand)) {
                     continue;
                 }
-                boolean failedToSelectUnknownIme = !switchToInputMethod(imeId, userId);
+                boolean failedToSelectUnknownIme = !switchToInputMethodLocked(imeId, userId);
                 if (failedToSelectUnknownIme) {
                     error.print("Unknown input method ");
                     error.print(imeId);
@@ -5900,6 +5973,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @Override
         public void onStylusHandwritingReady(int requestId) {
             mImms.onStylusHandwritingReady(requestId);
+        }
+
+        @BinderThread
+        @Override
+        public void finishStylusHandwriting(int requestId) {
+            mImms.finishStylusHandwriting(requestId);
         }
     }
 }

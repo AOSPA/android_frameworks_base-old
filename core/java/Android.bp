@@ -29,8 +29,18 @@ filegroup {
 }
 
 filegroup {
+    name: "IBinaryTransparencyService.aidl",
+    srcs: ["com/android/internal/os/IBinaryTransparencyService.aidl"],
+}
+
+filegroup {
     name: "ITracingServiceProxy.aidl",
     srcs: ["android/tracing/ITracingServiceProxy.aidl"],
+}
+
+filegroup {
+    name: "TraceReportParams.aidl",
+    srcs: ["android/tracing/TraceReportParams.aidl"],
 }
 
 // These are subset of framework-core-sources that are needed by the
@@ -118,6 +128,7 @@ filegroup {
         "android/os/IThermalStatusListener.aidl",
         "android/os/IThermalService.aidl",
         "android/os/IPowerManager.aidl",
+        "android/os/IWakeLockCallback.aidl",
     ],
 }
 
@@ -149,7 +160,6 @@ java_library {
 filegroup {
     name: "framework-services-net-module-wifi-shared-srcs",
     srcs: [
-        "android/net/DhcpResults.java",
         "android/util/LocalLog.java",
     ],
 }
@@ -165,6 +175,18 @@ filegroup {
         "com/android/internal/util/IndentingPrintWriter.java",
         "com/android/internal/util/MessageUtils.java",
         "com/android/internal/util/WakeupMessage.java",
+        // TODO: delete as soon as NetworkStatsFactory stops using
+        "com/android/internal/util/ProcFileReader.java",
+    ],
+}
+
+// keep these files in sync with the packages/modules/Connectivity jarjar-rules.txt for
+// the connectivity module.
+filegroup {
+    name: "framework-connectivity-api-shared-srcs",
+    srcs: [
+        "android/util/IndentingPrintWriter.java",
+        "com/android/internal/util/FileRotator.java",
     ],
 }
 

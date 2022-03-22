@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar;
 
 import static android.app.admin.DevicePolicyManager.DEVICE_OWNER_TYPE_FINANCED;
+import static android.app.admin.DevicePolicyResources.Strings.SystemUi.KEYGUARD_MANAGEMENT_DISCLOSURE;
 import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
 
@@ -151,6 +152,7 @@ public class KeyguardIndicationController {
     private boolean mPowerPluggedIn;
     private boolean mPowerPluggedInWired;
     private boolean mPowerPluggedInWireless;
+    private boolean mPowerPluggedInDock;
     private boolean mPowerCharged;
     private boolean mBatteryOverheated;
     private boolean mEnableBatteryDefender;
@@ -342,7 +344,9 @@ public class KeyguardIndicationController {
     private CharSequence getDisclosureText(@Nullable CharSequence organizationName) {
         final Resources packageResources = mContext.getResources();
         if (organizationName == null) {
-            return packageResources.getText(R.string.do_disclosure_generic);
+            return mDevicePolicyManager.getString(
+                    KEYGUARD_MANAGEMENT_DISCLOSURE,
+                    () -> packageResources.getString(R.string.do_disclosure_generic));
         } else if (mDevicePolicyManager.isDeviceManaged()
                 && mDevicePolicyManager.getDeviceOwnerType(
                 mDevicePolicyManager.getDeviceOwnerComponentOnAnyUser())
@@ -350,7 +354,10 @@ public class KeyguardIndicationController {
             return packageResources.getString(R.string.do_financed_disclosure_with_name,
                     organizationName);
         } else {
-            return packageResources.getString(R.string.do_disclosure_with_name,
+            return mDevicePolicyManager.getString(
+                    KEYGUARD_MANAGEMENT_DISCLOSURE,
+                    () -> packageResources.getString(
+                            R.string.do_disclosure_with_name, organizationName),
                     organizationName);
         }
     }
@@ -786,6 +793,10 @@ public class KeyguardIndicationController {
             chargingId = hasChargingTime
                     ? R.string.keyguard_indication_charging_time_wireless
                     : R.string.keyguard_plugged_in_wireless;
+        } else if (mPowerPluggedInDock) {
+            chargingId = hasChargingTime
+                    ? R.string.keyguard_indication_charging_time_dock
+                    : R.string.keyguard_plugged_in_dock;
         } else {
             chargingId = hasChargingTime
                     ? R.string.keyguard_indication_charging_time
@@ -911,6 +922,7 @@ public class KeyguardIndicationController {
             boolean wasPluggedIn = mPowerPluggedIn;
             mPowerPluggedInWired = status.isPluggedInWired() && isChargingOrFull;
             mPowerPluggedInWireless = status.isPluggedInWireless() && isChargingOrFull;
+            mPowerPluggedInDock = status.isPluggedInDock() && isChargingOrFull;
             mPowerPluggedIn = status.isPluggedIn() && isChargingOrFull;
             mPowerCharged = status.isCharged();
             mChargingWattage = status.maxChargingWattage;

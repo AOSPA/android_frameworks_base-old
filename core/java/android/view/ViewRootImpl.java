@@ -52,6 +52,7 @@ import static android.view.ViewRootImplProto.VISIBLE_RECT;
 import static android.view.ViewRootImplProto.WIDTH;
 import static android.view.ViewRootImplProto.WINDOW_ATTRIBUTES;
 import static android.view.ViewRootImplProto.WIN_FRAME;
+import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION;
 import static android.view.WindowCallbacks.RESIZE_MODE_DOCKED_DIVIDER;
 import static android.view.WindowCallbacks.RESIZE_MODE_FREEFORM;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
@@ -236,7 +237,7 @@ import java.util.function.Consumer;
 @SuppressWarnings({"EmptyCatchBlock", "PointlessBooleanExpression"})
 public final class ViewRootImpl implements ViewParent,
         View.AttachInfo.Callbacks, ThreadedRenderer.DrawCallbacks,
-        AttachedSurfaceControl {
+        AttachedSurfaceControl, OnBackInvokedDispatcherOwner {
     private static final String TAG = "ViewRootImpl";
     private static final boolean DBG = false;
     private static final boolean LOCAL_LOGV = false;
@@ -313,10 +314,15 @@ public final class ViewRootImpl implements ViewParent,
     private @SurfaceControl.BufferTransform
             int mPreviousTransformHint = SurfaceControl.BUFFER_TRANSFORM_IDENTITY;
     /**
-     * The fallback {@link OnBackInvokedDispatcher} when the window doesn't have a decor view.
+     * The top level {@link OnBackInvokedDispatcher}.
      */
-    private WindowOnBackInvokedDispatcher mFallbackOnBackInvokedDispatcher =
+    private final WindowOnBackInvokedDispatcher mOnBackInvokedDispatcher =
             new WindowOnBackInvokedDispatcher();
+    /**
+     * Compatibility {@link OnBackInvokedCallback} that dispatches KEYCODE_BACK events
+     * to view root for apps using legacy back behavior.
+     */
+    private OnBackInvokedCallback mCompatOnBackInvokedCallback;
 
     /**
      * Callback for notifying about global configuration changes.
@@ -474,6 +480,9 @@ public final class ViewRootImpl implements ViewParent,
     final Region mTransparentRegion;
     final Region mPreviousTransparentRegion;
 
+    Region mTouchableRegion;
+    Region mPreviousTouchableRegion;
+
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     int mWidth;
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
@@ -560,6 +569,8 @@ public final class ViewRootImpl implements ViewParent,
     @Nullable
     int mContentCaptureEnabled = CONTENT_CAPTURE_ENABLED_NOT_CHECKED;
     boolean mPerformContentCapture;
+    boolean mPerformAutoFill;
+
 
     boolean mReportNextDraw;
     /**
@@ -640,6 +651,7 @@ public final class ViewRootImpl implements ViewParent,
 
     // These are accessed by multiple threads.
     final Rect mWinFrame; // frame given by window manager.
+    Rect mOverrideInsetsFrame;
 
     final Rect mPendingBackDropFrame = new Rect();
 
@@ -839,6 +851,7 @@ public final class ViewRootImpl implements ViewParent,
         mPreviousTransparentRegion = new Region();
         mFirst = true; // true for the first time the view is added
         mPerformContentCapture = true; // also true for the first time the view is added
+        mPerformAutoFill = true;
         mAdded = false;
         mAttachInfo = new View.AttachInfo(mWindowSession, mWindow, display, this, mHandler, this,
                 context);
@@ -887,7 +900,6 @@ public final class ViewRootImpl implements ViewParent,
         mFastScrollSoundEffectsEnabled = audioManager.areNavigationRepeatSoundEffectsEnabled();
 
         mScrollCaptureRequestTimeout = SCROLL_CAPTURE_REQUEST_TIMEOUT_MILLIS;
-        mFallbackOnBackInvokedDispatcher.attachToWindow(mWindowSession, mWindow);
     }
 
     public static void addFirstDrawHandler(Runnable callback) {
@@ -1138,9 +1150,6 @@ public final class ViewRootImpl implements ViewParent,
                     if (pendingInsetsController != null) {
                         pendingInsetsController.replayAndAttach(mInsetsController);
                     }
-                    ((RootViewSurfaceTaker) mView)
-                            .provideWindowOnBackInvokedDispatcher()
-                            .attachToWindow(mWindowSession, mWindow);
                 }
 
                 try {
@@ -1187,6 +1196,15 @@ public final class ViewRootImpl implements ViewParent,
                         getAttachedWindowFrame(), 1f /* compactScale */,
                         mTmpFrames.displayFrame, mTempRect2, mTmpFrames.frame);
                 setFrame(mTmpFrames.frame);
+                registerBackCallbackOnWindow();
+                if (WindowOnBackInvokedDispatcher.shouldUseLegacyBack()) {
+                    // For apps requesting legacy back behavior, we add a compat callback that
+                    // dispatches {@link KeyEvent#KEYCODE_BACK} to their root views.
+                    // This way from system point of view, these apps are providing custom
+                    // {@link OnBackInvokedCallback}s, and will not play system back animations
+                    // for them.
+                    registerCompatOnBackInvokedCallback();
+                }
                 if (DEBUG_LAYOUT) Log.v(mTag, "Added window " + mWindow);
                 if (res < WindowManagerGlobal.ADD_OKAY) {
                     mAttachInfo.mRootView = null;
@@ -1329,7 +1347,7 @@ public final class ViewRootImpl implements ViewParent,
     private void setTag() {
         final String[] split = mWindowAttributes.getTitle().toString().split("\\.");
         if (split.length > 0) {
-            mTag = TAG + "[" + split[split.length - 1] + "]";
+            mTag =  "VRI[" + split[split.length - 1] + "]";
         }
     }
 
@@ -3254,9 +3272,15 @@ public final class ViewRootImpl implements ViewParent,
             mAttachInfo.mTreeObserver.dispatchOnGlobalLayout();
         }
 
+        Rect contentInsets = null;
+        Rect visibleInsets = null;
+        Region touchableRegion = null;
+        int touchableInsetMode = TOUCHABLE_INSETS_REGION;
+        boolean computedInternalInsets = false;
         if (computesInternalInsets) {
-            // Clear the original insets.
             final ViewTreeObserver.InternalInsetsInfo insets = mAttachInfo.mGivenInternalInsets;
+
+            // Clear the original insets.
             insets.reset();
 
             // Compute new insets in place.
@@ -3268,9 +3292,6 @@ public final class ViewRootImpl implements ViewParent,
                 mLastGivenInsets.set(insets);
 
                 // Translate insets to screen coordinates if needed.
-                final Rect contentInsets;
-                final Rect visibleInsets;
-                final Region touchableRegion;
                 if (mTranslator != null) {
                     contentInsets = mTranslator.getTranslatedContentInsets(insets.contentInsets);
                     visibleInsets = mTranslator.getTranslatedVisibleInsets(insets.visibleInsets);
@@ -3280,12 +3301,46 @@ public final class ViewRootImpl implements ViewParent,
                     visibleInsets = insets.visibleInsets;
                     touchableRegion = insets.touchableRegion;
                 }
-
-                try {
-                    mWindowSession.setInsets(mWindow, insets.mTouchableInsets,
-                            contentInsets, visibleInsets, touchableRegion);
-                } catch (RemoteException e) {
+                computedInternalInsets = true;
+            }
+            touchableInsetMode = insets.mTouchableInsets;
+        }
+        boolean needsSetInsets = computedInternalInsets;
+        needsSetInsets |= !Objects.equals(mPreviousTouchableRegion, mTouchableRegion) &&
+            (mTouchableRegion != null);
+        if (needsSetInsets) {
+            if (mTouchableRegion != null) {
+                if (mPreviousTouchableRegion == null) {
+                    mPreviousTouchableRegion = new Region();
                 }
+                mPreviousTouchableRegion.set(mTouchableRegion);
+                if (touchableInsetMode != TOUCHABLE_INSETS_REGION) {
+                    Log.e(mTag, "Setting touchableInsetMode to non TOUCHABLE_INSETS_REGION" +
+                          " from OnComputeInternalInsets, while also using setTouchableRegion" +
+                          " causes setTouchableRegion to be ignored");
+                }
+            } else {
+                mPreviousTouchableRegion = null;
+            }
+            if (contentInsets == null) contentInsets = new Rect(0,0,0,0);
+            if (visibleInsets == null) visibleInsets = new Rect(0,0,0,0);
+            if (touchableRegion == null) {
+                touchableRegion = mTouchableRegion;
+            } else if (touchableRegion != null && mTouchableRegion != null) {
+                touchableRegion.op(touchableRegion, mTouchableRegion, Region.Op.UNION);
+            }
+            try {
+                mWindowSession.setInsets(mWindow, touchableInsetMode,
+                                         contentInsets, visibleInsets, touchableRegion);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        } else if (mTouchableRegion == null && mPreviousTouchableRegion != null) {
+            mPreviousTouchableRegion = null;
+            try {
+                mWindowSession.clearTouchableRegion(mWindow);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
             }
         }
 
@@ -4313,6 +4368,18 @@ public final class ViewRootImpl implements ViewParent,
         }
         if (mPerformContentCapture) {
             performContentCaptureInitialReport();
+        }
+
+        if (mPerformAutoFill) {
+            notifyEnterForAutoFillIfNeeded();
+        }
+    }
+
+    private void notifyEnterForAutoFillIfNeeded() {
+        mPerformAutoFill = false;
+        final AutofillManager afm = getAutofillManager();
+        if (afm != null) {
+            afm.notifyViewEnteredForActivityStarted(mView);
         }
     }
 
@@ -5880,7 +5947,7 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
-        private boolean isBack(InputEvent event) {
+        boolean isBack(InputEvent event) {
             if (event instanceof KeyEvent) {
                 return ((KeyEvent) event).getKeyCode() == KeyEvent.KEYCODE_BACK;
             } else {
@@ -6418,6 +6485,19 @@ public final class ViewRootImpl implements ViewParent,
 
             if (shouldDropInputEvent(q)) {
                 return FINISH_NOT_HANDLED;
+            }
+
+            if (isBack(event)
+                    && mContext != null
+                    && !WindowOnBackInvokedDispatcher.shouldUseLegacyBack()) {
+                // Invoke the appropriate {@link OnBackInvokedCallback} if the new back
+                // navigation should be used, and the key event is not handled by anything else.
+                OnBackInvokedCallback topCallback =
+                        getOnBackInvokedDispatcher().getTopCallback();
+                if (topCallback != null) {
+                    topCallback.onBackInvoked();
+                    return FINISH_HANDLED;
+                }
             }
 
             // This dispatch is for windows that don't have a Window.Callback. Otherwise,
@@ -8037,7 +8117,22 @@ public final class ViewRootImpl implements ViewParent,
 
     private void setFrame(Rect frame) {
         mWinFrame.set(frame);
-        mInsetsController.onFrameChanged(frame);
+        mInsetsController.onFrameChanged(mOverrideInsetsFrame != null ?
+            mOverrideInsetsFrame : frame);
+    }
+
+    /**
+     * In the normal course of operations we compute insets relative to
+     * the frame returned from relayout window. In the case of
+     * SurfaceControlViewHost, this frame is in local coordinates
+     * instead of global coordinates. We support this override
+     * frame so we can allow SurfaceControlViewHost to set a frame
+     * to be used to calculate insets, without disturbing the main
+     * mFrame.
+     */
+    void setOverrideInsetsFrame(Rect frame) {
+        mOverrideInsetsFrame = new Rect(frame);
+        mInsetsController.onFrameChanged(mOverrideInsetsFrame);
     }
 
     /**
@@ -8354,6 +8449,8 @@ public final class ViewRootImpl implements ViewParent,
 
             mAdded = false;
         }
+        unregisterCompatOnBackInvokedCallback();
+        mOnBackInvokedDispatcher.detachFromWindow();
         WindowManagerGlobal.getInstance().doRemoveView(this);
     }
 
@@ -10709,11 +10806,59 @@ public final class ViewRootImpl implements ViewParent,
      * Returns the {@link OnBackInvokedDispatcher} on the decor view if one exists, or the
      * fallback {@link OnBackInvokedDispatcher} instance.
      */
-    @Nullable
-    public OnBackInvokedDispatcher getOnBackInvokedDispatcher() {
-        if (mView instanceof RootViewSurfaceTaker) {
-            return ((RootViewSurfaceTaker) mView).provideWindowOnBackInvokedDispatcher();
+    @NonNull
+    public WindowOnBackInvokedDispatcher getOnBackInvokedDispatcher() {
+        return mOnBackInvokedDispatcher;
+    }
+
+    /**
+     * When this ViewRootImpl is added to the window manager, transfers the first
+     * {@link OnBackInvokedCallback} to be called to the server.
+     */
+    private void registerBackCallbackOnWindow() {
+        mOnBackInvokedDispatcher.attachToWindow(mWindowSession, mWindow);
+    }
+
+    private void sendBackKeyEvent(int action) {
+        long when = SystemClock.uptimeMillis();
+        final KeyEvent ev = new KeyEvent(when, when, action,
+                KeyEvent.KEYCODE_BACK, 0 /* repeat */, 0 /* metaState */,
+                KeyCharacterMap.VIRTUAL_KEYBOARD, 0 /* scancode */,
+                KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_VIRTUAL_HARD_KEY,
+                InputDevice.SOURCE_KEYBOARD);
+
+        ev.setDisplayId(mContext.getDisplay().getDisplayId());
+        if (mView != null) {
+            mView.dispatchKeyEvent(ev);
         }
-        return mFallbackOnBackInvokedDispatcher;
+    }
+
+    private void registerCompatOnBackInvokedCallback() {
+        mCompatOnBackInvokedCallback = new OnBackInvokedCallback() {
+            @Override
+            public void onBackInvoked() {
+                sendBackKeyEvent(KeyEvent.ACTION_DOWN);
+                sendBackKeyEvent(KeyEvent.ACTION_UP);
+            }
+        };
+        mOnBackInvokedDispatcher.registerOnBackInvokedCallback(
+                mCompatOnBackInvokedCallback, OnBackInvokedDispatcher.PRIORITY_DEFAULT);
+    }
+
+    private void unregisterCompatOnBackInvokedCallback() {
+        if (mCompatOnBackInvokedCallback != null) {
+            mOnBackInvokedDispatcher.unregisterOnBackInvokedCallback(mCompatOnBackInvokedCallback);
+        }
+    }
+
+    @Override
+    public void setTouchableRegion(Region r) {
+        if (r != null) {
+            mTouchableRegion = new Region(r);
+        } else {
+            mTouchableRegion = null;
+        }
+        mLastGivenInsets.reset();
+        requestLayout();
     }
 }

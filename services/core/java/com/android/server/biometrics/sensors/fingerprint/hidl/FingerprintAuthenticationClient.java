@@ -23,7 +23,6 @@ import android.content.Context;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricFingerprintConstants;
-import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.fingerprint.V2_1.IBiometricsFingerprint;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.fingerprint.ISidefpsController;
@@ -32,6 +31,8 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Slog;
 
+import com.android.server.biometrics.log.BiometricContext;
+import com.android.server.biometrics.log.BiometricLogger;
 import com.android.server.biometrics.log.CallbackWithProbe;
 import com.android.server.biometrics.log.Probe;
 import com.android.server.biometrics.sensors.AuthenticationClient;
@@ -45,6 +46,7 @@ import com.android.server.biometrics.sensors.fingerprint.Udfps;
 import com.android.server.biometrics.sensors.fingerprint.UdfpsHelper;
 
 import java.util.ArrayList;
+import java.util.function.Supplier;
 
 /**
  * Fingerprint-specific authentication client supporting the
@@ -64,11 +66,12 @@ class FingerprintAuthenticationClient extends AuthenticationClient<IBiometricsFi
     private boolean mIsPointerDown;
 
     FingerprintAuthenticationClient(@NonNull Context context,
-            @NonNull LazyDaemon<IBiometricsFingerprint> lazyDaemon,
+            @NonNull Supplier<IBiometricsFingerprint> lazyDaemon,
             @NonNull IBinder token, long requestId,
             @NonNull ClientMonitorCallbackConverter listener, int targetUserId, long operationId,
             boolean restricted, @NonNull String owner, int cookie, boolean requireConfirmation,
-            int sensorId, boolean isStrongBiometric, int statsClient,
+            int sensorId, @NonNull BiometricLogger logger,
+            @NonNull BiometricContext biometricContext, boolean isStrongBiometric,
             @NonNull TaskStackListener taskStackListener,
             @NonNull LockoutFrameworkImpl lockoutTracker,
             @Nullable IUdfpsOverlayController udfpsOverlayController,
@@ -76,10 +79,9 @@ class FingerprintAuthenticationClient extends AuthenticationClient<IBiometricsFi
             boolean allowBackgroundAuthentication,
             @NonNull FingerprintSensorPropertiesInternal sensorProps) {
         super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted,
-                owner, cookie, requireConfirmation, sensorId, isStrongBiometric,
-                BiometricsProtoEnums.MODALITY_FINGERPRINT, statsClient, taskStackListener,
-                lockoutTracker, allowBackgroundAuthentication, true /* shouldVibrate */,
-                false /* isKeyguardBypassEnabled */);
+                owner, cookie, requireConfirmation, sensorId, logger, biometricContext,
+                isStrongBiometric, taskStackListener, lockoutTracker, allowBackgroundAuthentication,
+                true /* shouldVibrate */, false /* isKeyguardBypassEnabled */);
         setRequestId(requestId);
         mLockoutFrameworkImpl = lockoutTracker;
         mSensorOverlays = new SensorOverlays(udfpsOverlayController, sidefpsController);

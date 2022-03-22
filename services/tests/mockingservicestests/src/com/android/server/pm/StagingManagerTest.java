@@ -36,7 +36,6 @@ import android.apex.ApexInfo;
 import android.apex.ApexSessionInfo;
 import android.apex.ApexSessionParams;
 import android.content.Context;
-import android.content.IntentSender;
 import android.content.pm.ApexStagedEvent;
 import android.content.pm.IStagedApexObserver;
 import android.content.pm.PackageInstaller;
@@ -50,7 +49,7 @@ import android.util.IntArray;
 import android.util.SparseArray;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
-import com.android.internal.content.PackageHelper;
+import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.Preconditions;
 
@@ -75,6 +74,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 @Presubmit
@@ -101,12 +101,12 @@ public class StagingManagerTest {
         mMockitoSession = ExtendedMockito.mockitoSession()
                     .strictness(Strictness.LENIENT)
                     .mockStatic(SystemProperties.class)
-                    .mockStatic(PackageHelper.class)
+                    .mockStatic(InstallLocationUtils.class)
                     .startMocking();
 
         when(mStorageManager.supportsCheckpoint()).thenReturn(true);
         when(mStorageManager.needsCheckpoint()).thenReturn(true);
-        when(PackageHelper.getStorageManager()).thenReturn(mStorageManager);
+        when(InstallLocationUtils.getStorageManager()).thenReturn(mStorageManager);
 
         when(SystemProperties.get(eq("ro.apex.updatable"))).thenReturn("true");
         when(SystemProperties.get(eq("ro.apex.updatable"), anyString())).thenReturn("true");
@@ -724,7 +724,8 @@ public class StagingManagerTest {
         params.isStaged = true;
 
         InstallSource installSource = InstallSource.create("testInstallInitiator",
-                "testInstallOriginator", "testInstaller", "testAttributionTag");
+                "testInstallOriginator", "testInstaller", "testAttributionTag",
+                PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED);
 
         PackageInstallerSession session = new PackageInstallerSession(
                 /* callback */ null,
@@ -953,7 +954,7 @@ public class StagingManagerTest {
         }
 
         @Override
-        public void installSession(IntentSender statusReceiver) {
+        public CompletableFuture<Void> installSession() {
             throw new UnsupportedOperationException();
         }
 

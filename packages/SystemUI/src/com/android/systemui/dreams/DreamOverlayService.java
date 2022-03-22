@@ -29,9 +29,14 @@ import androidx.lifecycle.LifecycleRegistry;
 import androidx.lifecycle.ViewModelStore;
 
 import com.android.internal.policy.PhoneWindow;
+import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.settingslib.dream.DreamBackend;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dreams.complication.Complication;
+import com.android.systemui.dreams.complication.ComplicationUtils;
 import com.android.systemui.dreams.dagger.DreamOverlayComponent;
+import com.android.systemui.dreams.touch.DreamOverlayTouchMonitor;
 
 import java.util.concurrent.Executor;
 
@@ -53,6 +58,8 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
     // A controller for the dream overlay container view (which contains both the status bar and the
     // content area).
     private final DreamOverlayContainerViewController mDreamOverlayContainerViewController;
+    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private final DreamBackend mDreamBackend;
 
     // A reference to the {@link Window} used to hold the dream overlay.
     private Window mWindow;
@@ -68,19 +75,45 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
 
     private ViewModelStore mViewModelStore = new ViewModelStore();
 
+    private DreamOverlayTouchMonitor mDreamOverlayTouchMonitor;
+
+    private final KeyguardUpdateMonitorCallback mKeyguardCallback =
+            new KeyguardUpdateMonitorCallback() {
+                @Override
+                public void onShadeExpandedChanged(boolean expanded) {
+                    if (mLifecycleRegistry.getCurrentState() != Lifecycle.State.RESUMED
+                            && mLifecycleRegistry.getCurrentState() != Lifecycle.State.STARTED) {
+                        return;
+                    }
+
+                    mLifecycleRegistry.setCurrentState(
+                            expanded ? Lifecycle.State.STARTED : Lifecycle.State.RESUMED);
+                }
+            };
+
+    private DreamOverlayStateController mStateController;
+
     @Inject
     public DreamOverlayService(
             Context context,
             @Main Executor executor,
-            DreamOverlayComponent.Factory dreamOverlayComponentFactory) {
+            DreamOverlayComponent.Factory dreamOverlayComponentFactory,
+            DreamOverlayStateController stateController,
+            KeyguardUpdateMonitor keyguardUpdateMonitor) {
         mContext = context;
         mExecutor = executor;
+        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mKeyguardUpdateMonitor.registerCallback(mKeyguardCallback);
+        mStateController = stateController;
 
         final DreamOverlayComponent component =
                 dreamOverlayComponentFactory.create(mViewModelStore, mHost);
         mDreamOverlayContainerViewController = component.getDreamOverlayContainerViewController();
         setCurrentState(Lifecycle.State.CREATED);
         mLifecycleRegistry = component.getLifecycleRegistry();
+        mDreamOverlayTouchMonitor = component.getDreamOverlayTouchMonitor();
+        mDreamBackend = component.getDreamBackend();
+        mDreamOverlayTouchMonitor.init();
     }
 
     private void setCurrentState(Lifecycle.State state) {
@@ -89,9 +122,11 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
 
     @Override
     public void onDestroy() {
+        mKeyguardUpdateMonitor.registerCallback(mKeyguardCallback);
         setCurrentState(Lifecycle.State.DESTROYED);
         final WindowManager windowManager = mContext.getSystemService(WindowManager.class);
         windowManager.removeView(mWindow.getDecorView());
+        mStateController.setOverlayActive(false);
         super.onDestroy();
     }
 
@@ -99,8 +134,12 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
     public void onStartDream(@NonNull WindowManager.LayoutParams layoutParams) {
         setCurrentState(Lifecycle.State.STARTED);
         mExecutor.execute(() -> {
+            mStateController.setAvailableComplicationTypes(
+                    ComplicationUtils.convertComplicationTypes(
+                            mDreamBackend.getEnabledComplications()));
             addOverlayWindowLocked(layoutParams);
             setCurrentState(Lifecycle.State.RESUMED);
+            mStateController.setOverlayActive(true);
         });
     }
 

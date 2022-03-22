@@ -683,8 +683,6 @@
     <string name="wifi_non_persistent_mac_randomization">Wi\u2011Fi non\u2011persistent MAC randomization</string>
     <!-- Setting Checkbox title whether to always keep mobile data active. [CHAR LIMIT=80] -->
     <string name="mobile_data_always_on">Mobile data always active</string>
-    <!-- Setting Checkbox title whether to allow smart DDS switch. [CHAR LIMIT=80] -->
-    <string name="smart_dds_switch">Smart DDS switch</string>
     <!-- Setting Checkbox title whether to enable hardware acceleration for tethering. [CHAR LIMIT=80] -->
     <string name="tethering_hardware_offload">Tethering hardware acceleration</string>
     <!-- Setting Checkbox title for showing Bluetooth devices without names -->
@@ -782,7 +780,6 @@
     <!-- Setting Checkbox title whether to enable view attribute inspection -->
     <string name="debug_view_attributes">Enable view attribute inspection</string>
     <string name="mobile_data_always_on_summary">Always keep mobile data active, even when Wi\u2011Fi is active (for fast network switching).</string>
-    <string name="smart_dds_switch_summary">Allow modem to intelligently switch the DDS.</string>
     <string name="tethering_hardware_offload_summary">Use tethering hardware acceleration if available</string>
     <!-- Title of warning dialog about the implications of enabling USB debugging -->
     <string name="adb_warning_title">Allow USB debugging?</string>
@@ -1190,6 +1187,9 @@
     <!-- Summary for settings preference disabled by administrator [CHAR LIMIT=50] -->
     <string name="disabled_by_admin_summary_text">Controlled by admin</string>
 
+    <!-- Summary for settings preference disabled by app ops [CHAR LIMIT=50] -->
+    <string name="disabled_by_app_ops_text">Controlled by Restricted Setting</string>
+
     <!-- [CHAR LIMIT=25] Manage applications, text telling using an application is disabled. -->
     <string name="disabled">Disabled</string>
     <!-- Summary of app trusted to install apps [CHAR LIMIT=45] -->
@@ -1332,8 +1332,8 @@
 
     <!--  Do not disturb: Label for button in enable zen dialog that will turn on zen mode. [CHAR LIMIT=30] -->
     <string name="zen_mode_enable_dialog_turn_on">Turn on</string>
-    <!-- Do not disturb: Title for the Do not Disturb dialog to turn on Do not disturb. [CHAR LIMIT=50]-->
-    <string name="zen_mode_settings_turn_on_dialog_title">Turn on Do Not Disturb</string>
+    <!-- Priority mode: Title for the Priority mode dialog to turn on Priority mode. [CHAR LIMIT=50]-->
+    <string name="zen_mode_settings_turn_on_dialog_title" translatable="false">Turn on Priority mode</string>
     <!-- Sound: Summary for the Do not Disturb option when there is no automatic rules turned on. [CHAR LIMIT=NONE]-->
     <string name="zen_mode_settings_summary_off">Never</string>
     <!--[CHAR LIMIT=40] Zen Interruption level: Priority.  -->
@@ -1571,4 +1571,22 @@
 
     <!-- Content description of the no calling for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_no_calling">No calling.</string>
+
+    <!-- Screensaver overlay which displays the time. [CHAR LIMIT=20] -->
+    <string name="dream_complication_title_time">Time</string>
+    <!-- Screensaver overlay which displays the date. [CHAR LIMIT=20] -->
+    <string name="dream_complication_title_date">Date</string>
+    <!-- Screensaver overlay which displays the weather. [CHAR LIMIT=20] -->
+    <string name="dream_complication_title_weather">Weather</string>
+    <!-- Screensaver overlay which displays air quality. [CHAR LIMIT=20] -->
+    <string name="dream_complication_title_aqi">Air Quality</string>
+    <!-- Screensaver overlay which displays cast info. [CHAR LIMIT=20] -->
+    <string name="dream_complication_title_cast_info">Cast Info</string>
+
+    <!-- Title for a screen allowing the user to choose a profile picture. [CHAR LIMIT=NONE] -->
+    <string name="avatar_picker_title">Choose a profile picture</string>
+
+    <!-- Content description for a default user icon. [CHAR LIMIT=NONE] -->
+    <string name="default_user_icon_description">Default user icon</string>
+
 </resources>

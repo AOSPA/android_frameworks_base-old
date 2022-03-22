@@ -54,10 +54,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 /**
@@ -367,13 +365,17 @@ public class TelecomManager {
             "android.telecom.extra.INCOMING_CALL_EXTRAS";
 
     /**
-     * Optional extra for {@link #ACTION_INCOMING_CALL} containing a boolean to indicate that the
-     * call has an externally generated ringer. Used by the HfpClientConnectionService when In Band
-     * Ringtone is enabled to prevent two ringers from being generated.
+     * Optional extra for {@link #addNewIncomingCall(PhoneAccountHandle, Bundle)} used to indicate
+     * that a call has an in-band ringtone associated with it.  This is used when the device is
+     * acting as an HFP headset and the Bluetooth stack has received an in-band ringtone from the
+     * the HFP host which must be played instead of any local ringtone the device would otherwise
+     * have generated.
+     *
      * @hide
      */
-    public static final String EXTRA_CALL_EXTERNAL_RINGER =
-            "android.telecom.extra.CALL_EXTERNAL_RINGER";
+    @SystemApi
+    public static final String EXTRA_CALL_HAS_IN_BAND_RINGTONE =
+            "android.telecom.extra.CALL_HAS_IN_BAND_RINGTONE";
 
     /**
      * Optional extra for {@link android.content.Intent#ACTION_CALL} and
@@ -396,6 +398,15 @@ public class TelecomManager {
     @SystemApi
     public static final String EXTRA_IS_USER_INTENT_EMERGENCY_CALL =
             "android.telecom.extra.IS_USER_INTENT_EMERGENCY_CALL";
+
+    /**
+     * Optional extra for {@link #ACTION_INCOMING_CALL} containing a boolean to indicate that the
+     * call has an externally generated ringer. Used by the HfpClientConnectionService when In Band
+     * Ringtone is enabled to prevent two ringers from being generated.
+     * @hide
+     */
+    public static final String EXTRA_CALL_EXTERNAL_RINGER =
+            "android.telecom.extra.CALL_EXTERNAL_RINGER";
 
     /**
      * A mandatory extra containing a {@link Uri} to be passed in when calling
@@ -606,14 +617,6 @@ public class TelecomManager {
             "android.telecom.extra.START_CALL_WITH_RTT";
 
     /**
-     * A parcelable extra, which when set on the bundle passed into {@link #placeCall(Uri, Bundle)},
-     * indicates that the call should be initiated with an active {@link CallEndpoint} to stream
-     * the call as a tethered call.
-     */
-    public static final String EXTRA_START_CALL_ON_ENDPOINT =
-            "android.telecom.extra.START_CALL_ON_ENDPOINT";
-
-    /**
      * Start an activity indicating that the completion of an outgoing call or an incoming call
      * which was not blocked by the {@link CallScreeningService}, and which was NOT terminated
      * while the call was in {@link Call#STATE_AUDIO_PROCESSING}.
@@ -771,23 +774,6 @@ public class TelecomManager {
      */
     public static final String METADATA_INCLUDE_SELF_MANAGED_CALLS =
             "android.telecom.INCLUDE_SELF_MANAGED_CALLS";
-
-    /**
-     * A boolean meta-data value indicating this {@link InCallService} implementation is aimed at
-     * working as a streaming app for a tethered call. When there's a tethered call
-     * requesting to a {@link CallEndpoint} registered with this app, Telecom will bind to this
-     * streaming app and let the app streaming the call to the requested endpoint.
-     * <p>
-     * This meta-data can only be set for an {@link InCallService} which doesn't set neither
-     * {@link #METADATA_IN_CALL_SERVICE_UI} nor {@link #METADATA_IN_CALL_SERVICE_CAR_MODE_UI}.
-     * Otherwise, the app will be treated as a phone/dialer app or a car-mode app.
-     * <p>
-     * The {@link InCallService} declared this meta-data must implement
-     * {@link InCallService#onCallEndpointActivationRequested(CallEndpoint, CallEndpointSession)}.
-     * See this method for more information.
-     */
-    public static final String METADATA_STREAMING_TETHERED_CALLS =
-            "android.telecom.STREAMING_TETHERED_CALLS";
 
     /**
      * The dual tone multi-frequency signaling character sent to indicate the dialing system should
@@ -1507,9 +1493,14 @@ public class TelecomManager {
      * when placing calls. The user may still need to enable the {@link PhoneAccount} within
      * the phone app settings before the account is usable.
      * <p>
+     * Note: Each package is limited to 10 {@link PhoneAccount} registrations.
+     * <p>
      * A {@link SecurityException} will be thrown if an app tries to register a
      * {@link PhoneAccountHandle} where the package name specified within
      * {@link PhoneAccountHandle#getComponentName()} does not match the package name of the app.
+     * <p>
+     * A {@link IllegalArgumentException} will be thrown if an app tries to register a
+     * {@link PhoneAccount} when the upper bound limit, 10, has already been reached.
      *
      * @param account The complete {@link PhoneAccount}.
      */
@@ -2305,7 +2296,6 @@ public class TelecomManager {
      *   <li>{@link #EXTRA_PHONE_ACCOUNT_HANDLE}</li>
      *   <li>{@link #EXTRA_START_CALL_WITH_SPEAKERPHONE}</li>
      *   <li>{@link #EXTRA_START_CALL_WITH_VIDEO_STATE}</li>
-     *   <li>{@link #EXTRA_START_CALL_ON_ENDPOINT}</li>
      * </ul>
      * <p>
      * An app which implements the self-managed {@link ConnectionService} API uses
@@ -2633,79 +2623,6 @@ public class TelecomManager {
                 Log.e(TAG, "RemoteException handleCallIntent: " + e);
             }
         }
-    }
-
-    /**
-     * Register a set of {@link CallEndpoint} to telecom. All registered {@link CallEndpoint} can
-     * be provided as options for push, place or answer call externally.
-     *
-     * @param endpoints Endpoints to be registered.
-     */
-    // TODO: add permission requirements
-    // @RequiresPermission{}
-    public void registerCallEndpoints(@NonNull Set<CallEndpoint> endpoints) {
-        ITelecomService service = getTelecomService();
-        List<CallEndpoint> endpointList = new ArrayList<>(endpoints);
-        if (service != null) {
-            try {
-                service.registerCallEndpoints(endpointList, mContext.getOpPackageName());
-            } catch (RemoteException e) {
-                Log.e(TAG, "RemoteException registerCallEndpoints: " + e);
-                e.rethrowAsRuntimeException();
-            }
-        } else {
-            throw new IllegalStateException("Telecom service is null.");
-        }
-    }
-
-    /**
-     * Unregister all {@link CallEndpoint} from telecom in the set provided. After un-registration,
-     * telecom will stop tracking and maintaining these {@link CallEndpoint}, user can no longer
-     * carry a call on them.
-     *
-     * @param endpoints
-     */
-    // TODO: add permission requirements
-    // @RequiresPermission{}
-    public void unregisterCallEndpoints(@NonNull Set<CallEndpoint> endpoints) {
-        ITelecomService service = getTelecomService();
-        List<CallEndpoint> endpointList = new ArrayList<>(endpoints);
-        if (service != null) {
-            try {
-                service.unregisterCallEndpoints(endpointList, mContext.getOpPackageName());
-            } catch (RemoteException e) {
-                Log.e(TAG, "RemoteException unregisterCallEndpoints: " + e);
-                e.rethrowAsRuntimeException();
-            }
-        } else {
-            throw new IllegalStateException("Telecom service is null.");
-        }
-    }
-
-    /**
-     * Return a set all registered {@link CallEndpoint} that can be used to stream and carry an
-     * external call.
-     *
-     * @return A set of all available {@link CallEndpoint}.
-     */
-    // TODO: add permission requirements
-    // @RequiresPermission{}
-    public @NonNull Set<CallEndpoint> getCallEndpoints() {
-        Set<CallEndpoint> endpoints = new HashSet<>();
-        List<CallEndpoint> endpointList;
-        ITelecomService service = getTelecomService();
-        if (service != null) {
-            try {
-                endpointList = service.getCallEndpoints(mContext.getOpPackageName());
-                return new HashSet<>(endpointList);
-            } catch (RemoteException e) {
-                Log.e(TAG, "RemoteException registerCallEndpoints: " + e);
-                e.rethrowAsRuntimeException();
-            }
-        } else {
-            throw new IllegalStateException("Telecom service is null.");
-        }
-        return endpoints;
     }
 
     private boolean isSystemProcess() {

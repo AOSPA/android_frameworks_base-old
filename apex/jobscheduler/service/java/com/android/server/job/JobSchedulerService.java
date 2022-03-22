@@ -357,6 +357,9 @@ public class JobSchedulerService extends com.android.server.SystemService
     // Putting RESTRICTED_INDEX after NEVER_INDEX to make it easier for proto dumping
     // (ScheduledJobStateChanged and JobStatusDumpProto).
     public static final int RESTRICTED_INDEX = 5;
+    // Putting EXEMPTED_INDEX after RESTRICTED_INDEX to make it easier for proto dumping
+    // (ScheduledJobStateChanged and JobStatusDumpProto).
+    public static final int EXEMPTED_INDEX = 6;
 
     private class ConstantsObserver implements DeviceConfig.OnPropertiesChangedListener,
             EconomyManagerInternal.TareStateChangeListener {
@@ -1209,18 +1212,16 @@ public class JobSchedulerService extends com.android.server.SystemService
         synchronized (mLock) {
             mStartedUsers = ArrayUtils.appendInt(mStartedUsers, user.getUserIdentifier());
         }
-        // The user is starting but credential encrypted storage is still locked.
-        // Only direct-boot-aware jobs can safely run.
-        // Let's kick off any eligible jobs for this user.
-        mHandler.obtainMessage(MSG_CHECK_JOB).sendToTarget();
     }
 
+    /** Start jobs after user is available, delayed by a few seconds since non-urgent. */
     @Override
-    public void onUserUnlocked(@NonNull TargetUser user) {
-        // The user is fully unlocked and credential encrypted storage is now decrypted.
-        // Direct-boot-UNaware jobs can now safely run.
-        // Let's kick off any outstanding jobs for this user.
-        mHandler.obtainMessage(MSG_CHECK_JOB).sendToTarget();
+    public void onUserCompletedEvent(@NonNull TargetUser user, UserCompletedEventType eventType) {
+        if (eventType.includesOnUserStarting() || eventType.includesOnUserUnlocked()) {
+            // onUserStarting: direct-boot-aware jobs can safely run
+            // onUserUnlocked: direct-boot-UNaware jobs can safely run.
+            mHandler.obtainMessage(MSG_CHECK_JOB).sendToTarget();
+        }
     }
 
     @Override
@@ -2494,6 +2495,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                     shouldForceBatchJob =
                             mConstants.MIN_READY_NON_ACTIVE_JOBS_COUNT > 1
                                     && job.getEffectiveStandbyBucket() != ACTIVE_INDEX
+                                    && job.getEffectiveStandbyBucket() != EXEMPTED_INDEX
                                     && !batchDelayExpired;
                 }
 
@@ -2766,7 +2768,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                 return job.getEffectiveStandbyBucket() != RESTRICTED_INDEX
                         ? mConstants.RUNTIME_MIN_EJ_GUARANTEE_MS
                         : Math.min(mConstants.RUNTIME_MIN_EJ_GUARANTEE_MS, 5 * MINUTE_IN_MILLIS);
-            } else if (job.getEffectivePriority() == JobInfo.PRIORITY_HIGH) {
+            } else if (job.getEffectivePriority() >= JobInfo.PRIORITY_HIGH) {
                 return mConstants.RUNTIME_MIN_HIGH_PRIORITY_GUARANTEE_MS;
             } else {
                 return mConstants.RUNTIME_MIN_GUARANTEE_MS;
@@ -3088,8 +3090,10 @@ public class JobSchedulerService extends com.android.server.SystemService
             return FREQUENT_INDEX;
         } else if (bucket > UsageStatsManager.STANDBY_BUCKET_ACTIVE) {
             return WORKING_INDEX;
-        } else {
+        } else if (bucket > UsageStatsManager.STANDBY_BUCKET_EXEMPTED) {
             return ACTIVE_INDEX;
+        } else {
+            return EXEMPTED_INDEX;
         }
     }
 

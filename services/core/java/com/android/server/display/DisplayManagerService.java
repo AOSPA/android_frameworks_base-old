@@ -142,7 +142,6 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -1329,7 +1328,9 @@ public final class DisplayManagerService extends SystemService {
 
         if (callingUid != Process.SYSTEM_UID
                 && (flags & VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP) != 0) {
-            if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
+            // The virtualDevice instance has been validated above using isValidVirtualDevice
+            if (virtualDevice == null
+                    && !checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
                 throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "
                         + "create a virtual display which is not in the default DisplayGroup.");
             }
@@ -1765,10 +1766,6 @@ public final class DisplayManagerService extends SystemService {
 
     void setUserPreferredDisplayModeInternal(int displayId, Display.Mode mode) {
         synchronized (mSyncRoot) {
-            if (Objects.equals(mUserPreferredMode, mode) && displayId == Display.INVALID_DISPLAY) {
-                return;
-            }
-
             if (mode != null && !isResolutionAndRefreshRateValid(mode)
                     && displayId == Display.INVALID_DISPLAY) {
                 throw new IllegalArgumentException("width, height and refresh rate of mode should "
@@ -1822,7 +1819,15 @@ public final class DisplayManagerService extends SystemService {
         Settings.Global.putInt(mContext.getContentResolver(),
                 Settings.Global.USER_PREFERRED_RESOLUTION_WIDTH, resolutionWidth);
         mDisplayDeviceRepo.forEachLocked((DisplayDevice device) -> {
-            device.setUserPreferredDisplayModeLocked(mode);
+            // If there is a display specific mode, don't override that
+            final Point deviceUserPreferredResolution =
+                    mPersistentDataStore.getUserPreferredResolution(device);
+            final float deviceRefreshRate =
+                    mPersistentDataStore.getUserPreferredRefreshRate(device);
+            if (!isValidResolution(deviceUserPreferredResolution)
+                    && !isValidRefreshRate(deviceRefreshRate)) {
+                device.setUserPreferredDisplayModeLocked(mode);
+            }
         });
     }
 
@@ -1836,6 +1841,16 @@ public final class DisplayManagerService extends SystemService {
                 return null;
             }
             return displayDevice.getUserPreferredDisplayModeLocked();
+        }
+    }
+
+    Display.Mode getSystemPreferredDisplayModeInternal(int displayId) {
+        synchronized (mSyncRoot) {
+            final DisplayDevice device = getDeviceForDisplayLocked(displayId);
+            if (device == null) {
+                return null;
+            }
+            return device.getSystemPreferredDisplayModeLocked();
         }
     }
 
@@ -2186,6 +2201,16 @@ public final class DisplayManagerService extends SystemService {
             if (mDisplayModeDirector != null) {
                 mDisplayModeDirector.setLoggingEnabled(enabled);
             }
+        }
+    }
+
+    Display.Mode getActiveDisplayModeAtStart(int displayId) {
+        synchronized (mSyncRoot) {
+            final DisplayDevice device = getDeviceForDisplayLocked(displayId);
+            if (device == null) {
+                return null;
+            }
+            return device.getActiveDisplayModeAtStartLocked();
         }
     }
 
@@ -3488,6 +3513,16 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
+        public Display.Mode getSystemPreferredDisplayMode(int displayId) {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return getSystemPreferredDisplayModeInternal(displayId);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
         public void setShouldAlwaysRespectAppRequestedMode(boolean enabled) {
             mContext.enforceCallingOrSelfPermission(
                     Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS,
@@ -3551,6 +3586,14 @@ public final class DisplayManagerService extends SystemService {
         return !Float.isNaN(brightness)
                 && (brightness >= PowerManager.BRIGHTNESS_MIN)
                 && (brightness <= PowerManager.BRIGHTNESS_MAX);
+    }
+
+    private static boolean isValidResolution(Point resolution) {
+        return (resolution != null) && (resolution.x > 0) && (resolution.y > 0);
+    }
+
+    private static boolean isValidRefreshRate(float refreshRate) {
+        return !Float.isNaN(refreshRate) && (refreshRate > 0.0f);
     }
 
     private final class LocalService extends DisplayManagerInternal {

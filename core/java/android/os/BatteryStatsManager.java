@@ -515,6 +515,38 @@ public final class BatteryStatsManager {
     }
 
     /**
+     * Indicates that Bluetooth was toggled on.
+     *
+     * @param uid calling package uid
+     * @param reason why Bluetooth has been turned on
+     * @param packageName package responsible for this change
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    public void reportBluetoothOn(int uid, int reason, @NonNull String packageName) {
+        try {
+            mBatteryStats.noteBluetoothOn(uid, reason, packageName);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Indicates that Bluetooth was toggled off.
+     *
+     * @param uid calling package uid
+     * @param reason why Bluetooth has been turned on
+     * @param packageName package responsible for this change
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    public void reportBluetoothOff(int uid, int reason, @NonNull String packageName) {
+        try {
+            mBatteryStats.noteBluetoothOff(uid, reason, packageName);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Indicates that a new Bluetooth LE scan has started.
      *
      * @param ws worksource (to be used for battery blaming).

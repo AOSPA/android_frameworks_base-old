@@ -46,6 +46,9 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.activityTypeToString;
 import static android.app.WindowConfiguration.isSplitScreenWindowingMode;
+import static android.app.admin.DevicePolicyResources.Drawables.Source.PROFILE_SWITCH_ANIMATION;
+import static android.app.admin.DevicePolicyResources.Drawables.Style.OUTLINE;
+import static android.app.admin.DevicePolicyResources.Drawables.WORK_PROFILE_ICON;
 import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_HOME;
 import static android.content.Intent.CATEGORY_LAUNCHER;
@@ -242,6 +245,7 @@ import android.app.TaskInfo;
 import android.app.TaskInfo.CameraCompatControlState;
 import android.app.WaitResult;
 import android.app.WindowConfiguration;
+import android.app.admin.DevicePolicyManager;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityRelaunchItem;
@@ -273,6 +277,7 @@ import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.hardware.HardwareBuffer;
 import android.net.Uri;
 import android.os.Binder;
@@ -401,9 +406,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // How many activities have to be scheduled to stop to force a stop pass.
     private static final int MAX_STOPPING_TO_FORCE = 3;
 
-    private static final int STARTING_WINDOW_TYPE_NONE = 0;
-    private static final int STARTING_WINDOW_TYPE_SNAPSHOT = 1;
-    private static final int STARTING_WINDOW_TYPE_SPLASH_SCREEN = 2;
+    static final int STARTING_WINDOW_TYPE_NONE = 0;
+    static final int STARTING_WINDOW_TYPE_SNAPSHOT = 1;
+    static final int STARTING_WINDOW_TYPE_SPLASH_SCREEN = 2;
 
     static final int INVALID_PID = -1;
 
@@ -546,6 +551,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     // Tracking splash screen status from previous activity
     boolean mSplashScreenStyleEmpty = false;
+
+    Drawable mEnterpriseThumbnailDrawable;
+
+    private void updateEnterpriseThumbnailDrawable(Context context) {
+        DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
+        mEnterpriseThumbnailDrawable = dpm.getDrawable(
+                WORK_PROFILE_ICON, OUTLINE, PROFILE_SWITCH_ANIMATION,
+                () -> context.getDrawable(R.drawable.ic_corp_badge));
+    }
 
     static final int LAUNCH_SOURCE_TYPE_SYSTEM = 1;
     static final int LAUNCH_SOURCE_TYPE_HOME = 2;
@@ -727,6 +741,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // WindowManagerService#getFixedToUserRotation for more context.
     @Nullable
     private Rect mLetterboxBoundsForFixedOrientationAndAspectRatio;
+
+    // Whether the activity is eligible to be letterboxed for fixed orientation with respect to its
+    // requested orientation, even when it's letterbox for another reason (e.g., size compat mode)
+    // and therefore #isLetterboxedForFixedOrientationAndAspectRatio returns false.
+    private boolean mIsEligibleForFixedOrientationLetterbox;
 
     // State of the Camera app compat control which is used to correct stretched viewfinder
     // in apps that don't handle all possible configurations and changes between them correctly.
@@ -1941,6 +1960,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mActivityRecordInputSink = new ActivityRecordInputSink(this);
 
+        updateEnterpriseThumbnailDrawable(mAtmService.mUiContext);
+
         if (mPerf == null)
             mPerf = new BoostFramework();
     }
@@ -2168,7 +2189,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         final int typeParameter = StartingSurfaceController
                 .makeStartingWindowTypeParameter(newTask, taskSwitch, processRunning,
-                        allowTaskSnapshot, activityCreated, useEmpty, useLegacy, activityAllDrawn);
+                        allowTaskSnapshot, activityCreated, useEmpty, useLegacy, activityAllDrawn,
+                        type, packageName, mUserId);
 
         if (type == STARTING_WINDOW_TYPE_SNAPSHOT) {
             if (isActivityTypeHome()) {
@@ -4496,6 +4518,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         pendingOptions.getOverrideTaskTransition());
                 options = AnimationOptions.makeCustomAnimOptions(pendingOptions.getPackageName(),
                         pendingOptions.getCustomEnterResId(), pendingOptions.getCustomExitResId(),
+                        pendingOptions.getCustomBackgroundColor(),
                         pendingOptions.getOverrideTaskTransition());
                 startCallback = pendingOptions.getAnimationStartedListener();
                 finishCallback = pendingOptions.getAnimationFinishedListener();
@@ -6682,7 +6705,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return null;
     }
 
-    private boolean shouldUseEmptySplashScreen(ActivityRecord sourceRecord, boolean startActivity) {
+    private boolean shouldUseEmptySplashScreen(ActivityRecord sourceRecord, boolean startActivity,
+            ActivityOptions options) {
         if (sourceRecord == null && !startActivity) {
             // Use empty style if this activity is not top activity. This could happen when adding
             // a splash screen window to the warm start activity which is re-create because top is
@@ -6692,8 +6716,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return true;
             }
         }
-        if (mPendingOptions != null) {
-            final int optionsStyle = mPendingOptions.getSplashScreenStyle();
+        if (options != null) {
+            final int optionsStyle = options.getSplashScreenStyle();
             if (optionsStyle == SplashScreen.SPLASH_SCREEN_STYLE_EMPTY) {
                 return true;
             } else if (optionsStyle == SplashScreen.SPLASH_SCREEN_STYLE_ICON) {
@@ -6722,11 +6746,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 || mLaunchSourceType == LAUNCH_SOURCE_TYPE_HOME);
     }
 
-    private int getSplashscreenTheme() {
+    private int getSplashscreenTheme(ActivityOptions options) {
         // Find the splash screen theme. User can override the persisted theme by
         // ActivityOptions.
-        String splashScreenThemeResName = mPendingOptions != null
-                ? mPendingOptions.getSplashScreenThemeResName() : null;
+        String splashScreenThemeResName = options != null
+                ? options.getSplashScreenThemeResName() : null;
         if (splashScreenThemeResName == null || splashScreenThemeResName.isEmpty()) {
             try {
                 splashScreenThemeResName = mAtmService.getPackageManager()
@@ -6753,7 +6777,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     void showStartingWindow(ActivityRecord prev, boolean newTask, boolean taskSwitch,
             boolean startActivity, ActivityRecord sourceRecord) {
         showStartingWindow(prev, newTask, taskSwitch, isProcessRunning(), startActivity,
-                sourceRecord);
+                sourceRecord, null /* candidateOptions */);
     }
 
     /**
@@ -6761,22 +6785,27 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * @param processRunning Whether the client process is running.
      * @param startActivity Whether this activity is just created from starter.
      * @param sourceRecord The source activity which start this activity.
+     * @param candidateOptions The options for the style of starting window.
      */
     void showStartingWindow(ActivityRecord prev, boolean newTask, boolean taskSwitch,
-            boolean processRunning, boolean startActivity, ActivityRecord sourceRecord) {
+            boolean processRunning, boolean startActivity, ActivityRecord sourceRecord,
+            ActivityOptions candidateOptions) {
         if (mTaskOverlay) {
             // We don't show starting window for overlay activities.
             return;
         }
-        if (mPendingOptions != null
-                && mPendingOptions.getAnimationType() == ActivityOptions.ANIM_SCENE_TRANSITION) {
+        final ActivityOptions startOptions = candidateOptions != null
+                ? candidateOptions : mPendingOptions;
+        if (startOptions != null
+                && startOptions.getAnimationType() == ActivityOptions.ANIM_SCENE_TRANSITION) {
             // Don't show starting window when using shared element transition.
             return;
         }
 
-        mSplashScreenStyleEmpty = shouldUseEmptySplashScreen(sourceRecord, startActivity);
+        mSplashScreenStyleEmpty = shouldUseEmptySplashScreen(
+                sourceRecord, startActivity, startOptions);
 
-        final int splashScreenTheme = startActivity ? getSplashscreenTheme() : 0;
+        final int splashScreenTheme = startActivity ? getSplashscreenTheme(startOptions) : 0;
         final int resolvedTheme = evaluateStartingWindowTheme(prev, packageName, theme,
                 splashScreenTheme);
 
@@ -7045,7 +7074,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     void prepareSurfaces() {
-        final boolean show = isVisible() || isAnimating(TRANSITION | PARENTS,
+        final boolean show = isVisible() || isAnimating(PARENTS,
                 ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_RECENTS);
 
         if (mSurfaceControl != null) {
@@ -7104,12 +7133,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
         final Rect frame = win.getRelativeFrame();
-        final int thumbnailDrawableRes = task.mUserId == mWmService.mCurrentUserId
-                ? R.drawable.ic_account_circle
-                : R.drawable.ic_corp_badge;
-        final HardwareBuffer thumbnail =
-                getDisplayContent().mAppTransition
-                        .createCrossProfileAppsThumbnail(thumbnailDrawableRes, frame);
+        final Drawable thumbnailDrawable = task.mUserId == mWmService.mCurrentUserId
+                ? mAtmService.mUiContext.getDrawable(R.drawable.ic_account_circle)
+                : mEnterpriseThumbnailDrawable;
+        final HardwareBuffer thumbnail = getDisplayContent().mAppTransition
+                .createCrossProfileAppsThumbnail(thumbnailDrawable, frame);
         if (thumbnail == null) {
             return;
         }
@@ -7743,6 +7771,26 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     /**
+     * Whether this activity is eligible for letterbox eduction.
+     *
+     * <p>Conditions that need to be met:
+     *
+     * <ul>
+     *     <li>{@link LetterboxConfiguration#getIsEducationEnabled} is true.
+     *     <li>The activity is eligible for fixed orientation letterbox.
+     *     <li>The activity is in fullscreen.
+     *     <li>The activity is portrait-only.
+     * </ul>
+     */
+    // TODO(b/215316431): Add tests
+    boolean isEligibleForLetterboxEducation() {
+        return mWmService.mLetterboxConfiguration.getIsEducationEnabled()
+                && mIsEligibleForFixedOrientationLetterbox
+                && getWindowingMode() == WINDOWING_MODE_FULLSCREEN
+                && getRequestedConfigurationOrientation() == ORIENTATION_PORTRAIT;
+    }
+
+    /**
      * In some cases, applying insets to bounds changes the orientation. For example, if a
      * close-to-square display rotates to portrait to respect a portrait orientation activity, after
      * insets such as the status and nav bars are applied, the activity may actually have a
@@ -7804,6 +7852,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private void resolveFixedOrientationConfiguration(@NonNull Configuration newParentConfig,
             int windowingMode) {
         mLetterboxBoundsForFixedOrientationAndAspectRatio = null;
+        mIsEligibleForFixedOrientationLetterbox = false;
         final Rect parentBounds = newParentConfig.windowConfiguration.getBounds();
         final Rect stableBounds = new Rect();
         // If orientation is respected when insets are applied, then stableBounds will be empty.
@@ -7843,8 +7892,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // make it fit the available bounds by scaling down its bounds.
         final int forcedOrientation = getRequestedConfigurationOrientation();
 
-        if (forcedOrientation == ORIENTATION_UNDEFINED
-                || (forcedOrientation == parentOrientation && orientationRespectedWithInsets)) {
+        mIsEligibleForFixedOrientationLetterbox = forcedOrientation != ORIENTATION_UNDEFINED
+                && forcedOrientation != parentOrientation;
+
+        if (!mIsEligibleForFixedOrientationLetterbox && (forcedOrientation == ORIENTATION_UNDEFINED
+                || orientationRespectedWithInsets)) {
             return;
         }
 

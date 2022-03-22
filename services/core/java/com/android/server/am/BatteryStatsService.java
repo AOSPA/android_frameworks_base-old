@@ -431,6 +431,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
 
         @Override
+        public List<BatteryUsageStats> getBatteryUsageStats(List<BatteryUsageStatsQuery> queries) {
+            return BatteryStatsService.this.getBatteryUsageStats(queries);
+        }
+
+        @Override
         public void noteJobsDeferred(int uid, int numDeferred, long sinceLast) {
             if (DBG) Slog.d(TAG, "Jobs deferred " + uid + ": " + numDeferred + " " + sinceLast);
             BatteryStatsService.this.noteJobsDeferred(uid, numDeferred, sinceLast);
@@ -792,12 +797,19 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             final BatteryUsageStats bus;
             switch (atomTag) {
                 case FrameworkStatsLog.BATTERY_USAGE_STATS_SINCE_RESET:
-                    bus = getBatteryUsageStats(List.of(BatteryUsageStatsQuery.DEFAULT)).get(0);
+                    final BatteryUsageStatsQuery querySinceReset =
+                            new BatteryUsageStatsQuery.Builder()
+                                    .includeProcessStateData()
+                                    .build();
+                    bus = getBatteryUsageStats(List.of(querySinceReset)).get(0);
                     break;
                 case FrameworkStatsLog.BATTERY_USAGE_STATS_SINCE_RESET_USING_POWER_PROFILE_MODEL:
-                    final BatteryUsageStatsQuery powerProfileQuery =
-                            new BatteryUsageStatsQuery.Builder().powerProfileModeledOnly().build();
-                    bus = getBatteryUsageStats(List.of(powerProfileQuery)).get(0);
+                    final BatteryUsageStatsQuery queryPowerProfile =
+                            new BatteryUsageStatsQuery.Builder()
+                                    .includeProcessStateData()
+                                    .powerProfileModeledOnly()
+                                    .build();
+                    bus = getBatteryUsageStats(List.of(queryPowerProfile)).get(0);
                     break;
                 case FrameworkStatsLog.BATTERY_USAGE_STATS_BEFORE_RESET:
                     if (!BATTERY_USAGE_STORE_ENABLED) {
@@ -807,10 +819,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     final long sessionStart = mBatteryUsageStatsStore
                             .getLastBatteryUsageStatsBeforeResetAtomPullTimestamp();
                     final long sessionEnd = mStats.getStartClockTime();
-                    final BatteryUsageStatsQuery query = new BatteryUsageStatsQuery.Builder()
-                            .aggregateSnapshots(sessionStart, sessionEnd)
-                            .build();
-                    bus = getBatteryUsageStats(List.of(query)).get(0);
+                    final BatteryUsageStatsQuery queryBeforeReset =
+                            new BatteryUsageStatsQuery.Builder()
+                                    .includeProcessStateData()
+                                    .aggregateSnapshots(sessionStart, sessionEnd)
+                                    .build();
+                    bus = getBatteryUsageStats(List.of(queryBeforeReset)).get(0);
                     mBatteryUsageStatsStore
                             .setLastBatteryUsageStatsBeforeResetAtomPullTimestamp(sessionEnd);
                     break;
@@ -1360,7 +1374,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     }
 
     public void notePhoneDataConnectionState(final int dataType, final boolean hasData,
-            final int serviceType) {
+            final int serviceType, final int nrFrequency) {
         enforceCallingPermission();
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1368,7 +1382,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             mHandler.post(() -> {
                 synchronized (mStats) {
                     mStats.notePhoneDataConnectionStateLocked(dataType, hasData, serviceType,
-                            elapsedRealtime, uptime);
+                            nrFrequency, elapsedRealtime, uptime);
                 }
             });
         }
@@ -1955,6 +1969,32 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                 }
             });
         }
+    }
+
+    /**
+     * Bluetooth on stat logging
+     */
+    public void noteBluetoothOn(int uid, int reason, String packageName) {
+        if (Binder.getCallingPid() != Process.myPid()) {
+            mContext.enforcePermission(android.Manifest.permission.BLUETOOTH_CONNECT,
+                    Binder.getCallingPid(), uid, null);
+        }
+        FrameworkStatsLog.write_non_chained(FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED,
+                uid, null, FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__ENABLED,
+                reason, packageName);
+    }
+
+    /**
+     * Bluetooth off stat logging
+     */
+    public void noteBluetoothOff(int uid, int reason, String packageName) {
+        if (Binder.getCallingPid() != Process.myPid()) {
+            mContext.enforcePermission(android.Manifest.permission.BLUETOOTH_CONNECT,
+                    Binder.getCallingPid(), uid, null);
+        }
+        FrameworkStatsLog.write_non_chained(FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED,
+                uid, null, FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__DISABLED,
+                reason, packageName);
     }
 
     @Override

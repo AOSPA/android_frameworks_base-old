@@ -84,7 +84,7 @@ import android.util.Xml;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.content.PackageHelper;
+import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ImageUtils;
@@ -783,7 +783,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             // If caller requested explicit location, validity check it, otherwise
             // resolve the best internal or adopted location.
             if ((params.installFlags & PackageManager.INSTALL_INTERNAL) != 0) {
-                if (!PackageHelper.fitsOnInternal(mContext, params)) {
+                if (!InstallLocationUtils.fitsOnInternal(mContext, params)) {
                     throw new IOException("No suitable internal storage available");
                 }
             } else if ((params.installFlags & PackageManager.INSTALL_FORCE_VOLUME_UUID) != 0) {
@@ -797,7 +797,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 // requested install flags, delta size, and manifest settings.
                 final long ident = Binder.clearCallingIdentity();
                 try {
-                    params.volumeUuid = PackageHelper.resolveInstallVolume(mContext, params);
+                    params.volumeUuid = InstallLocationUtils.resolveInstallVolume(mContext, params);
                 } finally {
                     Binder.restoreCallingIdentity(ident);
                 }
@@ -848,7 +848,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
         InstallSource installSource = InstallSource.create(installerPackageName,
                 originatingPackageName, requestedInstallerPackageName,
-                installerAttributionTag);
+                installerAttributionTag, params.packageSource);
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
                 mSilentUpdatePolicy, mInstallThread.getLooper(), mStagingManager, sessionId,
                 userId, callingUid, installSource, params, createdMillis, 0L, stageDir, stageCid,
@@ -1651,7 +1651,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         public void onSessionChanged(PackageInstallerSession session) {
             session.markUpdated();
             mSettingsWriteRequest.schedule();
-            if (mOkToSendBroadcasts && !session.isDestroyed()) {
+            // TODO(b/210359798): Remove the session.isStaged() check. Some apps assume this
+            // broadcast is sent by only staged sessions and call isStagedSessionApplied() without
+            // checking if it is a staged session or not and cause exception.
+            if (mOkToSendBroadcasts && !session.isDestroyed() && session.isStaged()) {
                 // we don't scrub the data here as this is sent only to the installer several
                 // privileged system packages
                 sendSessionUpdatedBroadcast(

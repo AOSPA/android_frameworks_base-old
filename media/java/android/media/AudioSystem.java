@@ -26,10 +26,12 @@ import android.bluetooth.BluetoothLeAudioCodecConfig;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.media.audio.common.AidlConversion;
 import android.media.audiofx.AudioEffect;
 import android.media.audiopolicy.AudioMix;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.Parcel;
 import android.os.Vibrator;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -1572,9 +1574,24 @@ public class AudioSystem
      *     {@link #AUDIO_STATUS_ERROR} or {@link #AUDIO_STATUS_SERVER_DIED}
      */
     @UnsupportedAppUsage
-    public static native int setDeviceConnectionState(int device, int state,
-                                                      String device_address, String device_name,
-                                                      int codecFormat);
+    public static int setDeviceConnectionState(AudioDeviceAttributes attributes, int state,
+            int codecFormat) {
+        android.media.audio.common.AudioPort port =
+                AidlConversion.api2aidl_AudioDeviceAttributes_AudioPort(attributes);
+        Parcel parcel = Parcel.obtain();
+        port.writeToParcel(parcel, 0);
+        parcel.setDataPosition(0);
+        try {
+            return setDeviceConnectionState(state, parcel, codecFormat);
+        } finally {
+            parcel.recycle();
+        }
+    }
+    /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public static native int setDeviceConnectionState(int state, Parcel parcel, int codecFormat);
     /** @hide */
     @UnsupportedAppUsage
     public static native int getDeviceConnectionState(int device, String device_address);
@@ -1888,6 +1905,12 @@ public class AudioSystem
 
     /**
      * @hide
+     * @see AudioManager#isUltrasoundSupported()
+     */
+    public static native boolean isUltrasoundSupported();
+
+    /**
+     * @hide
      * Send audio HAL server process pids to native audioserver process for use
      * when generating audio HAL servers tombstones
      */
@@ -2131,6 +2154,15 @@ public class AudioSystem
     public static native boolean canBeSpatialized(AudioAttributes attributes,
                                               AudioFormat format,
                                               AudioDeviceAttributes[] devices);
+
+    /**
+     * @hide
+     * @param attributes audio attributes describing the playback use case
+     * @param audioProfilesList the list of AudioProfiles that can be played as direct output
+     * @return {@link #SUCCESS} if the list of AudioProfiles was successfully created (can be empty)
+     */
+    public static native int getDirectProfilesForAttributes(@NonNull AudioAttributes attributes,
+            @NonNull ArrayList<AudioProfile> audioProfilesList);
 
     // Items shared with audio service
 

@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static com.android.systemui.DejankUtils.whitelistIpcs;
 import static com.android.systemui.ScreenDecorations.DisplayCutoutView.boundsFromDirection;
 import static com.android.systemui.util.Utils.getStatusBarHeaderHeightKeyguard;
 
@@ -27,7 +26,6 @@ import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.os.UserManager;
 import android.util.AttributeSet;
 import android.util.Pair;
 import android.util.TypedValue;
@@ -42,12 +40,13 @@ import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.battery.BatteryMeterView;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
-import com.android.systemui.statusbar.window.StatusBarWindowView;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -70,9 +69,10 @@ public class KeyguardStatusBarView extends RelativeLayout {
     private ImageView mMultiUserAvatar;
     private BatteryMeterView mBatteryView;
     private StatusIconContainer mStatusIconContainer;
+    private ViewGroup mUserSwitcherContainer;
 
     private boolean mKeyguardUserSwitcherEnabled;
-    private final UserManager mUserManager;
+    private boolean mKeyguardUserAvatarEnabled;
 
     private boolean mIsPrivacyDotEnabled;
     private int mSystemIconsSwitcherHiddenExpandedMargin;
@@ -99,10 +99,10 @@ public class KeyguardStatusBarView extends RelativeLayout {
      */
     private int mTopClipping;
     private final Rect mClipRect = new Rect(0, 0, 0, 0);
+    private boolean mIsUserSwitcherEnabled;
 
     public KeyguardStatusBarView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mUserManager = UserManager.get(getContext());
     }
 
     @Override
@@ -115,8 +115,13 @@ public class KeyguardStatusBarView extends RelativeLayout {
         mCutoutSpace = findViewById(R.id.cutout_space_view);
         mStatusIconArea = findViewById(R.id.status_icon_area);
         mStatusIconContainer = findViewById(R.id.statusIcons);
+        mUserSwitcherContainer = findViewById(R.id.user_switcher_container);
         mIsPrivacyDotEnabled = mContext.getResources().getBoolean(R.bool.config_enablePrivacyDot);
         loadDimens();
+    }
+
+    public ViewGroup getUserSwitcherContainer() {
+        return mUserSwitcherContainer;
     }
 
     @Override
@@ -163,6 +168,10 @@ public class KeyguardStatusBarView extends RelativeLayout {
         updateKeyguardStatusBarHeight();
     }
 
+    public void setUserSwitcherEnabled(boolean enabled) {
+        mIsUserSwitcherEnabled = enabled;
+    }
+
     private void updateKeyguardStatusBarHeight() {
         MarginLayoutParams lp =  (MarginLayoutParams) getLayoutParams();
         lp.height = getStatusBarHeaderHeightKeyguard(mContext);
@@ -186,6 +195,17 @@ public class KeyguardStatusBarView extends RelativeLayout {
     }
 
     private void updateVisibilities() {
+        // Multi user avatar is disabled in favor of the user switcher chip
+        if (!mKeyguardUserAvatarEnabled) {
+            if (mMultiUserAvatar.getParent() == mStatusIconArea) {
+                mStatusIconArea.removeView(mMultiUserAvatar);
+            } else if (mMultiUserAvatar.getParent() != null) {
+                getOverlay().remove(mMultiUserAvatar);
+            }
+
+            return;
+        }
+
         if (mMultiUserAvatar.getParent() != mStatusIconArea
                 && !mKeyguardUserSwitcherEnabled) {
             if (mMultiUserAvatar.getParent() != null) {
@@ -200,11 +220,7 @@ public class KeyguardStatusBarView extends RelativeLayout {
             // If we have no keyguard switcher, the screen width is under 600dp. In this case,
             // we only show the multi-user switch if it's enabled through UserManager as well as
             // by the user.
-            // TODO(b/138661450) Move IPC calls to background
-            boolean isMultiUserEnabled = whitelistIpcs(() -> mUserManager.isUserSwitcherEnabled(
-                    mContext.getResources().getBoolean(
-                            R.bool.qs_show_user_switcher_for_single_user)));
-            if (isMultiUserEnabled) {
+            if (mIsUserSwitcherEnabled) {
                 mMultiUserAvatar.setVisibility(View.VISIBLE);
             } else {
                 mMultiUserAvatar.setVisibility(View.GONE);
@@ -350,6 +366,16 @@ public class KeyguardStatusBarView extends RelativeLayout {
         mKeyguardUserSwitcherEnabled = enabled;
     }
 
+    void setKeyguardUserAvatarEnabled(boolean enabled) {
+        mKeyguardUserAvatarEnabled = enabled;
+        updateVisibilities();
+    }
+
+    @VisibleForTesting
+    boolean isKeyguardUserAvatarEnabled() {
+        return mKeyguardUserAvatarEnabled;
+    }
+
     private void animateNextLayoutChange() {
         final int systemIconsCurrentX = mSystemIconsContainer.getLeft();
         final boolean userAvatarVisible = mMultiUserAvatar.getParent() == mStatusIconArea;
@@ -420,9 +446,14 @@ public class KeyguardStatusBarView extends RelativeLayout {
 
     /** Should only be called from {@link KeyguardStatusBarViewController}. */
     void onOverlayChanged() {
-        mCarrierLabel.setTextAppearance(
-                Utils.getThemeAttr(mContext, com.android.internal.R.attr.textAppearanceSmall));
+        int theme = Utils.getThemeAttr(mContext, com.android.internal.R.attr.textAppearanceSmall);
+        mCarrierLabel.setTextAppearance(theme);
         mBatteryView.updatePercentView();
+
+        TextView userSwitcherName = mUserSwitcherContainer.findViewById(R.id.current_user_name);
+        if (userSwitcherName != null) {
+            userSwitcherName.setTextAppearance(theme);
+        }
     }
 
     private void updateIconsAndTextColors(StatusBarIconController.TintedIconManager iconManager) {
@@ -433,6 +464,14 @@ public class KeyguardStatusBarView extends RelativeLayout {
                 R.color.light_mode_icon_color_single_tone);
         float intensity = textColor == Color.WHITE ? 0 : 1;
         mCarrierLabel.setTextColor(iconColor);
+
+        TextView userSwitcherName = mUserSwitcherContainer.findViewById(R.id.current_user_name);
+        if (userSwitcherName != null) {
+            userSwitcherName.setTextColor(Utils.getColorStateListDefaultColor(
+                    mContext,
+                    R.color.light_mode_icon_color_single_tone));
+        }
+
         if (iconManager != null) {
             iconManager.setTint(iconColor);
         }

@@ -20,6 +20,7 @@ import static android.os.Build.VERSION_CODES.S;
 
 import android.Manifest;
 import android.annotation.CheckResult;
+import android.annotation.DurationMillisLong;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -33,6 +34,7 @@ import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.AppGlobals;
+import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.PropertyInvalidatedCache;
 import android.compat.annotation.ChangeId;
@@ -236,6 +238,41 @@ public final class PermissionManager {
         return PermissionChecker.checkPermissionForDataDelivery(mContext, permission,
                 // FIXME(b/199526514): PID should be passed inside AttributionSource.
                 PermissionChecker.PID_UNKNOWN, attributionSource, message);
+    }
+
+    /**
+     *
+     * Similar to checkPermissionForDataDelivery, except it results in an app op start, rather than
+     * a note. If this method is used, then {@link #finishDataDelivery(String, AttributionSource)}
+     * must be used when access is finished.
+     *
+     * @param permission The permission to check.
+     * @param attributionSource the permission identity
+     * @param message A message describing the reason the permission was checked
+     * @return The permission check result which is either {@link #PERMISSION_GRANTED}
+     *     or {@link #PERMISSION_SOFT_DENIED} or {@link #PERMISSION_HARD_DENIED}.
+     *
+     * @see #checkPermissionForDataDelivery(String, AttributionSource, String)
+     */
+    @PermissionCheckerManager.PermissionResult
+    public int checkPermissionForStartDataDelivery(@NonNull String permission,
+            @NonNull AttributionSource attributionSource, @Nullable String message) {
+        return PermissionChecker.checkPermissionForDataDelivery(mContext, permission,
+                // FIXME(b/199526514): PID should be passed inside AttributionSource.
+                PermissionChecker.PID_UNKNOWN, attributionSource, message, true);
+    }
+
+    /**
+     * Indicate that usage has finished for an {@link AttributionSource} started with
+     * {@link #checkPermissionForStartDataDelivery(String, AttributionSource, String)}
+     *
+     * @param permission The permission to check.
+     * @param attributionSource the permission identity to finish
+     */
+    public void finishDataDelivery(@NonNull String permission,
+            @NonNull AttributionSource attributionSource) {
+        PermissionChecker.finishDataDelivery(mContext, AppOpsManager.permissionToOp(permission),
+                attributionSource);
     }
 
     /**
@@ -1246,6 +1283,22 @@ public final class PermissionManager {
     }
 
     /**
+     * Starts a one-time permission session for a given package.
+     * @see #startOneTimePermissionSession(String, long, long, int, int)
+     * @hide
+     * @deprecated Use {@link #startOneTimePermissionSession(String, long, long, int, int)} instead
+     */
+    @Deprecated
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS)
+    public void startOneTimePermissionSession(@NonNull String packageName, long timeoutMillis,
+            @ActivityManager.RunningAppProcessInfo.Importance int importanceToResetTimer,
+            @ActivityManager.RunningAppProcessInfo.Importance int importanceToKeepSessionAlive) {
+        startOneTimePermissionSession(packageName, timeoutMillis, -1,
+                importanceToResetTimer, importanceToKeepSessionAlive);
+    }
+
+    /**
      * Starts a one-time permission session for a given package. A one-time permission session is
      * ended if app becomes inactive. Inactivity is defined as the package's uid importance level
      * staying > importanceToResetTimer for timeoutMillis milliseconds. If the package's uid
@@ -1265,25 +1318,33 @@ public final class PermissionManager {
      * {@link PermissionControllerService#onOneTimePermissionSessionTimeout(String)} is invoked.
      * </p>
      * <p>
-     * Note that if there is currently an active session for a package a new one isn't created and
-     * the existing one isn't changed.
+     * Note that if there is currently an active session for a package a new one isn't created but
+     * each parameter of the existing one will be updated to the more aggressive of both sessions.
+     * This means that durations will be set to the shortest parameter and importances will be set
+     * to the lowest one.
      * </p>
      * @param packageName The package to start a one-time permission session for
      * @param timeoutMillis Number of milliseconds for an app to be in an inactive state
+     * @param revokeAfterKilledDelayMillis Number of milliseconds to wait before revoking on the
+     *                                     event an app is terminated. Set to -1 to use default
+     *                                     value for the device.
      * @param importanceToResetTimer The least important level to uid must be to reset the timer
      * @param importanceToKeepSessionAlive The least important level the uid must be to keep the
-     *                                    session alive
+     *                                     session alive
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS)
-    public void startOneTimePermissionSession(@NonNull String packageName, long timeoutMillis,
+    public void startOneTimePermissionSession(@NonNull String packageName,
+            @DurationMillisLong long timeoutMillis,
+            @DurationMillisLong long revokeAfterKilledDelayMillis,
             @ActivityManager.RunningAppProcessInfo.Importance int importanceToResetTimer,
             @ActivityManager.RunningAppProcessInfo.Importance int importanceToKeepSessionAlive) {
         try {
             mPermissionManager.startOneTimePermissionSession(packageName, mContext.getUserId(),
-                    timeoutMillis, importanceToResetTimer, importanceToKeepSessionAlive);
+                    timeoutMillis, revokeAfterKilledDelayMillis, importanceToResetTimer,
+                    importanceToKeepSessionAlive);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }

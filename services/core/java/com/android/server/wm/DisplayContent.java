@@ -170,7 +170,6 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
-import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -194,13 +193,13 @@ import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.IntArray;
 import android.util.RotationUtils;
+import android.util.Size;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 import android.view.DisplayCutout;
-import android.view.DisplayCutout.CutoutPathParserInfo;
 import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.IDisplayWindowInsetsController;
@@ -239,7 +238,6 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.policy.WindowManagerPolicy;
-import com.android.server.wm.utils.DisplayRotationUtil;
 import com.android.server.wm.utils.RotationCache;
 import com.android.server.wm.utils.WmDisplayCutout;
 
@@ -583,8 +581,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /** Caches the value whether told display manager that we have content. */
     private boolean mLastHasContent;
-
-    private static DisplayRotationUtil sRotationUtil = new DisplayRotationUtil();
 
     /**
      * The input method window for this display.
@@ -1687,9 +1683,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // adjustments of previous rotated activity should be cleared earlier. Otherwise if
             // the current top is in the same process, it may get the rotated state. The transform
             // will be cleared later with transition callback to ensure smooth animation.
-            if (hasTopFixedRotationLaunchingApp()) {
-                mFixedRotationLaunchingApp.notifyFixedRotationTransform(false /* enabled */);
-            }
             return false;
         }
         if (!r.getDisplayArea().matchParentBounds()) {
@@ -1887,7 +1880,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         if (mAsyncRotationController == null) {
             mAsyncRotationController = new AsyncRotationController(this);
-            mAsyncRotationController.hide();
+            mAsyncRotationController.start();
             return true;
         }
         return false;
@@ -1897,7 +1890,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void finishAsyncRotationIfPossible() {
         final AsyncRotationController controller = mAsyncRotationController;
         if (controller != null && !mDisplayRotation.hasSeamlessRotatingWindow()) {
-            controller.show();
+            controller.completeAll();
             mAsyncRotationController = null;
         }
     }
@@ -1905,19 +1898,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /** Shows the given window which may be hidden for screen rotation. */
     void finishAsyncRotation(WindowToken windowToken) {
         final AsyncRotationController controller = mAsyncRotationController;
-        if (controller != null && controller.show(windowToken)) {
+        if (controller != null && controller.completeRotation(windowToken)) {
             mAsyncRotationController = null;
         }
     }
 
     /** Returns {@code true} if the screen rotation animation needs to wait for the window. */
     boolean shouldSyncRotationChange(WindowState w) {
-        if (w.mForceSeamlesslyRotate) {
-            // The window should look no different before and after rotation.
-            return false;
-        }
         final AsyncRotationController controller = mAsyncRotationController;
-        return controller == null || !controller.isHandledToken(w.mToken);
+        return controller == null || !controller.isAsync(w);
     }
 
     void notifyInsetsChanged(Consumer<WindowState> dispatchInsetsChanged) {
@@ -2096,20 +2085,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             return WmDisplayCutout.computeSafeInsets(
                     cutout, displayWidth, displayHeight);
         }
-        final Insets waterfallInsets =
-                RotationUtils.rotateInsets(cutout.getWaterfallInsets(), rotation);
+        final DisplayCutout rotatedCutout =
+                cutout.getRotated(displayWidth, displayHeight, ROTATION_0, rotation);
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
-        final Rect[] newBounds = sRotationUtil.getRotatedBounds(
-                cutout.getBoundingRectsAll(),
-                rotation, displayWidth, displayHeight);
-        final CutoutPathParserInfo info = cutout.getCutoutPathParserInfo();
-        final CutoutPathParserInfo newInfo = new CutoutPathParserInfo(
-                info.getDisplayWidth(), info.getDisplayHeight(), info.getDensity(),
-                info.getCutoutSpec(), rotation, info.getScale());
-        return WmDisplayCutout.computeSafeInsets(
-                DisplayCutout.constructDisplayCutout(newBounds, waterfallInsets, newInfo),
+        return new WmDisplayCutout(rotatedCutout, new Size(
                 rotated ? displayHeight : displayWidth,
-                rotated ? displayWidth : displayHeight);
+                rotated ? displayWidth : displayHeight));
     }
 
     private WmDisplayCutout calculateDisplayCutoutForRotationUncached(
@@ -2202,8 +2183,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         outConfig.compatScreenHeightDp = (int) (outConfig.screenHeightDp / mCompatibleScreenScale);
 
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
-        outConfig.compatSmallestScreenWidthDp = computeCompatSmallestWidth(rotated, uiMode, dw,
-                dh);
+        outConfig.compatSmallestScreenWidthDp = computeCompatSmallestWidth(rotated, uiMode, dw, dh);
+        outConfig.windowConfiguration.setDisplayRotation(rotation);
     }
 
     /**
@@ -3054,13 +3035,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mTouchExcludeRegion.op(mTmpRegion, Region.Op.UNION);
         }
         amendWindowTapExcludeRegion(mTouchExcludeRegion);
-        // TODO(multi-display): Support docked root tasks on secondary displays & task containers.
-        if (mDisplayId == DEFAULT_DISPLAY
-                && getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
-            mDividerControllerLocked.getTouchRegion(mTmpRect);
-            mTmpRegion.set(mTmpRect);
-            mTouchExcludeRegion.op(mTmpRegion, Op.UNION);
-        }
         mTapDetector.setTouchExcludeRegion(mTouchExcludeRegion);
     }
 
@@ -3450,12 +3424,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Task rootPinnedTask = getDefaultTaskDisplayArea().getRootPinnedTask();
         if (rootPinnedTask != null) {
             pw.println(prefix + "rootPinnedTask=" + rootPinnedTask.getName());
-        }
-        final Task rootSplitScreenPrimaryTask = getDefaultTaskDisplayArea()
-                .getRootSplitScreenPrimaryTask();
-        if (rootSplitScreenPrimaryTask != null) {
-            pw.println(
-                    prefix + "rootSplitScreenPrimaryTask=" + rootSplitScreenPrimaryTask.getName());
         }
         // TODO: Support recents on non-default task containers
         final Task rootRecentsTask = getDefaultTaskDisplayArea().getRootTask(
@@ -4860,13 +4828,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         private static boolean skipImeWindowsDuringTraversal(DisplayContent dc) {
-            // We skip IME windows so they're processed just above their target, except
-            // in split-screen mode where we process the IME containers above the docked divider.
+            // We skip IME windows so they're processed just above their target.
             // Note that this method check should align with {@link
             // WindowState#applyImeWindowsIfNeeded} in case of any state mismatch.
             return dc.mImeLayeringTarget != null
-                    && (!dc.getDefaultTaskDisplayArea().isSplitScreenModeActivated()
-                             || dc.mImeLayeringTarget.getTask() == null)
                     // Make sure that the IME window won't be skipped to report that it has
                     // completed the orientation change.
                     && !dc.mWmService.mDisplayFrozen;
@@ -5517,26 +5482,46 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     void updateKeepClearAreas() {
+        final List<Rect> restrictedKeepClearAreas = new ArrayList();
+        final List<Rect> unrestrictedKeepClearAreas = new ArrayList();
+        getKeepClearAreas(restrictedKeepClearAreas, unrestrictedKeepClearAreas);
         mWmService.mDisplayNotificationController.dispatchKeepClearAreasChanged(
-                this, getKeepClearAreas());
+                this, restrictedKeepClearAreas, unrestrictedKeepClearAreas);
     }
 
     /**
-     * Returns all keep-clear areas from visible windows on this display.
+     * Fills {@param outRestricted} with all keep-clear areas from visible, relevant windows
+     * on this display, which set restricted keep-clear areas.
+     * Fills {@param outUnrestricted} with keep-clear areas from visible, relevant windows on this
+     * display, which set unrestricted keep-clear areas.
+     *
+     * For context on restricted vs unrestricted keep-clear areas, see
+     * {@link android.Manifest.permission.USE_UNRESTRICTED_KEEP_CLEAR_AREAS}.
      */
-    ArrayList<Rect> getKeepClearAreas() {
-        final ArrayList<Rect> keepClearAreas = new ArrayList<Rect>();
+    void getKeepClearAreas(List<Rect> outRestricted, List<Rect> outUnrestricted) {
         final Matrix tmpMatrix = new Matrix();
         final float[] tmpFloat9 = new float[9];
         forAllWindows(w -> {
             if (w.isVisible() && !w.inPinnedWindowingMode()) {
-                keepClearAreas.addAll(w.getKeepClearAreas(tmpMatrix, tmpFloat9));
+                if (w.mSession.mSetsUnrestrictedKeepClearAreas) {
+                    outUnrestricted.addAll(w.getKeepClearAreas(tmpMatrix, tmpFloat9));
+                } else {
+                    outRestricted.addAll(w.getKeepClearAreas(tmpMatrix, tmpFloat9));
+                }
             }
 
             // We stop traversing when we reach the base of a fullscreen app.
             return w.getWindowType() == TYPE_BASE_APPLICATION
                     && w.getWindowingMode() == WINDOWING_MODE_FULLSCREEN;
         }, true);
+    }
+
+    /**
+     * Returns all keep-clear areas from visible, relevant windows on this display.
+     */
+    ArrayList<Rect> getKeepClearAreas() {
+        final ArrayList<Rect> keepClearAreas = new ArrayList<Rect>();
+        getKeepClearAreas(keepClearAreas, keepClearAreas);
         return keepClearAreas;
     }
 

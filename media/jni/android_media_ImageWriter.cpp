@@ -42,7 +42,6 @@
 #include <deque>
 
 #define IMAGE_BUFFER_JNI_ID           "mNativeBuffer"
-#define IMAGE_FORMAT_UNKNOWN          0 // This is the same value as ImageFormat#UNKNOWN.
 // ----------------------------------------------------------------------------
 
 using namespace android;
@@ -460,8 +459,6 @@ static jlong ImageWriter_init(JNIEnv* env, jobject thiz, jobject weakThiz, jobje
     } else {
         // Set consumer buffer format to user specified format
         android_dataspace nativeDataspace = static_cast<android_dataspace>(dataSpace);
-        int userFormat = static_cast<int>(mapHalFormatDataspaceToPublicFormat(
-            hardwareBufferFormat, nativeDataspace));
         res = native_window_set_buffers_format(anw.get(), hardwareBufferFormat);
         if (res != OK) {
             ALOGE("%s: Unable to configure consumer native buffer format to %#x",
@@ -478,20 +475,29 @@ static jlong ImageWriter_init(JNIEnv* env, jobject thiz, jobject weakThiz, jobje
             return 0;
         }
         ctx->setBufferDataSpace(nativeDataspace);
-        surfaceFormat = userFormat;
+        surfaceFormat = static_cast<int32_t>(mapHalFormatDataspaceToPublicFormat(
+            hardwareBufferFormat, nativeDataspace));
     }
 
     ctx->setBufferFormat(surfaceFormat);
     env->SetIntField(thiz,
             gImageWriterClassInfo.mWriterFormat, reinterpret_cast<jint>(surfaceFormat));
 
-    res = native_window_set_usage(anw.get(), ndkUsage);
-    if (res != OK) {
-        ALOGE("%s: Configure usage %08x for format %08x failed: %s (%d)",
-              __FUNCTION__, static_cast<unsigned int>(ndkUsage),
-              surfaceFormat, strerror(-res), res);
-        jniThrowRuntimeException(env, "Failed to SW_WRITE_OFTEN configure usage");
-        return 0;
+    // ndkUsage == -1 means setUsage in ImageWriter class is not called.
+    // skip usage setting if setUsage in ImageWriter is not called and imageformat is opaque.
+    if (!(ndkUsage == -1 && isFormatOpaque(surfaceFormat))) {
+        if (ndkUsage == -1) {
+            ndkUsage = GRALLOC_USAGE_SW_WRITE_OFTEN;
+        }
+        res = native_window_set_usage(anw.get(), ndkUsage);
+        if (res != OK) {
+            ALOGE("%s: Configure usage %08x for format %08x failed: %s (%d)",
+                  __FUNCTION__, static_cast<unsigned int>(ndkUsage),
+                  surfaceFormat, strerror(-res), res);
+            jniThrowRuntimeException(env,
+                                     "Failed to SW_WRITE_OFTEN configure usage");
+            return 0;
+        }
     }
 
     int minUndequeuedBufferCount = 0;
@@ -952,7 +958,7 @@ static jint Image_getHeight(JNIEnv* env, jobject thiz) {
     return buffer->getHeight();
 }
 
-static jint Image_getFormat(JNIEnv* env, jobject thiz) {
+static jint Image_getFormat(JNIEnv* env, jobject thiz, jlong dataSpace) {
     ALOGV("%s", __FUNCTION__);
     GraphicBuffer* buffer;
     Image_getNativeContext(env, thiz, &buffer, NULL);
@@ -962,9 +968,9 @@ static jint Image_getFormat(JNIEnv* env, jobject thiz) {
         return 0;
     }
 
-    // ImageWriter doesn't support data space yet, assuming it is unknown.
     PublicFormat publicFmt = mapHalFormatDataspaceToPublicFormat(buffer->getPixelFormat(),
-                                                                 HAL_DATASPACE_UNKNOWN);
+        static_cast<android_dataspace>(dataSpace));
+
     return static_cast<jint>(publicFmt);
 }
 
@@ -984,6 +990,11 @@ static jobject Image_getHardwareBuffer(JNIEnv* env, jobject thiz) {
 
 static void Image_setFenceFd(JNIEnv* env, jobject thiz, int fenceFd) {
     ALOGV("%s:", __FUNCTION__);
+    int curtFenceFd = reinterpret_cast<jint>(
+        env->GetIntField(thiz,gSurfaceImageClassInfo.mNativeFenceFd));
+    if (curtFenceFd != -1) {
+        close(curtFenceFd);
+    }
     env->SetIntField(thiz, gSurfaceImageClassInfo.mNativeFenceFd, reinterpret_cast<jint>(fenceFd));
 }
 
@@ -1031,14 +1042,14 @@ static bool Image_getLockedImageInfo(JNIEnv* env, LockedImage* buffer, int idx,
 }
 
 static jobjectArray Image_createSurfacePlanes(JNIEnv* env, jobject thiz,
-        int numPlanes, int writerFormat) {
+        int numPlanes, int writerFormat, long dataSpace) {
     ALOGV("%s: create SurfacePlane array with size %d", __FUNCTION__, numPlanes);
     int rowStride, pixelStride;
     uint8_t *pData;
     uint32_t dataSize;
     jobject byteBuffer;
 
-    int format = Image_getFormat(env, thiz);
+    int format = Image_getFormat(env, thiz, dataSpace);
     if (isFormatOpaque(format) && numPlanes > 0) {
         String8 msg;
         msg.appendFormat("Format 0x%x is opaque, thus not writable, the number of planes (%d)"
@@ -1108,11 +1119,12 @@ static JNINativeMethod gImageWriterMethods[] = {
 };
 
 static JNINativeMethod gImageMethods[] = {
-    {"nativeCreatePlanes",      "(II)[Landroid/media/ImageWriter$WriterSurfaceImage$SurfacePlane;",
+    {"nativeCreatePlanes",      "(IIJ)[Landroid/media/ImageWriter$WriterSurfaceImage$SurfacePlane;",
                                                                (void*)Image_createSurfacePlanes },
     {"nativeGetWidth",          "()I",                         (void*)Image_getWidth },
     {"nativeGetHeight",         "()I",                         (void*)Image_getHeight },
-    {"nativeGetFormat",         "()I",                         (void*)Image_getFormat },
+    {"nativeGetFormat",         "(J)I",                        (void*)Image_getFormat },
+    {"nativeSetFenceFd",        "(I)V",                        (void*)Image_setFenceFd },
     {"nativeGetHardwareBuffer", "()Landroid/hardware/HardwareBuffer;",
                                                                (void*)Image_getHardwareBuffer },
 };

@@ -53,7 +53,7 @@ import android.util.TimingsTraceLog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.content.PackageHelper;
+import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
@@ -77,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -131,7 +132,7 @@ public class StagingManager {
         void setSessionReady();
         void setSessionFailed(@SessionErrorCode int errorCode, String errorMessage);
         void setSessionApplied();
-        void installSession(IntentSender statusReceiver);
+        CompletableFuture<Void> installSession();
         boolean hasParentSessionId();
         long getCommittedMillis();
         void abandon();
@@ -237,7 +238,7 @@ public class StagingManager {
                     mApexManager.revertActiveSessions();
                 }
 
-                PackageHelper.getStorageManager().abortChanges(
+                InstallLocationUtils.getStorageManager().abortChanges(
                         "abort-staged-install", false /*retry*/);
             }
         } catch (Exception e) {
@@ -417,8 +418,6 @@ public class StagingManager {
         installApksInSession(session);
         t.traceEnd();
 
-        Slog.d(TAG, "Marking session " + session.sessionId() + " as applied");
-        session.setSessionApplied();
         if (hasApex) {
             if (supportsCheckpoint) {
                 // Store the session ID, which will be marked as successful by ApexManager upon
@@ -494,24 +493,17 @@ public class StagingManager {
         }
     }
 
-    private void installApksInSession(StagedSession session)
-            throws PackageManagerException {
-        if (!session.containsApkSession()) {
-            return;
-        }
-
-        final LocalIntentReceiverSync receiver = new LocalIntentReceiverSync();
-        session.installSession(receiver.getIntentSender());
-        final Intent result = receiver.getResult();
-        final int status = result.getIntExtra(PackageInstaller.EXTRA_STATUS,
-                PackageInstaller.STATUS_FAILURE);
-        if (status != PackageInstaller.STATUS_SUCCESS) {
-            final String errorMessage = result.getStringExtra(
-                    PackageInstaller.EXTRA_STATUS_MESSAGE);
-            Slog.e(TAG, "Failure to install APK staged session "
-                    + session.sessionId() + " [" + errorMessage + "]");
-            throw new PackageManagerException(
-                    SessionInfo.SESSION_ACTIVATION_FAILED, errorMessage);
+    private void installApksInSession(StagedSession session) throws PackageManagerException {
+        try {
+            // Blocking wait for installation to complete
+            session.installSession().get();
+        } catch (InterruptedException e) {
+            // Should be impossible
+            throw new RuntimeException(e);
+        } catch (ExecutionException ee) {
+            PackageManagerException e = (PackageManagerException) ee.getCause();
+            final String errorMsg = PackageManager.installStatusToString(e.error, e.getMessage());
+            throw new PackageManagerException(SessionInfo.SESSION_ACTIVATION_FAILED, errorMsg);
         }
     }
 
@@ -674,8 +666,8 @@ public class StagingManager {
         boolean needsCheckpoint = false;
         boolean supportsCheckpoint = false;
         try {
-            supportsCheckpoint = PackageHelper.getStorageManager().supportsCheckpoint();
-            needsCheckpoint = PackageHelper.getStorageManager().needsCheckpoint();
+            supportsCheckpoint = InstallLocationUtils.getStorageManager().supportsCheckpoint();
+            needsCheckpoint = InstallLocationUtils.getStorageManager().needsCheckpoint();
         } catch (RemoteException e) {
             // This means that vold has crashed, and device is in a bad state.
             throw new IllegalStateException("Failed to get checkpoint status", e);

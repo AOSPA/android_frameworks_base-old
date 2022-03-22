@@ -2386,6 +2386,15 @@ public final class Settings {
             "android.settings.ENABLE_MMS_DATA_REQUEST";
 
     /**
+     * Shows restrict settings dialog when settings is blocked.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SHOW_RESTRICTED_SETTING_DIALOG =
+            "android.settings.SHOW_RESTRICTED_SETTING_DIALOG";
+
+    /**
      * Integer value that specifies the reason triggering enable MMS data notification.
      * This must be passed as an extra field to the {@link #ACTION_ENABLE_MMS_DATA_REQUEST}.
      * Extra with value of EnableMmsDataReason interface.
@@ -2426,6 +2435,23 @@ public final class Settings {
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_MMS_MESSAGE_SETTING = "android.settings.MMS_MESSAGE_SETTING";
+
+    /**
+     * Activity Action: Show a screen of bedtime settings, which is provided by the wellbeing app.
+     * <p>
+     * The handler of this intent action may not exist.
+     * <p>
+     * To start an activity with this intent, apps should set the wellbeing package explicitly in
+     * the intent together with this action. The wellbeing package is defined in
+     * {@code com.android.internal.R.string.config_defaultWellbeingPackage}.
+     * <p>
+     * Output: Nothing
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_BEDTIME_SETTINGS = "android.settings.BEDTIME_SETTINGS";
 
     // End of Intent actions for Settings
 
@@ -6585,6 +6611,8 @@ public final class Settings {
          * @hide
          */
         @Readable(maxTargetSdk = Build.VERSION_CODES.S)
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLUETOOTH_NAME = "bluetooth_name";
 
         /**
@@ -6592,6 +6620,8 @@ public final class Settings {
          * @hide
          */
         @Readable(maxTargetSdk = Build.VERSION_CODES.S)
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLUETOOTH_ADDRESS = "bluetooth_address";
 
         /**
@@ -6599,6 +6629,8 @@ public final class Settings {
          * @hide
          */
         @Readable(maxTargetSdk = Build.VERSION_CODES.S)
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLUETOOTH_ADDR_VALID = "bluetooth_addr_valid";
 
         /**
@@ -10044,6 +10076,13 @@ public final class Settings {
         public static final String QS_AUTO_ADDED_TILES = "qs_auto_tiles";
 
         /**
+         * The duration of timeout, in milliseconds, to switch from a non-primary user to the
+         * primary user when the device is docked.
+         * @hide
+         */
+        public static final String TIMEOUT_TO_USER_ZERO = "timeout_to_user_zero";
+
+        /**
          * Backup manager behavioral parameters.
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -10268,6 +10307,22 @@ public final class Settings {
          */
         @Readable
         public static final String NEARBY_SHARING_COMPONENT = "nearby_sharing_component";
+
+        /**
+         * Nearby Sharing Slice URI for the SliceProvider to
+         * read Nearby Sharing scan results and then draw the UI.
+         * @hide
+         */
+        public static final String NEARBY_SHARING_SLICE_URI = "nearby_sharing_slice_uri";
+
+        /**
+         * Current provider of Fast Pair saved devices page.
+         * Default value in @string/config_defaultNearbyFastPairSettingsDevicesComponent.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String NEARBY_FAST_PAIR_SETTINGS_DEVICES_COMPONENT =
+                "nearby_fast_pair_settings_devices_component";
 
         /**
          * Controls whether aware is enabled.
@@ -10621,6 +10676,15 @@ public final class Settings {
         public static final String FAST_PAIR_SCAN_ENABLED = "fast_pair_scan_enabled";
 
         /**
+         * Setting to store denylisted system languages by the CEC {@code <Set Menu Language>}
+         * confirmation dialog.
+         *
+         * @hide
+         */
+        public static final String HDMI_CEC_SET_MENU_LANGUAGE_DENYLIST =
+                "hdmi_cec_set_menu_language_denylist";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
@@ -10837,6 +10901,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLUETOOTH_CLASS_OF_DEVICE = "bluetooth_class_of_device";
 
         /**
@@ -10845,6 +10911,8 @@ public final class Settings {
          * {@hide}
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLUETOOTH_DISABLED_PROFILES = "bluetooth_disabled_profiles";
 
         /**
@@ -11307,15 +11375,6 @@ public final class Settings {
         @Readable
         public static final String DEVELOPMENT_USE_BLAST_ADAPTER_VR =
                 "use_blast_adapter_vr";
-
-        /**
-         * If true, submit buffers using blast in SurfaceView.
-         * (0 = false, 1 = true)
-         * @hide
-         */
-        @Readable
-        public static final String DEVELOPMENT_USE_BLAST_ADAPTER_SV =
-                "use_blast_adapter_sv";
 
         /**
          * Path to the WindowManager display settings file. If unset, the default file path will
@@ -12394,6 +12453,8 @@ public final class Settings {
         * @hide
         */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_ALWAYS_AVAILABLE = "ble_scan_always_enabled";
 
         /**
@@ -12401,6 +12462,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_LOW_POWER_WINDOW_MS = "ble_scan_low_power_window_ms";
 
         /**
@@ -12408,6 +12471,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_BALANCED_WINDOW_MS = "ble_scan_balanced_window_ms";
 
         /**
@@ -12415,6 +12480,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_LOW_LATENCY_WINDOW_MS =
                 "ble_scan_low_latency_window_ms";
 
@@ -12423,6 +12490,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_LOW_POWER_INTERVAL_MS =
                 "ble_scan_low_power_interval_ms";
 
@@ -12431,6 +12500,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_BALANCED_INTERVAL_MS =
                 "ble_scan_balanced_interval_ms";
 
@@ -12439,6 +12510,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_LOW_LATENCY_INTERVAL_MS =
                 "ble_scan_low_latency_interval_ms";
 
@@ -12447,6 +12520,8 @@ public final class Settings {
          * @hide
          */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String BLE_SCAN_BACKGROUND_MODE = "ble_scan_background_mode";
 
         /**
@@ -13179,6 +13254,8 @@ public final class Settings {
 
         /** {@hide} */
         @Readable
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("NoSettingsProvider")
         public static final String
                 BLUETOOTH_BTSNOOP_DEFAULT_MODE = "bluetooth_btsnoop_default_mode";
         /** {@hide} */
@@ -16737,6 +16814,40 @@ public final class Settings {
         public static final String RESTRICTED_NETWORKING_MODE = "restricted_networking_mode";
 
         /**
+         * Setting indicating whether Low Power Standby is enabled, if supported.
+         *
+         * Values are:
+         * 0: disabled
+         * 1: enabled
+         *
+         * @hide
+         */
+        public static final String LOW_POWER_STANDBY_ENABLED = "low_power_standby_enabled";
+
+        /**
+         * Setting indicating whether Low Power Standby is allowed to be active during doze
+         * maintenance mode.
+         *
+         * Values are:
+         * 0: Low Power Standby will be disabled during doze maintenance mode
+         * 1: Low Power Standby can be active during doze maintenance mode
+         *
+         * @hide
+         */
+        public static final String LOW_POWER_STANDBY_ACTIVE_DURING_MAINTENANCE =
+                "low_power_standby_active_during_maintenance";
+
+        /**
+         * Timeout for the system server watchdog.
+         *
+         * @see {@link com.android.server.Watchdog}.
+         *
+         * @hide
+         */
+        public static final String WATCHDOG_TIMEOUT_MILLIS =
+                "system_server_watchdog_timeout_ms";
+
+        /**
          * Settings migrated from Wear OS settings provider.
          * @hide
          */
@@ -17241,6 +17352,18 @@ public final class Settings {
              */
             public static final String CLOCKWORK_LONG_PRESS_TO_ASSISTANT_ENABLED =
                     "clockwork_long_press_to_assistant_enabled";
+
+            /*
+             * Whether the device has Cooldown Mode enabled.
+             * @hide
+             */
+            public static final String COOLDOWN_MODE_ON = "cooldown_mode_on";
+
+            /*
+             * Whether the device has Wet Mode/ Touch Lock Mode enabled.
+             * @hide
+             */
+            public static final String WET_MODE_ON = "wet_mode_on";
         }
     }
 

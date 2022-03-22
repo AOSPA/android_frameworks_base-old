@@ -45,7 +45,8 @@ class KeyguardMediaController @Inject constructor(
     private val statusBarStateController: SysuiStatusBarStateController,
     private val notifLockscreenUserManager: NotificationLockscreenUserManager,
     private val context: Context,
-    configurationController: ConfigurationController
+    configurationController: ConfigurationController,
+    private val mediaFlags: MediaFlags
 ) {
 
     init {
@@ -61,7 +62,11 @@ class KeyguardMediaController @Inject constructor(
         })
 
         // First let's set the desired state that we want for this host
-        mediaHost.expansion = MediaHostState.COLLAPSED
+        mediaHost.expansion = if (mediaFlags.useMediaSessionLayout()) {
+            MediaHostState.EXPANDED
+        } else {
+            MediaHostState.COLLAPSED
+        }
         mediaHost.showsOnlyActiveMedia = true
         mediaHost.falsingProtectionNeeded = true
 
@@ -159,8 +164,7 @@ class KeyguardMediaController @Inject constructor(
     }
 
     fun refreshMediaPosition() {
-        val keyguardOrUserSwitcher = (statusBarStateController.state == StatusBarState.KEYGUARD ||
-                statusBarStateController.state == StatusBarState.FULLSCREEN_USER_SWITCHER)
+        val keyguardOrUserSwitcher = (statusBarStateController.state == StatusBarState.KEYGUARD)
         // mediaHost.visible required for proper animations handling
         visible = mediaHost.visible &&
                 !bypassController.bypassEnabled &&

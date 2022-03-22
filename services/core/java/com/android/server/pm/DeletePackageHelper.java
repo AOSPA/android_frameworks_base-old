@@ -63,6 +63,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.PackageUserState;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
@@ -221,12 +222,12 @@ final class DeletePackageHelper {
                 res = deletePackageLIF(packageName, UserHandle.of(removeUser), true, allUsers,
                         deleteFlags | PackageManager.DELETE_CHATTY, info, true);
             }
+            if (res && pkg != null) {
+                mPm.mInstantAppRegistry.onPackageUninstalled(pkg, uninstalledPs,
+                        info.mRemovedUsers);
+            }
             synchronized (mPm.mLock) {
                 if (res) {
-                    if (pkg != null) {
-                        mPm.mInstantAppRegistry.onPackageUninstalledLPw(pkg, uninstalledPs,
-                                info.mRemovedUsers);
-                    }
                     mPm.updateSequenceNumberLP(uninstalledPs, info.mRemovedUsers);
                     mPm.updateInstantAppInstallerLocked(packageName);
                 }
@@ -432,9 +433,7 @@ final class DeletePackageHelper {
             }
             if (clearPackageStateAndReturn) {
                 clearPackageStateForUserLIF(ps, userId, outInfo, flags);
-                synchronized (mPm.mLock) {
-                    mPm.scheduleWritePackageRestrictionsLocked(user);
-                }
+                mPm.scheduleWritePackageRestrictions(user);
                 return;
             }
         }
@@ -603,7 +602,9 @@ final class DeletePackageHelper {
         if (outInfo != null) {
             // Delete the updated package
             outInfo.mIsRemovedPackageSystemUpdate = true;
-            outInfo.mAppIdChanging = disabledPs.getAppId() != deletedPs.getAppId();
+            if (disabledPs.getAppId() != deletedPs.getAppId()) {
+                outInfo.mNewAppId = disabledPs.getAppId();
+            }
         }
 
         if (disabledPs.getVersionCode() < deletedPs.getVersionCode()
@@ -633,7 +634,6 @@ final class DeletePackageHelper {
 
         final String packageName = versionedPackage.getPackageName();
         final long versionCode = versionedPackage.getLongVersionCode();
-        final String internalPackageName;
 
         try {
             if (mPm.mInjector.getLocalService(ActivityTaskManagerInternal.class)
@@ -647,10 +647,8 @@ final class DeletePackageHelper {
             e.rethrowFromSystemServer();
         }
 
-        synchronized (mPm.mLock) {
-            // Normalize package name to handle renamed packages and static libs
-            internalPackageName = mPm.resolveInternalPackageNameLPr(packageName, versionCode);
-        }
+        // Normalize package name to handle renamed packages and static libs
+        final String internalPackageName = mPm.resolveInternalPackageName(packageName, versionCode);
 
         final int uid = Binder.getCallingUid();
         if (!isOrphaned(internalPackageName)
@@ -759,13 +757,8 @@ final class DeletePackageHelper {
     }
 
     private boolean isOrphaned(String packageName) {
-        // reader
-        synchronized (mPm.mLock) {
-            if (!mPm.mPackages.containsKey(packageName)) {
-                return false;
-            }
-            return mPm.mSettings.isOrphaned(packageName);
-        }
+        final PackageStateInternal packageState = mPm.getPackageStateInternal(packageName);
+        return packageState != null && packageState.getInstallSource().isOrphaned;
     }
 
     private boolean isCallerAllowedToSilentlyUninstall(int callingUid, String pkgName) {
@@ -905,7 +898,7 @@ final class DeletePackageHelper {
         int installedForUsersCount = 0;
         synchronized (mPm.mLock) {
             // Normalize package name to handle renamed packages and static libs
-            final String internalPkgName = mPm.resolveInternalPackageNameLPr(packageName,
+            final String internalPkgName = mPm.resolveInternalPackageName(packageName,
                     versionCode);
             final PackageSetting ps = mPm.mSettings.getPackageLPr(internalPkgName);
             if (ps != null) {

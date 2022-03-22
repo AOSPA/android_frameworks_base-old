@@ -1522,6 +1522,10 @@
          but the display is fully on. -->
     <integer name="config_autoBrightnessShortTermModelTimeout">300000</integer>
 
+    <!-- Timeout (in milliseconds) after which we start the animation "Android
+         is starting" -->
+    <integer name="config_progressTimeoutFallbackHome">2000</integer>
+
     <!-- Array of output values for LCD backlight corresponding to the lux values
          in the config_autoBrightnessLevels array.  This array should have size one greater
          than the size of the config_autoBrightnessLevels array.
@@ -2376,6 +2380,15 @@
     <bool name="config_dreamsActivatedOnSleepByDefault">false</bool>
     <!-- ComponentName of the default dream (Settings.Secure.DEFAULT_SCREENSAVER_COMPONENT) -->
     <string name="config_dreamsDefaultComponent" translatable="false">com.android.deskclock/com.android.deskclock.Screensaver</string>
+    <!-- ComponentNames of the dreams that we should hide -->
+    <string-array name="config_disabledDreamComponents" translatable="false">
+    </string-array>
+    <!-- The list of supported dream complications -->
+    <integer-array name="config_supportedDreamComplications">
+    </integer-array>
+    <!-- The list of dream complications which should be enabled by default -->
+    <integer-array name="config_dreamComplicationsEnabledByDefault">
+    </integer-array>
 
     <!-- Are we allowed to dream while not plugged in? -->
     <bool name="config_dreamsEnabledOnBattery">false</bool>
@@ -2612,6 +2625,10 @@
          will be locked. -->
     <bool name="config_multiuserDelayUserDataLocking">false</bool>
 
+    <!-- Whether to automatically switch a non-primary user back to the primary user after a
+         timeout when the device is docked.  -->
+    <bool name="config_enableTimeoutToUserZeroWhenDocked">false</bool>
+
     <!-- Whether to only install system packages on a user if they're allowlisted for that user
          type. These are flags and can be freely combined.
          0  - disable allowlist (install all system packages; no logging)
@@ -2706,6 +2723,9 @@
          Default is bandwidth_estimator.
          Values are bandwidth_estimator, carrier_config and modem. -->
     <string name="config_bandwidthEstimateSource">bandwidth_estimator</string>
+
+    <!-- Whether force to enable telephony new data stack or not -->
+    <bool name="config_force_enable_telephony_new_data_stack">false</bool>
 
     <!-- Whether WiFi display is supported by this device.
          There are many prerequisites for this feature to work correctly.
@@ -2883,6 +2903,11 @@
      of privacy settings. -->
     <string name="config_sensorUseStartedActivity" translatable="false"
             >com.android.systemui/com.android.systemui.sensorprivacy.SensorUseStartedActivity</string>
+
+    <!-- Component name of the activity used to ask a user to confirm system language change after
+         receiving <Set Menu Language> CEC message. -->
+    <string name="config_hdmiCecSetMenuLanguageActivity"
+            >com.android.systemui/com.android.systemui.hdmi.HdmiCecSetMenuLanguageActivity</string>
 
     <!-- Name of the dialog that is used to request the user's consent for a Platform VPN -->
     <string name="config_platformVpnConfirmDialogComponent" translatable="false"
@@ -4107,6 +4132,15 @@
     -->
     <string name="config_defaultAugmentedAutofillService" translatable="false"></string>
 
+    <!-- The package name list for the system's cloudsearch service.
+          This service returns cloudsearch results.
+          This service must be trusted, as it can be activated without explicit consent of the user.
+          If no service with the specified name exists on the device, cloudsearch will be disabled.
+          Example: "com.android.intelligence/.CloudSearchService"
+          config_defaultCloudSearchService is for the single provider case.
+    -->
+    <string name="config_defaultCloudSearchService" translatable="false"></string>
+
     <!-- The package name for the system's translation service.
      This service must be trusted, as it can be activated without explicit consent of the user.
      If no service with the specified name exists on the device, translation wil be
@@ -4158,6 +4192,15 @@
     <string name="config_defaultOnDeviceSpeechRecognitionService" translatable="false"></string>
 
     <string name="config_defaultMusicRecognitionService" translatable="false"></string>
+
+    <!-- The package name for the system's wallpaper effects generation service.
+    This service returns wallpaper effects results.
+    This service must be trusted, as it can be activated without explicit consent of the user.
+    If no service with the specified name exists on the device, wallpaper effects
+    generation service will be disabled.
+    Example: "com.android.intelligence/.WallpaperEffectsGenerationService"
+-->
+    <string name="config_defaultWallpaperEffectsGenerationService" translatable="false"></string>
 
     <!-- The package name for the default retail demo app.
          This package must be trusted, as it has the permissions to query the usage stats on the
@@ -4623,6 +4666,18 @@
     <array name="config_displayWhiteBalanceDisplayColorTemperatures">
     </array>
 
+    <!-- See DisplayWhiteBalanceController.
+         The same as config_displayWhiteBalanceAmbientColorTemperatures, but with a stronger
+         visual adjustment. -->
+    <array name="config_displayWhiteBalanceStrongAmbientColorTemperatures">
+    </array>
+
+    <!-- See DisplayWhiteBalanceController.
+         The same as config_displayWhiteBalanceDisplayColorTemperatures, but with a stronger
+         visual adjustment. -->
+    <array name="config_displayWhiteBalanceStrongDisplayColorTemperatures">
+    </array>
+
     <!-- All of the paths defined for the batterymeter are defined on a 12x20 canvas, and must
      be parsable by android.utill.PathParser -->
     <string name="config_batterymeterPerimeterPath" translatable="false">
@@ -4967,6 +5022,13 @@
          Used by ChooserActivity. -->
     <string translatable="false" name="config_defaultNearbySharingComponent"></string>
 
+    <!-- URI used for Nearby Share SliceProvider scanning. -->
+    <string translatable="false" name="config_defaultNearbySharingSliceUri"></string>
+
+    <!-- Component name that accepts settings intents for saved devices.
+             Used by FastPairSettingsFragment. -->
+    <string translatable="false" name="config_defaultNearbyFastPairSettingsDevicesComponent"></string>
+
     <!-- Boolean indicating whether frameworks needs to reset cell broadcast geo-fencing
          check after reboot or airplane mode toggling -->
     <bool translatable="false" name="reset_geo_fencing_check_after_boot_or_apm">false</bool>
@@ -5129,6 +5191,9 @@
         If given value is outside of this range, the option 1 (center) is assummed. -->
     <integer name="config_letterboxDefaultPositionForReachability">1</integer>
 
+    <!-- Whether displaying letterbox education is enabled for letterboxed fullscreen apps. -->
+    <bool name="config_letterboxIsEducationEnabled">false</bool>
+
     <!-- Whether a camera compat controller is enabled to allow the user to apply or revert
          treatment for stretched issues in camera viewfinder. -->
     <bool name="config_isCameraCompatControlForStretchedIssuesEnabled">false</bool>
@@ -5243,6 +5308,12 @@
     <bool name="config_cecTvSendStandbyOnSleepEnabled_default">true</bool>
     <bool name="config_cecTvSendStandbyOnSleepDisabled_allowed">true</bool>
     <bool name="config_cecTvSendStandbyOnSleepDisabled_default">false</bool>
+
+    <bool name="config_cecSetMenuLanguage_userConfigurable">true</bool>
+    <bool name="config_cecSetMenuLanguageEnabled_allowed">true</bool>
+    <bool name="config_cecSetMenuLanguageEnabled_default">true</bool>
+    <bool name="config_cecSetMenuLanguageDisabled_allowed">true</bool>
+    <bool name="config_cecSetMenuLanguageDisabled_default">false</bool>
 
     <bool name="config_cecRcProfileTv_userConfigurable">true</bool>
     <bool name="config_cecRcProfileTvNone_allowed">true</bool>
@@ -5620,6 +5691,25 @@
 
     <!-- Whether or not to enable the lock screen entry point for the QR code scanner. -->
     <bool name="config_enableQrCodeScannerOnLockScreen">false</bool>
+
+    <!-- Whether Low Power Standby is supported and can be enabled. -->
+    <bool name="config_lowPowerStandbySupported">false</bool>
+
+    <!-- If supported, whether Low Power Standby is enabled by default. -->
+    <bool name="config_lowPowerStandbyEnabledByDefault">false</bool>
+
+    <!-- The amount of time after becoming non-interactive (in ms) after which
+         Low Power Standby can activate. -->
+    <integer name="config_lowPowerStandbyNonInteractiveTimeout">5000</integer>
+
+
+    <!-- Mapping to select an Intent.EXTRA_DOCK_STATE value from extcon state
+         key-value pairs. Each entry is evaluated in order and is of the form:
+            "[EXTRA_DOCK_STATE value],key1=value1,key2=value2[,...]"
+         An entry with no key-value pairs is valid and can be used as a wildcard.
+     -->
+    <string-array name="config_dockExtconStateMapping">
+    </string-array>
 
     <!-- Maximum time in millisecs for telephony should wait to deactivate data call
          when user turned off mobile data or data roaming during CIWLAN -->

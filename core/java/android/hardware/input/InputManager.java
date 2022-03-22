@@ -35,6 +35,7 @@ import android.hardware.lights.Light;
 import android.hardware.lights.LightState;
 import android.hardware.lights.LightsManager;
 import android.hardware.lights.LightsRequest;
+import android.os.Binder;
 import android.os.BlockUntrustedTouchesMode;
 import android.os.Build;
 import android.os.CombinedVibration;
@@ -1211,7 +1212,7 @@ public final class InputManager {
      */
     public InputMonitor monitorGestureInput(String name, int displayId) {
         try {
-            return mIm.monitorGestureInput(name, displayId);
+            return mIm.monitorGestureInput(new Binder(), name, displayId);
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }
@@ -1359,19 +1360,18 @@ public final class InputManager {
     }
 
     /**
-     * Add a runtime association between the input device name and display, by unique id. Input
-     * device names are expected to be unique.
-     * @param inputDeviceName The name of the input device.
+     * Add a runtime association between the input port and display, by unique id. Input ports are
+     * expected to be unique.
+     * @param inputPort The port of the input device.
      * @param displayUniqueId The unique id of the associated display.
      * <p>
      * Requires {@link android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY}.
      * </p>
      * @hide
      */
-    public void addUniqueIdAssociation(@NonNull String inputDeviceName,
-            @NonNull String displayUniqueId) {
+    public void addUniqueIdAssociation(@NonNull String inputPort, @NonNull String displayUniqueId) {
         try {
-            mIm.addUniqueIdAssociation(inputDeviceName, displayUniqueId);
+            mIm.addUniqueIdAssociation(inputPort, displayUniqueId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1379,15 +1379,15 @@ public final class InputManager {
 
     /**
      * Removes a runtime association between the input device and display.
-     * @param inputDeviceName The name of the input device.
+     * @param inputPort The port of the input device.
      * <p>
      * Requires {@link android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY}.
      * </p>
      * @hide
      */
-    public void removeUniqueIdAssociation(@NonNull String inputDeviceName) {
+    public void removeUniqueIdAssociation(@NonNull String inputPort) {
         try {
-            mIm.removeUniqueIdAssociation(inputDeviceName);
+            mIm.removeUniqueIdAssociation(inputPort);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

@@ -41,19 +41,22 @@ public class Flags {
     /***************************************/
     // 100 - notification
     public static final BooleanFlag NEW_NOTIFICATION_PIPELINE_RENDERING =
-            new BooleanFlag(101, false);
+            new BooleanFlag(101, true);
 
     public static final BooleanFlag NOTIFICATION_PIPELINE_DEVELOPER_LOGGING =
             new BooleanFlag(103, false);
-
-    public static final ResourceBooleanFlag NOTIFICATION_SHADE_DRAG =
-            new ResourceBooleanFlag(104, R.bool.config_enableNotificationShadeDrag);
 
     public static final BooleanFlag NSSL_DEBUG_LINES =
             new BooleanFlag(105, false);
 
     public static final BooleanFlag NSSL_DEBUG_REMOVE_ANIMATION =
             new BooleanFlag(106, false);
+
+    public static final BooleanFlag NEW_PIPELINE_CRASH_ON_CALL_TO_OLD_PIPELINE =
+            new BooleanFlag(107, false);
+
+    public static final ResourceBooleanFlag NOTIFICATION_DRAG_TO_CONTENTS =
+            new ResourceBooleanFlag(108, R.bool.config_notificationToContents);
 
     /***************************************/
     // 200 - keyguard/lockscreen
@@ -104,10 +107,15 @@ public class Flags {
     public static final ResourceBooleanFlag QS_USER_DETAIL_SHORTCUT =
             new ResourceBooleanFlag(503, R.bool.flag_lockscreen_qs_user_detail_shortcut);
 
+    public static final BooleanFlag NEW_FOOTER = new BooleanFlag(504, false);
+
     /***************************************/
     // 600- status bar
     public static final BooleanFlag COMBINED_STATUS_BAR_SIGNAL_ICONS =
             new BooleanFlag(601, false);
+
+    public static final ResourceBooleanFlag STATUS_BAR_USER_SWITCHER =
+            new ResourceBooleanFlag(602, R.bool.flag_user_switcher_chip);
 
     /***************************************/
     // 700 - dialer/calls

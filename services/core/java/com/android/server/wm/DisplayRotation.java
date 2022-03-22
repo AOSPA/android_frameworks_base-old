@@ -248,6 +248,13 @@ public class DisplayRotation {
                     "org.codeaurora.intent.action.WIFI_DISPLAY_VIDEO";
 
     /**
+     * Broadcast Permission for Wifi Display
+     */
+
+    private static final String WIFI_DISPLAY_PERMISSION =
+                    "com.qualcomm.permission.wfd.QC_WFD";
+
+    /**
      * Wifi Display specific variables
      */
     private boolean mWifiDisplayConnected = false;
@@ -320,7 +327,9 @@ public class DisplayRotation {
                                         false/* forceRelayout */);
                             }
                         }
-                    }, new IntentFilter(ACTION_WIFI_DISPLAY_VIDEO), null, UiThread.getHandler());
+                    }, new IntentFilter(ACTION_WIFI_DISPLAY_VIDEO),
+                        WIFI_DISPLAY_PERMISSION,
+                        UiThread.getHandler());
                 }
             };
             t.start();
@@ -736,18 +745,7 @@ public class DisplayRotation {
             return false;
         }
 
-        // For the upside down rotation we don't rotate seamlessly as the navigation bar moves
-        // position. Note most apps (using orientation:sensor or user as opposed to fullSensor)
-        // will not enter the reverse portrait orientation, so actually the orientation won't change
-        // at all.
-        if (oldRotation == mUpsideDownRotation || newRotation == mUpsideDownRotation) {
-            return false;
-        }
-
-        // If the navigation bar can't change sides, then it will jump when we change orientations
-        // and we don't rotate seamlessly - unless that is allowed, eg. with gesture navigation
-        // where the navbar is low-profile enough that this isn't very noticeable.
-        if (!mAllowSeamlessRotationDespiteNavBarMoving && !mDisplayPolicy.navigationBarCanMove()) {
+        if (!canRotateSeamlessly(oldRotation, newRotation)) {
             return false;
         }
 
@@ -772,6 +770,20 @@ public class DisplayRotation {
         }
 
         return true;
+    }
+
+    boolean canRotateSeamlessly(int oldRotation, int newRotation) {
+        // For the upside down rotation we don't rotate seamlessly as the navigation bar moves
+        // position. Note most apps (using orientation:sensor or user as opposed to fullSensor)
+        // will not enter the reverse portrait orientation, so actually the orientation won't change
+        // at all.
+        if (oldRotation == mUpsideDownRotation || newRotation == mUpsideDownRotation) {
+            return false;
+        }
+        // If the navigation bar can't change sides, then it will jump when we change orientations
+        // and we don't rotate seamlessly - unless that is allowed, eg. with gesture navigation
+        // where the navbar is low-profile enough that this isn't very noticeable.
+        return mAllowSeamlessRotationDespiteNavBarMoving || mDisplayPolicy.navigationBarCanMove();
     }
 
     void markForSeamlessRotation(WindowState w, boolean seamlesslyRotated) {
@@ -1162,6 +1174,21 @@ public class DisplayRotation {
         final int oldRotation = mRotation;
         final int rotation = rotationForOrientation(mLastOrientation, oldRotation);
         return oldRotation != rotation;
+    }
+
+
+    /**
+     * Resets whether the screen can be rotated via the accelerometer in all 4 rotations as the
+     * default behavior.
+     *
+     * To be called if there is potential that the value changed. For example if the active display
+     * changed.
+     *
+     * At the moment it is called from
+     * {@link DisplayWindowSettings#applyRotationSettingsToDisplayLocked}.
+     */
+    void resetAllowAllRotations() {
+        mAllowAllRotations = ALLOW_ALL_ROTATIONS_UNDEFINED;
     }
 
     /**

@@ -4461,7 +4461,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * pixel" units.  This size is adjusted based on the current density and
      * user font size preference.
      *
-     * <p>Note: if this TextView has the auto-size feature enabled than this function is no-op.
+     * <p>Note: if this TextView has the auto-size feature enabled, then this function is no-op.
      *
      * @param size The scaled pixel size.
      *
@@ -4476,7 +4476,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Set the default text size to a given unit and value. See {@link
      * TypedValue} for the possible dimension units.
      *
-     * <p>Note: if this TextView has the auto-size feature enabled than this function is no-op.
+     * <p>Note: if this TextView has the auto-size feature enabled, then this function is no-op.
      *
      * @param unit The desired dimension unit.
      * @param size The desired size in the given units.
@@ -10821,8 +10821,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         && mSavedMarqueeModeLayout.getLineWidth(0) > width));
     }
 
+    /**
+     * @hide
+     */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
-    private void startMarquee() {
+    protected void startMarquee() {
         // Do not ellipsize EditText
         if (getKeyListener() != null) return;
 
@@ -10848,7 +10851,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
-    private void stopMarquee() {
+    /**
+     * @hide
+     */
+    protected void stopMarquee() {
         if (mMarquee != null && !mMarquee.isStopped()) {
             mMarquee.stop();
         }
@@ -12280,6 +12286,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     EXTRA_DATA_RENDERING_INFO_KEY,
                     EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY
             ));
+            info.setTextSelectable(isTextSelectable());
         } else {
             info.setAvailableExtraData(Arrays.asList(
                     EXTRA_DATA_RENDERING_INFO_KEY

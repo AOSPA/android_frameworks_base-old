@@ -63,8 +63,8 @@ import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.usage.AppStandbyInfo;
 import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManager.ForcedReasons;
 import android.app.usage.UsageStatsManager.StandbyBuckets;
-import android.app.usage.UsageStatsManager.SystemForcedReasons;
 import android.app.usage.UsageStatsManagerInternal;
 import android.appwidget.AppWidgetManager;
 import android.content.BroadcastReceiver;
@@ -183,7 +183,7 @@ public class AppStandbyController
             COMPRESS_TIME ? 1 * ONE_MINUTE : 12 * ONE_HOUR,
             COMPRESS_TIME ? 4 * ONE_MINUTE : 24 * ONE_HOUR,
             COMPRESS_TIME ? 16 * ONE_MINUTE : 48 * ONE_HOUR,
-            COMPRESS_TIME ? 32 * ONE_MINUTE : 3 * ONE_DAY
+            COMPRESS_TIME ? 32 * ONE_MINUTE : 8 * ONE_DAY
     };
 
     /** The minimum allowed values for each index in {@link #DEFAULT_ELAPSED_TIME_THRESHOLDS}. */
@@ -347,6 +347,22 @@ public class AppStandbyController
      */
     boolean mLinkCrossProfileApps =
             ConstantsObserver.DEFAULT_CROSS_PROFILE_APPS_SHARE_STANDBY_BUCKETS;
+
+    /**
+     * Duration (in millis) for the window where events occurring will be considered as
+     * broadcast response, starting from the point when an app receives a broadcast.
+     */
+    volatile long mBroadcastResponseWindowDurationMillis =
+            ConstantsObserver.DEFAULT_BROADCAST_RESPONSE_WINDOW_DURATION_MS;
+
+    /**
+     * Process state threshold that is used for deciding whether or not an app is in the background
+     * in the context of recording broadcast response stats. Apps whose process state is higher
+     * than this threshold state will be considered to be in background.
+     */
+    volatile int mBroadcastResponseFgThresholdState =
+            ConstantsObserver.DEFAULT_BROADCAST_RESPONSE_FG_THRESHOLD_STATE;
+
     /**
      * Whether we should allow apps into the
      * {@link android.app.usage.UsageStatsManager#STANDBY_BUCKET_RESTRICTED} bucket or not.
@@ -1406,13 +1422,13 @@ public class AppStandbyController
 
     @Override
     public void restrictApp(@NonNull String packageName, int userId,
-            @SystemForcedReasons int restrictReason) {
+            @ForcedReasons int restrictReason) {
         restrictApp(packageName, userId, REASON_MAIN_FORCED_BY_SYSTEM, restrictReason);
     }
 
     @Override
     public void restrictApp(@NonNull String packageName, int userId, int mainReason,
-            @SystemForcedReasons int restrictReason) {
+            @ForcedReasons int restrictReason) {
         if (mainReason != REASON_MAIN_FORCED_BY_SYSTEM
                 && mainReason != REASON_MAIN_FORCED_BY_USER) {
             Slog.e(TAG, "Tried to restrict app " + packageName + " for an unsupported reason");
@@ -1774,6 +1790,15 @@ public class AppStandbyController
         }
     }
 
+    @Override
+    public long getBroadcastResponseWindowDurationMs() {
+        return mBroadcastResponseWindowDurationMillis;
+    }
+
+    @Override
+    public int getBroadcastResponseFgThresholdState() {
+        return mBroadcastResponseFgThresholdState;
+    }
 
     @Override
     public void flushToDisk() {
@@ -1799,27 +1824,36 @@ public class AppStandbyController
      * bucket if it was forced into the bucket by the system because it was buggy.
      */
     @VisibleForTesting
-    void maybeUnrestrictBuggyApp(String packageName, int userId) {
+    void maybeUnrestrictBuggyApp(@NonNull String packageName, int userId) {
+        maybeUnrestrictApp(packageName, userId,
+                REASON_MAIN_FORCED_BY_SYSTEM, REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY,
+                REASON_MAIN_DEFAULT, REASON_SUB_DEFAULT_APP_UPDATE);
+    }
+
+    @Override
+    public void maybeUnrestrictApp(@NonNull String packageName, int userId,
+            int prevMainReasonRestrict, int prevSubReasonRestrict,
+            int mainReasonUnrestrict, int subReasonUnrestrict) {
         synchronized (mAppIdleLock) {
             final long elapsedRealtime = mInjector.elapsedRealtime();
             final AppIdleHistory.AppUsageHistory app =
                     mAppIdleHistory.getAppUsageHistory(packageName, userId, elapsedRealtime);
             if (app.currentBucket != STANDBY_BUCKET_RESTRICTED
-                    || (app.bucketingReason & REASON_MAIN_MASK) != REASON_MAIN_FORCED_BY_SYSTEM) {
+                    || (app.bucketingReason & REASON_MAIN_MASK) != prevMainReasonRestrict) {
                 return;
             }
 
             final int newBucket;
             final int newReason;
-            if ((app.bucketingReason & REASON_SUB_MASK) == REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY) {
-                // If bugginess was the only reason the app should be restricted, then lift it out.
+            if ((app.bucketingReason & REASON_SUB_MASK) == prevSubReasonRestrict) {
+                // If it was the only reason the app should be restricted, then lift it out.
                 newBucket = STANDBY_BUCKET_RARE;
-                newReason = REASON_MAIN_DEFAULT | REASON_SUB_DEFAULT_APP_UPDATE;
+                newReason = mainReasonUnrestrict | subReasonUnrestrict;
             } else {
-                // There's another reason the app was restricted. Remove the buggy bit and call
+                // There's another reason the app was restricted. Remove the subreason bit and call
                 // it a day.
                 newBucket = STANDBY_BUCKET_RESTRICTED;
-                newReason = app.bucketingReason & ~REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY;
+                newReason = app.bucketingReason & ~prevSubReasonRestrict;
             }
             mAppIdleHistory.setAppStandbyBucket(
                     packageName, userId, elapsedRealtime, newBucket, newReason);
@@ -2031,6 +2065,14 @@ public class AppStandbyController
 
         pw.print("  mSystemUpdateUsageTimeoutMillis=");
         TimeUtils.formatDuration(mSystemUpdateUsageTimeoutMillis, pw);
+        pw.println();
+
+        pw.print("  mBroadcastResponseWindowDurationMillis=");
+        TimeUtils.formatDuration(mBroadcastResponseWindowDurationMillis, pw);
+        pw.println();
+
+        pw.print("  mBroadcastResponseFgThresholdState=");
+        pw.print(ActivityManager.procStateToString(mBroadcastResponseFgThresholdState));
         pw.println();
 
         pw.println();
@@ -2464,6 +2506,10 @@ public class AppStandbyController
                 KEY_PREFIX_ELAPSED_TIME_THRESHOLD + "rare",
                 KEY_PREFIX_ELAPSED_TIME_THRESHOLD + "restricted"
         };
+        private static final String KEY_BROADCAST_RESPONSE_WINDOW_DURATION_MS =
+                "broadcast_response_window_timeout_ms";
+        private static final String KEY_BROADCAST_RESPONSE_FG_THRESHOLD_STATE =
+                "broadcast_response_fg_threshold_state";
         public static final long DEFAULT_CHECK_IDLE_INTERVAL_MS =
                 COMPRESS_TIME ? ONE_MINUTE : 4 * ONE_HOUR;
         public static final long DEFAULT_STRONG_USAGE_TIMEOUT =
@@ -2493,6 +2539,10 @@ public class AppStandbyController
         public static final long DEFAULT_AUTO_RESTRICTED_BUCKET_DELAY_MS =
                 COMPRESS_TIME ? ONE_MINUTE : ONE_DAY;
         public static final boolean DEFAULT_CROSS_PROFILE_APPS_SHARE_STANDBY_BUCKETS = true;
+        public static final long DEFAULT_BROADCAST_RESPONSE_WINDOW_DURATION_MS =
+                2 * ONE_MINUTE;
+        public static final int DEFAULT_BROADCAST_RESPONSE_FG_THRESHOLD_STATE =
+                ActivityManager.PROCESS_STATE_TOP;
 
         ConstantsObserver(Handler handler) {
             super(handler);
@@ -2609,6 +2659,16 @@ public class AppStandbyController
                             mUnexemptedSyncScheduledTimeoutMillis = properties.getLong(
                                     KEY_UNEXEMPTED_SYNC_SCHEDULED_HOLD_DURATION,
                                     DEFAULT_UNEXEMPTED_SYNC_SCHEDULED_TIMEOUT);
+                            break;
+                        case KEY_BROADCAST_RESPONSE_WINDOW_DURATION_MS:
+                            mBroadcastResponseWindowDurationMillis = properties.getLong(
+                                    KEY_BROADCAST_RESPONSE_WINDOW_DURATION_MS,
+                                    DEFAULT_BROADCAST_RESPONSE_WINDOW_DURATION_MS);
+                            break;
+                        case KEY_BROADCAST_RESPONSE_FG_THRESHOLD_STATE:
+                            mBroadcastResponseFgThresholdState = properties.getInt(
+                                    KEY_BROADCAST_RESPONSE_FG_THRESHOLD_STATE,
+                                    DEFAULT_BROADCAST_RESPONSE_FG_THRESHOLD_STATE);
                             break;
                         default:
                             if (!timeThresholdsUpdated

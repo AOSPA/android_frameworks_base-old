@@ -25,12 +25,15 @@ import android.os.RemoteException;
 import android.util.Slog;
 
 import com.android.internal.util.Preconditions;
+import com.android.server.biometrics.log.BiometricContext;
+import com.android.server.biometrics.log.BiometricLogger;
 import com.android.server.biometrics.sensors.ClientMonitorCallback;
 import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
 import com.android.server.biometrics.sensors.GenerateChallengeClient;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Face-specific generateChallenge client supporting the
@@ -48,10 +51,12 @@ public class FaceGenerateChallengeClient extends GenerateChallengeClient<IBiomet
     private Long mChallengeResult;
 
     FaceGenerateChallengeClient(@NonNull Context context,
-            @NonNull LazyDaemon<IBiometricsFace> lazyDaemon, @NonNull IBinder token,
+            @NonNull Supplier<IBiometricsFace> lazyDaemon, @NonNull IBinder token,
             @NonNull ClientMonitorCallbackConverter listener, int userId, @NonNull String owner,
-            int sensorId, long now) {
-        super(context, lazyDaemon, token, listener, userId, owner, sensorId);
+            int sensorId, @NonNull BiometricLogger logger,
+            @NonNull BiometricContext biometricContext, long now) {
+        super(context, lazyDaemon, token, listener, userId, owner, sensorId, logger,
+                biometricContext);
         mCreatedAt = now;
         mWaiting = new ArrayList<>();
     }

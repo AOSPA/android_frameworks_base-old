@@ -291,6 +291,8 @@ public class StorageManager {
     public static final int FLAG_INCLUDE_INVISIBLE = 1 << 10;
     /** {@hide} */
     public static final int FLAG_INCLUDE_RECENT = 1 << 11;
+    /** {@hide} */
+    public static final int FLAG_INCLUDE_SHARED_PROFILE = 1 << 12;
 
     /** {@hide} */
     public static final int FSTRIM_FLAG_DEEP = IVold.FSTRIM_FLAG_DEEP_TRIM;
@@ -1328,6 +1330,23 @@ public class StorageManager {
     }
 
     /**
+     * Return the list of shared/external storage volumes currently available to
+     * the calling user and the user it shares media with
+     * CDD link : https://source.android.com/compatibility/12/android-12-cdd#95_multi-user_support
+     * <p>
+     * This is similar to {@link StorageManager#getStorageVolumes()} except that the result also
+     * includes the volumes belonging to any user it shares media with
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_EXTERNAL_STORAGE)
+    public @NonNull List<StorageVolume> getStorageVolumesIncludingSharedProfiles() {
+        final ArrayList<StorageVolume> res = new ArrayList<>();
+        Collections.addAll(res,
+                getVolumeList(mContext.getUserId(),
+                        FLAG_REAL_STATE | FLAG_INCLUDE_INVISIBLE | FLAG_INCLUDE_SHARED_PROFILE));
+        return res;
+    }
+
+    /**
      * Return the list of shared/external storage volumes both currently and
      * recently available to the calling user.
      * <p>
@@ -1605,9 +1624,9 @@ public class StorageManager {
     }
 
     /** {@hide} */
-    public void unlockUserKey(int userId, int serialNumber, byte[] token, byte[] secret) {
+    public void unlockUserKey(int userId, int serialNumber, byte[] secret) {
         try {
-            mStorageManager.unlockUserKey(userId, serialNumber, token, secret);
+            mStorageManager.unlockUserKey(userId, serialNumber, secret);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

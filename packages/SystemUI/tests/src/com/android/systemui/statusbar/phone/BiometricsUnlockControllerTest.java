@@ -38,6 +38,7 @@ import android.testing.TestableLooper.RunWithLooper;
 import android.testing.TestableResources;
 
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.util.LatencyTracker;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.AuthController;
@@ -46,6 +47,7 @@ import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.log.SessionTracker;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
@@ -107,6 +109,10 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
     private StatusBarStateController mStatusBarStateController;
     @Mock
     private KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
+    @Mock
+    private SessionTracker mSessionTracker;
+    @Mock
+    private LatencyTracker mLatencyTracker;
     private BiometricUnlockController mBiometricUnlockController;
 
     @Before
@@ -129,7 +135,8 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
                 mUpdateMonitor, res.getResources(), mKeyguardBypassController, mDozeParameters,
                 mMetricsLogger, mDumpManager, mPowerManager,
                 mNotificationMediaManager, mWakefulnessLifecycle, mScreenLifecycle,
-                mAuthController, mStatusBarStateController, mKeyguardUnlockAnimationController);
+                mAuthController, mStatusBarStateController, mKeyguardUnlockAnimationController,
+                mSessionTracker, mLatencyTracker);
         mBiometricUnlockController.setKeyguardViewController(mStatusBarKeyguardViewManager);
         mBiometricUnlockController.setBiometricModeListener(mBiometricModeListener);
     }

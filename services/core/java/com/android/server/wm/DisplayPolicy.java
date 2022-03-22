@@ -144,6 +144,7 @@ import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.policy.ForceShowNavigationBarSettingsObserver;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
 import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.policy.SystemBarUtils;
@@ -211,6 +212,7 @@ public class DisplayPolicy {
     private final ScreenshotHelper mScreenshotHelper;
 
     private static boolean SCROLL_BOOST_SS_ENABLE = false;
+    private static boolean DRAG_PLH_ENABLE = false;
     private static boolean isLowRAM = false;
 
     /*
@@ -398,6 +400,9 @@ public class DisplayPolicy {
 
     private final WindowManagerInternal.AppTransitionListener mAppTransitionListener;
 
+    private final ForceShowNavigationBarSettingsObserver mForceShowNavigationBarSettingsObserver;
+    private boolean mForceShowNavigationBarEnabled;
+
     private class PolicyHandler extends Handler {
 
         PolicyHandler(Looper looper) {
@@ -482,8 +487,10 @@ public class DisplayPolicy {
             mScreenOnFully = true;
         }
 
-        if (mPerf != null)
-                SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
+        if (mPerf != null) {
+            SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
+            DRAG_PLH_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.perf.dplh", "false"));
+        }
         isLowRAM = SystemProperties.getBoolean("ro.config.low_ram", false);
 
         final Looper looper = UiThread.getHandler().getLooper();
@@ -647,9 +654,15 @@ public class DisplayPolicy {
                         }
                         isGame = isTopAppGame(currentPackage, mPerfBoostDrag);
                         if (!isGame && started) {
+                            if (DRAG_PLH_ENABLE) {
+                                mPerfBoostDrag.perfEvent(BoostFramework.VENDOR_HINT_DRAG_START, currentPackage);
+                            }
                             mPerfBoostDrag.perfHint(BoostFramework.VENDOR_HINT_DRAG_BOOST,
                                             currentPackage, -1, 1);
                         } else {
+                            if (DRAG_PLH_ENABLE) {
+                                mPerfBoostDrag.perfEvent(BoostFramework.VENDOR_HINT_DRAG_END, currentPackage);
+                            }
                             mPerfBoostDrag.perfLockRelease();
                         }
                     }
@@ -798,6 +811,18 @@ public class DisplayPolicy {
             }
         });
         mHandler.post(mGestureNavigationSettingsObserver::register);
+
+        mForceShowNavigationBarSettingsObserver = new ForceShowNavigationBarSettingsObserver(
+                mHandler, mContext);
+        mForceShowNavigationBarSettingsObserver.setOnChangeRunnable(() -> {
+            synchronized (mLock) {
+                mForceShowNavigationBarEnabled =
+                        mForceShowNavigationBarSettingsObserver.isEnabled();
+                updateSystemBarAttributes();
+            }
+        });
+        mForceShowNavigationBarEnabled = mForceShowNavigationBarSettingsObserver.isEnabled();
+        mHandler.post(mForceShowNavigationBarSettingsObserver::register);
     }
 
     /**
@@ -935,6 +960,10 @@ public class DisplayPolicy {
 
     public boolean isWindowManagerDrawComplete() {
         return mWindowManagerDrawComplete;
+    }
+
+    public boolean isForceShowNavigationBarEnabled() {
+        return mForceShowNavigationBarEnabled;
     }
 
     public ScreenOnListener getScreenOnListener() {
@@ -2901,6 +2930,8 @@ public class DisplayPolicy {
         }
         pw.print(prefix); pw.print("mTopIsFullscreen="); pw.println(mTopIsFullscreen);
         pw.print(prefix); pw.print("mForceStatusBar="); pw.print(mForceStatusBar);
+        pw.print(prefix); pw.print("mForceShowNavigationBarEnabled=");
+        pw.print(mForceShowNavigationBarEnabled);
         pw.print(" mAllowLockscreenWhenOn="); pw.println(mAllowLockscreenWhenOn);
         pw.print(prefix); pw.print("mRemoteInsetsControllerControlsSystemBars=");
         pw.println(mDisplayContent.getInsetsPolicy().getRemoteInsetsControllerControlsSystemBars());
@@ -2978,6 +3009,7 @@ public class DisplayPolicy {
     void release() {
         mDisplayContent.mTransitionController.unregisterLegacyListener(mAppTransitionListener);
         mHandler.post(mGestureNavigationSettingsObserver::unregister);
+        mHandler.post(mForceShowNavigationBarSettingsObserver::unregister);
         mImmersiveModeConfirmation.release();
     }
 

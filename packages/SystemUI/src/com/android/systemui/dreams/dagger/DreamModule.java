@@ -16,13 +16,20 @@
 
 package com.android.systemui.dreams.dagger;
 
+import com.android.systemui.dreams.complication.dagger.RegisteredComplicationsModule;
+import com.android.systemui.dreams.touch.dagger.DreamTouchModule;
+
 import dagger.Module;
 
 /**
  * Dagger Module providing Communal-related functionality.
  */
-@Module(subcomponents = {
-        DreamOverlayComponent.class,
-})
+@Module(includes = {
+            DreamTouchModule.class,
+            RegisteredComplicationsModule.class,
+        },
+        subcomponents = {
+            DreamOverlayComponent.class,
+        })
 public interface DreamModule {
 }

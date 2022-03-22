@@ -1039,6 +1039,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                         "  Rejecting as detached: %s", wc);
                 continue;
             }
+            // The level of transition target should be at least window token.
+            if (wc.asWindowState() != null) continue;
 
             final ChangeInfo changeInfo = changes.get(wc);
 
@@ -1080,6 +1082,10 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             for (WindowContainer<?> p = wc.getParent(); p != null; p = p.getParent()) {
                 final ChangeInfo parentChange = changes.get(p);
                 if (parentChange == null || !parentChange.hasChanged(p)) break;
+                if (p.mRemoteToken == null) {
+                    // Intermediate parents must be those that has window to be managed by Shell.
+                    continue;
+                }
                 if (parentChange.mParent != null && !skipIntermediateReports) {
                     changes.get(wc).mParent = p;
                     // The chain above the parent was processed.
@@ -1322,7 +1328,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     }
 
     boolean getLegacyIsReady() {
-        return mState == STATE_STARTED && mSyncId >= 0 && mSyncEngine.isReady(mSyncId);
+        return (mState == STATE_STARTED || mState == STATE_COLLECTING) && mSyncId >= 0;
     }
 
     static Transition fromBinder(IBinder binder) {

@@ -17,17 +17,21 @@
 package com.android.server.companion.virtual;
 
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
+import android.hardware.display.DisplayManagerInternal;
+import android.hardware.input.IInputManager;
+import android.hardware.input.InputManager;
 import android.hardware.input.InputManagerInternal;
 import android.os.Binder;
 import android.os.IBinder;
-import android.os.IInputConstants;
 import android.platform.test.annotations.Presubmit;
 import android.view.Display;
+import android.view.DisplayInfo;
 
 import androidx.test.runner.AndroidJUnit4;
 
@@ -46,33 +50,44 @@ public class InputControllerTest {
     @Mock
     private InputManagerInternal mInputManagerInternalMock;
     @Mock
+    private DisplayManagerInternal mDisplayManagerInternalMock;
+    @Mock
     private InputController.NativeWrapper mNativeWrapperMock;
+    @Mock
+    private IInputManager mIInputManagerMock;
 
     private InputController mInputController;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
 
         doNothing().when(mInputManagerInternalMock).setVirtualMousePointerDisplayId(anyInt());
         LocalServices.removeServiceForTest(InputManagerInternal.class);
         LocalServices.addService(InputManagerInternal.class, mInputManagerInternalMock);
 
+        final DisplayInfo displayInfo = new DisplayInfo();
+        displayInfo.uniqueId = "uniqueId";
+        doReturn(displayInfo).when(mDisplayManagerInternalMock).getDisplayInfo(anyInt());
+        LocalServices.removeServiceForTest(DisplayManagerInternal.class);
+        LocalServices.addService(DisplayManagerInternal.class, mDisplayManagerInternalMock);
+
+        InputManager.resetInstance(mIInputManagerMock);
+        doNothing().when(mIInputManagerMock).addUniqueIdAssociation(anyString(), anyString());
+        doNothing().when(mIInputManagerMock).removeUniqueIdAssociation(anyString());
         mInputController = new InputController(new Object(), mNativeWrapperMock);
     }
 
     @Test
-    public void unregisterInputDevice_allMiceUnregistered_unsetValues() {
+    public void unregisterInputDevice_allMiceUnregistered_clearPointerDisplayId() {
         final IBinder deviceToken = new Binder();
         mInputController.createMouse("name", /*vendorId= */ 1, /*productId= */ 1, deviceToken,
                 /* displayId= */ 1);
         verify(mInputManagerInternalMock).setVirtualMousePointerDisplayId(eq(1));
-        verify(mInputManagerInternalMock).setPointerAcceleration(eq(1f));
+        doReturn(1).when(mInputManagerInternalMock).getVirtualMousePointerDisplayId();
         mInputController.unregisterInputDevice(deviceToken);
         verify(mInputManagerInternalMock).setVirtualMousePointerDisplayId(
                 eq(Display.INVALID_DISPLAY));
-        verify(mInputManagerInternalMock).setPointerAcceleration(
-                eq((float) IInputConstants.DEFAULT_POINTER_ACCELERATION));
     }
 
     @Test
@@ -81,14 +96,11 @@ public class InputControllerTest {
         mInputController.createMouse("name", /*vendorId= */ 1, /*productId= */ 1, deviceToken,
                 /* displayId= */ 1);
         verify(mInputManagerInternalMock).setVirtualMousePointerDisplayId(eq(1));
-        verify(mInputManagerInternalMock).setPointerAcceleration(eq(1f));
         final IBinder deviceToken2 = new Binder();
         mInputController.createMouse("name", /*vendorId= */ 1, /*productId= */ 1, deviceToken2,
                 /* displayId= */ 2);
         verify(mInputManagerInternalMock).setVirtualMousePointerDisplayId(eq(2));
         mInputController.unregisterInputDevice(deviceToken);
         verify(mInputManagerInternalMock).setVirtualMousePointerDisplayId(eq(1));
-        verify(mInputManagerInternalMock, times(0)).setPointerAcceleration(
-                eq((float) IInputConstants.DEFAULT_POINTER_ACCELERATION));
     }
 }

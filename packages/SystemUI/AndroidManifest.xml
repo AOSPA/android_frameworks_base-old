@@ -39,6 +39,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-permission android:name="android.permission.INJECT_EVENTS" />
+    <uses-permission android:name="android.permission.MODIFY_TOUCH_MODE_STATE" />
     <uses-permission android:name="android.permission.DUMP" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.READ_DEVICE_CONFIG" />
@@ -213,6 +214,9 @@
     <!-- DevicePolicyManager get user restrictions -->
     <uses-permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS" />
 
+    <!-- DevicePolicyManager get admin policy -->
+    <uses-permission android:name="android.permission.QUERY_ADMIN_POLICY" />
+
     <!-- TV picture-in-picture -->
     <uses-permission android:name="android.permission.RECEIVE_MEDIA_RESOURCE_USAGE" />
 
@@ -304,6 +308,11 @@
 
     <!-- For clipboard overlay -->
     <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.SET_CLIP_SOURCE" />
+
+    <!-- To change system language (HDMI CEC) -->
+    <uses-permission android:name="android.permission.CHANGE_CONFIGURATION" />
+    <uses-permission android:name="android.permission.SUPPRESS_CLIPBOARD_ACCESS_NOTIFICATION" />
 
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
@@ -486,6 +495,16 @@
             android:theme="@style/Theme.SystemUI.Dialog.Alert"
             android:finishOnCloseSystemDialogs="true"
             android:excludeFromRecents="true">
+        </activity>
+
+        <!-- started from HdmiCecLocalDevicePlayback -->
+        <activity android:name=".hdmi.HdmiCecSetMenuLanguageActivity"
+                  android:exported="true"
+                  android:launchMode="singleTop"
+                  android:permission="android.permission.CHANGE_CONFIGURATION"
+                  android:theme="@style/BottomSheet"
+                  android:finishOnCloseSystemDialogs="true"
+                  android:excludeFromRecents="true">
         </activity>
 
         <!-- started from SensoryPrivacyService -->
@@ -858,11 +877,11 @@
             android:singleUser="true"
             android:permission="android.permission.BIND_DREAM_SERVICE" />
 
-        <!-- Service for external clients to do media transfer -->
-        <!-- TODO(b/203800643): Export and guard with a permission. -->
+        <!-- Service for external clients to notify us of nearby media devices -->
+        <!-- TODO(b/216313420): Export and guard with a permission. -->
         <service
-            android:name=".media.taptotransfer.sender.MediaTttSenderService"
-           />
+            android:name=".media.nearby.NearbyMediaDevicesService"
+            />
 
         <receiver
             android:name=".tuner.TunerService$ClearReceiver"

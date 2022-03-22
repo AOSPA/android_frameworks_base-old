@@ -2210,38 +2210,12 @@ class Task extends TaskFragment {
             final Rect taskBounds = getBounds();
             width = taskBounds.width();
             height = taskBounds.height();
-
-            final int outset = getTaskOutset();
-            width += 2 * outset;
-            height += 2 * outset;
         }
         if (width == mLastSurfaceSize.x && height == mLastSurfaceSize.y) {
             return;
         }
         transaction.setWindowCrop(mSurfaceControl, width, height);
         mLastSurfaceSize.set(width, height);
-    }
-
-    /**
-     * Calculate an amount by which to expand the task bounds in each direction.
-     * Used to make room for shadows in the pinned windowing mode.
-     */
-    int getTaskOutset() {
-        // If we are drawing shadows on the task then don't outset the root task.
-        if (mWmService.mRenderShadowsInCompositor) {
-            return 0;
-        }
-        DisplayContent displayContent = getDisplayContent();
-        if (inPinnedWindowingMode() && displayContent != null) {
-            final DisplayMetrics displayMetrics = displayContent.getDisplayMetrics();
-
-            // We multiply by two to match the client logic for converting view elevation
-            // to insets, as in {@link WindowManager.LayoutParams#setSurfaceInsets}
-            return (int) Math.ceil(
-                    mWmService.dipToPixel(PINNED_WINDOWING_MODE_ELEVATION_IN_DIP, displayMetrics)
-                            * 2);
-        }
-        return 0;
     }
 
     @VisibleForTesting
@@ -3447,6 +3421,9 @@ class Task extends TaskFragment {
         // Whether the direct top activity is in size compat mode on foreground.
         info.topActivityInSizeCompat = isTopActivityResumed
                 && mReuseActivitiesReport.top.inSizeCompatMode();
+        // Whether the direct top activity is eligible for letterbox education.
+        info.topActivityEligibleForLetterboxEducation = isTopActivityResumed
+                && mReuseActivitiesReport.top.isEligibleForLetterboxEducation();
         // Whether the direct top activity requested showing camera compat control.
         info.cameraCompatControlState = isTopActivityResumed
                 ? mReuseActivitiesReport.top.getCameraCompatControlState()
@@ -4348,7 +4325,7 @@ class Task extends TaskFragment {
      */
     private void updateShadowsRadius(boolean taskIsFocused,
             SurfaceControl.Transaction pendingTransaction) {
-        if (!mWmService.mRenderShadowsInCompositor || !isRootTask()) return;
+        if (!isRootTask()) return;
 
         final float newShadowRadius = getShadowRadius(taskIsFocused);
         if (mShadowRadius != newShadowRadius) {
@@ -4513,20 +4490,9 @@ class Task extends TaskFragment {
         // right mode.
         if (!creating) {
             if (!taskDisplayArea.isValidWindowingMode(windowingMode, null /* ActivityRecord */,
-                    topTask, getActivityType())) {
+                    topTask)) {
                 windowingMode = WINDOWING_MODE_UNDEFINED;
             }
-        }
-
-        final boolean alreadyInSplitScreenMode = taskDisplayArea.isSplitScreenModeActivated();
-
-        if (creating && alreadyInSplitScreenMode && windowingMode == WINDOWING_MODE_FULLSCREEN
-                && isActivityTypeStandardOrUndefined()) {
-            // If the root task is being created explicitly in fullscreen mode, dismiss split-screen
-            // and display a warning toast about it.
-            mAtmService.getTaskChangeNotificationController()
-                    .notifyActivityDismissingDockedRootTask();
-            taskDisplayArea.onSplitScreenModeDismissed(this);
         }
 
         if (currentMode == windowingMode) {
@@ -6039,14 +6005,6 @@ class Task extends TaskFragment {
         scheduleAnimation();
     }
 
-    @Override
-    void getRelativePosition(Point outPos) {
-        super.getRelativePosition(outPos);
-        final int outset = getTaskOutset();
-        outPos.x -= outset;
-        outPos.y -= outset;
-    }
-
     private Point getRelativePosition() {
         Point position = new Point();
         getRelativePosition(position);
@@ -6524,9 +6482,8 @@ class Task extends TaskFragment {
 
             if (!TaskDisplayArea.isWindowingModeSupported(mWindowingMode,
                     mAtmService.mSupportsMultiWindow,
-                    mAtmService.mSupportsSplitScreenMultiWindow,
                     mAtmService.mSupportsFreeformWindowManagement,
-                    mAtmService.mSupportsPictureInPicture, mActivityType)) {
+                    mAtmService.mSupportsPictureInPicture)) {
                 throw new IllegalArgumentException("Can't create root task for unsupported "
                         + "windowingMode=" + mWindowingMode);
             }
@@ -6621,6 +6578,20 @@ class Task extends TaskFragment {
                     mRealActivitySuspended, mUserSetupComplete, mMinWidth, mMinHeight,
                     mActivityInfo, mVoiceSession, mVoiceInteractor, mCreatedByOrganizer,
                     mLaunchCookie, mDeferTaskAppear, mRemoveWithTaskOrganizer);
+        }
+    }
+
+    @Override
+    void updateOverlayInsetsState(WindowState originalChange) {
+        super.updateOverlayInsetsState(originalChange);
+        if (originalChange != getTopVisibleAppMainWindow()) {
+            return;
+        }
+        if (mOverlayHost != null) {
+            final InsetsState s = getDisplayContent().getInsetsPolicy()
+                .getInsetsForWindow(originalChange, true);
+            getBounds(mTmpRect);
+            mOverlayHost.dispatchInsetsChanged(s, mTmpRect);
         }
     }
 }

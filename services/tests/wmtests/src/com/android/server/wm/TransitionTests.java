@@ -21,6 +21,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_CLOSE;
@@ -49,7 +50,6 @@ import android.platform.test.annotations.Presubmit;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.view.SurfaceControl;
-import android.view.TransactionCommittedListener;
 import android.window.IDisplayAreaOrganizer;
 import android.window.ITaskOrganizer;
 import android.window.ITransitionPlayer;
@@ -505,7 +505,12 @@ public class TransitionTests extends WindowTestsBase {
         final WindowState statusBar = createWindow(null, TYPE_STATUS_BAR, "statusBar");
         final WindowState navBar = createWindow(null, TYPE_NAVIGATION_BAR, "navBar");
         final WindowState ime = createWindow(null, TYPE_INPUT_METHOD, "ime");
-        final WindowState[] windows = { statusBar, navBar, ime };
+        final WindowToken decorToken = new WindowToken.Builder(mWm, mock(IBinder.class),
+                TYPE_NAVIGATION_BAR_PANEL).setDisplayContent(mDisplayContent)
+                .setRoundedCornerOverlay(true).build();
+        final WindowState screenDecor =
+                createWindow(null, decorToken.windowType, decorToken, "screenDecor");
+        final WindowState[] windows = { statusBar, navBar, ime, screenDecor };
         makeWindowVisible(windows);
         mDisplayContent.getDisplayPolicy().addWindowLw(statusBar, statusBar.mAttrs);
         mDisplayContent.getDisplayPolicy().addWindowLw(navBar, navBar.mAttrs);
@@ -524,26 +529,27 @@ public class TransitionTests extends WindowTestsBase {
         player.startTransition();
 
         assertFalse(statusBar.mToken.inTransition());
+        assertFalse(decorToken.inTransition());
         assertTrue(ime.mToken.inTransition());
         assertTrue(task.inTransition());
+        assertTrue(asyncRotationController.isTargetToken(decorToken));
 
+        screenDecor.setOrientationChanging(false);
         // Status bar finishes drawing before the start transaction. Its fade-in animation will be
         // executed until the transaction is committed, so it is still in target tokens.
         statusBar.setOrientationChanging(false);
         assertTrue(asyncRotationController.isTargetToken(statusBar.mToken));
 
         final SurfaceControl.Transaction startTransaction = mock(SurfaceControl.Transaction.class);
-        final ArgumentCaptor<TransactionCommittedListener> listenerCaptor =
-                ArgumentCaptor.forClass(TransactionCommittedListener.class);
-        player.onTransactionReady(startTransaction);
+        final SurfaceControl.TransactionCommittedListener transactionCommittedListener =
+                onRotationTransactionReady(player, startTransaction);
 
-        verify(startTransaction).addTransactionCommittedListener(any(), listenerCaptor.capture());
         // The transaction is committed, so fade-in animation for status bar is consumed.
-        listenerCaptor.getValue().onTransactionCommitted();
+        transactionCommittedListener.onTransactionCommitted();
         assertFalse(asyncRotationController.isTargetToken(statusBar.mToken));
 
-        // Status bar finishes drawing after the start transaction, so its fade-in animation can
-        // execute directly.
+        // Navigation bar finishes drawing after the start transaction, so its fade-in animation
+        // can execute directly.
         navBar.setOrientationChanging(false);
         assertFalse(asyncRotationController.isTargetToken(navBar.mToken));
         assertNull(mDisplayContent.getAsyncRotationController());
@@ -578,7 +584,8 @@ public class TransitionTests extends WindowTestsBase {
         final SurfaceControl.Transaction startTransaction = mock(SurfaceControl.Transaction.class);
         final SurfaceControl leash = statusBar.mToken.getAnimationLeash();
         doReturn(true).when(leash).isValid();
-        player.onTransactionReady(startTransaction);
+        final SurfaceControl.TransactionCommittedListener transactionCommittedListener =
+                onRotationTransactionReady(player, startTransaction);
         // The leash should be unrotated.
         verify(startTransaction).setMatrix(eq(leash), any(), any());
 
@@ -589,6 +596,8 @@ public class TransitionTests extends WindowTestsBase {
                 mock(SurfaceControl.Transaction.class);
         final boolean layoutNeeded = statusBar.finishDrawing(postDrawTransaction);
         assertFalse(layoutNeeded);
+
+        transactionCommittedListener.onTransactionCommitted();
         player.finish();
         // The controller should capture the draw transaction and merge it when preparing to run
         // fade-in animation.
@@ -739,6 +748,9 @@ public class TransitionTests extends WindowTestsBase {
             }
             from = from.getParent();
         }
+        if (end.asDisplayArea() != null) {
+            end.asDisplayArea().mOrganizer = organizer;
+        }
     }
 
     /** Fill the change map with all the parents of top. Change maps are usually fully populated */
@@ -747,5 +759,14 @@ public class TransitionTests extends WindowTestsBase {
         for (WindowContainer curr = top.getParent(); curr != null; curr = curr.getParent()) {
             changes.put(curr, new Transition.ChangeInfo(true /* vis */, false /* exChg */));
         }
+    }
+
+    private static SurfaceControl.TransactionCommittedListener onRotationTransactionReady(
+            TestTransitionPlayer player, SurfaceControl.Transaction startTransaction) {
+        final ArgumentCaptor<SurfaceControl.TransactionCommittedListener> listenerCaptor =
+                ArgumentCaptor.forClass(SurfaceControl.TransactionCommittedListener.class);
+        player.onTransactionReady(startTransaction);
+        verify(startTransaction).addTransactionCommittedListener(any(), listenerCaptor.capture());
+        return listenerCaptor.getValue();
     }
 }

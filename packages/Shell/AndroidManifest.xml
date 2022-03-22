@@ -192,6 +192,9 @@
     <uses-permission android:name="android.permission.REVOKE_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.WHITELIST_RESTRICTED_PERMISSIONS" />
+    <!-- Permission required for processes that don't own the focused window to switch
+         touch mode state -->
+    <uses-permission android:name="android.permission.MODIFY_TOUCH_MODE_STATE" />
     <!-- Permission required to test onPermissionsChangedListener -->
     <uses-permission android:name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS" />
     <uses-permission android:name="android.permission.SET_KEYBOARD_LAYOUT" />
@@ -204,7 +207,6 @@
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
     <uses-permission android:name="android.permission.CREATE_USERS" />
     <uses-permission android:name="android.permission.QUERY_USERS" />
-    <uses-permission android:name="android.permission.CREATE_VIRTUAL_DEVICE" />
     <uses-permission android:name="android.permission.MANAGE_CREDENTIAL_MANAGEMENT_APP" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS" />
     <uses-permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS" />
@@ -249,6 +251,7 @@
     <uses-permission android:name="android.permission.MANAGE_CONTENT_CAPTURE" />
     <uses-permission android:name="android.permission.MANAGE_CONTENT_SUGGESTIONS" />
     <uses-permission android:name="android.permission.MANAGE_APP_PREDICTIONS" />
+    <uses-permission android:name="android.permission.MANAGE_LOW_POWER_STANDBY" />
     <uses-permission android:name="android.permission.MANAGE_SEARCH_UI" />
     <uses-permission android:name="android.permission.MANAGE_SMARTSPACE" />
     <uses-permission android:name="android.permission.MANAGE_WALLPAPER_EFFECTS_GENERATION" />
@@ -309,6 +312,7 @@
     <uses-permission android:name="android.permission.COMPANION_APPROVE_WIFI_CONNECTIONS" />
     <uses-permission android:name="android.permission.MANAGE_COMPANION_DEVICES" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_PROFILE_COMPUTER" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_SELF_MANAGED" />
@@ -335,6 +339,9 @@
 
     <!-- Permission needed to run keyguard manager tests in CTS -->
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS" />
+
+    <!-- Permission needed to add/remove weak escrow token in CTS tests -->
+    <uses-permission android:name="android.permission.MANAGE_WEAK_ESCROW_TOKEN" />
 
     <!-- Permission needed to set/clear/verify lockscreen credentials in CTS tests -->
     <uses-permission android:name="android.permission.SET_AND_VERIFY_LOCKSCREEN_CREDENTIALS" />
@@ -526,6 +533,8 @@
     <!-- Permission needed for CTS test - WifiManagerTest -->
     <uses-permission android:name="android.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS" />
     <uses-permission android:name="android.permission.WIFI_UPDATE_COEX_UNSAFE_CHANNELS" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+    <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG" />
 
     <!-- Permission required for CTS tests to enable/disable rate limiting toasts. -->
     <uses-permission android:name="android.permission.MANAGE_TOAST_RATE_LIMITING" />
@@ -553,9 +562,14 @@
     <!-- Permissions required for CTS test - TrustTestCases -->
     <uses-permission android:name="android.permission.PROVIDE_TRUST_AGENT" />
     <uses-permission android:name="android.permission.ACCESS_KEYGUARD_SECURE_STORAGE" />
+    <uses-permission android:name="android.permission.TRUST_LISTENER" />
 
     <!-- Permission required for CTS test - CtsGameManagerTestCases -->
     <uses-permission android:name="android.permission.MANAGE_GAME_MODE" />
+
+    <!-- Permission required for CTS test - CtsGameServiceTestCases -->
+    <uses-permission android:name="android.permission.SET_GAME_SERVICE" />
+    <uses-permission android:name="android.permission.MANAGE_GAME_ACTIVITY" />
 
     <!-- Permission required for CTS test - ClipboardManagerTest -->
     <uses-permission android:name="android.permission.SET_CLIP_SOURCE" />
@@ -624,6 +638,11 @@
     <uses-permission android:name="android.permission.SEND_SAFETY_CENTER_UPDATE" />
     <uses-permission android:name="android.permission.READ_SAFETY_CENTER_STATUS" />
     <uses-permission android:name="android.permission.MANAGE_SAFETY_CENTER" />
+
+    <!-- Permissions required for CTS test - CtsVirtualDevicesTestCases -->
+    <uses-permission android:name="android.permission.CREATE_VIRTUAL_DEVICE" />
+    <uses-permission android:name="android.permission.ADD_TRUSTED_DISPLAY" />
+    <uses-permission android:name="android.permission.ADD_ALWAYS_UNLOCKED_DISPLAY" />
 
 
     <!-- Permission required for CTS test - Notification test suite -->

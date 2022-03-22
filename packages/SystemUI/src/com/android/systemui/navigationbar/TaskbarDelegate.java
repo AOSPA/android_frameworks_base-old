@@ -17,7 +17,7 @@
 package com.android.systemui.navigationbar;
 
 import static android.app.StatusBarManager.NAVIGATION_HINT_BACK_ALT;
-import static android.app.StatusBarManager.NAVIGATION_HINT_IME_SHOWN;
+import static android.app.StatusBarManager.NAVIGATION_HINT_IME_SWITCHER_SHOWN;
 import static android.app.StatusBarManager.WINDOW_STATE_SHOWING;
 import static android.view.InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
 import static android.view.InsetsState.containsType;
@@ -31,6 +31,7 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_B
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_HOME_DISABLED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_IME_SHOWING;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_IME_SWITCHER_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_IMMERSIVE_MODE;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NAV_BAR_HIDDEN;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_OVERVIEW_DISABLED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_SCREEN_PINNING;
@@ -292,7 +293,7 @@ public class TaskbarDelegate implements CommandQueue.Callbacks,
                 .setFlag(SYSUI_STATE_IME_SHOWING,
                         (mNavigationIconHints & NAVIGATION_HINT_BACK_ALT) != 0)
                 .setFlag(SYSUI_STATE_IME_SWITCHER_SHOWING,
-                        (mNavigationIconHints & NAVIGATION_HINT_IME_SHOWN) != 0)
+                        (mNavigationIconHints & NAVIGATION_HINT_IME_SWITCHER_SHOWN) != 0)
                 .setFlag(SYSUI_STATE_OVERVIEW_DISABLED,
                         (mDisabledFlags & View.STATUS_BAR_DISABLE_RECENT) != 0)
                 .setFlag(SYSUI_STATE_HOME_DISABLED,
@@ -304,6 +305,7 @@ public class TaskbarDelegate implements CommandQueue.Callbacks,
                         allowSystemGestureIgnoringBarVisibility())
                 .setFlag(SYSUI_STATE_SCREEN_PINNING,
                         ActivityManagerWrapper.getInstance().isScreenPinningActive())
+                .setFlag(SYSUI_STATE_IMMERSIVE_MODE, isImmersiveMode())
                 .commitUpdate(mDisplayId);
     }
 
@@ -443,6 +445,10 @@ public class TaskbarDelegate implements CommandQueue.Callbacks,
 
     private boolean allowSystemGestureIgnoringBarVisibility() {
         return mBehavior != BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
+    }
+
+    private boolean isImmersiveMode() {
+        return mBehavior == BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
     }
 
     @Override

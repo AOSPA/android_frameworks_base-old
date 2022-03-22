@@ -112,7 +112,7 @@ interface IInputManager {
     oneway void requestPointerCapture(IBinder inputChannelToken, boolean enabled);
 
     /** Create an input monitor for gestures. */
-    InputMonitor monitorGestureInput(String name, int displayId);
+    InputMonitor monitorGestureInput(IBinder token, String name, int displayId);
 
     // Add a runtime association between the input port and the display port. This overrides any
     // static associations.
@@ -122,9 +122,9 @@ interface IInputManager {
     void removePortAssociation(in String inputPort);
 
     // Add a runtime association between the input device and display.
-    void addUniqueIdAssociation(in String inputDeviceName, in String displayUniqueId);
+    void addUniqueIdAssociation(in String inputPort, in String displayUniqueId);
     // Remove the runtime association between the input device and display.
-    void removeUniqueIdAssociation(in String inputDeviceName);
+    void removeUniqueIdAssociation(in String inputPort);
 
     InputSensorInfo[] getSensorList(int deviceId);
 

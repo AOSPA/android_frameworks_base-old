@@ -41,11 +41,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.test.filters.SmallTest;
 
+import com.android.server.biometrics.log.BiometricContext;
+import com.android.server.biometrics.log.BiometricLogger;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import java.util.function.Supplier;
 
 @Presubmit
 @RunWith(AndroidTestingRunner.class)
@@ -64,6 +69,10 @@ public class UserAwareBiometricSchedulerTest {
     private Context mContext;
     @Mock
     private IBiometricService mBiometricService;
+    @Mock
+    private BiometricLogger mBiometricLogger;
+    @Mock
+    private BiometricContext mBiometricContext;
 
     private TestUserStartedCallback mUserStartedCallback = new TestUserStartedCallback();
     private TestUserStoppedCallback mUserStoppedCallback = new TestUserStoppedCallback();
@@ -86,7 +95,8 @@ public class UserAwareBiometricSchedulerTest {
                     @Override
                     public StopUserClient<?> getStopUserClient(int userId) {
                         return new TestStopUserClient(mContext, Object::new, mToken, userId,
-                                TEST_SENSOR_ID, mUserStoppedCallback);
+                                TEST_SENSOR_ID, mBiometricLogger, mBiometricContext,
+                                mUserStoppedCallback);
                     }
 
                     @NonNull
@@ -94,7 +104,8 @@ public class UserAwareBiometricSchedulerTest {
                     public StartUserClient<?, ?> getStartUserClient(int newUserId) {
                         mStartUserClientCount++;
                         return new TestStartUserClient(mContext, Object::new, mToken, newUserId,
-                                TEST_SENSOR_ID, mUserStartedCallback, mStartOperationsFinish);
+                                TEST_SENSOR_ID,  mBiometricLogger, mBiometricContext,
+                                mUserStartedCallback, mStartOperationsFinish);
                     }
                 },
                 CoexCoordinator.getInstance());
@@ -215,7 +226,7 @@ public class UserAwareBiometricSchedulerTest {
         int numInvocations;
 
         @Override
-        public void onUserStarted(int newUserId, Object newObject) {
+        public void onUserStarted(int newUserId, Object newObject, int halInterfaceVersion) {
             numInvocations++;
             mCurrentUserId = newUserId;
         }
@@ -223,9 +234,11 @@ public class UserAwareBiometricSchedulerTest {
 
     private static class TestStopUserClient extends StopUserClient<Object> {
         public TestStopUserClient(@NonNull Context context,
-                @NonNull LazyDaemon<Object> lazyDaemon, @Nullable IBinder token, int userId,
-                int sensorId, @NonNull UserStoppedCallback callback) {
-            super(context, lazyDaemon, token, userId, sensorId, callback);
+                @NonNull Supplier<Object> lazyDaemon, @Nullable IBinder token, int userId,
+                int sensorId, @NonNull BiometricLogger logger,
+                @NonNull BiometricContext biometricContext,
+                @NonNull UserStoppedCallback callback) {
+            super(context, lazyDaemon, token, userId, sensorId, logger, biometricContext, callback);
         }
 
         @Override
@@ -251,9 +264,11 @@ public class UserAwareBiometricSchedulerTest {
         ClientMonitorCallback mCallback;
 
         public TestStartUserClient(@NonNull Context context,
-                @NonNull LazyDaemon<Object> lazyDaemon, @Nullable IBinder token, int userId,
-                int sensorId, @NonNull UserStartedCallback<Object> callback, boolean shouldFinish) {
-            super(context, lazyDaemon, token, userId, sensorId, callback);
+                @NonNull Supplier<Object> lazyDaemon, @Nullable IBinder token, int userId,
+                int sensorId, @NonNull BiometricLogger logger,
+                @NonNull BiometricContext biometricContext,
+                @NonNull UserStartedCallback<Object> callback, boolean shouldFinish) {
+            super(context, lazyDaemon, token, userId, sensorId, logger, biometricContext, callback);
             mShouldFinish = shouldFinish;
         }
 
@@ -268,7 +283,8 @@ public class UserAwareBiometricSchedulerTest {
 
             mCallback = callback;
             if (mShouldFinish) {
-                mUserStartedCallback.onUserStarted(getTargetUserId(), new Object());
+                mUserStartedCallback.onUserStarted(
+                        getTargetUserId(), new Object(), 1 /* halInterfaceVersion */);
                 callback.onClientFinished(this, true /* success */);
             }
         }

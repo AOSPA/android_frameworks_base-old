@@ -236,11 +236,55 @@
         <item name="android:textColor">?android:attr/colorError</item>
     </style>
 
+    <style name="TextAppearance.AuthNonBioCredential"
+        parent="@android:style/TextAppearance.DeviceDefault">
+        <item name="android:accessibilityLiveRegion">polite</item>
+        <item name="android:textAlignment">gravity</item>
+        <item name="android:layout_gravity">top</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+    </style>
+
+    <style name="TextAppearance.AuthNonBioCredential.Title">
+        <item name="android:fontFamily">google-sans</item>
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:textSize">36sp</item>
+    </style>
+
+    <style name="TextAppearance.AuthNonBioCredential.Subtitle">
+        <item name="android:fontFamily">google-sans</item>
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:textSize">18sp</item>
+    </style>
+
+    <style name="TextAppearance.AuthNonBioCredential.Description">
+        <item name="android:fontFamily">google-sans</item>
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="TextAppearance.AuthNonBioCredential.Error">
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingBottom">18dp</item>
+        <item name="android:paddingHorizontal">24dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?android:attr/colorError</item>
+        <item name="android:gravity">center</item>
+    </style>
+
     <style name="TextAppearance.AuthCredential.PasswordEntry" parent="@android:style/TextAppearance.DeviceDefault">
         <item name="android:gravity">center</item>
         <item name="android:singleLine">true</item>
         <item name="android:textColor">?android:attr/colorForeground</item>
         <item name="android:textSize">24sp</item>
+    </style>
+
+    <style name="AuthCredentialHeaderStyle">
+        <item name="android:paddingStart">48dp</item>
+        <item name="android:paddingEnd">24dp</item>
+        <item name="android:paddingTop">28dp</item>
+        <item name="android:paddingBottom">20dp</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_gravity">top</item>
     </style>
 
     <style name="DeviceManagementDialogTitle">
@@ -307,9 +351,8 @@
         <item name="android:maxWidth">420dp</item>
         <item name="android:minHeight">0dp</item>
         <item name="android:minWidth">0dp</item>
-        <item name="android:paddingBottom">0dp</item>
-        <item name="android:paddingHorizontal">44dp</item>
-        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingHorizontal">60dp</item>
+        <item name="android:paddingBottom">40dp</item>
     </style>
 
     <style name="LockPatternStyle">
@@ -404,19 +447,19 @@
     </style>
 
     <style name="DualToneLightTheme">
-        <item name="backgroundColor">@color/light_mode_icon_color_dual_tone_background</item>
+        <item name="iconBackgroundColor">@color/light_mode_icon_color_dual_tone_background</item>
         <item name="fillColor">@color/light_mode_icon_color_dual_tone_fill</item>
         <item name="singleToneColor">@color/light_mode_icon_color_single_tone</item>
         <item name="homeHandleColor">@color/navigation_bar_home_handle_light_color</item>
     </style>
     <style name="DualToneDarkTheme">
-        <item name="backgroundColor">@color/dark_mode_icon_color_dual_tone_background</item>
+        <item name="iconBackgroundColor">@color/dark_mode_icon_color_dual_tone_background</item>
         <item name="fillColor">@color/dark_mode_icon_color_dual_tone_fill</item>
         <item name="singleToneColor">@color/dark_mode_icon_color_single_tone</item>
         <item name="homeHandleColor">@color/navigation_bar_home_handle_dark_color</item>
     </style>
     <style name="QSHeaderDarkTheme">
-        <item name="backgroundColor">@color/dark_mode_qs_icon_color_dual_tone_background</item>
+        <item name="iconBackgroundColor">@color/dark_mode_qs_icon_color_dual_tone_background</item>
         <item name="fillColor">@color/dark_mode_qs_icon_color_dual_tone_fill</item>
         <item name="singleToneColor">@color/dark_mode_qs_icon_color_single_tone</item>
     </style>
@@ -664,7 +707,9 @@
         <item name="android:windowActivityTransitions">true</item>
     </style>
 
-    <style name="Screenshot" parent="@android:style/Theme.DeviceDefault.DayNight"/>
+    <style name="FloatingOverlay" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="overlayButtonTextColor">?android:attr/textColorPrimary</item>
+    </style>
 
     <!-- Clipboard overlay's edit text activity. -->
     <style name="EditTextActivity" parent="@android:style/Theme.DeviceDefault.DayNight">
@@ -746,7 +791,7 @@
      <style name="Theme.SystemUI.Dialog.Control.DetailPanel" parent="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
       <item name="android:windowFullscreen">false</item>
       <item name="android:windowIsFloating">false</item>
-      <item name="android:windowBackground">@android:color/black</item>
+      <item name="android:windowBackground">@color/controls_task_view_bg</item>
       <item name="android:backgroundDimEnabled">false</item>
       <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>

@@ -334,6 +334,8 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_ACCESSIBILITY"/>
         <permission name="android.permission.MANAGE_DEVICE_ADMINS"/>
         <permission name="android.permission.MANAGE_GAME_MODE"/>
+        <permission name="android.permission.MANAGE_GAME_ACTIVITY" />
+        <permission name="android.permission.MANAGE_LOW_POWER_STANDBY" />
         <permission name="android.permission.MANAGE_ROLLBACKS"/>
         <permission name="android.permission.MANAGE_USB"/>
         <permission name="android.permission.MODIFY_APPWIDGET_BIND_PERMISSIONS"/>
@@ -391,6 +393,7 @@ applications that come with the platform
         <permission name="android.permission.STATUS_BAR_SERVICE"/>
         <permission name="android.permission.REQUEST_INCIDENT_REPORT_APPROVAL"/>
         <permission name="android.permission.CONTROL_KEYGUARD_SECURE_NOTIFICATIONS"/>
+        <permission name="android.permission.MANAGE_WEAK_ESCROW_TOKEN"/>
         <permission name="android.permission.SET_WALLPAPER" />
         <permission name="android.permission.SET_WALLPAPER_COMPONENT" />
         <permission name="android.permission.SET_WALLPAPER_DIM_AMOUNT" />
@@ -398,6 +401,7 @@ applications that come with the platform
         <!-- Permission required for CTS test - TrustTestCases -->
         <permission name="android.permission.PROVIDE_TRUST_AGENT" />
         <permission name="android.permission.ACCESS_KEYGUARD_SECURE_STORAGE" />
+        <permission name="android.permission.TRUST_LISTENER" />
         <!-- Permissions required for Incremental CTS tests -->
         <permission name="com.android.permission.USE_INSTALLER_V2"/>
         <permission name="android.permission.LOADER_USAGE_STATS"/>
@@ -435,6 +439,7 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_COMPANION_DEVICES" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_COMPUTER" />
         <permission name="android.permission.REQUEST_COMPANION_SELF_MANAGED" />
         <!-- Permission required for testing registering pull atom callbacks. -->
         <permission name="android.permission.REGISTER_STATS_PULL_ATOM"/>
@@ -471,6 +476,8 @@ applications that come with the platform
         <!-- Permission needed for CTS test - WifiManagerTest -->
         <permission name="android.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS" />
         <permission name="android.permission.WIFI_UPDATE_COEX_UNSAFE_CHANNELS" />
+        <permission name="android.permission.NEARBY_WIFI_DEVICES" />
+        <permission name="android.permission.OVERRIDE_WIFI_CONFIG" />
         <!-- Permission required for CTS test CarrierMessagingServiceWrapperTest -->
         <permission name="android.permission.BIND_CARRIER_SERVICES"/>
         <!-- Permission required for CTS test - MusicRecognitionManagerTest -->
@@ -577,6 +584,7 @@ applications that come with the platform
         <permission name="android.permission.INSTALL_DYNAMIC_SYSTEM"/>
         <permission name="android.permission.BIND_CELL_BROADCAST_SERVICE"/>
         <permission name="android.permission.READ_SAFETY_CENTER_STATUS" />
+        <permission name="android.permission.SEND_SAFETY_CENTER_UPDATE" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.bips">

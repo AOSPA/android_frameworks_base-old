@@ -106,9 +106,9 @@ public abstract class TvInputService extends Service {
      * @hide
      */
     @IntDef(prefix = "PRIORITY_HINT_USE_CASE_TYPE_",
-        value = {PRIORITY_HINT_USE_CASE_TYPE_BACKGROUND, PRIORITY_HINT_USE_CASE_TYPE_SCAN,
-            PRIORITY_HINT_USE_CASE_TYPE_PLAYBACK, PRIORITY_HINT_USE_CASE_TYPE_LIVE,
-            PRIORITY_HINT_USE_CASE_TYPE_RECORD})
+            value = {PRIORITY_HINT_USE_CASE_TYPE_BACKGROUND, PRIORITY_HINT_USE_CASE_TYPE_SCAN,
+                    PRIORITY_HINT_USE_CASE_TYPE_PLAYBACK, PRIORITY_HINT_USE_CASE_TYPE_LIVE,
+                    PRIORITY_HINT_USE_CASE_TYPE_RECORD})
     @Retention(RetentionPolicy.SOURCE)
     public @interface PriorityHintUseCaseType {}
 
@@ -872,7 +872,6 @@ public abstract class TvInputService extends Service {
          * Notifies response for broadcast info.
          *
          * @param response broadcast info response.
-         * @hide
          */
         public void notifyBroadcastInfoResponse(@NonNull final BroadcastInfoResponse response) {
             executeOrPostRunnableOnMainThread(new Runnable() {
@@ -895,7 +894,7 @@ public abstract class TvInputService extends Service {
          * Notifies response for advertisement.
          *
          * @param response advertisement response.
-         * @hide
+         * @see android.media.tv.interactive.TvInteractiveAppService.Session#requestAd(AdRequest)
          */
         public void notifyAdResponse(@NonNull final AdResponse response) {
             executeOrPostRunnableOnMainThread(new Runnable() {
@@ -976,7 +975,6 @@ public abstract class TvInputService extends Service {
 
         /**
          * Notifies signal strength.
-         * @hide
          */
         public void notifySignalStrength(@TvInputManager.SignalStrength final int strength) {
             executeOrPostRunnableOnMainThread(new Runnable() {
@@ -1112,22 +1110,20 @@ public abstract class TvInputService extends Service {
          * called when broadcast info is requested.
          *
          * @param request broadcast info request
-         * @hide
          */
         public void onRequestBroadcastInfo(@NonNull BroadcastInfoRequest request) {
         }
 
         /**
-         * @hide
+         * called when broadcast info is removed.
          */
         public void onRemoveBroadcastInfo(int requestId) {
         }
 
         /**
-         * called when advertisement is requested.
+         * Called when advertisement request is received.
          *
-         * @param request advertisement request
-         * @hide
+         * @param request advertisement request received
          */
         public void onRequestAd(@NonNull AdRequest request) {
         }
@@ -2293,43 +2289,43 @@ public abstract class TvInputService extends Service {
 
         private final TvInputManager.SessionCallback mHardwareSessionCallback =
                 new TvInputManager.SessionCallback() {
-            @Override
-            public void onSessionCreated(TvInputManager.Session session) {
-                mHardwareSession = session;
-                SomeArgs args = SomeArgs.obtain();
-                if (session != null) {
-                    args.arg1 = HardwareSession.this;
-                    args.arg2 = mProxySession;
-                    args.arg3 = mProxySessionCallback;
-                    args.arg4 = session.getToken();
-                    session.tune(TvContract.buildChannelUriForPassthroughInput(
-                            getHardwareInputId()));
-                } else {
-                    args.arg1 = null;
-                    args.arg2 = null;
-                    args.arg3 = mProxySessionCallback;
-                    args.arg4 = null;
-                    onRelease();
-                }
-                mServiceHandler.obtainMessage(ServiceHandler.DO_NOTIFY_SESSION_CREATED, args)
-                        .sendToTarget();
-            }
+                    @Override
+                    public void onSessionCreated(TvInputManager.Session session) {
+                        mHardwareSession = session;
+                        SomeArgs args = SomeArgs.obtain();
+                        if (session != null) {
+                            args.arg1 = HardwareSession.this;
+                            args.arg2 = mProxySession;
+                            args.arg3 = mProxySessionCallback;
+                            args.arg4 = session.getToken();
+                            session.tune(TvContract.buildChannelUriForPassthroughInput(
+                                    getHardwareInputId()));
+                        } else {
+                            args.arg1 = null;
+                            args.arg2 = null;
+                            args.arg3 = mProxySessionCallback;
+                            args.arg4 = null;
+                            onRelease();
+                        }
+                        mServiceHandler.obtainMessage(ServiceHandler.DO_NOTIFY_SESSION_CREATED,
+                                        args).sendToTarget();
+                    }
 
-            @Override
-            public void onVideoAvailable(final TvInputManager.Session session) {
-                if (mHardwareSession == session) {
-                    onHardwareVideoAvailable();
-                }
-            }
+                    @Override
+                    public void onVideoAvailable(final TvInputManager.Session session) {
+                        if (mHardwareSession == session) {
+                            onHardwareVideoAvailable();
+                        }
+                    }
 
-            @Override
-            public void onVideoUnavailable(final TvInputManager.Session session,
-                    final int reason) {
-                if (mHardwareSession == session) {
-                    onHardwareVideoUnavailable(reason);
-                }
-            }
-        };
+                    @Override
+                    public void onVideoUnavailable(final TvInputManager.Session session,
+                            final int reason) {
+                        if (mHardwareSession == session) {
+                            onHardwareVideoUnavailable(reason);
+                        }
+                    }
+                };
 
         /**
          * This method will not be called in {@link HardwareSession}. Framework will

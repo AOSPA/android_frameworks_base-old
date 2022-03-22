@@ -4029,6 +4029,53 @@ public class UserManager {
     }
 
     /**
+     * Returns the remaining number of users of the given type that can be created.
+     *
+     * @param userType the type of user, such as {@link UserManager#USER_TYPE_FULL_SECONDARY}.
+     * @return how many additional users can be created.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS,
+            android.Manifest.permission.QUERY_USERS
+    })
+    public int getRemainingCreatableUserCount(@NonNull String userType) {
+        Objects.requireNonNull(userType, "userType must not be null");
+        try {
+            return mService.getRemainingCreatableUserCount(userType);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the remaining number of profiles that can be added to the context user.
+     * <p>Note that is applicable to any profile type (currently not including Restricted profiles).
+     *
+     * @param userType the type of profile, such as {@link UserManager#USER_TYPE_PROFILE_MANAGED}.
+     * @return how many additional profiles can be created.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS,
+            android.Manifest.permission.QUERY_USERS
+    })
+    @UserHandleAware
+    public int getRemainingCreatableProfileCount(@NonNull String userType) {
+        Objects.requireNonNull(userType, "userType must not be null");
+        try {
+            // TODO(b/142482943): Perhaps let the following code apply to restricted users too.
+            return mService.getRemainingCreatableProfileCount(userType, mUserId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Checks whether it's possible to add more managed profiles.
      * if allowedToRemoveOne is true and if the user already has a managed profile, then return if
      * we could add a new managed profile to this user after removing the existing one.
@@ -4038,6 +4085,7 @@ public class UserManager {
      */
     @RequiresPermission(anyOf = {
             android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS,
             android.Manifest.permission.QUERY_USERS
     })
     public boolean canAddMoreManagedProfiles(@UserIdInt int userId, boolean allowedToRemoveOne) {
@@ -4057,6 +4105,7 @@ public class UserManager {
      */
     @RequiresPermission(anyOf = {
             android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS,
             android.Manifest.permission.QUERY_USERS
     })
     public boolean canAddMoreProfilesToUser(@NonNull String userType, @UserIdInt int userId) {
@@ -4709,6 +4758,28 @@ public class UserManager {
     }
 
     /**
+     * Returns {@code true} if the user shares lock settings credential with its parent user
+     *
+     * This API only works for {@link UserManager#isProfile() profiles}
+     * and will always return false for any other user type.
+     *
+     * @hide
+     */
+    @SystemApi
+    @UserHandleAware(
+            requiresAnyOfPermissionsIfNotCallerProfileGroup = {
+                    Manifest.permission.MANAGE_USERS,
+                    Manifest.permission.INTERACT_ACROSS_USERS})
+    @SuppressAutoDoc
+    public boolean isCredentialSharedWithParent() {
+        try {
+            return mService.isCredentialSharedWithParent(mUserId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Removes a user and all associated data.
      * @param userId the integer handle of the user.
      * @hide
@@ -4904,8 +4975,8 @@ public class UserManager {
     public static int getMaxSupportedUsers() {
         // Don't allow multiple users on certain builds
         if (android.os.Build.ID.startsWith("JVP")) return 1;
-        return SystemProperties.getInt("fw.max_users",
-                Resources.getSystem().getInteger(R.integer.config_multiuserMaximumUsers));
+        return Math.max(1, SystemProperties.getInt("fw.max_users",
+                Resources.getSystem().getInteger(R.integer.config_multiuserMaximumUsers)));
     }
 
     /**

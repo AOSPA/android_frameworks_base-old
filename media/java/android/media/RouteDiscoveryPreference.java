@@ -64,6 +64,13 @@ public final class RouteDiscoveryPreference implements Parcelable {
 
     @NonNull
     private final List<String> mPreferredFeatures;
+    @NonNull
+    private final List<String> mRequiredFeatures;
+    @NonNull
+    private final List<String> mPackageOrder;
+    @NonNull
+    private final List<String> mAllowedPackages;
+
     private final boolean mShouldPerformActiveScan;
     @Nullable
     private final Bundle mExtras;
@@ -78,12 +85,18 @@ public final class RouteDiscoveryPreference implements Parcelable {
 
     RouteDiscoveryPreference(@NonNull Builder builder) {
         mPreferredFeatures = builder.mPreferredFeatures;
+        mRequiredFeatures = builder.mRequiredFeatures;
+        mPackageOrder = builder.mPackageOrder;
+        mAllowedPackages = builder.mAllowedPackages;
         mShouldPerformActiveScan = builder.mActiveScan;
         mExtras = builder.mExtras;
     }
 
     RouteDiscoveryPreference(@NonNull Parcel in) {
         mPreferredFeatures = in.createStringArrayList();
+        mRequiredFeatures = in.createStringArrayList();
+        mPackageOrder = in.createStringArrayList();
+        mAllowedPackages = in.createStringArrayList();
         mShouldPerformActiveScan = in.readBoolean();
         mExtras = in.readBundle();
     }
@@ -96,10 +109,53 @@ public final class RouteDiscoveryPreference implements Parcelable {
      * {@link MediaRoute2Info#FEATURE_LIVE_AUDIO}, {@link MediaRoute2Info#FEATURE_LIVE_VIDEO},
      * or {@link MediaRoute2Info#FEATURE_REMOTE_PLAYBACK} or custom features defined by a provider.
      * </p>
+     *
+     * @see #getRequiredFeatures()
      */
     @NonNull
     public List<String> getPreferredFeatures() {
         return mPreferredFeatures;
+    }
+
+    /**
+     * Gets the required features of routes that media router would like to discover.
+     * <p>
+     * Routes that have all the required features will be discovered.
+     * They may include predefined features such as
+     * {@link MediaRoute2Info#FEATURE_LIVE_AUDIO}, {@link MediaRoute2Info#FEATURE_LIVE_VIDEO},
+     * or {@link MediaRoute2Info#FEATURE_REMOTE_PLAYBACK} or custom features defined by a provider.
+     *
+     * @see #getPreferredFeatures()
+     */
+    @NonNull
+    public List<String> getRequiredFeatures() {
+        return mRequiredFeatures;
+    }
+
+    /**
+     * Gets the ordered list of package names used to remove duplicate routes.
+     * <p>
+     * Duplicate route removal is enabled if the returned list is non-empty. Routes are deduplicated
+     * based on their {@link MediaRoute2Info#getDeduplicationIds() deduplication IDs}. If two routes
+     * have a deduplication ID in common, only the route from the provider whose package name is
+     * first in the provided list will remain.
+     *
+     * @see #shouldRemoveDuplicates()
+     */
+    @NonNull
+    public List<String> getDeduplicationPackageOrder() {
+        return mPackageOrder;
+    }
+
+    /**
+     * Gets the list of allowed packages.
+     * <p>
+     * If it's not empty, it will only discover routes from the provider whose package name
+     * belongs to the list.
+     */
+    @NonNull
+    public List<String> getAllowedPackages() {
+        return mAllowedPackages;
     }
 
     /**
@@ -111,6 +167,15 @@ public final class RouteDiscoveryPreference implements Parcelable {
      */
     public boolean shouldPerformActiveScan() {
         return mShouldPerformActiveScan;
+    }
+
+    /**
+     * Gets whether duplicate routes removal is enabled.
+     *
+     * @see #getDeduplicationPackageOrder()
+     */
+    public boolean shouldRemoveDuplicates() {
+        return !mPackageOrder.isEmpty();
     }
 
     /**
@@ -128,6 +193,9 @@ public final class RouteDiscoveryPreference implements Parcelable {
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeStringList(mPreferredFeatures);
+        dest.writeStringList(mRequiredFeatures);
+        dest.writeStringList(mPackageOrder);
+        dest.writeStringList(mAllowedPackages);
         dest.writeBoolean(mShouldPerformActiveScan);
         dest.writeBundle(mExtras);
     }
@@ -155,14 +223,17 @@ public final class RouteDiscoveryPreference implements Parcelable {
             return false;
         }
         RouteDiscoveryPreference other = (RouteDiscoveryPreference) o;
-        //TODO: Make this order-free
         return Objects.equals(mPreferredFeatures, other.mPreferredFeatures)
+                && Objects.equals(mRequiredFeatures, other.mRequiredFeatures)
+                && Objects.equals(mPackageOrder, other.mPackageOrder)
+                && Objects.equals(mAllowedPackages, other.mAllowedPackages)
                 && mShouldPerformActiveScan == other.mShouldPerformActiveScan;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mPreferredFeatures, mShouldPerformActiveScan);
+        return Objects.hash(mPreferredFeatures, mRequiredFeatures, mPackageOrder, mAllowedPackages,
+                mShouldPerformActiveScan);
     }
 
     /**
@@ -170,13 +241,21 @@ public final class RouteDiscoveryPreference implements Parcelable {
      */
     public static final class Builder {
         List<String> mPreferredFeatures;
+        List<String> mRequiredFeatures;
+        List<String> mPackageOrder;
+        List<String> mAllowedPackages;
+
         boolean mActiveScan;
+
         Bundle mExtras;
 
         public Builder(@NonNull List<String> preferredFeatures, boolean activeScan) {
             Objects.requireNonNull(preferredFeatures, "preferredFeatures must not be null");
             mPreferredFeatures = preferredFeatures.stream().filter(str -> !TextUtils.isEmpty(str))
                     .collect(Collectors.toList());
+            mRequiredFeatures = List.of();
+            mPackageOrder = List.of();
+            mAllowedPackages = List.of();
             mActiveScan = activeScan;
         }
 
@@ -184,26 +263,39 @@ public final class RouteDiscoveryPreference implements Parcelable {
             Objects.requireNonNull(preference, "preference must not be null");
 
             mPreferredFeatures = preference.getPreferredFeatures();
+            mRequiredFeatures = preference.getRequiredFeatures();
+            mPackageOrder = preference.getDeduplicationPackageOrder();
+            mAllowedPackages = preference.getAllowedPackages();
             mActiveScan = preference.shouldPerformActiveScan();
             mExtras = preference.getExtras();
         }
 
         /**
-         * A constructor to combine all of the preferences into a single preference.
-         * It ignores extras of preferences.
+         * A constructor to combine multiple preferences into a single preference. The combined
+         * preference will discover a superset of the union of the routes discoverable by each of
+         * the individual preferences.
+         * <p>
+         * When routes need to be discovered for multiple preferences, the combined preference can
+         * be used to query route providers once and obtain all routes of interest. The obtained
+         * routes can then be filtered for each of the individual preferences. This is typically
+         * more efficient than querying route providers with each of the individual preferences.
          *
          * @hide
          */
         public Builder(@NonNull Collection<RouteDiscoveryPreference> preferences) {
             Objects.requireNonNull(preferences, "preferences must not be null");
 
-            Set<String> routeFeatureSet = new HashSet<>();
-            mActiveScan = false;
+            Set<String> preferredFeatures = new HashSet<>();
+            boolean activeScan = false;
             for (RouteDiscoveryPreference preference : preferences) {
-                routeFeatureSet.addAll(preference.mPreferredFeatures);
-                mActiveScan |= preference.mShouldPerformActiveScan;
+                preferredFeatures.addAll(preference.mPreferredFeatures);
+                activeScan |= preference.mShouldPerformActiveScan;
             }
-            mPreferredFeatures = new ArrayList<>(routeFeatureSet);
+            mPreferredFeatures = new ArrayList<>(preferredFeatures);
+            mRequiredFeatures = List.of();
+            mPackageOrder = List.of();
+            mAllowedPackages = List.of();
+            mActiveScan = activeScan;
         }
 
         /**
@@ -224,6 +316,30 @@ public final class RouteDiscoveryPreference implements Parcelable {
         }
 
         /**
+         * Sets the required route features to discover.
+         */
+        @NonNull
+        public Builder setRequiredFeatures(@NonNull List<String> requiredFeatures) {
+            Objects.requireNonNull(requiredFeatures, "preferredFeatures must not be null");
+            mRequiredFeatures = requiredFeatures.stream().filter(str -> !TextUtils.isEmpty(str))
+                    .collect(Collectors.toList());
+            return this;
+        }
+
+        /**
+         * Sets the list of package names of providers that media router would like to discover.
+         * <p>
+         * If it's non-empty, media router only discovers route from the provider in the list.
+         * The default value is empty, which discovers routes from all providers.
+         */
+        @NonNull
+        public Builder setAllowedPackages(@NonNull List<String> allowedPackages) {
+            Objects.requireNonNull(allowedPackages, "allowedPackages must not be null");
+            mAllowedPackages = List.copyOf(allowedPackages);
+            return this;
+        }
+
+        /**
          * Sets if active scanning should be performed.
          * <p>
          * Since active scanning uses more system resources, set this as {@code true} only
@@ -233,6 +349,24 @@ public final class RouteDiscoveryPreference implements Parcelable {
         @NonNull
         public Builder setShouldPerformActiveScan(boolean activeScan) {
             mActiveScan = activeScan;
+            return this;
+        }
+
+        /**
+         * Sets the order of packages to use when removing duplicate routes.
+         * <p>
+         * Routes are deduplicated based on their
+         * {@link MediaRoute2Info#getDeduplicationIds() deduplication IDs}.
+         * If two routes have a deduplication ID in common, only the route from the provider whose
+         * package name is first in the provided list will remain.
+         *
+         * @param packageOrder ordered list of package names used to remove duplicate routes, or an
+         *                     empty list if deduplication should not be enabled.
+         */
+        @NonNull
+        public Builder setDeduplicationPackageOrder(@NonNull List<String> packageOrder) {
+            Objects.requireNonNull(packageOrder, "packageOrder must not be null");
+            mPackageOrder = List.copyOf(packageOrder);
             return this;
         }
 

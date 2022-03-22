@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.notification.stack;
 
-import static android.provider.Settings.Secure.NOTIFICATION_HISTORY_ENABLED;
 import static android.view.View.GONE;
 
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
@@ -27,6 +26,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.assertTrue;
 
 import static org.junit.Assert.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,10 +40,9 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.os.UserHandle;
-import android.provider.Settings;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
+import android.util.MathUtils;
 
 import androidx.test.annotation.UiThreadTest;
 import androidx.test.filters.SmallTest;
@@ -110,10 +109,6 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     public void setUp() throws Exception {
         allowTestableLooperAsMainThread();
 
-        Settings.Secure.putIntForUser(mContext.getContentResolver(), NOTIFICATION_HISTORY_ENABLED,
-                1, UserHandle.USER_CURRENT);
-
-
         // Interact with real instance of AmbientState.
         mAmbientState = new AmbientState(mContext, mNotificationSectionsManager, mBypassController);
 
@@ -148,6 +143,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mStackScroller.setShelfController(notificationShelfController);
         mStackScroller.setStatusBar(mBar);
         mStackScroller.setEmptyShadeView(mEmptyShadeView);
+        when(mStackScrollLayoutController.isHistoryEnabled()).thenReturn(true);
         when(mStackScrollLayoutController.getNoticationRoundessManager())
                 .thenReturn(mNotificationRoundnessManager);
         mStackScroller.setController(mStackScrollLayoutController);
@@ -162,6 +158,47 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         doNothing().when(mGroupExpansionManager).collapseGroups();
         doNothing().when(mExpandHelper).cancelImmediately();
         doNothing().when(mNotificationShelf).setAnimationsEnabled(anyBoolean());
+    }
+
+    @Test
+    public void testUpdateStackEndHeight_forEndOfStackHeightAnimation() {
+        final float nsslHeight = 10f;
+        final float bottomMargin = 1f;
+        final float topPadding = 1f;
+
+        mStackScroller.updateStackEndHeight(nsslHeight, bottomMargin, topPadding);
+        final float stackEndHeight = nsslHeight - bottomMargin - topPadding;
+        assertTrue(mAmbientState.getStackEndHeight() == stackEndHeight);
+    }
+
+    @Test
+    public void testUpdateStackHeight_withDozeAmount_whenDozeChanging() {
+        final float dozeAmount = 0.5f;
+        mAmbientState.setDozeAmount(dozeAmount);
+
+        final float endHeight = 8f;
+        final float expansionFraction = 1f;
+        float expected = MathUtils.lerp(
+                endHeight * StackScrollAlgorithm.START_FRACTION,
+                endHeight, dozeAmount);
+
+        mStackScroller.updateStackHeight(endHeight, expansionFraction);
+        assertTrue(mAmbientState.getStackHeight() == expected);
+    }
+
+    @Test
+    public void testUpdateStackHeight_withExpansionAmount_whenDozeNotChanging() {
+        final float dozeAmount = 1f;
+        mAmbientState.setDozeAmount(dozeAmount);
+
+        final float endHeight = 8f;
+        final float expansionFraction = 0.5f;
+        final float expected = MathUtils.lerp(
+                endHeight * StackScrollAlgorithm.START_FRACTION,
+                endHeight, expansionFraction);
+
+        mStackScroller.updateStackHeight(endHeight, expansionFraction);
+        assertTrue(mAmbientState.getStackHeight() == expected);
     }
 
     @Test
@@ -358,6 +395,22 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mStackScroller.setFooterView(view);
         mStackScroller.updateFooter();
         verify(mStackScroller).updateFooterView(true, true, true);
+    }
+
+    @Test
+    public void testUpdateFooter_withoutHistory() {
+        setBarStateForTest(StatusBarState.SHADE);
+        mStackScroller.setCurrentUserSetup(true);
+
+        when(mStackScrollLayoutController.isHistoryEnabled()).thenReturn(false);
+        when(mStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
+        when(mStackScrollLayoutController.hasActiveClearableNotifications(eq(ROWS_ALL)))
+                .thenReturn(true);
+
+        FooterView view = mock(FooterView.class);
+        mStackScroller.setFooterView(view);
+        mStackScroller.updateFooter();
+        verify(mStackScroller).updateFooterView(true, true, false);
     }
 
     @Test

@@ -153,8 +153,8 @@ public class Filter implements AutoCloseable {
 
 
     /** @hide */
-    @IntDef(flag = true, prefix = "STATUS_", value = {STATUS_DATA_READY, STATUS_LOW_WATER,
-            STATUS_HIGH_WATER, STATUS_OVERFLOW})
+    @IntDef(prefix = "STATUS_",
+            value = {STATUS_DATA_READY, STATUS_LOW_WATER, STATUS_HIGH_WATER, STATUS_OVERFLOW})
     @Retention(RetentionPolicy.SOURCE)
     public @interface Status {}
 
@@ -185,8 +185,7 @@ public class Filter implements AutoCloseable {
     public static final int STATUS_OVERFLOW = DemuxFilterStatus.OVERFLOW;
 
     /** @hide */
-    @IntDef(flag = true,
-            prefix = "SCRAMBLING_STATUS_",
+    @IntDef(prefix = "SCRAMBLING_STATUS_",
             value = {SCRAMBLING_STATUS_UNKNOWN, SCRAMBLING_STATUS_NOT_SCRAMBLED,
                     SCRAMBLING_STATUS_SCRAMBLED})
     @Retention(RetentionPolicy.SOURCE)
@@ -209,8 +208,7 @@ public class Filter implements AutoCloseable {
             android.hardware.tv.tuner.ScramblingStatus.SCRAMBLED;
 
     /** @hide */
-    @IntDef(flag = true,
-            prefix = "MONITOR_EVENT_",
+    @IntDef(prefix = "MONITOR_EVENT_",
             value = {MONITOR_EVENT_SCRAMBLING_STATUS, MONITOR_EVENT_IP_CID_CHANGE})
     @Retention(RetentionPolicy.SOURCE)
     public @interface MonitorEventMask {}
@@ -625,21 +623,21 @@ public class Filter implements AutoCloseable {
      * <p>This functionality is only available in Tuner version 2.0 and higher and will otherwise
      * be a no-op. Use {@link TunerVersionChecker#getTunerVersion()} to get the version information.
      *
-     * @param delayInMs specifies the duration of the delay in milliseconds.
+     * @param durationInMs specifies the duration of the delay in milliseconds.
      * @return one of the following results: {@link Tuner#RESULT_SUCCESS},
      * {@link Tuner#RESULT_UNAVAILABLE}, {@link Tuner#RESULT_NOT_INITIALIZED},
      * {@link Tuner#RESULT_INVALID_STATE}, {@link Tuner#RESULT_INVALID_ARGUMENT},
      * {@link Tuner#RESULT_OUT_OF_MEMORY}, or {@link Tuner#RESULT_UNKNOWN_ERROR}.
      */
-    public int delayCallbackUntilMillisElapsed(long delayInMs) {
+    public int delayCallbackForDurationMillis(long durationInMs) {
         if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
                   TunerVersionChecker.TUNER_VERSION_2_0, "setTimeDelayHint")) {
             return Tuner.RESULT_UNAVAILABLE;
         }
 
-        if (delayInMs >= 0 && delayInMs <= Integer.MAX_VALUE) {
+        if (durationInMs >= 0 && durationInMs <= Integer.MAX_VALUE) {
             synchronized (mLock) {
-                return nativeSetTimeDelayHint((int) delayInMs);
+                return nativeSetTimeDelayHint((int) durationInMs);
             }
         }
         return Tuner.RESULT_INVALID_ARGUMENT;
@@ -655,20 +653,20 @@ public class Filter implements AutoCloseable {
      * <p>This functionality is only available in Tuner version 2.0 and higher and will otherwise
      * be a no-op. Use {@link TunerVersionChecker#getTunerVersion()} to get the version information.
      *
-     * @param delayInBytes specifies the duration of the delay in bytes.
+     * @param bytesAccumulated specifies the delay condition in bytes.
      * @return one of the following results: {@link Tuner#RESULT_SUCCESS},
      * {@link Tuner#RESULT_UNAVAILABLE}, {@link Tuner#RESULT_NOT_INITIALIZED},
      * {@link Tuner#RESULT_INVALID_STATE}, {@link Tuner#RESULT_INVALID_ARGUMENT},
      * {@link Tuner#RESULT_OUT_OF_MEMORY}, or {@link Tuner#RESULT_UNKNOWN_ERROR}.
      */
-    public int delayCallbackUntilBytesAccumulated(int delayInBytes) {
+    public int delayCallbackUntilBytesAccumulated(int bytesAccumulated) {
         if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
                   TunerVersionChecker.TUNER_VERSION_2_0, "setTimeDelayHint")) {
             return Tuner.RESULT_UNAVAILABLE;
         }
 
         synchronized (mLock) {
-            return nativeSetDataSizeDelayHint(delayInBytes);
+            return nativeSetDataSizeDelayHint(bytesAccumulated);
         }
     }
 }

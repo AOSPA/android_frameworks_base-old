@@ -81,6 +81,7 @@ import android.util.Pools;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
+import android.view.InsetsState;
 import android.view.MagnificationSpec;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
@@ -313,7 +314,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     private final List<WindowContainerListener> mListeners = new ArrayList<>();
 
-    private OverlayHost mOverlayHost;
+    protected TrustedOverlayHost mOverlayHost;
 
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
@@ -3599,17 +3600,34 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 @AnimationType int type, @Nullable AnimationAdapter snapshotAnim);
     }
 
-    void addOverlay(SurfaceControlViewHost.SurfacePackage overlay) {
+    void addTrustedOverlay(SurfaceControlViewHost.SurfacePackage overlay) {
         if (mOverlayHost == null) {
-            mOverlayHost = new OverlayHost(mWmService);
+            mOverlayHost = new TrustedOverlayHost(mWmService);
         }
         mOverlayHost.addOverlay(overlay, mSurfaceControl);
+
+        // Emit an initial onConfigurationChanged to ensure the overlay
+        // can receive any changes between their creation time and
+        // attach time.
+        try {
+            overlay.getRemoteInterface().onConfigurationChanged(getConfiguration());
+        } catch (Exception e) {
+            Slog.e(TAG, "Error sending initial configuration change to WindowContainer overlay");
+            removeTrustedOverlay(overlay);
+        }
     }
 
-    void removeOverlay(SurfaceControlViewHost.SurfacePackage overlay) {
+    void removeTrustedOverlay(SurfaceControlViewHost.SurfacePackage overlay) {
         if (mOverlayHost != null && !mOverlayHost.removeOverlay(overlay)) {
             mOverlayHost.release();
             mOverlayHost = null;
+        }
+    }
+
+    void updateOverlayInsetsState(WindowState originalChange) {
+        final WindowContainer p = getParent();
+        if (p != null) {
+            p.updateOverlayInsetsState(originalChange);
         }
     }
 }

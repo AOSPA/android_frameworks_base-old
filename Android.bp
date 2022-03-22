@@ -77,7 +77,6 @@ filegroup {
         // Java/AIDL sources under frameworks/base
         ":framework-annotations",
         ":framework-blobstore-sources",
-        ":framework-bluetooth-sources", // TODO(b/214988855) : Remove once framework-bluetooth jar is ready
         ":framework-connectivity-tiramisu-sources",
         ":framework-core-sources",
         ":framework-drm-sources",
@@ -156,32 +155,9 @@ java_library_with_nonpublic_deps {
     name: "framework-all",
     installable: false,
     static_libs: [
-        "android.net.ipsec.ike.impl",
+        "all-framework-module-impl",
         "framework-minus-apex",
-        "framework-appsearch.impl",
-        "framework-connectivity.impl",
-        "framework-connectivity-tiramisu.impl",
-        "framework-graphics.impl",
-        "framework-mediaprovider.impl",
-        "framework-permission.impl",
-        "framework-permission-s.impl",
-        "framework-scheduling.impl",
-        "framework-sdkextensions.impl",
-        "framework-statsd.impl",
-        "framework-supplementalprocess.impl",
-        "framework-tethering.impl",
-        "framework-nearby.impl",
-        "framework-uwb.impl",
-        "framework-wifi.impl",
-        "updatable-media",
     ],
-    soong_config_variables: {
-        include_nonpublic_framework_api: {
-            static_libs: [
-                "framework-supplementalapi.impl",
-            ],
-        },
-    },
     apex_available: ["//apex_available:platform"],
     sdk_version: "core_platform",
     visibility: [
@@ -319,6 +295,7 @@ java_defaults {
     defaults: ["framework-aidl-export-defaults", "btadva_fwk_java_defaults"],
     srcs: [
         ":framework-non-updatable-sources",
+        ":framework-bluetooth-sources", // TODO(b/214988855) : Remove once framework-bluetooth jar is ready
         "core/java/**/*.logtags",
         ":apex-info-list",
     ],
@@ -330,6 +307,8 @@ java_defaults {
         include_dirs: [
             "frameworks/av/aidl",
             "frameworks/native/libs/permission/aidl",
+            // TODO: remove when moved to the below package
+            "frameworks/base/packages/ConnectivityT/framework-t/aidl-export",
             "packages/modules/Connectivity/framework/aidl-export",
         ],
     },
@@ -438,7 +417,6 @@ java_library {
     static_libs: [
         "app-compat-annotations",
         "framework-minus-apex",
-        "framework-appsearch.impl", // TODO(b/146218515): should be removed
         "framework-updatable-stubs-module_libs_api",
     ],
     sdk_version: "core_platform",
@@ -467,7 +445,6 @@ filegroup {
         // TODO: remove these annotations as soon as we can use andoid.support.annotations.*
         ":framework-annotations",
         ":modules-utils-preconditions-srcs",
-        "core/java/android/net/DhcpResults.java",
         "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/LocalLog.java",
         "core/java/com/android/internal/util/HexDump.java",
@@ -579,6 +556,9 @@ stubs_defaults {
         include_dirs: [
             "frameworks/av/aidl",
             "frameworks/native/libs/permission/aidl",
+            // TODO: remove when moved to the below package
+            "frameworks/base/packages/ConnectivityT/framework-t/aidl-export",
+            "packages/modules/Connectivity/framework/aidl-export",
         ],
     },
     // These are libs from framework-internal-utils that are required (i.e. being referenced)
@@ -624,6 +604,8 @@ stubs_defaults {
     libs: [
         "art.module.public.api",
         "sdk_module-lib_current_framework-tethering",
+        "sdk_module-lib_current_framework-connectivity-tiramisu",
+        "sdk_public_current_framework-bluetooth",
         // There are a few classes from modules used by the core that
         // need to be resolved by metalava. We use a prebuilt stub of the
         // full sdk to ensure we can resolve them. If a new class gets added,

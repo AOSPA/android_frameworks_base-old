@@ -34,6 +34,7 @@ import android.os.ServiceManager;
 import android.provider.Settings;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Xml;
@@ -50,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -116,6 +118,7 @@ public class DreamBackend {
     private final boolean mDreamsEnabledByDefault;
     private final boolean mDreamsActivatedOnSleepByDefault;
     private final boolean mDreamsActivatedOnDockByDefault;
+    private final Set<ComponentName> mDisabledDreams;
     private final Set<Integer> mSupportedComplications;
     private final Set<Integer> mDefaultEnabledComplications;
 
@@ -143,14 +146,18 @@ public class DreamBackend {
                 com.android.internal.R.bool.config_dreamsActivatedOnDockByDefault);
         mDreamPreviewDefault = resources.getDrawable(
                 com.android.internal.R.drawable.default_dream_preview);
+        mDisabledDreams = Arrays.stream(resources.getStringArray(
+                        com.android.internal.R.array.config_disabledDreamComponents))
+                .map(ComponentName::unflattenFromString)
+                .collect(Collectors.toSet());
 
-        mSupportedComplications =
-                Arrays.stream(resources.getIntArray(R.array.config_supportedDreamComplications))
-                        .boxed()
-                        .collect(Collectors.toSet());
+        mSupportedComplications = Arrays.stream(resources.getIntArray(
+                        com.android.internal.R.array.config_supportedDreamComplications))
+                .boxed()
+                .collect(Collectors.toSet());
 
-        mDefaultEnabledComplications = Arrays.stream(
-                        resources.getIntArray(R.array.config_dreamComplicationsEnabledByDefault))
+        mDefaultEnabledComplications = Arrays.stream(resources.getIntArray(
+                        com.android.internal.R.array.config_dreamComplicationsEnabledByDefault))
                 .boxed()
                 // A complication can only be enabled by default if it is also supported.
                 .filter(mSupportedComplications::contains)
@@ -166,14 +173,16 @@ public class DreamBackend {
                 PackageManager.GET_META_DATA);
         List<DreamInfo> dreamInfos = new ArrayList<>(resolveInfos.size());
         for (ResolveInfo resolveInfo : resolveInfos) {
-            if (resolveInfo.serviceInfo == null) {
+            final ComponentName componentName = getDreamComponentName(resolveInfo);
+            if (componentName == null || mDisabledDreams.contains(componentName)) {
                 continue;
             }
+
             DreamInfo dreamInfo = new DreamInfo();
             dreamInfo.caption = resolveInfo.loadLabel(pm);
             dreamInfo.icon = resolveInfo.loadIcon(pm);
             dreamInfo.description = getDescription(resolveInfo, pm);
-            dreamInfo.componentName = getDreamComponentName(resolveInfo);
+            dreamInfo.componentName = componentName;
             dreamInfo.isActive = dreamInfo.componentName.equals(activeDream);
 
             final DreamMetadata dreamMetadata = getDreamMetadata(pm, resolveInfo);
@@ -285,6 +294,11 @@ public class DreamBackend {
         }
     }
 
+    /** Returns whether a particular complication is enabled */
+    public boolean isComplicationEnabled(@ComplicationType int complication) {
+        return getEnabledComplications().contains(complication);
+    }
+
     /** Gets all complications which have been enabled by the user. */
     public Set<Integer> getEnabledComplications() {
         final String enabledComplications = Settings.Secure.getString(
@@ -324,6 +338,35 @@ public class DreamBackend {
                 convertToString(enabledComplications));
     }
 
+    /**
+     * Gets the title of a particular complication type to be displayed to the user. If there
+     * is no title, null is returned.
+     */
+    @Nullable
+    public CharSequence getComplicationTitle(@ComplicationType int complicationType) {
+        int res = 0;
+        switch (complicationType) {
+            case COMPLICATION_TYPE_TIME:
+                res = R.string.dream_complication_title_time;
+                break;
+            case COMPLICATION_TYPE_DATE:
+                res = R.string.dream_complication_title_date;
+                break;
+            case COMPLICATION_TYPE_WEATHER:
+                res = R.string.dream_complication_title_weather;
+                break;
+            case COMPLICATION_TYPE_AIR_QUALITY:
+                res = R.string.dream_complication_title_aqi;
+                break;
+            case COMPLICATION_TYPE_CAST_INFO:
+                res = R.string.dream_complication_title_cast_info;
+                break;
+            default:
+                return null;
+        }
+        return mContext.getString(res);
+    }
+
     private static String convertToString(Set<Integer> set) {
         return set.stream()
                 .map(String::valueOf)
@@ -331,6 +374,9 @@ public class DreamBackend {
     }
 
     private static Set<Integer> parseFromString(String string) {
+        if (TextUtils.isEmpty(string)) {
+            return new HashSet<>();
+        }
         return Arrays.stream(string.split(","))
                 .map(Integer::parseInt)
                 .collect(Collectors.toSet());
@@ -482,7 +528,18 @@ public class DreamBackend {
         if (flattenedString.indexOf('/') < 0) {
             flattenedString = serviceInfo.packageName + "/" + flattenedString;
         }
-        return ComponentName.unflattenFromString(flattenedString);
+
+        ComponentName cn = ComponentName.unflattenFromString(flattenedString);
+
+        if (cn == null) return null;
+        if (!cn.getPackageName().equals(serviceInfo.packageName)) {
+            Log.w(TAG,
+                    "Inconsistent package name in component: " + cn.getPackageName()
+                            + ", should be: " + serviceInfo.packageName);
+            return null;
+        }
+
+        return cn;
     }
 
     private static DreamMetadata getDreamMetadata(PackageManager pm, ResolveInfo resolveInfo) {
