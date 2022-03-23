@@ -96,6 +96,7 @@ java_defaults {
         "SettingsLibCollapsingToolbarBaseActivity",
         "SettingsLibTwoTargetPreference",
         "SettingsLibSettingsTransition",
+        "SettingsLibActivityEmbedding",
     ],
 }
 

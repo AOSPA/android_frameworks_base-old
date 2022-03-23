@@ -22,6 +22,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -61,7 +62,7 @@ public class WindowContextControllerTest {
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mController = new WindowContextController(mMockToken);
-        doNothing().when(mMockToken).onConfigurationChanged(any(), anyInt());
+        doNothing().when(mMockToken).onConfigurationChanged(any(), anyInt(), anyBoolean());
         doReturn(true).when(mMockToken).attachToDisplayArea(anyInt(), anyInt(), any());
     }
 
