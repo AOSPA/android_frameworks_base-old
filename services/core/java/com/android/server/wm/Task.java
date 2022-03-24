@@ -201,7 +201,6 @@ import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.app.ActivityTrigger;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.XmlUtils;
@@ -288,9 +287,6 @@ class Task extends TaskFragment {
     // code.
     static final int PERSIST_TASK_VERSION = 1;
 
-    //ActivityTrigger
-    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
-
     private static final int DEFAULT_MIN_TASK_SIZE_DP = 220;
 
     private float mShadowRadius = 0;
@@ -311,8 +307,6 @@ class Task extends TaskFragment {
     static final int REPARENT_KEEP_ROOT_TASK_AT_FRONT = 1;
     // Do not move the root task as a part of reparenting
     static final int REPARENT_LEAVE_ROOT_TASK_IN_PLACE = 2;
-
-    public BoostFramework mPerf = null;
 
     // The topmost Activity passed to convertToTranslucent(). When non-null it means we are
     // waiting for all Activities in mUndrawnActivitiesBelowTopTranslucent to be removed as they
