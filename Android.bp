@@ -97,6 +97,7 @@ filegroup {
         ":platform-compat-native-aidl",
 
         // AIDL sources from external directories
+        ":android.hardware.gnss-V2-java-source",
         ":android.hardware.graphics.common-V3-java-source",
         ":android.hardware.security.keymint-V2-java-source",
         ":android.hardware.security.secureclock-V1-java-source",
@@ -351,6 +352,7 @@ java_defaults {
         "modules-utils-preconditions",
         "modules-utils-synchronous-result-receiver",
         "modules-utils-os",
+        "modules-utils-uieventlogger-interface",
         "framework-permission-aidl-java",
         "spatializer-aidl-java",
         "audiopolicy-types-aidl-java",

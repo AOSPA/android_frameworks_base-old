@@ -2757,7 +2757,7 @@ public final class ActiveServices {
     int bindServiceLocked(IApplicationThread caller, IBinder token, Intent service,
             String resolvedType, final IServiceConnection connection, int flags,
             String instanceName, boolean isSdkSandboxService, int sdkSandboxClientAppUid,
-            String callingPackage, final int userId)
+            String sdkSandboxClientAppPackage, String callingPackage, final int userId)
             throws TransactionTooLargeException {
         if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "bindService: " + service
                 + " type=" + resolvedType + " conn=" + connection.asBinder()
@@ -2842,8 +2842,9 @@ public final class ActiveServices {
         final boolean allowInstant = (flags & Context.BIND_ALLOW_INSTANT) != 0;
 
         ServiceLookupResult res = retrieveServiceLocked(service, instanceName,
-                isSdkSandboxService, sdkSandboxClientAppUid, resolvedType, callingPackage,
-                callingPid, callingUid, userId, true, callerFg, isBindExternal, allowInstant);
+                isSdkSandboxService, sdkSandboxClientAppUid, sdkSandboxClientAppPackage,
+                resolvedType, callingPackage, callingPid, callingUid, userId, true, callerFg,
+                isBindExternal, allowInstant);
         if (res == null) {
             return 0;
         }
@@ -3310,14 +3311,14 @@ public final class ActiveServices {
             int callingPid, int callingUid, int userId,
             boolean createIfNeeded, boolean callingFromFg, boolean isBindExternal,
             boolean allowInstant) {
-        return retrieveServiceLocked(service, instanceName, false, 0, resolvedType, callingPackage,
-                callingPid, callingUid, userId, createIfNeeded, callingFromFg, isBindExternal,
-                allowInstant);
+        return retrieveServiceLocked(service, instanceName, false, 0, null, resolvedType,
+                callingPackage, callingPid, callingUid, userId, createIfNeeded, callingFromFg,
+                isBindExternal, allowInstant);
     }
 
     private ServiceLookupResult retrieveServiceLocked(Intent service,
             String instanceName, boolean isSdkSandboxService, int sdkSandboxClientAppUid,
-            String resolvedType,
+            String sdkSandboxClientAppPackage, String resolvedType,
             String callingPackage, int callingPid, int callingUid, int userId,
             boolean createIfNeeded, boolean callingFromFg, boolean isBindExternal,
             boolean allowInstant) {
@@ -3498,7 +3499,8 @@ public final class ActiveServices {
                                                                                   : null;
                     r = new ServiceRecord(mAm, className, name, definingPackageName,
                             definingUid, filter, sInfo, callingFromFg, res,
-                            sdkSandboxProcessName, sdkSandboxClientAppUid);
+                            sdkSandboxProcessName, sdkSandboxClientAppUid,
+                            sdkSandboxClientAppPackage);
                     res.setService(r);
                     smap.mServicesByInstanceName.put(name, r);
                     smap.mServicesByIntent.put(filter, r);
@@ -3904,6 +3906,18 @@ public final class ActiveServices {
     @GuardedBy("mAm")
     void performScheduleRestartLocked(ServiceRecord r, @NonNull String scheduling,
             @NonNull String reason, @UptimeMillisLong long now) {
+
+        // If the service is waiting to become a foreground service, remove the pending
+        // SERVICE_FOREGROUND_TIMEOUT_MSG msg, and set fgWaiting to false, so next time the service
+        // is brought up, scheduleServiceForegroundTransitionTimeoutLocked() can be called again and
+        // a new SERVICE_FOREGROUND_TIMEOUT_MSG is scheduled in SERVICE_START_FOREGROUND_TIMEOUT
+        // again.
+        if (r.fgRequired && r.fgWaiting) {
+            mAm.mHandler.removeMessages(
+                    ActivityManagerService.SERVICE_FOREGROUND_TIMEOUT_MSG, r);
+            r.fgWaiting = false;
+        }
+
         mAm.mHandler.removeCallbacks(r.restarter);
         mAm.mHandler.postAtTime(r.restarter, r.nextRestartTime);
         r.nextRestartTime = now + r.restartDelay;
@@ -4332,7 +4346,7 @@ public final class ActiveServices {
             if (r.isSdkSandbox) {
                 final int uid = Process.toSdkSandboxUid(r.sdkSandboxClientAppUid);
                 app = mAm.startSdkSandboxProcessLocked(procName, r.appInfo, true, intentFlags,
-                        hostingRecord, ZYGOTE_POLICY_FLAG_EMPTY, uid);
+                        hostingRecord, ZYGOTE_POLICY_FLAG_EMPTY, uid, r.sdkSandboxClientAppPackage);
                 r.isolationHostProc = app;
             } else {
                 app = mAm.startProcessLocked(procName, r.appInfo, true, intentFlags,
@@ -5861,7 +5875,7 @@ public final class ActiveServices {
     void serviceForegroundTimeout(ServiceRecord r) {
         ProcessRecord app;
         synchronized (mAm) {
-            if (!r.fgRequired || r.destroying) {
+            if (!r.fgRequired || !r.fgWaiting || r.destroying) {
                 return;
             }
 

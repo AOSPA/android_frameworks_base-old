@@ -96,6 +96,7 @@ import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
 import java.util.Optional;
 
 import dagger.BindsOptionalOf;
+import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
@@ -189,15 +190,13 @@ public abstract class WMShellBaseModule {
             @ShellMainThread ShellExecutor mainExecutor,
             @ShellMainThread Handler mainHandler,
             Context context,
-            CompatUIController compatUI,
             SyncTransactionQueue syncTransactionQueue,
             DisplayController displayController,
             DisplayInsetsController displayInsetsController,
             Optional<RecentTasksController> recentTasksOptional
     ) {
-        return new KidsModeTaskOrganizer(mainExecutor, mainHandler, context, compatUI,
-                syncTransactionQueue, displayController, displayInsetsController,
-                recentTasksOptional);
+        return new KidsModeTaskOrganizer(mainExecutor, mainHandler, context, syncTransactionQueue,
+                displayController, displayInsetsController, recentTasksOptional);
     }
 
     @WMSingleton
@@ -210,9 +209,9 @@ public abstract class WMShellBaseModule {
     static CompatUIController provideCompatUIController(Context context,
             DisplayController displayController, DisplayInsetsController displayInsetsController,
             DisplayImeController imeController, SyncTransactionQueue syncQueue,
-            @ShellMainThread ShellExecutor mainExecutor) {
+            @ShellMainThread ShellExecutor mainExecutor, Lazy<Transitions> transitionsLazy) {
         return new CompatUIController(context, displayController, displayInsetsController,
-                imeController, syncQueue, mainExecutor);
+                imeController, syncQueue, mainExecutor, transitionsLazy);
     }
 
     @WMSingleton

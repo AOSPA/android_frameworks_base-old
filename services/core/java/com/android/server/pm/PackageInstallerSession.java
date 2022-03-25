@@ -29,6 +29,7 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_APK;
 import static android.content.pm.PackageManager.INSTALL_FAILED_MEDIA_UNAVAILABLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_MISSING_SPLIT;
+import static android.content.pm.PackageManager.INSTALL_FROM_ADB;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NO_CERTIFICATES;
 import static android.content.pm.PackageManager.INSTALL_STAGED;
 import static android.content.pm.PackageManager.INSTALL_SUCCEEDED;
@@ -126,6 +127,7 @@ import android.system.StructStat;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.EventLog;
 import android.util.ExceptionUtils;
 import android.util.IntArray;
 import android.util.MathUtils;
@@ -867,7 +869,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return USER_ACTION_NOT_NEEDED;
         }
 
-        if (mPm.isInstallDisabledForPackage(getInstallerPackageName(), mInstallerUid, userId)) {
+        if (snapshot.isInstallDisabledForPackage(getInstallerPackageName(), mInstallerUid,
+                userId)) {
             // show the installer to account for device poslicy or unknown sources use cases
             return USER_ACTION_REQUIRED;
         }
@@ -962,12 +965,17 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         "DataLoader installation of APEX modules is not allowed.");
             }
 
-            if (isSystemDataLoaderInstallation() && mContext.checkCallingOrSelfPermission(
-                    Manifest.permission.USE_SYSTEM_DATA_LOADERS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                throw new SecurityException("You need the "
-                        + "com.android.permission.USE_SYSTEM_DATA_LOADERS permission "
-                        + "to use system data loaders");
+            if (isSystemDataLoaderInstallation()) {
+                if (mContext.checkCallingOrSelfPermission(
+                        Manifest.permission.USE_SYSTEM_DATA_LOADERS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    throw new SecurityException("You need the "
+                            + "com.android.permission.USE_SYSTEM_DATA_LOADERS permission "
+                            + "to use system data loaders");
+                }
+
+                // All installations using system dataloaders marked as ADB.
+                this.params.installFlags |= INSTALL_FROM_ADB;
             }
         }
 
@@ -2881,7 +2889,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 inheritFileLocked(mResolvedBaseFile);
                 // Collect the requiredSplitTypes from base
                 CollectionUtils.addAll(requiredSplitTypes, existing.getBaseRequiredSplitTypes());
-            } else {
+            } else if ((params.installFlags & PackageManager.INSTALL_DONT_KILL_APP) != 0) {
+                EventLog.writeEvent(0x534e4554, "219044664");
+
                 // Installing base.apk. Make sure the app is restarted.
                 params.setDontKillApp(false);
             }
@@ -3776,7 +3786,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         };
 
         if (!manualStartAndDestroy) {
-            final PerUidReadTimeouts[] perUidReadTimeouts = mPm.getPerUidReadTimeouts();
+            final PerUidReadTimeouts[] perUidReadTimeouts =
+                    mPm.getPerUidReadTimeouts(mPm.snapshotComputer());
 
             final StorageHealthCheckParams healthCheckParams = new StorageHealthCheckParams();
             healthCheckParams.blockedTimeoutMs = INCREMENTAL_STORAGE_BLOCKED_TIMEOUT_MS;
@@ -4307,9 +4318,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static String getDeviceOwnerInstalledPackageMsg(Context context, boolean update) {
         DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
         return update
-                ? dpm.getString(PACKAGE_UPDATED_BY_DO,
+                ? dpm.getResources().getString(PACKAGE_UPDATED_BY_DO,
                     () -> context.getString(R.string.package_updated_device_owner))
-                : dpm.getString(PACKAGE_INSTALLED_BY_DO,
+                : dpm.getResources().getString(PACKAGE_INSTALLED_BY_DO,
                     () -> context.getString(R.string.package_installed_device_owner));
     }
 

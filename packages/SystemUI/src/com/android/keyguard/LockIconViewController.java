@@ -211,6 +211,23 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
         mDownDetected = false;
         updateBurnInOffsets();
         updateVisibility();
+
+        updateAccessibility();
+    }
+
+    private void updateAccessibility() {
+        if (mAccessibilityManager.isTouchExplorationEnabled()) {
+            mView.setOnClickListener(
+                    new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            onLongPress();
+                        }
+                    }
+            );
+        } else {
+            mView.setOnClickListener(null);
+        }
     }
 
     @Override
@@ -558,7 +575,7 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
         switch(event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_HOVER_ENTER:
-                if (!mDownDetected) {
+                if (!mDownDetected && mAccessibilityManager.isTouchExplorationEnabled()) {
                     mVibrator.vibrate(
                             Process.myUid(),
                             getContext().getOpPackageName(),

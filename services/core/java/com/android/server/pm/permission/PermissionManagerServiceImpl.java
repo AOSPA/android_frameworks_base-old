@@ -1597,25 +1597,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         }
     }
 
-    @Override
-    public void revokeOwnPermissionsOnKill(String packageName, List<String> permissions) {
-        final int callingUid = Binder.getCallingUid();
-        int callingUserId = UserHandle.getUserId(callingUid);
-        int targetPackageUid = mPackageManagerInt.getPackageUid(packageName, 0, callingUserId);
-        if (targetPackageUid != callingUid) {
-            throw new SecurityException("uid " + callingUid
-                    + " cannot revoke permissions for package " + packageName + " with uid "
-                    + targetPackageUid);
-        }
-        for (String permName : permissions) {
-            if (!checkCallingOrSelfPermission(permName)) {
-                throw new SecurityException("uid " + callingUid + " cannot revoke permission "
-                        + permName + " because it does not hold that permission");
-            }
-        }
-        mPermissionControllerManager.revokeOwnPermissionsOnKill(packageName, permissions);
-    }
-
     private boolean mayManageRolePermission(int uid) {
         final PackageManager packageManager = mContext.getPackageManager();
         final String[] packageNames = packageManager.getPackagesForUid(uid);
@@ -3291,10 +3272,13 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         } else if (pkg.isSystemExt()) {
             permissions = systemConfig.getSystemExtPrivAppPermissions(pkg.getPackageName());
         } else if (containingApexPackageName != null) {
+            final ApexManager apexManager = ApexManager.getInstance();
+            final String apexName = apexManager.getApexModuleNameForPackageName(
+                    containingApexPackageName);
             final Set<String> privAppPermissions = systemConfig.getPrivAppPermissions(
                     pkg.getPackageName());
             final Set<String> apexPermissions = systemConfig.getApexPrivAppPermissions(
-                    containingApexPackageName, pkg.getPackageName());
+                    apexName, pkg.getPackageName());
             if (privAppPermissions != null) {
                 // TODO(andreionea): Remove check as soon as all apk-in-apex
                 // permission allowlists are migrated.

@@ -1920,9 +1920,9 @@
     <string name="permdesc_readMediaVideo">Allows the app to read video files from your shared storage.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. "shared storage" refers to a storage space on the device that all apps with this permission can read from. [CHAR LIMIT=none] -->
-    <string name="permlab_readMediaImage">read image files from shared storage</string>
+    <string name="permlab_readMediaImages">read image files from shared storage</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. "shared storage" refers to a storage space on the device that all apps with this permission can read from. [CHAR LIMIT=none] -->
-    <string name="permdesc_readMediaImage">Allows the app to read image files from your shared storage.</string>
+    <string name="permdesc_readMediaImages">Allows the app to read image files from your shared storage.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. "shared storage" refers to a storage space on the device that all apps with this permission can write to. [CHAR LIMIT=none] -->
     <string name="permlab_sdcardWrite">modify or delete the contents of your shared storage</string>
@@ -5741,7 +5741,7 @@
 
     <!-- Content for the log access confirmation dialog. [CHAR LIMIT=NONE]-->
     <string name="log_access_confirmation_body">Device logs record what happens on your device. Apps can use these logs to find and fix issues.\n\nSome logs may contain sensitive info, so only allow apps you trust to access all device logs.
-        \n\nIf you don’t allow this app to access all device logs, it can still access its own logs, and your device manufacturer may still be able to access some logs or info on your device. Learn more
+        \n\nIf you don’t allow this app to access all device logs, it can still access its own logs and your device manufacturer may still be able to access some logs or info on your device. Learn more
     </string>
 
     <!-- Privacy notice do not show [CHAR LIMIT=20] -->

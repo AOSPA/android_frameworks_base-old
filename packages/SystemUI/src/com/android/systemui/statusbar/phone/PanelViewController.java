@@ -390,7 +390,7 @@ public abstract class PanelViewController {
 
     protected void startExpandMotion(float newX, float newY, boolean startTracking,
             float expandedHeight) {
-        if (!mHandlingPointerUp) {
+        if (!mHandlingPointerUp && !mStatusBarStateController.isDozing()) {
             beginJankMonitoring(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
         }
         mInitialOffsetOnTouch = expandedHeight;
@@ -453,7 +453,7 @@ public abstract class PanelViewController {
                 mLockscreenGestureLogger.log(LockscreenUiEvent.LOCKSCREEN_UNLOCK);
             }
             @Classifier.InteractionType int interactionType = vel == 0 ? GENERIC
-                    : vel > 0 ? QUICK_SETTINGS
+                    : y - mInitialTouchY > 0 ? QUICK_SETTINGS
                             : (mKeyguardStateController.canDismissLockScreen()
                                     ? UNLOCK : BOUNCER_UNLOCK);
 
@@ -540,7 +540,7 @@ public abstract class PanelViewController {
             return true;
         }
 
-        @Classifier.InteractionType int interactionType = vel > 0
+        @Classifier.InteractionType int interactionType = y - mInitialTouchY > 0
                 ? QUICK_SETTINGS : (
                         mKeyguardStateController.canDismissLockScreen() ? UNLOCK : BOUNCER_UNLOCK);
 
@@ -666,7 +666,9 @@ public abstract class PanelViewController {
 
             @Override
             public void onAnimationStart(Animator animation) {
-                beginJankMonitoring(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
+                if (!mStatusBarStateController.isDozing()) {
+                    beginJankMonitoring(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
+                }
             }
 
             @Override
@@ -812,6 +814,7 @@ public abstract class PanelViewController {
             }
             mExpandedFraction = Math.min(1f,
                     maxPanelHeight == 0 ? 0 : mExpandedHeight / maxPanelHeight);
+            mAmbientState.setExpansionFraction(mExpandedFraction);
             onHeightUpdated(mExpandedHeight);
             updatePanelExpansionAndVisibility();
         });

@@ -116,6 +116,16 @@ class LockscreenShadeTransitionController @Inject constructor(
     private var scrimTransitionDistance = 0
 
     /**
+     * Distance that it takes in order for the notifications scrim fade in to start.
+     */
+    private var notificationsScrimTransitionDelay = 0
+
+    /**
+     * Distance that it takes for the notifications scrim to fully fade if after it started.
+     */
+    private var notificationsScrimTransitionDistance = 0
+
+    /**
      * Distance that the full shade transition takes in order for the notification shelf to fully
      * expand.
      */
@@ -225,6 +235,10 @@ class LockscreenShadeTransitionController @Inject constructor(
             R.dimen.lockscreen_shade_transition_by_tap_distance)
         scrimTransitionDistance = context.resources.getDimensionPixelSize(
                 R.dimen.lockscreen_shade_scrim_transition_distance)
+        notificationsScrimTransitionDelay = context.resources.getDimensionPixelSize(
+                R.dimen.lockscreen_shade_notifications_scrim_transition_delay)
+        notificationsScrimTransitionDistance = context.resources.getDimensionPixelSize(
+                R.dimen.lockscreen_shade_notifications_scrim_transition_distance)
         notificationShelfTransitionDistance = context.resources.getDimensionPixelSize(
                 R.dimen.lockscreen_shade_notif_shelf_transition_distance)
         qsTransitionDistance = context.resources.getDimensionPixelSize(
@@ -405,7 +419,9 @@ class LockscreenShadeTransitionController @Inject constructor(
                             false /* animate */, 0 /* delay */)
 
                     mediaHierarchyManager.setTransitionToFullShadeAmount(field)
+                    transitionToShadeAmountScrim(field)
                     transitionToShadeAmountCommon(field)
+                    transitionToShadeAmountKeyguard(field)
                 }
             }
         }
@@ -416,15 +432,15 @@ class LockscreenShadeTransitionController @Inject constructor(
     var qSDragProgress = 0f
         private set
 
-    private fun transitionToShadeAmountCommon(dragDownAmount: Float) {
+    private fun transitionToShadeAmountScrim(dragDownAmount: Float) {
         val scrimProgress = MathUtils.saturate(dragDownAmount / scrimTransitionDistance)
-        scrimController.setTransitionToFullShadeProgress(scrimProgress)
+        val notificationsScrimDragAmount = dragDownAmount - notificationsScrimTransitionDelay
+        val notificationsScrimProgress = MathUtils.saturate(
+                notificationsScrimDragAmount / notificationsScrimTransitionDistance)
+        scrimController.setTransitionToFullShadeProgress(scrimProgress, notificationsScrimProgress)
+    }
 
-        // Fade out all content only visible on the lockscreen
-        val npvcProgress =
-            MathUtils.saturate(dragDownAmount / npvcKeyguardContentAlphaTransitionDistance)
-        notificationPanelController.setKeyguardOnlyContentAlpha(1.0f - npvcProgress)
-
+    private fun transitionToShadeAmountCommon(dragDownAmount: Float) {
         if (depthControllerTransitionDistance > 0) {
             val depthProgress =
                 MathUtils.saturate(dragDownAmount / depthControllerTransitionDistance)
@@ -436,6 +452,22 @@ class LockscreenShadeTransitionController @Inject constructor(
 
         val statusBarProgress = MathUtils.saturate(dragDownAmount / statusBarTransitionDistance)
         centralSurfaces.setTransitionToFullShadeProgress(statusBarProgress)
+    }
+
+    private fun transitionToShadeAmountKeyguard(dragDownAmount: Float) {
+        // Fade out all content only visible on the lockscreen
+        val keyguardAlphaProgress =
+            MathUtils.saturate(dragDownAmount / npvcKeyguardContentAlphaTransitionDistance)
+        val keyguardAlpha = 1f - keyguardAlphaProgress
+        val keyguardTranslationY = if (useSplitShade) {
+            // On split-shade, the translationY of the keyguard should stay in sync with the
+            // translation of media.
+            mediaHierarchyManager.getGuidedTransformationTranslationY()
+        } else {
+            0
+        }
+        notificationPanelController
+            .setKeyguardTransitionProgress(keyguardAlpha, keyguardTranslationY)
     }
 
     private fun setDragDownAmountAnimated(

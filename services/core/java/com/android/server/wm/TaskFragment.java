@@ -63,8 +63,6 @@ import static com.android.server.wm.TaskFragmentProto.DISPLAY_ID;
 import static com.android.server.wm.TaskFragmentProto.MIN_HEIGHT;
 import static com.android.server.wm.TaskFragmentProto.MIN_WIDTH;
 import static com.android.server.wm.TaskFragmentProto.WINDOW_CONTAINER;
-import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
-import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowContainerChildProto.TASK_FRAGMENT;
 
 import android.annotation.IntDef;
@@ -1487,7 +1485,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             // next activity.
             final boolean lastResumedCanPip = prev.checkEnterPictureInPictureState(
                     "shouldAutoPipWhilePausing", userLeaving);
-            if (lastResumedCanPip && prev.pictureInPictureArgs.isAutoEnterEnabled()) {
+            if (userLeaving && lastResumedCanPip
+                    && prev.pictureInPictureArgs.isAutoEnterEnabled()) {
                 shouldAutoPip = true;
             } else if (!lastResumedCanPip) {
                 // If the flag RESUME_WHILE_PAUSING is set, then continue to schedule the previous
@@ -2396,8 +2395,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (!hasChild()) {
             return false;
         }
-        return isAnimating(TRANSITION | CHILDREN, WindowState.EXIT_ANIMATING_TYPES)
-                || inTransition();
+        return isExitAnimationRunningSelfOrChild() || inTransition();
     }
 
     @Override
