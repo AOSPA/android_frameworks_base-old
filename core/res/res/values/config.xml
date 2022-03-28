@@ -2726,7 +2726,7 @@
     <string name="config_bandwidthEstimateSource">bandwidth_estimator</string>
 
     <!-- Whether force to enable telephony new data stack or not -->
-    <bool name="config_force_enable_telephony_new_data_stack">true</bool>
+    <bool name="config_force_enable_telephony_new_data_stack">false</bool>
 
     <!-- Whether WiFi display is supported by this device.
          There are many prerequisites for this feature to work correctly.
@@ -2990,6 +2990,12 @@
         <item>com.android.server.notification.CriticalNotificationExtractor</item>
 
     </string-array>
+
+    <!-- When migrating notification settings into the permission framework, whether all existing
+         apps should be marked as 'user-set' (true) or whether only the apps that have explicitly
+         modified notification settings should be marked as 'user-set' (false). Users will not see
+         system generated permission prompts for 'user-set' apps. -->
+    <bool name="config_notificationForceUserSetOnUpgrade">true</bool>
 
     <!-- Default Gravity setting for the system Toast view. Equivalent to: Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM -->
     <integer name="config_toastDefaultGravity">0x00000051</integer>
@@ -4874,6 +4880,7 @@
         <item>0.25</item>
         <item>0.5</item>
         <item>0.75</item>
+        <item>0.875</item>
     </string-array>
 
     <!-- Messages that should not be shown to the user during face auth enrollment. This should be
@@ -5758,13 +5765,13 @@
         exceeds the threshold, it'll be moved to restricted standby bucket. The value must be
         one of or combination of the definitions in AppBatteryPolicy.
     -->
-    <integer name="config_bg_current_drain_types_to_restricted_bucket">4</integer>
+    <integer name="config_bg_current_drain_types_to_restricted_bucket">20</integer>
 
     <!-- The types of battery drain we're checking on each app; if the sum of the battery drain
         exceeds the threshold, it'll be moved to background restricted level. The value must be
         one of or combination of the definitions in AppBatteryPolicy.
     -->
-    <integer name="config_bg_current_drain_types_to_bg_restricted">12</integer>
+    <integer name="config_bg_current_drain_types_to_bg_restricted">28</integer>
 
     <!-- The power usage components we're monitoring. Must one of the definition in BatteryConsumer.
     -->
@@ -5812,7 +5819,7 @@
     <!-- The types of state where we'll exempt its battery usage during that state.
          The state here must be one or a combination of STATE_TYPE_* in BaseAppStateTracker.
     -->
-    <integer name="config_bg_current_drain_exempted_types">9</integer>
+    <integer name="config_bg_current_drain_exempted_types">25</integer>
 
     <!-- The behavior when an app has the permission ACCESS_BACKGROUND_LOCATION granted,
          whether or not the system will use a higher threshold towards its background battery usage

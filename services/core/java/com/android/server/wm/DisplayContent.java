@@ -128,7 +128,6 @@ import static com.android.server.wm.DisplayContentProto.RESUMED_ACTIVITY;
 import static com.android.server.wm.DisplayContentProto.ROOT_DISPLAY_AREA;
 import static com.android.server.wm.DisplayContentProto.SCREEN_ROTATION_ANIMATION;
 import static com.android.server.wm.DisplayContentProto.SLEEP_TOKENS;
-import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_RECENTS;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
@@ -145,7 +144,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.REPORT_HARD_KEYBOARD_STATUS_CHANGE;
 import static com.android.server.wm.WindowManagerService.H.WINDOW_HIDE_TIMEOUT;
-import static com.android.server.wm.WindowManagerService.LAYOUT_REPEAT_THRESHOLD;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_PLACING_SURFACES;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_ASSIGN_LAYERS;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
@@ -4270,17 +4268,17 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     @VisibleForTesting
     SurfaceControl computeImeParent() {
+        if (mImeLayeringTarget != null && mImeInputTarget != null
+                && mImeLayeringTarget.mActivityRecord != mImeInputTarget.getActivityRecord()) {
+            // Do not change parent if the window hasn't requested IME.
+            return null;
+        }
         // Attach it to app if the target is part of an app and such app is covering the entire
         // screen. If it's not covering the entire screen the IME might extend beyond the apps
         // bounds.
         if (shouldImeAttachedToApp()) {
-            if (mImeLayeringTarget.mActivityRecord != mImeInputTarget.getActivityRecord()) {
-                // Do not change parent if the window hasn't requested IME.
-                return null;
-            }
             return mImeLayeringTarget.mActivityRecord.getSurfaceControl();
         }
-
         // Otherwise, we just attach it to where the display area policy put it.
         return mImeWindowsContainer.getParent() != null
                 ? mImeWindowsContainer.getParent().getSurfaceControl() : null;
@@ -4504,56 +4502,38 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         mTmpUpdateAllDrawn.clear();
 
-        int repeats = 0;
-        do {
-            repeats++;
-            if (repeats > 6) {
-                Slog.w(TAG, "Animation repeat aborted after too many iterations");
-                clearLayoutNeeded();
-                break;
-            }
+        if (DEBUG_LAYOUT_REPEATS) surfacePlacer.debugLayoutRepeats("On entry to LockedInner",
+                pendingLayoutChanges);
 
-            if (DEBUG_LAYOUT_REPEATS) surfacePlacer.debugLayoutRepeats("On entry to LockedInner",
-                    pendingLayoutChanges);
+        if ((pendingLayoutChanges & FINISH_LAYOUT_REDO_WALLPAPER) != 0) {
+            mWallpaperController.adjustWallpaperWindows();
+        }
 
-            if ((pendingLayoutChanges & FINISH_LAYOUT_REDO_WALLPAPER) != 0) {
-                mWallpaperController.adjustWallpaperWindows();
-            }
-
-            if ((pendingLayoutChanges & FINISH_LAYOUT_REDO_CONFIG) != 0) {
-                if (DEBUG_LAYOUT) Slog.v(TAG, "Computing new config from layout");
-                if (updateOrientation()) {
-                    setLayoutNeeded();
-                    sendNewConfiguration();
-                }
-            }
-
-            if ((pendingLayoutChanges & FINISH_LAYOUT_REDO_LAYOUT) != 0) {
+        if ((pendingLayoutChanges & FINISH_LAYOUT_REDO_CONFIG) != 0) {
+            if (DEBUG_LAYOUT) Slog.v(TAG, "Computing new config from layout");
+            if (updateOrientation()) {
                 setLayoutNeeded();
+                sendNewConfiguration();
             }
+        }
 
-            // FIRST LOOP: Perform a layout, if needed.
-            if (repeats < LAYOUT_REPEAT_THRESHOLD) {
-                performLayout(repeats == 1, false /* updateInputWindows */);
-            } else {
-                Slog.w(TAG, "Layout repeat skipped after too many iterations");
-            }
+        if ((pendingLayoutChanges & FINISH_LAYOUT_REDO_LAYOUT) != 0) {
+            setLayoutNeeded();
+        }
 
-            // FIRST AND ONE HALF LOOP: Make WindowManagerPolicy think it is animating.
-            pendingLayoutChanges = 0;
+        // Perform a layout, if needed.
+        performLayout(true /* initial */, false /* updateInputWindows */);
+        pendingLayoutChanges = 0;
 
-            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "applyPostLayoutPolicy");
-            try {
-                mDisplayPolicy.beginPostLayoutPolicyLw();
-                forAllWindows(mApplyPostLayoutPolicy, true /* traverseTopToBottom */);
-                pendingLayoutChanges |= mDisplayPolicy.finishPostLayoutPolicyLw();
-            } finally {
-                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
-            }
-            if (DEBUG_LAYOUT_REPEATS) surfacePlacer.debugLayoutRepeats(
-                    "after finishPostLayoutPolicyLw", pendingLayoutChanges);
-            mInsetsStateController.onPostLayout();
-        } while (pendingLayoutChanges != 0);
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "applyPostLayoutPolicy");
+        try {
+            mDisplayPolicy.beginPostLayoutPolicyLw();
+            forAllWindows(mApplyPostLayoutPolicy, true /* traverseTopToBottom */);
+            mDisplayPolicy.finishPostLayoutPolicyLw();
+        } finally {
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+        }
+        mInsetsStateController.onPostLayout();
 
         mTmpApplySurfaceChangesTransactionState.reset();
 
@@ -5020,10 +5000,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // docked divider while keeping the app itself below the docked divider, so instead
         // we will put the docked divider below the IME. @see #assignRelativeLayerForImeTargetChild
         //
-        // In the case the IME target is animating, the animation Z order may be different
-        // than the WindowContainer Z order, so it's difficult to be sure we have the correct
-        // IME target. In this case we just layer the IME over its parent surface.
-        //
         // In the case where we have no IME target we let its window parent to place it.
         //
         // Keep IME window in surface parent as long as app's starting window
@@ -5039,9 +5015,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     // We don't need to set relative layer if the IME target in non-multi-window
                     // mode is the activity main window since updateImeParent will ensure the IME
                     // surface be attached on the fullscreen activity.
-                    && imeTarget.mAttrs.type != TYPE_BASE_APPLICATION
-                    && imeTarget.mToken.getActivity(app -> app.isAnimating(TRANSITION | PARENTS,
-                            ANIMATION_TYPE_ALL & ~ANIMATION_TYPE_RECENTS)) == null;
+                    && imeTarget.mAttrs.type != TYPE_BASE_APPLICATION;
             if (canImeTargetSetRelativeLayer) {
                 mImeWindowsContainer.assignRelativeLayer(t, imeTarget.getSurfaceControl(),
                         // TODO: We need to use an extra level on the app surface to ensure

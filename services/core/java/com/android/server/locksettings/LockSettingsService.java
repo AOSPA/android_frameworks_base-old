@@ -255,8 +255,6 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     private final RebootEscrowManager mRebootEscrowManager;
 
-    private boolean mFirstCallToVold;
-
     // Current password metric for all users on the device. Updated when user unlocks
     // the device or changes password. Removed when user is stopped.
     @GuardedBy("this")
@@ -376,7 +374,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             LockscreenCredential profileUserPassword) {
         if (DEBUG) Slog.v(TAG, "Check child profile lock for user: " + profileUserId);
         // Only for profiles that shares credential with parent
-        if (!isCredentialSharedWithParent(profileUserId)) {
+        if (!isCredentialSharableWithParent(profileUserId)) {
             return;
         }
         // Do not tie profile when work challenge is enabled
@@ -600,8 +598,6 @@ public class LockSettingsService extends ILockSettings.Stub {
         mStrongAuth = injector.getStrongAuth();
         mActivityManager = injector.getActivityManager();
 
-        mFirstCallToVold = true;
-
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_USER_ADDED);
         filter.addAction(Intent.ACTION_USER_STARTING);
@@ -692,19 +688,19 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     private String getEncryptionNotificationTitle() {
-        return mInjector.getDevicePolicyManager().getString(
+        return mInjector.getDevicePolicyManager().getResources().getString(
                 PROFILE_ENCRYPTED_TITLE,
                 () -> mContext.getString(R.string.profile_encrypted_title));
     }
 
     private String getEncryptionNotificationDetail() {
-        return mInjector.getDevicePolicyManager().getString(
+        return mInjector.getDevicePolicyManager().getResources().getString(
                 PROFILE_ENCRYPTED_DETAIL,
                 () -> mContext.getString(R.string.profile_encrypted_detail));
     }
 
     private String getEncryptionNotificationMessage() {
-        return mInjector.getDevicePolicyManager().getString(
+        return mInjector.getDevicePolicyManager().getResources().getString(
                 PROFILE_ENCRYPTED_MESSAGE,
                 () -> mContext.getString(R.string.profile_encrypted_message));
     }
@@ -792,7 +788,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     private void ensureProfileKeystoreUnlocked(int userId) {
         final KeyStore ks = KeyStore.getInstance();
         if (ks.state(userId) == KeyStore.State.LOCKED
-                && isCredentialSharedWithParent(userId)
+                && isCredentialSharableWithParent(userId)
                 && hasUnifiedChallenge(userId)) {
             Slog.i(TAG, "Profile got unlocked, will unlock its keystore");
             // If boot took too long and the password in vold got expired, parent keystore will
@@ -813,7 +809,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 // Hide notification first, as tie managed profile lock takes time
                 hideEncryptionNotification(new UserHandle(userId));
 
-                if (isCredentialSharedWithParent(userId)) {
+                if (isCredentialSharableWithParent(userId)) {
                     tieProfileLockIfNecessary(userId, LockscreenCredential.createNone());
                 }
 
@@ -1080,7 +1076,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         final int userCount = users.size();
         for (int i = 0; i < userCount; i++) {
             UserInfo user = users.get(i);
-            if (isCredentialSharedWithParent(user.id)
+            if (isCredentialSharableWithParent(user.id)
                     && !getSeparateProfileChallengeEnabledInternal(user.id)) {
                 success &= SyntheticPasswordCrypto.migrateLockSettingsKey(
                         PROFILE_KEY_NAME_ENCRYPT + user.id);
@@ -1513,7 +1509,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             Thread.currentThread().interrupt();
         }
 
-        if (isCredentialSharedWithParent(userId)) {
+        if (isCredentialSharableWithParent(userId)) {
             if (!hasUnifiedChallenge(userId)) {
                 mBiometricDeferredQueue.processPendingLockoutResets();
             }
@@ -1522,7 +1518,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
         for (UserInfo profile : mUserManager.getProfiles(userId)) {
             if (profile.id == userId) continue;
-            if (!isCredentialSharedWithParent(profile.id)) continue;
+            if (!isCredentialSharableWithParent(profile.id)) continue;
 
             if (hasUnifiedChallenge(profile.id)) {
                 if (mUserManager.isUserRunning(profile.id)) {
@@ -1559,7 +1555,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     private Map<Integer, LockscreenCredential> getDecryptedPasswordsForAllTiedProfiles(int userId) {
-        if (isCredentialSharedWithParent(userId)) {
+        if (isCredentialSharableWithParent(userId)) {
             return null;
         }
         Map<Integer, LockscreenCredential> result = new ArrayMap<>();
@@ -1567,7 +1563,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         final int size = profiles.size();
         for (int i = 0; i < size; i++) {
             final UserInfo profile = profiles.get(i);
-            if (!isCredentialSharedWithParent(profile.id)) {
+            if (!isCredentialSharableWithParent(profile.id)) {
                 continue;
             }
             final int profileUserId = profile.id;
@@ -1602,7 +1598,7 @@ public class LockSettingsService extends ILockSettings.Stub {
      */
     private void synchronizeUnifiedWorkChallengeForProfiles(int userId,
             Map<Integer, LockscreenCredential> profilePasswordMap) {
-        if (isCredentialSharedWithParent(userId)) {
+        if (isCredentialSharableWithParent(userId)) {
             return;
         }
         final boolean isSecure = isUserSecure(userId);
@@ -1611,7 +1607,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         for (int i = 0; i < size; i++) {
             final UserInfo profile = profiles.get(i);
             final int profileUserId = profile.id;
-            if (isCredentialSharedWithParent(profileUserId)) {
+            if (isCredentialSharableWithParent(profileUserId)) {
                 if (getSeparateProfileChallengeEnabledInternal(profileUserId)) {
                     continue;
                 }
@@ -1638,12 +1634,12 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     private boolean isProfileWithUnifiedLock(int userId) {
-        return isCredentialSharedWithParent(userId)
+        return isCredentialSharableWithParent(userId)
                 && !getSeparateProfileChallengeEnabledInternal(userId);
     }
 
     private boolean isProfileWithSeparatedLock(int userId) {
-        return isCredentialSharedWithParent(userId)
+        return isCredentialSharableWithParent(userId)
                 && getSeparateProfileChallengeEnabledInternal(userId);
     }
 
@@ -1761,7 +1757,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 setSeparateProfileChallengeEnabledLocked(userId, true, /* unused */ null);
                 notifyPasswordChanged(credential, userId);
             }
-            if (isCredentialSharedWithParent(userId)) {
+            if (isCredentialSharableWithParent(userId)) {
                 // Make sure the profile doesn't get locked straight after setting work challenge.
                 setDeviceUnlockedForUser(userId);
             }
@@ -1776,7 +1772,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     /**
      * @param savedCredential if the user is a profile with
-     * {@link UserManager#isCredentialSharedWithParent()} with unified challenge and
+     * {@link UserManager#isCredentialSharableWithParent()} with unified challenge and
      *   savedCredential is empty, LSS will try to re-derive the profile password internally.
      *     TODO (b/80170828): Fix this so profile password is always passed in.
      * @param isLockTiedToParent is {@code true} if {@code userId} is a profile and its new
@@ -1952,8 +1948,8 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
     }
 
-    protected boolean isCredentialSharedWithParent(int userId) {
-        return getUserManagerFromCache(userId).isCredentialSharedWithParent();
+    protected boolean isCredentialSharableWithParent(int userId) {
+        return getUserManagerFromCache(userId).isCredentialSharableWithParent();
     }
 
     private VerifyCredentialResponse convertResponse(GateKeeperResponse gateKeeperResponse) {
@@ -2203,7 +2199,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         final List<UserInfo> profiles = mUserManager.getProfiles(userId);
         for (UserInfo pi : profiles) {
             // Unlock profile which shares credential with parent with unified lock
-            if (isCredentialSharedWithParent(pi.id)
+            if (isCredentialSharableWithParent(pi.id)
                     && !getSeparateProfileChallengeEnabledInternal(pi.id)
                     && mStorage.hasChildProfileLock(pi.id)) {
                 try {
@@ -2524,77 +2520,6 @@ public class LockSettingsService extends ILockSettings.Stub {
         });
     }
 
-    private LockscreenCredential createPattern(String patternString) {
-        final byte[] patternBytes = patternString.getBytes();
-        LockscreenCredential pattern = LockscreenCredential.createPattern(
-                LockPatternUtils.byteArrayToPattern(patternBytes));
-        Arrays.fill(patternBytes, (byte) 0);
-        return pattern;
-    }
-
-    @Override
-    public boolean checkVoldPassword(int userId) {
-        if (!mFirstCallToVold) {
-            return false;
-        }
-        mFirstCallToVold = false;
-
-        checkPasswordReadPermission();
-
-        // There's no guarantee that this will safely connect, but if it fails
-        // we will simply show the lock screen when we shouldn't, so relatively
-        // benign. There is an outside chance something nasty would happen if
-        // this service restarted before vold stales out the password in this
-        // case. The nastiness is limited to not showing the lock screen when
-        // we should, within the first minute of decrypting the phone if this
-        // service can't connect to vold, it restarts, and then the new instance
-        // does successfully connect.
-        final IStorageManager service = mInjector.getStorageManager();
-        // TODO(b/120484642): Update vold to return a password as a byte array
-        String password;
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            password = service.getPassword();
-            service.clearPassword();
-        } catch (RemoteException e) {
-            Slog.w(TAG, "vold getPassword() failed", e);
-            return false;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-        if (TextUtils.isEmpty(password)) {
-            return false;
-        }
-
-        try {
-            final LockscreenCredential credential;
-            switch (getCredentialTypeInternal(userId)) {
-                case CREDENTIAL_TYPE_PATTERN:
-                    credential = createPattern(password);
-                    break;
-                case CREDENTIAL_TYPE_PIN:
-                    credential = LockscreenCredential.createPin(password);
-                    break;
-                case CREDENTIAL_TYPE_PASSWORD:
-                    credential = LockscreenCredential.createPassword(password);
-                    break;
-                default:
-                    credential = null;
-                    Slog.e(TAG, "Unknown credential type");
-            }
-
-            if (credential != null
-                    && checkCredential(credential, userId, null /* progressCallback */)
-                                .getResponseCode() == GateKeeperResponse.RESPONSE_OK) {
-                return true;
-            }
-        } catch (Exception e) {
-            Slog.e(TAG, "checkVoldPassword failed: ", e);
-        }
-
-        return false;
-    }
-
     private void removeUser(int userId, boolean unknownUser) {
         Slog.i(TAG, "RemoveUser: " + userId);
         removeBiometricsForUser(userId);
@@ -2605,7 +2530,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         mManagedProfilePasswordCache.removePassword(userId);
 
         gateKeeperClearSecureUserId(userId);
-        if (unknownUser || isCredentialSharedWithParent(userId)) {
+        if (unknownUser || isCredentialSharableWithParent(userId)) {
             removeKeystoreProfileKey(userId);
         }
         // Clean up storage last, this is to ensure that cleanupDataForReusedUserIdIfNecessary()
@@ -3325,7 +3250,7 @@ public class LockSettingsService extends ILockSettings.Stub {
      * Returns a fixed pseudorandom byte string derived from the user's synthetic password.
      * This is used to salt the password history hash to protect the hash against offline
      * bruteforcing, since rederiving this value requires a successful authentication.
-     * If user is a profile with {@link UserManager#isCredentialSharedWithParent()} true and with
+     * If user is a profile with {@link UserManager#isCredentialSharableWithParent()} true and with
      * unified challenge, currentCredential is ignored.
      */
     @Override

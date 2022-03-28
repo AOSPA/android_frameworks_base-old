@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,10 @@
  * limitations under the License.
  */
 
-package com.android.internal.logging;
+package com.android.internal.telephony;
 
-import static java.lang.annotation.ElementType.FIELD;
-import static java.lang.annotation.RetentionPolicy.SOURCE;
-
-import java.lang.annotation.Retention;
-import java.lang.annotation.Target;
-
-@Retention(SOURCE)
-@Target(FIELD)
-public @interface UiEvent {
-    /** An explanation, suitable for Android analysts, of the UI event that this log represents. */
-    String doc();
+oneway interface ICarrierPrivilegesCallback {
+    void onCarrierPrivilegesChanged(
+            in List<String> privilegedPackageNames, in int[] privilegedUids);
+    void onCarrierServiceChanged(in String carrierServicePackageName, in int carrierServiceUid);
 }

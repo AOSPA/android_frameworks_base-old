@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The Android Open Source Project
+ * Copyright 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-package com.android.internal.telephony;
+package android.media.tv.interactive;
 
-oneway interface ICarrierPrivilegesListener {
-    void onCarrierPrivilegesChanged(
-            in List<String> privilegedPackageNames, in int[] privilegedUids);
-}
+parcelable TvInteractiveAppServiceInfo;

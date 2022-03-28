@@ -37,6 +37,7 @@
     <dimen name="controls_task_view_right_margin">8dp</dimen>
 
     <dimen name="split_shade_header_height">42dp</dimen>
+    <dimen name="status_bar_header_height_keyguard">42dp</dimen>
 
     <!-- Distance that the full shade transition takes in order to complete by tapping on a button
          like "expand". -->
@@ -52,6 +53,14 @@
     <!-- Distance that the full shade transition takes in order for scrim to fully transition to
          the shade (in alpha) -->
     <dimen name="lockscreen_shade_scrim_transition_distance">80dp</dimen>
+
+    <!-- The notifications scrim transition should start when the other scrims' transition is at
+         95%. -->
+    <dimen name="lockscreen_shade_notifications_scrim_transition_delay">76dp</dimen>
+
+    <!-- The notifications scrim transition duration is 66.6% of the duration of the other scrims'
+         transition. -->
+    <dimen name="lockscreen_shade_notifications_scrim_transition_distance">53.28dp</dimen>
 
     <!-- Distance that the full shade transition takes in order for the keyguard content on
          NotificationPanelViewController to fully fade (e.g. Clock & Smartspace) -->
