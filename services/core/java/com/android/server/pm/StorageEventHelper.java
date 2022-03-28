@@ -26,13 +26,13 @@ import static com.android.server.pm.PackageManagerService.SCAN_INITIAL;
 import static com.android.server.pm.PackageManagerService.TAG;
 import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
 
+import android.annotation.NonNull;
 import android.app.ResourcesManager;
 import android.content.IIntentReceiver;
 import android.content.pm.PackageManager;
 import android.content.pm.PackagePartitions;
 import android.content.pm.UserInfo;
 import android.content.pm.VersionedPackage;
-import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.UserHandle;
@@ -49,6 +49,7 @@ import android.os.storage.DiskInfo;
 import com.android.internal.policy.AttributeCache;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
+import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -79,7 +80,7 @@ public final class StorageEventHelper extends StorageEventListener {
                 // Clean up any users or apps that were removed or recreated
                 // while this volume was missing
                 mPm.mUserManager.reconcileUsers(volumeUuid);
-                reconcileApps(volumeUuid);
+                reconcileApps(mPm.snapshotComputer(), volumeUuid);
 
                 // Clean up any install sessions that expired or were
                 // cancelled while this volume was missing
@@ -151,7 +152,7 @@ public final class StorageEventHelper extends StorageEventListener {
                 final AndroidPackage pkg;
                 try {
                     pkg = installPackageHelper.scanSystemPackageTracedLI(
-                            ps.getPath(), parseFlags, SCAN_INITIAL, 0, null);
+                            ps.getPath(), parseFlags, SCAN_INITIAL, null);
                     loaded.add(pkg);
 
                 } catch (PackageManagerException e) {
@@ -303,8 +304,8 @@ public final class StorageEventHelper extends StorageEventListener {
      * aren't expected, either due to uninstallation or reinstallation on
      * another volume.
      */
-    public void reconcileApps(String volumeUuid) {
-        List<String> absoluteCodePaths = collectAbsoluteCodePaths();
+    public void reconcileApps(@NonNull Computer snapshot, String volumeUuid) {
+        List<String> absoluteCodePaths = collectAbsoluteCodePaths(snapshot);
         List<File> filesToDelete = null;
 
         final File[] files = FileUtils.listFilesOrEmpty(
@@ -349,10 +350,10 @@ public final class StorageEventHelper extends StorageEventListener {
         }
     }
 
-    private List<String> collectAbsoluteCodePaths() {
+    private List<String> collectAbsoluteCodePaths(@NonNull Computer snapshot) {
         List<String> codePaths = new ArrayList<>();
         final ArrayMap<String, ? extends PackageStateInternal> packageStates =
-                mPm.getPackageStates();
+                snapshot.getPackageStates();
         final int packageCount = packageStates.size();
         for (int i = 0; i < packageCount; i++) {
             final PackageStateInternal ps = packageStates.valueAt(i);

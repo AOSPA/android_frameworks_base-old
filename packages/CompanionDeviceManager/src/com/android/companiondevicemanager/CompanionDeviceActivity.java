@@ -29,6 +29,7 @@ import static com.android.companiondevicemanager.PermissionListAdapter.TYPE_NOTI
 import static com.android.companiondevicemanager.PermissionListAdapter.TYPE_STORAGE;
 import static com.android.companiondevicemanager.Utils.getApplicationLabel;
 import static com.android.companiondevicemanager.Utils.getHtmlFromResources;
+import static com.android.companiondevicemanager.Utils.getIcon;
 import static com.android.companiondevicemanager.Utils.getVendorHeaderIcon;
 import static com.android.companiondevicemanager.Utils.getVendorHeaderName;
 import static com.android.companiondevicemanager.Utils.prepareResultReceiverForIpc;
@@ -56,6 +57,7 @@ import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
@@ -106,29 +108,34 @@ public class CompanionDeviceActivity extends FragmentActivity implements
     private TextView mTitle;
     private TextView mSummary;
 
+    // Present for single device and multiple device only.
+    private ImageView mProfileIcon;
+
     // Only present for selfManaged devices.
     private ImageView mVendorHeaderImage;
     private TextView mVendorHeaderName;
     private ImageButton mVendorHeaderButton;
 
     // Progress indicator is only shown while we are looking for the first suitable device for a
-    // "regular" (ie. not self-managed) association.
-    private View mProgressIndicator;
+    // multiple device association.
+    private ProgressBar mProgressIndicator;
 
     // Present for self-managed association requests and "single-device" regular association
     // regular.
     private Button mButtonAllow;
     private Button mButtonNotAllow;
-    // Present for multiple devices association requests only.
+    // Present for multiple devices' association requests only.
     private Button mButtonNotAllowMultipleDevices;
 
     private LinearLayout mAssociationConfirmationDialog;
+    private LinearLayout mMultipleDeviceList;
     private RelativeLayout mVendorHeader;
 
     // The recycler view is only shown for multiple-device regular association request, after
     // at least one matching device is found.
     private @Nullable RecyclerView mDeviceListRecyclerView;
     private @Nullable DeviceListAdapter mDeviceAdapter;
+
 
     // The recycler view is only shown for selfManaged association request.
     private @Nullable RecyclerView mPermissionListRecyclerView;
@@ -243,17 +250,22 @@ public class CompanionDeviceActivity extends FragmentActivity implements
 
         setContentView(R.layout.activity_confirmation);
 
+        mMultipleDeviceList = findViewById(R.id.multiple_device_list);
         mAssociationConfirmationDialog = findViewById(R.id.activity_confirmation);
         mVendorHeader = findViewById(R.id.vendor_header);
 
         mTitle = findViewById(R.id.title);
         mSummary = findViewById(R.id.summary);
 
+        mProfileIcon = findViewById(R.id.profile_icon);
+
         mVendorHeaderImage = findViewById(R.id.vendor_header_image);
         mVendorHeaderName = findViewById(R.id.vendor_header_name);
         mVendorHeaderButton = findViewById(R.id.vendor_header_button);
 
         mDeviceListRecyclerView = findViewById(R.id.device_list);
+
+        mProgressIndicator = findViewById(R.id.spinner);
         mDeviceAdapter = new DeviceListAdapter(this, this::onListItemClick);
 
         mPermissionListRecyclerView = findViewById(R.id.permission_list);
@@ -420,6 +432,7 @@ public class CompanionDeviceActivity extends FragmentActivity implements
         mVendorHeaderName.setText(vendorName);
 
         mDeviceListRecyclerView.setVisibility(View.GONE);
+        mProfileIcon.setVisibility(View.GONE);
         mVendorHeader.setVisibility(View.VISIBLE);
     }
 
@@ -447,17 +460,22 @@ public class CompanionDeviceActivity extends FragmentActivity implements
         final Spanned title = getHtmlFromResources(
                 this, R.string.confirmation_title, appLabel, deviceName);
         final Spanned summary;
+        final Drawable profileIcon;
 
         if (deviceProfile == null) {
             summary = getHtmlFromResources(this, R.string.summary_generic);
+            profileIcon = getIcon(this, R.drawable.ic_device_other);
+            mSummary.setVisibility(View.GONE);
         } else if (deviceProfile.equals(DEVICE_PROFILE_WATCH)) {
             summary = getHtmlFromResources(this, R.string.summary_watch, appLabel, deviceName);
+            profileIcon = getIcon(this, R.drawable.ic_watch);
         } else {
             throw new RuntimeException("Unsupported profile " + deviceProfile);
         }
 
         mTitle.setText(title);
         mSummary.setText(summary);
+        mProfileIcon.setImageDrawable(profileIcon);
     }
 
     private void initUiForMultipleDevices(CharSequence appLabel) {
@@ -467,12 +485,16 @@ public class CompanionDeviceActivity extends FragmentActivity implements
 
         final String profileName;
         final Spanned summary;
+        final Drawable profileIcon;
         if (deviceProfile == null) {
             profileName = getString(R.string.profile_name_generic);
             summary = getHtmlFromResources(this, R.string.summary_generic);
+            profileIcon = getIcon(this, R.drawable.ic_device_other);
+            mSummary.setVisibility(View.GONE);
         } else if (deviceProfile.equals(DEVICE_PROFILE_WATCH)) {
             profileName = getString(R.string.profile_name_watch);
             summary = getHtmlFromResources(this, R.string.summary_watch, appLabel);
+            profileIcon = getIcon(this, R.drawable.ic_watch);
         } else {
             throw new RuntimeException("Unsupported profile " + deviceProfile);
         }
@@ -481,21 +503,27 @@ public class CompanionDeviceActivity extends FragmentActivity implements
 
         mTitle.setText(title);
         mSummary.setText(summary);
+        mProfileIcon.setImageDrawable(profileIcon);
 
-        mDeviceAdapter = new DeviceListAdapter(this, this::onListItemClick);
-
-        // TODO: hide the list and show a spinner until a first device matching device is found.
         mDeviceListRecyclerView.setAdapter(mDeviceAdapter);
         mDeviceListRecyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        CompanionDeviceDiscoveryService.getScanResult().observe(
-                /* lifecycleOwner */ this,
-                /* observer */ mDeviceAdapter);
+        CompanionDeviceDiscoveryService.getScanResult().observe(this,
+                deviceFilterPairs -> {
+                    // Dismiss the progress bar once there's one device found for multiple devices.
+                    if (deviceFilterPairs.size() >= 1) {
+                        mProgressIndicator.setVisibility(View.GONE);
+                    }
+
+                    mDeviceAdapter.setDevices(deviceFilterPairs);
+                });
 
         // "Remove" consent button: users would need to click on the list item.
         mButtonAllow.setVisibility(View.GONE);
         mButtonNotAllow.setVisibility(View.GONE);
         mButtonNotAllowMultipleDevices.setVisibility(View.VISIBLE);
+        mMultipleDeviceList.setVisibility(View.VISIBLE);
+        mProgressIndicator.setVisibility(View.VISIBLE);
     }
 
     private void onListItemClick(int position) {
@@ -543,7 +571,7 @@ public class CompanionDeviceActivity extends FragmentActivity implements
                 CompanionVendorHelperDialogFragment.newInstance(mRequest.getPackageName(),
                         mRequest.getUserId(), mRequest.getDeviceProfile());
 
-        mAssociationConfirmationDialog.setVisibility(View.GONE);
+        mAssociationConfirmationDialog.setVisibility(View.INVISIBLE);
 
         fragmentDialog.show(fragmentManager, /* Tag */ FRAGMENT_DIALOG_TAG);
     }

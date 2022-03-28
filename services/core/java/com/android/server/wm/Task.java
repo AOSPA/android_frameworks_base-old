@@ -74,6 +74,7 @@ import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static com.android.internal.policy.DecorView.DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP;
 import static com.android.internal.policy.DecorView.DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BACK_PREVIEW;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_LOCKTASK;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_RECENTS_ANIMATIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
@@ -615,6 +616,12 @@ class Task extends TaskFragment {
     ActivityRecord mChildPipActivity;
 
     boolean mLastSurfaceShowing = true;
+
+    /**
+     * Tracks if a back gesture is in progress.
+     * Skips any system transition animations if this is set to {@code true}.
+     */
+    boolean mBackGestureStarted = false;
 
     private Task(ActivityTaskManagerService atmService, int _taskId, Intent _intent,
             Intent _affinityIntent, String _affinity, String _rootAffinity,
@@ -1630,12 +1637,16 @@ class Task extends TaskFragment {
     }
 
     ActivityRecord performClearTop(ActivityRecord newR, int launchFlags) {
+        // The task should be preserved for putting new activity in case the last activity is
+        // finished if it is normal launch mode and not single top ("clear-task-top").
+        mReuseTask = true;
         mTaskSupervisor.beginDeferResume();
         final ActivityRecord result;
         try {
             result = clearTopActivities(newR, launchFlags);
         } finally {
             mTaskSupervisor.endDeferResume();
+            mReuseTask = false;
         }
         return result;
     }
@@ -3329,6 +3340,14 @@ class Task extends TaskFragment {
                     }
                 });
             }
+        } else if (mBackGestureStarted) {
+            // Cancel playing transitions if a back navigation animation is in progress.
+            // This bit is set by {@link BackNavigationController} when a back gesture is started.
+            // It is used as a one-off transition overwrite that is cleared when the back gesture
+            // is committed and triggers a transition, or when the gesture is cancelled.
+            mBackGestureStarted = false;
+            mDisplayContent.mSkipAppTransitionAnimation = true;
+            ProtoLog.d(WM_DEBUG_BACK_PREVIEW, "Skipping app transition animation. task=%s", this);
         } else {
             super.applyAnimationUnchecked(lp, enter, transit, isVoiceInteraction, sources);
         }
@@ -3410,7 +3429,7 @@ class Task extends TaskFragment {
         info.positionInParent = getRelativePosition();
 
         info.pictureInPictureParams = getPictureInPictureParams(top);
-        info.preferDockBigOverlays = getPreferDockBigOverlays();
+        info.shouldDockBigOverlays = shouldDockBigOverlays();
         if (info.pictureInPictureParams != null
                 && info.pictureInPictureParams.isLaunchIntoPip()
                 && top.getTopMostActivity().getLastParentBeforePip() != null) {
@@ -3463,9 +3482,9 @@ class Task extends TaskFragment {
                 ? null : new PictureInPictureParams(topMostActivity.pictureInPictureArgs);
     }
 
-    private boolean getPreferDockBigOverlays() {
+    private boolean shouldDockBigOverlays() {
         final ActivityRecord topMostActivity = getTopMostActivity();
-        return topMostActivity != null && topMostActivity.preferDockBigOverlays;
+        return topMostActivity != null && topMostActivity.shouldDockBigOverlays;
     }
 
     Rect getDisplayCutoutInsets() {
@@ -4361,7 +4380,7 @@ class Task extends TaskFragment {
         }
     }
 
-    void onPreferDockBigOverlaysChanged() {
+    void onShouldDockBigOverlaysChanged() {
         dispatchTaskInfoChangedIfNeeded(true /* force */);
     }
 

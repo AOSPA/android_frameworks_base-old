@@ -89,7 +89,6 @@ import static android.view.WindowManager.REMOVE_CONTENT_MODE_UNDEFINED;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_RELAUNCH;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
-import static android.view.WindowManagerGlobal.RELAYOUT_RES_BLAST_SYNC;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 import static android.view.WindowManagerPolicyConstants.TYPE_LAYER_MULTIPLIER;
@@ -119,7 +118,6 @@ import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
-import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DISPLAY;
@@ -750,6 +748,9 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private final DisplayHashController mDisplayHashController;
 
+    volatile float mMaximumObscuringOpacityForTouch =
+            InputManager.DEFAULT_MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH;
+
     @VisibleForTesting
     final WindowContextListenerController mWindowContextListenerController =
             new WindowContextListenerController();
@@ -787,6 +788,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR);
         private final Uri mDisplaySettingsPathUri = Settings.Global.getUriFor(
                 DEVELOPMENT_WM_DISPLAY_SETTINGS_PATH);
+        private final Uri mMaximumObscuringOpacityForTouchUri = Settings.Global.getUriFor(
+                Settings.Global.MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH);
 
         public SettingsObserver() {
             super(new Handler());
@@ -810,6 +813,8 @@ public class WindowManagerService extends IWindowManager.Stub
             resolver.registerContentObserver(mDevEnableNonResizableMultiWindowUri, false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mDisplaySettingsPathUri, false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(mMaximumObscuringOpacityForTouchUri, false, this,
                     UserHandle.USER_ALL);
         }
 
@@ -854,6 +859,11 @@ public class WindowManagerService extends IWindowManager.Stub
                 return;
             }
 
+            if (mMaximumObscuringOpacityForTouchUri.equals(uri)) {
+                updateMaximumObscuringOpacityForTouch();
+                return;
+            }
+
             @UpdateAnimationScaleMode
             final int mode;
             if (mWindowAnimationScaleUri.equals(uri)) {
@@ -873,6 +883,14 @@ public class WindowManagerService extends IWindowManager.Stub
         void loadSettings() {
             updateSystemUiSettings(false /* handleChange */);
             updatePointerLocation();
+            updateMaximumObscuringOpacityForTouch();
+        }
+
+        void updateMaximumObscuringOpacityForTouch() {
+            ContentResolver resolver = mContext.getContentResolver();
+            mMaximumObscuringOpacityForTouch = Settings.Global.getFloat(resolver,
+                    Settings.Global.MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH,
+                    InputManager.DEFAULT_MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH);
         }
 
         void updateSystemUiSettings(boolean handleChange) {
@@ -2143,6 +2161,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         w.mGivenTouchableRegion.scale(w.mGlobalScale);
                     }
                     w.setDisplayLayoutNeeded();
+                    w.updateSourceFrame(w.getFrame());
                     mWindowPlacerLocked.performSurfacePlacement();
                     w.getDisplayContent().getInputMonitor().updateInputWindowsLw(true);
 
@@ -2197,7 +2216,7 @@ public class WindowManagerService extends IWindowManager.Stub
             int requestedWidth, int requestedHeight, int viewVisibility, int flags,
             ClientWindowFrames outFrames, MergedConfiguration mergedConfiguration,
             SurfaceControl outSurfaceControl, InsetsState outInsetsState,
-            InsetsSourceControl[] outActiveControls) {
+            InsetsSourceControl[] outActiveControls, Bundle outSyncIdBundle) {
         Arrays.fill(outActiveControls, null);
         int result = 0;
         boolean configChanged;
@@ -2488,19 +2507,20 @@ public class WindowManagerService extends IWindowManager.Stub
             ProtoLog.v(WM_DEBUG_FOCUS, "Relayout of %s: focusMayChange=%b",
                     win, focusMayChange);
 
-            result |= mInTouchMode ? WindowManagerGlobal.RELAYOUT_RES_IN_TOUCH_MODE : 0;
-
             if (DEBUG_LAYOUT) {
                 Slog.v(TAG_WM, "Relayout complete " + win + ": outFrames=" + outFrames);
             }
             win.mInRelayout = false;
 
             if (mUseBLASTSync && win.useBLASTSync() && viewVisibility != View.GONE
-                    && win.mNextRelayoutUseSync) {
+                    && (win.mSyncSeqId > win.mLastSeqIdSentToRelayout)) {
                 win.prepareDrawHandlers();
                 win.markRedrawForSyncReported();
-                win.mNextRelayoutUseSync = false;
-                result |= RELAYOUT_RES_BLAST_SYNC;
+
+                win.mLastSeqIdSentToRelayout = win.mSyncSeqId;
+                outSyncIdBundle.putInt("seqid", win.mSyncSeqId);
+            } else {
+                outSyncIdBundle.putInt("seqid", -1);
             }
 
             if (configChanged) {
@@ -2548,8 +2568,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (win.isWinVisibleLw() && winAnimator.applyAnimationLocked(transit, false)) {
             focusMayChange = true;
             win.mAnimatingExit = true;
-        } else if (win.mDisplayContent.okToAnimate() && win.isAnimating(TRANSITION | PARENTS,
-                WindowState.EXIT_ANIMATING_TYPES)) {
+        } else if (win.mDisplayContent.okToAnimate() && win.isExitAnimationRunningSelfOrParent()) {
             // Currently in a hide animation... turn this into
             // an exit.
             win.mAnimatingExit = true;
@@ -2622,7 +2641,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     void finishDrawingWindow(Session session, IWindow client,
-            @Nullable SurfaceControl.Transaction postDrawTransaction) {
+            @Nullable SurfaceControl.Transaction postDrawTransaction, int seqId) {
         if (postDrawTransaction != null) {
             postDrawTransaction.sanitize();
         }
@@ -2633,7 +2652,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 WindowState win = windowForClientLocked(session, client, false);
                 ProtoLog.d(WM_DEBUG_ADD_REMOVE, "finishDrawingWindow: %s mDrawState=%s",
                         win, (win != null ? win.mWinAnimator.drawStateToString() : "null"));
-                if (win != null && win.finishDrawing(postDrawTransaction)) {
+                if (win != null && win.finishDrawing(postDrawTransaction, seqId)) {
                     if (win.hasWallpaper()) {
                         win.getDisplayContent().pendingLayoutChanges |=
                                 WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
@@ -3267,7 +3286,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mContext.enforceCallingOrSelfPermission(
                 Manifest.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE,
                 Manifest.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE
-                        + " permission required to read keyguard visibility");
+                        + " permission required to subscribe to keyguard locked state changes");
     }
 
     private void dispatchKeyguardLockedState() {

@@ -4087,6 +4087,28 @@ public abstract class PackageManager {
             "android.software.incremental_delivery";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
+     * has the requisite kernel support for the EROFS filesystem present in 4.19 kernels as a
+     * staging driver, which lacks 0padding and big pcluster support.
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_EROFS_LEGACY = "android.software.erofs_legacy";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
+     * has the requisite kernel support for the EROFS filesystem present in 5.10 kernels, which
+     * has 0padding, big pcluster, and chunked index support.
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_EROFS = "android.software.erofs";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
      * The device has tuner hardware to support tuner operations.
      *
@@ -4970,8 +4992,8 @@ public abstract class PackageManager {
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
      *         deleted with {@code DELETE_KEEP_DATA} flag set).
-     * @throws NameNotFoundException if a package with the given name cannot be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @deprecated Use {@link #getPackageInfo(String, PackageInfoFlags)} instead.
      */
     @Deprecated
@@ -5007,8 +5029,8 @@ public abstract class PackageManager {
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
      *         deleted with {@code DELETE_KEEP_DATA} flag set).
-     * @throws NameNotFoundException if a package with the given name cannot be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @deprecated Use {@link #getPackageInfo(VersionedPackage, PackageInfoFlags)} instead.
      */
     @Deprecated
@@ -5040,8 +5062,8 @@ public abstract class PackageManager {
      *         applications (which includes installed applications as well as
      *         applications with data directory i.e. applications which had been
      *         deleted with {@code DELETE_KEEP_DATA} flag set).
-     * @throws NameNotFoundException if a package with the given name cannot be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @deprecated Use {@link #getPackageInfoAsUser(String, PackageInfoFlags, int)} instead.
      * @hide
      */
@@ -5166,8 +5188,8 @@ public abstract class PackageManager {
      *            desired package.
      * @return Returns an int array of the assigned GIDs, or null if there are
      *         none.
-     * @throws NameNotFoundException if a package with the given name cannot be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      */
     public abstract int[] getPackageGids(@NonNull String packageName)
             throws NameNotFoundException;
@@ -5183,8 +5205,8 @@ public abstract class PackageManager {
      *            desired package.
      * @return Returns an int array of the assigned gids, or null if there are
      *         none.
-     * @throws NameNotFoundException if a package with the given name cannot be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @deprecated Use {@link #getPackageGids(String, PackageInfoFlags)} instead.
      */
     @Deprecated
@@ -5210,8 +5232,8 @@ public abstract class PackageManager {
      * @param packageName The full name (i.e. com.google.apps.contacts) of the
      *            desired package.
      * @return Returns an integer UID who owns the given package name.
-     * @throws NameNotFoundException if a package with the given name can not be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @deprecated Use {@link #getPackageUid(String, PackageInfoFlags)} instead.
      */
     @Deprecated
@@ -5237,8 +5259,8 @@ public abstract class PackageManager {
      *            desired package.
      * @param userId The user handle identifier to look up the package under.
      * @return Returns an integer UID who owns the given package name.
-     * @throws NameNotFoundException if a package with the given name can not be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @hide
      */
     @SuppressWarnings("HiddenAbstractMethod")
@@ -5256,8 +5278,8 @@ public abstract class PackageManager {
      *            desired package.
      * @param userId The user handle identifier to look up the package under.
      * @return Returns an integer UID who owns the given package name.
-     * @throws NameNotFoundException if a package with the given name can not be
-     *             found on the system.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @deprecated Use {@link #getPackageUidAsUser(String, PackageInfoFlags, int)} instead.
      * @hide
      */
@@ -10281,17 +10303,36 @@ public abstract class PackageManager {
     }
 
     /**
-     * Grants implicit visibility of the package that provides an authority to a querying UID.
+     * Makes a package that provides an authority {@code visibleAuthority} become visible to the
+     * application {@code recipientUid}.
      *
      * @throws SecurityException when called by a package other than the contacts provider
      * @hide
      */
-    public void grantImplicitAccess(int queryingUid, String visibleAuthority) {
+    public void makeProviderVisible(int recipientUid, String visibleAuthority) {
         try {
-            ActivityThread.getPackageManager().grantImplicitAccess(queryingUid, visibleAuthority);
+            ActivityThread.getPackageManager().makeProviderVisible(recipientUid, visibleAuthority);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Makes the package associated with the uid {@code visibleUid} become visible to the
+     * recipient uid application.
+     *
+     * @param recipientUid The uid of the application that is being given access to {@code
+     *                     visibleUid}
+     * @param visibleUid The uid of the application that is becoming accessible to {@code
+     *                   recipientAppId}
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MAKE_UID_VISIBLE)
+    @TestApi
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void makeUidVisible(int recipientUid, int visibleUid) {
+        throw new UnsupportedOperationException(
+                "makeUidVisible not implemented in subclass");
     }
 
     // Some of the flags don't affect the query result, but let's be conservative and cache

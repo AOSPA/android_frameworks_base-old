@@ -17,8 +17,6 @@
 package com.android.systemui.statusbar.phone;
 
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
-import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedulerKt.ANIMATING_IN;
-import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedulerKt.ANIMATING_OUT;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -47,6 +45,7 @@ import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
+import com.android.systemui.statusbar.phone.fragment.StatusBarSystemEventAnimator;
 import com.android.systemui.statusbar.phone.userswitcher.StatusBarUserInfoTracker;
 import com.android.systemui.statusbar.phone.userswitcher.StatusBarUserSwitcherController;
 import com.android.systemui.statusbar.phone.userswitcher.StatusBarUserSwitcherFeatureController;
@@ -59,7 +58,6 @@ import com.android.systemui.util.ViewController;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 import javax.inject.Inject;
@@ -107,6 +105,8 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
                 @Override
                 public void onDensityOrFontScaleChanged() {
                     mView.loadDimens();
+                    // The animator is dependent on resources for offsets
+                    mSystemEventAnimator = new StatusBarSystemEventAnimator(mView, getResources());
                 }
 
                 @Override
@@ -123,21 +123,16 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
 
     private final SystemStatusAnimationCallback mAnimationCallback =
             new SystemStatusAnimationCallback() {
+                @NonNull
                 @Override
-                public void onSystemChromeAnimationStart() {
-                    mView.onSystemChromeAnimationStart(
-                            mAnimationScheduler.getAnimationState() == ANIMATING_OUT);
+                public Animator onSystemEventAnimationFinish(boolean hasPersistentDot) {
+                    return mSystemEventAnimator.onSystemEventAnimationFinish(hasPersistentDot);
                 }
 
+                @NonNull
                 @Override
-                public void onSystemChromeAnimationEnd() {
-                    mView.onSystemChromeAnimationEnd(
-                            mAnimationScheduler.getAnimationState() == ANIMATING_IN);
-                }
-
-                @Override
-                public void onSystemChromeAnimationUpdate(@NonNull ValueAnimator anim) {
-                    mView.onSystemChromeAnimationUpdate((float) anim.getAnimatedValue());
+                public Animator onSystemEventAnimationBegin() {
+                    return mSystemEventAnimator.onSystemEventAnimationBegin();
                 }
             };
 
@@ -232,6 +227,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
     private int mStatusBarState;
     private boolean mDozing;
     private boolean mShowingKeyguardHeadsUp;
+    private StatusBarSystemEventAnimator mSystemEventAnimator;
 
     @Inject
     public KeyguardStatusBarViewController(
@@ -292,16 +288,15 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
         );
 
         Resources r = getResources();
-        mBlockedIcons = Collections.unmodifiableList(Arrays.asList(
-                r.getString(com.android.internal.R.string.status_bar_volume),
-                r.getString(com.android.internal.R.string.status_bar_alarm_clock),
-                r.getString(com.android.internal.R.string.status_bar_call_strength)));
+        mBlockedIcons = Arrays.asList(r.getStringArray(
+                R.array.config_keyguard_statusbar_icon_blocklist));
         mNotificationsHeaderCollideDistance = r.getDimensionPixelSize(
                 R.dimen.header_notifications_collide_distance);
 
         mView.setKeyguardUserAvatarEnabled(
                 !mFeatureController.isStatusBarUserSwitcherFeatureEnabled());
         mFeatureController.addCallback(enabled -> mView.setKeyguardUserAvatarEnabled(!enabled));
+        mSystemEventAnimator = new StatusBarSystemEventAnimator(mView, r);
     }
 
     @Override

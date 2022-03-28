@@ -543,7 +543,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // activity can enter picture in picture while pausing (only when switching to another task)
     PictureInPictureParams pictureInPictureArgs = new PictureInPictureParams.Builder().build();
         // The PiP params used when deferring the entering of picture-in-picture.
-    boolean preferDockBigOverlays;
+    boolean shouldDockBigOverlays;
     int launchCount;        // count of launches since last state
     long lastLaunchTime;    // time of last launch of this activity
     ComponentName requestedVrComponent; // the requested component for handling VR mode.
@@ -559,7 +559,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     private void updateEnterpriseThumbnailDrawable(Context context) {
         DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
-        mEnterpriseThumbnailDrawable = dpm.getDrawable(
+        mEnterpriseThumbnailDrawable = dpm.getResources().getDrawable(
                 WORK_PROFILE_ICON, OUTLINE, PROFILE_SWITCH_ANIMATION,
                 () -> context.getDrawable(R.drawable.ic_corp_badge));
     }
@@ -2057,7 +2057,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mLetterboxUiController = new LetterboxUiController(mWmService, this);
         mCameraCompatControlEnabled = mWmService.mContext.getResources()
                 .getBoolean(R.bool.config_isCameraCompatControlForStretchedIssuesEnabled);
-        preferDockBigOverlays = mWmService.mContext.getResources()
+        shouldDockBigOverlays = mWmService.mContext.getResources()
                 .getBoolean(R.bool.config_dockBigOverlayWindows);
 
         if (_createTime > 0) {
@@ -2495,7 +2495,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     private boolean transferSplashScreenIfNeeded() {
-        if (!mHandleExitSplashScreen || mStartingSurface == null || mStartingWindow == null
+        if (finishing || !mHandleExitSplashScreen || mStartingSurface == null
+                || mStartingWindow == null
                 || mTransferringSplashScreenState == TRANSFER_SPLASH_SCREEN_FINISH) {
             return false;
         }
@@ -2933,7 +2934,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     boolean supportsPictureInPicture() {
         return mAtmService.mSupportsPictureInPicture && isActivityTypeStandardOrUndefined()
-                && info.supportsPictureInPicture();
+                && info.supportsPictureInPicture()
+                && (mDisplayContent != null && mDisplayContent.mDwpcHelper.isWindowingModeSupported(
+                WINDOWING_MODE_PINNED));
     }
 
     /**
@@ -5700,19 +5703,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     "makeInvisible", true /* beforeStopping */);
             // Defer telling the client it is hidden if it can enter Pip and isn't current paused,
             // stopped or stopping. This gives it a chance to enter Pip in onPause().
-            // TODO: There is still a question surrounding activities in multi-window mode that want
-            // to enter Pip after they are paused, but are still visible. I they should be okay to
-            // enter Pip in those cases, but not "auto-Pip" which is what this condition covers and
-            // the current contract for "auto-Pip" is that the app should enter it before onPause
-            // returns. Just need to confirm this reasoning makes sense.
             final boolean deferHidingClient = canEnterPictureInPicture
                     && !isState(STARTED, STOPPING, STOPPED, PAUSED);
-            if (!mTransitionController.isShellTransitionsEnabled()
-                    && deferHidingClient && pictureInPictureArgs.isAutoEnterEnabled()) {
-                // Go ahead and just put the activity in pip if it supports auto-pip.
-                mAtmService.enterPictureInPictureMode(this, pictureInPictureArgs);
-                return;
-            }
             setDeferHidingClient(deferHidingClient);
             setVisibility(false);
 
@@ -9701,9 +9693,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         getTask().getRootTask().onPictureInPictureParamsChanged();
     }
 
-    void setPreferDockBigOverlays(boolean preferDockBigOverlays) {
-        this.preferDockBigOverlays = preferDockBigOverlays;
-        getTask().getRootTask().onPreferDockBigOverlaysChanged();
+    void setShouldDockBigOverlays(boolean shouldDockBigOverlays) {
+        this.shouldDockBigOverlays = shouldDockBigOverlays;
+        getTask().getRootTask().onShouldDockBigOverlaysChanged();
     }
 
     @Override
