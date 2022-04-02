@@ -4475,23 +4475,6 @@ public class ActivityManager {
     }
 
     /**
-     * Logs out current current foreground user by switching to the system user and stopping the
-     * user being switched from.
-     * @hide
-     */
-    public static void logoutCurrentUser() {
-        int currentUser = ActivityManager.getCurrentUser();
-        if (currentUser != UserHandle.USER_SYSTEM) {
-            try {
-                getService().switchUser(UserHandle.USER_SYSTEM);
-                getService().stopUser(currentUser, /* force= */ false, null);
-            } catch (RemoteException e) {
-                e.rethrowFromSystemServer();
-            }
-        }
-    }
-
-    /**
      * Stops the given {@code userId}.
      *
      * @hide
@@ -4904,6 +4887,11 @@ public class ActivityManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /** @hide */
+    public static boolean isProcStateConsideredInteraction(@ProcessState int procState) {
+        return (procState <= PROCESS_STATE_TOP || procState == PROCESS_STATE_BOUND_TOP);
     }
 
     /** @hide */

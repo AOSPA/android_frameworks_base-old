@@ -12354,9 +12354,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         // A view should not be exposed as clickable/long-clickable to a service because of a
-        // LinkMovementMethod.
+        // LinkMovementMethod or because it has selectable and non-editable text.
         if ((info.isClickable() || info.isLongClickable())
-                && mMovement instanceof LinkMovementMethod) {
+                && (mMovement instanceof LinkMovementMethod
+                || (isTextSelectable() && !isTextEditable()))) {
             if (!hasOnClickListeners()) {
                 info.setClickable(false);
                 info.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK);
@@ -12588,11 +12589,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                         return true;
                     }
                     if (start >= 0 && start <= end && end <= text.length()) {
+                        requestFocusOnNonEditableSelectableText();
                         Selection.setSelection((Spannable) text, start, end);
-                        // Make sure selection mode is engaged.
-                        if (mEditor != null) {
-                            mEditor.startSelectionActionModeAsync(false);
-                        }
+                        hideAccessibilitySelectionControllers();
                         return true;
                     }
                 }
@@ -12686,6 +12685,18 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return handled;
     }
 
+    private void requestFocusOnNonEditableSelectableText() {
+        if (!isTextEditable() && isTextSelectable()) {
+            if (!isEnabled()) {
+                return;
+            }
+
+            if (isFocusable() && !isFocused()) {
+                requestFocus();
+            }
+        }
+    }
+
     private boolean hasSpannableText() {
         return mText != null && mText instanceof Spannable;
     }
@@ -12714,9 +12725,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     /**
      * Returns the text that should be exposed to accessibility services.
      * <p>
-     * This approximates what is displayed visually. If the user has specified
-     * that accessibility services should speak passwords, this method will
-     * bypass any password transformation method and return unobscured text.
+     * This approximates what is displayed visually.
      *
      * @return the text that should be exposed to accessibility services, may
      *         be {@code null} if no text is set
@@ -13697,6 +13706,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     /**
      * @hide
      */
+    public void prepareForExtendedAccessibilitySelection() {
+        requestFocusOnNonEditableSelectableText();
+    }
+
+    /**
+     * @hide
+     */
     @Override
     public int getAccessibilitySelectionEnd() {
         return getSelectionEnd();
@@ -13718,8 +13734,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             Selection.removeSelection((Spannable) text);
         }
         // Hide all selection controllers used for adjusting selection
-        // since we are doing so explicitlty by other means and these
+        // since we are doing so explicitly by other means and these
         // controllers interact with how selection behaves.
+        hideAccessibilitySelectionControllers();
+    }
+
+    private void hideAccessibilitySelectionControllers() {
         if (mEditor != null) {
             mEditor.hideCursorAndSpanControllers();
             mEditor.stopTextActionMode();

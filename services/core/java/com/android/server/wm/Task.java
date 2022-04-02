@@ -2367,6 +2367,20 @@ class Task extends TaskFragment {
         return parentTask == null ? null : parentTask.getOrganizedTask();
     }
 
+    /** @return the first create-by-organizer task. */
+    @Nullable
+    Task getCreatedByOrganizerTask() {
+        if (mCreatedByOrganizer) {
+            return this;
+        }
+        final WindowContainer parent = getParent();
+        if (parent == null) {
+            return null;
+        }
+        final Task parentTask = parent.asTask();
+        return parentTask == null ? null : parentTask.getCreatedByOrganizerTask();
+    }
+
     // TODO(task-merge): Figure out what's the right thing to do for places that used it.
     boolean isRootTask() {
         return getRootTask() == this;
@@ -3304,9 +3318,10 @@ class Task extends TaskFragment {
             mTmpDimBoundsRect.offsetTo(0, 0);
         }
 
-        updateShadowsRadius(isFocused(), getSyncTransaction());
+        final SurfaceControl.Transaction t = getSyncTransaction();
+        updateShadowsRadius(isFocused(), t);
 
-        if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
+        if (mDimmer.updateDims(t, mTmpDimBoundsRect)) {
             scheduleAnimation();
         }
 
@@ -3316,7 +3331,7 @@ class Task extends TaskFragment {
         final boolean show = isVisible() || isAnimating(TRANSITION | PARENTS | CHILDREN);
         if (mSurfaceControl != null) {
             if (show != mLastSurfaceShowing) {
-                getSyncTransaction().setVisibility(mSurfaceControl, show);
+                t.setVisibility(mSurfaceControl, show);
             }
         }
         mLastSurfaceShowing = show;
@@ -6108,7 +6123,7 @@ class Task extends TaskFragment {
     /**
      * Sets the current picture-in-picture actions.
      */
-    void setPictureInPictureActions(List<RemoteAction> actions) {
+    void setPictureInPictureActions(List<RemoteAction> actions, RemoteAction closeAction) {
         if (!mWmService.mAtmService.mSupportsPictureInPicture) {
             return;
         }
@@ -6117,7 +6132,7 @@ class Task extends TaskFragment {
             return;
         }
 
-        getDisplayContent().getPinnedTaskController().setActions(actions);
+        getDisplayContent().getPinnedTaskController().setActions(actions, closeAction);
     }
 
     public DisplayInfo getDisplayInfo() {
