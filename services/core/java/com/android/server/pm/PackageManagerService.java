@@ -1256,9 +1256,18 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         if (applicationInfo == null) {
             throw new ParcelableException(new PackageManager.NameNotFoundException(packageName));
         }
+
         final InstallSourceInfo installSourceInfo = snapshot.getInstallSourceInfo(packageName);
-        final String installerPackageName =
-                installSourceInfo != null ? installSourceInfo.getInitiatingPackageName() : null;
+        final String installerPackageName;
+        if (installSourceInfo != null) {
+            if (!TextUtils.isEmpty(installSourceInfo.getInitiatingPackageName())) {
+                installerPackageName = installSourceInfo.getInitiatingPackageName();
+            } else {
+                installerPackageName = installSourceInfo.getInstallingPackageName();
+            }
+        } else {
+            installerPackageName = null;
+        }
 
         List<Pair<String, File>> filesToChecksum = new ArrayList<>();
 
@@ -1893,6 +1902,16 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     /* excludeDying= */ false,
                     /* excludePreCreated= */ false));
             t.traceEnd();
+
+            if (mFirstBoot) {
+                t.traceBegin("setFirstBoot: ");
+                try {
+                    mInstaller.setFirstBoot();
+                } catch (InstallerException e) {
+                    Slog.w(TAG, "Could not set First Boot: ", e);
+                }
+                t.traceEnd();
+            }
 
             mPermissionManager.readLegacyPermissionsTEMP(mSettings.mPermissions);
             mPermissionManager.readLegacyPermissionStateTEMP();
