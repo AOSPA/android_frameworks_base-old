@@ -311,6 +311,14 @@ class ContextImpl extends Context {
     @ContextType
     private int mContextType;
 
+    /**
+     * {@code true} to indicate that the {@link Context} owns the {@link #getWindowContextToken()}
+     * and is responsible for detaching the token when the Context is released.
+     *
+     * @see #finalize()
+     */
+    private boolean mOwnsToken = false;
+
     @GuardedBy("mSync")
     private File mDatabasesDir;
     @GuardedBy("mSync")
@@ -1862,6 +1870,14 @@ class ContextImpl extends Context {
                             "Not allowed to start service " + service + ": " + cn.getClassName());
                 }
             }
+            // If we started a foreground service in the same package, remember the stack trace.
+            if (cn != null && requireForeground) {
+                if (cn.getPackageName().equals(getOpPackageName())) {
+                    Service.setStartForegroundServiceStackTrace(cn.getClassName(),
+                            new StackTrace("Last startServiceCommon() call for this service was "
+                                    + "made here"));
+                }
+            }
             return cn;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2745,7 +2761,7 @@ class ContextImpl extends Context {
      */
     private static Resources createWindowContextResources(@NonNull ContextImpl windowContextBase) {
         final LoadedApk packageInfo = windowContextBase.mPackageInfo;
-        final ClassLoader classLoader = windowContextBase.mClassLoader;
+        final ClassLoader classLoader = windowContextBase.getClassLoader();
         final IBinder token = windowContextBase.getWindowContextToken();
 
         final String resDir = packageInfo.getResDir();
@@ -3002,6 +3018,7 @@ class ContextImpl extends Context {
         token.attachContext(context);
         token.attachToDisplayContent(displayId);
         context.mContextType = CONTEXT_TYPE_SYSTEM_OR_SYSTEM_UI;
+        context.mOwnsToken = true;
 
         return context;
     }
@@ -3183,6 +3200,10 @@ class ContextImpl extends Context {
     final void performFinalCleanup(String who, String what) {
         //Log.i(TAG, "Cleanup up context: " + this);
         mPackageInfo.removeContextRegistrations(getOuterContext(), who, what);
+        if (mContextType == CONTEXT_TYPE_SYSTEM_OR_SYSTEM_UI
+                && mToken instanceof WindowTokenClient) {
+            mMainThread.onSystemUiContextCleanup(this);
+        }
     }
 
     @UnsupportedAppUsage
@@ -3196,12 +3217,6 @@ class ContextImpl extends Context {
     @UnsupportedAppUsage
     final void setOuterContext(@NonNull Context context) {
         mOuterContext = context;
-        // TODO(b/149463653): check if we still need this method after migrating IMS to
-        //  WindowContext.
-        if (mOuterContext.isUiContext() && mContextType <= CONTEXT_TYPE_DISPLAY_CONTEXT) {
-            mContextType = CONTEXT_TYPE_WINDOW_CONTEXT;
-            mIsConfigurationBasedContext = true;
-        }
     }
 
     @UnsupportedAppUsage
