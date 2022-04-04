@@ -73,6 +73,8 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
     private static final String NAME_DP_AUDIO = "soc:qcom,msm-ext-disp";
     // within a device, a single stream supports DP
     private static final String[] DP_AUDIO_CONNS = {
+                                                     NAME_DP_AUDIO + "/1/1",
+                                                     NAME_DP_AUDIO + "/0/1",
                                                      NAME_DP_AUDIO + "/1/0",
                                                      NAME_DP_AUDIO + "/0/0"
                                                    };
@@ -511,11 +513,10 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                             String intf_name = state_str.substring(offset,
                                                                    equals);
 
-                            if (intf_name.equals("DP")) {
+                            if (intf_name.equals("DP") || intf_name.equals("HDMI")) {
                                 state = Integer.parseInt(
                                             state_str.substring(equals + 1,
                                                                 equals + 2));
-                                break;
                             }
                         }
 
@@ -676,7 +677,11 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                         file.close();
 
                         String cableName = (new String(buffer, 0, len)).trim();
-                        if (cableName.equals("DP") && index == cable_index) {
+                        if (cableName.equals("HDMI") && index == cable_index) {
+                            mCableIndex = index;
+                            Slog.w(TAG, "checkCableIndex set cable " + cable_index);
+                            break;
+                        } else if (cableName.equals("DP") && index == cable_index) {
                             mCableIndex = index;
                             Slog.w(TAG, "checkCableIndex set cable " + cable_index);
                             break;
