@@ -328,6 +328,9 @@ public class KeyguardPatternViewController
             case PROMPT_REASON_PREPARE_FOR_UPDATE:
                 mMessageAreaController.setMessage(R.string.kg_prompt_reason_timeout_pattern);
                 break;
+            case PROMPT_REASON_NON_STRONG_BIOMETRIC_TIMEOUT:
+                mMessageAreaController.setMessage(R.string.kg_prompt_reason_timeout_pattern);
+                break;
             case PROMPT_REASON_NONE:
                 break;
             default:
@@ -356,7 +359,7 @@ public class KeyguardPatternViewController
     }
 
     private void displayDefaultSecurityMessage() {
-        mMessageAreaController.setMessage("");
+        mMessageAreaController.setMessage(R.string.keyguard_enter_your_pattern);
     }
 
     private void handleAttemptLockout(long elapsedRealtimeDeadline) {

@@ -24,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.media.session.MediaSessionManager;
 import android.os.Bundle;
@@ -36,19 +37,20 @@ import android.widget.TextView;
 import androidx.core.graphics.drawable.IconCompat;
 import androidx.test.filters.SmallTest;
 
-import com.android.internal.logging.UiEventLogger;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.animation.DialogLaunchAnimator;
+import com.android.systemui.broadcast.BroadcastSender;
+import com.android.systemui.media.nearby.NearbyMediaDevicesManager;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.phone.ShadeController;
-import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
+import java.util.Optional;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -61,28 +63,28 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
     private MediaOutputBaseAdapter mMediaOutputBaseAdapter = mock(MediaOutputBaseAdapter.class);
     private MediaSessionManager mMediaSessionManager = mock(MediaSessionManager.class);
     private LocalBluetoothManager mLocalBluetoothManager = mock(LocalBluetoothManager.class);
-    private ShadeController mShadeController = mock(ShadeController.class);
     private ActivityStarter mStarter = mock(ActivityStarter.class);
+    private BroadcastSender mBroadcastSender = mock(BroadcastSender.class);
     private NotificationEntryManager mNotificationEntryManager =
             mock(NotificationEntryManager.class);
-    private final UiEventLogger mUiEventLogger = mock(UiEventLogger.class);
+    private NearbyMediaDevicesManager mNearbyMediaDevicesManager = mock(
+            NearbyMediaDevicesManager.class);
     private final DialogLaunchAnimator mDialogLaunchAnimator = mock(DialogLaunchAnimator.class);
-    private final SystemUIDialogManager mDialogManager = mock(SystemUIDialogManager.class);
 
     private MediaOutputBaseDialogImpl mMediaOutputBaseDialogImpl;
     private MediaOutputController mMediaOutputController;
     private int mHeaderIconRes;
     private IconCompat mIconCompat;
-    private Drawable mAppSourceDrawable;
     private CharSequence mHeaderTitle;
     private CharSequence mHeaderSubtitle;
 
     @Before
     public void setUp() {
-        mMediaOutputController = new MediaOutputController(mContext, TEST_PACKAGE, false,
-                mMediaSessionManager, mLocalBluetoothManager, mShadeController, mStarter,
-                mNotificationEntryManager, mUiEventLogger, mDialogLaunchAnimator, mDialogManager);
-        mMediaOutputBaseDialogImpl = new MediaOutputBaseDialogImpl(mContext,
+        mMediaOutputController = new MediaOutputController(mContext, TEST_PACKAGE,
+                mMediaSessionManager, mLocalBluetoothManager, mStarter,
+                mNotificationEntryManager, mDialogLaunchAnimator,
+                Optional.of(mNearbyMediaDevicesManager));
+        mMediaOutputBaseDialogImpl = new MediaOutputBaseDialogImpl(mContext, mBroadcastSender,
                 mMediaOutputController);
         mMediaOutputBaseDialogImpl.onCreate(new Bundle());
     }
@@ -99,7 +101,10 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
 
     @Test
     public void refresh_withIconCompat_iconIsVisible() {
-        mIconCompat = mock(IconCompat.class);
+        mIconCompat = IconCompat.createWithBitmap(
+                Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888));
+        when(mMediaOutputBaseAdapter.getController()).thenReturn(mMediaOutputController);
+
         mMediaOutputBaseDialogImpl.refresh();
         final ImageView view = mMediaOutputBaseDialogImpl.mDialogView.requireViewById(
                 R.id.header_icon);
@@ -170,15 +175,16 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
 
     class MediaOutputBaseDialogImpl extends MediaOutputBaseDialog {
 
-        MediaOutputBaseDialogImpl(Context context, MediaOutputController mediaOutputController) {
-            super(context, mediaOutputController, mDialogManager);
+        MediaOutputBaseDialogImpl(Context context, BroadcastSender broadcastSender,
+                MediaOutputController mediaOutputController) {
+            super(context, broadcastSender, mediaOutputController);
 
             mAdapter = mMediaOutputBaseAdapter;
         }
 
         @Override
         Drawable getAppSourceIcon() {
-            return mAppSourceDrawable;
+            return null;
         }
 
         @Override

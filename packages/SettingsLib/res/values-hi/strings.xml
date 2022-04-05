@@ -456,7 +456,7 @@
     <string name="daltonizer_mode_protanomaly" msgid="7805583306666608440">"लाल रंग पहचान न पाना (लाल-हरा)"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="7135266249220732267">"नीला रंग पहचान न पाना (नीला-पीला)"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="1810693571332381974">"रंग में सुधार करने की सुविधा"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="2333641630205214702">"आपके डिवाइस पर रंगों के दिखने के तरीके में बदलाव करें. इससे, आपको इन कामों में मदद मिलेगी:&lt;br/&gt;&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;रंगों को बेहतर तरीके से देखने में&lt;/li&gt; &lt;li&gt;&amp;nbsp;आसानी से फ़ोकस के लिए, रंग हटाने में&lt;/li&gt; &lt;/ol&gt;"</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="1522101114585266455">"रंग में सुधार करने की सुविधा का इस्तेमाल, इन मामलों में किया जा सकता है:&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;आपको ज़्यादा सटीक तरह से रंग देखने हों&lt;/li&gt; &lt;li&gt;&amp;nbsp;ज़्यादा फ़ोकस करने के लिए, आपको कुछ खास रंग हटाने हों&lt;/li&gt; &lt;/ol&gt;"</string>
     <string name="daltonizer_type_overridden" msgid="4509604753672535721">"<xliff:g id="TITLE">%1$s</xliff:g> के द्वारा ओवरराइड किया गया"</string>
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"बैटरी करीब <xliff:g id="TIME_REMAINING">%1$s</xliff:g> में खत्म हो जाएगी"</string>
@@ -493,7 +493,9 @@
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"चार्ज नहीं हो रही है"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"कनेक्ट किया गया, चार्ज नहीं हो रहा है"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"बैटरी चार्ज हो गई"</string>
+    <string name="battery_info_status_full_charged" msgid="3536054261505567948">"बैटरी पूरी चार्ज है"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"इसका नियंत्रण एडमिन के पास है"</string>
+    <string name="disabled_by_app_ops_text" msgid="8373595926549098012">"इसे पाबंदी मोड वाली सेटिंग से कंट्रोल किया जाता है"</string>
     <string name="disabled" msgid="8017887509554714950">"बंद किया गया"</string>
     <string name="external_source_trusted" msgid="1146522036773132905">"अनुमति है"</string>
     <string name="external_source_untrusted" msgid="5037891688911672227">"अनुमति नहीं है"</string>
@@ -526,8 +528,7 @@
     <string name="ims_reg_status_not_registered" msgid="2989287366045704694">"रजिस्टर नहीं है"</string>
     <string name="status_unavailable" msgid="5279036186589861608">"मौजूद नहीं है"</string>
     <string name="wifi_status_mac_randomized" msgid="466382542497832189">"एमएसी पता रैंडम पर सेट है"</string>
-    <!-- no translation found for wifi_tether_connected_summary (5282919920463340158) -->
-    <skip />
+    <string name="wifi_tether_connected_summary" msgid="5282919920463340158">"{count,plural, =0{0 डिवाइस कनेक्ट किया गया है}=1{1 डिवाइस कनेक्ट किया गया है}one{# डिवाइस कनेक्ट किया गया है}other{# डिवाइस कनेक्ट किए गए हैं}}"</string>
     <string name="accessibility_manual_zen_more_time" msgid="5141801092071134235">"ज़्यादा समय."</string>
     <string name="accessibility_manual_zen_less_time" msgid="6828877595848229965">"कम समय."</string>
     <string name="cancel" msgid="5665114069455378395">"रद्द करें"</string>
@@ -636,4 +637,11 @@
     <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"ईथरनेट डिस्‍कनेक्‍ट किया गया."</string>
     <string name="accessibility_ethernet_connected" msgid="6175942685957461563">"ईथरनेट."</string>
     <string name="accessibility_no_calling" msgid="3540827068323895748">"वॉइस कॉल की सुविधा उपलब्ध नहीं है."</string>
+    <string name="dream_complication_title_time" msgid="701747800712893499">"समय"</string>
+    <string name="dream_complication_title_date" msgid="8661176085446135789">"तारीख"</string>
+    <string name="dream_complication_title_weather" msgid="598609151677172783">"मौसम"</string>
+    <string name="dream_complication_title_aqi" msgid="4587552608957834110">"हवा की क्वालिटी"</string>
+    <string name="dream_complication_title_cast_info" msgid="4038776652841885084">"कास्टिंग की जानकारी"</string>
+    <string name="avatar_picker_title" msgid="8492884172713170652">"प्रोफ़ाइल फ़ोटो चुनें"</string>
+    <string name="default_user_icon_description" msgid="6554047177298972638">"उपयोगकर्ता के लिए डिफ़ॉल्ट आइकॉन"</string>
 </resources>

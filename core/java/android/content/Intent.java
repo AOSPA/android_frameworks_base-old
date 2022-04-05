@@ -1458,6 +1458,18 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_ALL_APPS = "android.intent.action.ALL_APPS";
+
+    /**
+     * Activity Action: Action to show the list of all work apps in the launcher. For example,
+     * shows the work apps folder or tab.
+     *
+     * <p>Input: Nothing.
+     * <p>Output: nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_SHOW_WORK_APPS =
+            "android.intent.action.SHOW_WORK_APPS";
+
     /**
      * Activity Action: Show settings for choosing wallpaper.
      * <p>Input: Nothing.
@@ -2042,7 +2054,7 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.VIEW_PERMISSION_USAGE_FOR_PERIOD";
 
     /**
-     * Activity action: Launch the Safety Hub UI.
+     * Activity action: Launch the Safety Center Quick Settings UI.
      *
      * <p>
      * Input: Nothing.
@@ -2050,11 +2062,14 @@ public class Intent implements Parcelable, Cloneable {
      * <p>
      * Output: Nothing.
      * </p>
+     *
+     * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     @RequiresPermission(Manifest.permission.MANAGE_SENSOR_PRIVACY)
-    public static final String ACTION_VIEW_SAFETY_HUB =
-            "android.intent.action.VIEW_SAFETY_HUB";
+    public static final String ACTION_VIEW_SAFETY_CENTER_QS =
+            "android.intent.action.VIEW_SAFETY_CENTER_QS";
 
     /**
      * Activity action: Launch UI to manage a default app.
@@ -9206,6 +9221,16 @@ public class Intent implements Parcelable, Cloneable {
         return (mExtras != null)
                 ? new Bundle(mExtras)
                 : null;
+    }
+
+    /**
+     * Returns the total size of the extras in bytes, or 0 if no extras are present.
+     * @hide
+     */
+    public int getExtrasTotalSize() {
+        return (mExtras != null)
+                ? mExtras.getSize()
+                : 0;
     }
 
     /**

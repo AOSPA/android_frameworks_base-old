@@ -5648,27 +5648,33 @@ public class AudioManager {
      * Note that the information may be imprecise when the implementation
      * cannot distinguish whether a particular device is enabled.
      *
-     * {@hide}
+     * @deprecated on {@link android.os.Build.VERSION_CODES#T} as new devices
+     *             will have multi-bit device types.
+     *             Prefer to use {@link #getDevicesForAttributes()} instead,
+     *             noting that getDevicesForStream() has a few small discrepancies
+     *             for better volume handling.
+     * @hide
      */
     @UnsupportedAppUsage
+    @Deprecated
     public int getDevicesForStream(int streamType) {
         switch (streamType) {
-        case STREAM_VOICE_CALL:
-        case STREAM_SYSTEM:
-        case STREAM_RING:
-        case STREAM_MUSIC:
-        case STREAM_ALARM:
-        case STREAM_NOTIFICATION:
-        case STREAM_DTMF:
-        case STREAM_ACCESSIBILITY:
-            final IAudioService service = getService();
-            try {
-                return service.getDevicesForStream(streamType);
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-        default:
-            return 0;
+            case STREAM_VOICE_CALL:
+            case STREAM_SYSTEM:
+            case STREAM_RING:
+            case STREAM_MUSIC:
+            case STREAM_ALARM:
+            case STREAM_NOTIFICATION:
+            case STREAM_DTMF:
+            case STREAM_ACCESSIBILITY:
+                final IAudioService service = getService();
+                try {
+                    return service.getDeviceMaskForStream(streamType);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+            default:
+                return 0;
         }
     }
 
@@ -7002,7 +7008,8 @@ public class AudioManager {
         for (Integer format : formatsList) {
             int btSourceCodec = AudioSystem.audioFormatToBluetoothSourceCodec(format);
             if (btSourceCodec != BluetoothCodecConfig.SOURCE_CODEC_TYPE_INVALID) {
-                codecConfigList.add(new BluetoothCodecConfig(btSourceCodec));
+                codecConfigList.add(
+                        new BluetoothCodecConfig.Builder().setCodecType(btSourceCodec).build());
             }
         }
         return codecConfigList;
@@ -7349,8 +7356,13 @@ public class AudioManager {
      * Ultrasound playback and capture, false otherwise.
      */
     @SystemApi
-    public static boolean isUltrasoundSupported() {
-        return AudioSystem.isUltrasoundSupported();
+    @RequiresPermission(android.Manifest.permission.ACCESS_ULTRASOUND)
+    public boolean isUltrasoundSupported() {
+        try {
+            return getService().isUltrasoundSupported();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -8395,6 +8407,119 @@ public class AudioManager {
                             stub -> stub.register(false));
             mMuteAwaitConnectionListeners = res.first;
             mMuteAwaitConnDispatcherStub = res.second;
+        }
+    }
+
+    /**
+     * Add UIDs that can be considered as assistant.
+     *
+     * @param assistantUids UIDs of the services that can be considered as assistant.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void addAssistantServicesUids(@NonNull int[] assistantUids) {
+        try {
+            getService().addAssistantServicesUids(assistantUids);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Remove UIDs that can be considered as assistant.
+     *
+     * @param assistantUids UIDs of the services that should be remove.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void removeAssistantServicesUids(@NonNull int[] assistantUids) {
+        try {
+            getService().removeAssistantServicesUids(assistantUids);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the assistants UIDs that been added with the
+     * {@link #addAssistantServicesUids(int[])} and not yet removed with
+     * {@link #removeAssistantServicesUids(int[])}
+     *
+     * @return array of assistants UIDs
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public @NonNull int[] getAssistantServicesUids() {
+        try {
+            int[] uids = getService().getAssistantServicesUids();
+            return Arrays.copyOf(uids, uids.length);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets UIDs that can be considered as active assistant. Calling the API with a new array will
+     * overwrite previous UIDs. If the array of UIDs is empty then no UID will be considered active.
+     * In this manner calling the API with an empty array will remove all UIDs previously set.
+     *
+     * @param assistantUids UIDs of the services that can be considered active assistant. Can be
+     * an empty array, for this no UID will be considered active.
+     *
+     * <p> Note that during audio service crash reset and after boot up the list of active assistant
+     * UIDs will be reset to an empty list (i.e. no UID will be considered as an active assistant).
+     * Just after user switch the list of active assistant will also reset to empty.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void setActiveAssistantServiceUids(@NonNull int[]  assistantUids) {
+        try {
+            getService().setActiveAssistantServiceUids(assistantUids);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get active assistant UIDs last set with the
+     * {@link #setActiveAssistantServiceUids(int[])}
+     *
+     * @return array of active assistants UIDs
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public @NonNull int[] getActiveAssistantServicesUids() {
+        try {
+            int[] uids = getService().getActiveAssistantServiceUids();
+            return Arrays.copyOf(uids, uids.length);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the audio HAL version in the form MAJOR.MINOR. If there is no audio HAL found, null
+     * will be returned.
+     *
+     * @hide
+     */
+    @TestApi
+    public static @Nullable String getHalVersion() {
+        try {
+            return getService().getHalVersion();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error querying getHalVersion", e);
+            throw e.rethrowFromSystemServer();
         }
     }
 

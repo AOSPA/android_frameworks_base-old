@@ -324,6 +324,14 @@ public class ActivityClient {
         }
     }
 
+    void setPreferDockBigOverlays(IBinder token, boolean preferDockBigOverlays) {
+        try {
+            getActivityClientController().setPreferDockBigOverlays(token, preferDockBigOverlays);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
     void toggleFreeformWindowingMode(IBinder token) {
         try {
             getActivityClientController().toggleFreeformWindowingMode(token);
@@ -438,9 +446,9 @@ public class ActivityClient {
         }
     }
 
-    void setDisablePreviewScreenshots(IBinder token, boolean disable) {
+    void setRecentsScreenshotEnabled(IBinder token, boolean enabled) {
         try {
-            getActivityClientController().setDisablePreviewScreenshots(token, disable);
+            getActivityClientController().setRecentsScreenshotEnabled(token, enabled);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }

@@ -456,7 +456,7 @@
     <string name="daltonizer_mode_protanomaly" msgid="7805583306666608440">"Protanomalie (roșu-verde)"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="7135266249220732267">"Tritanomalie (albastru-galben)"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="1810693571332381974">"Corecția culorii"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="2333641630205214702">"Ajustați modul în care se afișează culorile pe dispozitiv. Acest lucru poate fi util când doriți să:&lt;br/&gt;&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;vedeți culorile mai bine;&lt;/li&gt; &lt;li&gt;&amp;nbsp; eliminați culorile pentru a vă ajuta să vă concentrați.&lt;/li&gt; &lt;/ol&gt;"</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="1522101114585266455">"Corecția culorii poate fi utilă dacă doriți:&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;să vedeți mai precis culorile;&lt;/li&gt; &lt;li&gt;&amp;nbsp;să eliminați culorile pentru a vă concentra mai bine.&lt;/li&gt; &lt;/ol&gt;"</string>
     <string name="daltonizer_type_overridden" msgid="4509604753672535721">"Valoare înlocuită de <xliff:g id="TITLE">%1$s</xliff:g>"</string>
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"Timp aproximativ rămas: <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
@@ -493,7 +493,9 @@
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Nu se încarcă"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Conectat, nu se încarcă"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Încărcată"</string>
+    <string name="battery_info_status_full_charged" msgid="3536054261505567948">"Complet încărcată"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Controlată de administrator"</string>
+    <string name="disabled_by_app_ops_text" msgid="8373595926549098012">"Controlată de setarea restricționată"</string>
     <string name="disabled" msgid="8017887509554714950">"Dezactivată"</string>
     <string name="external_source_trusted" msgid="1146522036773132905">"Permise"</string>
     <string name="external_source_untrusted" msgid="5037891688911672227">"Nepermise"</string>
@@ -635,4 +637,11 @@
     <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"Ethernet deconectat."</string>
     <string name="accessibility_ethernet_connected" msgid="6175942685957461563">"Ethernet."</string>
     <string name="accessibility_no_calling" msgid="3540827068323895748">"Apelarea nu este disponibilă."</string>
+    <string name="dream_complication_title_time" msgid="701747800712893499">"Oră"</string>
+    <string name="dream_complication_title_date" msgid="8661176085446135789">"Dată"</string>
+    <string name="dream_complication_title_weather" msgid="598609151677172783">"Meteo"</string>
+    <string name="dream_complication_title_aqi" msgid="4587552608957834110">"Calitatea aerului"</string>
+    <string name="dream_complication_title_cast_info" msgid="4038776652841885084">"Informații artiști"</string>
+    <string name="avatar_picker_title" msgid="8492884172713170652">"Alegeți o fotografie de profil"</string>
+    <string name="default_user_icon_description" msgid="6554047177298972638">"Pictograma prestabilită a utilizatorului"</string>
 </resources>

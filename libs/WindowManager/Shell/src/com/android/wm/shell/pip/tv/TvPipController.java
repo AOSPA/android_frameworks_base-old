@@ -18,10 +18,6 @@ package com.android.wm.shell.pip.tv;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.view.KeyEvent.KEYCODE_DPAD_DOWN;
-import static android.view.KeyEvent.KEYCODE_DPAD_LEFT;
-import static android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
-import static android.view.KeyEvent.KEYCODE_DPAD_UP;
 
 import android.annotation.IntDef;
 import android.app.ActivityManager;
@@ -34,42 +30,48 @@ import android.content.pm.ParceledListSlice;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Rect;
+import android.os.Handler;
 import android.os.RemoteException;
 import android.util.Log;
-import android.view.DisplayInfo;
 import android.view.Gravity;
 
 import com.android.wm.shell.R;
 import com.android.wm.shell.WindowManagerShellWrapper;
+import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.TaskStackListenerCallback;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.pip.PinnedStackListenerForwarder;
 import com.android.wm.shell.pip.Pip;
+import com.android.wm.shell.pip.PipAnimationController;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipTaskOrganizer;
 import com.android.wm.shell.pip.PipTransitionController;
+import com.android.wm.shell.pip.tv.TvPipKeepClearAlgorithm.Placement;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Set;
 
 /**
  * Manages the picture-in-picture (PIP) UI and states.
  */
 public class TvPipController implements PipTransitionController.PipTransitionCallback,
-        TvPipMenuController.Delegate, TvPipNotificationController.Delegate {
+        TvPipMenuController.Delegate, TvPipNotificationController.Delegate,
+        DisplayController.OnDisplaysChangedListener {
     private static final String TAG = "TvPipController";
     static final boolean DEBUG = false;
 
+    private static final double EPS = 1e-7;
     private static final int NONEXISTENT_TASK_ID = -1;
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = { "STATE_" }, value = {
             STATE_NO_PIP,
             STATE_PIP,
-            STATE_PIP_MENU
+            STATE_PIP_MENU,
     })
     public @interface State {}
 
@@ -89,28 +91,28 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
      */
     private static final int STATE_PIP_MENU = 2;
 
-    private static final int DEFAULT_GRAVITY = Gravity.BOTTOM | Gravity.RIGHT;
-
     private final Context mContext;
 
-    private final PipBoundsState mPipBoundsState;
+    private final TvPipBoundsState mTvPipBoundsState;
     private final TvPipBoundsAlgorithm mTvPipBoundsAlgorithm;
     private final PipTaskOrganizer mPipTaskOrganizer;
     private final PipMediaController mPipMediaController;
     private final TvPipNotificationController mPipNotificationController;
     private final TvPipMenuController mTvPipMenuController;
     private final ShellExecutor mMainExecutor;
+    private final Handler mMainHandler;
     private final TvPipImpl mImpl = new TvPipImpl();
 
     private @State int mState = STATE_NO_PIP;
-    private @Gravity.GravityFlags int mGravity = DEFAULT_GRAVITY;
+    private int mPreviousGravity = TvPipBoundsState.DEFAULT_TV_GRAVITY;
     private int mPinnedTaskId = NONEXISTENT_TASK_ID;
+    private Runnable mUnstashRunnable;
 
     private int mResizeAnimationDuration;
 
     public static Pip create(
             Context context,
-            PipBoundsState pipBoundsState,
+            TvPipBoundsState tvPipBoundsState,
             TvPipBoundsAlgorithm tvPipBoundsAlgorithm,
             PipTaskOrganizer pipTaskOrganizer,
             PipTransitionController pipTransitionController,
@@ -118,11 +120,13 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
             PipMediaController pipMediaController,
             TvPipNotificationController pipNotificationController,
             TaskStackListenerImpl taskStackListener,
+            DisplayController displayController,
             WindowManagerShellWrapper wmShell,
-            ShellExecutor mainExecutor) {
+            ShellExecutor mainExecutor,
+            Handler mainHandler) {
         return new TvPipController(
                 context,
-                pipBoundsState,
+                tvPipBoundsState,
                 tvPipBoundsAlgorithm,
                 pipTaskOrganizer,
                 pipTransitionController,
@@ -130,13 +134,15 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
                 pipMediaController,
                 pipNotificationController,
                 taskStackListener,
+                displayController,
                 wmShell,
-                mainExecutor).mImpl;
+                mainExecutor,
+                mainHandler).mImpl;
     }
 
     private TvPipController(
             Context context,
-            PipBoundsState pipBoundsState,
+            TvPipBoundsState tvPipBoundsState,
             TvPipBoundsAlgorithm tvPipBoundsAlgorithm,
             PipTaskOrganizer pipTaskOrganizer,
             PipTransitionController pipTransitionController,
@@ -144,14 +150,17 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
             PipMediaController pipMediaController,
             TvPipNotificationController pipNotificationController,
             TaskStackListenerImpl taskStackListener,
+            DisplayController displayController,
             WindowManagerShellWrapper wmShell,
-            ShellExecutor mainExecutor) {
+            ShellExecutor mainExecutor,
+            Handler mainHandler) {
         mContext = context;
         mMainExecutor = mainExecutor;
+        mMainHandler = mainHandler;
 
-        mPipBoundsState = pipBoundsState;
-        mPipBoundsState.setDisplayId(context.getDisplayId());
-        mPipBoundsState.setDisplayLayout(new DisplayLayout(context, context.getDisplay()));
+        mTvPipBoundsState = tvPipBoundsState;
+        mTvPipBoundsState.setDisplayId(context.getDisplayId());
+        mTvPipBoundsState.setDisplayLayout(new DisplayLayout(context, context.getDisplay()));
         mTvPipBoundsAlgorithm = tvPipBoundsAlgorithm;
 
         mPipMediaController = pipMediaController;
@@ -169,6 +178,7 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
 
         registerTaskStackListenerCallback(taskStackListener);
         registerWmShellPinnedStackListener(wmShell);
+        displayController.addDisplayWindowListener(this);
     }
 
     private void onConfigurationChanged(Configuration newConfig) {
@@ -181,6 +191,7 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
 
         loadConfigurations();
         mPipNotificationController.onConfigurationChanged(mContext);
+        mTvPipBoundsAlgorithm.onConfigurationChanged(mContext);
     }
 
     /**
@@ -205,13 +216,20 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
         }
 
         setState(STATE_PIP_MENU);
-        movePinnedStack();
+        updatePinnedStackBounds();
     }
 
     @Override
     public void closeMenu() {
         if (DEBUG) Log.d(TAG, "closeMenu(), state before=" + stateToName(mState));
         setState(STATE_PIP);
+        mTvPipBoundsAlgorithm.keepUnstashedForCurrentKeepClearAreas();
+        updatePinnedStackBounds();
+    }
+
+    @Override
+    public void onInMoveModeChanged() {
+        updatePinnedStackBounds();
     }
 
     /**
@@ -226,11 +244,25 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
     }
 
     @Override
+    public void togglePipExpansion() {
+        if (DEBUG) Log.d(TAG, "togglePipExpansion()");
+        boolean expanding = !mTvPipBoundsState.isTvPipExpanded();
+        int saveGravity = mTvPipBoundsAlgorithm
+                .updateGravityOnExpandToggled(mPreviousGravity, expanding);
+        if (saveGravity != Gravity.NO_GRAVITY) {
+            mPreviousGravity = saveGravity;
+        }
+        mTvPipBoundsState.setTvPipManuallyCollapsed(!expanding);
+        mTvPipBoundsState.setTvPipExpanded(expanding);
+        updatePinnedStackBounds();
+    }
+
+    @Override
     public void movePip(int keycode) {
-        if (updatePosition(keycode)) {
-            if (DEBUG) Log.d(TAG, "New gravity: " + Gravity.toString(mGravity));
-            mTvPipMenuController.updateMenu(mGravity);
-            movePinnedStack();
+        if (mTvPipBoundsAlgorithm.updateGravity(keycode)) {
+            mTvPipMenuController.updateGravity(mTvPipBoundsState.getTvPipGravity());
+            mPreviousGravity = Gravity.NO_GRAVITY;
+            updatePinnedStackBounds();
         } else {
             if (DEBUG) Log.d(TAG, "Position hasn't changed");
         }
@@ -238,53 +270,64 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
 
     @Override
     public int getPipGravity() {
-        return mGravity;
+        return mTvPipBoundsState.getTvPipGravity();
+    }
+
+    public int getOrientation() {
+        return mTvPipBoundsState.getTvFixedPipOrientation();
+    }
+
+    @Override
+    public void onKeepClearAreasChanged(int displayId, Set<Rect> restricted,
+            Set<Rect> unrestricted) {
+        if (mTvPipBoundsState.getDisplayId() == displayId) {
+            mTvPipBoundsState.setKeepClearAreas(restricted, unrestricted);
+            updatePinnedStackBounds();
+        }
     }
 
     /**
-     * @return true if position changed
+     * Update the PiP bounds based on the state of the PiP and keep clear areas.
+     * Animates to the current PiP bounds, and schedules unstashing the PiP if necessary.
      */
-    private boolean updatePosition(int keycode) {
-        if (DEBUG) Log.d(TAG, "updatePosition, keycode: " + keycode);
-
-        int updatedGravity;
-        switch (keycode) {
-            case KEYCODE_DPAD_UP:
-                updatedGravity = (mGravity & (~Gravity.BOTTOM)) | Gravity.TOP;
-                break;
-            case KEYCODE_DPAD_DOWN:
-                updatedGravity =  (mGravity & (~Gravity.TOP)) | Gravity.BOTTOM;
-                break;
-            case KEYCODE_DPAD_LEFT:
-                updatedGravity = (mGravity & (~Gravity.RIGHT)) | Gravity.LEFT;
-                break;
-            case KEYCODE_DPAD_RIGHT:
-                updatedGravity = (mGravity & (~Gravity.LEFT)) | Gravity.RIGHT;
-                break;
-            default:
-                updatedGravity = mGravity;
-        }
-
-        if (updatedGravity != mGravity) {
-            mGravity = updatedGravity;
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Animate to the updated position of the PiP based on the state and position of the PiP.
-     */
-    private void movePinnedStack() {
+    private void updatePinnedStackBounds() {
         if (mState == STATE_NO_PIP) {
             return;
         }
 
-        Rect bounds = mTvPipBoundsAlgorithm.getTvNormalBounds(mGravity);
-        if (DEBUG) Log.d(TAG, "movePinnedStack() - new pip bounds: " + bounds.toShortString());
+        final boolean stayAtAnchorPosition = mTvPipMenuController.isInMoveMode();
+        final boolean disallowStashing = mState == STATE_PIP_MENU || stayAtAnchorPosition;
+        final Placement placement = mTvPipBoundsAlgorithm.getTvPipBounds();
+
+        int stashType =
+                disallowStashing ? PipBoundsState.STASH_TYPE_NONE : placement.getStashType();
+        mTvPipBoundsState.setStashed(stashType);
+
+        if (stayAtAnchorPosition) {
+            movePinnedStackTo(placement.getAnchorBounds());
+        } else if (disallowStashing) {
+            movePinnedStackTo(placement.getUnstashedBounds());
+        } else {
+            movePinnedStackTo(placement.getBounds());
+        }
+
+        if (mUnstashRunnable != null) {
+            mMainHandler.removeCallbacks(mUnstashRunnable);
+            mUnstashRunnable = null;
+        }
+        if (!disallowStashing && placement.getUnstashDestinationBounds() != null) {
+            mUnstashRunnable = () -> movePinnedStackTo(placement.getUnstashDestinationBounds());
+            mMainHandler.postAtTime(mUnstashRunnable, placement.getUnstashTime());
+        }
+    }
+
+    /** Animates the PiP to the given bounds. */
+    private void movePinnedStackTo(Rect bounds) {
+        if (DEBUG) Log.d(TAG, "movePinnedStackTo() - new pip bounds: " + bounds.toShortString());
         mPipTaskOrganizer.scheduleAnimateResizePip(bounds,
                 mResizeAnimationDuration, rect -> {
                     if (DEBUG) Log.d(TAG, "movePinnedStack() animation done");
+                    mTvPipMenuController.updateExpansionState();
                 });
     }
 
@@ -308,7 +351,6 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
         if (DEBUG) Log.d(TAG, "checkIfPinnedTaskAppeared(), task=" + pinnedTask);
         if (pinnedTask == null || pinnedTask.topActivity == null) return;
         mPinnedTaskId = pinnedTask.taskId;
-        setState(STATE_PIP);
 
         mPipMediaController.onActivityPinned();
         mPipNotificationController.show(pinnedTask.topActivity.getPackageName());
@@ -328,7 +370,7 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
 
         mPipNotificationController.dismiss();
         mTvPipMenuController.hideMenu();
-        mGravity = DEFAULT_GRAVITY;
+        mTvPipBoundsState.resetTvPipState();
         setState(STATE_NO_PIP);
         mPinnedTaskId = NONEXISTENT_TASK_ID;
     }
@@ -345,12 +387,10 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
 
     @Override
     public void onPipTransitionFinished(int direction) {
-        if (DEBUG) Log.d(TAG, "onPipTransition_Finished(), state=" + stateToName(mState));
-
-        if (mState == STATE_PIP_MENU) {
-            if (DEBUG) Log.d(TAG, "  > show menu");
-            mTvPipMenuController.showMenu();
+        if (PipAnimationController.isInPipDirection(direction) && mState == STATE_NO_PIP) {
+            setState(STATE_PIP);
         }
+        if (DEBUG) Log.d(TAG, "onPipTransition_Finished(), state=" + stateToName(mState));
     }
 
     private void setState(@State int state) {
@@ -359,17 +399,18 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
                     + stateToName(mState));
         }
         mState = state;
+
+        if (mState == STATE_PIP_MENU) {
+            if (DEBUG) Log.d(TAG, "  > show menu");
+            mTvPipMenuController.showMenu();
+        }
+
+        updatePinnedStackBounds();
     }
 
     private void loadConfigurations() {
         final Resources res = mContext.getResources();
         mResizeAnimationDuration = res.getInteger(R.integer.config_pipResizeAnimationDuration);
-    }
-
-    private DisplayInfo getDisplayInfo() {
-        final DisplayInfo displayInfo = new DisplayInfo();
-        mContext.getDisplay().getDisplayInfo(displayInfo);
-        return displayInfo;
     }
 
     private void registerTaskStackListenerCallback(TaskStackListenerImpl taskStackListener) {
@@ -408,16 +449,75 @@ public class TvPipController implements PipTransitionController.PipTransitionCal
                                 + ", height=" + imeHeight);
                     }
 
-                    if (imeVisible == mPipBoundsState.isImeShowing()
-                            && (!imeVisible || imeHeight == mPipBoundsState.getImeHeight())) {
+                    if (imeVisible == mTvPipBoundsState.isImeShowing()
+                            && (!imeVisible || imeHeight == mTvPipBoundsState.getImeHeight())) {
                         // Nothing changed: either IME has been and remains invisible, or remains
                         // visible with the same height.
                         return;
                     }
-                    mPipBoundsState.setImeVisibility(imeVisible, imeHeight);
+                    mTvPipBoundsState.setImeVisibility(imeVisible, imeHeight);
 
                     if (mState != STATE_NO_PIP) {
-                        movePinnedStack();
+                        updatePinnedStackBounds();
+                    }
+                }
+
+                @Override
+                public void onAspectRatioChanged(float ratio) {
+                    if (DEBUG) Log.d(TAG, "onAspectRatioChanged: " + ratio);
+
+                    boolean ratioChanged = mTvPipBoundsState.getAspectRatio() != ratio;
+                    mTvPipBoundsState.setAspectRatio(ratio);
+
+                    if (!mTvPipBoundsState.isTvPipExpanded() && ratioChanged) {
+                        updatePinnedStackBounds();
+                    }
+                }
+
+                @Override
+                public void onExpandedAspectRatioChanged(float ratio) {
+                    if (DEBUG) Log.d(TAG, "onExpandedAspectRatioChanged: " + ratio);
+
+                    // 0) No update to the ratio --> don't do anything
+
+                    if (Math.abs(mTvPipBoundsState.getDesiredTvExpandedAspectRatio() - ratio)
+                            < EPS) {
+                        return;
+                    }
+
+                    mTvPipBoundsState.setDesiredTvExpandedAspectRatio(ratio, false);
+
+                    // 1) PiP is expanded and only aspect ratio changed, but wasn't disabled
+                    // --> update bounds, but don't toggle
+                    if (mTvPipBoundsState.isTvPipExpanded() && ratio != 0) {
+                        mTvPipBoundsAlgorithm.updateExpandedPipSize();
+                        updatePinnedStackBounds();
+                    }
+
+                    // 2) PiP is expanded, but expanded PiP was disabled
+                    // --> collapse PiP
+                    if (mTvPipBoundsState.isTvPipExpanded() && ratio == 0) {
+                        int saveGravity = mTvPipBoundsAlgorithm
+                                .updateGravityOnExpandToggled(mPreviousGravity, false);
+                        if (saveGravity != Gravity.NO_GRAVITY) {
+                            mPreviousGravity = saveGravity;
+                        }
+                        mTvPipBoundsState.setTvPipExpanded(false);
+                        updatePinnedStackBounds();
+                    }
+
+                    // 3) PiP not expanded and not manually collapsed and expand was enabled
+                    // --> expand to new ratio
+                    if (!mTvPipBoundsState.isTvPipExpanded() && ratio != 0
+                            && !mTvPipBoundsState.isTvPipManuallyCollapsed()) {
+                        mTvPipBoundsAlgorithm.updateExpandedPipSize();
+                        int saveGravity = mTvPipBoundsAlgorithm
+                                .updateGravityOnExpandToggled(mPreviousGravity, true);
+                        if (saveGravity != Gravity.NO_GRAVITY) {
+                            mPreviousGravity = saveGravity;
+                        }
+                        mTvPipBoundsState.setTvPipExpanded(true);
+                        updatePinnedStackBounds();
                     }
                 }
 

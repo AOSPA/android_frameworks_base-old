@@ -18,6 +18,7 @@ package com.android.wm.shell.pip.tv;
 
 import static android.view.WindowManager.SHELL_ROOT_LAYER_PIP;
 
+import android.app.ActivityManager;
 import android.app.RemoteAction;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -32,12 +33,12 @@ import android.os.RemoteException;
 import android.util.Log;
 import android.view.SurfaceControl;
 import android.view.SyncRtSurfaceTransactionApplier;
+import android.view.WindowManagerGlobal;
 
 import androidx.annotation.Nullable;
 
 import com.android.wm.shell.R;
 import com.android.wm.shell.common.SystemWindows;
-import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipMenuController;
 
@@ -53,7 +54,7 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
 
     private final Context mContext;
     private final SystemWindows mSystemWindows;
-    private final PipBoundsState mPipBoundsState;
+    private final TvPipBoundsState mTvPipBoundsState;
     private final Handler mMainHandler;
 
     private Delegate mDelegate;
@@ -85,11 +86,11 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         }
     };
 
-    public TvPipMenuController(Context context, PipBoundsState pipBoundsState,
+    public TvPipMenuController(Context context, TvPipBoundsState tvPipBoundsState,
             SystemWindows systemWindows, PipMediaController pipMediaController,
             Handler mainHandler) {
         mContext = context;
-        mPipBoundsState = pipBoundsState;
+        mTvPipBoundsState = tvPipBoundsState;
         mSystemWindows = systemWindows;
         mMainHandler = mainHandler;
 
@@ -150,24 +151,32 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         if (DEBUG) Log.d(TAG, "showMenu()");
 
         if (mPipMenuView != null) {
-            Rect menuBounds = getMenuBounds(mPipBoundsState.getBounds());
+            Rect menuBounds = getMenuBounds(mTvPipBoundsState.getBounds());
             mSystemWindows.updateViewLayout(mPipMenuView, getPipMenuLayoutParams(
                     MENU_WINDOW_TITLE, menuBounds.width(), menuBounds.height()));
             maybeUpdateMenuViewActions();
+            updateExpansionState();
 
-            SurfaceControl menuSurfaceControl = mSystemWindows.getViewSurface(mPipMenuView);
+            SurfaceControl menuSurfaceControl = getSurfaceControl();
             if (menuSurfaceControl != null) {
                 SurfaceControl.Transaction t = new SurfaceControl.Transaction();
                 t.setRelativeLayer(mPipMenuView.getWindowSurfaceControl(), mLeash, 1);
                 t.setPosition(menuSurfaceControl, menuBounds.left, menuBounds.top);
                 t.apply();
             }
+            grantPipMenuFocus(true);
             mPipMenuView.show(mInMoveMode, mDelegate.getPipGravity());
         }
     }
 
-    void updateMenu(int gravity) {
+    void updateGravity(int gravity) {
         mPipMenuView.showMovementHints(gravity);
+    }
+
+    void updateExpansionState() {
+        mPipMenuView.setExpandedModeEnabled(mTvPipBoundsState.isTvExpandedPipSupported()
+                && mTvPipBoundsState.getDesiredTvExpandedAspectRatio() != 0);
+        mPipMenuView.setIsExpanded(mTvPipBoundsState.isTvPipExpanded());
     }
 
     private Rect getMenuBounds(Rect pipBounds) {
@@ -186,10 +195,15 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
             if (DEBUG) Log.d(TAG, "hideMenu()");
         }
 
-        mPipMenuView.hide(mInMoveMode);
+        mPipMenuView.hide();
         if (!mInMoveMode) {
+            grantPipMenuFocus(false);
             mDelegate.closeMenu();
         }
+    }
+
+    boolean isInMoveMode() {
+        return mInMoveMode;
     }
 
     @Override
@@ -198,6 +212,7 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         mInMoveMode = true;
         mPipMenuView.showMenuButtons(false);
         mPipMenuView.showMovementHints(mDelegate.getPipGravity());
+        mDelegate.onInMoveModeChanged();
     }
 
     @Override
@@ -207,6 +222,7 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
             mInMoveMode = false;
             mPipMenuView.showMenuButtons(true);
             mPipMenuView.hideMovementHints();
+            mDelegate.onInMoveModeChanged();
             return true;
         }
         return false;
@@ -349,7 +365,9 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         SurfaceControl surfaceControl = getSurfaceControl();
         SyncRtSurfaceTransactionApplier.SurfaceParams params =
                 new SyncRtSurfaceTransactionApplier.SurfaceParams.Builder(
-                        surfaceControl).withMatrix(mMoveTransform).build();
+                        surfaceControl)
+                        .withMatrix(mMoveTransform)
+                        .build();
 
         if (pipLeash != null && transaction != null) {
             SyncRtSurfaceTransactionApplier.SurfaceParams
@@ -365,6 +383,8 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
             mPipMenuView.getHandler().removeCallbacks(mUpdateEmbeddedMatrix);
             mPipMenuView.getHandler().post(mUpdateEmbeddedMatrix);
         }
+
+        updateMenuBounds(pipDestBounds);
     }
 
     private boolean maybeCreateSyncApplier() {
@@ -396,6 +416,14 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         mSystemWindows.updateViewLayout(mPipMenuView,
                 getPipMenuLayoutParams(MENU_WINDOW_TITLE, menuBounds.width(),
                         menuBounds.height()));
+        if (mPipMenuView != null) {
+            mPipMenuView.updateLayout(destinationBounds);
+        }
+    }
+
+    @Override
+    public void onFocusTaskChanged(ActivityManager.RunningTaskInfo taskInfo) {
+        Log.d(TAG, "onFocusTaskChanged");
     }
 
     @Override
@@ -415,15 +443,35 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         mDelegate.movePipToFullscreen();
     }
 
+    @Override
+    public void onToggleExpandedMode() {
+        mDelegate.togglePipExpansion();
+    }
+
     interface Delegate {
         void movePipToFullscreen();
 
         void movePip(int keycode);
 
+        void onInMoveModeChanged();
+
         int getPipGravity();
+
+        void togglePipExpansion();
 
         void closeMenu();
 
         void closePip();
+    }
+
+    private void grantPipMenuFocus(boolean grantFocus) {
+        if (DEBUG) Log.d(TAG, "grantWindowFocus(" + grantFocus + ")");
+
+        try {
+            WindowManagerGlobal.getWindowSession().grantEmbeddedWindowFocus(null /* window */,
+                    mSystemWindows.getFocusGrantToken(mPipMenuView), grantFocus);
+        } catch (Exception e) {
+            Log.e(TAG, "Unable to update focus", e);
+        }
     }
 }

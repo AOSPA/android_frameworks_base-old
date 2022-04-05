@@ -1,6 +1,5 @@
 package com.android.systemui.media
 
-import android.app.Notification
 import android.app.Notification.MediaStyle
 import android.app.PendingIntent
 import android.app.smartspace.SmartspaceAction
@@ -240,15 +239,14 @@ class MediaDataManagerTest : SysuiTestCase() {
 
     @Test
     fun testOnNotificationAdded_isRcn_markedRemote() {
-        val bundle = Bundle().apply {
-            putString(Notification.EXTRA_SUBSTITUTE_APP_NAME, "Remote Cast Notification")
-        }
         val rcn = SbnBuilder().run {
             setPkg("com.android.systemui") // System package
             modifyNotification(context).also {
                 it.setSmallIcon(android.R.drawable.ic_media_pause)
-                it.setStyle(MediaStyle().apply { setMediaSession(session.sessionToken) })
-                it.addExtras(bundle)
+                it.setStyle(MediaStyle().apply {
+                    setMediaSession(session.sessionToken)
+                    setRemotePlaybackInfo("Remote device", 0, null)
+                })
             }
             build()
         }
@@ -372,6 +370,7 @@ class MediaDataManagerTest : SysuiTestCase() {
         assertThat(data.song).isEqualTo(SESSION_TITLE)
         assertThat(data.app).isEqualTo(APP_NAME)
         assertThat(data.actions).hasSize(1)
+        assertThat(data.semanticActions!!.playOrPause).isNotNull()
         assertThat(data.lastActive).isAtLeast(currentTime)
     }
 
@@ -660,11 +659,11 @@ class MediaDataManagerTest : SysuiTestCase() {
         actions.nextOrCustom!!.action!!.run()
         verify(transportControls).skipToNext()
 
-        assertThat(actions.startCustom).isNotNull()
-        assertThat(actions.startCustom!!.contentDescription).isEqualTo(customDesc[0])
+        assertThat(actions.custom0).isNotNull()
+        assertThat(actions.custom0!!.contentDescription).isEqualTo(customDesc[0])
 
-        assertThat(actions.endCustom).isNotNull()
-        assertThat(actions.endCustom!!.contentDescription).isEqualTo(customDesc[1])
+        assertThat(actions.custom1).isNotNull()
+        assertThat(actions.custom1!!.contentDescription).isEqualTo(customDesc[1])
     }
 
     @Test
@@ -698,11 +697,11 @@ class MediaDataManagerTest : SysuiTestCase() {
         assertThat(actions.nextOrCustom).isNotNull()
         assertThat(actions.nextOrCustom!!.contentDescription).isEqualTo(customDesc[1])
 
-        assertThat(actions.startCustom).isNotNull()
-        assertThat(actions.startCustom!!.contentDescription).isEqualTo(customDesc[2])
+        assertThat(actions.custom0).isNotNull()
+        assertThat(actions.custom0!!.contentDescription).isEqualTo(customDesc[2])
 
-        assertThat(actions.endCustom).isNotNull()
-        assertThat(actions.endCustom!!.contentDescription).isEqualTo(customDesc[3])
+        assertThat(actions.custom1).isNotNull()
+        assertThat(actions.custom1!!.contentDescription).isEqualTo(customDesc[3])
     }
 
     @Test
@@ -738,10 +737,10 @@ class MediaDataManagerTest : SysuiTestCase() {
         assertThat(actions.prevOrCustom).isNull()
         assertThat(actions.nextOrCustom).isNull()
 
-        assertThat(actions.startCustom).isNotNull()
-        assertThat(actions.startCustom!!.contentDescription).isEqualTo(customDesc[0])
+        assertThat(actions.custom0).isNotNull()
+        assertThat(actions.custom0!!.contentDescription).isEqualTo(customDesc[0])
 
-        assertThat(actions.endCustom).isNotNull()
-        assertThat(actions.endCustom!!.contentDescription).isEqualTo(customDesc[1])
+        assertThat(actions.custom1).isNotNull()
+        assertThat(actions.custom1!!.contentDescription).isEqualTo(customDesc[1])
     }
 }

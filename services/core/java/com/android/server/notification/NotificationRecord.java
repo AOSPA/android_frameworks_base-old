@@ -69,6 +69,8 @@ import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
 import com.android.server.uri.UriGrantsManagerInternal;
 
+import dalvik.annotation.optimization.NeverCompile;
+
 import java.io.PrintWriter;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -467,6 +469,7 @@ public final class NotificationRecord {
             rv.getPackage(), rv.getLayoutId(), rv.estimateMemoryUsage(), rv.toString());
     }
 
+    @NeverCompile // Avoid size overhead of debugging code.
     void dump(PrintWriter pw, String prefix, Context baseContext, boolean redact) {
         final Notification notification = getSbn().getNotification();
         pw.println(prefix + this);
@@ -475,6 +478,7 @@ public final class NotificationRecord {
         pw.println(prefix + "opPkg=" + getSbn().getOpPkg());
         pw.println(prefix + "icon=" + notification.getSmallIcon());
         pw.println(prefix + "flags=0x" + Integer.toHexString(notification.flags));
+        pw.println(prefix + "originalFlags=0x" + Integer.toHexString(mOriginalFlags));
         pw.println(prefix + "pri=" + notification.priority);
         pw.println(prefix + "key=" + getSbn().getKey());
         pw.println(prefix + "seen=" + mStats.hasSeen());
@@ -541,6 +545,7 @@ public final class NotificationRecord {
         if (notification == null) {
             pw.println(prefix + "None");
             return;
+
         }
         pw.println(prefix + "fullscreenIntent=" + notification.fullScreenIntent);
         pw.println(prefix + "contentIntent=" + notification.contentIntent);

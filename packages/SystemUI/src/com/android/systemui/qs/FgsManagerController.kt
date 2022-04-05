@@ -18,7 +18,10 @@ package com.android.systemui.qs
 
 import android.app.IActivityManager
 import android.app.IForegroundServiceObserver
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.IBinder
@@ -27,6 +30,7 @@ import android.os.RemoteException
 import android.provider.DeviceConfig.NAMESPACE_SYSTEMUI
 import android.text.format.DateUtils
 import android.util.ArrayMap
+import android.util.IndentingPrintWriter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -38,18 +42,26 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags.TASK_MANAGER_ENABLED
+import com.android.systemui.Dumpable
 import com.android.systemui.R
 import com.android.systemui.animation.DialogLaunchAnimator
+import com.android.systemui.broadcast.BroadcastDispatcher
+import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.statusbar.phone.SystemUIDialog
 import com.android.systemui.util.DeviceConfigProxy
+import com.android.systemui.util.indentIfPossible
 import com.android.systemui.util.time.SystemClock
+import java.io.FileDescriptor
+import java.io.PrintWriter
 import java.util.Objects
 import java.util.concurrent.Executor
 import javax.inject.Inject
 import kotlin.math.max
 
+@SysUISingleton
 class FgsManagerController @Inject constructor(
     private val context: Context,
     @Main private val mainExecutor: Executor,
@@ -58,12 +70,17 @@ class FgsManagerController @Inject constructor(
     private val activityManager: IActivityManager,
     private val packageManager: PackageManager,
     private val deviceConfigProxy: DeviceConfigProxy,
-    private val dialogLaunchAnimator: DialogLaunchAnimator
-) : IForegroundServiceObserver.Stub() {
+    private val dialogLaunchAnimator: DialogLaunchAnimator,
+    private val broadcastDispatcher: BroadcastDispatcher,
+    private val dumpManager: DumpManager
+) : IForegroundServiceObserver.Stub(), Dumpable {
 
     companion object {
         private val LOG_TAG = FgsManagerController::class.java.simpleName
     }
+
+    var changesSinceDialog = false
+        private set
 
     private var isAvailable = false
 
@@ -111,6 +128,20 @@ class FgsManagerController @Inject constructor(
             isAvailable = deviceConfigProxy
                     .getBoolean(NAMESPACE_SYSTEMUI, TASK_MANAGER_ENABLED, true)
 
+            dumpManager.registerDumpable(this)
+
+            broadcastDispatcher.registerReceiver(
+                    object : BroadcastReceiver() {
+                        override fun onReceive(context: Context, intent: Intent) {
+                            if (intent.action == Intent.ACTION_SHOW_FOREGROUND_SERVICE_MANAGER) {
+                                showDialog(null)
+                            }
+                        }
+                    },
+                    IntentFilter(Intent.ACTION_SHOW_FOREGROUND_SERVICE_MANAGER),
+                    executor = mainExecutor,
+                    flags = Context.RECEIVER_NOT_EXPORTED)
+
             initialized = true
         }
     }
@@ -137,6 +168,7 @@ class FgsManagerController @Inject constructor(
             val numPackagesAfter = getNumRunningPackagesLocked()
 
             if (numPackagesAfter != numPackagesBefore) {
+                changesSinceDialog = true
                 onNumberOfPackagesChangedListeners.forEach {
                     backgroundExecutor.execute { it.onNumberOfPackagesChanged(numPackagesAfter) }
                 }
@@ -210,6 +242,7 @@ class FgsManagerController @Inject constructor(
                 this.dialog = dialog
 
                 dialog.setOnDismissListener {
+                    changesSinceDialog = false
                     synchronized(lock) {
                         this.dialog = null
                         updateAppItemsLocked()
@@ -354,6 +387,7 @@ class FgsManagerController @Inject constructor(
                 PowerExemptionManager.REASON_SYSTEM_UID,
                 PowerExemptionManager.REASON_DEVICE_DEMO_MODE -> UIControl.HIDE_ENTRY
 
+                PowerExemptionManager.REASON_ALLOWLISTED_PACKAGE,
                 PowerExemptionManager.REASON_DEVICE_OWNER,
                 PowerExemptionManager.REASON_PROFILE_OWNER,
                 PowerExemptionManager.REASON_PROC_STATE_PERSISTENT,
@@ -372,6 +406,16 @@ class FgsManagerController @Inject constructor(
         }
 
         override fun hashCode(): Int = Objects.hash(userId, packageName)
+
+        fun dump(pw: PrintWriter) {
+            pw.println("UserPackage: [")
+            pw.indentIfPossible {
+                pw.println("userId=$userId")
+                pw.println("packageName=$packageName")
+                pw.println("uiControl=$uiControl")
+            }
+            pw.println("]")
+        }
     }
 
     private data class StartTimeAndTokens(
@@ -390,6 +434,22 @@ class FgsManagerController @Inject constructor(
 
         fun isEmpty(): Boolean {
             return tokens.isEmpty()
+        }
+
+        fun dump(pw: PrintWriter) {
+            pw.println("StartTimeAndTokens: [")
+            pw.indentIfPossible {
+                pw.println("startTime=$startTime (time running =" +
+                        " ${systemClock.elapsedRealtime() - startTime}ms)")
+                pw.println("tokens: [")
+                pw.indentIfPossible {
+                    for (token in tokens) {
+                        pw.println("$token")
+                    }
+                }
+                pw.println("]")
+            }
+            pw.println("]")
         }
     }
 
@@ -422,9 +482,54 @@ class FgsManagerController @Inject constructor(
         var appLabel: CharSequence = ""
         var icon: Drawable? = null
         var stopped = false
+
+        fun dump(pw: PrintWriter, systemClock: SystemClock) {
+            pw.println("RunningApp: [")
+            pw.indentIfPossible {
+                pw.println("userId=$userId")
+                pw.println("packageName=$packageName")
+                pw.println("timeStarted=$timeStarted (time since start =" +
+                        " ${systemClock.elapsedRealtime() - timeStarted}ms)\"")
+                pw.println("uiControl=$uiControl")
+                pw.println("appLabel=$appLabel")
+                pw.println("icon=$icon")
+                pw.println("stopped=$stopped")
+            }
+            pw.println("]")
+        }
     }
 
     private enum class UIControl {
         NORMAL, HIDE_BUTTON, HIDE_ENTRY
+    }
+
+    override fun dump(fd: FileDescriptor, printwriter: PrintWriter, args: Array<out String>) {
+        val pw = IndentingPrintWriter(printwriter)
+        synchronized(lock) {
+            pw.println("changesSinceDialog=$changesSinceDialog")
+            pw.println("Running service tokens: [")
+            pw.indentIfPossible {
+                runningServiceTokens.forEach { (userPackage, startTimeAndTokens) ->
+                    pw.println("{")
+                    pw.indentIfPossible {
+                        userPackage.dump(pw)
+                        startTimeAndTokens.dump(pw)
+                    }
+                    pw.println("}")
+                }
+            }
+            pw.println("]")
+
+            pw.println("Loaded package UI info: [")
+            pw.indentIfPossible {
+                runningApps.forEach { (userPackage, runningApp) ->
+                    pw.println("{")
+                    userPackage.dump(pw)
+                    runningApp.dump(pw, systemClock)
+                    pw.println("}")
+                }
+            }
+            pw.println("]")
+        }
     }
 }

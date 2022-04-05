@@ -16,19 +16,23 @@
 
 package android.companion.virtual;
 
+import android.annotation.CallbackExecutor;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.companion.AssociationInfo;
+import android.companion.virtual.audio.VirtualAudioDevice;
+import android.companion.virtual.audio.VirtualAudioDevice.AudioConfigurationChangeCallback;
 import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Point;
 import android.hardware.display.DisplayManager;
+import android.hardware.display.DisplayManager.VirtualDisplayFlag;
 import android.hardware.display.VirtualDisplay;
 import android.hardware.display.VirtualDisplayConfig;
 import android.hardware.input.VirtualKeyboard;
@@ -77,14 +81,21 @@ public final class VirtualDeviceManager {
     }
 
     /**
-     * Creates a virtual device.
+     * Creates a virtual device where applications can launch and receive input events injected by
+     * the creator.
+     *
+     * <p>The {@link android.Manifest.permission#CREATE_VIRTUAL_DEVICE} permission is required to
+     * create virtual devices, which is only available to system apps holding specific roles.
      *
      * @param associationId The association ID as returned by {@link AssociationInfo#getId()} from
      *   Companion Device Manager. Virtual devices must have a corresponding association with CDM in
      *   order to be created.
+     * @param params The parameters for creating virtual devices. See {@link VirtualDeviceParams}
+     *   for the available options.
+     * @return The created virtual device.
      */
     @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
-    @Nullable
+    @NonNull
     public VirtualDevice createVirtualDevice(
             int associationId,
             @NonNull VirtualDeviceParams params) {
@@ -136,6 +147,8 @@ public final class VirtualDeviceManager {
                         }
                     }
                 };
+        @Nullable
+        private VirtualAudioDevice mVirtualAudioDevice;
 
         private VirtualDevice(
                 IVirtualDeviceManager service,
@@ -208,25 +221,23 @@ public final class VirtualDeviceManager {
          * {@link DisplayManager#VIRTUAL_DISPLAY_FLAG_PUBLIC VIRTUAL_DISPLAY_FLAG_PUBLIC} and
          * {@link DisplayManager#VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
          * VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY}.
+         * @param executor The executor on which {@code callback} will be invoked. This is ignored
+         * if {@code callback} is {@code null}. If {@code callback} is specified, this executor must
+         * not be null.
          * @param callback Callback to call when the state of the {@link VirtualDisplay} changes
-         * @param handler The handler on which the listener should be invoked, or null
-         * if the listener should be invoked on the calling thread's looper.
          * @return The newly created virtual display, or {@code null} if the application could
          * not create the virtual display.
          *
          * @see DisplayManager#createVirtualDisplay
          */
-        // Suppress "ExecutorRegistration" because DisplayManager.createVirtualDisplay takes a
-        // handler
-        @SuppressLint("ExecutorRegistration")
         @Nullable
         public VirtualDisplay createVirtualDisplay(
-                int width,
-                int height,
-                int densityDpi,
+                @IntRange(from = 1) int width,
+                @IntRange(from = 1) int height,
+                @IntRange(from = 1) int densityDpi,
                 @Nullable Surface surface,
-                int flags,
-                @Nullable Handler handler,
+                @VirtualDisplayFlag int flags,
+                @Nullable @CallbackExecutor Executor executor,
                 @Nullable VirtualDisplay.Callback callback) {
             // TODO(b/205343547): Handle display groups properly instead of creating a new display
             //  group for every new virtual display created using this API.
@@ -242,18 +253,23 @@ public final class VirtualDeviceManager {
                             .setFlags(getVirtualDisplayFlags(flags))
                             .build(),
                     callback,
-                    handler);
+                    executor);
         }
 
         /**
-         * Closes the virtual device, stopping and tearing down any virtual displays,
-         * audio policies, and event injection that's currently in progress.
+         * Closes the virtual device, stopping and tearing down any virtual displays, associated
+         * virtual audio device, and event injection that's currently in progress.
          */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         public void close() {
             try {
                 mVirtualDevice.close();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
+            }
+            if (mVirtualAudioDevice != null) {
+                mVirtualAudioDevice.close();
+                mVirtualAudioDevice = null;
             }
         }
 
@@ -262,8 +278,8 @@ public final class VirtualDeviceManager {
          *
          * @param display the display that the events inputted through this device should target
          * @param inputDeviceName the name to call this input device
-         * @param vendorId the vendor id
-         * @param productId the product id
+         * @param vendorId the PCI vendor id
+         * @param productId the product id, as defined by the vendor
          */
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         @NonNull
@@ -288,8 +304,8 @@ public final class VirtualDeviceManager {
          *
          * @param display the display that the events inputted through this device should target
          * @param inputDeviceName the name to call this input device
-         * @param vendorId the vendor id
-         * @param productId the product id
+         * @param vendorId the PCI vendor id
+         * @param productId the product id, as defined by the vendor
          */
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         @NonNull
@@ -314,8 +330,8 @@ public final class VirtualDeviceManager {
          *
          * @param display the display that the events inputted through this device should target
          * @param inputDeviceName the name to call this input device
-         * @param vendorId the vendor id
-         * @param productId the product id
+         * @param vendorId the PCI vendor id
+         * @param productId the product id, as defined by the vendor
          */
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         @NonNull
@@ -335,6 +351,36 @@ public final class VirtualDeviceManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
+
+        /**
+         * Creates a VirtualAudioDevice, capable of recording audio emanating from this device,
+         * or injecting audio from another device.
+         *
+         * <p>Note: One {@link VirtualDevice} can only create one {@link VirtualAudioDevice}, so
+         * calling this method multiple times will return the same instance. When
+         * {@link VirtualDevice#close()} is called, the associated {@link VirtualAudioDevice} will
+         * also be closed automatically.
+         *
+         * @param display The target virtual display to capture from and inject into.
+         * @param executor The {@link Executor} object for the thread on which to execute
+         *                the callback. If <code>null</code>, the {@link Executor} associated with
+         *                the main {@link Looper} will be used.
+         * @param callback Interface to be notified when playback or recording configuration of
+         *                applications running on virtual display is changed.
+         * @return A {@link VirtualAudioDevice} instance.
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualAudioDevice createVirtualAudioDevice(
+                @NonNull VirtualDisplay display,
+                @Nullable Executor executor,
+                @Nullable AudioConfigurationChangeCallback callback) {
+            if (mVirtualAudioDevice == null) {
+                mVirtualAudioDevice = new VirtualAudioDevice(
+                        mContext, mVirtualDevice, display, executor, callback);
+            }
+            return mVirtualAudioDevice;
         }
 
         /**
@@ -379,23 +425,12 @@ public final class VirtualDeviceManager {
          * Adds an activity listener to listen for events such as top activity change or virtual
          * display task stack became empty.
          *
+         * @param executor The executor where the listener is executed on.
          * @param listener The listener to add.
-         * @see #removeActivityListener(ActivityListener)
-         */
-        public void addActivityListener(@NonNull ActivityListener listener) {
-            addActivityListener(listener, mContext.getMainExecutor());
-        }
-
-        /**
-         * Adds an activity listener to listen for events such as top activity change or virtual
-         * display task stack became empty.
-         *
-         * @param listener The listener to add.
-         * @param executor The executor where the callback is executed on.
          * @see #removeActivityListener(ActivityListener)
          */
         public void addActivityListener(
-                @NonNull ActivityListener listener, @NonNull Executor executor) {
+                @CallbackExecutor @NonNull Executor executor, @NonNull ActivityListener listener) {
             mActivityListeners.put(listener, new ActivityListenerDelegate(listener, executor));
         }
 

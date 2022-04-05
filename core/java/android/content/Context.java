@@ -36,6 +36,7 @@ import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UiContext;
 import android.annotation.UserIdInt;
+import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.BroadcastOptions;
 import android.app.GameManager;
@@ -45,6 +46,8 @@ import android.app.VrManager;
 import android.app.ambientcontext.AmbientContextManager;
 import android.app.people.PeopleManager;
 import android.app.time.TimeManager;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -85,6 +88,7 @@ import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.view.textclassifier.TextClassificationManager;
 import android.window.WindowContext;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.compat.IPlatformCompatNative;
 
@@ -111,6 +115,19 @@ import java.util.function.Consumer;
  * broadcasting and receiving intents, etc.
  */
 public abstract class Context {
+    /**
+     * After {@link Build.VERSION_CODES#TIRAMISU},
+     * {@link #registerComponentCallbacks(ComponentCallbacks)} will add a {@link ComponentCallbacks}
+     * to {@link Activity} or {@link ContextWrapper#getBaseContext()} instead of always adding to
+     * {@link #getApplicationContext()}.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    @VisibleForTesting
+    public static final long OVERRIDABLE_COMPONENT_CALLBACKS = 193247900L;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "MODE_" }, value = {
             MODE_PRIVATE,
@@ -163,7 +180,7 @@ public abstract class Context {
      *             {@link BroadcastReceiver}, and {@link android.app.Service}.
      *             There are no guarantees that this access mode will remain on
      *             a file, such as when it goes through a backup and restore.
-     * @see android.support.v4.content.FileProvider
+     * @see androidx.core.content.FileProvider
      * @see Intent#FLAG_GRANT_WRITE_URI_PERMISSION
      */
     @Deprecated
@@ -183,7 +200,7 @@ public abstract class Context {
      *             {@link BroadcastReceiver}, and {@link android.app.Service}.
      *             There are no guarantees that this access mode will remain on
      *             a file, such as when it goes through a backup and restore.
-     * @see android.support.v4.content.FileProvider
+     * @see androidx.core.content.FileProvider
      * @see Intent#FLAG_GRANT_WRITE_URI_PERMISSION
      */
     @Deprecated
@@ -3508,7 +3525,7 @@ public abstract class Context {
     public abstract boolean stopServiceAsUser(Intent service, UserHandle user);
 
     /**
-     * Connect to an application service, creating it if needed.  This defines
+     * Connects to an application service, creating it if needed.  This defines
      * a dependency between your application and the service.  The given
      * <var>conn</var> will receive the service object when it is created and be
      * told if it dies and restarts.  The service will be considered required
@@ -3523,11 +3540,8 @@ public abstract class Context {
      * will be invoked instead of
      * {@link ServiceConnection#onServiceConnected(ComponentName, IBinder) onServiceConnected()}.
      *
-     * <p>This method will throw {@link SecurityException} if the calling app does not
-     * have permission to bind to the given service.
-     *
-     * <p class="note">Note: this method <em>cannot be called from a
-     * {@link BroadcastReceiver} component</em>.  A pattern you can use to
+     * <p class="note"><b>Note:</b> This method <em>cannot</em> be called from a
+     * {@link BroadcastReceiver} component.  A pattern you can use to
      * communicate from a BroadcastReceiver to a Service is to call
      * {@link #startService} with the arguments containing the command to be
      * sent, with the service calling its
@@ -3542,42 +3556,49 @@ public abstract class Context {
      *      specify an explicit component name.
      * @param conn Receives information as the service is started and stopped.
      *      This must be a valid ServiceConnection object; it must not be null.
-     * @param flags Operation options for the binding.  May be 0,
-     *          {@link #BIND_AUTO_CREATE}, {@link #BIND_DEBUG_UNBIND},
-     *          {@link #BIND_NOT_FOREGROUND}, {@link #BIND_ABOVE_CLIENT},
-     *          {@link #BIND_ALLOW_OOM_MANAGEMENT}, {@link #BIND_WAIVE_PRIORITY}.
-     *          {@link #BIND_IMPORTANT}, {@link #BIND_ADJUST_WITH_ACTIVITY},
-     *          {@link #BIND_NOT_PERCEPTIBLE}, or {@link #BIND_INCLUDE_CAPABILITIES}.
-     * @return {@code true} if the system is in the process of bringing up a
-     *         service that your client has permission to bind to; {@code false}
-     *         if the system couldn't find the service or if your client doesn't
-     *         have permission to bind to it. You should call {@link #unbindService}
-     *         to release the connection even if this method returned {@code false}.
+     * @param flags Operation options for the binding. Can be:
+     *      <ul>
+     *          <li>0
+     *          <li>{@link #BIND_AUTO_CREATE}
+     *          <li>{@link #BIND_DEBUG_UNBIND}
+     *          <li>{@link #BIND_NOT_FOREGROUND}
+     *          <li>{@link #BIND_ABOVE_CLIENT}
+     *          <li>{@link #BIND_ALLOW_OOM_MANAGEMENT}
+     *          <li>{@link #BIND_WAIVE_PRIORITY}
+     *          <li>{@link #BIND_IMPORTANT}
+     *          <li>{@link #BIND_ADJUST_WITH_ACTIVITY}
+     *          <li>{@link #BIND_NOT_PERCEPTIBLE}
+     *          <li>{@link #BIND_INCLUDE_CAPABILITIES}
+     *      </ul>
      *
-     * @throws SecurityException If the caller does not have permission to access the service
-     * or the service can not be found.
+     * @return {@code true} if the system is in the process of bringing up a
+     *      service that your client has permission to bind to; {@code false}
+     *      if the system couldn't find the service or if your client doesn't
+     *      have permission to bind to it. Regardless of the return value, you
+     *      should later call {@link #unbindService} to release the connection.
+     *
+     * @throws SecurityException If the caller does not have permission to
+     *      access the service or the service cannot be found. Call
+     *      {@link #unbindService} to release the connection when this exception
+     *      is thrown.
      *
      * @see #unbindService
      * @see #startService
-     * @see #BIND_AUTO_CREATE
-     * @see #BIND_DEBUG_UNBIND
-     * @see #BIND_NOT_FOREGROUND
-     * @see #BIND_ABOVE_CLIENT
-     * @see #BIND_ALLOW_OOM_MANAGEMENT
-     * @see #BIND_WAIVE_PRIORITY
-     * @see #BIND_IMPORTANT
-     * @see #BIND_ADJUST_WITH_ACTIVITY
-     * @see #BIND_NOT_PERCEPTIBLE
-     * @see #BIND_INCLUDE_CAPABILITIES
      */
     public abstract boolean bindService(@RequiresPermission Intent service,
             @NonNull ServiceConnection conn, @BindServiceFlags int flags);
 
     /**
-     * Same as {@link #bindService(Intent, ServiceConnection, int)} with executor to control
-     * ServiceConnection callbacks.
+     * Same as {@link #bindService(Intent, ServiceConnection, int)
+     * bindService(Intent, ServiceConnection, int)} with executor to control ServiceConnection
+     * callbacks.
+     *
      * @param executor Callbacks on ServiceConnection will be called on executor. Must use same
      *      instance for the same instance of ServiceConnection.
+     *
+     * @return The result of the binding as described in
+     *      {@link #bindService(Intent, ServiceConnection, int)
+     *      bindService(Intent, ServiceConnection, int)}.
      */
     public boolean bindService(@RequiresPermission @NonNull Intent service,
             @BindServiceFlags int flags, @NonNull @CallbackExecutor Executor executor,
@@ -3603,11 +3624,12 @@ public abstract class Context {
      * @param instanceName Unique identifier for the service instance.  Each unique
      *      name here will result in a different service instance being created.  Identifiers
      *      must only contain ASCII letters, digits, underscores, and periods.
-     * @return Returns success of binding as per {@link #bindService}.
      * @param executor Callbacks on ServiceConnection will be called on executor.
      *      Must use same instance for the same instance of ServiceConnection.
      * @param conn Receives information as the service is started and stopped.
      *      This must be a valid ServiceConnection object; it must not be null.
+     *
+     * @return Returns success of binding as per {@link #bindService}.
      *
      * @throws SecurityException If the caller does not have permission to access the service
      * @throws IllegalArgumentException If the instanceName is invalid.
@@ -3623,8 +3645,7 @@ public abstract class Context {
     }
 
     /**
-     * Binds to a service in the given {@code user} in the same manner as
-     * {@link #bindService(Intent, ServiceConnection, int)}.
+     * Binds to a service in the given {@code user} in the same manner as {@link #bindService}.
      *
      * <p>Requires that one of the following conditions are met:
      * <ul>
@@ -7056,6 +7077,18 @@ public abstract class Context {
     @SuppressWarnings("HiddenAbstractMethod")
     @TestApi
     public abstract int getDisplayId();
+
+    /**
+     * @return Returns the id of the Display object associated with this Context or
+     * {@link Display#INVALID_DISPLAY} if no Display has been associated.
+     * @see #getDisplay()
+     * @see #getDisplayId()
+     *
+     * @hide
+     */
+    public int getAssociatedDisplayId() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * @hide

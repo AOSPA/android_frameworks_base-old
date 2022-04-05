@@ -81,6 +81,7 @@ public class AvatarPickerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setTheme(R.style.SudThemeGlifV3_DayNight);
         ThemeHelper.trySetDynamicColor(this);
         setContentView(R.layout.avatar_picker);
         setUpButtons();
@@ -94,7 +95,9 @@ public class AvatarPickerActivity extends Activity {
         restoreState(savedInstanceState);
 
         mAvatarPhotoController = new AvatarPhotoController(
-                this, mWaitingForActivityResult, getFileAuthority());
+                new AvatarPhotoController.AvatarUiImpl(this),
+                new AvatarPhotoController.ContextInjectorImpl(this, getFileAuthority()),
+                mWaitingForActivityResult);
     }
 
     private void setUpButtons() {

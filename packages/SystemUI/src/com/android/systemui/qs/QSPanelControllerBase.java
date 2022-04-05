@@ -76,6 +76,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
     private Consumer<Boolean> mMediaVisibilityChangedListener;
     private int mLastOrientation;
     private String mCachedSpecs = "";
+    @Nullable
     private QSTileRevealController mQsTileRevealController;
     private float mRevealExpansion;
 
@@ -185,6 +186,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         mDumpManager.unregisterDumpable(mView.getDumpableTag());
     }
 
+    @Nullable
     protected QSTileRevealController createTileRevealController() {
         return null;
     }
@@ -250,6 +252,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         return !mRecords.isEmpty();
     }
 
+    @Nullable
     QSTileView getTileView(QSTile tile) {
         for (QSPanelControllerBase.TileRecord r : mRecords) {
             if (r.tile == tile) {
@@ -298,20 +301,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
             mQsCustomizerController.hide();
             return;
         }
-        mView.closeDetail();
     }
-
-    /** */
-    public void openDetails(String subPanel) {
-        QSTile tile = getTile(subPanel);
-        // If there's no tile with that name (as defined in QSFactoryImpl or other QSFactory),
-        // QSFactory will not be able to create a tile and getTile will return null
-        if (tile != null) {
-            mView.showDetailAdapter(
-                    true, tile.getDetailAdapter(), new int[]{mView.getWidth() / 2, 0});
-        }
-    }
-
 
     void setListening(boolean listening) {
         mView.setListening(listening);
@@ -424,12 +414,23 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         mUsingHorizontalLayoutChangedListener = listener;
     }
 
+    @Nullable
     public View getBrightnessView() {
         return mView.getBrightnessView();
     }
 
+    /** Sets whether we are currently on lock screen. */
+    public void setIsOnKeyguard(boolean isOnKeyguard) {
+        boolean isOnSplitShadeLockscreen = mShouldUseSplitNotificationShade && isOnKeyguard;
+        // When the split shade is expanding on lockscreen, the media container transitions from the
+        // lockscreen to QS.
+        // We have to prevent the media container position from moving during the transition to have
+        // a smooth translation animation without stuttering.
+        mView.setShouldMoveMediaOnExpansion(!isOnSplitShadeLockscreen);
+    }
+
     /** */
-    public static final class TileRecord extends QSPanel.Record {
+    public static final class TileRecord {
         public TileRecord(QSTile tile, com.android.systemui.plugins.qs.QSTileView tileView) {
             this.tile = tile;
             this.tileView = tileView;
@@ -438,6 +439,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         public QSTile tile;
         public com.android.systemui.plugins.qs.QSTileView tileView;
         public boolean scanState;
+        @Nullable
         public QSTile.Callback callback;
     }
 }

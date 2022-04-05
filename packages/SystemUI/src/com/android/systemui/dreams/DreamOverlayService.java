@@ -19,6 +19,8 @@ package com.android.systemui.dreams;
 import android.content.Context;
 import android.graphics.drawable.ColorDrawable;
 import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
@@ -31,10 +33,9 @@ import androidx.lifecycle.ViewModelStore;
 import com.android.internal.policy.PhoneWindow;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
-import com.android.settingslib.dream.DreamBackend;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dreams.complication.Complication;
-import com.android.systemui.dreams.complication.ComplicationUtils;
+import com.android.systemui.dreams.complication.DreamPreviewComplication;
 import com.android.systemui.dreams.dagger.DreamOverlayComponent;
 import com.android.systemui.dreams.touch.DreamOverlayTouchMonitor;
 
@@ -59,10 +60,13 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
     // content area).
     private final DreamOverlayContainerViewController mDreamOverlayContainerViewController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
-    private final DreamBackend mDreamBackend;
+    private final DreamPreviewComplication mPreviewComplication;
 
     // A reference to the {@link Window} used to hold the dream overlay.
     private Window mWindow;
+
+    // True if the service has been destroyed.
+    private boolean mDestroyed;
 
     private final Complication.Host mHost = new Complication.Host() {
         @Override
@@ -99,12 +103,14 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
             @Main Executor executor,
             DreamOverlayComponent.Factory dreamOverlayComponentFactory,
             DreamOverlayStateController stateController,
-            KeyguardUpdateMonitor keyguardUpdateMonitor) {
+            KeyguardUpdateMonitor keyguardUpdateMonitor,
+            DreamPreviewComplication previewComplication) {
         mContext = context;
         mExecutor = executor;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mKeyguardUpdateMonitor.registerCallback(mKeyguardCallback);
         mStateController = stateController;
+        mPreviewComplication = previewComplication;
 
         final DreamOverlayComponent component =
                 dreamOverlayComponentFactory.create(mViewModelStore, mHost);
@@ -112,7 +118,6 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
         setCurrentState(Lifecycle.State.CREATED);
         mLifecycleRegistry = component.getLifecycleRegistry();
         mDreamOverlayTouchMonitor = component.getDreamOverlayTouchMonitor();
-        mDreamBackend = component.getDreamBackend();
         mDreamOverlayTouchMonitor.init();
     }
 
@@ -122,11 +127,17 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
 
     @Override
     public void onDestroy() {
-        mKeyguardUpdateMonitor.registerCallback(mKeyguardCallback);
+        mKeyguardUpdateMonitor.removeCallback(mKeyguardCallback);
         setCurrentState(Lifecycle.State.DESTROYED);
         final WindowManager windowManager = mContext.getSystemService(WindowManager.class);
-        windowManager.removeView(mWindow.getDecorView());
+        if (mWindow != null) {
+            windowManager.removeView(mWindow.getDecorView());
+        }
         mStateController.setOverlayActive(false);
+        mPreviewComplication.setDreamLabel(null);
+        mStateController.removeComplication(mPreviewComplication);
+        mStateController.setPreviewMode(false);
+        mDestroyed = true;
         super.onDestroy();
     }
 
@@ -134,9 +145,17 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
     public void onStartDream(@NonNull WindowManager.LayoutParams layoutParams) {
         setCurrentState(Lifecycle.State.STARTED);
         mExecutor.execute(() -> {
-            mStateController.setAvailableComplicationTypes(
-                    ComplicationUtils.convertComplicationTypes(
-                            mDreamBackend.getEnabledComplications()));
+            if (mDestroyed) {
+                // The task could still be executed after the service has been destroyed. Bail if
+                // that is the case.
+                return;
+            }
+            mStateController.setShouldShowComplications(shouldShowComplications());
+            mStateController.setPreviewMode(isPreviewMode());
+            if (isPreviewMode()) {
+                mPreviewComplication.setDreamLabel(getDreamLabel());
+                mStateController.addComplication(mPreviewComplication);
+            }
             addOverlayWindowLocked(layoutParams);
             setCurrentState(Lifecycle.State.RESUMED);
             mStateController.setOverlayActive(true);
@@ -169,9 +188,26 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
         }
 
         mDreamOverlayContainerViewController.init();
+        // Make extra sure the container view has been removed from its old parent (otherwise we
+        // risk an IllegalStateException in some cases when setting the container view as the
+        // window's content view and the container view hasn't been properly removed previously).
+        removeContainerViewFromParent();
         mWindow.setContentView(mDreamOverlayContainerViewController.getContainerView());
 
         final WindowManager windowManager = mContext.getSystemService(WindowManager.class);
         windowManager.addView(mWindow.getDecorView(), mWindow.getAttributes());
+    }
+
+    private void removeContainerViewFromParent() {
+        View containerView = mDreamOverlayContainerViewController.getContainerView();
+        if (containerView == null) {
+            return;
+        }
+        ViewGroup parentView = (ViewGroup) containerView.getParent();
+        if (parentView == null) {
+            return;
+        }
+        Log.w(TAG, "Removing dream overlay container view parent!");
+        parentView.removeView(containerView);
     }
 }

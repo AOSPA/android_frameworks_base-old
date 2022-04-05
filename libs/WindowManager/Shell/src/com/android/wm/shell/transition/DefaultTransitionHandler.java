@@ -26,6 +26,7 @@ import static android.app.ActivityOptions.ANIM_THUMBNAIL_SCALE_DOWN;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_SCALE_UP;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_RESOURCE_UPDATED;
+import static android.app.admin.DevicePolicyManager.EXTRA_RESOURCE_TYPE;
 import static android.app.admin.DevicePolicyManager.EXTRA_RESOURCE_TYPE_DRAWABLE;
 import static android.app.admin.DevicePolicyResources.Drawables.Source.PROFILE_SWITCH_ANIMATION;
 import static android.app.admin.DevicePolicyResources.Drawables.Style.OUTLINE;
@@ -156,9 +157,8 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
     private BroadcastReceiver mEnterpriseResourceUpdatedReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            boolean isDrawable = intent.getBooleanExtra(
-                    EXTRA_RESOURCE_TYPE_DRAWABLE, /* default= */ false);
-            if (!isDrawable) {
+            if (intent.getIntExtra(EXTRA_RESOURCE_TYPE, /* default= */ -1)
+                    != EXTRA_RESOURCE_TYPE_DRAWABLE) {
                 return;
             }
             updateEnterpriseThumbnailDrawable();
@@ -201,6 +201,7 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                 "Display is changing, check if it should be seamless.");
         boolean checkedDisplayLayout = false;
         boolean hasTask = false;
+        boolean displayExplicitSeamless = false;
         for (int i = info.getChanges().size() - 1; i >= 0; --i) {
             final TransitionInfo.Change change = info.getChanges().get(i);
 
@@ -209,7 +210,6 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
 
             // This container isn't rotating, so we can ignore it.
             if (change.getEndRotation() == change.getStartRotation()) continue;
-
             if ((change.getFlags() & FLAG_IS_DISPLAY) != 0) {
                 // In the presence of System Alert windows we can not seamlessly rotate.
                 if ((change.getFlags() & FLAG_DISPLAY_HAS_ALERT_WINDOWS) != 0) {
@@ -217,6 +217,8 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                             "  display has system alert windows, so not seamless.");
                     return false;
                 }
+                displayExplicitSeamless =
+                        change.getRotationAnimation() == ROTATION_ANIMATION_SEAMLESS;
             } else if ((change.getFlags() & FLAG_IS_WALLPAPER) != 0) {
                 if (change.getRotationAnimation() != ROTATION_ANIMATION_SEAMLESS) {
                     ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
@@ -268,8 +270,8 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
             }
         }
 
-        // ROTATION_ANIMATION_SEAMLESS can only be requested by task.
-        if (hasTask) {
+        // ROTATION_ANIMATION_SEAMLESS can only be requested by task or display.
+        if (hasTask || displayExplicitSeamless) {
             ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  Rotation IS seamless.");
             return true;
         }
@@ -346,12 +348,13 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
         for (int i = info.getChanges().size() - 1; i >= 0; --i) {
             final TransitionInfo.Change change = info.getChanges().get(i);
             final boolean isTask = change.getTaskInfo() != null;
+            boolean isSeamlessDisplayChange = false;
 
             if (change.getMode() == TRANSIT_CHANGE && (change.getFlags() & FLAG_IS_DISPLAY) != 0) {
                 if (info.getType() == TRANSIT_CHANGE) {
-                    boolean isSeamless = isRotationSeamless(info, mDisplayController);
+                    isSeamlessDisplayChange = isRotationSeamless(info, mDisplayController);
                     final int anim = getRotationAnimation(info);
-                    if (!(isSeamless || anim == ROTATION_ANIMATION_JUMPCUT)) {
+                    if (!(isSeamlessDisplayChange || anim == ROTATION_ANIMATION_JUMPCUT)) {
                         mRotationAnimation = new ScreenRotationAnimation(mContext, mSurfaceSession,
                                 mTransactionPool, startTransaction, change, info.getRootLeash(),
                                 anim);
@@ -385,6 +388,8 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                 startTransaction.setPosition(change.getLeash(),
                         change.getEndAbsBounds().left - info.getRootOffset().x,
                         change.getEndAbsBounds().top - info.getRootOffset().y);
+                // Seamless display transition doesn't need to animate.
+                if (isSeamlessDisplayChange) continue;
                 if (isTask) {
                     // Skip non-tasks since those usually have null bounds.
                     startTransaction.setWindowCrop(change.getLeash(),
@@ -403,7 +408,8 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                             || type == TRANSIT_CLOSE
                             || type == TRANSIT_TO_FRONT
                             || type == TRANSIT_TO_BACK;
-                    if (isOpenOrCloseTransition) {
+                    final boolean isTranslucent = (change.getFlags() & FLAG_TRANSLUCENT) != 0;
+                    if (isOpenOrCloseTransition && !isTranslucent) {
                         // Use the overview background as the background for the animation
                         final Context uiContext = ActivityThread.currentActivityThread()
                                 .getSystemUiContext();
@@ -417,8 +423,8 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                     // hasRoundedCorners is currently only enabled for tasks
                     final Context displayContext =
                             mDisplayController.getDisplayContext(change.getTaskInfo().displayId);
-                    cornerRadius =
-                            ScreenDecorationsUtils.getWindowCornerRadius(displayContext);
+                    cornerRadius = displayContext == null ? 0
+                            : ScreenDecorationsUtils.getWindowCornerRadius(displayContext);
                 } else {
                     cornerRadius = 0;
                 }
@@ -724,14 +730,17 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                         ? R.styleable.WindowAnimation_wallpaperCloseEnterAnimation
                         : R.styleable.WindowAnimation_wallpaperCloseExitAnimation;
             } else if (type == TRANSIT_OPEN) {
-                if (isTask) {
+                // We will translucent open animation for translucent activities and tasks. Choose
+                // WindowAnimation_activityOpenEnterAnimation and set translucent here, then
+                // TransitionAnimation loads appropriate animation later.
+                if ((changeFlags & FLAG_TRANSLUCENT) != 0 && enter) {
+                    translucent = true;
+                }
+                if (isTask && !translucent) {
                     animAttr = enter
                             ? R.styleable.WindowAnimation_taskOpenEnterAnimation
                             : R.styleable.WindowAnimation_taskOpenExitAnimation;
                 } else {
-                    if ((changeFlags & FLAG_TRANSLUCENT) != 0 && enter) {
-                        translucent = true;
-                    }
                     animAttr = enter
                             ? R.styleable.WindowAnimation_activityOpenEnterAnimation
                             : R.styleable.WindowAnimation_activityOpenExitAnimation;
@@ -765,7 +774,7 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                             .loadAnimationAttr(options.getPackageName(), options.getAnimations(),
                                     animAttr, translucent);
                 } else {
-                    a = mTransitionAnimation.loadDefaultAnimationAttr(animAttr);
+                    a = mTransitionAnimation.loadDefaultAnimationAttr(animAttr, translucent);
                 }
             }
         }

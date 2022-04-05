@@ -174,6 +174,13 @@ public class ActivityOptions extends ComponentOptions {
     public static final String KEY_SPLASH_SCREEN_THEME = "android.activity.splashScreenTheme";
 
     /**
+     * Indicates that this activity launch is eligible to show a legacy permission prompt
+     * @hide
+     */
+    public static final String KEY_LEGACY_PERMISSION_PROMPT_ELIGIBLE =
+            "android:activity.legacyPermissionPromptEligible";
+
+    /**
      * Callback for when the last frame of the animation is played.
      * @hide
      */
@@ -350,6 +357,10 @@ public class ActivityOptions extends ComponentOptions {
     /** See {@link #setTransientLaunch()}. */
     private static final String KEY_TRANSIENT_LAUNCH = "android.activity.transientLaunch";
 
+    /** see {@link #makeLaunchIntoPip(PictureInPictureParams)}. */
+    private static final String KEY_LAUNCH_INTO_PIP_PARAMS =
+            "android.activity.launchIntoPipParams";
+
     /**
      * @see #setLaunchCookie
      * @hide
@@ -441,9 +452,11 @@ public class ActivityOptions extends ComponentOptions {
     private String mSplashScreenThemeResName;
     @SplashScreen.SplashScreenStyle
     private int mSplashScreenStyle = SplashScreen.SPLASH_SCREEN_STYLE_UNDEFINED;
+    private boolean mIsEligibleForLegacyPermissionPrompt;
     private boolean mRemoveWithTaskOrganizer;
     private boolean mLaunchedFromBubble;
     private boolean mTransientLaunch;
+    private PictureInPictureParams mLaunchIntoPipParams;
 
     /**
      * Create an ActivityOptions specifying a custom animation to run when
@@ -1106,6 +1119,24 @@ public class ActivityOptions extends ComponentOptions {
         return opts;
     }
 
+    /**
+     * Creates an {@link ActivityOptions} instance that launch into picture-in-picture.
+     * This is normally used by a Host activity to start another activity that will directly enter
+     * picture-in-picture upon its creation.
+     * @param pictureInPictureParams {@link PictureInPictureParams} for launching the Activity to
+     *                               picture-in-picture mode.
+     */
+    @NonNull
+    public static ActivityOptions makeLaunchIntoPip(
+            @NonNull PictureInPictureParams pictureInPictureParams) {
+        final ActivityOptions opts = new ActivityOptions();
+        opts.mLaunchIntoPipParams = new PictureInPictureParams.Builder(pictureInPictureParams)
+                .setIsLaunchIntoPip(true)
+                .build();
+        opts.mLaunchBounds = new Rect(pictureInPictureParams.getSourceRectHint());
+        return opts;
+    }
+
     /** @hide */
     public boolean getLaunchTaskBehind() {
         return mAnimationType == ANIM_LAUNCH_TASK_BEHIND;
@@ -1121,7 +1152,7 @@ public class ActivityOptions extends ComponentOptions {
 
         mPackageName = opts.getString(KEY_PACKAGE_NAME);
         try {
-            mUsageTimeReport = opts.getParcelable(KEY_USAGE_TIME_REPORT);
+            mUsageTimeReport = opts.getParcelable(KEY_USAGE_TIME_REPORT, PendingIntent.class);
         } catch (RuntimeException e) {
             Slog.w(TAG, e);
         }
@@ -1219,6 +1250,9 @@ public class ActivityOptions extends ComponentOptions {
         mLaunchedFromBubble = opts.getBoolean(KEY_LAUNCHED_FROM_BUBBLE);
         mTransientLaunch = opts.getBoolean(KEY_TRANSIENT_LAUNCH);
         mSplashScreenStyle = opts.getInt(KEY_SPLASH_SCREEN_STYLE);
+        mLaunchIntoPipParams = opts.getParcelable(KEY_LAUNCH_INTO_PIP_PARAMS);
+        mIsEligibleForLegacyPermissionPrompt =
+                opts.getBoolean(KEY_LEGACY_PERMISSION_PROMPT_ELIGIBLE);
     }
 
     /**
@@ -1387,17 +1421,9 @@ public class ActivityOptions extends ComponentOptions {
         return mRemoteTransition;
     }
 
-    /**
-     * Creates an ActivityOptions from the Bundle generated from {@link ActivityOptions#toBundle()}.
-     * Returns an instance of ActivityOptions populated with options with known keys from the
-     * provided Bundle, stripping out unknown entries.
-     * @hide
-     */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
-    @TestApi
-    @NonNull
-    public static ActivityOptions fromBundle(@NonNull Bundle bOptions) {
-        return new ActivityOptions(bOptions);
+    /** @hide */
+    public static ActivityOptions fromBundle(Bundle bOptions) {
+        return bOptions != null ? new ActivityOptions(bOptions) : null;
     }
 
     /** @hide */
@@ -1429,7 +1455,6 @@ public class ActivityOptions extends ComponentOptions {
     /**
      * Gets the style can be used for cold-launching an activity.
      * @see #setSplashScreenStyle(int)
-     * @hide
      */
     public @SplashScreen.SplashScreenStyle int getSplashScreenStyle() {
         return mSplashScreenStyle;
@@ -1439,15 +1464,33 @@ public class ActivityOptions extends ComponentOptions {
      * Sets the preferred splash screen style of the opening activities. This only applies if the
      * Activity or Process is not yet created.
      * @param style Can be either {@link SplashScreen#SPLASH_SCREEN_STYLE_ICON} or
-     *              {@link SplashScreen#SPLASH_SCREEN_STYLE_EMPTY}
+     *              {@link SplashScreen#SPLASH_SCREEN_STYLE_SOLID_COLOR}
      */
     @NonNull
     public ActivityOptions setSplashScreenStyle(@SplashScreen.SplashScreenStyle int style) {
         if (style == SplashScreen.SPLASH_SCREEN_STYLE_ICON
-                || style == SplashScreen.SPLASH_SCREEN_STYLE_EMPTY) {
+                || style == SplashScreen.SPLASH_SCREEN_STYLE_SOLID_COLOR) {
             mSplashScreenStyle = style;
         }
         return this;
+    }
+
+    /**
+     * Whether the activity is eligible to show a legacy permission prompt
+     * @hide
+     */
+    @TestApi
+    public boolean isEligibleForLegacyPermissionPrompt() {
+        return mIsEligibleForLegacyPermissionPrompt;
+    }
+
+    /**
+     * Sets whether the activity is eligible to show a legacy permission prompt
+     * @hide
+     */
+    @TestApi
+    public void setEligibleForLegacyPermissionPrompt(boolean eligible) {
+        mIsEligibleForLegacyPermissionPrompt = eligible;
     }
 
     /**
@@ -1555,6 +1598,23 @@ public class ActivityOptions extends ComponentOptions {
     @TestApi
     public void setLaunchWindowingMode(int windowingMode) {
         mLaunchWindowingMode = windowingMode;
+    }
+
+    /**
+     * @return {@link PictureInPictureParams} used to launch into PiP mode.
+     * @hide
+     */
+    public PictureInPictureParams getLaunchIntoPipParams() {
+        return mLaunchIntoPipParams;
+    }
+
+    /**
+     * @return {@code true} if this instance is used to launch into PiP mode.
+     * @hide
+     */
+    public boolean isLaunchIntoPip() {
+        return mLaunchIntoPipParams != null
+                && mLaunchIntoPipParams.isLaunchIntoPip();
     }
 
     /** @hide */
@@ -1868,6 +1928,8 @@ public class ActivityOptions extends ComponentOptions {
         mAnimationFinishedListener = otherOptions.mAnimationFinishedListener;
         mSpecsFuture = otherOptions.mSpecsFuture;
         mRemoteAnimationAdapter = otherOptions.mRemoteAnimationAdapter;
+        mLaunchIntoPipParams = otherOptions.mLaunchIntoPipParams;
+        mIsEligibleForLegacyPermissionPrompt = otherOptions.mIsEligibleForLegacyPermissionPrompt;
     }
 
     /**
@@ -2039,6 +2101,13 @@ public class ActivityOptions extends ComponentOptions {
         }
         if (mSplashScreenStyle != 0) {
             b.putInt(KEY_SPLASH_SCREEN_STYLE, mSplashScreenStyle);
+        }
+        if (mLaunchIntoPipParams != null) {
+            b.putParcelable(KEY_LAUNCH_INTO_PIP_PARAMS, mLaunchIntoPipParams);
+        }
+        if (mIsEligibleForLegacyPermissionPrompt) {
+            b.putBoolean(KEY_LEGACY_PERMISSION_PROMPT_ELIGIBLE,
+                    mIsEligibleForLegacyPermissionPrompt);
         }
         return b;
     }

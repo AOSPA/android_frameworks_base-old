@@ -80,6 +80,7 @@ class ProcessRecord implements WindowProcessListener {
     volatile ApplicationInfo info; // all about the first app in the process
     final ProcessInfo processInfo; // if non-null, process-specific manifest info
     final boolean isolated;     // true if this is a special isolated process
+    public final boolean isSdkSandbox; // true if this is an SDK sandbox process
     final boolean appZygote;    // true if this is forked from the app zygote
     final int uid;              // uid of process; may be different from 'info' if isolated
     final int userId;           // user of process.
@@ -493,28 +494,38 @@ class ProcessRecord implements WindowProcessListener {
 
     ProcessRecord(ActivityManagerService _service, ApplicationInfo _info, String _processName,
             int _uid) {
+        this(_service, _info, _processName, _uid, -1, null);
+    }
+
+    ProcessRecord(ActivityManagerService _service, ApplicationInfo _info, String _processName,
+            int _uid, int _definingUid, String _definingProcessName) {
         mService = _service;
         mProcLock = _service.mProcLock;
         info = _info;
         ProcessInfo procInfo = null;
         if (_service.mPackageManagerInt != null) {
-            ArrayMap<String, ProcessInfo> processes =
-                    _service.mPackageManagerInt.getProcessesForUid(_uid);
-            if (processes != null) {
-                procInfo = processes.get(_processName);
-                if (procInfo != null && procInfo.deniedPermissions == null
-                        && procInfo.gwpAsanMode == ApplicationInfo.GWP_ASAN_DEFAULT
-                        && procInfo.memtagMode == ApplicationInfo.MEMTAG_DEFAULT
-                        && procInfo.nativeHeapZeroInitialized == ApplicationInfo.ZEROINIT_DEFAULT) {
-                    // If this process hasn't asked for permissions to be denied, or for a
-                    // non-default GwpAsan mode, or any other non-default setting, then we don't
-                    // care about it.
-                    procInfo = null;
-                }
+            if (_definingUid > 0) {
+                ArrayMap<String, ProcessInfo> processes =
+                        _service.mPackageManagerInt.getProcessesForUid(_definingUid);
+                if (processes != null) procInfo = processes.get(_definingProcessName);
+            } else {
+                ArrayMap<String, ProcessInfo> processes =
+                        _service.mPackageManagerInt.getProcessesForUid(_uid);
+                if (processes != null) procInfo = processes.get(_processName);
+            }
+            if (procInfo != null && procInfo.deniedPermissions == null
+                    && procInfo.gwpAsanMode == ApplicationInfo.GWP_ASAN_DEFAULT
+                    && procInfo.memtagMode == ApplicationInfo.MEMTAG_DEFAULT
+                    && procInfo.nativeHeapZeroInitialized == ApplicationInfo.ZEROINIT_DEFAULT) {
+                // If this process hasn't asked for permissions to be denied, or for a
+                // non-default GwpAsan mode, or any other non-default setting, then we don't
+                // care about it.
+                procInfo = null;
             }
         }
         processInfo = procInfo;
         isolated = Process.isIsolated(_uid);
+        isSdkSandbox = Process.isSdkSandboxUid(_uid);
         appZygote = (UserHandle.getAppId(_uid) >= Process.FIRST_APP_ZYGOTE_ISOLATED_UID
                 && UserHandle.getAppId(_uid) <= Process.LAST_APP_ZYGOTE_ISOLATED_UID);
         uid = _uid;

@@ -53,12 +53,15 @@ import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.unfold.SysUIUnfoldComponent;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import java.util.Optional;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -72,7 +75,7 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     @Mock
     private KeyguardStateController mKeyguardStateController;
     @Mock
-    private StatusBar mStatusBar;
+    private CentralSurfaces mCentralSurfaces;
     @Mock
     private ViewGroup mContainer;
     @Mock
@@ -100,6 +103,8 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     @Mock
     private ShadeController mShadeController;
     @Mock
+    private SysUIUnfoldComponent mSysUiUnfoldComponent;
+    @Mock
     private DreamOverlayStateController mDreamOverlayStateController;
     @Mock
     private LatencyTracker mLatencyTracker;
@@ -113,7 +118,7 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
                 any(ViewGroup.class),
                 any(KeyguardBouncer.BouncerExpansionCallback.class)))
                 .thenReturn(mBouncer);
-        when(mStatusBar.getBouncerContainer()).thenReturn(mContainer);
+        when(mCentralSurfaces.getBouncerContainer()).thenReturn(mContainer);
         when(mContainer.findViewById(anyInt())).thenReturn(mKeyguardMessageArea);
         mStatusBarKeyguardViewManager = new StatusBarKeyguardViewManager(
                 getContext(),
@@ -130,10 +135,11 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
                 mock(NotificationMediaManager.class),
                 mKeyguardBouncerFactory,
                 mKeyguardMessageAreaFactory,
+                Optional.of(mSysUiUnfoldComponent),
                 () -> mShadeController,
                 mLatencyTracker);
-        mStatusBarKeyguardViewManager.registerStatusBar(
-                mStatusBar,
+        mStatusBarKeyguardViewManager.registerCentralSurfaces(
+                mCentralSurfaces,
                 mNotificationPanelView,
                 new PanelExpansionStateManager(),
                 mBiometricUnlockController,
@@ -255,7 +261,7 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
     @Test
     public void onPanelExpansionChanged_neverTranslatesBouncerWhenLaunchingApp() {
-        when(mStatusBar.isInLaunchTransition()).thenReturn(true);
+        when(mCentralSurfaces.isInLaunchTransition()).thenReturn(true);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(
                 /* fraction= */ KeyguardBouncer.EXPANSION_VISIBLE,
                 /* expanded= */ true,
@@ -266,12 +272,12 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     @Test
     public void setOccluded_animatesPanelExpansion_onlyIfBouncerHidden() {
         mStatusBarKeyguardViewManager.setOccluded(false /* occluded */, true /* animated */);
-        verify(mStatusBar).animateKeyguardUnoccluding();
+        verify(mCentralSurfaces).animateKeyguardUnoccluding();
 
         when(mBouncer.isShowing()).thenReturn(true);
-        clearInvocations(mStatusBar);
+        clearInvocations(mCentralSurfaces);
         mStatusBarKeyguardViewManager.setOccluded(false /* occluded */, true /* animated */);
-        verify(mStatusBar, never()).animateKeyguardUnoccluding();
+        verify(mCentralSurfaces, never()).animateKeyguardUnoccluding();
     }
 
     @Test
@@ -297,7 +303,7 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
     @Test
     public void setOccluded_isInLaunchTransition_onKeyguardOccludedChangedCalled() {
-        when(mStatusBar.isInLaunchTransition()).thenReturn(true);
+        when(mCentralSurfaces.isInLaunchTransition()).thenReturn(true);
         mStatusBarKeyguardViewManager.show(null);
 
         mStatusBarKeyguardViewManager.setOccluded(true /* occluded */, false /* animated */);
@@ -306,7 +312,7 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
     @Test
     public void setOccluded_isLaunchingActivityOverLockscreen_onKeyguardOccludedChangedCalled() {
-        when(mStatusBar.isLaunchingActivityOverLockscreen()).thenReturn(true);
+        when(mCentralSurfaces.isLaunchingActivityOverLockscreen()).thenReturn(true);
         mStatusBarKeyguardViewManager.show(null);
 
         mStatusBarKeyguardViewManager.setOccluded(true /* occluded */, false /* animated */);

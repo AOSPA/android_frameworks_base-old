@@ -161,13 +161,13 @@ public final class Choreographer {
     private static final int MOTION_EVENT_ACTION_MOVE = 2;
     private static final int MOTION_EVENT_ACTION_CANCEL = 3;
 
-    // All frame callbacks posted by applications have this token or EXTENDED_FRAME_CALLBACK_TOKEN.
+    // All frame callbacks posted by applications have this token or VSYNC_CALLBACK_TOKEN.
     private static final Object FRAME_CALLBACK_TOKEN = new Object() {
         public String toString() { return "FRAME_CALLBACK_TOKEN"; }
     };
-    private static final Object EXTENDED_FRAME_CALLBACK_TOKEN = new Object() {
+    private static final Object VSYNC_CALLBACK_TOKEN = new Object() {
         public String toString() {
-            return "EXTENDED_FRAME_CALLBACK_TOKEN";
+            return "VSYNC_CALLBACK_TOKEN";
         }
     };
 
@@ -518,21 +518,21 @@ public final class Choreographer {
     }
 
     /**
-     * Posts an extended frame callback to run on the next frame.
+     * Posts a vsync callback to run on the next frame.
      * <p>
      * The callback runs once then is automatically removed.
      * </p>
      *
-     * @param callback The extended frame callback to run during the next frame.
+     * @param callback The vsync callback to run during the next frame.
      *
-     * @see #removeExtendedFrameCallback
+     * @see #removeVsyncCallback
      */
-    public void postExtendedFrameCallback(@NonNull ExtendedFrameCallback callback) {
+    public void postVsyncCallback(@NonNull VsyncCallback callback) {
         if (callback == null) {
             throw new IllegalArgumentException("callback must not be null");
         }
 
-        postCallbackDelayedInternal(CALLBACK_ANIMATION, callback, EXTENDED_FRAME_CALLBACK_TOKEN, 0);
+        postCallbackDelayedInternal(CALLBACK_ANIMATION, callback, VSYNC_CALLBACK_TOKEN, 0);
     }
 
     /**
@@ -625,18 +625,18 @@ public final class Choreographer {
     }
 
     /**
-     * Removes a previously posted extended frame callback.
+     * Removes a previously posted vsync callback.
      *
-     * @param callback The extended frame callback to remove.
+     * @param callback The vsync callback to remove.
      *
-     * @see #postExtendedFrameCallback
+     * @see #postVsyncCallback
      */
-    public void removeExtendedFrameCallback(@Nullable ExtendedFrameCallback callback) {
+    public void removeVsyncCallback(@Nullable VsyncCallback callback) {
         if (callback == null) {
             throw new IllegalArgumentException("callback must not be null");
         }
 
-        removeCallbacksInternal(CALLBACK_ANIMATION, callback, EXTENDED_FRAME_CALLBACK_TOKEN);
+        removeCallbacksInternal(CALLBACK_ANIMATION, callback, VSYNC_CALLBACK_TOKEN);
     }
 
     /**
@@ -1103,7 +1103,7 @@ public final class Choreographer {
          * The time in {@link System#nanoTime()} timebase which this frame is expected to be
          * presented.
          */
-        public long getExpectedPresentTimeNanos() {
+        public long getExpectedPresentationTimeNanos() {
             return mExpectedPresentTimeNanos;
         }
 
@@ -1116,7 +1116,7 @@ public final class Choreographer {
     }
 
     /**
-     * The payload for {@link ExtendedFrameCallback} which includes frame information such as when
+     * The payload for {@link VsyncCallback} which includes frame information such as when
      * the frame started being rendered, and multiple possible frame timelines and their
      * information including deadline and expected present time.
      */
@@ -1183,7 +1183,7 @@ public final class Choreographer {
      *
      * @see FrameCallback
      */
-    public interface ExtendedFrameCallback {
+    public interface VsyncCallback {
         /**
          * Called when a new display frame is being rendered.
          *
@@ -1281,7 +1281,7 @@ public final class Choreographer {
     private static final class CallbackRecord {
         public CallbackRecord next;
         public long dueTime;
-        /** Runnable or FrameCallback or ExtendedFrameCallback object. */
+        /** Runnable or FrameCallback or VsyncCallback object. */
         public Object action;
         /** Denotes the action type. */
         public Object token;
@@ -1296,8 +1296,8 @@ public final class Choreographer {
         }
 
         void run(FrameData frameData) {
-            if (token == EXTENDED_FRAME_CALLBACK_TOKEN) {
-                ((ExtendedFrameCallback) action).onVsync(frameData);
+            if (token == VSYNC_CALLBACK_TOKEN) {
+                ((VsyncCallback) action).onVsync(frameData);
             } else {
                 run(frameData.getFrameTimeNanos());
             }

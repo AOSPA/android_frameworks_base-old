@@ -149,11 +149,11 @@ data class MediaButton(
     /**
      * First custom action space
      */
-    var startCustom: MediaAction? = null,
+    var custom0: MediaAction? = null,
     /**
-     * Last custom action space
+     * Second custom action space
      */
-    var endCustom: MediaAction? = null
+    var custom1: MediaAction? = null
 )
 
 /** State of a media action. */
@@ -164,8 +164,17 @@ data class MediaAction(
 )
 
 /** State of the media device. */
-data class MediaDeviceData(
+data class MediaDeviceData
+@JvmOverloads constructor(
+    /** Whether or not to enable the chip */
     val enabled: Boolean,
+
+    /** Device icon to show in the chip */
     val icon: Drawable?,
-    val name: String?
+
+    /** Device display name */
+    val name: CharSequence?,
+
+    /** Optional intent to override the default output switcher for this control */
+    val intent: PendingIntent? = null
 )

@@ -57,6 +57,7 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationClickNotifier;
@@ -113,7 +114,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Mock
     private NotificationRemoteInputManager mRemoteInputManager;
     @Mock
-    private StatusBar mStatusBar;
+    private CentralSurfaces mCentralSurfaces;
     @Mock
     private KeyguardStateController mKeyguardStateController;
     @Mock
@@ -130,7 +131,6 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     private NotifPipeline mNotifPipeline;
     @Mock
     private NotificationVisibilityProvider mVisibilityProvider;
-
     @Mock
     private ActivityIntentHelper mActivityIntentHelper;
     @Mock
@@ -145,14 +145,14 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     private ActivityLaunchAnimator mActivityLaunchAnimator;
     @Mock
     private InteractionJankMonitor mJankMonitor;
+    private StatusBarNotificationActivityStarter.LaunchEventsEmitter mLaunchEventsEmitter;
     private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
-
     private NotificationTestHelper mNotificationTestHelper;
     private ExpandableNotificationRow mNotificationRow;
     private ExpandableNotificationRow mBubbleNotificationRow;
 
     private final Answer<Void> mCallOnDismiss = answerVoid(
-            (ActivityStarter.OnDismissAction dismissAction, Runnable cancel,
+            (OnDismissAction dismissAction, Runnable cancel,
                     Boolean afterKeyguardGone) -> dismissAction.onDismiss());
     private ArrayList<NotificationEntry> mActiveNotifications;
 
@@ -201,9 +201,9 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                         NotificationListContainer.class),
                         headsUpManager,
                         mJankMonitor);
-
+        mLaunchEventsEmitter = new StatusBarNotificationActivityStarter.LaunchEventsEmitter();
         mNotificationActivityStarter =
-                new StatusBarNotificationActivityStarter.Builder(
+                new StatusBarNotificationActivityStarter(
                         getContext(),
                         mock(CommandQueue.class),
                         mHandler,
@@ -229,22 +229,21 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                         mock(LockPatternUtils.class),
                         mock(StatusBarRemoteInputCallback.class),
                         mActivityIntentHelper,
-
                         mNotifPipelineFlags,
                         mock(MetricsLogger.class),
                         mock(StatusBarNotificationActivityStarterLogger.class),
-                        mOnUserInteractionCallback)
-                        .setStatusBar(mStatusBar)
-                        .setNotificationPresenter(mock(NotificationPresenter.class))
-                        .setNotificationPanelViewController(
-                                mock(NotificationPanelViewController.class))
-                        .setActivityLaunchAnimator(mActivityLaunchAnimator)
-                        .setNotificationAnimatorControllerProvider(notificationAnimationProvider)
-                        .build();
+                        mOnUserInteractionCallback,
+                        mCentralSurfaces,
+                        mock(NotificationPresenter.class),
+                        mock(NotificationPanelViewController.class),
+                        mActivityLaunchAnimator,
+                        notificationAnimationProvider,
+                        mLaunchEventsEmitter
+                );
 
         // set up dismissKeyguardThenExecute to synchronously invoke the OnDismissAction arg
         doAnswer(mCallOnDismiss).when(mActivityStarter).dismissKeyguardThenExecute(
-                any(ActivityStarter.OnDismissAction.class), any(), anyBoolean());
+                any(OnDismissAction.class), any(), anyBoolean());
 
         // set up addAfterKeyguardGoneRunnable to synchronously invoke the Runnable arg
         doAnswer(answerVoid(Runnable::run))
@@ -269,7 +268,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         sbn.getNotification().flags |= Notification.FLAG_AUTO_CANCEL;
 
         when(mKeyguardStateController.isShowing()).thenReturn(true);
-        when(mStatusBar.isOccluded()).thenReturn(true);
+        when(mCentralSurfaces.isOccluded()).thenReturn(true);
 
         // When
         mNotificationActivityStarter.onNotificationClicked(sbn, mNotificationRow);
@@ -328,7 +327,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Given
         sbn.getNotification().contentIntent = null;
         when(mKeyguardStateController.isShowing()).thenReturn(true);
-        when(mStatusBar.isOccluded()).thenReturn(true);
+        when(mCentralSurfaces.isOccluded()).thenReturn(true);
 
         // When
         mNotificationActivityStarter.onNotificationClicked(sbn, mBubbleNotificationRow);
@@ -358,7 +357,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Given
         sbn.getNotification().contentIntent = mContentIntent;
         when(mKeyguardStateController.isShowing()).thenReturn(true);
-        when(mStatusBar.isOccluded()).thenReturn(true);
+        when(mCentralSurfaces.isOccluded()).thenReturn(true);
 
         // When
         mNotificationActivityStarter.onNotificationClicked(sbn, mBubbleNotificationRow);
@@ -402,6 +401,42 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         mNotificationActivityStarter.handleFullScreenIntent(entry);
 
         // THEN display should try wake up for the full screen intent
-        verify(mStatusBar).wakeUpForFullScreenIntent();
+        verify(mCentralSurfaces).wakeUpForFullScreenIntent();
+    }
+
+    @Test
+    public void testNotifActivityStarterEventSourceStartEvent_onNotificationClicked() {
+        NotifActivityLaunchEvents.Listener listener =
+                mock(NotifActivityLaunchEvents.Listener.class);
+        mLaunchEventsEmitter.registerListener(listener);
+        mNotificationActivityStarter
+                .onNotificationClicked(mNotificationRow.getEntry().getSbn(), mNotificationRow);
+        verify(listener).onStartLaunchNotifActivity(mNotificationRow.getEntry());
+    }
+
+    @Test
+    public void testNotifActivityStarterEventSourceFinishEvent_dismissKeyguardCancelled() {
+        NotifActivityLaunchEvents.Listener listener =
+                mock(NotifActivityLaunchEvents.Listener.class);
+        mLaunchEventsEmitter.registerListener(listener);
+        // set up dismissKeyguardThenExecute to synchronously invoke the cancel runnable arg
+        doAnswer(answerVoid(
+                (OnDismissAction dismissAction, Runnable cancel, Boolean afterKeyguardGone) ->
+                        cancel.run()))
+                .when(mActivityStarter)
+                .dismissKeyguardThenExecute(any(OnDismissAction.class), any(), anyBoolean());
+        mNotificationActivityStarter
+                .onNotificationClicked(mNotificationRow.getEntry().getSbn(), mNotificationRow);
+        verify(listener).onFinishLaunchNotifActivity(mNotificationRow.getEntry());
+    }
+
+    @Test
+    public void testNotifActivityStarterEventSourceFinishEvent_postPanelCollapse() {
+        NotifActivityLaunchEvents.Listener listener =
+                mock(NotifActivityLaunchEvents.Listener.class);
+        mLaunchEventsEmitter.registerListener(listener);
+        mNotificationActivityStarter
+                .onNotificationClicked(mNotificationRow.getEntry().getSbn(), mNotificationRow);
+        verify(listener).onFinishLaunchNotifActivity(mNotificationRow.getEntry());
     }
 }

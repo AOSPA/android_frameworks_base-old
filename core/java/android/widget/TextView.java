@@ -5081,7 +5081,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @param color A color value in the form 0xAARRGGBB.
      * Do not pass a resource ID. To get a color value from a resource ID, call
-     * {@link android.support.v4.content.ContextCompat#getColor(Context, int) getColor}.
+     * {@link androidx.core.content.ContextCompat#getColor(Context, int) getColor}.
      *
      * @see #setTextColor(ColorStateList)
      * @see #getTextColors()
@@ -12286,7 +12286,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     EXTRA_DATA_RENDERING_INFO_KEY,
                     EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY
             ));
-            info.setTextSelectable(isTextSelectable());
+            info.setTextSelectable(isTextSelectable() || isTextEditable());
         } else {
             info.setAvailableExtraData(Arrays.asList(
                     EXTRA_DATA_RENDERING_INFO_KEY
@@ -12304,7 +12304,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 info.addAction(AccessibilityNodeInfo.ACTION_CUT);
             }
             if (canReplace()) {
-                info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_SUGGESTIONS);
+                info.addAction(
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_TEXT_SUGGESTIONS);
             }
             if (canShare()) {
                 info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
@@ -12625,7 +12626,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             default: {
                 // New ids have static blocks to assign values, so they can't be used in a case
                 // block.
-                if (action == R.id.accessibilityActionShowSuggestions) {
+                if (action == R.id.accessibilityActionShowTextSuggestions) {
                     return isFocused() && canReplace() && onTextContextMenuItem(ID_REPLACE);
                 }
                 return super.performAccessibilityActionInternal(action, arguments);
@@ -12765,7 +12766,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     /**
      * Called when a context menu option for the text view is selected.  Currently
      * this will be one of {@link android.R.id#selectAll}, {@link android.R.id#cut},
-     * {@link android.R.id#copy}, {@link android.R.id#paste} or {@link android.R.id#shareText}.
+     * {@link android.R.id#copy}, {@link android.R.id#paste},
+     * {@link android.R.id#pasteAsPlainText} (starting at API level 23) or
+     * {@link android.R.id#shareText}.
      *
      * @return true if the context menu item action was performed.
      */
@@ -12956,6 +12959,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * method. The default actions can also be removed from the menu using
      * {@link android.view.Menu#removeItem(int)} and passing {@link android.R.id#selectAll},
      * {@link android.R.id#cut}, {@link android.R.id#copy}, {@link android.R.id#paste},
+     * {@link android.R.id#pasteAsPlainText} (starting at API level 23),
      * {@link android.R.id#replaceText} or {@link android.R.id#shareText} ids as parameters.
      *
      * <p>Returning false from
@@ -12994,7 +12998,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * {@link android.view.ActionMode.Callback#onPrepareActionMode(android.view.ActionMode,
      * android.view.Menu)} method. The default actions can also be removed from the menu using
      * {@link android.view.Menu#removeItem(int)} and passing {@link android.R.id#selectAll},
-     * {@link android.R.id#paste} or {@link android.R.id#replaceText} ids as parameters.</p>
+     * {@link android.R.id#paste}, {@link android.R.id#pasteAsPlainText} (starting at API
+     * level 23) or {@link android.R.id#replaceText} ids as parameters.</p>
      *
      * <p>Returning false from
      * {@link android.view.ActionMode.Callback#onCreateActionMode(android.view.ActionMode,

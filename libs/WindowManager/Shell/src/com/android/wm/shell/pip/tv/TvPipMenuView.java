@@ -23,20 +23,21 @@ import static android.view.KeyEvent.KEYCODE_DPAD_DOWN;
 import static android.view.KeyEvent.KEYCODE_DPAD_LEFT;
 import static android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
 import static android.view.KeyEvent.KEYCODE_DPAD_UP;
+import static android.view.KeyEvent.KEYCODE_ENTER;
 
 import android.app.PendingIntent;
 import android.app.RemoteAction;
 import android.content.Context;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
-import android.view.LayoutInflater;
 import android.view.SurfaceControl;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewRootImpl;
-import android.view.WindowManagerGlobal;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -70,6 +71,13 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
     private final ImageView mArrowDown;
     private final ImageView mArrowLeft;
 
+    private final ViewGroup mScrollView;
+    private final ViewGroup mHorizontalScrollView;
+
+    private Rect mCurrentBounds;
+
+    private final TvPipMenuActionButton mExpandButton;
+
     public TvPipMenuView(@NonNull Context context) {
         this(context, null);
     }
@@ -95,6 +103,11 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
                 .setOnClickListener(this);
         mActionButtonsContainer.findViewById(R.id.tv_pip_menu_move_button)
                 .setOnClickListener(this);
+        mExpandButton = findViewById(R.id.tv_pip_menu_expand_button);
+        mExpandButton.setOnClickListener(this);
+
+        mScrollView = findViewById(R.id.tv_pip_menu_scroll);
+        mHorizontalScrollView = findViewById(R.id.tv_pip_menu_horizontal_scroll);
 
         mMenuFrameView = findViewById(R.id.tv_pip_menu_frame);
 
@@ -104,14 +117,52 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         mArrowLeft = findViewById(R.id.tv_pip_menu_arrow_left);
     }
 
+    void updateLayout(Rect updatedBounds) {
+        Log.d(TAG, "update menu layout: " + updatedBounds.toShortString());
+        boolean previouslyVertical =
+                mCurrentBounds != null && mCurrentBounds.height() > mCurrentBounds.width();
+        boolean vertical = updatedBounds.height() > updatedBounds.width();
+
+        mCurrentBounds = updatedBounds;
+        if (previouslyVertical == vertical) {
+            if (DEBUG) Log.d(TAG, "no update for menu layout");
+            return;
+        } else {
+            if (DEBUG) Log.d(TAG, "change menu layout to vertical: " + vertical);
+        }
+
+        if (vertical) {
+            mHorizontalScrollView.removeView(mActionButtonsContainer);
+            mScrollView.addView(mActionButtonsContainer);
+        } else {
+            mScrollView.removeView(mActionButtonsContainer);
+            mHorizontalScrollView.addView(mActionButtonsContainer);
+        }
+        mActionButtonsContainer.setOrientation(vertical ? LinearLayout.VERTICAL
+                : LinearLayout.HORIZONTAL);
+
+        mScrollView.setVisibility(vertical ? VISIBLE : GONE);
+        mHorizontalScrollView.setVisibility(vertical ? GONE : VISIBLE);
+    }
+
     void setListener(@Nullable Listener listener) {
         mListener = listener;
     }
 
+    void setExpandedModeEnabled(boolean enabled) {
+        mExpandButton.setVisibility(enabled ? VISIBLE : GONE);
+    }
+
+    void setIsExpanded(boolean expanded) {
+        if (DEBUG) Log.d(TAG, "setIsExpanded, expanded: " + expanded);
+        mExpandButton.setImageResource(
+                expanded ? R.drawable.pip_ic_collapse : R.drawable.pip_ic_expand);
+        mExpandButton.setTextAndDescription(
+                expanded ? R.string.pip_collapse : R.string.pip_expand);
+    }
+
     void show(boolean inMoveMode, int gravity) {
         if (DEBUG) Log.d(TAG, "show(), inMoveMode: " + inMoveMode);
-        grantWindowFocus(true);
-
         if (inMoveMode) {
             showMovementHints(gravity);
         } else {
@@ -120,15 +171,11 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         animateAlphaTo(1, mMenuFrameView);
     }
 
-    void hide(boolean isInMoveMode) {
+    void hide() {
         if (DEBUG) Log.d(TAG, "hide()");
         animateAlphaTo(0, mActionButtonsContainer);
         animateAlphaTo(0, mMenuFrameView);
         hideMovementHints();
-
-        if (!isInMoveMode) {
-            grantWindowFocus(false);
-        }
     }
 
     private void animateAlphaTo(float alpha, View view) {
@@ -157,17 +204,6 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
                 || mArrowLeft.getAlpha() != 0f;
     }
 
-    private void grantWindowFocus(boolean grantFocus) {
-        if (DEBUG) Log.d(TAG, "grantWindowFocus(" + grantFocus + ")");
-
-        try {
-            WindowManagerGlobal.getWindowSession().grantEmbeddedWindowFocus(null /* window */,
-                    getViewRootImpl().getInputToken(), grantFocus);
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to update focus", e);
-        }
-    }
-
     void setAdditionalActions(List<RemoteAction> actions, Handler mainHandler) {
         if (DEBUG) Log.d(TAG, "setAdditionalActions()");
 
@@ -175,13 +211,13 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         final int actionsNumber = actions.size();
         int buttonsNumber = mAdditionalButtons.size();
         if (actionsNumber > buttonsNumber) {
-            final LayoutInflater layoutInflater = LayoutInflater.from(mContext);
             // Add buttons until we have enough to display all of the actions.
             while (actionsNumber > buttonsNumber) {
                 TvPipMenuActionButton button = new TvPipMenuActionButton(mContext);
                 button.setOnClickListener(this);
 
-                mActionButtonsContainer.addView(button);
+                mActionButtonsContainer.addView(button,
+                        mActionButtonsContainer.getChildCount() - 1);
                 mAdditionalButtons.add(button);
 
                 buttonsNumber++;
@@ -233,6 +269,8 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
             mListener.onEnterMoveMode();
         } else if (id == R.id.tv_pip_menu_close_button) {
             mListener.onCloseButtonClick();
+        } else if (id == R.id.tv_pip_menu_expand_button) {
+            mListener.onToggleExpandedMode();
         } else {
             // This should be an "additional action"
             final RemoteAction action = (RemoteAction) v.getTag();
@@ -265,6 +303,7 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
                 case KEYCODE_DPAD_RIGHT:
                     return mListener.onPipMovement(event.getKeyCode()) || super.dispatchKeyEvent(
                             event);
+                case KEYCODE_ENTER:
                 case KEYCODE_DPAD_CENTER:
                     return mListener.onExitMoveMode() || super.dispatchKeyEvent(event);
                 default:
@@ -280,10 +319,14 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
     public void showMovementHints(int gravity) {
         if (DEBUG) Log.d(TAG, "showMovementHints(), position: " + Gravity.toString(gravity));
 
-        animateAlphaTo((gravity & Gravity.BOTTOM) == Gravity.BOTTOM ? 1f : 0f, mArrowUp);
-        animateAlphaTo((gravity & Gravity.TOP) == Gravity.TOP ? 1f : 0f, mArrowDown);
-        animateAlphaTo((gravity & Gravity.RIGHT) == Gravity.RIGHT ? 1f : 0f, mArrowLeft);
-        animateAlphaTo((gravity & Gravity.LEFT) == Gravity.LEFT ? 1f : 0f, mArrowRight);
+        animateAlphaTo(checkGravity(gravity, Gravity.BOTTOM) ? 1f : 0f, mArrowUp);
+        animateAlphaTo(checkGravity(gravity, Gravity.TOP) ? 1f : 0f, mArrowDown);
+        animateAlphaTo(checkGravity(gravity, Gravity.RIGHT) ? 1f : 0f, mArrowLeft);
+        animateAlphaTo(checkGravity(gravity, Gravity.LEFT) ? 1f : 0f, mArrowRight);
+    }
+
+    private boolean checkGravity(int gravity, int feature) {
+        return (gravity & feature) == feature;
     }
 
     /**
@@ -324,5 +367,7 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         void onCloseButtonClick();
 
         void onFullscreenButtonClick();
+
+        void onToggleExpandedMode();
     }
 }

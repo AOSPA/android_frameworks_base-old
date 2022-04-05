@@ -25,6 +25,7 @@ import static android.app.usage.UsageStatsManager.REASON_MAIN_TIMEOUT;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
 import static android.app.usage.UsageStatsManager.REASON_SUB_DEFAULT_APP_UPDATE;
 import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY;
+import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_USER_FLAG_INTERACTION;
 import static android.app.usage.UsageStatsManager.REASON_SUB_MASK;
 import static android.app.usage.UsageStatsManager.REASON_SUB_PREDICTED_RESTORED;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_ACTIVE_TIMEOUT;
@@ -103,6 +104,7 @@ import android.util.IndentingPrintWriter;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.util.SparseLongArray;
 import android.util.TimeUtils;
 import android.view.Display;
 import android.widget.Toast;
@@ -258,6 +260,13 @@ public class AppStandbyController
     private final ArraySet<String> mHeadlessSystemApps = new ArraySet<>();
 
     private final CountDownLatch mAdminDataAvailableLatch = new CountDownLatch(1);
+
+    /**
+     * Set of user IDs and the next time (in the elapsed realtime timebase) when we should check the
+     * apps' idle states.
+     */
+    @GuardedBy("mPendingIdleStateChecks")
+    private final SparseLongArray mPendingIdleStateChecks = new SparseLongArray();
 
     // Cache the active network scorer queried from the network scorer service
     private volatile String mCachedNetworkScorer = null;
@@ -721,7 +730,14 @@ public class AppStandbyController
 
     @Override
     public void postCheckIdleStates(int userId) {
-        mHandler.sendMessage(mHandler.obtainMessage(MSG_CHECK_IDLE_STATES, userId, 0));
+        if (userId == UserHandle.USER_ALL) {
+            postOneTimeCheckIdleStates();
+        } else {
+            synchronized (mPendingIdleStateChecks) {
+                mPendingIdleStateChecks.put(userId, mInjector.elapsedRealtime());
+            }
+            mHandler.obtainMessage(MSG_CHECK_IDLE_STATES).sendToTarget();
+        }
     }
 
     @Override
@@ -1421,6 +1437,18 @@ public class AppStandbyController
     }
 
     @Override
+    @StandbyBuckets
+    public int getAppMinStandbyBucket(String packageName, int appId, int userId,
+            boolean shouldObfuscateInstantApps) {
+        if (shouldObfuscateInstantApps && mInjector.isPackageEphemeral(userId, packageName)) {
+            return STANDBY_BUCKET_NEVER;
+        }
+        synchronized (mAppIdleLock) {
+            return getAppMinBucket(packageName, appId, userId);
+        }
+    }
+
+    @Override
     public void restrictApp(@NonNull String packageName, int userId,
             @ForcedReasons int restrictReason) {
         restrictApp(packageName, userId, REASON_MAIN_FORCED_BY_SYSTEM, restrictReason);
@@ -1581,7 +1609,11 @@ public class AppStandbyController
                     // Only user force can bypass the delay restriction. If the user forced the
                     // app into the RESTRICTED bucket, then a toast confirming the action
                     // shouldn't be surprising.
-                    if (Build.IS_DEBUGGABLE) {
+                    // Exclude REASON_SUB_FORCED_USER_FLAG_INTERACTION since the RESTRICTED bucket
+                    // isn't directly visible in that flow.
+                    if (Build.IS_DEBUGGABLE
+                            && (reason & REASON_SUB_MASK)
+                            != REASON_SUB_FORCED_USER_FLAG_INTERACTION) {
                         Toast.makeText(mContext,
                                 // Since AppStandbyController sits low in the lock hierarchy,
                                 // make sure not to call out with the lock held.
@@ -2369,10 +2401,32 @@ public class AppStandbyController
                     break;
 
                 case MSG_CHECK_IDLE_STATES:
-                    if (checkIdleStates(msg.arg1) && mAppIdleEnabled) {
-                        mHandler.sendMessageDelayed(mHandler.obtainMessage(
-                                MSG_CHECK_IDLE_STATES, msg.arg1, 0),
-                                mCheckIdleIntervalMillis);
+                    removeMessages(MSG_CHECK_IDLE_STATES);
+
+                    long earliestCheck = Long.MAX_VALUE;
+                    final long nowElapsed = mInjector.elapsedRealtime();
+                    synchronized (mPendingIdleStateChecks) {
+                        for (int i = mPendingIdleStateChecks.size() - 1; i >= 0; --i) {
+                            long expirationTime = mPendingIdleStateChecks.valueAt(i);
+
+                            if (expirationTime <= nowElapsed) {
+                                final int userId = mPendingIdleStateChecks.keyAt(i);
+                                if (checkIdleStates(userId) && mAppIdleEnabled) {
+                                    expirationTime = nowElapsed + mCheckIdleIntervalMillis;
+                                    mPendingIdleStateChecks.put(userId, expirationTime);
+                                } else {
+                                    mPendingIdleStateChecks.removeAt(i);
+                                    continue;
+                                }
+                            }
+
+                            earliestCheck = Math.min(earliestCheck, expirationTime);
+                        }
+                    }
+                    if (earliestCheck != Long.MAX_VALUE) {
+                        mHandler.sendMessageDelayed(
+                                mHandler.obtainMessage(MSG_CHECK_IDLE_STATES),
+                                earliestCheck - nowElapsed);
                     }
                     break;
 

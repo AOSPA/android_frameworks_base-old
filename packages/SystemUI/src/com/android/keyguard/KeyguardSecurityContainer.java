@@ -856,10 +856,9 @@ public class KeyguardSecurityContainer extends FrameLayout {
         }
 
         private void setupUserSwitcher() {
-            String currentUserName = mUserSwitcherController.getCurrentUserName();
-            mUserSwitcher.setText(currentUserName);
+            final UserRecord currentUser = mUserSwitcherController.getCurrentUserRecord();
+            mUserSwitcher.setText(mUserSwitcherController.getCurrentUserName());
 
-            final UserRecord currentUser = getCurrentUser();
             ViewGroup anchor = mView.findViewById(R.id.user_switcher_anchor);
             BaseUserAdapter adapter = new BaseUserAdapter(mUserSwitcherController) {
                 @Override
@@ -919,7 +918,7 @@ public class KeyguardSecurityContainer extends FrameLayout {
                     }
                     drawable.setTint(iconColor);
 
-                    Drawable bg = context.getDrawable(R.drawable.kg_bg_avatar);
+                    Drawable bg = context.getDrawable(R.drawable.user_avatar_bg);
                     bg.setTintBlendMode(BlendMode.DST);
                     bg.setTint(Utils.getColorAttrDefaultColor(context,
                                 com.android.internal.R.attr.colorSurfaceVariant));
@@ -961,16 +960,6 @@ public class KeyguardSecurityContainer extends FrameLayout {
             });
         }
 
-        private UserRecord getCurrentUser() {
-            for (int i = 0; i < mUserSwitcherController.getUsers().size(); ++i) {
-                UserRecord userRecord = mUserSwitcherController.getUsers().get(i);
-                if (userRecord.isCurrent) {
-                    return userRecord;
-                }
-            }
-            return null;
-        }
-
         /**
          * Each view will get half the width. Yes, it would be easier to use something other than
          * FrameLayout but it was too disruptive to downstream projects to change.
@@ -984,18 +973,22 @@ public class KeyguardSecurityContainer extends FrameLayout {
 
         @Override
         public void updateSecurityViewLocation() {
+            int yTrans = mResources.getDimensionPixelSize(R.dimen.bouncer_user_switcher_y_trans);
+
             if (mResources.getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
                 updateViewGravity(mViewFlipper, Gravity.CENTER_HORIZONTAL);
                 updateViewGravity(mUserSwitcherViewGroup, Gravity.CENTER_HORIZONTAL);
-                mUserSwitcherViewGroup.setTranslationY(0);
+
+                mUserSwitcherViewGroup.setTranslationY(yTrans);
+                mViewFlipper.setTranslationY(-yTrans);
             } else {
                 updateViewGravity(mViewFlipper, Gravity.RIGHT | Gravity.BOTTOM);
                 updateViewGravity(mUserSwitcherViewGroup, Gravity.LEFT | Gravity.CENTER_VERTICAL);
 
                 // Attempt to reposition a bit higher to make up for this frame being a bit lower
                 // on the device
-                int yTrans = mResources.getDimensionPixelSize(R.dimen.status_bar_height);
                 mUserSwitcherViewGroup.setTranslationY(-yTrans);
+                mViewFlipper.setTranslationY(0);
             }
         }
 

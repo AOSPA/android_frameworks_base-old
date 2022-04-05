@@ -1139,7 +1139,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
             if (provider != null && !provider.equals(manager.getName())) {
                 continue;
             }
-            CallerIdentity identity = manager.getIdentity();
+            CallerIdentity identity = manager.getProviderIdentity();
             if (identity == null) {
                 continue;
             }
@@ -1161,7 +1161,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
             return Collections.emptyList();
         }
 
-        CallerIdentity identity = manager.getIdentity();
+        CallerIdentity identity = manager.getProviderIdentity();
         if (identity == null) {
             return Collections.emptyList();
         }
@@ -1440,6 +1440,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
         ipw.println("Location Settings:");
         ipw.increaseIndent();
         mInjector.getSettingsHelper().dump(fd, ipw, args);
+        mInjector.getLocationSettings().dump(fd, ipw, args);
         ipw.decreaseIndent();
 
         synchronized (mLock) {
@@ -1547,7 +1548,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
         if (!enabled) {
             PackageTagsList.Builder builder = new PackageTagsList.Builder();
             for (LocationProviderManager manager : mProviderManagers) {
-                CallerIdentity identity = manager.getIdentity();
+                CallerIdentity identity = manager.getProviderIdentity();
                 if (identity != null) {
                     builder.add(identity.getPackageName(), identity.getAttributionTag());
                 }
@@ -1635,7 +1636,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 if (provider != null && !provider.equals(manager.getName())) {
                     continue;
                 }
-                if (identity.equals(manager.getIdentity())) {
+                if (identity.equals(manager.getProviderIdentity())) {
                     return true;
                 }
             }
@@ -1676,7 +1677,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 if (listener != null) {
                     ArraySet<Integer> uids = new ArraySet<>(mProviderManagers.size());
                     for (LocationProviderManager manager : mProviderManagers) {
-                        CallerIdentity identity = manager.getIdentity();
+                        CallerIdentity identity = manager.getProviderIdentity();
                         if (identity != null) {
                             uids.add(identity.getUid());
                         }

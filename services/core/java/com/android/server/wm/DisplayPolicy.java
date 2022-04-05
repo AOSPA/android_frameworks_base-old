@@ -1192,7 +1192,7 @@ public class DisplayPolicy {
                 break;
             case TYPE_NAVIGATION_BAR_PANEL:
                 // Check for permission if the caller is not the recents component.
-                if (!mService.mAtmInternal.isCallerRecents(callingUid)) {
+                if (!mService.mAtmService.isCallerRecents(callingUid)) {
                     mContext.enforcePermission(
                             android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                             "DisplayPolicy");
@@ -1211,7 +1211,7 @@ public class DisplayPolicy {
 
         if (attrs.providesInsetsTypes != null) {
             // Recents component is allowed to add inset types.
-            if (!mService.mAtmInternal.isCallerRecents(callingUid)) {
+            if (!mService.mAtmService.isCallerRecents(callingUid)) {
                 mContext.enforcePermission(
                         android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                         "DisplayPolicy");
@@ -1261,8 +1261,8 @@ public class DisplayPolicy {
                 break;
             case TYPE_STATUS_BAR:
                 mStatusBar = win;
-                final TriConsumer<DisplayFrames, WindowState, Rect> gestureFrameProvider =
-                        (displayFrames, windowState, rect) -> {
+                final TriConsumer<DisplayFrames, WindowContainer, Rect> gestureFrameProvider =
+                        (displayFrames, windowContainer, rect) -> {
                             rect.bottom = rect.top + getStatusBarHeight(displayFrames);
                             final DisplayCutout cutout =
                                     displayFrames.mInsetsState.getDisplayCutout();
@@ -1283,24 +1283,25 @@ public class DisplayPolicy {
             case TYPE_NAVIGATION_BAR:
                 mNavigationBar = win;
                 mDisplayContent.setInsetProvider(ITYPE_NAVIGATION_BAR, win,
-                        (displayFrames, windowState, inOutFrame) -> {
+                        (displayFrames, windowContainer, inOutFrame) -> {
                             if (!mNavButtonForcedVisible) {
-                                inOutFrame.inset(windowState.getLayoutingAttrs(
+                                inOutFrame.inset(win.getLayoutingAttrs(
                                         displayFrames.mRotation).providedInternalInsets);
                                 inOutFrame.inset(win.mGivenContentInsets);
                             }
                         },
 
                         // For IME we use regular frame.
-                        (displayFrames, windowState, inOutFrame) ->
-                                inOutFrame.set(windowState.getFrame()));
+                        (displayFrames, windowContainer, inOutFrame) -> {
+                            inOutFrame.set(win.getFrame());
+                        });
 
                 mDisplayContent.setInsetProvider(ITYPE_BOTTOM_MANDATORY_GESTURES, win,
-                        (displayFrames, windowState, inOutFrame) -> {
+                        (displayFrames, windowContainer, inOutFrame) -> {
                             inOutFrame.top -= mBottomGestureAdditionalInset;
                         });
                 mDisplayContent.setInsetProvider(ITYPE_LEFT_GESTURES, win,
-                        (displayFrames, windowState, inOutFrame) -> {
+                        (displayFrames, windowContainer, inOutFrame) -> {
                             final int leftSafeInset =
                                     Math.max(displayFrames.mDisplayCutoutSafe.left, 0);
                             inOutFrame.left = 0;
@@ -1309,7 +1310,7 @@ public class DisplayPolicy {
                             inOutFrame.right = leftSafeInset + mLeftGestureInset;
                         });
                 mDisplayContent.setInsetProvider(ITYPE_RIGHT_GESTURES, win,
-                        (displayFrames, windowState, inOutFrame) -> {
+                        (displayFrames, windowContainer, inOutFrame) -> {
                             final int rightSafeInset =
                                     Math.min(displayFrames.mDisplayCutoutSafe.right,
                                             displayFrames.mUnrestricted.right);
@@ -1319,8 +1320,8 @@ public class DisplayPolicy {
                             inOutFrame.right = displayFrames.mDisplayWidth;
                         });
                 mDisplayContent.setInsetProvider(ITYPE_BOTTOM_TAPPABLE_ELEMENT, win,
-                        (displayFrames, windowState, inOutFrame) -> {
-                            if ((windowState.getAttrs().flags & FLAG_NOT_TOUCHABLE) != 0
+                        (displayFrames, windowContainer, inOutFrame) -> {
+                            if ((win.getAttrs().flags & FLAG_NOT_TOUCHABLE) != 0
                                     || mNavigationBarLetsThroughTaps) {
                                 inOutFrame.setEmpty();
                             }
@@ -1331,11 +1332,13 @@ public class DisplayPolicy {
             default:
                 if (attrs.providesInsetsTypes != null) {
                     for (@InternalInsetsType int insetsType : attrs.providesInsetsTypes) {
-                        final TriConsumer<DisplayFrames, WindowState, Rect> imeFrameProvider =
+                        final TriConsumer<DisplayFrames, WindowContainer, Rect> imeFrameProvider =
                                 !attrs.providedInternalImeInsets.equals(Insets.NONE)
-                                        ? (displayFrames, windowState, inOutFrame) ->
-                                        inOutFrame.inset(windowState.getLayoutingAttrs(
-                                                displayFrames.mRotation).providedInternalImeInsets)
+                                        ? (displayFrames, windowContainer, inOutFrame) -> {
+                                            inOutFrame.inset(win.getLayoutingAttrs(
+                                                    displayFrames.mRotation)
+                                                    .providedInternalImeInsets);
+                                        }
                                         : null;
                         switch (insetsType) {
                             case ITYPE_STATUS_BAR:
@@ -1356,10 +1359,9 @@ public class DisplayPolicy {
                                 break;
                         }
                         mDisplayContent.setInsetProvider(insetsType, win, (displayFrames,
-                                windowState, inOutFrame) -> {
-                            inOutFrame.inset(
-                                    windowState.getLayoutingAttrs(displayFrames.mRotation)
-                                            .providedInternalInsets);
+                                windowContainer, inOutFrame) -> {
+                            inOutFrame.inset(win.getLayoutingAttrs(
+                                    displayFrames.mRotation).providedInternalInsets);
                             inOutFrame.inset(win.mGivenContentInsets);
                         }, imeFrameProvider);
                         mInsetsSourceWindowsExceptIme.add(win);
@@ -1385,8 +1387,13 @@ public class DisplayPolicy {
         }
     }
 
-    TriConsumer<DisplayFrames, WindowState, Rect> getImeSourceFrameProvider() {
-        return (displayFrames, windowState, inOutFrame) -> {
+    TriConsumer<DisplayFrames, WindowContainer, Rect> getImeSourceFrameProvider() {
+        return (displayFrames, windowContainer, inOutFrame) -> {
+            WindowState windowState = windowContainer.asWindowState();
+            if (windowState == null) {
+                throw new IllegalArgumentException("IME insets must be provided by a window.");
+            }
+
             if (mNavigationBar != null && navigationBarPosition(displayFrames.mRotation)
                     == NAV_BAR_BOTTOM) {
                 // In gesture navigation, nav bar frame is larger than frame to calculate insets.

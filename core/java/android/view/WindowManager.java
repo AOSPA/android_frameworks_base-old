@@ -97,6 +97,7 @@ import android.content.ClipData;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Insets;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -105,7 +106,6 @@ import android.graphics.Region;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.IInputConstants;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
@@ -2384,6 +2384,16 @@ public interface WindowManager extends ViewManager {
         public static final int PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR = 0x00001000;
 
         /**
+         * Flag to indicate that the window frame should be the requested frame adding the display
+         * cutout frame. This will only be applied if a specific size smaller than the parent frame
+         * is given, and the window is covering the display cutout. The extended frame will not be
+         * larger than the parent frame.
+         *
+         * {@hide}
+         */
+        public static final int PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT = 0x00002000;
+
+        /**
          * Flag that will make window ignore app visibility and instead depend purely on the decor
          * view visibility for determining window visibility. This is used by recents to keep
          * drawing after it launches an app.
@@ -3221,7 +3231,8 @@ public interface WindowManager extends ViewManager {
 
         /**
          * The window is allowed to extend into the {@link DisplayCutout} area, only if the
-         * {@link DisplayCutout} is fully contained within a system bar. Otherwise, the window is
+         * {@link DisplayCutout} is fully contained within a system bar or the {@link DisplayCutout}
+         * is not deeper than 16 dp, but this depends on the OEM choice. Otherwise, the window is
          * laid out such that it does not overlap with the {@link DisplayCutout} area.
          *
          * <p>
@@ -3236,6 +3247,13 @@ public interface WindowManager extends ViewManager {
          * The usual precautions for not overlapping with the status and navigation bar are
          * sufficient for ensuring that no important content overlaps with the DisplayCutout.
          *
+         * <p>
+         * Note: OEMs can have an option to allow the window to always extend into the
+         * {@link DisplayCutout} area, no matter the cutout flag set, when the {@link DisplayCutout}
+         * is on the different side from system bars, only if the {@link DisplayCutout} overlaps at
+         * most 16dp with the windows.
+         * In such case, OEMs must provide an opt-in/out affordance for users.
+         *
          * @see DisplayCutout
          * @see WindowInsets
          * @see #layoutInDisplayCutoutMode
@@ -3248,8 +3266,16 @@ public interface WindowManager extends ViewManager {
          * The window is always allowed to extend into the {@link DisplayCutout} areas on the short
          * edges of the screen.
          *
+         * <p>
          * The window will never extend into a {@link DisplayCutout} area on the long edges of the
-         * screen.
+         * screen, unless the {@link DisplayCutout} is not deeper than 16 dp, but this depends on
+         * the OEM choice.
+         *
+         * <p>
+         * Note: OEMs can have an option to allow the window to extend into the
+         * {@link DisplayCutout} area on the long edge side, only if the cutout overlaps at most
+         * 16dp with the windows. In such case, OEMs must provide an opt-in/out affordance for
+         * users.
          *
          * <p>
          * The window must make sure that no important content overlaps with the
@@ -3333,8 +3359,7 @@ public interface WindowManager extends ViewManager {
          *
          * @hide
          */
-        public static final int INPUT_FEATURE_NO_INPUT_CHANNEL =
-                IInputConstants.InputFeature.NO_INPUT_CHANNEL;
+        public static final int INPUT_FEATURE_NO_INPUT_CHANNEL = 1 << 0;
 
         /**
          * When this window has focus, does not call user activity for all input events so
@@ -3347,58 +3372,43 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-        public static final int INPUT_FEATURE_DISABLE_USER_ACTIVITY =
-                IInputConstants.InputFeature.DISABLE_USER_ACTIVITY;
+        public static final int INPUT_FEATURE_DISABLE_USER_ACTIVITY = 1 << 1;
 
         /**
          * An input spy window. This window will receive all pointer events within its touchable
-         * area, but will will not stop events from being sent to other windows below it in z-order.
+         * area, but will not stop events from being sent to other windows below it in z-order.
          * An input event will be dispatched to all spy windows above the top non-spy window at the
          * event's coordinates.
-         * @hide
-         */
-        public static final int INPUT_FEATURE_SPY =
-                IInputConstants.InputFeature.SPY;
-
-        /**
-         * When used with the window flag {@link #FLAG_NOT_TOUCHABLE}, this window will continue
-         * to receive events from a stylus device within its touchable region. All other pointer
-         * events, such as from a mouse or touchscreen, will be dispatched to the windows behind it.
-         *
-         * This input feature has no effect when the window flag {@link #FLAG_NOT_TOUCHABLE} is
-         * not set.
-         *
-         * The window must be a trusted overlay to use this input feature.
-         *
-         * @see #FLAG_NOT_TOUCHABLE
          *
          * @hide
          */
-        public static final int INPUT_FEATURE_INTERCEPTS_STYLUS =
-                IInputConstants.InputFeature.INTERCEPTS_STYLUS;
+        @RequiresPermission(permission.MONITOR_INPUT)
+        public static final int INPUT_FEATURE_SPY = 1 << 2;
 
         /**
          * An internal annotation for flags that can be specified to {@link #inputFeatures}.
          *
+         * NOTE: These are not the same as {@link android.os.InputConfig} flags.
+         *
          * @hide
          */
         @Retention(RetentionPolicy.SOURCE)
-        @IntDef(flag = true, prefix = { "INPUT_FEATURE_" }, value = {
-            INPUT_FEATURE_NO_INPUT_CHANNEL,
-            INPUT_FEATURE_DISABLE_USER_ACTIVITY,
-            INPUT_FEATURE_SPY,
-            INPUT_FEATURE_INTERCEPTS_STYLUS,
+        @IntDef(flag = true, prefix = {"INPUT_FEATURE_"}, value = {
+                INPUT_FEATURE_NO_INPUT_CHANNEL,
+                INPUT_FEATURE_DISABLE_USER_ACTIVITY,
+                INPUT_FEATURE_SPY,
         })
-        public @interface InputFeatureFlags {}
+        public @interface InputFeatureFlags {
+        }
 
         /**
-         * Control special features of the input subsystem.
+         * Control a set of features of the input subsystem that are exposed to the app process.
          *
-         * @see #INPUT_FEATURE_NO_INPUT_CHANNEL
-         * @see #INPUT_FEATURE_DISABLE_USER_ACTIVITY
-         * @see #INPUT_FEATURE_SPY
-         * @see #INPUT_FEATURE_INTERCEPTS_STYLUS
+         * WARNING: Do NOT use {@link android.os.InputConfig} flags! This must be set to flag values
+         * included in {@link InputFeatureFlags}.
+         *
          * @hide
+         * @see InputFeatureFlags
          */
         @InputFeatureFlags
         @UnsupportedAppUsage
@@ -4818,10 +4828,6 @@ public interface WindowManager extends ViewManager {
                 inputFeatures &= ~INPUT_FEATURE_SPY;
                 features.add("INPUT_FEATURE_SPY");
             }
-            if ((inputFeatures & INPUT_FEATURE_INTERCEPTS_STYLUS) != 0) {
-                inputFeatures &= ~INPUT_FEATURE_INTERCEPTS_STYLUS;
-                features.add("INPUT_FEATURE_INTERCEPTS_STYLUS");
-            }
             if (inputFeatures != 0) {
                 features.add(Integer.toHexString(inputFeatures));
             }
@@ -4864,21 +4870,24 @@ public interface WindowManager extends ViewManager {
      * Registers the frame rate per second count callback for one given task ID.
      * Each callback can only register for receiving FPS callback for one task id until unregister
      * is called. If there's no task associated with the given task id,
-     * {@link IllegalArgumentException} will be thrown. If a task id destroyed after a callback is
-     * registered, the registered callback will not be unregistered until
-     * {@link #unregisterTaskFpsCallback(TaskFpsCallback))} is called
+     * {@link IllegalArgumentException} will be thrown. Registered callbacks should always be
+     * unregistered via {@link #unregisterTaskFpsCallback(TaskFpsCallback)}
+     * even when the task id has been destroyed.
+     *
      * @param taskId task id of the task.
+     * @param executor Executor to execute the callback.
      * @param callback callback to be registered.
      *
      * @hide
      */
     @SystemApi
     default void registerTaskFpsCallback(@IntRange(from = 0) int taskId,
+            @NonNull Executor executor,
             @NonNull TaskFpsCallback callback) {}
 
     /**
      * Unregisters the frame rate per second count callback which was registered with
-     * {@link #registerTaskFpsCallback(int,TaskFpsCallback)}.
+     * {@link #registerTaskFpsCallback(Executor, int, TaskFpsCallback)}.
      *
      * @param callback callback to be unregistered.
      *
@@ -4886,4 +4895,21 @@ public interface WindowManager extends ViewManager {
      */
     @SystemApi
     default void unregisterTaskFpsCallback(@NonNull TaskFpsCallback callback) {}
+
+    /**
+     * Take a snapshot using the same path that's used for Recents. This is used for Testing only.
+     *
+     * @param taskId to take the snapshot of
+     *
+     * @return a bitmap of the screenshot or {@code null} if it was unable to screenshot. The
+     * screenshot can fail if the taskId is invalid or if there's no SurfaceControl associated with
+     * that task.
+     *
+     * @hide
+     */
+    @TestApi
+    @Nullable
+    default Bitmap snapshotTaskForRecents(@IntRange(from = 0) int taskId) {
+        return null;
+    }
 }

@@ -83,6 +83,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.Process;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -139,6 +140,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.inputmethod.IInputContentUriToken;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.ImeTracing;
+import com.android.internal.inputmethod.InputMethodNavButtonFlags;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
@@ -578,6 +580,7 @@ public class InputMethodService extends AbstractInputMethodService {
     private boolean mImeSurfaceScheduledForRemoval;
     private ImsConfigurationTracker mConfigTracker = new ImsConfigurationTracker();
     private boolean mDestroyed;
+    private boolean mOnPreparedStylusHwCalled;
 
     /** Stylus handwriting Ink window.  */
     private InkWindow mInkWindow;
@@ -658,7 +661,7 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public final void initializeInternal(@NonNull IBinder token,
                 IInputMethodPrivilegedOperations privilegedOperations, int configChanges,
-                boolean stylusHwSupported, boolean shouldShowImeSwitcherWhenImeIsShown) {
+                boolean stylusHwSupported, @InputMethodNavButtonFlags int navButtonFlags) {
             if (mDestroyed) {
                 Log.i(TAG, "The InputMethodService has already onDestroyed()."
                     + "Ignore the initialization.");
@@ -671,8 +674,7 @@ public class InputMethodService extends AbstractInputMethodService {
             if (stylusHwSupported) {
                 mInkWindow = new InkWindow(mWindow.getContext());
             }
-            mNavigationBarController.setShouldShowImeSwitcherWhenImeIsShown(
-                    shouldShowImeSwitcherWhenImeIsShown);
+            mNavigationBarController.onNavButtonFlagsChanged(navButtonFlags);
             attachToken(token);
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
@@ -782,10 +784,9 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public final void dispatchStartInputWithToken(@Nullable InputConnection inputConnection,
                 @NonNull EditorInfo editorInfo, boolean restarting,
-                @NonNull IBinder startInputToken, boolean shouldShowImeSwitcherWhenImeIsShown) {
+                @NonNull IBinder startInputToken, @InputMethodNavButtonFlags int navButtonFlags) {
             mPrivOps.reportStartInputAsync(startInputToken);
-            mNavigationBarController.setShouldShowImeSwitcherWhenImeIsShown(
-                    shouldShowImeSwitcherWhenImeIsShown);
+            mNavigationBarController.onNavButtonFlagsChanged(navButtonFlags);
             if (restarting) {
                 restartInput(inputConnection, editorInfo);
             } else {
@@ -799,10 +800,8 @@ public class InputMethodService extends AbstractInputMethodService {
          */
         @MainThread
         @Override
-        public void onShouldShowImeSwitcherWhenImeIsShownChanged(
-                boolean shouldShowImeSwitcherWhenImeIsShown) {
-            mNavigationBarController.setShouldShowImeSwitcherWhenImeIsShown(
-                    shouldShowImeSwitcherWhenImeIsShown);
+        public void onNavButtonFlagsChanged(@InputMethodNavButtonFlags int navButtonFlags) {
+            mNavigationBarController.onNavButtonFlagsChanged(navButtonFlags);
         }
 
         /**
@@ -919,12 +918,13 @@ public class InputMethodService extends AbstractInputMethodService {
                 Log.d(TAG, "Input should have started before starting Stylus handwriting.");
                 return;
             }
-            if (!mInkWindow.isInitialized()) {
+            if (!mOnPreparedStylusHwCalled) {
                 // prepare hasn't been called by Stylus HOVER.
                 onPrepareStylusHandwriting();
+                mOnPreparedStylusHwCalled = true;
             }
             if (onStartStylusHandwriting()) {
-                mPrivOps.onStylusHandwritingReady(requestId);
+                mPrivOps.onStylusHandwritingReady(requestId, Process.myPid());
             } else {
                 Log.i(TAG, "IME is not ready. Can't start Stylus Handwriting");
                 // TODO(b/210039666): see if it's valuable to propagate this back to IMM.
@@ -976,6 +976,7 @@ public class InputMethodService extends AbstractInputMethodService {
         public void initInkWindow() {
             mInkWindow.initOnly();
             onPrepareStylusHandwriting();
+            mOnPreparedStylusHwCalled = true;
         }
 
         /**
@@ -985,24 +986,6 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public void changeInputMethodSubtype(InputMethodSubtype subtype) {
             dispatchOnCurrentInputMethodSubtypeChanged(subtype);
-        }
-
-        /**
-         * {@inheritDoc}
-         * @hide
-         */
-        @Override
-        public void setCurrentShowInputToken(IBinder showInputToken) {
-            mCurShowInputToken = showInputToken;
-        }
-
-        /**
-         * {@inheritDoc}
-         * @hide
-         */
-        @Override
-        public void setCurrentHideInputToken(IBinder hideInputToken) {
-            mCurHideInputToken = hideInputToken;
         }
     }
 
@@ -2354,7 +2337,7 @@ public class InputMethodService extends AbstractInputMethodService {
 
     /**
      * Called to prepare stylus handwriting.
-     * The system calls this before the first {@link #onStartStylusHandwriting} request.
+     * The system calls this before the {@link #onStartStylusHandwriting} request.
      *
      * <p>Note: The system tries to call this as early as possible, when it detects that
      * handwriting stylus input is imminent. However, that a subsequent call to
@@ -2438,6 +2421,7 @@ public class InputMethodService extends AbstractInputMethodService {
         mInkWindow.hide(false /* remove */);
 
         mPrivOps.finishStylusHandwriting(requestId);
+        mOnPreparedStylusHwCalled = false;
         onFinishStylusHandwriting();
     }
 

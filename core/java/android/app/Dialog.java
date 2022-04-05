@@ -52,9 +52,6 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
-import android.view.OnBackInvokedCallback;
-import android.view.OnBackInvokedDispatcher;
-import android.view.OnBackInvokedDispatcherOwner;
 import android.view.SearchEvent;
 import android.view.View;
 import android.view.View.OnCreateContextMenuListener;
@@ -63,6 +60,9 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
+import android.window.OnBackInvokedDispatcherOwner;
 import android.window.WindowOnBackInvokedDispatcher;
 
 import com.android.internal.R;
@@ -456,7 +456,8 @@ public class Dialog implements DialogInterface, Window.Callback,
      */
     protected void onStart() {
         if (mActionBar != null) mActionBar.setShowHideAnimationEnabled(true);
-        if (mContext != null && !WindowOnBackInvokedDispatcher.shouldUseLegacyBack()) {
+        if (mContext != null
+                && WindowOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled(mContext)) {
             // Add onBackPressed as default back behavior.
             mDefaultBackCallback = new OnBackInvokedCallback() {
                 @Override
@@ -465,6 +466,7 @@ public class Dialog implements DialogInterface, Window.Callback,
                 }
             };
             getOnBackInvokedDispatcher().registerSystemOnBackInvokedCallback(mDefaultBackCallback);
+            mDefaultBackCallback = null;
         }
     }
 
@@ -702,7 +704,7 @@ public class Dialog implements DialogInterface, Window.Callback,
         if ((keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)
                 && event.isTracking()
                 && !event.isCanceled()
-                && WindowOnBackInvokedDispatcher.shouldUseLegacyBack()) {
+                && !WindowOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled(mContext)) {
             onBackPressed();
             return true;
         }

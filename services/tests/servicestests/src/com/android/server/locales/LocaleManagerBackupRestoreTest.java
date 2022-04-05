@@ -41,7 +41,9 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.os.Binder;
+import android.os.HandlerThread;
 import android.os.LocaleList;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.SimpleClock;
 import android.util.SparseArray;
@@ -78,6 +80,7 @@ import java.util.Map;
  */
 @RunWith(AndroidJUnit4.class)
 public class LocaleManagerBackupRestoreTest {
+    private static final String TAG = "LocaleManagerBackupRestoreTest";
     private static final String DEFAULT_PACKAGE_NAME = "com.android.myapp";
     private static final String DEFAULT_LOCALE_TAGS = "en-XC,ar-XB";
     private static final String TEST_LOCALES_XML_TAG = "locales";
@@ -104,6 +107,7 @@ public class LocaleManagerBackupRestoreTest {
     private PackageManager mMockPackageManager;
     @Mock
     private LocaleManagerService mMockLocaleManagerService;
+
     BroadcastReceiver mUserMonitor;
     PackageMonitor mPackageMonitor;
 
@@ -128,15 +132,22 @@ public class LocaleManagerBackupRestoreTest {
         mMockPackageManagerInternal = mock(PackageManagerInternal.class);
         mMockPackageManager = mock(PackageManager.class);
         mMockLocaleManagerService = mock(LocaleManagerService.class);
+        SystemAppUpdateTracker systemAppUpdateTracker = mock(SystemAppUpdateTracker.class);
 
         doReturn(mMockPackageManager).when(mMockContext).getPackageManager();
 
+        HandlerThread broadcastHandlerThread = new HandlerThread(TAG,
+                Process.THREAD_PRIORITY_BACKGROUND);
+        broadcastHandlerThread.start();
+
         mBackupHelper = spy(new ShadowLocaleManagerBackupHelper(mMockContext,
-                mMockLocaleManagerService, mMockPackageManagerInternal, mClock, STAGE_DATA));
+                mMockLocaleManagerService, mMockPackageManagerInternal, mClock, STAGE_DATA,
+                broadcastHandlerThread));
         doNothing().when(mBackupHelper).notifyBackupManager();
 
         mUserMonitor = mBackupHelper.getUserMonitor();
-        mPackageMonitor = mBackupHelper.getPackageMonitor();
+        mPackageMonitor = new LocaleManagerServicePackageMonitor(mBackupHelper,
+            systemAppUpdateTracker);
         setCurrentTimeMillis(DEFAULT_CREATION_TIME_MILLIS);
     }
 

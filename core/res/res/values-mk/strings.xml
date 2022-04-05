@@ -180,10 +180,7 @@
     <string name="low_memory" product="watch" msgid="3479447988234030194">"Складот за гледање е полн. Избришете некои датотеки за да ослободите простор."</string>
     <string name="low_memory" product="tv" msgid="6663680413790323318">"Капацитетот на уредот Android TV е полн. Избришете некои датотеки за да ослободите простор."</string>
     <string name="low_memory" product="default" msgid="2539532364144025569">"Меморијата на телефонот е полна. Избришете некои датотеки за да ослободите простор."</string>
-    <plurals name="ssl_ca_cert_warning" formatted="false" msgid="2288194355006173029">
-      <item quantity="one">Инсталирани се авторитети за сертификатот</item>
-      <item quantity="other">Инсталирани се авторитети за сертификатот</item>
-    </plurals>
+    <string name="ssl_ca_cert_warning" msgid="7233573909730048571">"{count,plural, =1{Инсталиран е орган за сертификатот}one{Инсталирани се органи за сертификатот}other{Инсталирани се органи за сертификатот}}"</string>
     <string name="ssl_ca_cert_noti_by_unknown" msgid="4961102218216815242">"Од страна на непознато трето лице"</string>
     <string name="ssl_ca_cert_noti_by_administrator" msgid="4564941950768783879">"Од администраторот на вашиот работен профил"</string>
     <string name="ssl_ca_cert_noti_managed" msgid="217337232273211674">"Од <xliff:g id="MANAGING_DOMAIN">%s</xliff:g>"</string>
@@ -203,6 +200,7 @@
     <string name="sensor_notification_service" msgid="7474531979178682676">"Услуга за известување од сензорот"</string>
     <string name="twilight_service" msgid="8964898045693187224">"Услуга за самрак"</string>
     <string name="gnss_time_update_service" msgid="9039489496037616095">"Услуга за ажурирање на времето на GNSS"</string>
+    <string name="device_policy_manager_service" msgid="5085762851388850332">"Услуга на „Управникот со правилата на уредот“"</string>
     <string name="music_recognition_manager_service" msgid="7481956037950276359">"Услуга на управникот за препознавање музика"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Уредот ќе се избрише"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Апликацијата на администраторот не може да се користи. Уредот ќе се избрише сега.\n\nАко имате прашања, контактирајте со администраторот на организацијата."</string>
@@ -256,10 +254,7 @@
     <string name="bugreport_option_interactive_summary" msgid="8493795476325339542">"Користете го ова во повеќето ситуации. Ви дозволува да го следите напредокот на извештајот, да внесете повеќе детали во врска со проблемот и да сликате слики од екранот. Може да испушти некои помалку користени делови за коишто е потребно долго време за да се пријават."</string>
     <string name="bugreport_option_full_title" msgid="7681035745950045690">"Целосен извештај"</string>
     <string name="bugreport_option_full_summary" msgid="1975130009258435885">"Користете ја опцијава за да имате минимално системско попречување кога уредот не  реагира или е премногу бавен или пак кога ви се потребни сите делови од извештајот. Не ви дозволува да внесете повеќе детали или да сликате дополнителни слики од екранот."</string>
-    <plurals name="bugreport_countdown" formatted="false" msgid="3906120379260059206">
-      <item quantity="one">Ќе се направи слика од екранот за извештајот за грешки за <xliff:g id="NUMBER_1">%d</xliff:g> секунда.</item>
-      <item quantity="other">Ќе се направи слика од екранот за извештајот за грешки за <xliff:g id="NUMBER_1">%d</xliff:g> секунди.</item>
-    </plurals>
+    <string name="bugreport_countdown" msgid="6418620521782120755">"{count,plural, =1{Ќе се зачува слика од екранот за извештајот за грешки по # секунда.}one{Ќе се зачува слика од екранот за извештајот за грешки по # секунда.}other{Ќе се зачува слика од екранот за извештајот за грешки по # секунди.}}"</string>
     <string name="bugreport_screenshot_success_toast" msgid="7986095104151473745">"Се сними слика од екранот со извештај за грешка"</string>
     <string name="bugreport_screenshot_failure_toast" msgid="6736320861311294294">"Не успеа да се сними слика од екранот со извештај за грешка"</string>
     <string name="global_action_toggle_silent_mode" msgid="8464352592860372188">"Тивок режим"</string>
@@ -310,8 +305,12 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"пристапува до календарот"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"испраќа и прикажува SMS-пораки"</string>
-    <string name="permgrouplab_storage" msgid="1938416135375282333">"Датотеки и аудиовизуелни содржини"</string>
-    <string name="permgroupdesc_storage" msgid="6351503740613026600">"пристапува до фотографии, аудио-видео и датотеки на уредот"</string>
+    <string name="permgrouplab_storage" msgid="9173334109512154196">"Датотеки и документи"</string>
+    <string name="permgroupdesc_storage" msgid="8352226729501080525">"да пристапува до датотеки и документи на уредот"</string>
+    <string name="permgrouplab_readMediaAural" msgid="5885210465560755316">"Музика и друго аудио"</string>
+    <string name="permgroupdesc_readMediaAural" msgid="1170143315714662822">"да пристапува до аудиодатотеки на вашиот уред"</string>
+    <string name="permgrouplab_readMediaVisual" msgid="9137695801926624061">"Фотографии и видеа"</string>
+    <string name="permgroupdesc_readMediaVisual" msgid="173787212014117477">"да пристапува до слики и видеодатотеки на вашиот уред"</string>
     <string name="permgrouplab_microphone" msgid="2480597427667420076">"Микрофон"</string>
     <string name="permgroupdesc_microphone" msgid="1047786732792487722">"снима аудио"</string>
     <string name="permgrouplab_activityRecognition" msgid="3324466667921775766">"Физичка активност"</string>
@@ -391,7 +390,7 @@
     <string name="permlab_systemAlertWindow" msgid="5757218350944719065">"Апликацијава може да се појави врз други апликации"</string>
     <string name="permdesc_systemAlertWindow" msgid="1145660714855738308">"Апликацијава може да се појави врз други апликации или делови од екранот. Тоа може да го попречи нормалното користење на апликацијата и да го смени начинот на кој се појавуваат другите апликации."</string>
     <string name="permlab_runInBackground" msgid="541863968571682785">"извршување во заднина"</string>
-    <string name="permdesc_runInBackground" msgid="4344539472115495141">"Апликацијава може да се извршува во заднина. Тоа може побрзо да ја троши батеријата."</string>
+    <string name="permdesc_runInBackground" msgid="4344539472115495141">"Апликацијава може да работи во заднина. Тоа може побрзо да ја троши батеријата."</string>
     <string name="permlab_useDataInBackground" msgid="783415807623038947">"користење мобилен интернет во заднина"</string>
     <string name="permdesc_useDataInBackground" msgid="1230753883865891987">"Апликацијава може да користи мобилен интернет во заднина. Тоа може да го зголеми користењето мобилен интернет."</string>
     <string name="permlab_persistentActivity" msgid="464970041740567970">"направи апликацијата постојано да биде активна"</string>
@@ -548,7 +547,7 @@
     <string name="permlab_uwb_ranging" msgid="8141915781475770665">"да ја одреди релативната положба помеѓу уредите со ултраширок појас во близина"</string>
     <string name="permdesc_uwb_ranging" msgid="2519723069604307055">"Дозволува апликацијата да ја одреди релативната положба помеѓу уредите со ултраширок појас во близина"</string>
     <string name="permlab_nearby_wifi_devices" msgid="392774237063608500">"да има интеракција со уредите со Wi‑Fi во близина"</string>
-    <string name="permdesc_nearby_wifi_devices" msgid="3054307728646332906">"Дозволува апликацијата да рекламира, да се поврзува и да ја одредува релативната положба уредите со Wi‑Fi во близина"</string>
+    <string name="permdesc_nearby_wifi_devices" msgid="3054307728646332906">"Дозволува апликацијата да рекламира, да се поврзува и да ја одредува релативната положба на уреди со Wi‑Fi во близина"</string>
     <string name="permlab_preferredPaymentInfo" msgid="5274423844767445054">"Информации за претпочитаната услуга за плаќање преку NFC"</string>
     <string name="permdesc_preferredPaymentInfo" msgid="8583552469807294967">"Дозволува апликацијата да добие информации за претпочитаната услуга за плаќање преку NFC, како регистрирани помагала и дестинација на маршрутата."</string>
     <string name="permlab_nfc" msgid="1904455246837674977">"контролирај комуникација на блиско поле"</string>
@@ -588,8 +587,9 @@
     <string name="screen_lock_dialog_default_subtitle" msgid="120359538048533695">"Внесете го заклучувањето на екранот за да продолжите"</string>
     <string name="fingerprint_acquired_partial" msgid="694598777291084823">"Откриен е делумен отпечаток"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Отпечатокот не може да се обработи. Обидете се повторно."</string>
-    <string name="fingerprint_acquired_imager_dirty" msgid="5236744087471419479">"Исчистете го сензорот"</string>
-    <string name="fingerprint_acquired_too_fast" msgid="6038375140739678098">"Држете малку подолго"</string>
+    <string name="fingerprint_acquired_imager_dirty" msgid="1770676120848224250">"Исчистете го сензорот за отпечатоци и обидете се повторно"</string>
+    <string name="fingerprint_acquired_imager_dirty_alt" msgid="9169582140486372897">"Исчистете го сензорот и обидете се повторно"</string>
+    <string name="fingerprint_acquired_too_fast" msgid="1628459767349116104">"Цврсто притиснете на сензорот"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"Прстот се движеше премногу бавно. Обидете се повторно."</string>
     <string name="fingerprint_acquired_already_enrolled" msgid="2285166003936206785">"Пробајте со друг отпечаток"</string>
     <string name="fingerprint_acquired_too_bright" msgid="3863560181670915607">"Премногу светло"</string>
@@ -597,6 +597,8 @@
     <string name="fingerprint_acquired_immobile" msgid="1621891895241888048">"Менувајте ја положбата на прстот по малку секој пат"</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
+    <string name="fingerprint_error_not_match" msgid="4599441812893438961">"Отпечатокот не е препознаен"</string>
+    <string name="fingerprint_udfps_error_not_match" msgid="4709197752023550709">"Цврсто притиснете на сензорот"</string>
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"Отпечатокот е проверен"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"Лицето е проверено"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"Лицето е проверено, притиснете го копчето „Потврди“"</string>
@@ -683,6 +685,12 @@
     <string name="permdesc_readSyncStats" msgid="3867809926567379434">"Овозможува апликацијата да ја чита статистиката за синхронизација на сметка, вклучувајќи ја и историјата на синхронизирани настани и колку податоци се синхронизирани."</string>
     <string name="permlab_sdcardRead" msgid="5791467020950064920">"ги чита содржините од заедничкото место за складирање"</string>
     <string name="permdesc_sdcardRead" msgid="6872973242228240382">"Дозволува апликацијата да ги чита содржините од заедничкото место за складирање."</string>
+    <string name="permlab_readMediaAudio" msgid="8723513075731763810">"да чита аудиодатотеки од споделениот капацитет"</string>
+    <string name="permdesc_readMediaAudio" msgid="5299772574434619399">"Дозволува апликацијата да ги чита аудиодатотеките од споделениот капацитет."</string>
+    <string name="permlab_readMediaVideo" msgid="7768003311260655007">"да чита видеодатотеки од споделениот капацитет"</string>
+    <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Дозволува апликацијата да ги чита видеодатотеките од споделениот капацитет."</string>
+    <string name="permlab_readMediaImage" msgid="1507059005825769856">"да чита датотеки со слики од споделениот капацитет"</string>
+    <string name="permdesc_readMediaImage" msgid="8328052622292457588">"Дозволува апликацијата да ги чита датотеките со слики од споделениот капацитет."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"ги менува или брише содржините на заедничкото место за складирање"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Дозволува апликацијата да ги пишува содржините на заедничкото место за складирање."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"остварува/прима повици преку SIP"</string>
@@ -1072,10 +1080,7 @@
     <string name="enable_explore_by_touch_warning_message" product="default" msgid="4312979647356179250">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> сака да овозможи „Истражувај со допир“. Кога е вклучено „Истражувај со допир“, може да се слушнат или да се видат описи на она што е под вашиот прст или да се прават движења за комуницирање со телефонот."</string>
     <string name="oneMonthDurationPast" msgid="4538030857114635777">"Пред 1 месец"</string>
     <string name="beforeOneMonthDurationPast" msgid="8315149541372065392">"Пред повеќе од 1 месец"</string>
-    <plurals name="last_num_days" formatted="false" msgid="687443109145393632">
-      <item quantity="one">Последните <xliff:g id="COUNT_1">%d</xliff:g> ден</item>
-      <item quantity="other">Последните <xliff:g id="COUNT_1">%d</xliff:g> дена</item>
-    </plurals>
+    <string name="last_num_days" msgid="2393660431490280537">"{count,plural, =1{Минатиот # ден}one{Минатите # ден}other{Минатите # дена}}"</string>
     <string name="last_month" msgid="1528906781083518683">"Минатиот месец"</string>
     <string name="older" msgid="1645159827884647400">"Постари"</string>
     <string name="preposition_for_date" msgid="2780767868832729599">"на <xliff:g id="DATE">%s</xliff:g>"</string>
@@ -1094,70 +1099,22 @@
     <string name="year" msgid="5182610307741238982">"година"</string>
     <string name="years" msgid="5797714729103773425">"години"</string>
     <string name="now_string_shortest" msgid="3684914126941650330">"сега"</string>
-    <plurals name="duration_minutes_shortest" formatted="false" msgid="7519574894537185135">
-      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>м.</item>
-      <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g>м.</item>
-    </plurals>
-    <plurals name="duration_hours_shortest" formatted="false" msgid="2838655994500499651">
-      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>ч.</item>
-      <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g>ч.</item>
-    </plurals>
-    <plurals name="duration_days_shortest" formatted="false" msgid="3686058472983158496">
-      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>д.</item>
-      <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g>д.</item>
-    </plurals>
-    <plurals name="duration_years_shortest" formatted="false" msgid="8299112348723640338">
-      <item quantity="one"><xliff:g id="COUNT_1">%d</xliff:g>г.</item>
-      <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g>г.</item>
-    </plurals>
-    <plurals name="duration_minutes_shortest_future" formatted="false" msgid="849196137176399440">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g>м.</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g>м.</item>
-    </plurals>
-    <plurals name="duration_hours_shortest_future" formatted="false" msgid="5386373597343170388">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g>ч.</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g>ч.</item>
-    </plurals>
-    <plurals name="duration_days_shortest_future" formatted="false" msgid="814754627092787227">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g>д.</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g>д.</item>
-    </plurals>
-    <plurals name="duration_years_shortest_future" formatted="false" msgid="7683731800140202145">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g>г.</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g>г.</item>
-    </plurals>
-    <plurals name="duration_minutes_relative" formatted="false" msgid="6569851308583028344">
-      <item quantity="one">пред <xliff:g id="COUNT_1">%d</xliff:g> минута</item>
-      <item quantity="other">пред <xliff:g id="COUNT_1">%d</xliff:g> минути</item>
-    </plurals>
-    <plurals name="duration_hours_relative" formatted="false" msgid="420434788589102019">
-      <item quantity="one">пред <xliff:g id="COUNT_1">%d</xliff:g> час</item>
-      <item quantity="other">пред <xliff:g id="COUNT_1">%d</xliff:g> часа</item>
-    </plurals>
-    <plurals name="duration_days_relative" formatted="false" msgid="6056425878237482431">
-      <item quantity="one">пред <xliff:g id="COUNT_1">%d</xliff:g> ден</item>
-      <item quantity="other">пред <xliff:g id="COUNT_1">%d</xliff:g> дена</item>
-    </plurals>
-    <plurals name="duration_years_relative" formatted="false" msgid="2179998228861172159">
-      <item quantity="one">пред <xliff:g id="COUNT_1">%d</xliff:g> година</item>
-      <item quantity="other">пред <xliff:g id="COUNT_1">%d</xliff:g> години</item>
-    </plurals>
-    <plurals name="duration_minutes_relative_future" formatted="false" msgid="5759885720917567723">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g> минута</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g> минути</item>
-    </plurals>
-    <plurals name="duration_hours_relative_future" formatted="false" msgid="8963511608507707959">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g> час</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g> часа</item>
-    </plurals>
-    <plurals name="duration_days_relative_future" formatted="false" msgid="1964709470979250702">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g> ден</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g> дена</item>
-    </plurals>
-    <plurals name="duration_years_relative_future" formatted="false" msgid="3985129025134896371">
-      <item quantity="one">за <xliff:g id="COUNT_1">%d</xliff:g> година</item>
-      <item quantity="other">за <xliff:g id="COUNT_1">%d</xliff:g> години</item>
-    </plurals>
+    <string name="duration_minutes_shortest" msgid="5744379079540806690">"<xliff:g id="COUNT">%d</xliff:g> мин."</string>
+    <string name="duration_hours_shortest" msgid="1477752094141971675">"<xliff:g id="COUNT">%d</xliff:g> ч."</string>
+    <string name="duration_days_shortest" msgid="4083124701676227233">"<xliff:g id="COUNT">%d</xliff:g> д."</string>
+    <string name="duration_years_shortest" msgid="483982719231145618">"<xliff:g id="COUNT">%d</xliff:g> г."</string>
+    <string name="duration_minutes_shortest_future" msgid="5260857299282734759">"по <xliff:g id="COUNT">%d</xliff:g> мин."</string>
+    <string name="duration_hours_shortest_future" msgid="2979276794547981674">"по <xliff:g id="COUNT">%d</xliff:g> ч."</string>
+    <string name="duration_days_shortest_future" msgid="3392722163935571543">"по <xliff:g id="COUNT">%d</xliff:g> д."</string>
+    <string name="duration_years_shortest_future" msgid="5537464088352970388">"по <xliff:g id="COUNT">%d</xliff:g> г."</string>
+    <string name="duration_minutes_relative" msgid="8620337701051015593">"{count,plural, =1{Пред # минута}one{Пред # минута}other{Пред # минути}}"</string>
+    <string name="duration_hours_relative" msgid="4836449961693180253">"{count,plural, =1{Пред # час}one{Пред # час}other{Пред # часа}}"</string>
+    <string name="duration_days_relative" msgid="621965767567258302">"{count,plural, =1{Пред # ден}one{Пред # ден}other{Пред # дена}}"</string>
+    <string name="duration_years_relative" msgid="8731202348869424370">"{count,plural, =1{Пред # година}one{Пред # година}other{Пред # години}}"</string>
+    <string name="duration_minutes_relative_future" msgid="5259574171747708115">"{count,plural, =1{# минута}one{# минута}other{# минути}}"</string>
+    <string name="duration_hours_relative_future" msgid="6670440478481140565">"{count,plural, =1{# час}one{# час}other{# часа}}"</string>
+    <string name="duration_days_relative_future" msgid="8870658635774250746">"{count,plural, =1{# ден}one{# ден}other{# дена}}"</string>
+    <string name="duration_years_relative_future" msgid="8855853883925918380">"{count,plural, =1{# година}one{# година}other{# години}}"</string>
     <string name="VideoView_error_title" msgid="5750686717225068016">"Проблем со видео"</string>
     <string name="VideoView_error_text_invalid_progressive_playback" msgid="3782449246085134720">"Видеово не е важечко за постојан тек до уредов."</string>
     <string name="VideoView_error_text_unknown" msgid="7658683339707607138">"Ова видео не може да се пушти."</string>
@@ -1187,10 +1144,8 @@
     <string name="deleteText" msgid="4200807474529938112">"Избриши"</string>
     <string name="inputMethod" msgid="1784759500516314751">"Метод на внес"</string>
     <string name="editTextMenuTitle" msgid="857666911134482176">"Дејства со текст"</string>
-    <!-- no translation found for input_method_nav_back_button_desc (3655838793765691787) -->
-    <skip />
-    <!-- no translation found for input_method_ime_switch_button_desc (2736542240252198501) -->
-    <skip />
+    <string name="input_method_nav_back_button_desc" msgid="3655838793765691787">"Назад"</string>
+    <string name="input_method_ime_switch_button_desc" msgid="2736542240252198501">"Префрлете го методот за внесување"</string>
     <string name="low_internal_storage_view_title" msgid="9024241779284783414">"Капацитетот е речиси полн"</string>
     <string name="low_internal_storage_view_text" msgid="8172166728369697835">"Некои системски функции може да не работат"</string>
     <string name="low_internal_storage_view_text_no_boot" msgid="7368968163411251788">"Нема доволно меморија во системот. Проверете дали има слободен простор од 250 MB и рестартирајте."</string>
@@ -1411,6 +1366,8 @@
     <string name="test_harness_mode_notification_message" msgid="3039123743127958420">"Извршете фабричко ресетирање за да го оневозможите режимот на рамка за тестирање."</string>
     <string name="console_running_notification_title" msgid="6087888939261635904">"Сериската конзола е овозможена"</string>
     <string name="console_running_notification_message" msgid="7892751888125174039">"Перформансите се засегнати. За да оневозможите, проверете го подигнувачот."</string>
+    <string name="mte_override_notification_title" msgid="4731115381962792944">"Овозможена е експериментална MTE"</string>
+    <string name="mte_override_notification_message" msgid="2441170442725738942">"Изведбата и стабилноста може да се влошат. Рестартирајте за да се оневозможи. Ако се овозможи со arm64.memtag.bootctl, не бирајте поставки претходно."</string>
     <string name="usb_contaminant_detected_title" msgid="4359048603069159678">"Течност или нечистотија во USB-портата"</string>
     <string name="usb_contaminant_detected_message" msgid="7346100585390795743">"USB-портата е автоматски оневозможена. Допрете за да дознаете повеќе."</string>
     <string name="usb_contaminant_not_detected_title" msgid="2651167729563264053">"Во ред е да се користи USB-порта"</string>
@@ -1547,10 +1504,7 @@
     <string name="skip_button_label" msgid="3566599811326688389">"Прескокни"</string>
     <string name="no_matches" msgid="6472699895759164599">"Нема совпаѓања"</string>
     <string name="find_on_page" msgid="5400537367077438198">"Пронајди на страница"</string>
-    <plurals name="matches_found" formatted="false" msgid="1101758718194295554">
-      <item quantity="one"><xliff:g id="INDEX">%d</xliff:g> од <xliff:g id="TOTAL">%d</xliff:g></item>
-      <item quantity="other"><xliff:g id="INDEX">%d</xliff:g> од <xliff:g id="TOTAL">%d</xliff:g></item>
-    </plurals>
+    <string name="matches_found" msgid="2296462299979507689">"{count,plural, =1{# совпаѓање}one{# од {total}}other{# од {total}}}"</string>
     <string name="action_mode_done" msgid="2536182504764803222">"Готово"</string>
     <string name="progress_erasing" msgid="6891435992721028004">"Бришење споделена меморија…"</string>
     <string name="share" msgid="4157615043345227321">"Сподели"</string>
@@ -1680,10 +1634,6 @@
     <string name="kg_wrong_pattern" msgid="1342812634464179931">"Погрешна шема"</string>
     <string name="kg_wrong_password" msgid="2384677900494439426">"Погрешна лозинка"</string>
     <string name="kg_wrong_pin" msgid="3680925703673166482">"Погрешен PIN"</string>
-    <plurals name="kg_too_many_failed_attempts_countdown" formatted="false" msgid="236717428673283568">
-      <item quantity="one">Обидете се повторно за <xliff:g id="NUMBER">%d</xliff:g> секунда.</item>
-      <item quantity="other">Обидете се повторно за <xliff:g id="NUMBER">%d</xliff:g> секунди.</item>
-    </plurals>
     <string name="kg_pattern_instructions" msgid="8366024510502517748">"Употреби ја својата шема"</string>
     <string name="kg_sim_pin_instructions" msgid="6479401489471690359">"Внеси PIN на SIM картичка"</string>
     <string name="kg_pin_instructions" msgid="7355933174673539021">"Впишете PIN"</string>
@@ -1880,10 +1830,6 @@
     <string name="restr_pin_create_pin" msgid="917067613896366033">"Создади PIN за измена на ограничувањата"</string>
     <string name="restr_pin_error_doesnt_match" msgid="7063392698489280556">"PIN кодовите не се совпаѓаат. Обиди се повторно."</string>
     <string name="restr_pin_error_too_short" msgid="1547007808237941065">"PIN кодот е премногу краток. Мора да има најмалку 4 цифри."</string>
-    <plurals name="restr_pin_countdown" formatted="false" msgid="4427486903285216153">
-      <item quantity="one">Обидете се повторно по <xliff:g id="COUNT">%d</xliff:g> секунда</item>
-      <item quantity="other">Обидете се повторно по <xliff:g id="COUNT">%d</xliff:g> секунди</item>
-    </plurals>
     <string name="restr_pin_try_later" msgid="5897719962541636727">"Обиди се повторно подоцна"</string>
     <string name="immersive_cling_title" msgid="2307034298721541791">"Се прикажува на цел екран"</string>
     <string name="immersive_cling_description" msgid="7092737175345204832">"За да излезете, повлечете одозгора надолу."</string>
@@ -1911,38 +1857,14 @@
     <string name="data_saver_description" msgid="4995164271550590517">"За да се намали користењето интернет, „Штедачот на интернет“ спречува дел од апликациите да испраќаат или да примаат податоци во заднина. Одредена апликација што ја користите ќе може да користи интернет, но можеби тоа ќе го прави поретко. Ова значи, на пример, дека сликите нема да се прикажуваат додека не ги допрете."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Да се вклучи „Штедач на интернет“?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Вклучи"</string>
-    <plurals name="zen_mode_duration_minutes_summary" formatted="false" msgid="2877101784123058273">
-      <item quantity="one">За %1$d минута (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="other">За %1$d минути (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-    </plurals>
-    <plurals name="zen_mode_duration_minutes_summary_short" formatted="false" msgid="4230730310318858312">
-      <item quantity="one">За %1$d мин. (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="other">За %1$d мин. (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-    </plurals>
-    <plurals name="zen_mode_duration_hours_summary" formatted="false" msgid="7725354244196466758">
-      <item quantity="one">%1$d час (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="other">%1$d часа (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-    </plurals>
-    <plurals name="zen_mode_duration_hours_summary_short" formatted="false" msgid="588719069121765642">
-      <item quantity="one">За %1$d ч. (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="other">За %1$d ч. (до <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-    </plurals>
-    <plurals name="zen_mode_duration_minutes" formatted="false" msgid="1148568456958944998">
-      <item quantity="one">За %d минута</item>
-      <item quantity="other">За %d минути</item>
-    </plurals>
-    <plurals name="zen_mode_duration_minutes_short" formatted="false" msgid="2742377799995454859">
-      <item quantity="one">За %d мин.</item>
-      <item quantity="other">За %d мин.</item>
-    </plurals>
-    <plurals name="zen_mode_duration_hours" formatted="false" msgid="525401855645490022">
-      <item quantity="one">%d час</item>
-      <item quantity="other">%d часа</item>
-    </plurals>
-    <plurals name="zen_mode_duration_hours_short" formatted="false" msgid="7644653189680911640">
-      <item quantity="one">За %d ч.</item>
-      <item quantity="other">За %d ч.</item>
-    </plurals>
+    <string name="zen_mode_duration_minutes_summary" msgid="4555514757230849789">"{count,plural, =1{Една минута (до {formattedTime})}one{# минута (до {formattedTime})}other{# минути (до {formattedTime})}}"</string>
+    <string name="zen_mode_duration_minutes_summary_short" msgid="1187553788355486950">"{count,plural, =1{1 мин. (до {formattedTime})}one{# мин. (до {formattedTime})}other{# мин. (до {formattedTime})}}"</string>
+    <string name="zen_mode_duration_hours_summary" msgid="3866333100793277211">"{count,plural, =1{1 час (до {formattedTime})}one{# час (до {formattedTime})}other{# часа (до {formattedTime})}}"</string>
+    <string name="zen_mode_duration_hours_summary_short" msgid="687919813833347945">"{count,plural, =1{1 ч. (до {formattedTime})}one{# ч. (до {formattedTime})}other{# ч. (до {formattedTime})}}"</string>
+    <string name="zen_mode_duration_minutes" msgid="2340007982276569054">"{count,plural, =1{Една минута}one{# минута}other{# минути}}"</string>
+    <string name="zen_mode_duration_minutes_short" msgid="2435756450204526554">"{count,plural, =1{1 мин.}one{# мин.}other{# мин.}}"</string>
+    <string name="zen_mode_duration_hours" msgid="7841806065034711849">"{count,plural, =1{1 час}one{# час}other{# часа}}"</string>
+    <string name="zen_mode_duration_hours_short" msgid="3666949653933099065">"{count,plural, =1{1 ч.}one{# ч.}other{# ч.}}"</string>
     <string name="zen_mode_until_next_day" msgid="1403042784161725038">"До <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_until" msgid="2250286190237669079">"До <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"До <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (следниот аларм)"</string>
@@ -1989,10 +1911,6 @@
     <string name="call_notification_incoming_text" msgid="6143109825406638201">"Дојдовен повик"</string>
     <string name="call_notification_ongoing_text" msgid="3880832933933020875">"Тековен повик"</string>
     <string name="call_notification_screening_text" msgid="8396931408268940208">"Проверка на дојдовен повик"</string>
-    <plurals name="selected_count" formatted="false" msgid="3946212171128200491">
-      <item quantity="one"><xliff:g id="COUNT_1">%1$d</xliff:g> е избрана</item>
-      <item quantity="other"><xliff:g id="COUNT_1">%1$d</xliff:g> се избрани</item>
-    </plurals>
     <string name="default_notification_channel_label" msgid="3697928973567217330">"Некатегоризирано"</string>
     <string name="importance_from_user" msgid="2782756722448800447">"Ја поставивте важноста на известувањава."</string>
     <string name="importance_from_person" msgid="4235804979664465383">"Ова е важно заради луѓето кои се вклучени."</string>
@@ -2016,6 +1934,10 @@
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Вклучи"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Апликацијата не е достапна"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> не е достапна во моментов."</string>
+    <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> е недостапна"</string>
+    <string name="app_streaming_blocked_message" product="tv" msgid="4003011766528814377">"Ова не може да се отвори на <xliff:g id="DEVICE">%1$s</xliff:g> во моментов. Пробајте на вашиот Android TV како алтернатива."</string>
+    <string name="app_streaming_blocked_message" product="tablet" msgid="4242053045964946062">"Ова не може да се отвори на <xliff:g id="DEVICE">%1$s</xliff:g> во моментов. Пробајте на вашиот таблет како алтернатива."</string>
+    <string name="app_streaming_blocked_message" product="default" msgid="6159168735030739398">"Ова не може да се отвори на <xliff:g id="DEVICE">%1$s</xliff:g> во моментов. Пробајте на вашиот телефон како алтернатива."</string>
     <string name="deprecated_target_sdk_message" msgid="5203207875657579953">"Апликацијава е создадена за постара верзија на Android и може да не функционира правилно. Проверете за ажурирања или контактирајте со програмерот."</string>
     <string name="deprecated_target_sdk_app_store" msgid="8456784048558808909">"Проверка за ажурирање"</string>
     <string name="new_sms_notification_title" msgid="6528758221319927107">"Имате нови пораки"</string>
@@ -2058,10 +1980,7 @@
     <string name="autofill_save_accessibility_title" msgid="1523225776218450005">"Зачувајте за автоматско пополнување"</string>
     <string name="autofill_error_cannot_autofill" msgid="6528827648643138596">"Содржините не може автоматски да се пополнат"</string>
     <string name="autofill_picker_no_suggestions" msgid="1076022650427481509">"Нема предлози за автоматско пополнување"</string>
-    <plurals name="autofill_picker_some_suggestions" formatted="false" msgid="6651883186966959978">
-      <item quantity="one"><xliff:g id="COUNT">%1$s</xliff:g> предлог за автоматско пополнување</item>
-      <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> предлози за автоматско пополнување</item>
-    </plurals>
+    <string name="autofill_picker_some_suggestions" msgid="5560549696296202701">"{count,plural, =1{Еден предлог за автоматско пополнување}one{# предлог за автоматско пополнување}other{# предлози за автоматско пополнување}}"</string>
     <string name="autofill_save_title" msgid="7719802414283739775">"Да се зачува во "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
     <string name="autofill_save_title_with_type" msgid="3002460014579799605">"Да се зачува <xliff:g id="TYPE">%1$s</xliff:g> во "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
     <string name="autofill_save_title_with_2types" msgid="3783270967447869241">"Да се зачуваат <xliff:g id="TYPE_0">%1$s</xliff:g> и <xliff:g id="TYPE_1">%2$s</xliff:g> во "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
@@ -2108,6 +2027,11 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ДЕИНСТАЛИРАЈ"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"СЕПАК ОТВОРИ"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Откриена е штетна апликација"</string>
+    <string name="log_access_confirmation_title" msgid="3143035474800851565">"Барање за пристап до системска евиденција"</string>
+    <string name="log_access_confirmation_allow" msgid="143157286283302512">"Само овој пат"</string>
+    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Не дозволувај"</string>
+    <string name="log_access_confirmation_body" msgid="7599059550906238538">"<xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> бара системска евиденција за отстранување грешка на функција. Оваа евиденција може да содржи податоци запишани од апликациите и услугите на уредот."</string>
+    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Не прикажувај повторно"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> сака да прикажува делови од <xliff:g id="APP_2">%2$s</xliff:g>"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Измени"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Повиците и известувањата ќе вибрираат"</string>
@@ -2162,10 +2086,7 @@
     <string name="mime_type_presentation_ext" msgid="8761049335564371468">"<xliff:g id="EXTENSION">%1$s</xliff:g>-презентација"</string>
     <string name="bluetooth_airplane_mode_toast" msgid="2066399056595768554">"Bluetooth ќе остане вклучен при авионски режим"</string>
     <string name="car_loading_profile" msgid="8219978381196748070">"Се вчитува"</string>
-    <plurals name="file_count" formatted="false" msgid="7063513834724389247">
-      <item quantity="one"><xliff:g id="FILE_NAME_2">%s</xliff:g> + <xliff:g id="COUNT_3">%d</xliff:g> датотека</item>
-      <item quantity="other"><xliff:g id="FILE_NAME_2">%s</xliff:g> + <xliff:g id="COUNT_3">%d</xliff:g> датотеки</item>
-    </plurals>
+    <string name="file_count" msgid="3220018595056126969">"{count,plural, =1{{file_name} + # датотека}one{{file_name} + # датотека}other{{file_name} + # датотеки}}"</string>
     <string name="chooser_no_direct_share_targets" msgid="1511722103987329028">"Нема препорачани луѓе со кои може да се сподели"</string>
     <string name="chooser_all_apps_button_label" msgid="3230427756238666328">"Список со апликации"</string>
     <string name="usb_device_resolve_prompt_warn" msgid="325871329788064199">"На апликацијава не ѝ е доделена дозвола за снимање, но може да снима аудио преку овој USB-уред."</string>
@@ -2177,10 +2098,16 @@
     <string name="accessibility_system_action_power_dialog_label" msgid="8095341821683910781">"Дијалог за напојување"</string>
     <string name="accessibility_system_action_lock_screen_label" msgid="5484190691945563838">"Заклучен екран"</string>
     <string name="accessibility_system_action_screenshot_label" msgid="3581566515062741676">"Слика од екранот"</string>
+    <string name="accessibility_system_action_headset_hook_label" msgid="8524691721287425468">"Елемент за привлекување на слушалките"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_label" msgid="8488701469459210309">"Кратенка за пристапност на екранот"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_chooser_label" msgid="1057878690209817886">"Избирач на кратенка за пристапност на екранот"</string>
     <string name="accessibility_system_action_hardware_a11y_shortcut_label" msgid="5764644187715255107">"Кратенка за пристапност"</string>
     <string name="accessibility_system_action_dismiss_notification_shade" msgid="8931637495533770352">"Отфрлете го панелот за известување"</string>
+    <string name="accessibility_system_action_dpad_up_label" msgid="1029042950229333782">"Навигациско копче за нагоре"</string>
+    <string name="accessibility_system_action_dpad_down_label" msgid="3441918448624921461">"Навигациско копче за надолу"</string>
+    <string name="accessibility_system_action_dpad_left_label" msgid="6557647179116479152">"Навигациско копче за налево"</string>
+    <string name="accessibility_system_action_dpad_right_label" msgid="9180196950365804081">"Навигациско копче за надесно"</string>
+    <string name="accessibility_system_action_dpad_center_label" msgid="8149791419358224893">"Навигациско копче за средина"</string>
     <string name="accessibility_freeform_caption" msgid="8377519323496290122">"Насловна лента на <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> е ставен во корпата ОГРАНИЧЕНИ"</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
@@ -2201,8 +2128,8 @@
     <string name="resolver_switch_on_work" msgid="463709043650610420">"Допрете за да вклучите"</string>
     <string name="resolver_no_work_apps_available" msgid="3298291360133337270">"Нема работни апликации"</string>
     <string name="resolver_no_personal_apps_available" msgid="6284837227019594881">"Нема лични апликации"</string>
-    <string name="miniresolver_open_in_personal" msgid="2937599899213467617">"Да се отвори во <xliff:g id="APP">%s</xliff:g> во личниот профил?"</string>
-    <string name="miniresolver_open_in_work" msgid="152208044699347924">"Да се отвори во <xliff:g id="APP">%s</xliff:g> во работниот профил?"</string>
+    <string name="miniresolver_open_in_personal" msgid="3874522693661065566">"Да се отвори <xliff:g id="APP">%s</xliff:g> во личниот профил?"</string>
+    <string name="miniresolver_open_in_work" msgid="4415223793669536559">"Да се отвори <xliff:g id="APP">%s</xliff:g> во работниот профил?"</string>
     <string name="miniresolver_use_personal_browser" msgid="776072682871133308">"Користи личен прелистувач"</string>
     <string name="miniresolver_use_work_browser" msgid="543575306251952994">"Користи работен прелистувач"</string>
     <string name="PERSOSUBSTATE_SIM_NETWORK_ENTRY" msgid="8050953231914637819">"PIN за отклучување на мрежата на SIM-картичката"</string>
@@ -2332,4 +2259,10 @@
     <string name="view_and_control_notification_content" msgid="8003766498562604034">"<xliff:g id="SERVICE_NAME">%s</xliff:g> може да го прегледува и контролира вашиот екран. Допрете за да прегледате."</string>
     <string name="ui_translation_accessibility_translated_text" msgid="3197547218178944544">"<xliff:g id="MESSAGE">%1$s</xliff:g>, преведено."</string>
     <string name="ui_translation_accessibility_translation_finished" msgid="3057830947610088465">"Пораката е преведена од <xliff:g id="FROM_LANGUAGE">%1$s</xliff:g> на <xliff:g id="TO_LANGUAGE">%2$s</xliff:g>."</string>
+    <string name="notification_channel_abusive_bg_apps" msgid="6092140213264920355">"Активност во заднина"</string>
+    <string name="notification_title_abusive_bg_apps" msgid="344582472797982073">"Активност во заднина"</string>
+    <string name="notification_content_abusive_bg_apps" msgid="5572096708044958249">"<xliff:g id="APP">%1$s</xliff:g> работи во заднина и ја троши батеријата. Допрете за да прегледате."</string>
+    <string name="notification_content_long_running_fgs" msgid="8878031652441570178">"<xliff:g id="APP">%1$s</xliff:g> работи во заднина веќе долго време. Допрете за да прегледате."</string>
+    <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Проверете ги активните апликации"</string>
+    <string name="vdm_camera_access_denied" msgid="6345652513729130490">"Не може да се пристапи до камерата од уредов"</string>
 </resources>

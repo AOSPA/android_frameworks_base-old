@@ -68,6 +68,7 @@ import com.android.wm.shell.fullscreen.FullscreenTaskListener;
 import com.android.wm.shell.fullscreen.FullscreenUnfoldController;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
+import com.android.wm.shell.kidsmode.KidsModeTaskOrganizer;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreenController;
 import com.android.wm.shell.onehanded.OneHanded;
@@ -168,8 +169,8 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static DragAndDrop provideDragAndDrop(DragAndDropController dragAndDropController) {
-        return dragAndDropController.asDragAndDrop();
+    static Optional<DragAndDrop> provideDragAndDrop(DragAndDropController dragAndDropController) {
+        return Optional.of(dragAndDropController.asDragAndDrop());
     }
 
     @WMSingleton
@@ -184,8 +185,24 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static CompatUI provideCompatUI(CompatUIController compatUIController) {
-        return compatUIController.asCompatUI();
+    static KidsModeTaskOrganizer provideKidsModeTaskOrganizer(
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler,
+            Context context,
+            CompatUIController compatUI,
+            SyncTransactionQueue syncTransactionQueue,
+            DisplayController displayController,
+            DisplayInsetsController displayInsetsController,
+            Optional<RecentTasksController> recentTasksOptional
+    ) {
+        return new KidsModeTaskOrganizer(mainExecutor, mainHandler, context, compatUI,
+                syncTransactionQueue, displayController, displayInsetsController,
+                recentTasksOptional);
+    }
+
+    @WMSingleton
+    @Provides static Optional<CompatUI> provideCompatUI(CompatUIController compatUIController) {
+        return Optional.of(compatUIController.asCompatUI());
     }
 
     @WMSingleton
@@ -637,6 +654,7 @@ public abstract class WMShellBaseModule {
             DisplayInsetsController displayInsetsController,
             DragAndDropController dragAndDropController,
             ShellTaskOrganizer shellTaskOrganizer,
+            KidsModeTaskOrganizer kidsModeTaskOrganizer,
             Optional<BubbleController> bubblesOptional,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<AppPairsController> appPairsOptional,
@@ -653,6 +671,7 @@ public abstract class WMShellBaseModule {
                 displayInsetsController,
                 dragAndDropController,
                 shellTaskOrganizer,
+                kidsModeTaskOrganizer,
                 bubblesOptional,
                 splitScreenOptional,
                 appPairsOptional,
@@ -680,6 +699,7 @@ public abstract class WMShellBaseModule {
     @Provides
     static ShellCommandHandlerImpl provideShellCommandHandlerImpl(
             ShellTaskOrganizer shellTaskOrganizer,
+            KidsModeTaskOrganizer kidsModeTaskOrganizer,
             Optional<LegacySplitScreenController> legacySplitScreenOptional,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<Pip> pipOptional,
@@ -688,7 +708,7 @@ public abstract class WMShellBaseModule {
             Optional<AppPairsController> appPairsOptional,
             Optional<RecentTasksController> recentTasksOptional,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new ShellCommandHandlerImpl(shellTaskOrganizer,
+        return new ShellCommandHandlerImpl(shellTaskOrganizer, kidsModeTaskOrganizer,
                 legacySplitScreenOptional, splitScreenOptional, pipOptional, oneHandedOptional,
                 hideDisplayCutout, appPairsOptional, recentTasksOptional, mainExecutor);
     }

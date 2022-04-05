@@ -24,7 +24,6 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
-import android.annotation.StringDef;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
@@ -86,8 +85,10 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.MemoryIntArray;
 import android.view.Display;
+import android.view.MotionEvent;
 import android.view.Window;
 import android.view.WindowManager.LayoutParams;
+import android.widget.Editor;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
@@ -239,6 +240,20 @@ public final class Settings {
     @SystemApi
     public static final String ACTION_TETHER_PROVISIONING_UI =
             "android.settings.TETHER_PROVISIONING_UI";
+
+    /**
+     * Activity Action: Show a dialog activity to notify tethering is NOT supported by carrier.
+     *
+     * When {@link android.telephony.CarrierConfigManager#KEY_CARRIER_SUPPORTS_TETHERING_BOOL}
+     * is false, and tethering is started by Settings, this dialog activity will be started to
+     * tell the user that tethering is not supported by carrier.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SystemApi
+    public static final String ACTION_TETHER_UNSUPPORTED_CARRIER_UI =
+            "android.settings.TETHER_UNSUPPORTED_CARRIER_UI";
 
     /**
      * Activity Action: Show settings to allow entering/exiting airplane mode.
@@ -2128,7 +2143,7 @@ public final class Settings {
     /**
      * Intent extra: The id of a setting restricted by supervisors.
      * <p>
-     * Type: String with a value from the SupervisorVerificationSetting annotation below.
+     * Type: Integer with a value from the SupervisorVerificationSetting annotation below.
      * <ul>
      * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_UNKNOWN}
      * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS}
@@ -2141,20 +2156,19 @@ public final class Settings {
     /**
      * Unknown setting.
      */
-    public static final String SUPERVISOR_VERIFICATION_SETTING_UNKNOWN = "";
+    public static final int SUPERVISOR_VERIFICATION_SETTING_UNKNOWN = 0;
 
     /**
      * Biometric settings for supervisors.
      */
-    public static final String SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS =
-            "supervisor_restricted_biometrics_controller";
+    public static final int SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS = 1;
 
     /**
      * Keys for {@link #EXTRA_SUPERVISOR_RESTRICTED_SETTING_KEY}.
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
-    @StringDef(prefix = { "SUPERVISOR_VERIFICATION_SETTING_" }, value = {
+    @IntDef(prefix = { "SUPERVISOR_VERIFICATION_SETTING_" }, value = {
             SUPERVISOR_VERIFICATION_SETTING_UNKNOWN,
             SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS,
     })
@@ -4508,6 +4522,13 @@ public final class Settings {
          */
         @Readable
         public static final String SCREEN_OFF_TIMEOUT = "screen_off_timeout";
+
+        /**
+         * The amount of time in milliseconds before the device goes to sleep or begins to dream
+         * after a period of inactivity while it is docked.
+         * @hide
+         */
+        public static final String SCREEN_OFF_TIMEOUT_DOCKED = "screen_off_timeout_docked";
 
         /**
          * The screen backlight brightness between 0 and 255.
@@ -9954,6 +9975,14 @@ public final class Settings {
         public static final String LOCKSCREEN_SHOW_CONTROLS = "lockscreen_show_controls";
 
         /**
+         * Whether trivial home controls can be used without authentication
+         *
+         * @hide
+         */
+        public static final String LOCKSCREEN_ALLOW_TRIVIAL_CONTROLS =
+                "lockscreen_allow_trivial_controls";
+
+        /**
          * Whether wallet should be accessible from the lockscreen
          *
          * @hide
@@ -9967,6 +9996,13 @@ public final class Settings {
          */
         public static final String LOCKSCREEN_USE_DOUBLE_LINE_CLOCK =
                 "lockscreen_use_double_line_clock";
+
+        /**
+         * Whether to show the vibrate icon in the Status Bar (default off)
+         *
+         * @hide
+         */
+        public static final String STATUS_BAR_SHOW_VIBRATE_ICON = "status_bar_show_vibrate_icon";
 
         /**
          * Specifies whether the web action API is enabled.
@@ -10265,6 +10301,14 @@ public final class Settings {
                 "theme_customization_overlay_packages";
 
         /**
+         * Indicates whether the nav bar is forced to always be visible, even in immersive mode.
+         * <p>Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String NAV_BAR_FORCE_VISIBLE = "nav_bar_force_visible";
+
+        /**
          * Indicates whether the device is in kids nav mode.
          * <p>Type: int (0 for false, 1 for true)
          *
@@ -10323,6 +10367,34 @@ public final class Settings {
          */
         public static final String NEARBY_FAST_PAIR_SETTINGS_DEVICES_COMPONENT =
                 "nearby_fast_pair_settings_devices_component";
+
+        /**
+         * Current provider of the component for requesting ambient context consent.
+         * Default value in @string/config_defaultAmbientContextConsentComponent.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String AMBIENT_CONTEXT_CONSENT_COMPONENT =
+                "ambient_context_consent_component";
+
+        /**
+         * Current provider of the intent extra key for the caller's package name while
+         * requesting ambient context consent.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String AMBIENT_CONTEXT_PACKAGE_NAME_EXTRA_KEY =
+                "ambient_context_package_name_key";
+
+        /**
+         * Current provider of the intent extra key for the event code int array while
+         * requesting ambient context consent.
+         * Default value in @string/config_ambientContextEventArrayExtraKey.
+         * No VALIDATOR as this setting will not be backed up.
+         * @hide
+         */
+        public static final String AMBIENT_CONTEXT_EVENT_ARRAY_EXTRA_KEY =
+                "ambient_context_event_array_key";
 
         /**
          * Controls whether aware is enabled.
@@ -10668,14 +10740,6 @@ public final class Settings {
                 "communal_mode_trusted_networks";
 
         /**
-         * Setting to allow Fast Pair scans to be enabled.
-         * @hide
-         */
-        @SystemApi
-        @Readable
-        public static final String FAST_PAIR_SCAN_ENABLED = "fast_pair_scan_enabled";
-
-        /**
          * Setting to store denylisted system languages by the CEC {@code <Set Menu Language>}
          * confirmation dialog.
          *
@@ -10683,6 +10747,19 @@ public final class Settings {
          */
         public static final String HDMI_CEC_SET_MENU_LANGUAGE_DENYLIST =
                 "hdmi_cec_set_menu_language_denylist";
+
+        /**
+         * Whether the Taskbar Education is about to be shown or is currently showing.
+         *
+         * <p>1 if true, 0 or unset otherwise.
+         *
+         * <p>This setting is used to inform other components that the Taskbar Education is
+         * currently showing, which can prevent them from showing something else to the user.
+         *
+         * @hide
+         */
+        public static final String LAUNCHER_TASKBAR_EDUCATION_SHOWING =
+                "launcher_taskbar_education_showing";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -11692,8 +11769,8 @@ public final class Settings {
                 "night_display_forced_auto_mode_available";
 
         /**
-         * If UTC time between two NITZ signals is greater than this value then the second signal
-         * cannot be ignored.
+         * If Unix epoch time between two NITZ signals is greater than this value then the second
+         * signal cannot be ignored.
          *
          * <p>This value is in milliseconds. It is used for telephony-based time and time zone
          * detection.
@@ -15458,6 +15535,17 @@ public final class Settings {
         public static final String AUTOFILL_MAX_VISIBLE_DATASETS = "autofill_max_visible_datasets";
 
         /**
+         * Toggle for enabling stylus handwriting. When enabled, current Input method receives
+         * stylus {@link MotionEvent}s if an {@link Editor} is focused.
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String STYLUS_HANDWRITING_ENABLED = "stylus_handwriting_enabled";
+
+        /**
          * Exemptions to the hidden API blacklist.
          *
          * @hide
@@ -16846,6 +16934,14 @@ public final class Settings {
          */
         public static final String WATCHDOG_TIMEOUT_MILLIS =
                 "system_server_watchdog_timeout_ms";
+
+        /**
+         * Whether to enable managed device provisioning via the role holder.
+         *
+         * @hide
+         */
+        public static final String MANAGED_PROVISIONING_DEFER_PROVISIONING_TO_ROLE_HOLDER =
+                "managed_provisioning_defer_provisioning_to_role_holder";
 
         /**
          * Settings migrated from Wear OS settings provider.

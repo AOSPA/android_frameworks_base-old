@@ -50,8 +50,10 @@ import android.app.IActivityManager;
 import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -96,6 +98,7 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntryB
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
 import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
+import com.android.systemui.statusbar.notification.interruption.NotificationInterruptLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
 import com.android.systemui.statusbar.phone.DozeParameters;
@@ -196,6 +199,11 @@ public class BubblesTest extends SysuiTestCase {
     private ArgumentCaptor<NotificationRemoveInterceptor> mRemoveInterceptorCaptor;
     @Captor
     private ArgumentCaptor<List<Bubble>> mBubbleListCaptor;
+    @Captor
+    private ArgumentCaptor<IntentFilter> mFilterArgumentCaptor;
+    @Captor
+    private ArgumentCaptor<BroadcastReceiver> mBroadcastReceiverArgumentCaptor;
+
 
     private BubblesManager mBubblesManager;
     // TODO(178618782): Move tests on the controller directly to the shell
@@ -334,6 +342,7 @@ public class BubblesTest extends SysuiTestCase {
                         mock(StatusBarStateController.class),
                         mock(BatteryController.class),
                         mock(HeadsUpManager.class),
+                        mock(NotificationInterruptLogger.class),
                         mock(Handler.class)
                 );
 
@@ -1212,7 +1221,7 @@ public class BubblesTest extends SysuiTestCase {
         final Context userContext = setUpContextWithPackageManager(workPkg,
                 mock(ApplicationInfo.class));
 
-        // If things are working correctly, StatusBar.getPackageManagerForUser will call this
+        // If things are working correctly, CentralSurfaces.getPackageManagerForUser will call this
         when(context.createPackageContextAsUser(eq(workPkg), anyInt(), eq(workUser)))
                 .thenReturn(userContext);
 
@@ -1352,6 +1361,66 @@ public class BubblesTest extends SysuiTestCase {
         stackView.onBackPressed();
 
         // Make sure we're collapsed
+        assertStackCollapsed();
+    }
+
+    @Test
+    public void testRegisterUnregisterBroadcastListener() {
+        spyOn(mContext);
+        mBubbleController.updateBubble(mBubbleEntry);
+        verify(mContext).registerReceiver(mBroadcastReceiverArgumentCaptor.capture(),
+                mFilterArgumentCaptor.capture());
+        assertThat(mFilterArgumentCaptor.getValue().getAction(0)).isEqualTo(
+                Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+        assertThat(mFilterArgumentCaptor.getValue().getAction(1)).isEqualTo(
+                Intent.ACTION_SCREEN_OFF);
+
+        mBubbleData.dismissBubbleWithKey(mBubbleEntry.getKey(), REASON_APP_CANCEL);
+        // TODO: not certain why this isn't called normally when tests are run, perhaps because
+        // it's after an animation in BSV. This calls BubbleController#removeFromWindowManagerMaybe
+        mBubbleController.onAllBubblesAnimatedOut();
+
+        verify(mContext).unregisterReceiver(eq(mBroadcastReceiverArgumentCaptor.getValue()));
+    }
+
+    @Test
+    public void testBroadcastReceiverCloseDialogs_notGestureNav() {
+        spyOn(mContext);
+        mBubbleController.updateBubble(mBubbleEntry);
+        mBubbleData.setExpanded(true);
+        verify(mContext).registerReceiver(mBroadcastReceiverArgumentCaptor.capture(),
+                mFilterArgumentCaptor.capture());
+        Intent i = new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+        mBroadcastReceiverArgumentCaptor.getValue().onReceive(mContext, i);
+
+        assertStackExpanded();
+    }
+
+    @Test
+    public void testBroadcastReceiverCloseDialogs_reasonGestureNav() {
+        spyOn(mContext);
+        mBubbleController.updateBubble(mBubbleEntry);
+        mBubbleData.setExpanded(true);
+
+        verify(mContext).registerReceiver(mBroadcastReceiverArgumentCaptor.capture(),
+                mFilterArgumentCaptor.capture());
+        Intent i = new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+        i.putExtra("reason", "gestureNav");
+        mBroadcastReceiverArgumentCaptor.getValue().onReceive(mContext, i);
+        assertStackCollapsed();
+    }
+
+    @Test
+    public void testBroadcastReceiver_screenOff() {
+        spyOn(mContext);
+        mBubbleController.updateBubble(mBubbleEntry);
+        mBubbleData.setExpanded(true);
+
+        verify(mContext).registerReceiver(mBroadcastReceiverArgumentCaptor.capture(),
+                mFilterArgumentCaptor.capture());
+
+        Intent i = new Intent(Intent.ACTION_SCREEN_OFF);
+        mBroadcastReceiverArgumentCaptor.getValue().onReceive(mContext, i);
         assertStackCollapsed();
     }
 

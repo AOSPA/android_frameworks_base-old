@@ -154,7 +154,7 @@
     <!-- Needed for WallpaperManager.clear in ImageWallpaper.updateWallpaperLocked -->
     <uses-permission android:name="android.permission.SET_WALLPAPER"/>
 
-    <!-- Needed for WallpaperManager.getWallpaperDimAmount in StatusBar.updateTheme -->
+    <!-- Needed for WallpaperManager.getWallpaperDimAmount in CentralSurfaces.updateTheme -->
     <uses-permission android:name="android.permission.SET_WALLPAPER_DIM_AMOUNT"/>
 
     <!-- Wifi Display -->
@@ -313,6 +313,9 @@
     <!-- To change system language (HDMI CEC) -->
     <uses-permission android:name="android.permission.CHANGE_CONFIGURATION" />
     <uses-permission android:name="android.permission.SUPPRESS_CLIPBOARD_ACCESS_NOTIFICATION" />
+
+    <!-- To change system captions state -->
+    <uses-permission android:name="android.permission.SET_SYSTEM_AUDIO_CAPTION" />
 
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
@@ -770,22 +773,6 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".chooser.ChooserActivity"
-                android:theme="@*android:style/Theme.NoDisplay"
-                android:finishOnCloseSystemDialogs="true"
-                android:excludeFromRecents="true"
-                android:documentLaunchMode="never"
-                android:relinquishTaskIdentity="true"
-                android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
-                android:process=":ui"
-                android:visibleToInstantApps="true"
-                android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.CHOOSER" />
-                <category android:name="android.intent.category.VOICE" />
-            </intent-filter>
-        </activity>
-
         <activity android:name=".clipboardoverlay.EditTextActivity"
                   android:theme="@style/EditTextActivity"
                   android:exported="false"
@@ -810,7 +797,7 @@
                   android:noHistory="true"
                   android:showForAllUsers="true"
                   android:finishOnTaskLaunch="true"
-                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
+                  android:configChanges="screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
 
@@ -821,7 +808,7 @@
                   android:showForAllUsers="true"
                   android:finishOnTaskLaunch="true"
                   android:launchMode="singleInstance"
-                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
+                  android:configChanges="screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
 
@@ -845,6 +832,18 @@
                   android:showForAllUsers="true"
                   android:launchMode="singleInstance"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
+                  android:visibleToInstantApps="true">
+        </activity>
+
+        <activity android:name=".user.UserSwitcherActivity"
+                  android:label="@string/accessibility_multi_user_switch_switcher"
+                  android:theme="@style/Theme.UserSwitcherActivity"
+                  android:excludeFromRecents="true"
+                  android:showWhenLocked="true"
+                  android:showForAllUsers="true"
+                  android:finishOnTaskLaunch="true"
+                  android:launchMode="singleInstance"
+                  android:configChanges="screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
 
@@ -876,12 +875,6 @@
             android:exported="true"
             android:singleUser="true"
             android:permission="android.permission.BIND_DREAM_SERVICE" />
-
-        <!-- Service for external clients to notify us of nearby media devices -->
-        <!-- TODO(b/216313420): Export and guard with a permission. -->
-        <service
-            android:name=".media.nearby.NearbyMediaDevicesService"
-            />
 
         <receiver
             android:name=".tuner.TunerService$ClearReceiver"

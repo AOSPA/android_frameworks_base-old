@@ -50,7 +50,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
-import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.accessibility.AccessibilityTraceManager;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -304,7 +303,7 @@ public class FullScreenMagnificationController implements
         public void onImeWindowVisibilityChanged(boolean shown) {
             final Message m = PooledLambda.obtainMessage(
                     FullScreenMagnificationController::notifyImeWindowVisibilityChanged,
-                    FullScreenMagnificationController.this, shown);
+                    FullScreenMagnificationController.this, mDisplayId, shown);
             mControllerCtx.getHandler().sendMessage(m);
         }
 
@@ -374,9 +373,8 @@ public class FullScreenMagnificationController implements
                     .setScale(getScale())
                     .setCenterX(getCenterX())
                     .setCenterY(getCenterY()).build();
-            mControllerCtx.getAms().notifyMagnificationChanged(mDisplayId,
-                    mMagnificationRegion,
-                    config);
+            mMagnificationInfoChangedCallback.onFullScreenMagnificationChanged(mDisplayId,
+                    mMagnificationRegion, config);
             if (mUnregisterPending && !isMagnifying()) {
                 unregister(mDeleteAfterUnregister);
             }
@@ -665,10 +663,10 @@ public class FullScreenMagnificationController implements
      * FullScreenMagnificationController Constructor
      */
     public FullScreenMagnificationController(@NonNull Context context,
-            @NonNull AccessibilityManagerService ams, @NonNull Object lock,
+            @NonNull AccessibilityTraceManager traceManager, @NonNull Object lock,
             @NonNull MagnificationInfoChangedCallback magnificationInfoChangedCallback,
             @NonNull MagnificationScaleProvider scaleProvider) {
-        this(new ControllerContext(context, ams,
+        this(new ControllerContext(context, traceManager,
                 LocalServices.getService(WindowManagerInternal.class),
                 new Handler(context.getMainLooper()),
                 context.getResources().getInteger(R.integer.config_longAnimTime)), lock,
@@ -1217,11 +1215,12 @@ public class FullScreenMagnificationController implements
     /**
      * Notifies that the IME window visibility changed.
      *
+     * @param displayId the logical display id
      * @param shown {@code true} means the IME window shows on the screen. Otherwise it's
      *                           hidden.
      */
-    void notifyImeWindowVisibilityChanged(boolean shown) {
-        mMagnificationInfoChangedCallback.onImeWindowVisibilityChanged(shown);
+    void notifyImeWindowVisibilityChanged(int displayId, boolean shown) {
+        mMagnificationInfoChangedCallback.onImeWindowVisibilityChanged(displayId, shown);
     }
 
     /**
@@ -1521,7 +1520,6 @@ public class FullScreenMagnificationController implements
     @VisibleForTesting
     public static class ControllerContext {
         private final Context mContext;
-        private final AccessibilityManagerService mAms;
         private final AccessibilityTraceManager mTrace;
         private final WindowManagerInternal mWindowManager;
         private final Handler mHandler;
@@ -1531,13 +1529,12 @@ public class FullScreenMagnificationController implements
          * Constructor for ControllerContext.
          */
         public ControllerContext(@NonNull Context context,
-                @NonNull AccessibilityManagerService ams,
+                @NonNull AccessibilityTraceManager traceManager,
                 @NonNull WindowManagerInternal windowManager,
                 @NonNull Handler handler,
                 long animationDuration) {
             mContext = context;
-            mAms = ams;
-            mTrace = ams.getTraceManager();
+            mTrace = traceManager;
             mWindowManager = windowManager;
             mHandler = handler;
             mAnimationDuration = animationDuration;
@@ -1549,14 +1546,6 @@ public class FullScreenMagnificationController implements
         @NonNull
         public Context getContext() {
             return mContext;
-        }
-
-        /**
-         * @return AccessibilityManagerService
-         */
-        @NonNull
-        public AccessibilityManagerService getAms() {
-            return mAms;
         }
 
         /**
@@ -1621,16 +1610,30 @@ public class FullScreenMagnificationController implements
          * Called when the state of the magnification activation is changed.
          * It is for the logging data of the magnification activation state.
          *
-         * @param displayId The logical display id.
+         * @param displayId the logical display id
          * @param activated {@code true} if the magnification is activated, otherwise {@code false}.
          */
         void onFullScreenMagnificationActivationState(int displayId, boolean activated);
 
         /**
          * Called when the IME window visibility changed.
+         *
+         * @param displayId the logical display id
          * @param shown {@code true} means the IME window shows on the screen. Otherwise it's
          *                           hidden.
          */
-        void onImeWindowVisibilityChanged(boolean shown);
+        void onImeWindowVisibilityChanged(int displayId, boolean shown);
+
+        /**
+         * Called when the magnification spec changed.
+         *
+         * @param displayId The logical display id
+         * @param region    The region of the screen currently active for magnification.
+         *                  The returned region will be empty if the magnification is not active.
+         * @param config    The magnification config. That has magnification mode, the new scale and
+         *                  the new screen-relative center position
+         */
+        void onFullScreenMagnificationChanged(int displayId, @NonNull Region region,
+                @NonNull MagnificationConfig config);
     }
 }

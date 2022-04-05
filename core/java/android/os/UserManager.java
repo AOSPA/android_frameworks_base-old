@@ -98,8 +98,8 @@ public class UserManager {
     /** The userId of the constructor param context. To be used instead of mContext.getUserId(). */
     private final @UserIdInt int mUserId;
 
-    private Boolean mIsManagedProfileCached;
-    private Boolean mIsProfileCached;
+    /** The userType of UserHandle.myUserId(); empty string if not a profile; null until cached. */
+    private String mProfileTypeOfProcessUser = null;
 
     /**
      * User type representing a {@link UserHandle#USER_SYSTEM system} user that is a human user.
@@ -2276,7 +2276,7 @@ public class UserManager {
      * {@link UserManager#USER_TYPE_PROFILE_MANAGED managed profile}.
      * @hide
      */
-    public static boolean isUserTypeManagedProfile(String userType) {
+    public static boolean isUserTypeManagedProfile(@Nullable String userType) {
         return USER_TYPE_PROFILE_MANAGED.equals(userType);
     }
 
@@ -2284,7 +2284,7 @@ public class UserManager {
      * Returns whether the user type is a {@link UserManager#USER_TYPE_FULL_GUEST guest user}.
      * @hide
      */
-    public static boolean isUserTypeGuest(String userType) {
+    public static boolean isUserTypeGuest(@Nullable String userType) {
         return USER_TYPE_FULL_GUEST.equals(userType);
     }
 
@@ -2293,7 +2293,7 @@ public class UserManager {
      * {@link UserManager#USER_TYPE_FULL_RESTRICTED restricted user}.
      * @hide
      */
-    public static boolean isUserTypeRestricted(String userType) {
+    public static boolean isUserTypeRestricted(@Nullable String userType) {
         return USER_TYPE_FULL_RESTRICTED.equals(userType);
     }
 
@@ -2301,7 +2301,7 @@ public class UserManager {
      * Returns whether the user type is a {@link UserManager#USER_TYPE_FULL_DEMO demo user}.
      * @hide
      */
-    public static boolean isUserTypeDemo(String userType) {
+    public static boolean isUserTypeDemo(@Nullable String userType) {
         return USER_TYPE_FULL_DEMO.equals(userType);
     }
 
@@ -2309,7 +2309,7 @@ public class UserManager {
      * Returns whether the user type is a {@link UserManager#USER_TYPE_PROFILE_CLONE clone user}.
      * @hide
      */
-    public static boolean isUserTypeCloneProfile(String userType) {
+    public static boolean isUserTypeCloneProfile(@Nullable String userType) {
         return USER_TYPE_PROFILE_CLONE.equals(userType);
     }
 
@@ -2509,12 +2509,12 @@ public class UserManager {
     }
 
     /**
-     * Checks if the calling context user is running in a profile.
+     * Checks if the calling context user is running in a profile. A profile is a user that
+     * typically has its own separate data but shares its UI with some parent user. For example, a
+     * {@link #isManagedProfile() managed profile} is a type of profile.
      *
      * @return whether the caller is in a profile.
-     * @hide
      */
-    @SystemApi
     @UserHandleAware(
             requiresAnyOfPermissionsIfNotCallerProfileGroup = {
                     android.Manifest.permission.MANAGE_USERS,
@@ -2525,29 +2525,57 @@ public class UserManager {
     }
 
     private boolean isProfile(@UserIdInt int userId) {
-        if (userId == mUserId) {
+        final String profileType = getProfileType(userId);
+        return profileType != null && !profileType.equals("");
+    }
+
+    /**
+     * Returns the user type of the context user if it is a profile.
+     *
+     * This is a more specific form of {@link #getUserType()} with relaxed permission requirements.
+     *
+     * @return the user type of the context user if it is a {@link #isProfile() profile},
+     *         an empty string if it is not a profile,
+     *         or null if the user doesn't exist.
+     */
+    @UserHandleAware(
+            requiresAnyOfPermissionsIfNotCallerProfileGroup = {
+                    android.Manifest.permission.MANAGE_USERS,
+                    android.Manifest.permission.QUERY_USERS,
+                    android.Manifest.permission.INTERACT_ACROSS_USERS})
+    private @Nullable String getProfileType() {
+        return getProfileType(mUserId);
+    }
+
+    /** @see #getProfileType() */
+    private @Nullable String getProfileType(@UserIdInt int userId) {
+        // First, the typical case (i.e. the *process* user, not necessarily the context user).
+        // This cache cannot be become invalidated since it's about the calling process itself.
+        if (userId == UserHandle.myUserId()) {
             // No need for synchronization.  Once it becomes non-null, it'll be non-null forever.
             // Worst case we might end up calling the AIDL method multiple times but that's fine.
-            if (mIsProfileCached != null) {
-                return mIsProfileCached;
+            if (mProfileTypeOfProcessUser != null) {
+                return mProfileTypeOfProcessUser;
             }
             try {
-                mIsProfileCached = mService.isProfile(mUserId);
-                return mIsProfileCached;
-            } catch (RemoteException re) {
-                throw re.rethrowFromSystemServer();
-            }
-        } else {
-            try {
-                return mService.isProfile(userId);
+                final String profileType = mService.getProfileType(userId);
+                if (profileType != null) {
+                    return mProfileTypeOfProcessUser = profileType.intern();
+                }
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
         }
+
+        // The userId is not for the process's user. Use a slower cache that handles invalidation.
+        return mProfileTypeCache.query(userId);
     }
 
     /**
      * Checks if the context user is a managed profile.
+     *
+     * Note that this applies specifically to <em>managed</em> profiles. For profiles in general,
+     * use {@link #isProfile()} instead.
      *
      * @return whether the context user is a managed profile.
      */
@@ -2568,6 +2596,9 @@ public class UserManager {
      * {@link android.Manifest.permission#QUERY_USERS} permission, otherwise the caller
      * must be in the same profile group of specified user.
      *
+     * Note that this applies specifically to <em>managed</em> profiles. For profiles in general,
+     * use {@link #isProfile()} instead.
+     *
      * @return whether the specified user is a managed profile.
      * @hide
      */
@@ -2577,33 +2608,11 @@ public class UserManager {
             android.Manifest.permission.QUERY_USERS,
             android.Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
     public boolean isManagedProfile(@UserIdInt int userId) {
-        if (userId == mUserId) {
-            // No need for synchronization.  Once it becomes non-null, it'll be non-null forever.
-            // Worst case we might end up calling the AIDL method multiple times but that's fine.
-            if (mIsManagedProfileCached != null) {
-                return mIsManagedProfileCached;
-            }
-            try {
-                mIsManagedProfileCached = mService.isManagedProfile(mUserId);
-                return mIsManagedProfileCached;
-            } catch (RemoteException re) {
-                throw re.rethrowFromSystemServer();
-            }
-        } else {
-            try {
-                return mService.isManagedProfile(userId);
-            } catch (RemoteException re) {
-                throw re.rethrowFromSystemServer();
-            }
-        }
+        return isUserTypeManagedProfile(getProfileType(userId));
     }
 
     /**
      * Checks if the context user is a clone profile.
-     *
-     * <p>Requires {@link android.Manifest.permission#MANAGE_USERS} or
-     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS} permission, otherwise the caller
-     * must be in the same profile group of the user.
      *
      * @return whether the context user is a clone profile.
      *
@@ -2611,16 +2620,14 @@ public class UserManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
-            Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
-    @UserHandleAware
+    @UserHandleAware(
+            requiresAnyOfPermissionsIfNotCallerProfileGroup = {
+                    android.Manifest.permission.MANAGE_USERS,
+                    android.Manifest.permission.QUERY_USERS,
+                    android.Manifest.permission.INTERACT_ACROSS_USERS})
     @SuppressAutoDoc
     public boolean isCloneProfile() {
-        try {
-            return mService.isCloneProfile(mUserId);
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
+        return isUserTypeCloneProfile(getProfileType());
     }
 
     /**
@@ -3321,7 +3328,7 @@ public class UserManager {
      *
      * <p>This method can be used by OEMs to "warm" up the user creation by pre-creating some users
      * at the first boot, so they when the "real" user is created (for example,
-     * by {@link #createUser(String, String, int)} or {@link #createGuest(Context, String)}), it
+     * by {@link #createUser(String, String, int)} or {@link #createGuest(Context)}), it
      * takes less time.
      *
      * <p>This method completes the majority of work necessary for user creation: it
@@ -3358,7 +3365,6 @@ public class UserManager {
     /**
      * Creates a guest user and configures it.
      * @param context an application context
-     * @param name the name to set for the user
      * @return the {@link UserInfo} object for the created user, or {@code null} if the user
      *         could not be created.
      *
@@ -3366,20 +3372,19 @@ public class UserManager {
      */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.CREATE_USERS})
-    public UserInfo createGuest(Context context, String name) {
-        UserInfo guest = null;
+    public UserInfo createGuest(Context context) {
         try {
-            guest = mService.createUserWithThrow(name, USER_TYPE_FULL_GUEST, 0);
+            final UserInfo guest = mService.createUserWithThrow(null, USER_TYPE_FULL_GUEST, 0);
             if (guest != null) {
                 Settings.Secure.putStringForUser(context.getContentResolver(),
                         Settings.Secure.SKIP_FIRST_USE_HINTS, "1", guest.id);
             }
+            return guest;
         } catch (ServiceSpecificException e) {
             return null;
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
-        return guest;
     }
 
     /**
@@ -4840,15 +4845,16 @@ public class UserManager {
      * @param overrideDevicePolicy when {@code true}, user is removed even if the caller has
      * the {@link #DISALLOW_REMOVE_USER} or {@link #DISALLOW_REMOVE_MANAGED_PROFILE} restriction
      *
-     * @return the result code {@link #REMOVE_RESULT_REMOVED}, {@link #REMOVE_RESULT_DEFERRED},
-     * {@link #REMOVE_RESULT_ALREADY_BEING_REMOVED}, or {@link #REMOVE_RESULT_ERROR}.
+     * @return the {@link RemoveResult} code: {@link #REMOVE_RESULT_REMOVED},
+     * {@link #REMOVE_RESULT_DEFERRED}, {@link #REMOVE_RESULT_ALREADY_BEING_REMOVED}, or
+     * {@link #REMOVE_RESULT_ERROR}.
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.CREATE_USERS})
-    public int removeUserWhenPossible(@NonNull UserHandle user,
+    public @RemoveResult int removeUserWhenPossible(@NonNull UserHandle user,
             boolean overrideDevicePolicy) {
         try {
             return mService.removeUserWhenPossible(user.getIdentifier(), overrideDevicePolicy);
@@ -5245,6 +5251,33 @@ public class UserManager {
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
+    }
+
+    /* Cache key for anything that assumes that userIds cannot be re-used without rebooting. */
+    private static final String CACHE_KEY_STATIC_USER_PROPERTIES = "cache_key.static_user_props";
+
+    private final PropertyInvalidatedCache<Integer, String> mProfileTypeCache =
+            new PropertyInvalidatedCache<Integer, String>(32, CACHE_KEY_STATIC_USER_PROPERTIES) {
+                @Override
+                public String recompute(Integer query) {
+                    try {
+                        // Will be null (and not cached) if invalid user; otherwise cache the type.
+                        String profileType = mService.getProfileType(query);
+                        if (profileType != null) profileType = profileType.intern();
+                        return profileType;
+                    } catch (RemoteException re) {
+                        throw re.rethrowFromSystemServer();
+                    }
+                }
+                @Override
+                public boolean bypass(Integer query) {
+                    return query < 0;
+                }
+            };
+
+    /** {@hide} */
+    public static final void invalidateStaticUserProperties() {
+        PropertyInvalidatedCache.invalidateCache(CACHE_KEY_STATIC_USER_PROPERTIES);
     }
 
     /**

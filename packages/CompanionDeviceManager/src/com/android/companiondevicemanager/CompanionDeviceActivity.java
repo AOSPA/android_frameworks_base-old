@@ -24,8 +24,13 @@ import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTE
 
 import static com.android.companiondevicemanager.CompanionDeviceDiscoveryService.DiscoveryState;
 import static com.android.companiondevicemanager.CompanionDeviceDiscoveryService.DiscoveryState.FINISHED_TIMEOUT;
+import static com.android.companiondevicemanager.PermissionListAdapter.TYPE_APPS;
+import static com.android.companiondevicemanager.PermissionListAdapter.TYPE_NOTIFICATION;
+import static com.android.companiondevicemanager.PermissionListAdapter.TYPE_STORAGE;
 import static com.android.companiondevicemanager.Utils.getApplicationLabel;
 import static com.android.companiondevicemanager.Utils.getHtmlFromResources;
+import static com.android.companiondevicemanager.Utils.getVendorHeaderIcon;
+import static com.android.companiondevicemanager.Utils.getVendorHeaderName;
 import static com.android.companiondevicemanager.Utils.prepareResultReceiverForIpc;
 
 import static java.util.Objects.requireNonNull;
@@ -37,6 +42,8 @@ import android.companion.AssociationRequest;
 import android.companion.CompanionDeviceManager;
 import android.companion.IAssociationRequestCallback;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
 import android.net.MacAddress;
 import android.os.Bundle;
 import android.os.Handler;
@@ -46,16 +53,26 @@ import android.text.Spanned;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-import android.widget.ListView;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 
-import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *  A CompanionDevice activity response for showing the available
  *  nearby devices to be associated with.
  */
-public class CompanionDeviceActivity extends AppCompatActivity {
+public class CompanionDeviceActivity extends FragmentActivity implements
+        CompanionVendorHelperDialogFragment.CompanionVendorHelperDialogListener {
     private static final boolean DEBUG = false;
     private static final String TAG = CompanionDeviceActivity.class.getSimpleName();
 
@@ -67,6 +84,11 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     private static final String EXTRA_APPLICATION_CALLBACK = "application_callback";
     private static final String EXTRA_ASSOCIATION_REQUEST = "association_request";
     private static final String EXTRA_RESULT_RECEIVER = "result_receiver";
+
+    private static final String FRAGMENT_DIALOG_TAG = "fragment_dialog";
+
+    // Activity result: Internal Error.
+    private static final int RESULT_INTERNAL_ERROR = 2;
 
     // AssociationRequestsProcessor -> UI
     private static final int RESULT_CODE_ASSOCIATION_CREATED = 0;
@@ -84,6 +106,11 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     private TextView mTitle;
     private TextView mSummary;
 
+    // Only present for selfManaged devices.
+    private ImageView mVendorHeaderImage;
+    private TextView mVendorHeaderName;
+    private ImageButton mVendorHeaderButton;
+
     // Progress indicator is only shown while we are looking for the first suitable device for a
     // "regular" (ie. not self-managed) association.
     private View mProgressIndicator;
@@ -91,11 +118,21 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     // Present for self-managed association requests and "single-device" regular association
     // regular.
     private Button mButtonAllow;
+    private Button mButtonNotAllow;
+    // Present for multiple devices association requests only.
+    private Button mButtonNotAllowMultipleDevices;
 
-    // The list is only shown for multiple-device regular association request, after at least one
-    // matching device is found.
-    private @Nullable ListView mListView;
-    private @Nullable DeviceListAdapter mAdapter;
+    private LinearLayout mAssociationConfirmationDialog;
+    private RelativeLayout mVendorHeader;
+
+    // The recycler view is only shown for multiple-device regular association request, after
+    // at least one matching device is found.
+    private @Nullable RecyclerView mDeviceListRecyclerView;
+    private @Nullable DeviceListAdapter mDeviceAdapter;
+
+    // The recycler view is only shown for selfManaged association request.
+    private @Nullable RecyclerView mPermissionListRecyclerView;
+    private @Nullable PermissionListAdapter mPermissionListAdapter;
 
     // The flag used to prevent double taps, that may lead to sending several requests for creating
     // an association to CDM.
@@ -104,6 +141,8 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     // A reference to the device selected by the user, to be sent back to the application via
     // onActivityResult() after the association is created.
     private @Nullable DeviceFilterPair<?> mSelectedDevice;
+
+    private @Nullable List<Integer> mPermissionTypes;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -188,26 +227,52 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     private void initUI() {
         if (DEBUG) Log.d(TAG, "initUI(), request=" + mRequest);
 
+        final String packageName = mRequest.getPackageName();
+        final int userId = mRequest.getUserId();
+        final CharSequence appLabel;
+
+        try {
+            appLabel = getApplicationLabel(this, packageName, userId);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.w(TAG, "Package u" + userId + "/" + packageName + " not found.");
+
+            CompanionDeviceDiscoveryService.stop(this);
+            setResultAndFinish(null, RESULT_INTERNAL_ERROR);
+            return;
+        }
+
         setContentView(R.layout.activity_confirmation);
+
+        mAssociationConfirmationDialog = findViewById(R.id.activity_confirmation);
+        mVendorHeader = findViewById(R.id.vendor_header);
 
         mTitle = findViewById(R.id.title);
         mSummary = findViewById(R.id.summary);
 
-        mListView = findViewById(R.id.device_list);
-        mListView.setOnItemClickListener((av, iv, position, id) -> onListItemClick(position));
+        mVendorHeaderImage = findViewById(R.id.vendor_header_image);
+        mVendorHeaderName = findViewById(R.id.vendor_header_name);
+        mVendorHeaderButton = findViewById(R.id.vendor_header_button);
+
+        mDeviceListRecyclerView = findViewById(R.id.device_list);
+        mDeviceAdapter = new DeviceListAdapter(this, this::onListItemClick);
+
+        mPermissionListRecyclerView = findViewById(R.id.permission_list);
+        mPermissionListAdapter = new PermissionListAdapter(this);
 
         mButtonAllow = findViewById(R.id.btn_positive);
-        mButtonAllow.setOnClickListener(this::onPositiveButtonClick);
-        findViewById(R.id.btn_negative).setOnClickListener(this::onNegativeButtonClick);
+        mButtonNotAllow = findViewById(R.id.btn_negative);
+        mButtonNotAllowMultipleDevices = findViewById(R.id.btn_negative_multiple_devices);
 
-        final CharSequence appLabel = getApplicationLabel(this, mRequest.getPackageName());
+        mButtonAllow.setOnClickListener(this::onPositiveButtonClick);
+        mButtonNotAllow.setOnClickListener(this::onNegativeButtonClick);
+        mButtonNotAllowMultipleDevices.setOnClickListener(this::onNegativeButtonClick);
+
+        mVendorHeaderButton.setOnClickListener(this::onShowHelperDialog);
+
         if (mRequest.isSelfManaged()) {
             initUiForSelfManagedAssociation(appLabel);
         } else if (mRequest.isSingleDevice()) {
-            // TODO(b/211722613)
-            // Treat singleDevice as the multipleDevices for now
-            // initUiForSingleDevice(appLabel);
-            initUiForMultipleDevices(appLabel);
+            initUiForSingleDevice(appLabel);
         } else {
             initUiForMultipleDevices(appLabel);
         }
@@ -221,12 +286,6 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     }
 
     private void onUserSelectedDevice(@NonNull DeviceFilterPair<?> selectedDevice) {
-        if (mSelectedDevice != null) {
-            if (DEBUG) Log.w(TAG, "Already selected.");
-            return;
-        }
-        mSelectedDevice = requireNonNull(selectedDevice);
-
         final MacAddress macAddress = selectedDevice.getMacAddress();
         onAssociationApproved(macAddress);
     }
@@ -262,7 +321,7 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         if (DEBUG) Log.i(TAG, "onAssociationCreated(), association=" + association);
 
         // Don't need to notify the app, CdmService has already done that. Just finish.
-        setResultAndFinish(association);
+        setResultAndFinish(association, RESULT_OK);
     }
 
     private void cancel(boolean discoveryTimeout) {
@@ -289,10 +348,10 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         }
 
         // ... then set result and finish ("sending" onActivityResult()).
-        setResultAndFinish(null);
+        setResultAndFinish(null, RESULT_CANCELED);
     }
 
-    private void setResultAndFinish(@Nullable AssociationInfo association) {
+    private void setResultAndFinish(@Nullable AssociationInfo association, int resultCode) {
         if (DEBUG) Log.i(TAG, "setResultAndFinish(), association=" + association);
 
         final Intent data = new Intent();
@@ -302,7 +361,7 @@ public class CompanionDeviceActivity extends AppCompatActivity {
                 data.putExtra(CompanionDeviceManager.EXTRA_DEVICE, mSelectedDevice.getDevice());
             }
         }
-        setResult(association != null ? RESULT_OK : RESULT_CANCELED, data);
+        setResult(resultCode, data);
 
         finish();
     }
@@ -310,49 +369,85 @@ public class CompanionDeviceActivity extends AppCompatActivity {
     private void initUiForSelfManagedAssociation(CharSequence appLabel) {
         if (DEBUG) Log.i(TAG, "initUiFor_SelfManaged_Association()");
 
-        final CharSequence deviceName = mRequest.getDisplayName(); // "<device>";
-        final String deviceProfile = mRequest.getDeviceProfile(); // DEVICE_PROFILE_APP_STREAMING;
-
+        final CharSequence deviceName = mRequest.getDisplayName();
+        final String deviceProfile = mRequest.getDeviceProfile();
+        final String packageName = mRequest.getPackageName();
+        final int userId = mRequest.getUserId();
+        final Drawable vendorIcon;
+        final CharSequence vendorName;
         final Spanned title;
-        final Spanned summary;
+
+        mPermissionTypes = new ArrayList<>();
+
+        try {
+            vendorIcon = getVendorHeaderIcon(this, packageName, userId);
+            vendorName = getVendorHeaderName(this, packageName, userId);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(TAG, "Package u" + userId + "/" + packageName + " not found.");
+            setResultAndFinish(null, RESULT_INTERNAL_ERROR);
+            return;
+        }
+
         switch (deviceProfile) {
             case DEVICE_PROFILE_APP_STREAMING:
-                title = getHtmlFromResources(this, R.string.title_app_streaming, appLabel);
-                summary = getHtmlFromResources(
-                        this, R.string.summary_app_streaming, appLabel, deviceName);
+                title = getHtmlFromResources(this, R.string.title_app_streaming, deviceName);
+                mPermissionTypes.add(TYPE_APPS);
                 break;
 
             case DEVICE_PROFILE_AUTOMOTIVE_PROJECTION:
-                title = getHtmlFromResources(this, R.string.title_automotive_projection, appLabel);
-                summary = getHtmlFromResources(
-                        this, R.string.summary_automotive_projection, appLabel, deviceName);
+                title = getHtmlFromResources(
+                        this, R.string.title_automotive_projection, deviceName);
                 break;
 
             case DEVICE_PROFILE_COMPUTER:
-                title = getHtmlFromResources(this, R.string.title_computer, appLabel);
-                summary = getHtmlFromResources(
-                        this, R.string.summary_computer, appLabel, deviceName);
+                title = getHtmlFromResources(this, R.string.title_computer, deviceName);
+                mPermissionTypes.add(TYPE_NOTIFICATION);
+                mPermissionTypes.add(TYPE_STORAGE);
                 break;
 
             default:
                 throw new RuntimeException("Unsupported profile " + deviceProfile);
         }
-        mTitle.setText(title);
-        mSummary.setText(summary);
 
-        mListView.setVisibility(View.GONE);
+        mSummary.setVisibility(View.GONE);
+
+        mPermissionListAdapter.setPermissionType(mPermissionTypes);
+        mPermissionListRecyclerView.setAdapter(mPermissionListAdapter);
+        mPermissionListRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+        mTitle.setText(title);
+        mVendorHeaderImage.setImageDrawable(vendorIcon);
+        mVendorHeaderName.setText(vendorName);
+
+        mDeviceListRecyclerView.setVisibility(View.GONE);
+        mVendorHeader.setVisibility(View.VISIBLE);
     }
 
     private void initUiForSingleDevice(CharSequence appLabel) {
         if (DEBUG) Log.i(TAG, "initUiFor_SingleDevice()");
 
-        // TODO: use real name
-        final String deviceName = "<device>";
         final String deviceProfile = mRequest.getDeviceProfile();
 
+        CompanionDeviceDiscoveryService.getScanResult().observe(this,
+                deviceFilterPairs -> updateSingleDeviceUi(
+                        deviceFilterPairs, deviceProfile, appLabel));
+
+        mPermissionListRecyclerView.setVisibility(View.GONE);
+        mDeviceListRecyclerView.setVisibility(View.GONE);
+    }
+
+    private void updateSingleDeviceUi(List<DeviceFilterPair<?>> deviceFilterPairs,
+            String deviceProfile, CharSequence appLabel) {
+        // Ignore "empty" scan reports.
+        if (deviceFilterPairs.isEmpty()) return;
+
+        mSelectedDevice = requireNonNull(deviceFilterPairs.get(0));
+
+        final String deviceName = mSelectedDevice.getDisplayName();
         final Spanned title = getHtmlFromResources(
                 this, R.string.confirmation_title, appLabel, deviceName);
         final Spanned summary;
+
         if (deviceProfile == null) {
             summary = getHtmlFromResources(this, R.string.summary_generic);
         } else if (deviceProfile.equals(DEVICE_PROFILE_WATCH)) {
@@ -363,8 +458,6 @@ public class CompanionDeviceActivity extends AppCompatActivity {
 
         mTitle.setText(title);
         mSummary.setText(summary);
-
-        mListView.setVisibility(View.GONE);
     }
 
     private void initUiForMultipleDevices(CharSequence appLabel) {
@@ -389,22 +482,36 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         mTitle.setText(title);
         mSummary.setText(summary);
 
-        mAdapter = new DeviceListAdapter(this);
+        mDeviceAdapter = new DeviceListAdapter(this, this::onListItemClick);
 
         // TODO: hide the list and show a spinner until a first device matching device is found.
-        mListView.setAdapter(mAdapter);
+        mDeviceListRecyclerView.setAdapter(mDeviceAdapter);
+        mDeviceListRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+
         CompanionDeviceDiscoveryService.getScanResult().observe(
                 /* lifecycleOwner */ this,
-                /* observer */ mAdapter);
+                /* observer */ mDeviceAdapter);
 
         // "Remove" consent button: users would need to click on the list item.
         mButtonAllow.setVisibility(View.GONE);
+        mButtonNotAllow.setVisibility(View.GONE);
+        mButtonNotAllowMultipleDevices.setVisibility(View.VISIBLE);
     }
 
     private void onListItemClick(int position) {
         if (DEBUG) Log.d(TAG, "onListItemClick() " + position);
 
-        final DeviceFilterPair<?> selectedDevice = mAdapter.getItem(position);
+        final DeviceFilterPair<?> selectedDevice = mDeviceAdapter.getItem(position);
+
+        if (mSelectedDevice != null) {
+            if (DEBUG) Log.w(TAG, "Already selected.");
+            return;
+        }
+        // Notify the adapter to highlight the selected item.
+        mDeviceAdapter.setSelectedPosition(position);
+
+        mSelectedDevice = requireNonNull(selectedDevice);
+
         onUserSelectedDevice(selectedDevice);
     }
 
@@ -417,9 +524,7 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         if (mRequest.isSelfManaged()) {
             onAssociationApproved(null);
         } else {
-            // TODO(b/211722613): call onUserSelectedDevice().
-            throw new UnsupportedOperationException(
-                    "isSingleDevice() requests are not supported yet.");
+            onUserSelectedDevice(mSelectedDevice);
         }
     }
 
@@ -430,6 +535,17 @@ public class CompanionDeviceActivity extends AppCompatActivity {
         v.setEnabled(false);
 
         cancel(false);
+    }
+
+    private void onShowHelperDialog(View view) {
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        CompanionVendorHelperDialogFragment fragmentDialog =
+                CompanionVendorHelperDialogFragment.newInstance(mRequest.getPackageName(),
+                        mRequest.getUserId(), mRequest.getDeviceProfile());
+
+        mAssociationConfirmationDialog.setVisibility(View.GONE);
+
+        fragmentDialog.show(fragmentManager, /* Tag */ FRAGMENT_DIALOG_TAG);
     }
 
     private boolean isDone() {
@@ -450,4 +566,14 @@ public class CompanionDeviceActivity extends AppCompatActivity {
                     onAssociationCreated(association);
                 }
             };
+
+    @Override
+    public void onShowHelperDialogFailed() {
+        setResultAndFinish(null, RESULT_INTERNAL_ERROR);
+    }
+
+    @Override
+    public void onHelperDialogDismissed() {
+        mAssociationConfirmationDialog.setVisibility(View.VISIBLE);
+    }
 }

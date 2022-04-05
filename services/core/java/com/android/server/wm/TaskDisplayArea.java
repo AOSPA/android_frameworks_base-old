@@ -18,7 +18,6 @@ package com.android.server.wm;
 
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
@@ -112,9 +111,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     // through the list to find them.
     private Task mRootHomeTask;
     private Task mRootPinnedTask;
-
-    // TODO(b/159029784): Remove when getStack() behavior is cleaned-up
-    private Task mRootRecentsTask;
 
     private final ArrayList<WindowContainer> mTmpAlwaysOnTopChildren = new ArrayList<>();
     private final ArrayList<WindowContainer> mTmpNormalChildren = new ArrayList<>();
@@ -224,8 +220,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     Task getRootTask(int windowingMode, int activityType) {
         if (activityType == ACTIVITY_TYPE_HOME) {
             return mRootHomeTask;
-        } else if (activityType == ACTIVITY_TYPE_RECENTS) {
-            return mRootRecentsTask;
         }
         if (windowingMode == WINDOWING_MODE_PINNED) {
             return mRootPinnedTask;
@@ -249,11 +243,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     @Nullable
     Task getRootHomeTask() {
         return mRootHomeTask;
-    }
-
-    @Nullable
-    Task getRootRecentsTask() {
-        return mRootRecentsTask;
     }
 
     Task getRootPinnedTask() {
@@ -290,16 +279,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             } else {
                 mRootHomeTask = rootTask;
             }
-        } else if (rootTask.isActivityTypeRecents()) {
-            if (mRootRecentsTask != null) {
-                if (!rootTask.isDescendantOf(mRootRecentsTask)) {
-                    throw new IllegalArgumentException("addRootTaskReferenceIfNeeded: root recents"
-                            + " task=" + mRootRecentsTask + " already exist on display=" + this
-                            + " rootTask=" + rootTask);
-                }
-            } else {
-                mRootRecentsTask = rootTask;
-            }
         }
 
         if (!rootTask.isRootTask()) {
@@ -319,8 +298,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     void removeRootTaskReferenceIfNeeded(Task rootTask) {
         if (rootTask == mRootHomeTask) {
             mRootHomeTask = null;
-        } else if (rootTask == mRootRecentsTask) {
-            mRootRecentsTask = null;
         } else if (rootTask == mRootPinnedTask) {
             mRootPinnedTask = null;
         }
@@ -966,35 +943,31 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     Task getOrCreateRootTask(int windowingMode, int activityType, boolean onTop,
             @Nullable Task candidateTask, @Nullable Task sourceTask,
             @Nullable ActivityOptions options, int launchFlags) {
+        final int resolvedWindowingMode =
+                windowingMode == WINDOWING_MODE_UNDEFINED ? getWindowingMode() : windowingMode;
         // Need to pass in a determined windowing mode to see if a new root task should be created,
         // so use its parent's windowing mode if it is undefined.
-        if (!alwaysCreateRootTask(
-                windowingMode != WINDOWING_MODE_UNDEFINED ? windowingMode : getWindowingMode(),
-                activityType)) {
-            Task rootTask = getRootTask(windowingMode, activityType);
+        if (!alwaysCreateRootTask(resolvedWindowingMode, activityType)) {
+            Task rootTask = getRootTask(resolvedWindowingMode, activityType);
             if (rootTask != null) {
                 return rootTask;
             }
         } else if (candidateTask != null) {
             final int position = onTop ? POSITION_TOP : POSITION_BOTTOM;
-            final Task launchRootTask = getLaunchRootTask(windowingMode, activityType, options,
-                    sourceTask, launchFlags);
+            final Task launchRootTask = getLaunchRootTask(resolvedWindowingMode, activityType,
+                    options, sourceTask, launchFlags);
             if (launchRootTask != null) {
                 if (candidateTask.getParent() == null) {
                     launchRootTask.addChild(candidateTask, position);
                 } else if (candidateTask.getParent() != launchRootTask) {
                     candidateTask.reparent(launchRootTask, position);
                 }
-            } else if (candidateTask.getDisplayArea() != this || !candidateTask.isRootTask()) {
+            } else if (candidateTask.getDisplayArea() != this) {
                 if (candidateTask.getParent() == null) {
                     addChild(candidateTask, position);
                 } else {
                     candidateTask.reparent(this, onTop);
                 }
-            }
-            // Update windowing mode if necessary, e.g. moving a pinned task to fullscreen.
-            if (candidateTask.getWindowingMode() != windowingMode) {
-                candidateTask.setWindowingMode(windowingMode);
             }
             return candidateTask.getRootTask();
         }

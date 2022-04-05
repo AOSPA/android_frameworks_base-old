@@ -75,6 +75,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.window.ClientWindowFrames;
 import android.window.IOnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.logging.MetricsLoggerWrapper;
@@ -83,6 +84,7 @@ import com.android.server.LocalServices;
 import com.android.server.wm.WindowManagerService.H;
 
 import java.io.PrintWriter;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -520,10 +522,15 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public void reportKeepClearAreasChanged(IWindow window, List<Rect> keepClearAreas) {
+    public void reportKeepClearAreasChanged(IWindow window, List<Rect> restricted,
+            List<Rect> unrestricted) {
+        if (!mSetsUnrestrictedKeepClearAreas && !unrestricted.isEmpty()) {
+            unrestricted = Collections.emptyList();
+        }
+
         final long ident = Binder.clearCallingIdentity();
         try {
-            mService.reportKeepClearAreasChanged(this, window, keepClearAreas);
+            mService.reportKeepClearAreasChanged(this, window, restricted, unrestricted);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -837,7 +844,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     @Override
     public void grantInputChannel(int displayId, SurfaceControl surface,
             IWindow window, IBinder hostInputToken, int flags, int privateFlags, int type,
-            IBinder focusGrantToken, InputChannel outInputChannel) {
+            IBinder focusGrantToken, String inputHandleName, InputChannel outInputChannel) {
         if (hostInputToken == null && !mCanAddInternalSystemWindow) {
             // Callers without INTERNAL_SYSTEM_WINDOW permission cannot grant input channel to
             // embedded windows without providing a host window input token
@@ -853,7 +860,8 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         try {
             mService.grantInputChannel(this, mUid, mPid, displayId, surface, window, hostInputToken,
                     flags, mCanAddInternalSystemWindow ? privateFlags : 0,
-                    mCanAddInternalSystemWindow ? type : 0, focusGrantToken, outInputChannel);
+                    mCanAddInternalSystemWindow ? type : 0, focusGrantToken, inputHandleName,
+                    outInputChannel);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -904,15 +912,17 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public void setOnBackInvokedCallback(IWindow window,
-            IOnBackInvokedCallback onBackInvokedCallback) throws RemoteException {
+    public void setOnBackInvokedCallback(
+            IWindow window,
+            IOnBackInvokedCallback onBackInvokedCallback,
+            @OnBackInvokedDispatcher.Priority int priority) throws RemoteException {
         synchronized (mService.mGlobalLock) {
             WindowState windowState = mService.windowForClientLocked(this, window, false);
             if (windowState == null) {
                 Slog.e(TAG_WM,
                         "setOnBackInvokedCallback(): Can't find window state for window:" + window);
             } else {
-                windowState.setOnBackInvokedCallback(onBackInvokedCallback);
+                windowState.setOnBackInvokedCallback(onBackInvokedCallback, priority);
             }
         }
     }

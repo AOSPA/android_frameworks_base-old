@@ -28,7 +28,11 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.drawable.Icon;
+import android.media.INearbyMediaDevicesProvider;
+import android.media.INearbyMediaDevicesUpdateCallback;
 import android.media.MediaRoute2Info;
+import android.media.NearbyDevice;
+import android.media.NearbyMediaDevicesProvider;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -46,6 +50,9 @@ import com.android.internal.statusbar.NotificationVisibility;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -317,31 +324,31 @@ public class StatusBarManager {
     public @interface RequestResult {}
 
     /**
-     * Constant for {@link #setNavBarModeOverride(int)} indicating the default navbar mode.
+     * Constant for {@link #setNavBarMode(int)} indicating the default navbar mode.
      *
      * @hide
      */
     @SystemApi
-    public static final int NAV_BAR_MODE_OVERRIDE_NONE = 0;
+    public static final int NAV_BAR_MODE_DEFAULT = 0;
 
     /**
-     * Constant for {@link #setNavBarModeOverride(int)} indicating kids navbar mode.
+     * Constant for {@link #setNavBarMode(int)} indicating kids navbar mode.
      *
      * <p>When used, back and home icons will change drawables and layout, recents will be hidden,
-     * and the navbar will remain visible when apps are in immersive mode.
+     * and enables the setting to force navbar visible, even when apps are in immersive mode.
      *
      * @hide
      */
     @SystemApi
-    public static final int NAV_BAR_MODE_OVERRIDE_KIDS = 1;
+    public static final int NAV_BAR_MODE_KIDS = 1;
 
     /** @hide */
-    @IntDef(prefix = {"NAV_BAR_MODE_OVERRIDE_"}, value = {
-            NAV_BAR_MODE_OVERRIDE_NONE,
-            NAV_BAR_MODE_OVERRIDE_KIDS
+    @IntDef(prefix = {"NAV_BAR_MODE_"}, value = {
+            NAV_BAR_MODE_DEFAULT,
+            NAV_BAR_MODE_KIDS
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface NavBarModeOverride {}
+    public @interface NavBarMode {}
 
     /**
      * State indicating that this sender device is close to a receiver device, so the user can
@@ -502,6 +509,16 @@ public class StatusBarManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface MediaTransferReceiverState {}
+
+    /**
+     * A map from a provider registered in
+     * {@link #registerNearbyMediaDevicesProvider(NearbyMediaDevicesProvider)} to the wrapper
+     * around the provider that was created internally. We need the wrapper to make the provider
+     * binder-compatible, and we need to store a reference to the wrapper so that when the provider
+     * is un-registered, we un-register the saved wrapper instance.
+     */
+    private final Map<NearbyMediaDevicesProvider, NearbyMediaDevicesProviderWrapper>
+            nearbyMediaDevicesProviderMap = new HashMap<>();
 
     @UnsupportedAppUsage
     private Context mContext;
@@ -909,25 +926,23 @@ public class StatusBarManager {
     }
 
     /**
-     * Sets or removes the navigation bar mode override.
+     * Sets or removes the navigation bar mode.
      *
-     * @param navBarModeOverride the mode of the navigation bar override to be set.
+     * @param navBarMode the mode of the navigation bar to be set.
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.STATUS_BAR)
-    public void setNavBarModeOverride(@NavBarModeOverride int navBarModeOverride) {
-        if (navBarModeOverride != NAV_BAR_MODE_OVERRIDE_NONE
-                && navBarModeOverride != NAV_BAR_MODE_OVERRIDE_KIDS) {
-            throw new UnsupportedOperationException(
-                    "Supplied navBarModeOverride not supported: " + navBarModeOverride);
+    public void setNavBarMode(@NavBarMode int navBarMode) {
+        if (navBarMode != NAV_BAR_MODE_DEFAULT && navBarMode != NAV_BAR_MODE_KIDS) {
+            throw new IllegalArgumentException("Supplied navBarMode not supported: " + navBarMode);
         }
 
         try {
             final IStatusBarService svc = getService();
             if (svc != null) {
-                svc.setNavBarModeOverride(navBarModeOverride);
+                svc.setNavBarMode(navBarMode);
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -935,23 +950,23 @@ public class StatusBarManager {
     }
 
     /**
-     * Gets the navigation bar mode override. Returns default value if no override is set.
+     * Gets the navigation bar mode. Returns default value if no mode is set.
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.STATUS_BAR)
-    public @NavBarModeOverride int getNavBarModeOverride() {
-        int navBarModeOverride = NAV_BAR_MODE_OVERRIDE_NONE;
+    public @NavBarMode int getNavBarMode() {
+        int navBarMode = NAV_BAR_MODE_DEFAULT;
         try {
             final IStatusBarService svc = getService();
             if (svc != null) {
-                navBarModeOverride = svc.getNavBarModeOverride();
+                navBarMode = svc.getNavBarMode();
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return navBarModeOverride;
+        return navBarMode;
     }
 
     /**
@@ -1012,6 +1027,8 @@ public class StatusBarManager {
      *
      * @param displayState the new state for media tap-to-transfer.
      * @param routeInfo the media route information for the media being transferred.
+     * @param appIcon the icon of the app playing the media.
+     * @param appName the name of the app playing the media.
      *
      * @hide
      */
@@ -1019,13 +1036,76 @@ public class StatusBarManager {
     @RequiresPermission(Manifest.permission.MEDIA_CONTENT_CONTROL)
     public void updateMediaTapToTransferReceiverDisplay(
             @MediaTransferReceiverState int displayState,
-            @NonNull MediaRoute2Info routeInfo) {
+            @NonNull MediaRoute2Info routeInfo,
+            @Nullable Icon appIcon,
+            @Nullable CharSequence appName) {
         Objects.requireNonNull(routeInfo);
         IStatusBarService svc = getService();
         try {
-            svc.updateMediaTapToTransferReceiverDisplay(displayState, routeInfo);
+            svc.updateMediaTapToTransferReceiverDisplay(displayState, routeInfo, appIcon, appName);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Registers a provider that notifies callbacks about the status of nearby devices that are able
+     * to play media.
+     * <p>
+     * If multiple providers are registered, all the providers will be used for nearby device
+     * information.
+     * <p>
+     * @param provider the nearby device information provider to register
+     * <p>
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MEDIA_CONTENT_CONTROL)
+    public void registerNearbyMediaDevicesProvider(
+            @NonNull NearbyMediaDevicesProvider provider
+    ) {
+        Objects.requireNonNull(provider);
+        if (nearbyMediaDevicesProviderMap.containsKey(provider)) {
+            return;
+        }
+        try {
+            final IStatusBarService svc = getService();
+            NearbyMediaDevicesProviderWrapper providerWrapper =
+                    new NearbyMediaDevicesProviderWrapper(provider);
+            nearbyMediaDevicesProviderMap.put(provider, providerWrapper);
+            svc.registerNearbyMediaDevicesProvider(providerWrapper);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+   /**
+     * Unregisters a provider that gives information about nearby devices that are able to play
+     * media.
+     * <p>
+     * See {@link registerNearbyMediaDevicesProvider}.
+     * <p>
+     * @param provider the nearby device information provider to unregister
+     * <p>
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MEDIA_CONTENT_CONTROL)
+    public void unregisterNearbyMediaDevicesProvider(
+            @NonNull NearbyMediaDevicesProvider provider
+    ) {
+        Objects.requireNonNull(provider);
+        if (!nearbyMediaDevicesProviderMap.containsKey(provider)) {
+            return;
+        }
+        try {
+            final IStatusBarService svc = getService();
+            NearbyMediaDevicesProviderWrapper providerWrapper =
+                    nearbyMediaDevicesProviderMap.get(provider);
+            nearbyMediaDevicesProviderMap.remove(provider);
+            svc.unregisterNearbyMediaDevicesProvider(providerWrapper);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -1334,6 +1414,50 @@ public class StatusBarManager {
             } finally {
                 restoreCallingIdentity(callingIdentity);
             }
+        }
+    }
+
+    /**
+     * @hide
+     */
+    static final class NearbyMediaDevicesProviderWrapper extends INearbyMediaDevicesProvider.Stub {
+        @NonNull
+        private final NearbyMediaDevicesProvider mProvider;
+        // Because we're wrapping a {@link NearbyMediaDevicesProvider} in a binder-compatible
+        // interface, we also need to wrap the callbacks that the provider receives. We use
+        // this map to keep track of the original callback and the wrapper callback so that
+        // unregistering the callback works correctly.
+        @NonNull
+        private final Map<INearbyMediaDevicesUpdateCallback, Consumer<List<NearbyDevice>>>
+                mRegisteredCallbacks = new HashMap<>();
+
+        NearbyMediaDevicesProviderWrapper(@NonNull NearbyMediaDevicesProvider provider) {
+            mProvider = provider;
+        }
+
+        @Override
+        public void registerNearbyDevicesCallback(
+                @NonNull INearbyMediaDevicesUpdateCallback callback) {
+            Consumer<List<NearbyDevice>> callbackAsConsumer = nearbyDevices -> {
+                try {
+                    callback.onDevicesUpdated(nearbyDevices);
+                } catch (RemoteException ex) {
+                    throw ex.rethrowFromSystemServer();
+                }
+            };
+
+            mRegisteredCallbacks.put(callback, callbackAsConsumer);
+            mProvider.registerNearbyDevicesCallback(callbackAsConsumer);
+        }
+
+        @Override
+        public void unregisterNearbyDevicesCallback(
+                @NonNull INearbyMediaDevicesUpdateCallback callback) {
+            if (!mRegisteredCallbacks.containsKey(callback)) {
+                return;
+            }
+            mProvider.unregisterNearbyDevicesCallback(mRegisteredCallbacks.get(callback));
+            mRegisteredCallbacks.remove(callback);
         }
     }
 }

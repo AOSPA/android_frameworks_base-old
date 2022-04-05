@@ -423,7 +423,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
     private int getVolteResId() {
         int resId = 0;
-        int voiceNetTye = getVoiceNetworkType();
+        int voiceNetTye = mCurrentState.getVoiceNetworkType();
         if ( (mCurrentState.voiceCapable || mCurrentState.videoCapable)
                 &&  mCurrentState.imsRegistered ) {
             resId = R.drawable.ic_volte;
@@ -586,6 +586,14 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             typeIcon = getEnhancementDataRatIcon();
         }else if ( mConfig.enableDdsRatIconEnhancement ) {
             typeIcon = getEnhancementDdsRatIcon();
+        }
+
+        MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
+        if (mConfig.showVowifiIcon && vowifiIconGroup != null) {
+            typeIcon = vowifiIconGroup.dataType;
+            statusIcon = new IconState(true,
+                    ((mCurrentState.enabled && !mCurrentState.airplaneMode) ? statusIcon.icon : -1),
+                    statusIcon.contentDescription);
         }
 
         return new SbInfo(showTriangle, typeIcon, statusIcon);
@@ -883,26 +891,25 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         if (mCurrentState.connected) {
             mCurrentState.level = getSignalLevel(mCurrentState.signalStrength);
             if (mConfig.showRsrpSignalLevelforLTE) {
-                // TODO(b/214591923)
-                // if (DEBUG) {
-                //     Log.d(mTag, "updateTelephony CS:" + mServiceState.getVoiceNetworkType()
-                //             + "/" + TelephonyManager.getNetworkTypeName(
-                //             mServiceState.getVoiceNetworkType())
-                //             + ", PS:" + mServiceState.getDataNetworkType()
-                //             + "/"+ TelephonyManager.getNetworkTypeName(
-                //             mServiceState.getDataNetworkType()));
-                // }
-                // int dataType = mServiceState.getDataNetworkType();
-                // if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
-                //         dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
-                //     mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
-                // }else if ( dataType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
-                //     int voiceType = mServiceState.getVoiceNetworkType();
-                //     if (voiceType == TelephonyManager.NETWORK_TYPE_LTE ||
-                //             voiceType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
-                //         mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
-                //     }
-                // }
+                 if (DEBUG) {
+                     Log.d(mTag, "updateTelephony CS:" + mCurrentState.getVoiceNetworkType()
+                             + "/" + TelephonyManager.getNetworkTypeName(
+                             mCurrentState.getVoiceNetworkType())
+                             + ", PS:" + mCurrentState.getDataNetworkType()
+                             + "/"+ TelephonyManager.getNetworkTypeName(
+                             mCurrentState.getDataNetworkType()));
+                 }
+                 int dataType = mCurrentState.getDataNetworkType();
+                 if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
+                         dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                     mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
+                 } else if (dataType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                     int voiceType = mCurrentState.getVoiceNetworkType();
+                     if (voiceType == TelephonyManager.NETWORK_TYPE_LTE ||
+                             voiceType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                         mCurrentState.level = getAlternateLteLevel(mCurrentState.signalStrength);
+                     }
+                 }
             }
         }
 
@@ -1029,6 +1036,11 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     }
 
     private int getAlternateLteLevel(SignalStrength signalStrength) {
+        if (signalStrength == null) {
+            Log.e(mTag, "getAlternateLteLevel signalStrength is null");
+            return 0;
+        }
+
         int lteRsrp = signalStrength.getLteDbm();
         if ( lteRsrp == SignalStrength.INVALID ) {
             int signalStrengthLevel = signalStrength.getLevel();
@@ -1131,7 +1143,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
     private boolean isVowifiAvailable() {
         return mCurrentState.voiceCapable &&  mCurrentState.imsRegistered
-                && getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN;
+                && mCurrentState.getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN;
     }
 
     private MobileIconGroup getVowifiIconGroup() {
@@ -1156,6 +1168,9 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 + mConfig.enableDdsRatIconEnhancement + ",");
         pw.println("  mConfig.alwaysShowNetworkTypeIcon="
                 + mConfig.alwaysShowNetworkTypeIcon + ",");
+        pw.println("  mConfig.showVowifiIcon=" +  mConfig.showVowifiIcon + ",");
+        pw.println("  mConfig.showVolteIcon=" +  mConfig.showVolteIcon + ",");
+        pw.println("  isVolteSwitchOn=" + isVolteSwitchOn() + ",");
         pw.println("  mNetworkToIconLookup=" + mNetworkToIconLookup + ",");
         pw.println("  MobileStatusHistory");
         int size = 0;
@@ -1246,7 +1261,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         }
     }
 
-    /** Box for StatusBar icon info */
+    /** Box for status bar icon info */
     private static final class SbInfo {
         final boolean showTriangle;
         final int ratTypeIcon;

@@ -52,6 +52,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
+import android.content.pm.ProviderInfo;
 import android.content.pm.ServiceInfo;
 import android.net.Uri;
 import android.os.BatteryManager;
@@ -70,6 +71,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.WorkSource;
+import android.os.storage.StorageManagerInternal;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.text.format.DateUtils;
@@ -86,10 +88,10 @@ import android.util.SparseSetArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 
-import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
+import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
@@ -124,6 +126,8 @@ import com.android.server.usage.AppStandbyInternal.AppIdleStateChangeListener;
 import com.android.server.utils.quota.Categorizer;
 import com.android.server.utils.quota.Category;
 import com.android.server.utils.quota.CountQuotaTracker;
+
+import dalvik.annotation.optimization.NeverCompile;
 
 import libcore.util.EmptyArray;
 
@@ -237,6 +241,7 @@ public class JobSchedulerService extends com.android.server.SystemService
     static final int MSG_UID_ACTIVE = 6;
     static final int MSG_UID_IDLE = 7;
     static final int MSG_CHECK_CHANGED_JOB_LIST = 8;
+    static final int MSG_CHECK_MEDIA_EXEMPTION = 9;
 
     /**
      * Track Services that have currently active or pending jobs. The index is provided by
@@ -271,8 +276,8 @@ public class JobSchedulerService extends com.android.server.SystemService
     @GuardedBy("mLock")
     private final BatteryStateTracker mBatteryStateTracker;
 
-    @NonNull
-    private final String mSystemGalleryPackage;
+    @GuardedBy("mLock")
+    private final SparseArray<String> mCloudMediaProviderPackages = new SparseArray<>();
 
     private final CountQuotaTracker mQuotaTracker;
     private static final String QUOTA_TRACKER_SCHEDULE_PERSISTED_TAG = ".schedulePersisted()";
@@ -417,6 +422,9 @@ public class JobSchedulerService extends com.android.server.SystemService
                             break;
                         case Constants.KEY_CONN_CONGESTION_DELAY_FRAC:
                         case Constants.KEY_CONN_PREFETCH_RELAX_FRAC:
+                        case Constants.KEY_CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC:
+                        case Constants.KEY_CONN_USE_CELL_SIGNAL_STRENGTH:
+                        case Constants.KEY_CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS:
                             mConstants.updateConnectivityConstantsLocked();
                             break;
                         case Constants.KEY_PREFETCH_FORCE_BATCH_RELAX_THRESHOLD_MS:
@@ -489,6 +497,12 @@ public class JobSchedulerService extends com.android.server.SystemService
         private static final String KEY_MIN_EXP_BACKOFF_TIME_MS = "min_exp_backoff_time_ms";
         private static final String KEY_CONN_CONGESTION_DELAY_FRAC = "conn_congestion_delay_frac";
         private static final String KEY_CONN_PREFETCH_RELAX_FRAC = "conn_prefetch_relax_frac";
+        private static final String KEY_CONN_USE_CELL_SIGNAL_STRENGTH =
+                "conn_use_cell_signal_strength";
+        private static final String KEY_CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS =
+                "conn_update_all_jobs_min_interval_ms";
+        private static final String KEY_CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC =
+                "conn_low_signal_strength_relax_frac";
         private static final String KEY_PREFETCH_FORCE_BATCH_RELAX_THRESHOLD_MS =
                 "prefetch_force_batch_relax_threshold_ms";
         private static final String KEY_ENABLE_API_QUOTAS = "enable_api_quotas";
@@ -514,6 +528,9 @@ public class JobSchedulerService extends com.android.server.SystemService
         private static final long DEFAULT_MIN_EXP_BACKOFF_TIME_MS = JobInfo.MIN_BACKOFF_MILLIS;
         private static final float DEFAULT_CONN_CONGESTION_DELAY_FRAC = 0.5f;
         private static final float DEFAULT_CONN_PREFETCH_RELAX_FRAC = 0.5f;
+        private static final boolean DEFAULT_CONN_USE_CELL_SIGNAL_STRENGTH = true;
+        private static final long DEFAULT_CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS = MINUTE_IN_MILLIS;
+        private static final float DEFAULT_CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC = 0.5f;
         private static final long DEFAULT_PREFETCH_FORCE_BATCH_RELAX_THRESHOLD_MS = HOUR_IN_MILLIS;
         private static final boolean DEFAULT_ENABLE_API_QUOTAS = true;
         private static final int DEFAULT_API_QUOTA_SCHEDULE_COUNT = 250;
@@ -569,6 +586,23 @@ public class JobSchedulerService extends com.android.server.SystemService
          * we consider matching it against a metered network.
          */
         public float CONN_PREFETCH_RELAX_FRAC = DEFAULT_CONN_PREFETCH_RELAX_FRAC;
+        /**
+         * Whether to use the cell signal strength to determine if a particular job is eligible to
+         * run.
+         */
+        public boolean CONN_USE_CELL_SIGNAL_STRENGTH = DEFAULT_CONN_USE_CELL_SIGNAL_STRENGTH;
+        /**
+         * When throttling updating all tracked jobs, make sure not to update them more frequently
+         * than this value.
+         */
+        public long CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS =
+                DEFAULT_CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS;
+        /**
+         * The fraction of a job's running window that must pass before we consider running it on
+         * low signal strength networks.
+         */
+        public float CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC =
+                DEFAULT_CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC;
 
         /**
          * The amount of time within which we would consider the app to be launching relatively soon
@@ -661,6 +695,18 @@ public class JobSchedulerService extends com.android.server.SystemService
             CONN_PREFETCH_RELAX_FRAC = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_JOB_SCHEDULER,
                     KEY_CONN_PREFETCH_RELAX_FRAC,
                     DEFAULT_CONN_PREFETCH_RELAX_FRAC);
+            CONN_USE_CELL_SIGNAL_STRENGTH = DeviceConfig.getBoolean(
+                    DeviceConfig.NAMESPACE_JOB_SCHEDULER,
+                    KEY_CONN_USE_CELL_SIGNAL_STRENGTH,
+                    DEFAULT_CONN_USE_CELL_SIGNAL_STRENGTH);
+            CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS = DeviceConfig.getLong(
+                    DeviceConfig.NAMESPACE_JOB_SCHEDULER,
+                    KEY_CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS,
+                    DEFAULT_CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS);
+            CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC = DeviceConfig.getFloat(
+                    DeviceConfig.NAMESPACE_JOB_SCHEDULER,
+                    KEY_CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC,
+                    DEFAULT_CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC);
         }
 
         private void updatePrefetchConstantsLocked() {
@@ -739,6 +785,11 @@ public class JobSchedulerService extends com.android.server.SystemService
             pw.print(KEY_MIN_EXP_BACKOFF_TIME_MS, MIN_EXP_BACKOFF_TIME_MS).println();
             pw.print(KEY_CONN_CONGESTION_DELAY_FRAC, CONN_CONGESTION_DELAY_FRAC).println();
             pw.print(KEY_CONN_PREFETCH_RELAX_FRAC, CONN_PREFETCH_RELAX_FRAC).println();
+            pw.print(KEY_CONN_USE_CELL_SIGNAL_STRENGTH, CONN_USE_CELL_SIGNAL_STRENGTH).println();
+            pw.print(KEY_CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS, CONN_UPDATE_ALL_JOBS_MIN_INTERVAL_MS)
+                    .println();
+            pw.print(KEY_CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC, CONN_LOW_SIGNAL_STRENGTH_RELAX_FRAC)
+                    .println();
             pw.print(KEY_PREFETCH_FORCE_BATCH_RELAX_THRESHOLD_MS,
                     PREFETCH_FORCE_BATCH_RELAX_THRESHOLD_MS).println();
 
@@ -1737,9 +1788,6 @@ public class JobSchedulerService extends com.android.server.SystemService
         mJobRestrictions = new ArrayList<>();
         mJobRestrictions.add(new ThermalStatusRestriction(this));
 
-        mSystemGalleryPackage = Objects.requireNonNull(
-                context.getString(R.string.config_systemGallery));
-
         // If the job store determined that it can't yet reschedule persisted jobs,
         // we need to start watching the clock.
         if (!mJobs.jobTimesInflatedValid()) {
@@ -1808,6 +1856,9 @@ public class JobSchedulerService extends com.android.server.SystemService
 
             mAppStateTracker = (AppStateTrackerImpl) Objects.requireNonNull(
                     LocalServices.getService(AppStateTracker.class));
+
+            LocalServices.getService(StorageManagerInternal.class)
+                    .registerCloudProviderChangeListener(new CloudProviderChangeListener());
 
             // Register br for package removals and user removals.
             final IntentFilter filter = new IntentFilter();
@@ -2307,6 +2358,15 @@ public class JobSchedulerService extends com.android.server.SystemService
                         break;
                     }
 
+                    case MSG_CHECK_MEDIA_EXEMPTION: {
+                        final SomeArgs args = (SomeArgs) message.obj;
+                        synchronized (mLock) {
+                            updateMediaBackupExemptionLocked(
+                                    args.argi1, (String) args.arg1, (String) args.arg2);
+                        }
+                        args.recycle();
+                        break;
+                    }
                 }
                 maybeRunPendingJobsLocked();
             }
@@ -2603,10 +2663,29 @@ public class JobSchedulerService extends com.android.server.SystemService
         if (DEBUG) {
             Slog.d(TAG, "Check changed jobs...");
         }
+        if (mChangedJobList.size() == 0) {
+            return;
+        }
 
         mChangedJobList.forEach(mMaybeQueueFunctor);
         mMaybeQueueFunctor.postProcessLocked();
         mChangedJobList.clear();
+    }
+
+    @GuardedBy("mLock")
+    private void updateMediaBackupExemptionLocked(int userId, @Nullable String oldPkg,
+            @Nullable String newPkg) {
+        final Predicate<JobStatus> shouldProcessJob =
+                (job) -> job.getSourceUserId() == userId
+                        && (job.getSourcePackageName().equals(oldPkg)
+                        || job.getSourcePackageName().equals(newPkg));
+        mJobs.forEachJob(shouldProcessJob,
+                (job) -> {
+                    if (job.updateMediaBackupExemptionStatus()) {
+                        mChangedJobList.add(job);
+                    }
+                });
+        mHandler.sendEmptyMessage(MSG_CHECK_CHANGED_JOB_LIST);
     }
 
     /** Returns true if both the calling and source users for the job are started. */
@@ -2928,7 +3007,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                     }
                 } else if (BatteryManager.ACTION_DISCHARGING.equals(action)) {
                     if (DEBUG) {
-                        Slog.d(TAG, "Disconnected from power @ " + sElapsedRealtimeClock.millis());
+                        Slog.d(TAG, "Battery discharging @ " + sElapsedRealtimeClock.millis());
                     }
                     if (mCharging) {
                         mCharging = false;
@@ -3004,8 +3083,8 @@ public class JobSchedulerService extends com.android.server.SystemService
         }
 
         @Override
-        public String getMediaBackupPackage() {
-            return mSystemGalleryPackage;
+        public String getCloudMediaProviderPackage(int userId) {
+            return mCloudMediaProviderPackages.get(userId);
         }
 
         @Override
@@ -3111,6 +3190,35 @@ public class JobSchedulerService extends com.android.server.SystemService
             Slog.v(TAG, packageName + "/" + userId + " standby bucket index: " + bucket);
         }
         return bucket;
+    }
+
+    private class CloudProviderChangeListener implements
+            StorageManagerInternal.CloudProviderChangeListener {
+
+        @Override
+        public void onCloudProviderChanged(int userId, @Nullable String authority) {
+            final PackageManager pm = getContext()
+                    .createContextAsUser(UserHandle.of(userId), 0)
+                    .getPackageManager();
+            final ProviderInfo pi = pm.resolveContentProvider(
+                    authority, PackageManager.ComponentInfoFlags.of(0));
+            final String newPkg = (pi == null) ? null : pi.packageName;
+            synchronized (mLock) {
+                final String oldPkg = mCloudMediaProviderPackages.get(userId);
+                if (!Objects.equals(oldPkg, newPkg)) {
+                    if (DEBUG) {
+                        Slog.d(TAG, "Cloud provider of user " + userId + " changed from " + oldPkg
+                                + " to " + newPkg);
+                    }
+                    mCloudMediaProviderPackages.put(userId, newPkg);
+                    SomeArgs args = SomeArgs.obtain();
+                    args.argi1 = userId;
+                    args.arg1 = oldPkg;
+                    args.arg2 = newPkg;
+                    mHandler.obtainMessage(MSG_CHECK_MEDIA_EXEMPTION, args).sendToTarget();
+                }
+            }
+        }
     }
 
     /**
@@ -3715,6 +3823,7 @@ public class JobSchedulerService extends com.android.server.SystemService
         });
     }
 
+    @NeverCompile // Avoid size overhead of debugging code.
     void dumpInternal(final IndentingPrintWriter pw, int filterUid) {
         final int filterAppId = UserHandle.getAppId(filterUid);
         final long now = sSystemClock.millis();
@@ -3753,6 +3862,12 @@ public class JobSchedulerService extends com.android.server.SystemService
             pw.println();
 
             pw.println("Started users: " + Arrays.toString(mStartedUsers));
+            pw.println();
+
+            pw.print("Media Cloud Providers: ");
+            pw.println(mCloudMediaProviderPackages);
+            pw.println();
+
             pw.print("Registered ");
             pw.print(mJobs.size());
             pw.println(" jobs:");

@@ -19,8 +19,9 @@ package com.android.systemui.statusbar.phone;
 import static android.app.StatusBarManager.SESSION_KEYGUARD;
 
 import android.annotation.IntDef;
-import android.content.Context;
 import android.content.res.Resources;
+import android.hardware.biometrics.BiometricFaceConstants;
+import android.hardware.biometrics.BiometricFingerprintConstants;
 import android.hardware.biometrics.BiometricSourceType;
 import android.hardware.fingerprint.FingerprintManager;
 import android.metrics.LogMaker;
@@ -45,6 +46,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.KeyguardViewController;
 import com.android.systemui.Dumpable;
+import com.android.systemui.R;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -163,7 +165,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
     private final KeyguardStateController mKeyguardStateController;
     private final NotificationShadeWindowController mNotificationShadeWindowController;
     private final SessionTracker mSessionTracker;
-    private final Context mContext;
+    private final int mConsecutiveFpFailureThreshold;
     private final int mWakeUpDelay;
     private int mMode;
     private BiometricSourceType mBiometricType;
@@ -266,7 +268,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
     private KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
 
     @Inject
-    public BiometricUnlockController(Context context, DozeScrimController dozeScrimController,
+    public BiometricUnlockController(DozeScrimController dozeScrimController,
             KeyguardViewMediator keyguardViewMediator, ScrimController scrimController,
             ShadeController shadeController,
             NotificationShadeWindowController notificationShadeWindowController,
@@ -284,7 +286,6 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
             KeyguardUnlockAnimationController keyguardUnlockAnimationController,
             SessionTracker sessionTracker,
             LatencyTracker latencyTracker) {
-        mContext = context;
         mPowerManager = powerManager;
         mShadeController = shadeController;
         mUpdateMonitor = keyguardUpdateMonitor;
@@ -302,6 +303,8 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         mKeyguardStateController = keyguardStateController;
         mHandler = handler;
         mWakeUpDelay = resources.getInteger(com.android.internal.R.integer.config_wakeUpDelayDoze);
+        mConsecutiveFpFailureThreshold = resources.getInteger(
+                R.integer.fp_consecutive_failure_time_ms);
         mKeyguardBypassController = keyguardBypassController;
         mKeyguardBypassController.setUnlockController(this);
         mMetricsLogger = metricsLogger;
@@ -343,7 +346,15 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
     }
 
     @Override
-    public void onBiometricAcquired(BiometricSourceType biometricSourceType) {
+    public void onBiometricAcquired(BiometricSourceType biometricSourceType,
+            int acquireInfo) {
+        if (BiometricSourceType.FINGERPRINT == biometricSourceType
+                && acquireInfo != BiometricFingerprintConstants.FINGERPRINT_ACQUIRED_GOOD) {
+            return;
+        } else if (BiometricSourceType.FACE == biometricSourceType
+                && acquireInfo != BiometricFaceConstants.FACE_ACQUIRED_GOOD) {
+            return;
+        }
         Trace.beginSection("BiometricUnlockController#onBiometricAcquired");
         releaseBiometricWakeLock();
         if (isWakeAndUnlock()) {
@@ -666,8 +677,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         if (biometricSourceType == BiometricSourceType.FINGERPRINT
                 && mUpdateMonitor.isUdfpsSupported()) {
             long currUptimeMillis = SystemClock.uptimeMillis();
-            if (currUptimeMillis - mLastFpFailureUptimeMillis
-                    < (mStatusBarStateController.isDozing() ? 3500 : 2000)) {
+            if (currUptimeMillis - mLastFpFailureUptimeMillis < mConsecutiveFpFailureThreshold) {
                 mNumConsecutiveFpFailures += 1;
             } else {
                 mNumConsecutiveFpFailures = 1;
@@ -717,7 +727,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
             public void run() {
                 mNotificationShadeWindowController.setForceDozeBrightness(false);
             }
-        }, StatusBar.FADE_KEYGUARD_DURATION_PULSING);
+        }, CentralSurfaces.FADE_KEYGUARD_DURATION_PULSING);
     }
 
     public void finishKeyguardFadingAway() {

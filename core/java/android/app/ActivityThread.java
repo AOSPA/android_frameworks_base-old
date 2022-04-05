@@ -2133,7 +2133,16 @@ public final class ActivityThread extends ClientTransactionHandler
                     Looper.myLooper().quit();
                     break;
                 case RECEIVER:
-                    Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "broadcastReceiveComp");
+                    if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                        ReceiverData rec = (ReceiverData) msg.obj;
+                        if (rec.intent != null) {
+                            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                                    "broadcastReceiveComp: " + rec.intent.getAction());
+                        } else {
+                            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                                    "broadcastReceiveComp");
+                        }
+                    }
                     handleReceiver((ReceiverData)msg.obj);
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
@@ -4460,12 +4469,6 @@ public final class ActivityThread extends ClientTransactionHandler
         // If we are getting ready to gc after going to the background, well
         // we are back active so skip it.
         unscheduleGcIdler();
-
-        // To investigate "duplciate Application objects" bug (b/185177290)
-        if (UserHandle.myUserId() != UserHandle.getUserId(data.info.applicationInfo.uid)) {
-            Slog.wtf(TAG, "handleCreateService called with wrong appinfo UID: myUserId="
-                    + UserHandle.myUserId() + " appinfo.uid=" + data.info.applicationInfo.uid);
-        }
 
         LoadedApk packageInfo = getPackageInfoNoCheck(
                 data.info.applicationInfo, data.compatInfo);

@@ -54,6 +54,7 @@ import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
 import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.CaptioningManager;
 
 import androidx.lifecycle.Observer;
 
@@ -130,6 +131,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private final Receiver mReceiver = new Receiver();
     private final RingerModeObservers mRingerModeObservers;
     private final MediaSessions mMediaSessions;
+    private final CaptioningManager mCaptioningManager;
     protected C mCallbacks = new C();
     private final State mState = new State();
     protected final MediaSessionsCallbacks mMediaSessionsCallbacksW;
@@ -175,7 +177,8 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
             IAudioService iAudioService,
             AccessibilityManager accessibilityManager,
             PackageManager packageManager,
-            WakefulnessLifecycle wakefulnessLifecycle) {
+            WakefulnessLifecycle wakefulnessLifecycle,
+            CaptioningManager captioningManager) {
         mContext = context.getApplicationContext();
         mPackageManager = packageManager;
         mWakefulnessLifecycle = wakefulnessLifecycle;
@@ -200,6 +203,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         mVibrator = vibrator;
         mHasVibrator = mVibrator.hasVibrator();
         mAudioService = iAudioService;
+        mCaptioningManager = captioningManager;
 
         boolean accessibilityVolumeStreamActive = accessibilityManager
                 .isAccessibilityVolumeStreamActive();
@@ -307,20 +311,11 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     public boolean areCaptionsEnabled() {
-        int currentValue = Settings.Secure.getIntForUser(mContext.getContentResolver(),
-                Settings.Secure.ODI_CAPTIONS_ENABLED, 0, UserHandle.USER_CURRENT);
-        return currentValue == 1;
+        return mCaptioningManager.isSystemAudioCaptioningEnabled();
     }
 
     public void setCaptionsEnabled(boolean isEnabled) {
-        Settings.Secure.putIntForUser(mContext.getContentResolver(),
-                Settings.Secure.ODI_CAPTIONS_ENABLED, isEnabled ? 1 : 0, UserHandle.USER_CURRENT);
-    }
-
-    @Override
-    public boolean isCaptionStreamOptedOut() {
-        // TODO(b/129768185): Removing secure setting, to be replaced by sound event listener
-        return false;
+        mCaptioningManager.setSystemAudioCaptioningEnabled(isEnabled);
     }
 
     public void getCaptionsComponentState(boolean fromTooltip) {
@@ -423,6 +418,13 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     private void onGetCaptionsComponentStateW(boolean fromTooltip) {
+        if (mCaptioningManager.isSystemAudioCaptioningUiEnabled()) {
+            mCallbacks.onCaptionComponentStateChanged(true, fromTooltip);
+            return;
+        }
+
+        // TODO(b/220968335): Remove this check once system captions component migrates
+        // to new CaptioningManager APIs.
         try {
             String componentNameString = mContext.getString(
                     com.android.internal.R.string.config_defaultSystemCaptionsService);
@@ -460,11 +462,15 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private boolean checkRoutedToBluetoothW(int stream) {
         boolean changed = false;
         if (stream == AudioManager.STREAM_MUSIC) {
+            // Note: Here we didn't use DEVICE_OUT_BLE_SPEAKER and DEVICE_OUT_BLE_BROADCAST
+            //       Since their values overlap with DEVICE_OUT_EARPIECE and DEVICE_OUT_SPEAKER.
+            //       Anyway, we can check BLE devices by using just DEVICE_OUT_BLE_HEADSET.
             final boolean routedToBluetooth =
                     (mAudio.getDevicesForStream(AudioManager.STREAM_MUSIC) &
                             (AudioManager.DEVICE_OUT_BLUETOOTH_A2DP |
                             AudioManager.DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
-                            AudioManager.DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) != 0;
+                            AudioManager.DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER |
+                            AudioManager.DEVICE_OUT_BLE_HEADSET)) != 0;
             changed |= updateStreamRoutedToBluetoothW(stream, routedToBluetooth);
         }
         return changed;

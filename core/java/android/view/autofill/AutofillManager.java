@@ -58,6 +58,7 @@ import android.os.Looper;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.provider.DeviceConfig;
 import android.service.autofill.AutofillService;
 import android.service.autofill.FillCallback;
 import android.service.autofill.FillEventHistory;
@@ -491,6 +492,15 @@ public final class AutofillManager {
     public static final String DEVICE_CONFIG_AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES =
             "compat_mode_allowed_packages";
 
+    /**
+     * Sets the fill dialog feature enabled or not.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String DEVICE_CONFIG_AUTOFILL_DIALOG_ENABLED =
+            "autofill_dialog_enabled";
+
     /** @hide */
     public static final int RESULT_OK = 0;
     /** @hide */
@@ -539,7 +549,7 @@ public final class AutofillManager {
      */
     public static final int NO_SESSION = Integer.MAX_VALUE;
 
-    private static final boolean HAS_FILL_DIALOG_UI_FEATURE = false;
+    private static final boolean HAS_FILL_DIALOG_UI_FEATURE_DEFAULT = false;
 
     private final IAutoFillManager mService;
 
@@ -654,6 +664,8 @@ public final class AutofillManager {
     private boolean mIsFillRequested;
 
     @Nullable private List<AutofillId> mFillDialogTriggerIds;
+
+    private final boolean mIsFillDialogEnabled;
 
     /** @hide */
     public interface AutofillClient {
@@ -794,6 +806,14 @@ public final class AutofillManager {
         mOptions = context.getAutofillOptions();
         mIsFillRequested = false;
         mRequireAutofill = false;
+
+        mIsFillDialogEnabled = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_AUTOFILL,
+                DEVICE_CONFIG_AUTOFILL_DIALOG_ENABLED,
+                HAS_FILL_DIALOG_UI_FEATURE_DEFAULT);
+        if (sDebug) {
+            Log.d(TAG, "Fill dialog is enabled:" + mIsFillDialogEnabled);
+        }
 
         if (mOptions != null) {
             sDebug = (mOptions.loggingLevel & FLAG_ADD_CLIENT_DEBUG) != 0;
@@ -1081,7 +1101,7 @@ public final class AutofillManager {
     }
 
     private boolean hasFillDialogUiFeature() {
-        return HAS_FILL_DIALOG_UI_FEATURE;
+        return mIsFillDialogEnabled;
     }
 
     /**
@@ -3012,6 +3032,7 @@ public final class AutofillManager {
         }
         pw.print(pfx); pw.print("compat mode enabled: ");
         synchronized (mLock) {
+            pw.print(pfx); pw.print("fill dialog enabled: "); pw.println(mIsFillDialogEnabled);
             if (mCompatibilityBridge != null) {
                 final String pfx2 = pfx + "  ";
                 pw.println("true");
@@ -3100,11 +3121,51 @@ public final class AutofillManager {
     }
 
     /**
-     * Checks the id of autofill whether supported the fill dialog.
+     * If autofill suggestions for a dialog-style UI are available for {@code view}, shows a dialog
+     * allowing the user to select a suggestion and returns {@code true}.
+     * <p>
+     * The dialog may not be available if the autofill service does not support it, or if the
+     * autofill request has not returned a response yet.
+     * <p>
+     * It is recommended to call this method the first time a user focuses on an autofill-able form,
+     * and to avoid showing the input method if the dialog is shown. If this method returns
+     * {@code false}, you should then instead show the input method (assuming that is how the
+     * view normally handles the focus event). If the user re-focuses on the view, you should not
+     * call this method again so as to not disrupt usage of the input method.
      *
-     * @hide
+     * @param view the view for which to show autofill suggestions. This is typically a view
+     *             receiving a focus event. The autofill suggestions shown will include content for
+     *             related views as well.
+     * @return {@code true} if the autofill dialog is being shown
      */
-    public boolean isShowFillDialog(AutofillId id) {
+    // TODO(b/210926084): Consider whether to include the one-time show logic within this method.
+    public boolean showAutofillDialog(@NonNull View view) {
+        Objects.requireNonNull(view);
+        if (shouldShowAutofillDialog(view.getAutofillId())) {
+            // If the id matches a trigger id, this will trigger the fill dialog.
+            notifyViewEntered(view);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Like {@link #showAutofillDialog(View)} but for virtual views.
+     *
+     * @param virtualId id identifying the virtual child inside the parent view.
+     */
+    // TODO(b/210926084): Consider whether to include the one-time show logic within this method.
+    public boolean showAutofillDialog(@NonNull View view, int virtualId) {
+        Objects.requireNonNull(view);
+        if (shouldShowAutofillDialog(getAutofillId(view, virtualId))) {
+            // If the id matches a trigger id, this will trigger the fill dialog.
+            notifyViewEntered(view, virtualId, /* bounds= */ null, /* flags= */ 0);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean shouldShowAutofillDialog(AutofillId id) {
         if (!hasFillDialogUiFeature() || mFillDialogTriggerIds == null) {
             return false;
         }

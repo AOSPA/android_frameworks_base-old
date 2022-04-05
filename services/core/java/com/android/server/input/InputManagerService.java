@@ -41,6 +41,9 @@ import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.database.ContentObserver;
 import android.graphics.PointF;
+import android.hardware.SensorPrivacyManager;
+import android.hardware.SensorPrivacyManager.Sensors;
+import android.hardware.SensorPrivacyManagerInternal;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayViewport;
 import android.hardware.input.IInputDevicesChangedListener;
@@ -141,6 +144,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 
 /*
  * Wraps the C++ InputManager and provides its callbacks.
@@ -548,6 +552,19 @@ public class InputManagerService extends IInputManager.Stub
                 LidSwitchCallback callback = mLidSwitchCallbacks.get(i);
                 callback.notifyLidSwitchChanged(0 /* whenNanos */, switchState == KEY_STATE_UP);
             }
+        }
+
+        // Set the HW mic toggle switch state
+        final int micMuteState = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY,
+                SW_MUTE_DEVICE);
+        if (micMuteState != InputManager.SWITCH_STATE_UNKNOWN) {
+            setSensorPrivacy(Sensors.MICROPHONE, micMuteState != InputManager.SWITCH_STATE_OFF);
+        }
+        // Set the HW camera toggle switch state
+        final int cameraMuteState = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY,
+                SW_CAMERA_LENS_COVER);
+        if (cameraMuteState != InputManager.SWITCH_STATE_UNKNOWN) {
+            setSensorPrivacy(Sensors.CAMERA, cameraMuteState != InputManager.SWITCH_STATE_OFF);
         }
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
@@ -2816,6 +2833,8 @@ public class InputManagerService extends IInputManager.Stub
         if ((switchMask & SW_CAMERA_LENS_COVER_BIT) != 0) {
             final boolean lensCovered = ((switchValues & SW_CAMERA_LENS_COVER_BIT) != 0);
             mWindowManagerCallbacks.notifyCameraLensCoverSwitchChanged(whenNanos, lensCovered);
+            // Use SW_CAMERA_LENS_COVER code for camera privacy toggles
+            setSensorPrivacy(Sensors.CAMERA, lensCovered);
         }
 
         if (mUseDevInputEventForAudioJack && (switchMask & SW_JACK_BITS) != 0) {
@@ -2836,7 +2855,18 @@ public class InputManagerService extends IInputManager.Stub
             final boolean micMute = ((switchValues & SW_MUTE_DEVICE_BIT) != 0);
             AudioManager audioManager = mContext.getSystemService(AudioManager.class);
             audioManager.setMicrophoneMuteFromSwitch(micMute);
+
+            setSensorPrivacy(Sensors.MICROPHONE, micMute);
         }
+    }
+
+    // Set the sensor privacy state based on the hardware toggles switch states
+    private void setSensorPrivacy(@SensorPrivacyManager.Sensors.Sensor int sensor,
+            boolean enablePrivacy) {
+        final SensorPrivacyManagerInternal sensorPrivacyManagerInternal =
+                LocalServices.getService(SensorPrivacyManagerInternal.class);
+        sensorPrivacyManagerInternal.setPhysicalToggleSensorPrivacy(UserHandle.USER_CURRENT, sensor,
+                enablePrivacy);
     }
 
     // Native callback.
@@ -2886,48 +2916,17 @@ public class InputManagerService extends IInputManager.Stub
 
     // Native callback
     @SuppressWarnings("unused")
-    private void notifyWindowUnresponsive(IBinder token, String reason) {
-        int gestureMonitorPid = -1;
-        synchronized (mInputMonitors) {
-            final GestureMonitorSpyWindow gestureMonitor = mInputMonitors.get(token);
-            if (gestureMonitor != null) {
-                gestureMonitorPid = gestureMonitor.mWindowHandle.ownerPid;
-            }
-        }
-        if (gestureMonitorPid != -1) {
-            mWindowManagerCallbacks.notifyGestureMonitorUnresponsive(gestureMonitorPid, reason);
-            return;
-        }
-        mWindowManagerCallbacks.notifyWindowUnresponsive(token, reason);
+    private void notifyWindowUnresponsive(IBinder token, int pid, boolean isPidValid,
+            String reason) {
+        mWindowManagerCallbacks.notifyWindowUnresponsive(token,
+                isPidValid ? OptionalInt.of(pid) : OptionalInt.empty(), reason);
     }
 
     // Native callback
     @SuppressWarnings("unused")
-    private void notifyMonitorUnresponsive(int pid, String reason) {
-        mWindowManagerCallbacks.notifyGestureMonitorUnresponsive(pid, reason);
-    }
-
-    // Native callback
-    @SuppressWarnings("unused")
-    private void notifyWindowResponsive(IBinder token) {
-        int gestureMonitorPid = -1;
-        synchronized (mInputMonitors) {
-            final GestureMonitorSpyWindow gestureMonitor = mInputMonitors.get(token);
-            if (gestureMonitor != null) {
-                gestureMonitorPid = gestureMonitor.mWindowHandle.ownerPid;
-            }
-        }
-        if (gestureMonitorPid != -1) {
-            mWindowManagerCallbacks.notifyGestureMonitorResponsive(gestureMonitorPid);
-            return;
-        }
-        mWindowManagerCallbacks.notifyWindowResponsive(token);
-    }
-
-    // Native callback
-    @SuppressWarnings("unused")
-    private void notifyMonitorResponsive(int pid) {
-        mWindowManagerCallbacks.notifyGestureMonitorResponsive(pid);
+    private void notifyWindowResponsive(IBinder token, int pid, boolean isPidValid) {
+        mWindowManagerCallbacks.notifyWindowResponsive(token,
+                isPidValid ? OptionalInt.of(pid) : OptionalInt.empty());
     }
 
     // Native callback.
@@ -3300,34 +3299,22 @@ public class InputManagerService extends IInputManager.Stub
         void notifyNoFocusedWindowAnr(InputApplicationHandle applicationHandle);
 
         /**
-         * Notify the window manager about a gesture monitor that is unresponsive.
-         *
-         * @param pid the pid of the gesture monitor process
-         * @param reason the reason why this connection is unresponsive
-         */
-        void notifyGestureMonitorUnresponsive(int pid, @NonNull String reason);
-
-        /**
          * Notify the window manager about a window that is unresponsive.
          *
          * @param token the token that can be used to look up the window
+         * @param pid the pid of the window owner, if known
          * @param reason the reason why this connection is unresponsive
          */
-        void notifyWindowUnresponsive(@NonNull IBinder token, @NonNull String reason);
-
-        /**
-         * Notify the window manager about a gesture monitor that has become responsive.
-         *
-         * @param pid the pid of the gesture monitor process
-         */
-        void notifyGestureMonitorResponsive(int pid);
+        void notifyWindowUnresponsive(@NonNull IBinder token, @NonNull OptionalInt pid,
+                @NonNull String reason);
 
         /**
          * Notify the window manager about a window that has become responsive.
          *
          * @param token the token that can be used to look up the window
+         * @param pid the pid of the window owner, if known
          */
-        void notifyWindowResponsive(@NonNull IBinder token);
+        void notifyWindowResponsive(@NonNull IBinder token, @NonNull OptionalInt pid);
 
         /**
          * This callback is invoked when an event first arrives to InputDispatcher and before it is

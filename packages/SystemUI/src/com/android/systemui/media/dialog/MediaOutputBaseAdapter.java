@@ -18,6 +18,7 @@ package com.android.systemui.media.dialog;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.app.WallpaperColors;
 import android.content.Context;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
@@ -56,7 +57,7 @@ public abstract class MediaOutputBaseAdapter extends
     static final int CUSTOMIZED_ITEM_GROUP = 2;
     static final int CUSTOMIZED_ITEM_DYNAMIC_GROUP = 3;
 
-    final MediaOutputController mController;
+    protected final MediaOutputController mController;
 
     private int mMargin;
     private boolean mIsAnimating;
@@ -84,6 +85,10 @@ public abstract class MediaOutputBaseAdapter extends
         return null;
     }
 
+    void updateColorScheme(WallpaperColors wallpaperColors, boolean isDarkTheme) {
+        mController.setCurrentColorScheme(wallpaperColors, isDarkTheme);
+    }
+
     CharSequence getItemTitle(MediaDevice device) {
         return device.getName();
     }
@@ -103,6 +108,10 @@ public abstract class MediaOutputBaseAdapter extends
 
     int getCurrentActivePosition() {
         return mCurrentActivePosition;
+    }
+
+    public MediaOutputController getController() {
+        return mController;
     }
 
     /**
@@ -168,6 +177,9 @@ public abstract class MediaOutputBaseAdapter extends
                                     .mutate() : mContext.getDrawable(
                             R.drawable.media_output_item_background)
                             .mutate();
+            backgroundDrawable.setColorFilter(new PorterDuffColorFilter(
+                    mController.getColorItemBackground(),
+                    PorterDuff.Mode.SRC_IN));
             mItemLayout.setBackground(backgroundDrawable);
             mProgressBar.setVisibility(showProgressBar ? View.VISIBLE : View.GONE);
             mSeekBar.setAlpha(1);
@@ -203,8 +215,13 @@ public abstract class MediaOutputBaseAdapter extends
             mStatusIcon.setVisibility(showStatus ? View.VISIBLE : View.GONE);
             mSeekBar.setAlpha(1);
             mSeekBar.setVisibility(showSeekBar ? View.VISIBLE : View.GONE);
-            mItemLayout.setBackground(mContext.getDrawable(R.drawable.media_output_item_background)
-                    .mutate());
+            final Drawable backgroundDrawable = mContext.getDrawable(
+                            R.drawable.media_output_item_background)
+                    .mutate();
+            backgroundDrawable.setColorFilter(new PorterDuffColorFilter(
+                    mController.getColorItemBackground(),
+                    PorterDuff.Mode.SRC_IN));
+            mItemLayout.setBackground(backgroundDrawable);
             mProgressBar.setVisibility(showProgressBar ? View.VISIBLE : View.GONE);
             mSubTitleText.setVisibility(showSubtitle ? View.VISIBLE : View.GONE);
             mTwoLineTitleText.setTranslationY(0);
@@ -232,7 +249,7 @@ public abstract class MediaOutputBaseAdapter extends
             mSeekBar.setMin(0);
             final int currentVolume = device.getCurrentVolume();
             if (mSeekBar.getProgress() != currentVolume) {
-                mSeekBar.setProgress(currentVolume);
+                mSeekBar.setProgress(currentVolume, true);
             }
             mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
@@ -261,7 +278,7 @@ public abstract class MediaOutputBaseAdapter extends
             mSeekBar.setMin(0);
             final int currentVolume = mController.getSessionVolume();
             if (mSeekBar.getProgress() != currentVolume) {
-                mSeekBar.setProgress(currentVolume);
+                mSeekBar.setProgress(currentVolume, true);
             }
             mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override

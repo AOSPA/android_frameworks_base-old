@@ -28,8 +28,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.R;
+import com.android.systemui.broadcast.BroadcastSender;
 import com.android.systemui.dagger.SysUISingleton;
-import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 
 /**
  * Dialog for media output transferring.
@@ -38,10 +38,9 @@ import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 public class MediaOutputDialog extends MediaOutputBaseDialog {
     final UiEventLogger mUiEventLogger;
 
-    MediaOutputDialog(Context context, boolean aboveStatusbar, MediaOutputController
-            mediaOutputController, UiEventLogger uiEventLogger,
-            SystemUIDialogManager dialogManager) {
-        super(context, mediaOutputController, dialogManager);
+    MediaOutputDialog(Context context, boolean aboveStatusbar, BroadcastSender broadcastSender,
+            MediaOutputController mediaOutputController, UiEventLogger uiEventLogger) {
+        super(context, broadcastSender, mediaOutputController);
         mUiEventLogger = uiEventLogger;
         mAdapter = new MediaOutputAdapter(mMediaOutputController, this);
         if (!aboveStatusbar) {

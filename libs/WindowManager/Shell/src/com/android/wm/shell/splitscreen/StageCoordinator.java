@@ -163,6 +163,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
     // and exit, since exit itself can trigger a number of changes that update the stages.
     private boolean mShouldUpdateRecents;
     private boolean mExitSplitScreenOnHide;
+    private boolean mIsDividerRemoteAnimating;
 
     /** The target stage to dismiss to when unlock after folded. */
     @StageType
@@ -353,8 +354,8 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         mSplitLayout.setDivideRatio(splitRatio);
         // Build a request WCT that will launch both apps such that task 0 is on the main stage
         // while task 1 is on the side stage.
-        mMainStage.activate(getMainStageBounds(), wct, false /* reparent */);
-        mSideStage.setBounds(getSideStageBounds(), wct);
+        mMainStage.activate(wct, false /* reparent */);
+        updateWindowBounds(mSplitLayout, wct);
 
         // Make sure the launch options will put tasks in the corresponding split roots
         addActivityOptions(mainOptions, mMainStage);
@@ -372,111 +373,23 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
     void startTasksWithLegacyTransition(int mainTaskId, @Nullable Bundle mainOptions,
             int sideTaskId, @Nullable Bundle sideOptions, @SplitPosition int sidePosition,
             float splitRatio, RemoteAnimationAdapter adapter) {
-        // Init divider first to make divider leash for remote animation target.
-        mSplitLayout.init();
-        // Set false to avoid record new bounds with old task still on top;
-        mShouldUpdateRecents = false;
-        final WindowContainerTransaction wct = new WindowContainerTransaction();
-        final WindowContainerTransaction evictWct = new WindowContainerTransaction();
-        prepareEvictChildTasks(SPLIT_POSITION_TOP_OR_LEFT, evictWct);
-        prepareEvictChildTasks(SPLIT_POSITION_BOTTOM_OR_RIGHT, evictWct);
-        // Need to add another wrapper here in shell so that we can inject the divider bar
-        // and also manage the process elevation via setRunningRemote
-        IRemoteAnimationRunner wrapper = new IRemoteAnimationRunner.Stub() {
-            @Override
-            public void onAnimationStart(@WindowManager.TransitionOldType int transit,
-                    RemoteAnimationTarget[] apps,
-                    RemoteAnimationTarget[] wallpapers,
-                    RemoteAnimationTarget[] nonApps,
-                    final IRemoteAnimationFinishedCallback finishedCallback) {
-                RemoteAnimationTarget[] augmentedNonApps =
-                        new RemoteAnimationTarget[nonApps.length + 1];
-                for (int i = 0; i < nonApps.length; ++i) {
-                    augmentedNonApps[i] = nonApps[i];
-                }
-                augmentedNonApps[augmentedNonApps.length - 1] = getDividerBarLegacyTarget();
-
-                IRemoteAnimationFinishedCallback wrapCallback =
-                        new IRemoteAnimationFinishedCallback.Stub() {
-                            @Override
-                            public void onAnimationFinished() throws RemoteException {
-                                mShouldUpdateRecents = true;
-                                mSyncQueue.queue(evictWct);
-                                mSyncQueue.runInSync(t -> setDividerVisibility(true, t));
-                                finishedCallback.onAnimationFinished();
-                            }
-                        };
-                try {
-                    try {
-                        ActivityTaskManager.getService().setRunningRemoteTransitionDelegate(
-                                adapter.getCallingApplication());
-                    } catch (SecurityException e) {
-                        Slog.e(TAG, "Unable to boost animation thread. This should only happen"
-                                + " during unit tests");
-                    }
-                    adapter.getRunner().onAnimationStart(transit, apps, wallpapers,
-                            augmentedNonApps, wrapCallback);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error starting remote animation", e);
-                }
-            }
-
-            @Override
-            public void onAnimationCancelled() {
-                mShouldUpdateRecents = true;
-                mSyncQueue.queue(evictWct);
-                mSyncQueue.runInSync(t -> setDividerVisibility(true, t));
-                try {
-                    adapter.getRunner().onAnimationCancelled();
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error starting remote animation", e);
-                }
-            }
-        };
-        RemoteAnimationAdapter wrappedAdapter = new RemoteAnimationAdapter(
-                wrapper, adapter.getDuration(), adapter.getStatusBarTransitionDelay());
-
-        if (mainOptions == null) {
-            mainOptions = ActivityOptions.makeRemoteAnimation(wrappedAdapter).toBundle();
-        } else {
-            ActivityOptions mainActivityOptions = ActivityOptions.fromBundle(mainOptions);
-            mainActivityOptions.update(ActivityOptions.makeRemoteAnimation(wrappedAdapter));
-            mainOptions = mainActivityOptions.toBundle();
-        }
-
-        sideOptions = sideOptions != null ? sideOptions : new Bundle();
-        setSideStagePosition(sidePosition, wct);
-
-        mSplitLayout.setDivideRatio(splitRatio);
-        if (mMainStage.isActive()) {
-            mMainStage.moveToTop(getMainStageBounds(), wct);
-        } else {
-            // Build a request WCT that will launch both apps such that task 0 is on the main stage
-            // while task 1 is on the side stage.
-            mMainStage.activate(getMainStageBounds(), wct, false /* reparent */);
-        }
-        mSideStage.moveToTop(getSideStageBounds(), wct);
-
-        // Make sure the launch options will put tasks in the corresponding split roots
-        addActivityOptions(mainOptions, mMainStage);
-        addActivityOptions(sideOptions, mSideStage);
-
-        // Add task launch requests
-        wct.startTask(mainTaskId, mainOptions);
-        wct.startTask(sideTaskId, sideOptions);
-
-        // Using legacy transitions, so we can't use blast sync since it conflicts.
-        mTaskOrganizer.applyTransaction(wct);
+        startWithLegacyTransition(mainTaskId, sideTaskId, null /* pendingIntent */,
+                null /* fillInIntent */, mainOptions, sideOptions, sidePosition, splitRatio,
+                adapter);
     }
 
     /** Start an intent and a task ordered by {@code intentFirst}. */
     void startIntentAndTaskWithLegacyTransition(PendingIntent pendingIntent, Intent fillInIntent,
-            int taskId, boolean intentFirst, @Nullable Bundle mainOptions,
-            @Nullable Bundle sideOptions, @SplitPosition int sidePosition, float splitRatio,
-            RemoteAnimationAdapter adapter) {
-        // TODO: try pulling the first chunk of this method into a method so that it can be shared
-        // with startTasksWithLegacyTransition. So far attempts to do so result in failure in split.
+            int taskId, @Nullable Bundle mainOptions, @Nullable Bundle sideOptions,
+            @SplitPosition int sidePosition, float splitRatio, RemoteAnimationAdapter adapter) {
+        startWithLegacyTransition(taskId, INVALID_TASK_ID, pendingIntent, fillInIntent,
+                mainOptions, sideOptions, sidePosition, splitRatio, adapter);
+    }
 
+    private void startWithLegacyTransition(int mainTaskId, int sideTaskId,
+            @Nullable PendingIntent pendingIntent, @Nullable Intent fillInIntent,
+            @Nullable Bundle mainOptions, @Nullable Bundle sideOptions,
+            @SplitPosition int sidePosition, float splitRatio, RemoteAnimationAdapter adapter) {
         // Init divider first to make divider leash for remote animation target.
         mSplitLayout.init();
         // Set false to avoid record new bounds with old task still on top;
@@ -494,6 +407,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                     RemoteAnimationTarget[] wallpapers,
                     RemoteAnimationTarget[] nonApps,
                     final IRemoteAnimationFinishedCallback finishedCallback) {
+                mIsDividerRemoteAnimating = true;
                 RemoteAnimationTarget[] augmentedNonApps =
                         new RemoteAnimationTarget[nonApps.length + 1];
                 for (int i = 0; i < nonApps.length; ++i) {
@@ -505,6 +419,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                         new IRemoteAnimationFinishedCallback.Stub() {
                             @Override
                             public void onAnimationFinished() throws RemoteException {
+                                mIsDividerRemoteAnimating = false;
                                 mShouldUpdateRecents = true;
                                 mSyncQueue.queue(evictWct);
                                 mSyncQueue.runInSync(t -> setDividerVisibility(true, t));
@@ -528,6 +443,7 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
             @Override
             public void onAnimationCancelled() {
+                mIsDividerRemoteAnimating = false;
                 mShouldUpdateRecents = true;
                 mSyncQueue.queue(evictWct);
                 mSyncQueue.runInSync(t -> setDividerVisibility(true, t));
@@ -554,29 +470,31 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
         mSplitLayout.setDivideRatio(splitRatio);
         if (mMainStage.isActive()) {
-            mMainStage.moveToTop(getMainStageBounds(), wct);
+            mMainStage.moveToTop(wct);
         } else {
             // Build a request WCT that will launch both apps such that task 0 is on the main stage
             // while task 1 is on the side stage.
-            mMainStage.activate(getMainStageBounds(), wct, false /* reparent */);
+            mMainStage.activate(wct, false /* reparent */);
         }
-        mSideStage.moveToTop(getSideStageBounds(), wct);
+        mSideStage.moveToTop(wct);
+        updateWindowBounds(mSplitLayout, wct);
 
         // Make sure the launch options will put tasks in the corresponding split roots
         addActivityOptions(mainOptions, mMainStage);
         addActivityOptions(sideOptions, mSideStage);
 
         // Add task launch requests
-        if (intentFirst) {
-            wct.sendPendingIntent(pendingIntent, fillInIntent, mainOptions);
-            wct.startTask(taskId, sideOptions);
-        } else {
-            wct.startTask(taskId, mainOptions);
+        if (pendingIntent != null && fillInIntent != null) {
+            wct.startTask(mainTaskId, mainOptions);
             wct.sendPendingIntent(pendingIntent, fillInIntent, sideOptions);
+        } else {
+            wct.startTask(mainTaskId, mainOptions);
+            wct.startTask(sideTaskId, sideOptions);
         }
 
         // Using legacy transitions, so we can't use blast sync since it conflicts.
         mTaskOrganizer.applyTransaction(wct);
+        mSyncQueue.runInSync(t -> updateSurfaceBounds(mSplitLayout, t));
     }
 
     /**
@@ -857,13 +775,15 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             setSideStagePosition(startPosition, wct);
             mSideStage.addTask(taskInfo, wct);
         }
-        mMainStage.activate(getMainStageBounds(), wct, true /* includingTopTask */);
-        mSideStage.moveToTop(getSideStageBounds(), wct);
+        mMainStage.activate(wct, true /* includingTopTask */);
+        mSideStage.moveToTop(wct);
+        updateWindowBounds(mSplitLayout, wct);
     }
 
     void finishEnterSplitScreen(SurfaceControl.Transaction t) {
         mSplitLayout.init();
         setDividerVisibility(true, t);
+        updateSurfaceBounds(mSplitLayout, t);
         setSplitsVisible(true);
         mShouldUpdateRecents = true;
         updateRecentTasksSplitPair();
@@ -1055,14 +975,15 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
     private void applyDividerVisibility(SurfaceControl.Transaction t) {
         final SurfaceControl dividerLeash = mSplitLayout.getDividerLeash();
-        if (dividerLeash == null) return;
+        if (mIsDividerRemoteAnimating || dividerLeash == null) return;
 
         if (mDividerVisible) {
             t.show(dividerLeash);
             t.setAlpha(dividerLeash, 1);
             t.setLayer(dividerLeash, SPLIT_DIVIDER_LAYER);
             t.setPosition(dividerLeash,
-                    mSplitLayout.getDividerBounds().left, mSplitLayout.getDividerBounds().top);
+                    mSplitLayout.getRefDividerBounds().left,
+                    mSplitLayout.getRefDividerBounds().top);
         } else {
             t.hide(dividerLeash);
         }
@@ -1079,10 +1000,9 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                 // Exit to side stage if main stage no longer has children.
                 exitSplitScreen(mSideStage, EXIT_REASON_APP_FINISHED);
             }
-        } else if (isSideStage) {
+        } else if (isSideStage && !mMainStage.isActive()) {
             final WindowContainerTransaction wct = new WindowContainerTransaction();
             mSplitLayout.init();
-            // Make sure the main stage is active.
             prepareEnterSplitScreen(wct);
             mSyncQueue.queue(wct);
             mSyncQueue.runInSync(t -> {
@@ -1197,9 +1117,9 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             return SPLIT_POSITION_UNDEFINED;
         }
 
-        if (token.equals(mMainStage.mRootTaskInfo.getToken())) {
+        if (mMainStage.containsToken(token)) {
             return getMainStagePosition();
-        } else if (token.equals(mSideStage.mRootTaskInfo.getToken())) {
+        } else if (mSideStage.containsToken(token)) {
             return getSideStagePosition();
         }
 

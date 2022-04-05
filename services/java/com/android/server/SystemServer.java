@@ -41,6 +41,7 @@ import android.app.usage.UsageStatsManagerInternal;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.IPackageManager;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
@@ -218,8 +219,6 @@ import dalvik.system.PathClassLoader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
-import com.google.android.startop.iorap.IorapForwardingService;
-
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -268,6 +267,10 @@ public final class SystemServer implements Dumpable {
             "com.android.server.companion.virtual.VirtualDeviceManagerService";
     private static final String STATS_COMPANION_APEX_PATH =
             "/apex/com.android.os.statsd/javalib/service-statsd.jar";
+    private static final String SCHEDULING_APEX_PATH =
+            "/apex/com.android.scheduling/javalib/service-scheduling.jar";
+    private static final String REBOOT_READINESS_LIFECYCLE_CLASS =
+            "com.android.server.scheduling.RebootReadinessManagerService$Lifecycle";
     private static final String CONNECTIVITY_SERVICE_APEX_PATH =
             "/apex/com.android.tethering/javalib/service-connectivity.jar";
     private static final String STATS_COMPANION_LIFECYCLE_CLASS =
@@ -386,8 +389,8 @@ public final class SystemServer implements Dumpable {
             "com.android.server.DeviceIdleController";
     private static final String BLOB_STORE_MANAGER_SERVICE_CLASS =
             "com.android.server.blob.BlobStoreManagerService";
-    private static final String APP_SEARCH_MANAGER_SERVICE_CLASS =
-            "com.android.server.appsearch.AppSearchManagerService";
+    private static final String APPSEARCH_MODULE_LIFECYCLE_CLASS =
+            "com.android.server.appsearch.AppSearchModule$Lifecycle";
     private static final String ISOLATED_COMPILATION_SERVICE_CLASS =
             "com.android.server.compos.IsolatedCompilationService";
     private static final String ROLLBACK_MANAGER_SERVICE_CLASS =
@@ -417,9 +420,13 @@ public final class SystemServer implements Dumpable {
     private static final String UWB_SERVICE_CLASS = "com.android.server.uwb.UwbService";
     private static final String SAFETY_CENTER_SERVICE_CLASS =
             "com.android.safetycenter.SafetyCenterService";
+    private static final String BLUETOOTH_SERVICE_CLASS =
+            "com.android.server.bluetooth.BluetoothService";
 
-    private static final String SUPPLEMENTALPROCESS_SERVICE_CLASS =
-            "com.android.server.supplementalprocess.SupplementalProcessManagerService$Lifecycle";
+    private static final String SDK_SANDBOX_MANAGER_SERVICE_CLASS =
+            "com.android.server.sdksandbox.SdkSandboxManagerService$Lifecycle";
+    private static final String AD_SERVICES_MANAGER_SERVICE_CLASS =
+            "com.android.server.adservices.AdServicesManagerService$Lifecycle";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -1223,12 +1230,15 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(domainVerificationService);
         t.traceEnd();
 
+        IPackageManager iPackageManager;
         t.traceBegin("StartPackageManagerService");
         try {
             Watchdog.getInstance().pauseWatchingCurrentThread("packagemanagermain");
-            mPackageManagerService = PackageManagerService.main(mSystemContext, installer,
-                    domainVerificationService, mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF,
-                    mOnlyCore);
+            Pair<PackageManagerService, IPackageManager> pmsPair = PackageManagerService.main(
+                    mSystemContext, installer, domainVerificationService,
+                    mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF, mOnlyCore);
+            mPackageManagerService = pmsPair.first;
+            iPackageManager = pmsPair.second;
         } finally {
             Watchdog.getInstance().resumeWatchingCurrentThread("packagemanagermain");
         }
@@ -1236,7 +1246,7 @@ public final class SystemServer implements Dumpable {
         // Now that the package manager has started, register the dex load reporter to capture any
         // dex files loaded by system server.
         // These dex files will be optimized by the BackgroundDexOptService.
-        SystemServerDexLoadReporter.configureSystemServerDexReporter(mPackageManagerService);
+        SystemServerDexLoadReporter.configureSystemServerDexReporter(iPackageManager);
 
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
@@ -1627,7 +1637,7 @@ public final class SystemServer implements Dumpable {
                 Slog.i(TAG, "No Bluetooth Service (Bluetooth Hardware Not Present)");
             } else {
                 t.traceBegin("StartBluetoothService");
-                mSystemServiceManager.startService(BluetoothService.class);
+                mSystemServiceManager.startService(BLUETOOTH_SERVICE_CLASS);
                 t.traceEnd();
             }
 
@@ -1641,10 +1651,6 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("PinnerService");
             mSystemServiceManager.startService(PinnerService.class);
-            t.traceEnd();
-
-            t.traceBegin("IorapForwardingService");
-            mSystemServiceManager.startService(IorapForwardingService.class);
             t.traceEnd();
 
             mSystemServiceManager.startService(ActivityTriggerService.class);
@@ -2612,6 +2618,12 @@ public final class SystemServer implements Dumpable {
                 STATS_COMPANION_LIFECYCLE_CLASS, STATS_COMPANION_APEX_PATH);
         t.traceEnd();
 
+        // Reboot Readiness
+        t.traceBegin("StartRebootReadinessManagerService");
+        mSystemServiceManager.startServiceFromJar(
+                REBOOT_READINESS_LIFECYCLE_CLASS, SCHEDULING_APEX_PATH);
+        t.traceEnd();
+
         // Statsd pulled atoms
         t.traceBegin("StartStatsPullAtomService");
         mSystemServiceManager.startService(STATS_PULL_ATOM_SERVICE_CLASS);
@@ -2627,9 +2639,14 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(IncidentCompanionService.class);
         t.traceEnd();
 
-        // Supplemental Process
-        t.traceBegin("StartSupplementalProcessManagerService");
-        mSystemServiceManager.startService(SUPPLEMENTALPROCESS_SERVICE_CLASS);
+        // SdkSandboxManagerService
+        t.traceBegin("StarSdkSandboxManagerService");
+        mSystemServiceManager.startService(SDK_SANDBOX_MANAGER_SERVICE_CLASS);
+        t.traceEnd();
+
+        // AdServicesManagerService (PP API service)
+        t.traceBegin("StartAdServicesManagerService");
+        mSystemServiceManager.startService(AD_SERVICES_MANAGER_SERVICE_CLASS);
         t.traceEnd();
 
         if (safeMode) {
@@ -2751,15 +2768,6 @@ public final class SystemServer implements Dumpable {
             systemTheme.rebase();
         }
 
-        t.traceBegin("MakePowerManagerServiceReady");
-        try {
-            // TODO: use boot phase
-            mPowerManagerService.systemReady();
-        } catch (Throwable e) {
-            reportWtf("making Power Manager Service ready", e);
-        }
-        t.traceEnd();
-
         // Permission policy service
         t.traceBegin("StartPermissionPolicyService");
         mSystemServiceManager.startService(PermissionPolicyService.class);
@@ -2817,8 +2825,8 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(SAFETY_CENTER_SERVICE_CLASS);
         t.traceEnd();
 
-        t.traceBegin("AppSearchManagerService");
-        mSystemServiceManager.startService(APP_SEARCH_MANAGER_SERVICE_CLASS);
+        t.traceBegin("AppSearchModule");
+        mSystemServiceManager.startService(APPSEARCH_MODULE_LIFECYCLE_CLASS);
         t.traceEnd();
 
         if (SystemProperties.getBoolean("ro.config.isolated_compilation_enabled", false)) {

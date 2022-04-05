@@ -91,6 +91,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -292,6 +293,7 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         LocalServices.removeServiceForTest(PackageManagerInternal.class);
         LocalServices.addService(PackageManagerInternal.class, mPackageManagerInternal);
         mContext.addMockSystemService(Context.ALARM_SERVICE, mAlarmManager);
+        when(mUm.getProfileIds(0, false)).thenReturn(new int[]{0});
 
         doNothing().when(mContext).sendBroadcastAsUser(any(), any(), any());
 
@@ -314,6 +316,11 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
                     return getApplicationInfo((String) args[0], mUid);
                 });
         when(mPackageManagerClient.getPackageUidAsUser(any(), anyInt())).thenReturn(mUid);
+        when(mPackageManagerInternal.isSameApp(anyString(), anyInt(), anyInt())).thenAnswer(
+                (Answer<Boolean>) invocation -> {
+                    Object[] args = invocation.getArguments();
+                    return (int) args[1] == mUid;
+                });
         final LightsManager mockLightsManager = mock(LightsManager.class);
         when(mockLightsManager.getLight(anyInt())).thenReturn(mock(LogicalLight.class));
         when(mAudioManager.getRingerModeInternal()).thenReturn(AudioManager.RINGER_MODE_NORMAL);
@@ -599,9 +606,9 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
 
     @Test
     public void testUpdateAppNotifyCreatorBlock() throws Exception {
-        when(mAppOpsManager.checkOpNoThrow(anyInt(), eq(mUid), eq(PKG))).thenReturn(MODE_IGNORED);
+        when(mPermissionHelper.hasPermission(mUid)).thenReturn(true);
 
-        mService.mAppOpsCallback.opChanged(0, mUid, PKG);
+        mBinderService.setNotificationsEnabledForPackage(PKG, mUid, false);
         Thread.sleep(500);
         waitForIdle();
 
@@ -611,14 +618,14 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         assertEquals(NotificationManager.ACTION_APP_BLOCK_STATE_CHANGED,
                 captor.getValue().getAction());
         assertEquals(PKG, captor.getValue().getPackage());
-        assertFalse(captor.getValue().getBooleanExtra(EXTRA_BLOCKED_STATE, true));
+        assertTrue(captor.getValue().getBooleanExtra(EXTRA_BLOCKED_STATE, true));
     }
 
     @Test
     public void testUpdateAppNotifyCreatorUnblock() throws Exception {
-        when(mAppOpsManager.checkOpNoThrow(anyInt(), eq(mUid), eq(PKG))).thenReturn(MODE_ALLOWED);
+        when(mPermissionHelper.hasPermission(mUid)).thenReturn(false);
 
-        mService.mAppOpsCallback.opChanged(0, mUid, PKG);
+        mBinderService.setNotificationsEnabledForPackage(PKG, mUid, true);
         Thread.sleep(500);
         waitForIdle();
 
@@ -656,7 +663,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         when(mPermissionHelper.hasPermission(anyInt())).thenReturn(false);
 
         NotificationManagerService.PostNotificationRunnable runnable =
-                mService.new PostNotificationRunnable(r.getKey());
+                mService.new PostNotificationRunnable(r.getKey(), r.getSbn().getPackageName(),
+                        r.getUid(), SystemClock.elapsedRealtime());
         runnable.run();
         waitForIdle();
 
@@ -789,7 +797,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
 
         mService.addEnqueuedNotification(r);
         NotificationManagerService.PostNotificationRunnable runnable =
-                mService.new PostNotificationRunnable(r.getKey());
+                mService.new PostNotificationRunnable(r.getKey(), r.getSbn().getPackageName(),
+                        r.getUid(), SystemClock.elapsedRealtime());
         runnable.run();
         waitForIdle();
 
@@ -805,7 +814,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         r = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
 
         mService.addEnqueuedNotification(r);
-        runnable = mService.new PostNotificationRunnable(r.getKey());
+        runnable = mService.new PostNotificationRunnable(r.getKey(), r.getSbn().getPackageName(),
+                r.getUid(), SystemClock.elapsedRealtime());
         runnable.run();
         waitForIdle();
 
@@ -821,7 +831,8 @@ public class NotificationPermissionMigrationTest extends UiServiceTestCase {
         r = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
 
         mService.addEnqueuedNotification(r);
-        runnable = mService.new PostNotificationRunnable(r.getKey());
+        runnable = mService.new PostNotificationRunnable(r.getKey(), r.getSbn().getPackageName(),
+                r.getUid(), SystemClock.elapsedRealtime());
         runnable.run();
         waitForIdle();
 

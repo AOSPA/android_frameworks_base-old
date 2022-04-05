@@ -290,7 +290,8 @@ interface IWindowSession {
     /**
      * Called when the keep-clear areas for this window have changed.
      */
-    oneway void reportKeepClearAreasChanged(IWindow window, in List<Rect> keepClearRects);
+    oneway void reportKeepClearAreasChanged(IWindow window, in List<Rect> restricted,
+           in List<Rect> unrestricted);
 
     /**
     * Request the server to call setInputWindowInfo on a given Surface, and return
@@ -298,7 +299,7 @@ interface IWindowSession {
     */
     void grantInputChannel(int displayId, in SurfaceControl surface, in IWindow window,
             in IBinder hostInputToken, int flags, int privateFlags, int type,
-            in IBinder focusGrantToken, out InputChannel outInputChannel);
+            in IBinder focusGrantToken, String inputHandleName, out InputChannel outInputChannel);
 
     /**
      * Update the flags on an input channel associated with a particular surface.
@@ -337,8 +338,10 @@ interface IWindowSession {
      *
      * @param window The token for the window to set the callback to.
      * @param callback The {@link IOnBackInvokedCallback} to set.
+     * @param priority The priority of the callback.
      */
-    oneway void setOnBackInvokedCallback(IWindow window, IOnBackInvokedCallback callback);
+    oneway void setOnBackInvokedCallback(
+            IWindow window, IOnBackInvokedCallback callback, int priority);
 
     /**
      * Clears a touchable region set by {@link #setInsets}.

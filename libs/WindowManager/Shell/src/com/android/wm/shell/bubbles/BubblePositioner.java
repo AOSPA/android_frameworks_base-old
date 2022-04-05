@@ -20,6 +20,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.annotation.IntDef;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Insets;
 import android.graphics.PointF;
@@ -66,7 +67,11 @@ public class BubblePositioner {
     /** The max percent of screen width to use for the flyout on phone. */
     public static final float FLYOUT_MAX_WIDTH_PERCENT = 0.6f;
     /** The percent of screen width that should be used for the expanded view on a large screen. **/
-    public static final float EXPANDED_VIEW_LARGE_SCREEN_WIDTH_PERCENT = 0.72f;
+    private static final float EXPANDED_VIEW_LARGE_SCREEN_LANDSCAPE_WIDTH_PERCENT = 0.48f;
+    /** The percent of screen width that should be used for the expanded view on a large screen. **/
+    private static final float EXPANDED_VIEW_LARGE_SCREEN_PORTRAIT_WIDTH_PERCENT = 0.70f;
+    /** The percent of screen width that should be used for the expanded view on a small tablet. **/
+    private static final float EXPANDED_VIEW_SMALL_TABLET_WIDTH_PERCENT = 0.72f;
 
     private Context mContext;
     private WindowManager mWindowManager;
@@ -76,6 +81,7 @@ public class BubblePositioner {
     private boolean mImeVisible;
     private int mImeHeight;
     private boolean mIsLargeScreen;
+    private boolean mIsSmallTablet;
 
     private Rect mPositionRect;
     private int mDefaultMaxBubbles;
@@ -85,7 +91,8 @@ public class BubblePositioner {
 
     private int mExpandedViewMinHeight;
     private int mExpandedViewLargeScreenWidth;
-    private int mExpandedViewLargeScreenInset;
+    private int mExpandedViewLargeScreenInsetClosestEdge;
+    private int mExpandedViewLargeScreenInsetFurthestEdge;
 
     private int mOverflowWidth;
     private int mExpandedViewPadding;
@@ -112,10 +119,6 @@ public class BubblePositioner {
         update();
     }
 
-    public void setRotation(int rotation) {
-        mRotation = rotation;
-    }
-
     /**
      * Available space and inset information. Call this when config changes
      * occur or when added to a window.
@@ -130,17 +133,26 @@ public class BubblePositioner {
                 | WindowInsets.Type.statusBars()
                 | WindowInsets.Type.displayCutout());
 
-        mIsLargeScreen = mContext.getResources().getConfiguration().smallestScreenWidthDp >= 600;
+        final Rect bounds = windowMetrics.getBounds();
+        Configuration config = mContext.getResources().getConfiguration();
+        mIsLargeScreen = config.smallestScreenWidthDp >= 600;
+        if (mIsLargeScreen) {
+            float largestEdgeDp = Math.max(config.screenWidthDp, config.screenHeightDp);
+            mIsSmallTablet = largestEdgeDp < 960;
+        } else {
+            mIsSmallTablet = false;
+        }
 
         if (BubbleDebugConfig.DEBUG_POSITIONER) {
             Log.w(TAG, "update positioner:"
                     + " rotation: " + mRotation
                     + " insets: " + insets
                     + " isLargeScreen: " + mIsLargeScreen
-                    + " bounds: " + windowMetrics.getBounds()
+                    + " isSmallTablet: " + mIsSmallTablet
+                    + " bounds: " + bounds
                     + " showingInTaskbar: " + mShowingInTaskbar);
         }
-        updateInternal(mRotation, insets, windowMetrics.getBounds());
+        updateInternal(mRotation, insets, bounds);
     }
 
     /**
@@ -175,15 +187,32 @@ public class BubblePositioner {
         mSpacingBetweenBubbles = res.getDimensionPixelSize(R.dimen.bubble_spacing);
         mDefaultMaxBubbles = res.getInteger(R.integer.bubbles_max_rendered);
         mExpandedViewPadding = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_padding);
-        mExpandedViewLargeScreenWidth = (int) (bounds.width()
-                * EXPANDED_VIEW_LARGE_SCREEN_WIDTH_PERCENT);
-        mExpandedViewLargeScreenInset = mIsLargeScreen
-                ? (bounds.width() - mExpandedViewLargeScreenWidth) / 2
-                : mExpandedViewPadding;
-        mOverflowWidth = mIsLargeScreen
-                ? mExpandedViewLargeScreenWidth
-                : res.getDimensionPixelSize(
-                        R.dimen.bubble_expanded_view_phone_landscape_overflow_width);
+        if (mIsSmallTablet) {
+            mExpandedViewLargeScreenWidth = (int) (bounds.width()
+                    * EXPANDED_VIEW_SMALL_TABLET_WIDTH_PERCENT);
+        } else {
+            mExpandedViewLargeScreenWidth = isLandscape()
+                    ? (int) (bounds.width() * EXPANDED_VIEW_LARGE_SCREEN_LANDSCAPE_WIDTH_PERCENT)
+                    : (int) (bounds.width() * EXPANDED_VIEW_LARGE_SCREEN_PORTRAIT_WIDTH_PERCENT);
+        }
+        if (mIsLargeScreen) {
+            if (isLandscape() && !mIsSmallTablet) {
+                mExpandedViewLargeScreenInsetClosestEdge = res.getDimensionPixelSize(
+                        R.dimen.bubble_expanded_view_largescreen_landscape_padding);
+                mExpandedViewLargeScreenInsetFurthestEdge = bounds.width()
+                        - mExpandedViewLargeScreenInsetClosestEdge
+                        - mExpandedViewLargeScreenWidth;
+            } else {
+                final int centeredInset = (bounds.width() - mExpandedViewLargeScreenWidth) / 2;
+                mExpandedViewLargeScreenInsetClosestEdge = centeredInset;
+                mExpandedViewLargeScreenInsetFurthestEdge = centeredInset;
+            }
+        } else {
+            mExpandedViewLargeScreenInsetClosestEdge = mExpandedViewPadding;
+            mExpandedViewLargeScreenInsetFurthestEdge = mExpandedViewPadding;
+        }
+
+        mOverflowWidth = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_overflow_width);
         mPointerWidth = res.getDimensionPixelSize(R.dimen.bubble_pointer_width);
         mPointerHeight = res.getDimensionPixelSize(R.dimen.bubble_pointer_height);
         mPointerMargin = res.getDimensionPixelSize(R.dimen.bubble_pointer_margin);
@@ -273,7 +302,8 @@ public class BubblePositioner {
 
     /** @return whether the device is in landscape orientation. */
     public boolean isLandscape() {
-        return mRotation == Surface.ROTATION_90 || mRotation == Surface.ROTATION_270;
+        return mContext.getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE;
     }
 
     /** @return whether the screen is considered large. */
@@ -315,6 +345,15 @@ public class BubblePositioner {
         mImeHeight = height;
     }
 
+    private int getExpandedViewLargeScreenInsetFurthestEdge(boolean isOverflow) {
+        if (isOverflow && mIsLargeScreen) {
+            return mScreenRect.width()
+                    - mExpandedViewLargeScreenInsetClosestEdge
+                    - mOverflowWidth;
+        }
+        return mExpandedViewLargeScreenInsetFurthestEdge;
+    }
+
     /**
      * Calculates the padding for the bubble expanded view.
      *
@@ -329,16 +368,21 @@ public class BubblePositioner {
      */
     public int[] getExpandedViewContainerPadding(boolean onLeft, boolean isOverflow) {
         final int pointerTotalHeight = mPointerHeight - mPointerOverlap;
+        final int expandedViewLargeScreenInsetFurthestEdge =
+                getExpandedViewLargeScreenInsetFurthestEdge(isOverflow);
         if (mIsLargeScreen) {
+            // Note:
+            // If we're in portrait OR if we're a small tablet, then the two insets values will
+            // be equal. If we're landscape and a large tablet, the two values will be different.
             // [left, top, right, bottom]
             mPaddings[0] = onLeft
-                    ? mExpandedViewLargeScreenInset - pointerTotalHeight
-                    : mExpandedViewLargeScreenInset;
+                    ? mExpandedViewLargeScreenInsetClosestEdge - pointerTotalHeight
+                    : expandedViewLargeScreenInsetFurthestEdge;
             mPaddings[1] = 0;
             mPaddings[2] = onLeft
-                    ? mExpandedViewLargeScreenInset
-                    : mExpandedViewLargeScreenInset - pointerTotalHeight;
-            // Overflow doesn't show manage button / get padding from it so add padding here for it
+                    ? expandedViewLargeScreenInsetFurthestEdge
+                    : mExpandedViewLargeScreenInsetClosestEdge - pointerTotalHeight;
+            // Overflow doesn't show manage button / get padding from it so add padding here
             mPaddings[3] = isOverflow ? mExpandedViewPadding : 0;
             return mPaddings;
         } else {
@@ -496,12 +540,13 @@ public class BubblePositioner {
         float x;
         float y;
         if (showBubblesVertically()) {
+            int inset = mExpandedViewLargeScreenInsetClosestEdge;
             y = rowStart + positionInRow;
             int left = mIsLargeScreen
-                    ? mExpandedViewLargeScreenInset - mExpandedViewPadding - mBubbleSize
+                    ? inset - mExpandedViewPadding - mBubbleSize
                     : mPositionRect.left;
             int right = mIsLargeScreen
-                    ? mPositionRect.right - mExpandedViewLargeScreenInset + mExpandedViewPadding
+                    ? mPositionRect.right - inset + mExpandedViewPadding
                     : mPositionRect.right - mBubbleSize;
             x = state.onLeft
                     ? left

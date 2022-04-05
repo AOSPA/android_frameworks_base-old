@@ -45,7 +45,6 @@ import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
-import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SharedMemory;
@@ -98,6 +97,7 @@ final class HotwordDetectionConnection {
     private static final Duration MAX_UPDATE_TIMEOUT_DURATION =
             Duration.ofMillis(MAX_UPDATE_TIMEOUT_MILLIS);
     private static final long RESET_DEBUG_HOTWORD_LOGGING_TIMEOUT_MILLIS = 60 * 60 * 1000; // 1 hour
+    private static final int MAX_ISOLATED_PROCESS_NUMBER = 10;
 
     private final Executor mAudioCopyExecutor = Executors.newCachedThreadPool();
     // TODO: This may need to be a Handler(looper)
@@ -278,8 +278,10 @@ final class HotwordDetectionConnection {
         mRemoteHotwordDetectionService.unbind();
         LocalServices.getService(PermissionManagerServiceInternal.class)
                 .setHotwordDetectionServiceProvider(null);
+        if (mIdentity != null) {
+            removeServiceUidForAudioPolicy(mIdentity.getIsolatedUid());
+        }
         mIdentity = null;
-        updateServiceUidForAudioPolicy(Process.INVALID_UID);
         mCancellationTaskFuture.cancel(/* may interrupt */ true);
         if (mAudioFlinger != null) {
             mAudioFlinger.unlinkToDeath(mAudioServerDeathRecipient, /* flags= */ 0);
@@ -771,7 +773,8 @@ final class HotwordDetectionConnection {
         ServiceConnection createLocked() {
             ServiceConnection connection =
                     new ServiceConnection(mContext, mIntent, mBindingFlags, mUser,
-                            IHotwordDetectionService.Stub::asInterface, ++mRestartCount);
+                            IHotwordDetectionService.Stub::asInterface,
+                            mRestartCount++ % MAX_ISOLATED_PROCESS_NUMBER);
             connection.connect();
 
             updateAudioFlinger(connection, mAudioFlinger);
@@ -909,17 +912,27 @@ final class HotwordDetectionConnection {
                 LocalServices.getService(PermissionManagerServiceInternal.class)
                         .setHotwordDetectionServiceProvider(() -> uid);
                 mIdentity = new HotwordDetectionServiceIdentity(uid, mVoiceInteractionServiceUid);
-                updateServiceUidForAudioPolicy(uid);
+                addServiceUidForAudioPolicy(uid);
             }
         }));
     }
 
-    private void updateServiceUidForAudioPolicy(int uid) {
+    private void addServiceUidForAudioPolicy(int uid) {
         mScheduledExecutorService.execute(() -> {
-            final AudioManagerInternal audioManager =
+            AudioManagerInternal audioManager =
                     LocalServices.getService(AudioManagerInternal.class);
             if (audioManager != null) {
-                audioManager.setHotwordDetectionServiceUid(uid);
+                audioManager.addAssistantServiceUid(uid);
+            }
+        });
+    }
+
+    private void removeServiceUidForAudioPolicy(int uid) {
+        mScheduledExecutorService.execute(() -> {
+            AudioManagerInternal audioManager =
+                    LocalServices.getService(AudioManagerInternal.class);
+            if (audioManager != null) {
+                audioManager.removeAssistantServiceUid(uid);
             }
         });
     }

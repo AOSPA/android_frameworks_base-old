@@ -251,7 +251,8 @@ public class RootWindowContainerTests extends WindowTestsBase {
         ensureTaskPlacement(fullscreenTask, firstActivity, secondActivity);
 
         // Move first activity to pinned root task.
-        mRootWindowContainer.moveActivityToPinnedRootTask(firstActivity, "initialMove");
+        mRootWindowContainer.moveActivityToPinnedRootTask(firstActivity,
+                null /* launchIntoPipHostActivity */, "initialMove");
 
         final TaskDisplayArea taskDisplayArea = fullscreenTask.getDisplayArea();
         Task pinnedRootTask = taskDisplayArea.getRootPinnedTask();
@@ -260,7 +261,8 @@ public class RootWindowContainerTests extends WindowTestsBase {
         ensureTaskPlacement(fullscreenTask, secondActivity);
 
         // Move second activity to pinned root task.
-        mRootWindowContainer.moveActivityToPinnedRootTask(secondActivity, "secondMove");
+        mRootWindowContainer.moveActivityToPinnedRootTask(secondActivity,
+                null /* launchIntoPipHostActivity */, "secondMove");
 
         // Need to get root tasks again as a new instance might have been created.
         pinnedRootTask = taskDisplayArea.getRootPinnedTask();
@@ -291,7 +293,8 @@ public class RootWindowContainerTests extends WindowTestsBase {
 
 
         // Move first activity to pinned root task.
-        mRootWindowContainer.moveActivityToPinnedRootTask(secondActivity, "initialMove");
+        mRootWindowContainer.moveActivityToPinnedRootTask(secondActivity,
+                null /* launchIntoPipHostActivity */, "initialMove");
 
         assertTrue(firstActivity.mRequestForceTransition);
     }
@@ -935,7 +938,33 @@ public class RootWindowContainerTests extends WindowTestsBase {
     }
 
     @Test
-    public void testGetValidLaunchRootTaskOnDisplayWithCandidateRootTask() {
+    public void testGetLaunchRootTaskOnSecondaryTaskDisplayArea() {
+        // Adding another TaskDisplayArea to the default display.
+        final DisplayContent display = mRootWindowContainer.getDefaultDisplay();
+        final TaskDisplayArea taskDisplayArea = new TaskDisplayArea(display,
+                mWm, "TDA", FEATURE_VENDOR_FIRST);
+        display.addChild(taskDisplayArea, POSITION_BOTTOM);
+
+        // Making sure getting the root task from the preferred TDA
+        LaunchParamsController.LaunchParams launchParams =
+                new LaunchParamsController.LaunchParams();
+        launchParams.mPreferredTaskDisplayArea = taskDisplayArea;
+        Task root = mRootWindowContainer.getOrCreateRootTask(null /* r */, null /* options */,
+                null /* candidateTask */, null /* sourceTask */, true /* onTop */, launchParams,
+                0 /* launchParams */);
+        assertEquals(taskDisplayArea, root.getTaskDisplayArea());
+
+        // Making sure still getting the root task from the preferred TDA when passing in a
+        // launching activity.
+        ActivityRecord r = new ActivityBuilder(mAtm).build();
+        root = mRootWindowContainer.getOrCreateRootTask(r, null /* options */,
+                null /* candidateTask */, null /* sourceTask */, true /* onTop */, launchParams,
+                0 /* launchParams */);
+        assertEquals(taskDisplayArea, root.getTaskDisplayArea());
+    }
+
+    @Test
+    public void testGetOrCreateRootTaskOnDisplayWithCandidateRootTask() {
         // Create a root task with an activity on secondary display.
         final TestDisplayContent secondaryDisplay = new TestDisplayContent.Builder(mAtm, 300,
                 600).build();
@@ -944,9 +973,9 @@ public class RootWindowContainerTests extends WindowTestsBase {
         final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(task).build();
 
         // Make sure the root task is valid and can be reused on default display.
-        final Task rootTask = mRootWindowContainer.getValidLaunchRootTaskInTaskDisplayArea(
-                mRootWindowContainer.getDefaultTaskDisplayArea(), activity, task,
-                null /* options */, null /* launchParams */);
+        final Task rootTask = mRootWindowContainer.getDefaultTaskDisplayArea().getOrCreateRootTask(
+                activity, null /* options */, task, null /* sourceTask */, null /* launchParams */,
+                0 /* launchFlags */, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         assertEquals(task, rootTask);
     }
 

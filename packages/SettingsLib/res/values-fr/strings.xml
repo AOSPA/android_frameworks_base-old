@@ -456,7 +456,7 @@
     <string name="daltonizer_mode_protanomaly" msgid="7805583306666608440">"Protanomalie (rouge/vert)"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="7135266249220732267">"Tritanomalie (bleu-jaune)"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="1810693571332381974">"Correction des couleurs"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="2333641630205214702">"Ajustez l\'affichage des couleurs sur votre appareil. Cette option peut vous être utile pour :&lt;br/&gt;&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;Accentuer la précision des couleurs&lt;/li&gt; &lt;li&gt;&amp;nbsp;Supprimer les couleurs pour mieux vous concentrer&lt;/li&gt; &lt;/ol&gt;"</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="1522101114585266455">"La correction des couleurs peut vous être utile pour :&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;Distinguer les couleurs plus précisément&lt;/li&gt; &lt;li&gt;&amp;nbsp;Supprimer les couleurs afin de mieux vous concentrer&lt;/li&gt; &lt;/ol&gt;"</string>
     <string name="daltonizer_type_overridden" msgid="4509604753672535721">"Remplacé par <xliff:g id="TITLE">%1$s</xliff:g>"</string>
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> – <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"Temps restant : environ <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
@@ -493,7 +493,9 @@
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Pas en charge"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Connectée, pas en charge"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Chargée"</string>
+    <string name="battery_info_status_full_charged" msgid="3536054261505567948">"Complètement chargée"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Contrôlé par l\'administrateur"</string>
+    <string name="disabled_by_app_ops_text" msgid="8373595926549098012">"Contrôlé par les paramètres restreints"</string>
     <string name="disabled" msgid="8017887509554714950">"Désactivée"</string>
     <string name="external_source_trusted" msgid="1146522036773132905">"Autorisé"</string>
     <string name="external_source_untrusted" msgid="5037891688911672227">"Non autorisé"</string>
@@ -526,8 +528,7 @@
     <string name="ims_reg_status_not_registered" msgid="2989287366045704694">"Non enregistré"</string>
     <string name="status_unavailable" msgid="5279036186589861608">"Non disponible"</string>
     <string name="wifi_status_mac_randomized" msgid="466382542497832189">"La sélection des adresses MAC est aléatoire"</string>
-    <!-- no translation found for wifi_tether_connected_summary (5282919920463340158) -->
-    <skip />
+    <string name="wifi_tether_connected_summary" msgid="5282919920463340158">"{count,plural, =0{0 appareil connecté}=1{1 appareil connecté}one{# appareil connecté}other{# appareils connectés}}"</string>
     <string name="accessibility_manual_zen_more_time" msgid="5141801092071134235">"Plus longtemps."</string>
     <string name="accessibility_manual_zen_less_time" msgid="6828877595848229965">"Moins longtemps."</string>
     <string name="cancel" msgid="5665114069455378395">"Annuler"</string>
@@ -636,4 +637,11 @@
     <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"Ethernet déconnecté"</string>
     <string name="accessibility_ethernet_connected" msgid="6175942685957461563">"Ethernet."</string>
     <string name="accessibility_no_calling" msgid="3540827068323895748">"Pas d\'appels."</string>
+    <string name="dream_complication_title_time" msgid="701747800712893499">"Heure"</string>
+    <string name="dream_complication_title_date" msgid="8661176085446135789">"Date"</string>
+    <string name="dream_complication_title_weather" msgid="598609151677172783">"Météo"</string>
+    <string name="dream_complication_title_aqi" msgid="4587552608957834110">"Qualité de l\'air"</string>
+    <string name="dream_complication_title_cast_info" msgid="4038776652841885084">"Infos distribution"</string>
+    <string name="avatar_picker_title" msgid="8492884172713170652">"Choisissez une photo de profil"</string>
+    <string name="default_user_icon_description" msgid="6554047177298972638">"Icône de l\'utilisateur par défaut"</string>
 </resources>

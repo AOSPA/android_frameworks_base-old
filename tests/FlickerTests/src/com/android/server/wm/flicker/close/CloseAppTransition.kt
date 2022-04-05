@@ -18,7 +18,6 @@ package com.android.server.wm.flicker.close
 
 import android.app.Instrumentation
 import android.platform.test.annotations.Presubmit
-import androidx.test.filters.FlakyTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.server.wm.flicker.FlickerBuilderProvider
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -61,7 +60,7 @@ abstract class CloseAppTransition(protected val testSpec: FlickerTestParameter) 
         }
         teardown {
             test {
-                testApp.exit()
+                testApp.exit(wmHelper)
             }
         }
     }
@@ -193,23 +192,5 @@ abstract class CloseAppTransition(protected val testSpec: FlickerTestParameter) 
     @Test
     open fun launcherLayerReplacesApp() {
         testSpec.replacesLayer(testApp.component, LAUNCHER_COMPONENT)
-    }
-
-    @FlakyTest
-    @Test
-    fun runPresubmitAssertion() {
-        flickerRule.checkPresubmitAssertions()
-    }
-
-    @FlakyTest
-    @Test
-    fun runPostsubmitAssertion() {
-        flickerRule.checkPostsubmitAssertions()
-    }
-
-    @FlakyTest
-    @Test
-    fun runFlakyAssertion() {
-        flickerRule.checkFlakyAssertions()
     }
 }

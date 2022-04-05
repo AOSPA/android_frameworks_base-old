@@ -49,7 +49,7 @@ import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.app.usage.AppLaunchEstimateInfo;
 import android.app.usage.AppStandbyInfo;
-import android.app.usage.BroadcastResponseStats;
+import android.app.usage.BroadcastResponseStatsList;
 import android.app.usage.ConfigurationStats;
 import android.app.usage.EventStats;
 import android.app.usage.IUsageStatsManager;
@@ -2379,6 +2379,40 @@ public class UsageStatsService extends SystemService implements
         }
 
         @Override
+        public int getAppMinStandbyBucket(String packageName, String callingPackage, int userId) {
+            final int callingUid = Binder.getCallingUid();
+            try {
+                userId = ActivityManager.getService().handleIncomingUser(
+                        Binder.getCallingPid(), callingUid, userId, false, false,
+                        "getAppStandbyBucket", null);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+            final int packageUid = mPackageManagerInternal.getPackageUid(packageName, 0, userId);
+            // If the calling app is asking about itself, continue, else check for permission.
+            if (packageUid != callingUid) {
+                if (!hasPermission(callingPackage)) {
+                    throw new SecurityException(
+                            "Don't have permission to query min app standby bucket");
+                }
+            }
+            if (packageUid < 0) {
+                throw new IllegalArgumentException(
+                        "Cannot get min standby bucket for non existent package ("
+                                + packageName + ")");
+            }
+            final boolean obfuscateInstantApps = shouldObfuscateInstantAppsForCaller(callingUid,
+                    userId);
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return mAppStandby.getAppMinStandbyBucket(
+                        packageName, UserHandle.getAppId(packageUid), userId, obfuscateInstantApps);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
         public void setEstimatedLaunchTime(String packageName, long estimatedLaunchTime,
                 int userId) {
             getContext().enforceCallingPermission(
@@ -2686,16 +2720,15 @@ public class UsageStatsService extends SystemService implements
 
         @Override
         @NonNull
-        public BroadcastResponseStats queryBroadcastResponseStats(
-                @NonNull String packageName,
-                @IntRange(from = 1) long id,
+        public BroadcastResponseStatsList queryBroadcastResponseStats(
+                @Nullable String packageName,
+                @IntRange(from = 0) long id,
                 @NonNull String callingPackage,
                 @UserIdInt int userId) {
-            Objects.requireNonNull(packageName);
             Objects.requireNonNull(callingPackage);
             // TODO: Move to Preconditions utility class
-            if (id <= 0) {
-                throw new IllegalArgumentException("id needs to be >0");
+            if (id < 0) {
+                throw new IllegalArgumentException("id needs to be >=0");
             }
 
             final int callingUid = Binder.getCallingUid();
@@ -2708,8 +2741,9 @@ public class UsageStatsService extends SystemService implements
             userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(), callingUid,
                     userId, false /* allowAll */, false /* requireFull */,
                     "queryBroadcastResponseStats" /* name */, callingPackage);
-            return mResponseStatsTracker.queryBroadcastResponseStats(
-                    callingUid, packageName, id, userId);
+            return new BroadcastResponseStatsList(
+                    mResponseStatsTracker.queryBroadcastResponseStats(
+                            callingUid, packageName, id, userId));
         }
 
         @Override
@@ -2718,10 +2752,9 @@ public class UsageStatsService extends SystemService implements
                 @IntRange(from = 1) long id,
                 @NonNull String callingPackage,
                 @UserIdInt int userId) {
-            Objects.requireNonNull(packageName);
             Objects.requireNonNull(callingPackage);
-            if (id <= 0) {
-                throw new IllegalArgumentException("id needs to be >0");
+            if (id < 0) {
+                throw new IllegalArgumentException("id needs to be >=0");
             }
 
             final int callingUid = Binder.getCallingUid();
@@ -2736,6 +2769,23 @@ public class UsageStatsService extends SystemService implements
                     "clearBroadcastResponseStats" /* name */, callingPackage);
             mResponseStatsTracker.clearBroadcastResponseStats(callingUid,
                     packageName, id, userId);
+        }
+
+        @Override
+        public void clearBroadcastEvents(@NonNull String callingPackage, @UserIdInt int userId) {
+            Objects.requireNonNull(callingPackage);
+
+            final int callingUid = Binder.getCallingUid();
+            if (!hasPermission(callingPackage)) {
+                throw new SecurityException(
+                        "Caller does not have the permission needed to call this API; "
+                                + "callingPackage=" + callingPackage
+                                + ", callingUid=" + callingUid);
+            }
+            userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(), callingUid,
+                    userId, false /* allowAll */, false /* requireFull */,
+                    "clearBroadcastResponseStats" /* name */, callingPackage);
+            mResponseStatsTracker.clearBroadcastEvents(callingUid, userId);
         }
     }
 

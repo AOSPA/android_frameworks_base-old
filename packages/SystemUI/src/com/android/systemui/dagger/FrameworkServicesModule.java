@@ -26,11 +26,13 @@ import android.app.IWallpaperManager;
 import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.app.StatsManager;
+import android.app.UiModeManager;
 import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
 import android.app.role.RoleManager;
 import android.app.smartspace.SmartspaceManager;
 import android.app.trust.TrustManager;
+import android.content.ClipboardManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.om.OverlayManager;
@@ -70,6 +72,7 @@ import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.CaptioningManager;
 import android.view.inputmethod.InputMethodManager;
 
 import com.android.internal.app.IBatteryStats;
@@ -115,6 +118,12 @@ public class FrameworkServicesModule {
     @Singleton
     static AudioManager provideAudioManager(Context context) {
         return context.getSystemService(AudioManager.class);
+    }
+
+    @Provides
+    @Singleton
+    static CaptioningManager provideCaptioningManager(Context context) {
+        return context.getSystemService(CaptioningManager.class);
     }
 
     @Provides
@@ -323,6 +332,13 @@ public class FrameworkServicesModule {
         return context.getSystemService(PowerManager.class);
     }
 
+    /** */
+    @Provides
+    @Singleton
+    static UiModeManager provideUiModeManager(Context context) {
+        return context.getSystemService(UiModeManager.class);
+    }
+
     @Provides
     @Main
     static Resources provideResources(Context context) {
@@ -447,6 +463,12 @@ public class FrameworkServicesModule {
             pm.initializeUsageHelper();
         }
         return pm;
+    }
+
+    @Provides
+    @Singleton
+    static ClipboardManager provideClipboardManager(Context context) {
+        return context.getSystemService(ClipboardManager.class);
     }
 
     @Provides

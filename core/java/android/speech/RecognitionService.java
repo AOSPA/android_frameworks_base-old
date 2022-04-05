@@ -199,7 +199,7 @@ public abstract class RecognitionService extends Service {
     }
 
     private void dispatchTriggerModelDownload(Intent intent) {
-        RecognitionService.this.triggerModelDownload(intent);
+        RecognitionService.this.onTriggerModelDownload(intent);
     }
 
     private class StartListeningArgs {
@@ -283,7 +283,7 @@ public abstract class RecognitionService extends Service {
     /**
      * Requests the download of the recognizer support for {@code recognizerIntent}.
      */
-    public void triggerModelDownload(@NonNull Intent recognizerIntent) {
+    public void onTriggerModelDownload(@NonNull Intent recognizerIntent) {
         if (DBG) {
             Log.i(TAG, String.format("#downloadModel [%s]", recognizerIntent));
         }
@@ -424,6 +424,27 @@ public abstract class RecognitionService extends Service {
          */
         public void rmsChanged(float rmsdB) throws RemoteException {
             mListener.onRmsChanged(rmsdB);
+        }
+
+        /**
+         * The service should call this method for each ready segment of a long recognition session.
+         *
+         * @param results the recognition results. To retrieve the results in {@code
+         *        ArrayList<String>} format use {@link Bundle#getStringArrayList(String)} with
+         *        {@link SpeechRecognizer#RESULTS_RECOGNITION} as a parameter
+         */
+        @SuppressLint({"CallbackMethodName", "RethrowRemoteException"})
+        public void segmentResults(@NonNull Bundle results) throws RemoteException {
+            mListener.onSegmentResults(results);
+        }
+
+        /**
+         * The service should call this method to end a segmented session.
+         */
+        @SuppressLint({"CallbackMethodName", "RethrowRemoteException"})
+        public void endOfSegmentedSession() throws RemoteException {
+            Message.obtain(mHandler, MSG_RESET).sendToTarget();
+            mListener.onEndOfSegmentedSession();
         }
 
         /**

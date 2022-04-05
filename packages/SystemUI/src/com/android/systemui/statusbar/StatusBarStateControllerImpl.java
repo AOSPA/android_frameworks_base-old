@@ -32,6 +32,7 @@ import android.os.Trace;
 import android.text.format.DateFormat;
 import android.util.FloatProperty;
 import android.util.Log;
+import android.view.Choreographer;
 import android.view.InsetsFlags;
 import android.view.InsetsVisibilities;
 import android.view.View;
@@ -44,6 +45,7 @@ import androidx.annotation.NonNull;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.jank.InteractionJankMonitor;
+import com.android.internal.jank.InteractionJankMonitor.Configuration;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
@@ -336,6 +338,9 @@ public class StatusBarStateControllerImpl implements
     }
 
     private void setDozeAmountInternal(float dozeAmount) {
+        if (Float.compare(dozeAmount, mDozeAmount) == 0) {
+            return;
+        }
         mDozeAmount = dozeAmount;
         float interpolatedAmount = mDozeInterpolator.getInterpolation(dozeAmount);
         synchronized (mListeners) {
@@ -349,8 +354,17 @@ public class StatusBarStateControllerImpl implements
     }
 
     private void beginInteractionJankMonitor() {
+        final boolean shouldPost =
+                (mIsDozing && mDozeAmount == 0) || (!mIsDozing && mDozeAmount == 1);
         if (mInteractionJankMonitor != null && mView != null && mView.isAttachedToWindow()) {
-            mInteractionJankMonitor.begin(mView, getCujType());
+            if (shouldPost) {
+                Choreographer.getInstance().postCallback(
+                        Choreographer.CALLBACK_ANIMATION, this::beginInteractionJankMonitor, null);
+            } else {
+                Configuration.Builder builder = Configuration.Builder.withView(getCujType(), mView)
+                        .setDeferMonitorForAnimationStart(false);
+                mInteractionJankMonitor.begin(builder);
+            }
         }
     }
 
@@ -406,8 +420,9 @@ public class StatusBarStateControllerImpl implements
      * notified before unranked, and we will sort ranked listeners from low to high
      *
      * @deprecated This method exists only to solve latent inter-dependencies from refactoring
-     * StatusBarState out of StatusBar.java. Any new listeners should be built not to need ranking
-     * (i.e., they are non-dependent on the order of operations of StatusBarState listeners).
+     * StatusBarState out of CentralSurfaces.java. Any new listeners should be built not to need
+     * ranking (i.e., they are non-dependent on the order of operations of StatusBarState
+     * listeners).
      */
     @Deprecated
     @Override
@@ -504,6 +519,10 @@ public class StatusBarStateControllerImpl implements
         pw.println(" mLeaveOpenOnKeyguardHide=" + mLeaveOpenOnKeyguardHide);
         pw.println(" mKeyguardRequested=" + mKeyguardRequested);
         pw.println(" mIsDozing=" + mIsDozing);
+        pw.println(" mListeners{" + mListeners.size() + "}=");
+        for (RankedListener rl : mListeners) {
+            pw.println("    " + rl.mListener);
+        }
         pw.println(" Historical states:");
         // Ignore records without a timestamp
         int size = 0;

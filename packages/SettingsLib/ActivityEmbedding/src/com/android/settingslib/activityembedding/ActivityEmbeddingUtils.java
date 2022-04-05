@@ -16,8 +16,14 @@
 
 package com.android.settingslib.activityembedding;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.provider.Settings;
+import android.text.TextUtils;
+
+import androidx.core.os.BuildCompat;
+import androidx.window.embedding.SplitController;
 
 import com.android.settingslib.utils.BuildCompatUtils;
 
@@ -40,6 +46,40 @@ public class ActivityEmbeddingUtils {
                     intent.resolveActivity(context.getPackageManager()) != null;
 
             return isEmbeddingActivityEnabled;
+        }
+        return false;
+    }
+
+    /**
+     * Whether the current activity is embedded in the Settings app or not.
+     *
+     * @param activity Activity that needs the check
+     */
+    public static boolean isActivityEmbedded(Activity activity) {
+        return SplitController.getInstance().isActivityEmbedded(activity);
+    }
+
+    /**
+     * Whether the current activity should hide the navigate up button.
+     *
+     * @param activity             Activity that needs the check
+     * @param isSecondLayerPage indicates if the activity(page) is shown in the 2nd layer of
+     *                             Settings app
+     */
+    public static boolean shouldHideNavigateUpButton(Activity activity, boolean isSecondLayerPage) {
+        if (!BuildCompat.isAtLeastT()) {
+            return false;
+        }
+        if (!isSecondLayerPage) {
+            return false;
+        }
+        final String shouldHideNavigateUpButton =
+                Settings.Global.getString(activity.getContentResolver(),
+                        "settings_hide_second_layer_page_navigate_up_button_in_two_pane");
+
+        if (TextUtils.isEmpty(shouldHideNavigateUpButton)
+                || Boolean.parseBoolean(shouldHideNavigateUpButton)) {
+            return isActivityEmbedded(activity);
         }
         return false;
     }

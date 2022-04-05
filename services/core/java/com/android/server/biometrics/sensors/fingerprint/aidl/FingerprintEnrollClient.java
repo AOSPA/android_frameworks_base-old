@@ -114,12 +114,16 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
 
     @Override
     public void onAcquired(@FingerprintAcquired int acquiredInfo, int vendorCode) {
+        boolean acquiredGood =
+                acquiredInfo == BiometricFingerprintConstants.FINGERPRINT_ACQUIRED_GOOD;
         // For UDFPS, notify SysUI that the illumination can be turned off.
         // See AcquiredInfo#GOOD and AcquiredInfo#RETRYING_CAPTURE
-        if (acquiredInfo == BiometricFingerprintConstants.FINGERPRINT_ACQUIRED_GOOD
-                && mSensorProps.isAnyUdfpsType()) {
-            vibrateSuccess();
-            mSensorOverlays.ifUdfps(controller -> controller.onAcquiredGood(getSensorId()));
+        if (mSensorProps.isAnyUdfpsType()) {
+            if (acquiredGood) {
+                vibrateSuccess();
+            }
+            mSensorOverlays.ifUdfps(
+                    controller -> controller.onAcquired(getSensorId(), acquiredInfo));
         }
 
         mSensorOverlays.ifUdfps(controller -> {
@@ -213,7 +217,7 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
                 context.y = y;
                 context.minor = minor;
                 context.major = major;
-                context.isAoD = getBiometricContext().isAoD();
+                context.isAod = getBiometricContext().isAod();
                 session.getSession().onPointerDownWithContext(context);
             } else {
                 session.getSession().onPointerDown(0 /* pointerId */, x, y, minor, major);

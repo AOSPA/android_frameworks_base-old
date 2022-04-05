@@ -204,6 +204,8 @@
     <protected-broadcast
         android:name="android.bluetooth.headsetclient.profile.action.LAST_VTAG" />
     <protected-broadcast
+        android:name="android.bluetooth.headsetclient.profile.action.NETWORK_SERVICE_STATE_CHANGED" />
+    <protected-broadcast
         android:name="android.bluetooth.hearingaid.profile.action.CONNECTION_STATE_CHANGED" />
     <protected-broadcast
         android:name="android.bluetooth.hearingaid.profile.action.PLAYING_STATE_CHANGED" />
@@ -755,6 +757,7 @@
     <protected-broadcast android:name="android.app.action.DEVICE_POLICY_RESOURCE_UPDATED" />
     <protected-broadcast android:name="android.intent.action.SHOW_FOREGROUND_SERVICE_MANAGER" />
     <protected-broadcast android:name="android.service.autofill.action.DELAYED_FILL" />
+    <protected-broadcast android:name="android.app.action.PROVISIONING_COMPLETED" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -1655,7 +1658,7 @@
                 android:permissionGroup="android.permission-group.UNDEFINED"
                 android:label="@string/permlab_postNotification"
                 android:description="@string/permdesc_postNotification"
-                android:protectionLevel="dangerous" />
+                android:protectionLevel="dangerous|instant" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- ====================================================================== -->
@@ -1934,12 +1937,31 @@
         android:label="@string/permlab_changeWifiState"
         android:protectionLevel="normal" />
 
-    <!-- @SystemApi @hide Allows applications to enable/disable wifi auto join. This permission
+    <!-- Allows applications to enable/disable wifi auto join. This permission
          is used to let OEMs grant their trusted app access to a subset of privileged wifi APIs
          to improve wifi performance.
-         <p>Not for use by third-party applications. -->
+         <p>Not for use by third-party applications.
+         @deprecated will be replaced with MANAGE_WIFI_NETWORK_SELECTION -->
     <permission android:name="android.permission.MANAGE_WIFI_AUTO_JOIN"
-                android:protectionLevel="signature|privileged" />
+                android:protectionLevel="signature|privileged|knownSigner"
+                android:knownCerts="@array/wifi_known_signers" />
+
+    <!-- This permission is used to let OEMs grant their trusted app access to a subset of
+         privileged wifi APIs to improve wifi performance. Allows applications to manage
+         Wi-Fi network selection related features such as enable or disable global auto-join,
+         modify connectivity scan intervals, and approve Wi-Fi Direct connections.
+         <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.MANAGE_WIFI_NETWORK_SELECTION"
+                android:protectionLevel="signature|privileged|knownSigner"
+                android:knownCerts="@array/wifi_known_signers" />
+
+    <!-- Allows applications to get notified when a Wi-Fi interface request cannot
+         be satisfied without tearing down one or more other interfaces, and provide a decision
+         whether to approve the request or reject it.
+         <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.MANAGE_WIFI_INTERFACES"
+                android:protectionLevel="signature|privileged|knownSigner"
+                android:knownCerts="@array/wifi_known_signers" />
 
     <!-- @SystemApi @hide Allows apps to create and manage IPsec tunnels.
          <p>Only granted to applications that are currently bound by the
@@ -1972,12 +1994,13 @@
     <permission android:name="android.permission.RECEIVE_WIFI_CREDENTIAL_CHANGE"
         android:protectionLevel="signature|privileged" />
 
-    <!-- @SystemApi @hide Allows an application to modify any wifi configuration, even if created
+    <!-- Allows an application to modify any wifi configuration, even if created
      by another application. Once reconfigured the original creator cannot make any further
      modifications.
      <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.OVERRIDE_WIFI_CONFIG"
-        android:protectionLevel="signature|privileged" />
+                android:protectionLevel="signature|privileged|knownSigner"
+                android:knownCerts="@array/wifi_known_signers" />
 
     <!-- @deprecated Allows applications to act as network scorers. @hide @SystemApi-->
     <permission android:name="android.permission.SCORE_NETWORKS"
@@ -2963,7 +2986,7 @@
     <!-- @SystemApi @hide Allows an application to set the profile owners and the device owner.
          This permission is not available to third party applications.-->
     <permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS"
-        android:protectionLevel="signature|role|setup"
+        android:protectionLevel="signature|role"
         android:label="@string/permlab_manageProfileAndDeviceOwners"
         android:description="@string/permdesc_manageProfileAndDeviceOwners" />
 
@@ -2971,6 +2994,10 @@
          the device.-->
     <permission android:name="android.permission.QUERY_ADMIN_POLICY"
                 android:protectionLevel="signature|role" />
+
+    <!-- @SystemApi @hide Allows an application to set a device owner on retail demo devices.-->
+    <permission android:name="android.permission.PROVISION_DEMO_DEVICE"
+                android:protectionLevel="signature|setup" />
 
     <!-- @TestApi @hide Allows an application to reset the record of previous system update freeze
          periods. -->
@@ -3111,7 +3138,7 @@
 
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.SYSTEM_APPLICATION_OVERLAY"
-                android:protectionLevel="signature|recents|role"/>
+                android:protectionLevel="signature|recents|role|installer"/>
 
     <!-- @deprecated Use {@link android.Manifest.permission#REQUEST_COMPANION_RUN_IN_BACKGROUND}
          @hide
@@ -3740,15 +3767,26 @@
         android:protectionLevel="signature|privileged" />
 
     <!-- ========================================= -->
-    <!-- Permissions for SupplementalApi -->
+    <!-- Permissions for AdServices -->
     <!-- ========================================= -->
     <eat-comment />
 
-    <!-- TODO(b/213488783): Update with correct names. -->
-    <!-- Allows an application to access SupplementalApis. -->
-    <permission android:name="android.permission.ACCESS_SUPPLEMENTAL_APIS"
-        android:label="@string/permlab_accessSupplementalApi"
-        android:description="@string/permdesc_accessSupplementalApi"
+    <!-- Allows an application to access AdServices Topics API. -->
+    <permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS"
+        android:label="@string/permlab_accessAdServicesTopics"
+        android:description="@string/permdesc_accessAdServicesTopics"
+        android:protectionLevel="normal" />
+
+    <!-- Allows an application to access AdServices Attribution APIs. -->
+    <permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION"
+        android:label="@string/permlab_accessAdServicesAttribution"
+        android:description="@string/permdesc_accessAdServicesAttribution"
+        android:protectionLevel="normal" />
+
+    <!-- Allows an application to access AdServices Custom Audiences APIs. -->
+    <permission android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCES"
+        android:label="@string/permlab_accessAdServicesCustomAudiences"
+        android:description="@string/permdesc_accessAdServicesCustomAudiences"
         android:protectionLevel="normal" />
 
     <!-- ==================================== -->
@@ -4148,6 +4186,13 @@
     <permission android:name="android.permission.MANAGE_HOTWORD_DETECTION"
                 android:protectionLevel="internal|preinstalled" />
 
+    <!-- Allows an application to subscribe to keyguard locked (i.e., showing) state.
+         <p>Protection level: internal|role
+         <p>Intended for use by ROLE_ASSISTANT only.
+    -->
+    <permission android:name="android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE"
+                android:protectionLevel="internal|role"/>
+
     <!-- Must be required by a {@link android.service.autofill.AutofillService},
          to ensure that only the system can bind to it.
          <p>Protection level: signature
@@ -4438,6 +4483,16 @@
      -->
     <permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:protectionLevel="normal|appop"/>
+
+    <!-- Allows apps to use exact alarms just like with SCHEDULE_EXACT_ALARM but without needing
+        to request this permission from the user.
+        <p><b>This is only for apps that rely on exact alarms for their core functionality.</b>
+        App stores may enforce policies to audit and review the use of this permission. Any app that
+        requests this but is found to not require exact alarms for its primary function may be
+        removed from the app store.
+    -->
+    <permission android:name="android.permission.USE_EXACT_ALARM"
+                android:protectionLevel="normal"/>
 
     <!-- Allows an application to query tablet mode state and monitor changes
          in it.
@@ -4737,10 +4792,10 @@
     <permission android:name="android.permission.READ_FRAME_BUFFER"
         android:protectionLevel="signature|recents" />
 
-      <!-- @SystemApi Allows an application to change the touch mode state.
+      <!-- Allows an application to change the touch mode state.
            Without this permission, an app can only change the touch mode
            if it currently has focus.
-         @hide -->
+           @hide -->
     <permission android:name="android.permission.MODIFY_TOUCH_MODE_STATE"
         android:protectionLevel="signature" />
 
@@ -5936,10 +5991,9 @@
 
     <!-- @SystemApi Allows an application to manage the wallpaper effects
      generation service.
-        @hide  <p>Not for use by third-party applications.</p> -->
+     @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MANAGE_WALLPAPER_EFFECTS_GENERATION"
-        android:protectionLevel="signature" />
-
+        android:protectionLevel="signature|role" />
 
     <!-- Allows an app to set the theme overlay in /vendor/overlay
          being used.
@@ -6275,7 +6329,10 @@
                 android:protectionLevel="signature|privileged" />
 
     <!-- Allows an application to read nearby streaming policy. The policy controls
-         whether to allow the device to stream its notifications and apps to nearby devices. -->
+         whether to allow the device to stream its notifications and apps to nearby devices.
+         Applications that are not the device owner will need this permission to call
+         {@link android.app.admin.DevicePolicyManager#getNearbyNotificationStreamingPolicy} or
+         {@link android.app.admin.DevicePolicyManager#getNearbyAppStreamingPolicy}. -->
     <permission android:name="android.permission.READ_NEARBY_STREAMING_POLICY"
         android:protectionLevel="normal" />
 
@@ -6387,6 +6444,20 @@
     -->
     <permission android:name="android.permission.SET_UNRESTRICTED_KEEP_CLEAR_AREAS"
                 android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows TV input apps and TV apps to use TIS extension interfaces for
+         domain-specific features.
+         <p>Protection level: signature|privileged|vendorPrivileged
+         <p>Not for use by third-party applications.
+         @hide
+    -->
+    <permission android:name="android.permission.TIS_EXTENSION_INTERFACE"
+        android:protectionLevel="signature|privileged|vendorPrivileged" />
+
+    <!-- @SystemApi Allows an application to write to the security log buffer in logd.
+         @hide -->
+    <permission android:name="android.permission.WRITE_SECURITY_LOG"
+        android:protectionLevel="signature|privileged" />
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>
@@ -6621,6 +6692,12 @@
                 android:process=":ui">
         </activity>
 
+        <activity android:name="com.android.internal.app.BlockedAppStreamingActivity"
+            android:theme="@style/Theme.Dialog.Confirmation"
+            android:excludeFromRecents="true"
+            android:process=":ui">
+        </activity>
+
         <activity android:name="com.android.internal.app.LaunchAfterAuthenticationActivity"
                   android:theme="@style/Theme.Translucent.NoTitleBar"
                   android:excludeFromRecents="true"
@@ -6637,6 +6714,13 @@
                   android:excludeFromRecents="true"
                   android:process=":ui"
                   android:label="@string/harmful_app_warning_title"
+                  android:exported="false">
+        </activity>
+
+        <activity android:name="com.android.server.logcat.LogAccessDialogActivity"
+                  android:theme="@style/Theme.DeviceDefault.Dialog.Alert.DayNight"
+                  android:excludeFromRecents="true"
+                  android:label="@string/log_access_confirmation_title"
                   android:exported="false">
         </activity>
 
@@ -6794,6 +6878,13 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name="com.android.server.sdksandbox.SdkSandboxVerifierReceiver"
+                 android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_NEEDS_VERIFICATION"/>
+            </intent-filter>
+        </receiver>
+
         <service android:name="android.hardware.location.GeofenceHardwareService"
             android:permission="android.permission.LOCATION_HARDWARE"
             android:exported="false" />
@@ -6889,15 +6980,19 @@
                     android:resource="@xml/autofill_compat_accessibility_service" />
         </service>
 
-        <service android:name="com.google.android.startop.iorap.IorapForwardingService$IorapdJobServiceProxy"
-                 android:permission="android.permission.BIND_JOB_SERVICE" >
-        </service>
-
         <service android:name="com.android.server.blob.BlobStoreIdleJobService"
                  android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
 
         <service android:name="com.android.server.companion.AssociationCleanUpService"
+                 android:permission="android.permission.BIND_JOB_SERVICE">
+        </service>
+
+        <service android:name="com.android.server.appsearch.contactsindexer.ContactsIndexerMaintenanceService"
+                 android:permission="android.permission.BIND_JOB_SERVICE">
+        </service>
+
+        <service android:name="com.android.server.BinaryTransparencyService$UpdateMeasurementsJobService"
                  android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
 

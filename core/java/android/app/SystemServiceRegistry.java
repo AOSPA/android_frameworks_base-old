@@ -18,6 +18,7 @@ package android.app;
 
 import android.accounts.AccountManager;
 import android.accounts.IAccountManager;
+import android.adservices.AdServicesFrameworkInitializer;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
@@ -25,7 +26,7 @@ import android.app.ContextImpl.ServiceInitializationState;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
 import android.app.ambientcontext.AmbientContextManager;
-import android.app.ambientcontext.IAmbientContextEventObserver;
+import android.app.ambientcontext.IAmbientContextManager;
 import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
 import android.app.cloudsearch.CloudSearchManager;
@@ -36,6 +37,7 @@ import android.app.job.JobSchedulerFrameworkInitializer;
 import android.app.people.PeopleManager;
 import android.app.prediction.AppPredictionManager;
 import android.app.role.RoleFrameworkInitializer;
+import android.app.sdksandbox.SdkSandboxManagerFrameworkInitializer;
 import android.app.search.SearchUiManager;
 import android.app.slice.SliceManager;
 import android.app.smartspace.SmartspaceManager;
@@ -208,7 +210,6 @@ import android.service.oemlock.OemLockManager;
 import android.service.persistentdata.IPersistentDataBlockService;
 import android.service.persistentdata.PersistentDataBlockManager;
 import android.service.vr.IVrManager;
-import android.supplementalprocess.SupplementalProcessFrameworkInitializer;
 import android.telecom.TelecomManager;
 import android.telephony.MmsManager;
 import android.telephony.TelephonyFrameworkInitializer;
@@ -1542,8 +1543,8 @@ public final class SystemServiceRegistry {
                             throws ServiceNotFoundException {
                         IBinder iBinder = ServiceManager.getServiceOrThrow(
                                 Context.AMBIENT_CONTEXT_SERVICE);
-                        IAmbientContextEventObserver manager =
-                                IAmbientContextEventObserver.Stub.asInterface(iBinder);
+                        IAmbientContextManager manager =
+                                IAmbientContextManager.Stub.asInterface(iBinder);
                         return new AmbientContextManager(ctx.getOuterContext(), manager);
                     }});
 
@@ -1564,7 +1565,8 @@ public final class SystemServiceRegistry {
             MediaFrameworkInitializer.registerServiceWrappers();
             RoleFrameworkInitializer.registerServiceWrappers();
             SchedulingFrameworkInitializer.registerServiceWrappers();
-            SupplementalProcessFrameworkInitializer.registerServiceWrappers();
+            SdkSandboxManagerFrameworkInitializer.registerServiceWrappers();
+            AdServicesFrameworkInitializer.registerServiceWrappers();
             UwbFrameworkInitializer.registerServiceWrappers();
             SafetyCenterFrameworkInitializer.registerServiceWrappers();
             ConnectivityFrameworkInitializerTiramisu.registerServiceWrappers();

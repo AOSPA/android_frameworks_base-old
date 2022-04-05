@@ -16,7 +16,6 @@
 
 package com.android.server.wm;
 
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_IS_RECENTS;
@@ -30,10 +29,12 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.IApplicationThread;
+import android.app.WindowConfiguration;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.util.ArrayMap;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -57,6 +58,10 @@ import java.util.function.LongConsumer;
  */
 class TransitionController {
     private static final String TAG = "TransitionController";
+
+    /** Whether to use shell-transitions rotation instead of fixed-rotation. */
+    private static final boolean SHELL_TRANSITIONS_ROTATION =
+            SystemProperties.getBoolean("persist.wm.debug.shell_transit_rotate", false);
 
     /** The same as legacy APP_TRANSITION_TIMEOUT_MS. */
     private static final int DEFAULT_TIMEOUT_MS = 5000;
@@ -203,6 +208,11 @@ class TransitionController {
         return mTransitionPlayer != null;
     }
 
+    /** @return {@code true} if using shell-transitions rotation instead of fixed-rotation. */
+    boolean useShellTransitionsRotation() {
+        return isShellTransitionsEnabled() && SHELL_TRANSITIONS_ROTATION;
+    }
+
     /**
      * @return {@code true} if transition is actively collecting changes. This is {@code false}
      * once a transition is playing
@@ -235,13 +245,46 @@ class TransitionController {
 
     /** @return {@code true} if wc is in a participant subtree */
     boolean inTransition(@NonNull WindowContainer wc) {
-        if (isCollecting(wc))  return true;
+        if (isCollecting(wc)) return true;
         for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
             for (WindowContainer p = wc; p != null; p = p.getParent()) {
                 if (mPlayingTransitions.get(i).mParticipants.contains(p)) {
                     return true;
                 }
             }
+        }
+        return false;
+    }
+
+    boolean inRecentsTransition(@NonNull WindowContainer wc) {
+        for (WindowContainer p = wc; p != null; p = p.getParent()) {
+            // TODO(b/221417431): replace this with deterministic snapshots
+            if (mCollectingTransition == null) break;
+            if ((mCollectingTransition.getFlags() & TRANSIT_FLAG_IS_RECENTS) != 0
+                    && mCollectingTransition.mParticipants.contains(wc)) {
+                return true;
+            }
+        }
+
+        for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
+            for (WindowContainer p = wc; p != null; p = p.getParent()) {
+                // TODO(b/221417431): replace this with deterministic snapshots
+                if ((mPlayingTransitions.get(i).getFlags() & TRANSIT_FLAG_IS_RECENTS) != 0
+                        && mPlayingTransitions.get(i).mParticipants.contains(p)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** @return {@code true} if wc is in a participant subtree */
+    boolean isTransitionOnDisplay(@NonNull DisplayContent dc) {
+        if (mCollectingTransition != null && mCollectingTransition.isOnDisplay(dc)) {
+            return true;
+        }
+        for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
+            if (mPlayingTransitions.get(i).isOnDisplay(dc)) return true;
         }
         return false;
     }
@@ -258,6 +301,17 @@ class TransitionController {
             if (mPlayingTransitions.get(i).isTransientLaunch(ar)) return true;
         }
         return false;
+    }
+
+    @WindowConfiguration.WindowingMode
+    int getWindowingModeAtStart(@NonNull WindowContainer wc) {
+        if (mCollectingTransition == null) return wc.getWindowingMode();
+        final Transition.ChangeInfo ci = mCollectingTransition.mChanges.get(wc);
+        if (ci == null) {
+            // not part of transition, so use current state.
+            return wc.getWindowingMode();
+        }
+        return ci.mWindowingMode;
     }
 
     @WindowManager.TransitionType
@@ -472,15 +526,22 @@ class TransitionController {
     /**
      * Record that the launch of {@param activity} is transient (meaning its lifecycle is currently
      * tied to the transition).
+     * @param restoreBelowTask If non-null, the activity's task will be ordered right below this
+     *                         task if requested.
      */
-    void setTransientLaunch(@NonNull ActivityRecord activity) {
+    void setTransientLaunch(@NonNull ActivityRecord activity, @Nullable Task restoreBelowTask) {
         if (mCollectingTransition == null) return;
-        mCollectingTransition.setTransientLaunch(activity);
+        mCollectingTransition.setTransientLaunch(activity, restoreBelowTask);
 
         // TODO(b/188669821): Remove once legacy recents behavior is moved to shell.
         // Also interpret HOME transient launch as recents
-        if (activity.getActivityType() == ACTIVITY_TYPE_HOME) {
+        if (activity.isActivityTypeHomeOrRecents()) {
             mCollectingTransition.addFlag(TRANSIT_FLAG_IS_RECENTS);
+            // When starting recents animation, we assume the recents activity is behind the app
+            // task and should not affect system bar appearance,
+            // until WMS#setRecentsAppBehindSystemBars be called from launcher when passing
+            // the gesture threshold.
+            activity.getTask().setCanAffectSystemUiFlags(false);
         }
     }
 

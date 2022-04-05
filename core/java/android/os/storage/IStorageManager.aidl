@@ -54,13 +54,13 @@ interface IStorageManager {
      */
     void shutdown(IStorageShutdownObserver observer) = 19;
     /**
-     * Mounts an Opaque Binary Blob (OBB) with the specified decryption key and
-     * only allows the calling process's UID access to the contents.
-     * StorageManagerService will call back to the supplied IObbActionListener to inform
-     * it of the terminal state of the call.
+     * Mounts an Opaque Binary Blob (OBB). Only allows the calling process's UID
+     * access to the contents. StorageManagerService will call back to the
+     * supplied IObbActionListener to inform it of the terminal state of the
+     * call.
      */
-    void mountObb(in String rawPath, in String canonicalPath, in String key,
-            IObbActionListener token, int nonce, in ObbInfo obbInfo) = 21;
+    void mountObb(in String rawPath, in String canonicalPath, IObbActionListener token,
+            int nonce, in ObbInfo obbInfo) = 21;
     /**
      * Unmounts an Opaque Binary Blob (OBB). When the force flag is specified,
      * any program using it will be forcibly killed to unmount the image.
@@ -203,4 +203,6 @@ interface IStorageManager {
     void notifyAppIoResumed(in String volumeUuid, int uid, int tid, int reason) = 93;
     int getExternalStorageMountMode(int uid, in String packageName) = 94;
     boolean isAppIoBlocked(in String volumeUuid, int uid, int tid, int reason) = 95;
+    void setCloudMediaProvider(in String authority) = 96;
+    String getCloudMediaProvider() = 97;
 }

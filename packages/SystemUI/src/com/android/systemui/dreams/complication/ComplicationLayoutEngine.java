@@ -16,17 +16,24 @@
 
 package com.android.systemui.dreams.complication;
 
-import static com.android.systemui.dreams.complication.dagger.ComplicationHostViewComponent.COMPLICATION_MARGIN;
-import static com.android.systemui.dreams.complication.dagger.ComplicationHostViewComponent.SCOPED_COMPLICATIONS_LAYOUT;
+import static com.android.systemui.dreams.complication.dagger.ComplicationHostViewModule.COMPLICATIONS_FADE_IN_DURATION;
+import static com.android.systemui.dreams.complication.dagger.ComplicationHostViewModule.COMPLICATIONS_FADE_OUT_DURATION;
+import static com.android.systemui.dreams.complication.dagger.ComplicationHostViewModule.COMPLICATION_MARGIN;
+import static com.android.systemui.dreams.complication.dagger.ComplicationHostViewModule.SCOPED_COMPLICATIONS_LAYOUT;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewPropertyAnimator;
 
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.Constraints;
 
 import com.android.systemui.R;
+import com.android.systemui.dreams.dagger.DreamOverlayComponent;
+import com.android.systemui.touch.TouchInsetManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,7 +49,8 @@ import javax.inject.Named;
  * their layout parameters and attributes. The management of this set is done by
  * {@link ComplicationHostViewController}.
  */
-public class ComplicationLayoutEngine  {
+@DreamOverlayComponent.DreamOverlayScope
+public class ComplicationLayoutEngine implements Complication.VisibilityController {
     public static final String TAG = "ComplicationLayoutEngine";
 
     /**
@@ -52,6 +60,7 @@ public class ComplicationLayoutEngine  {
     private static class ViewEntry implements Comparable<ViewEntry> {
         private final View mView;
         private final ComplicationLayoutParams mLayoutParams;
+        private final TouchInsetManager.TouchInsetSession mTouchInsetSession;
         private final Parent mParent;
         @Complication.Category
         private final int mCategory;
@@ -61,7 +70,8 @@ public class ComplicationLayoutEngine  {
          * Default constructor. {@link Parent} allows for the {@link ViewEntry}'s surrounding
          * view hierarchy to be accessed without traversing the entire view tree.
          */
-        ViewEntry(View view, ComplicationLayoutParams layoutParams, int category, Parent parent,
+        ViewEntry(View view, ComplicationLayoutParams layoutParams,
+                TouchInsetManager.TouchInsetSession touchSession, int category, Parent parent,
                 int margin) {
             mView = view;
             // Views that are generated programmatically do not have a unique id assigned to them
@@ -70,9 +80,12 @@ public class ComplicationLayoutEngine  {
             // {@link Complication.ViewHolder} should not reference the root container by id.
             mView.setId(View.generateViewId());
             mLayoutParams = layoutParams;
+            mTouchInsetSession = touchSession;
             mCategory = category;
             mParent = parent;
             mMargin = margin;
+
+            touchSession.addViewToTracking(mView);
         }
 
         /**
@@ -217,6 +230,7 @@ public class ComplicationLayoutEngine  {
             mParent.removeEntry(this);
 
             ((ViewGroup) mView.getParent()).removeView(mView);
+            mTouchInsetSession.removeViewFromTracking(mView);
         }
 
         @Override
@@ -242,15 +256,18 @@ public class ComplicationLayoutEngine  {
          */
         private static class Builder {
             private final View mView;
+            private final TouchInsetManager.TouchInsetSession mTouchSession;
             private final ComplicationLayoutParams mLayoutParams;
             private final int mCategory;
             private Parent mParent;
             private int mMargin;
 
-            Builder(View view, ComplicationLayoutParams lp, @Complication.Category int category) {
+            Builder(View view, TouchInsetManager.TouchInsetSession touchSession,
+                    ComplicationLayoutParams lp, @Complication.Category int category) {
                 mView = view;
                 mLayoutParams = lp;
                 mCategory = category;
+                mTouchSession = touchSession;
             }
 
             /**
@@ -291,7 +308,8 @@ public class ComplicationLayoutEngine  {
              * Builds and returns the resulting {@link ViewEntry}.
              */
             ViewEntry build() {
-                return new ViewEntry(mView, mLayoutParams, mCategory, mParent, mMargin);
+                return new ViewEntry(mView, mLayoutParams, mTouchSession, mCategory, mParent,
+                        mMargin);
             }
         }
 
@@ -442,13 +460,46 @@ public class ComplicationLayoutEngine  {
     private final int mMargin;
     private final HashMap<ComplicationId, ViewEntry> mEntries = new HashMap<>();
     private final HashMap<Integer, PositionGroup> mPositions = new HashMap<>();
+    private final TouchInsetManager.TouchInsetSession mSession;
+    private final int mFadeInDuration;
+    private final int mFadeOutDuration;
+    private ViewPropertyAnimator mViewPropertyAnimator;
 
     /** */
     @Inject
     public ComplicationLayoutEngine(@Named(SCOPED_COMPLICATIONS_LAYOUT) ConstraintLayout layout,
-            @Named(COMPLICATION_MARGIN) int margin) {
+            @Named(COMPLICATION_MARGIN) int margin,
+            TouchInsetManager.TouchInsetSession session,
+            @Named(COMPLICATIONS_FADE_IN_DURATION) int fadeInDuration,
+            @Named(COMPLICATIONS_FADE_OUT_DURATION) int fadeOutDuration) {
         mLayout = layout;
         mMargin = margin;
+        mSession = session;
+        mFadeInDuration = fadeInDuration;
+        mFadeOutDuration = fadeOutDuration;
+    }
+
+    @Override
+    public void setVisibility(int visibility, boolean animate) {
+        final boolean appearing = visibility == View.VISIBLE;
+
+        if (mViewPropertyAnimator != null) {
+            mViewPropertyAnimator.cancel();
+        }
+
+        if (appearing) {
+            mLayout.setVisibility(View.VISIBLE);
+        }
+
+        mViewPropertyAnimator = mLayout.animate()
+                .alpha(appearing ? 1f : 0f)
+                .setDuration(appearing ? mFadeInDuration : mFadeOutDuration)
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        mLayout.setVisibility(visibility);
+                    }
+                });
     }
 
     /**
@@ -463,12 +514,14 @@ public class ComplicationLayoutEngine  {
      */
     public void addComplication(ComplicationId id, View view,
             ComplicationLayoutParams lp, @Complication.Category int category) {
+        Log.d(TAG, "engine: " + this + " addComplication");
+
         // If the complication is present, remove.
         if (mEntries.containsKey(id)) {
             removeComplication(id);
         }
 
-        final ViewEntry.Builder entryBuilder = new ViewEntry.Builder(view, lp, category)
+        final ViewEntry.Builder entryBuilder = new ViewEntry.Builder(view, mSession, lp, category)
                 .setMargin(mMargin);
 
         // Add position group if doesn't already exist

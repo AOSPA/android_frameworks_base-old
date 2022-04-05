@@ -456,7 +456,7 @@
     <string name="daltonizer_mode_protanomaly" msgid="7805583306666608440">"Protanomaly (pula-berde)"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="7135266249220732267">"Tritanomaly (asul-dilaw)"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="1810693571332381974">"Pagtatama ng kulay"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="2333641630205214702">"Isaayos kung paano ipinapakita ang mga kulay sa iyong device. Makakatulong ito kapag gusto mong:&lt;br/&gt;&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;Makakita ng mas tumpak na mga kulay&lt;/li&gt; &lt;li&gt;&amp;nbsp;Mag-alis ng mga kulay para matulungan kang mag-focus&lt;/li&gt; &lt;/ol&gt;"</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="1522101114585266455">"Puwedeng makatulong ang pagtatama ng kulay kapag gusto mong:&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;Makita nang mas tumpak ang mga kulay&lt;/li&gt; &lt;li&gt;&amp;nbsp;Alisin ang mga kulay para matulungan kang tumuon&lt;/li&gt; &lt;/ol&gt;"</string>
     <string name="daltonizer_type_overridden" msgid="4509604753672535721">"Na-override ng <xliff:g id="TITLE">%1$s</xliff:g>"</string>
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"Humigit-kumulang <xliff:g id="TIME_REMAINING">%1$s</xliff:g> ang natitira"</string>
@@ -493,7 +493,9 @@
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Hindi nagcha-charge"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Nakakonekta, hindi nagcha-charge"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Nasingil"</string>
+    <string name="battery_info_status_full_charged" msgid="3536054261505567948">"Puno ang Baterya"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Pinapamahalaan ng admin"</string>
+    <string name="disabled_by_app_ops_text" msgid="8373595926549098012">"Kinokontrol ng Pinaghihigpitang Setting"</string>
     <string name="disabled" msgid="8017887509554714950">"Naka-disable"</string>
     <string name="external_source_trusted" msgid="1146522036773132905">"Pinapayagan"</string>
     <string name="external_source_untrusted" msgid="5037891688911672227">"Hindi pinapayagan"</string>
@@ -526,8 +528,7 @@
     <string name="ims_reg_status_not_registered" msgid="2989287366045704694">"Hindi nakarehistro"</string>
     <string name="status_unavailable" msgid="5279036186589861608">"Hindi available"</string>
     <string name="wifi_status_mac_randomized" msgid="466382542497832189">"Naka-randomize ang MAC"</string>
-    <!-- no translation found for wifi_tether_connected_summary (5282919920463340158) -->
-    <skip />
+    <string name="wifi_tether_connected_summary" msgid="5282919920463340158">"{count,plural, =0{0 device ang nakakonekta}=1{1 device ang nakakonekta}one{# device ang nakakonekta}other{# na device ang nakakonekta}}"</string>
     <string name="accessibility_manual_zen_more_time" msgid="5141801092071134235">"Dagdagan ang oras."</string>
     <string name="accessibility_manual_zen_less_time" msgid="6828877595848229965">"Bawasan ang oras."</string>
     <string name="cancel" msgid="5665114069455378395">"Kanselahin"</string>
@@ -636,4 +637,11 @@
     <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"Nadiskonekta ang Ethernet."</string>
     <string name="accessibility_ethernet_connected" msgid="6175942685957461563">"Ethernet."</string>
     <string name="accessibility_no_calling" msgid="3540827068323895748">"Hindi makakatawag."</string>
+    <string name="dream_complication_title_time" msgid="701747800712893499">"Oras"</string>
+    <string name="dream_complication_title_date" msgid="8661176085446135789">"Petsa"</string>
+    <string name="dream_complication_title_weather" msgid="598609151677172783">"Lagay ng Panahon"</string>
+    <string name="dream_complication_title_aqi" msgid="4587552608957834110">"Kalidad ng Hangin"</string>
+    <string name="dream_complication_title_cast_info" msgid="4038776652841885084">"Impormasyon ng Cast"</string>
+    <string name="avatar_picker_title" msgid="8492884172713170652">"Pumili ng larawan sa profile"</string>
+    <string name="default_user_icon_description" msgid="6554047177298972638">"Icon ng default na user"</string>
 </resources>

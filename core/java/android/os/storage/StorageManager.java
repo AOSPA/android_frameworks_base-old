@@ -83,7 +83,6 @@ import android.os.UserHandle;
 import android.provider.DeviceConfig;
 import android.provider.MediaStore;
 import android.provider.Settings;
-import android.sysprop.VoldProperties;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -273,12 +272,15 @@ public class StorageManager {
     public static final int FLAG_STORAGE_CE = IInstalld.FLAG_STORAGE_CE;
     /** {@hide} */
     public static final int FLAG_STORAGE_EXTERNAL = IInstalld.FLAG_STORAGE_EXTERNAL;
+    /** @hide */
+    public static final int FLAG_STORAGE_SDK = IInstalld.FLAG_STORAGE_SDK;
 
     /** {@hide} */
     @IntDef(prefix = "FLAG_STORAGE_",  value = {
             FLAG_STORAGE_DE,
             FLAG_STORAGE_CE,
-            FLAG_STORAGE_EXTERNAL
+            FLAG_STORAGE_EXTERNAL,
+            FLAG_STORAGE_SDK,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface StorageFlags {}
@@ -677,9 +679,7 @@ public class StorageManager {
     }
 
     /**
-     * Mount an Opaque Binary Blob (OBB) file. If a <code>key</code> is
-     * specified, it is supplied to the mounting process to be used in any
-     * encryption used in the OBB.
+     * Mount an Opaque Binary Blob (OBB) file.
      * <p>
      * The OBB will remain mounted for as long as the StorageManager reference
      * is held by the application. As soon as this reference is lost, the OBBs
@@ -692,19 +692,22 @@ public class StorageManager {
      * application's OBB that shares its UID.
      *
      * @param rawPath the path to the OBB file
-     * @param key secret used to encrypt the OBB; may be <code>null</code> if no
-     *            encryption was used on the OBB.
+     * @param key must be <code>null</code>. Previously, some Android device
+     *            implementations accepted a non-<code>null</code> key to mount
+     *            an encrypted OBB file. However, this never worked reliably and
+     *            is no longer supported.
      * @param listener will receive the success or failure of the operation
      * @return whether the mount call was successfully queued or not
      */
     public boolean mountObb(String rawPath, String key, OnObbStateChangeListener listener) {
         Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
+        Preconditions.checkArgument(key == null, "mounting encrypted OBBs is no longer supported");
         Preconditions.checkNotNull(listener, "listener cannot be null");
 
         try {
             final String canonicalPath = new File(rawPath).getCanonicalPath();
             final int nonce = mObbActionListener.addListener(listener);
-            mStorageManager.mountObb(rawPath, canonicalPath, key, mObbActionListener, nonce,
+            mStorageManager.mountObb(rawPath, canonicalPath, mObbActionListener, nonce,
                     getObbInfo(canonicalPath));
             return true;
         } catch (IOException e) {
@@ -1331,8 +1334,10 @@ public class StorageManager {
 
     /**
      * Return the list of shared/external storage volumes currently available to
-     * the calling user and the user it shares media with
-     * CDD link : https://source.android.com/compatibility/12/android-12-cdd#95_multi-user_support
+     * the calling user and the user it shares media with. Please refer to
+     * <a href="https://source.android.com/compatibility/12/android-12-cdd#95_multi-user_support">
+     *     multi-user support</a> for more details.
+     *
      * <p>
      * This is similar to {@link StorageManager#getStorageVolumes()} except that the result also
      * includes the volumes belonging to any user it shares media with
@@ -1536,6 +1541,8 @@ public class StorageManager {
      * be reserved for cached data depending on the device state which is then passed on
      * to getStorageCacheBytes.
      *
+     * Input File path must point to a storage volume.
+     *
      * @hide
      */
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
@@ -1731,10 +1738,7 @@ public class StorageManager {
      *         false not encrypted or file encrypted
      */
     public static boolean isBlockEncrypted() {
-        if (!isEncrypted()) {
-            return false;
-        }
-        return RoSystemProperties.CRYPTO_BLOCK_ENCRYPTED;
+        return false;
     }
 
     /** {@hide}
@@ -1744,18 +1748,7 @@ public class StorageManager {
      *         false not encrypted, file encrypted or default block encrypted
      */
     public static boolean isNonDefaultBlockEncrypted() {
-        if (!isBlockEncrypted()) {
-            return false;
-        }
-
-        try {
-            IStorageManager storageManager = IStorageManager.Stub.asInterface(
-                    ServiceManager.getService("mount"));
-            return storageManager.getPasswordType() != CRYPT_TYPE_DEFAULT;
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error getting encryption type");
-            return false;
-        }
+        return false;
     }
 
     /** {@hide}
@@ -1769,8 +1762,7 @@ public class StorageManager {
      * framework, so no service needs to check for changes during their lifespan
      */
     public static boolean isBlockEncrypting() {
-        final String state = VoldProperties.encrypt_progress().orElse("");
-        return !"".equalsIgnoreCase(state);
+        return false;
     }
 
     /** {@hide}
@@ -1785,8 +1777,7 @@ public class StorageManager {
      * framework, so no service needs to check for changes during their lifespan
      */
     public static boolean inCryptKeeperBounce() {
-        final String status = VoldProperties.decrypt().orElse("");
-        return "trigger_restart_min_framework".equals(status);
+        return false;
     }
 
     /** {@hide} */
@@ -2995,6 +2986,43 @@ public class StorageManager {
         Objects.requireNonNull(volumeUuid);
         try {
             return mStorageManager.isAppIoBlocked(convert(volumeUuid), uid, tid, reason);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Notify the system of the current cloud media provider.
+     *
+     * This can only be called by the {@link android.service.storage.ExternalStorageService}
+     * holding the {@link android.Manifest.permission#WRITE_MEDIA_STORAGE} permission.
+     *
+     * @param authority the authority of the content provider
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public void setCloudMediaProvider(@Nullable String authority) {
+        try {
+            mStorageManager.setCloudMediaProvider(authority);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the authority of the current cloud media provider that was set by the
+     * {@link android.service.storage.ExternalStorageService} holding the
+     * {@link android.Manifest.permission#WRITE_MEDIA_STORAGE} permission via
+     * {@link #setCloudMediaProvider(String)}.
+     *
+     * @hide
+     */
+    @Nullable
+    @TestApi
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public String getCloudMediaProvider() {
+        try {
+            return mStorageManager.getCloudMediaProvider();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

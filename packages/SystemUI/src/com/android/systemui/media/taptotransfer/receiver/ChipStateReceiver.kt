@@ -16,14 +16,43 @@
 
 package com.android.systemui.media.taptotransfer.receiver
 
-import android.graphics.drawable.Drawable
-import com.android.systemui.media.taptotransfer.common.MediaTttChipState
+import android.app.StatusBarManager
+import com.android.internal.logging.UiEventLogger
 
 /**
  * A class that stores all the information necessary to display the media tap-to-transfer chip on
  * the receiver device.
  */
-class ChipStateReceiver(
-    appIconDrawable: Drawable,
-    appIconContentDescription: String
-) : MediaTttChipState(appIconDrawable, appIconContentDescription)
+enum class ChipStateReceiver(
+    @StatusBarManager.MediaTransferSenderState val stateInt: Int,
+    val uiEvent: UiEventLogger.UiEventEnum,
+) {
+    CLOSE_TO_SENDER(
+        StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_CLOSE_TO_SENDER,
+        MediaTttReceiverUiEvents.MEDIA_TTT_RECEIVER_CLOSE_TO_SENDER,
+    ),
+    FAR_FROM_SENDER(
+        StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_FAR_FROM_SENDER,
+        MediaTttReceiverUiEvents.MEDIA_TTT_RECEIVER_FAR_FROM_SENDER,
+    );
+
+    companion object {
+        /**
+         * Returns the receiver state enum associated with the given [displayState] from
+         * [StatusBarManager].
+         */
+        fun getReceiverStateFromId(
+            @StatusBarManager.MediaTransferReceiverState displayState: Int
+        ) : ChipStateReceiver = values().first { it.stateInt == displayState }
+
+
+        /**
+         * Returns the state int from [StatusBarManager] associated with the given sender state
+         * name.
+         *
+         * @param name the name of one of the [ChipStateReceiver] enums.
+         */
+        @StatusBarManager.MediaTransferReceiverState
+        fun getReceiverStateIdFromName(name: String): Int = valueOf(name).stateInt
+    }
+}

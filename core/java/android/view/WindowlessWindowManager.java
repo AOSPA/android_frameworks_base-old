@@ -27,12 +27,11 @@ import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.MergedConfiguration;
-import android.view.InsetsState;
-import android.view.IWindow;
 import android.window.ClientWindowFrames;
 import android.window.IOnBackInvokedCallback;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -160,14 +159,15 @@ public class WindowlessWindowManager implements IWindowSession {
         if (((attrs.inputFeatures &
                 WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL) == 0)) {
             try {
-                if(mRealWm instanceof IWindowSession.Stub) {
+                if (mRealWm instanceof IWindowSession.Stub) {
                     mRealWm.grantInputChannel(displayId,
-                        new SurfaceControl(sc, "WindowlessWindowManager.addToDisplay"),
-                        window, mHostInputToken, attrs.flags, attrs.privateFlags, attrs.type,
-                        mFocusGrantToken, outInputChannel);
+                            new SurfaceControl(sc, "WindowlessWindowManager.addToDisplay"),
+                            window, mHostInputToken, attrs.flags, attrs.privateFlags, attrs.type,
+                            mFocusGrantToken, attrs.getTitle().toString(), outInputChannel);
                 } else {
                     mRealWm.grantInputChannel(displayId, sc, window, mHostInputToken, attrs.flags,
-                        attrs.privateFlags, attrs.type, mFocusGrantToken, outInputChannel);
+                            attrs.privateFlags, attrs.type, mFocusGrantToken,
+                            attrs.getTitle().toString(), outInputChannel);
                 }
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to grant input to surface: ", e);
@@ -474,18 +474,18 @@ public class WindowlessWindowManager implements IWindowSession {
 
     @Override
     public void reportSystemGestureExclusionChanged(android.view.IWindow window,
-            java.util.List<android.graphics.Rect> exclusionRects) {
+            List<Rect> exclusionRects) {
     }
 
     @Override
-    public void reportKeepClearAreasChanged(android.view.IWindow window,
-            java.util.List<android.graphics.Rect> exclusionRects) {
+    public void reportKeepClearAreasChanged(android.view.IWindow window, List<Rect> restrictedRects,
+            List<Rect> unrestrictedRects) {
     }
 
     @Override
     public void grantInputChannel(int displayId, SurfaceControl surface, IWindow window,
             IBinder hostInputToken, int flags, int privateFlags, int type, IBinder focusGrantToken,
-            InputChannel outInputChannel) {
+            String inputHandleName, InputChannel outInputChannel) {
     }
 
     @Override
@@ -510,7 +510,7 @@ public class WindowlessWindowManager implements IWindowSession {
 
     @Override
     public void setOnBackInvokedCallback(IWindow iWindow,
-            IOnBackInvokedCallback iOnBackInvokedCallback) throws RemoteException { }
+            IOnBackInvokedCallback iOnBackInvokedCallback, int priority) throws RemoteException { }
 
     @Override
     public boolean dropForAccessibility(IWindow window, int x, int y) {

@@ -29,6 +29,8 @@ import static android.view.WindowInsets.Type.ime;
 import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.HOME_BUTTON_LONG_PRESS_DURATION_MS;
 import static com.android.systemui.navigationbar.NavigationBar.NavBarActionEvent.NAVBAR_ASSIST_LONGPRESS;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -92,13 +94,11 @@ import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowView;
 import com.android.systemui.statusbar.phone.ShadeController;
-import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
+import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.utils.leaks.LeakCheckedTest;
 import com.android.wm.shell.back.BackAnimation;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.pip.Pip;
 
 import org.junit.After;
@@ -160,7 +160,7 @@ public class NavigationBarTest extends SysuiTestCase {
     @Mock
     private AssistManager mAssistManager;
     @Mock
-    private StatusBar mStatusBar;
+    private CentralSurfaces mCentralSurfaces;
 
     @Rule
     public final LeakCheckedTest.SysuiLeakCheck mLeakCheck = new LeakCheckedTest.SysuiLeakCheck();
@@ -189,7 +189,7 @@ public class NavigationBarTest extends SysuiTestCase {
                     mock(AccessibilityButtonModeObserver.class),
                     mock(AccessibilityButtonTargetsObserver.class),
                     mSystemActions, mOverviewProxyService,
-                    () -> mock(AssistManager.class), () -> Optional.of(mStatusBar),
+                    () -> mock(AssistManager.class), () -> Optional.of(mCentralSurfaces),
                     mock(NavigationModeController.class), mock(UserTracker.class),
                     mock(DumpManager.class)));
             mNavigationBar = createNavBar(mContext);
@@ -228,7 +228,8 @@ public class NavigationBarTest extends SysuiTestCase {
 
     @Test
     public void testHomeLongPress() {
-        mNavigationBar.onViewAttachedToWindow(mNavigationBar.createView(null));
+        mNavigationBar.onViewAttachedToWindow(mNavigationBar
+                .createView(null, /* initialVisibility= */ true));
         mNavigationBar.onHomeLongClick(mNavigationBar.getView());
 
         verify(mUiEventLogger, times(1)).log(NAVBAR_ASSIST_LONGPRESS);
@@ -241,7 +242,8 @@ public class NavigationBarTest extends SysuiTestCase {
                     .setLong(HOME_BUTTON_LONG_PRESS_DURATION_MS, 100)
                     .build());
         when(mNavBarHelper.getLongPressHomeEnabled()).thenReturn(true);
-        mNavigationBar.onViewAttachedToWindow(mNavigationBar.createView(null));
+        mNavigationBar.onViewAttachedToWindow(mNavigationBar
+                .createView(null, /* initialVisibility= */ true));
 
         mNavigationBar.onHomeTouch(mNavigationBar.getView(), MotionEvent.obtain(
                 /*downTime=*/SystemClock.uptimeMillis(),
@@ -263,7 +265,8 @@ public class NavigationBarTest extends SysuiTestCase {
 
     @Test
     public void testRegisteredWithDispatcher() {
-        mNavigationBar.onViewAttachedToWindow(mNavigationBar.createView(null));
+        mNavigationBar.onViewAttachedToWindow(mNavigationBar
+                .createView(null, /* initialVisibility= */ true));
         verify(mBroadcastDispatcher).registerReceiverWithHandler(
                 any(BroadcastReceiver.class),
                 any(IntentFilter.class),
@@ -279,12 +282,12 @@ public class NavigationBarTest extends SysuiTestCase {
         NotificationShadeWindowView mockShadeWindowView = mock(NotificationShadeWindowView.class);
         WindowInsets windowInsets = new WindowInsets.Builder().setVisible(ime(), false).build();
         doReturn(windowInsets).when(mockShadeWindowView).getRootWindowInsets();
-        doReturn(mockShadeWindowView).when(mStatusBar).getNotificationShadeWindowView();
+        doReturn(mockShadeWindowView).when(mCentralSurfaces).getNotificationShadeWindowView();
         doReturn(true).when(mockShadeWindowView).isAttachedToWindow();
         doNothing().when(defaultNavBar).checkNavBarModes();
         doNothing().when(externalNavBar).checkNavBarModes();
-        defaultNavBar.createView(null);
-        externalNavBar.createView(null);
+        defaultNavBar.createView(null, /* initialVisibility= */ true);
+        externalNavBar.createView(null, /* initialVisibility= */ true);
 
         defaultNavBar.setImeWindowStatus(DEFAULT_DISPLAY, null, IME_VISIBLE,
                 BACK_DISPOSITION_DEFAULT, true);
@@ -315,10 +318,10 @@ public class NavigationBarTest extends SysuiTestCase {
     @Test
     public void testSetImeWindowStatusWhenKeyguardLockingAndImeInsetsChange() {
         NotificationShadeWindowView mockShadeWindowView = mock(NotificationShadeWindowView.class);
-        doReturn(mockShadeWindowView).when(mStatusBar).getNotificationShadeWindowView();
+        doReturn(mockShadeWindowView).when(mCentralSurfaces).getNotificationShadeWindowView();
         doReturn(true).when(mockShadeWindowView).isAttachedToWindow();
         doNothing().when(mNavigationBar).checkNavBarModes();
-        mNavigationBar.createView(null);
+        mNavigationBar.createView(null, /* initialVisibility= */ true);
         WindowInsets windowInsets = new WindowInsets.Builder().setVisible(ime(), false).build();
         doReturn(windowInsets).when(mockShadeWindowView).getRootWindowInsets();
 
@@ -332,7 +335,7 @@ public class NavigationBarTest extends SysuiTestCase {
 
         // Verify navbar didn't alter and showing back icon when the keyguard is showing without
         // requesting IME insets visible.
-        doReturn(true).when(mStatusBar).isKeyguardShowing();
+        doReturn(true).when(mCentralSurfaces).isKeyguardShowing();
         mNavigationBar.setImeWindowStatus(DEFAULT_DISPLAY, null, IME_VISIBLE,
                 BACK_DISPOSITION_DEFAULT, true);
         assertFalse((mNavigationBar.getNavigationIconHints() & NAVIGATION_HINT_BACK_ALT) != 0);
@@ -354,7 +357,7 @@ public class NavigationBarTest extends SysuiTestCase {
 
     @Test
     public void testA11yEventAfterDetach() {
-        View v = mNavigationBar.createView(null);
+        View v = mNavigationBar.createView(null, /* initialVisibility= */ true);
         mNavigationBar.onViewAttachedToWindow(v);
         verify(mNavBarHelper).registerNavTaskStateUpdater(any(
                 NavBarHelper.NavbarTaskbarStateUpdater.class));
@@ -364,6 +367,20 @@ public class NavigationBarTest extends SysuiTestCase {
 
         // Should be safe even though the internal view is now null.
         mNavigationBar.updateAccessibilityStateFlags();
+    }
+
+    @Test
+    public void testCreateView_initiallyVisible_viewIsVisible() {
+        mNavigationBar.createView(null, /* initialVisibility= */ true);
+
+        assertThat(mNavigationBar.getView().getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void testCreateView_initiallyNotVisible_viewIsNotVisible() {
+        mNavigationBar.createView(null, /* initialVisibility= */ false);
+
+        assertThat(mNavigationBar.getView().getVisibility()).isEqualTo(View.INVISIBLE);
     }
 
     private NavigationBar createNavBar(Context context) {
@@ -383,9 +400,8 @@ public class NavigationBarTest extends SysuiTestCase {
                 mBroadcastDispatcher,
                 mCommandQueue,
                 Optional.of(mock(Pip.class)),
-                Optional.of(mock(LegacySplitScreen.class)),
                 Optional.of(mock(Recents.class)),
-                () -> Optional.of(mStatusBar),
+                () -> Optional.of(mCentralSurfaces),
                 mock(ShadeController.class),
                 mock(NotificationRemoteInputManager.class),
                 mock(NotificationShadeDepthController.class),

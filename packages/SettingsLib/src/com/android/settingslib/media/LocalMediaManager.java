@@ -21,6 +21,7 @@ import android.app.Notification;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.media.RoutingSessionInfo;
 import android.os.Build;
 import android.text.TextUtils;
@@ -36,9 +37,9 @@ import com.android.settingslib.bluetooth.BluetoothCallback;
 import com.android.settingslib.bluetooth.CachedBluetoothDevice;
 import com.android.settingslib.bluetooth.CachedBluetoothDeviceManager;
 import com.android.settingslib.bluetooth.HearingAidProfile;
+import com.android.settingslib.bluetooth.LeAudioProfile;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.settingslib.bluetooth.LocalBluetoothProfile;
-import com.android.settingslib.bluetooth.LeAudioProfile;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -197,6 +198,14 @@ public class LocalMediaManager implements BluetoothCallback {
     }
 
     /**
+     * Returns if the media session is available for volume control.
+     * @return True if this media session is available for colume control, false otherwise.
+     */
+    public boolean isMediaSessionAvailableForVolumeControl() {
+        return mInfoMediaManager.isRoutingSessionAvailableForVolumeControl();
+    }
+
+    /**
      * Start scan connected MediaDevice
      */
     public void startScan() {
@@ -223,6 +232,18 @@ public class LocalMediaManager implements BluetoothCallback {
     void dispatchOnRequestFailed(int reason) {
         for (DeviceCallback callback : getCallbacks()) {
             callback.onRequestFailed(reason);
+        }
+    }
+
+    /**
+     * Dispatch a change in the about-to-connect device. See
+     * {@link DeviceCallback#onAboutToConnectDeviceChanged} for more information.
+     */
+    public void dispatchAboutToConnectDeviceChanged(
+            @Nullable String deviceName,
+            @Nullable Drawable deviceIcon) {
+        for (DeviceCallback callback : getCallbacks()) {
+            callback.onAboutToConnectDeviceChanged(deviceName, deviceIcon);
         }
     }
 
@@ -674,6 +695,21 @@ public class LocalMediaManager implements BluetoothCallback {
          * {@link android.media.MediaRoute2ProviderService#REASON_INVALID_COMMAND},
          */
         default void onRequestFailed(int reason){};
+
+        /**
+         * Callback for notifying that we have a new about-to-connect device.
+         *
+         * An about-to-connect device is a device that is not yet connected but is expected to
+         * connect imminently and should be displayed as the current device in the media player.
+         * See [AudioManager.muteAwaitConnection] for more details.
+         *
+         * @param deviceName the name of the device (displayed to the user).
+         * @param deviceIcon the icon that should be used with the device.
+         */
+        default void onAboutToConnectDeviceChanged(
+                @Nullable String deviceName,
+                @Nullable Drawable deviceIcon
+        ) {}
     }
 
     /**

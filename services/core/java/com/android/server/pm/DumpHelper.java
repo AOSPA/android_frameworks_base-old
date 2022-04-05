@@ -37,6 +37,8 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxy;
 
+import dalvik.annotation.optimization.NeverCompile;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.function.BiConsumer;
@@ -51,6 +53,7 @@ final class DumpHelper {
         mPm = pm;
     }
 
+    @NeverCompile // Avoid size overhead of debugging code.
     public void doDump(FileDescriptor fd, PrintWriter pw, String[] args) {
         DumpState dumpState = new DumpState();
         ArraySet<String> permissionNames = null;
@@ -285,6 +288,8 @@ final class DumpHelper {
             ipw.decreaseIndent();
         }
 
+        final Computer snapshot = mPm.snapshotComputer();
+
         if (dumpState.isDumping(DumpState.DUMP_VERIFIERS)
                 && packageName == null) {
             final String requiredVerifierPackage = mPm.mRequiredVerifierPackage;
@@ -296,14 +301,14 @@ final class DumpHelper {
                 pw.print("  Required: ");
                 pw.print(requiredVerifierPackage);
                 pw.print(" (uid=");
-                pw.print(mPm.getPackageUid(requiredVerifierPackage, MATCH_DEBUG_TRIAGED_MISSING,
-                        UserHandle.USER_SYSTEM));
+                pw.print(snapshot.getPackageUid(requiredVerifierPackage,
+                        MATCH_DEBUG_TRIAGED_MISSING, UserHandle.USER_SYSTEM));
                 pw.println(")");
             } else if (requiredVerifierPackage != null) {
                 pw.print("vrfy,"); pw.print(requiredVerifierPackage);
                 pw.print(",");
-                pw.println(mPm.getPackageUid(requiredVerifierPackage, MATCH_DEBUG_TRIAGED_MISSING,
-                        UserHandle.USER_SYSTEM));
+                pw.println(snapshot.getPackageUid(requiredVerifierPackage,
+                        MATCH_DEBUG_TRIAGED_MISSING, UserHandle.USER_SYSTEM));
             }
         }
 
@@ -321,14 +326,14 @@ final class DumpHelper {
                     pw.print("  Using: ");
                     pw.print(verifierPackageName);
                     pw.print(" (uid=");
-                    pw.print(mPm.getPackageUid(verifierPackageName, MATCH_DEBUG_TRIAGED_MISSING,
-                            UserHandle.USER_SYSTEM));
+                    pw.print(snapshot.getPackageUid(verifierPackageName,
+                            MATCH_DEBUG_TRIAGED_MISSING, UserHandle.USER_SYSTEM));
                     pw.println(")");
                 } else if (verifierPackageName != null) {
                     pw.print("dv,"); pw.print(verifierPackageName);
                     pw.print(",");
-                    pw.println(mPm.getPackageUid(verifierPackageName, MATCH_DEBUG_TRIAGED_MISSING,
-                            UserHandle.USER_SYSTEM));
+                    pw.println(snapshot.getPackageUid(verifierPackageName,
+                            MATCH_DEBUG_TRIAGED_MISSING, UserHandle.USER_SYSTEM));
                 }
             } else {
                 pw.println();
@@ -402,7 +407,8 @@ final class DumpHelper {
         }
 
         if (!checkin && dumpState.isDumping(DumpState.DUMP_PROVIDERS)) {
-            mPm.mComponentResolver.dumpContentProviders(pw, dumpState, packageName);
+            mPm.mComponentResolver.dumpContentProviders(snapshot, pw, dumpState,
+                    packageName);
         }
 
         if (!checkin
@@ -657,13 +663,14 @@ final class DumpHelper {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
 
         synchronized (mPm.mLock) {
+            final Computer snapshot = mPm.snapshotComputer();
             final long requiredVerifierPackageToken =
                     proto.start(PackageServiceDumpProto.REQUIRED_VERIFIER_PACKAGE);
             proto.write(PackageServiceDumpProto.PackageShortProto.NAME,
                     mPm.mRequiredVerifierPackage);
             proto.write(
                     PackageServiceDumpProto.PackageShortProto.UID,
-                    mPm.getPackageUid(
+                    snapshot.getPackageUid(
                             mPm.mRequiredVerifierPackage,
                             MATCH_DEBUG_TRIAGED_MISSING,
                             UserHandle.USER_SYSTEM));
@@ -678,7 +685,7 @@ final class DumpHelper {
                 proto.write(PackageServiceDumpProto.PackageShortProto.NAME, verifierPackageName);
                 proto.write(
                         PackageServiceDumpProto.PackageShortProto.UID,
-                        mPm.getPackageUid(
+                        snapshot.getPackageUid(
                                 verifierPackageName,
                                 MATCH_DEBUG_TRIAGED_MISSING,
                                 UserHandle.USER_SYSTEM));

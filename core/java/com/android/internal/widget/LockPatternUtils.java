@@ -26,6 +26,7 @@ import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.PropertyInvalidatedCache;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.PasswordMetrics;
 import android.app.trust.IStrongAuthTracker;
@@ -732,38 +733,14 @@ public class LockPatternUtils {
         }
     }
 
-    private void updateCryptoUserInfo(int userId) {
-        if (userId != UserHandle.USER_SYSTEM) {
-            return;
-        }
-
-        final String ownerInfo = isOwnerInfoEnabled(userId) ? getOwnerInfo(userId) : "";
-
-        IBinder service = ServiceManager.getService("mount");
-        if (service == null) {
-            Log.e(TAG, "Could not find the mount service to update the user info");
-            return;
-        }
-
-        IStorageManager storageManager = IStorageManager.Stub.asInterface(service);
-        try {
-            Log.d(TAG, "Setting owner info");
-            storageManager.setField(StorageManager.OWNER_INFO_KEY, ownerInfo);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error changing user info", e);
-        }
-    }
-
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void setOwnerInfo(String info, int userId) {
         setString(LOCK_SCREEN_OWNER_INFO, info, userId);
-        updateCryptoUserInfo(userId);
     }
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void setOwnerInfoEnabled(boolean enabled, int userId) {
         setBoolean(LOCK_SCREEN_OWNER_INFO_ENABLED, enabled, userId);
-        updateCryptoUserInfo(userId);
     }
 
     @UnsupportedAppUsage
@@ -815,17 +792,6 @@ public class LockPatternUtils {
      */
     public static boolean isFileEncryptionEnabled() {
         return StorageManager.isFileEncryptedNativeOrEmulated();
-    }
-
-    /**
-     * Clears the encryption password.
-     */
-    public void clearEncryptionPassword() {
-        try {
-            getLockSettings().updateEncryptionPassword(StorageManager.CRYPT_TYPE_DEFAULT, null);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Couldn't clear encryption password");
-        }
     }
 
     /**
@@ -952,17 +918,53 @@ public class LockPatternUtils {
     }
 
     /**
+     * Retrieve the credential type of a user.
+     */
+    private final PropertyInvalidatedCache.QueryHandler<Integer, Integer> mCredentialTypeQuery =
+            new PropertyInvalidatedCache.QueryHandler<>() {
+                @Override
+                public Integer apply(Integer userHandle) {
+                    try {
+                        return getLockSettings().getCredentialType(userHandle);
+                    } catch (RemoteException re) {
+                        Log.e(TAG, "failed to get credential type", re);
+                        return CREDENTIAL_TYPE_NONE;
+                    }
+                }
+                @Override
+                public boolean shouldBypassCache(Integer userHandle) {
+                    return userHandle == USER_FRP;
+                }
+            };
+
+    /**
+     * The API that is cached.
+     */
+    private final static String CREDENTIAL_TYPE_API = "getCredentialType";
+
+    /**
+     * Cache the credential type of a user.
+     */
+    private final PropertyInvalidatedCache<Integer, Integer> mCredentialTypeCache =
+            new PropertyInvalidatedCache<>(4, PropertyInvalidatedCache.MODULE_SYSTEM,
+                    CREDENTIAL_TYPE_API, CREDENTIAL_TYPE_API, mCredentialTypeQuery);
+
+    /**
+     * Invalidate the credential cache
+     * @hide
+     */
+    public final static void invalidateCredentialTypeCache() {
+        PropertyInvalidatedCache.invalidateCache(PropertyInvalidatedCache.MODULE_SYSTEM,
+                CREDENTIAL_TYPE_API);
+    }
+
+    /**
      * Returns the credential type of the user, can be one of {@link #CREDENTIAL_TYPE_NONE},
      * {@link #CREDENTIAL_TYPE_PATTERN}, {@link #CREDENTIAL_TYPE_PIN} and
      * {@link #CREDENTIAL_TYPE_PASSWORD}
      */
     public @CredentialType int getCredentialTypeForUser(int userHandle) {
-        try {
-            return getLockSettings().getCredentialType(userHandle);
-        } catch (RemoteException re) {
-            Log.e(TAG, "failed to get credential type", re);
-            return CREDENTIAL_TYPE_NONE;
-        }
+        return mCredentialTypeCache.query(userHandle);
     }
 
     /**
@@ -1016,24 +1018,6 @@ public class LockPatternUtils {
      */
     public void setVisiblePatternEnabled(boolean enabled, int userId) {
         setBoolean(Settings.Secure.LOCK_PATTERN_VISIBLE, enabled, userId);
-
-        // Update for crypto if owner
-        if (userId != UserHandle.USER_SYSTEM) {
-            return;
-        }
-
-        IBinder service = ServiceManager.getService("mount");
-        if (service == null) {
-            Log.e(TAG, "Could not find the mount service to update the user info");
-            return;
-        }
-
-        IStorageManager storageManager = IStorageManager.Stub.asInterface(service);
-        try {
-            storageManager.setField(StorageManager.PATTERN_VISIBLE_KEY, enabled ? "1" : "0");
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error changing pattern visible state", e);
-        }
     }
 
     public boolean isVisiblePatternEverChosen(int userId) {
@@ -1044,23 +1028,7 @@ public class LockPatternUtils {
      * Set whether the visible password is enabled for cryptkeeper screen.
      */
     public void setVisiblePasswordEnabled(boolean enabled, int userId) {
-        // Update for crypto if owner
-        if (userId != UserHandle.USER_SYSTEM) {
-            return;
-        }
-
-        IBinder service = ServiceManager.getService("mount");
-        if (service == null) {
-            Log.e(TAG, "Could not find the mount service to update the user info");
-            return;
-        }
-
-        IStorageManager storageManager = IStorageManager.Stub.asInterface(service);
-        try {
-            storageManager.setField(StorageManager.PASSWORD_VISIBLE_KEY, enabled ? "1" : "0");
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error changing password visible state", e);
-        }
+        // No longer does anything.
     }
 
     /**
