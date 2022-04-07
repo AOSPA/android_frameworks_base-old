@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3f63fd27_cd81884b",
+        "filename": "core/java/android/hardware/camera2/CameraManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 540,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-04-07T04:40:44Z",
+      "side": 1,
+      "message": "move it near to the usage",
+      "revId": "c29ffb6910b004e2a93c4c9113d2a62c49858e00",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "6b86e028_dfe9b91b",
+        "filename": "core/java/android/hardware/camera2/CameraManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 544,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-04-07T04:40:44Z",
+      "side": 1,
+      "message": "should it not be CameraAccessException",
+      "revId": "c29ffb6910b004e2a93c4c9113d2a62c49858e00",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
