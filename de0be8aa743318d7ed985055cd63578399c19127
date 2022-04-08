@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0d94747d_c80ad375",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-04-08T03:10:40Z",
+      "side": 1,
+      "message": "seems like it should be a property or overlay to avoid hard coding. what if another device comes along with a different ID?",
+      "revId": "de0be8aa743318d7ed985055cd63578399c19127",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
