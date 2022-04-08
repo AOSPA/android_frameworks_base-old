@@ -1857,8 +1857,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return false;
         }
         if (tda == null) {
-            Slog.w(TAG, "Can't find TaskDisplayArea to determine support for multi"
-                    + " window. Task id=" + getTaskId() + " attached=" + isAttached());
             return false;
         }
         if (!getTask().isResizeable() && !tda.supportsNonResizableMultiWindow()) {
