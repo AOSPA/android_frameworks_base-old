@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
 const val TAG = "ColorScheme"
 
 const val ACCENT1_CHROMA = 48.0f
-const val ACCENT2_CHROMA = 16.0f
+const val ACCENT2_CHROMA = 24.0f
 const val ACCENT3_CHROMA = 32.0f
 const val ACCENT3_HUE_SHIFT = 60.0f
 
@@ -87,8 +87,8 @@ public class ColorScheme(@ColorInt seed: Int, val darkTheme: Boolean) {
         val chroma = camSeed.chroma.coerceAtLeast(ACCENT1_CHROMA)
         val tertiaryHue = wrapDegrees((hue + ACCENT3_HUE_SHIFT).toInt())
         accent1 = Shades.of(hue, chroma).toList()
-        accent2 = Shades.of(hue, ACCENT2_CHROMA).toList()
-        accent3 = Shades.of(tertiaryHue.toFloat(), ACCENT3_CHROMA).toList()
+        accent2 = Shades.of(hue + 10.0f, ACCENT2_CHROMA).toList()
+        accent3 = Shades.of(tertiaryHue.toFloat() + 20.0f, ACCENT3_CHROMA).toList()
         neutral1 = Shades.of(hue, NEUTRAL1_CHROMA).toList()
         neutral2 = Shades.of(hue, NEUTRAL2_CHROMA).toList()
     }
