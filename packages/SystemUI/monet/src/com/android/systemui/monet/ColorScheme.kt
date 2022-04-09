@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
 const val TAG = "ColorScheme"
 
 const val ACCENT1_CHROMA = 48.0f
-const val ACCENT2_CHROMA = 16.0f
+const val ACCENT2_CHROMA = 24.0f
 const val ACCENT3_CHROMA = 32.0f
 const val ACCENT3_HUE_SHIFT = 60.0f
 
