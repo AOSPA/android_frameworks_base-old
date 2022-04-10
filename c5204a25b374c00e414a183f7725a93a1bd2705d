@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c4b31e1f_06322ad7",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000715
+      },
+      "writtenOn": "2022-04-10T17:01:48Z",
+      "side": 1,
+      "message": "latest patch should mimic the vibrant style on Android 13, compare accent 2 and accent 3 colors before (refer to the A12 Easter egg widget) please share the screenshots in slack if there\u0027s any issues ",
+      "revId": "c5204a25b374c00e414a183f7725a93a1bd2705d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
