@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c944ef0e_594b46e5",
+        "filename": "packages/SystemUI/src/com/android/keyguard/KeyguardPinViewController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 98,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-04-10T04:46:19Z",
+      "side": 1,
+      "message": "why is it inside of the null check of ok button. i don\u0027t remember adding it there.",
+      "revId": "884cc56fe5d406c50182dad5c9e467d1e9b2e143",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
