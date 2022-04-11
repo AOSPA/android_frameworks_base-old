@@ -130,6 +130,8 @@ android_library {
         "smartspace-google",
         "tensorflowlite_java",
         "vendor-pixelatoms-java",
+        "colorkt",
+        "themelib",
     ],
     manifest: "AndroidManifest.xml",
     defaults: [

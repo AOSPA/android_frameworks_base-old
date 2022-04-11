@@ -25,6 +25,7 @@ import androidx.annotation.Nullable;
 import co.aospa.android.systemui.AospaServices;
 import co.aospa.android.systemui.assist.AssistManagerGoogle;
 import co.aospa.android.systemui.smartspace.KeyguardSmartspaceController;
+import co.aospa.android.systemui.theme.AospaThemeOverlayController;
 
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.app.AssistUtils;
@@ -95,6 +96,7 @@ import com.android.systemui.statusbar.policy.SensorPrivacyController;
 import com.android.systemui.statusbar.policy.SensorPrivacyControllerImpl;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.telephony.TelephonyListenerManager;
+import com.android.systemui.theme.ThemeOverlayController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.sensors.ProximitySensor;
@@ -287,6 +289,9 @@ public abstract class AospaSystemUIModule {
     static AospaServices provideAospaServices(Context context, UiEventLogger uiEventLogger, Lazy<ServiceConfigurationGoogle> lazy, Lazy<ColumbusServiceWrapper> lazyB) {
         return new AospaServices(context, uiEventLogger, lazy, lazyB);
     }
+
+    @Binds
+    abstract ThemeOverlayController provideThemeOverlayController(AospaThemeOverlayController themeOverlayController);
 
     // Google
     @Provides
