@@ -100,6 +100,12 @@ class AnrHelper {
         final int incomingPid = anrRecord.mPid;
         final String annotation = anrRecord.mAnnotation;
         synchronized (mAnrRecords) {
+            if (incomingPid == 0) {
+                // Extreme corner case such as zygote is no response to return pid for the process.
+                ProcessRecord anrProcess = anrRecord.mApp;
+                Slog.i(TAG, "Skip zero pid ANR, process=" + anrProcess.processName);
+                return;
+            }
             if (mProcessingPid == incomingPid) {
                 Slog.i(TAG, "Skip duplicated ANR, pid=" + incomingPid + " " + annotation);
                 return;
