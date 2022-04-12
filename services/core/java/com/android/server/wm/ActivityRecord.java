@@ -4620,14 +4620,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
             applyOptionsAnimation(mPendingOptions, intent);
         }
-        if (task == null) {
-            clearOptionsAnimation();
-        } else {
-            // This will clear the options for all the ActivityRecords for this Task.
-            task.forAllActivities((r) -> {
-                r.clearOptionsAnimation();
-            });
-        }
+        clearOptionsAnimationForSiblings();
     }
 
     /**
@@ -4812,6 +4805,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mPendingOptions = null;
         mPendingRemoteAnimation = null;
         mPendingRemoteTransition = null;
+    }
+
+    void clearOptionsAnimationForSiblings() {
+        if (task == null) {
+            clearOptionsAnimation();
+        } else {
+            // This will clear the options for all the ActivityRecords for this Task.
+            task.forAllActivities(ActivityRecord::clearOptionsAnimation);
+        }
     }
 
     ActivityOptions getOptions() {
