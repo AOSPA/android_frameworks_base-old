@@ -142,7 +142,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 @Override
                 public void onMobileStatusChanged(boolean updateTelephony,
                         MobileStatus mobileStatus) {
-                    if (Log.isLoggable(mTag, Log.DEBUG)) {
+                    if (DEBUG) {
                         Log.d(mTag, "onMobileStatusChanged="
                                 + " updateTelephony=" + updateTelephony
                                 + " mobileStatus=" + mobileStatus.toString());
@@ -333,7 +333,9 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 true, mObserver);
         mContext.registerReceiver(mVolteSwitchObserver,
                 new IntentFilter("org.codeaurora.intent.action.ACTION_ENHANCE_4G_SWITCH"));
-        mFeatureConnector.connect();
+        if (mConfig.showVolteIcon || mConfig.showVowifiIcon) {
+            mFeatureConnector.connect();
+        }
         if (mProviderModelBehavior) {
             mReceiverHandler.post(mTryRegisterIms);
         }
@@ -370,7 +372,9 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         mContext.getContentResolver().unregisterContentObserver(mObserver);
         mImsMmTelManager.unregisterImsRegistrationCallback(mRegistrationCallback);
         mContext.unregisterReceiver(mVolteSwitchObserver);
-        mFeatureConnector.disconnect();
+        if (mConfig.showVolteIcon || mConfig.showVowifiIcon) {
+            mFeatureConnector.disconnect();
+        }
     }
 
     private void updateInflateSignalStrength() {
@@ -880,7 +884,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
      * This will call listeners if necessary.
      */
     private void updateTelephony() {
-        if (Log.isLoggable(mTag, Log.DEBUG)) {
+        if (DEBUG) {
             Log.d(mTag, "updateTelephonySignalStrength: hasService="
                     + mCurrentState.isInService()
                     + " ss=" + mCurrentState.signalStrength
