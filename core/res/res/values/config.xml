@@ -3415,10 +3415,6 @@
          phone object irrespective of this config -->
     <bool name="config_switch_phone_on_voice_reg_state_change">true</bool>
 
-    <!-- Config determines whether to add 3 seconds delay for ims deregistration
-         before sending RADIO POWER OFF in APM ON and shutdown scenarios -->
-    <bool name="config_wait_for_ims_deregistration_before_radio_poweroff">false</bool>
-
     <bool name="config_sms_force_7bit_encoding">false</bool>
 
     <!-- Number of physical SIM slots on the device. This includes both eSIM and pSIM slots, and
