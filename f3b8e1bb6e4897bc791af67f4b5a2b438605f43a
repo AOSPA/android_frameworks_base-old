@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3981c6c9_b334be38",
+        "filename": "packages/SystemUI/res/values/aospa_strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2022-04-14T16:41:18Z",
+      "side": 1,
+      "message": "Why moving it to aospa_strings?",
+      "revId": "f3b8e1bb6e4897bc791af67f4b5a2b438605f43a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
