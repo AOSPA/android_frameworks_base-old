@@ -517,7 +517,12 @@ public class CarrierConfigManager {
     /** Control whether users can choose a network operator. */
     public static final String KEY_OPERATOR_SELECTION_EXPAND_BOOL = "operator_selection_expand_bool";
 
-    /** Used in Cellular Network Settings for preferred network type. */
+    /**
+     * Used in the Preferred Network Types menu to determine if the 2G option is displayed.
+     * Value defaults to false as of Android T to discourage the use of insecure 2G protocols.
+     *
+     * @see #KEY_HIDE_ENABLE_2G
+     */
     public static final String KEY_PREFER_2G_BOOL = "prefer_2g_bool";
 
     /**
@@ -8551,8 +8556,9 @@ public class CarrierConfigManager {
      *     <item value="source=GERAN|UTRAN, target:IWLAN, type=disallowed"/>
      *     <!-- Handover from IWLAN to 3G/4G/5G is not allowed if the device is roaming. -->
      *     <item value="source=IWLAN, target=UTRAN|EUTRAN|NGRAN, roaming=true, type=disallowed"/>
-     *     <!-- Handover from 4G to IWLAN is not allowed -->
-     *     <item value="source=EUTRAN, target=IWLAN, type=disallowed"/>
+     *     <!-- Handover from 4G to IWLAN is not allowed if the device has capability in either IMS
+     *     or EIMS-->
+     *     <item value="source=EUTRAN, target=IWLAN, type=disallowed, capabilities=IMS|EIMS"/>
      *     <!-- Handover is always allowed in any condition. -->
      *     <item value="source=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN,
      *         target=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN, type=allowed"/>
@@ -8700,7 +8706,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_IGNORE_SIM_NETWORK_LOCKED_EVENTS_BOOL, false);
         sDefaults.putBoolean(KEY_MDN_IS_ADDITIONAL_VOICEMAIL_NUMBER_BOOL, false);
         sDefaults.putBoolean(KEY_OPERATOR_SELECTION_EXPAND_BOOL, true);
-        sDefaults.putBoolean(KEY_PREFER_2G_BOOL, true);
+        sDefaults.putBoolean(KEY_PREFER_2G_BOOL, false);
         sDefaults.putBoolean(KEY_4G_ONLY_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_APN_SETTING_CDMA_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_CDMA_CHOICES_BOOL, false);
@@ -9623,42 +9629,26 @@ public class CarrierConfigManager {
     private void addConfig(String key, Object value, PersistableBundle configs) {
         if (value instanceof String) {
             configs.putString(key, (String) value);
-        }
-
-        if (value instanceof String[]) {
+        } else if (value instanceof String[]) {
             configs.putStringArray(key, (String[]) value);
-        }
-
-        if (value instanceof Integer) {
+        } else if (value instanceof Integer) {
             configs.putInt(key, (Integer) value);
-        }
-
-        if (value instanceof Long) {
+        } else if (value instanceof Long) {
             configs.putLong(key, (Long) value);
-        }
-
-        if (value instanceof Double) {
+        } else if (value instanceof Double) {
             configs.putDouble(key, (Double) value);
-        }
-
-        if (value instanceof Boolean) {
+        } else if (value instanceof Boolean) {
             configs.putBoolean(key, (Boolean) value);
-        }
-
-        if (value instanceof int[]) {
+        } else if (value instanceof int[]) {
             configs.putIntArray(key, (int[]) value);
-        }
-
-        if (value instanceof double[]) {
+        } else if (value instanceof double[]) {
             configs.putDoubleArray(key, (double[]) value);
-        }
-
-        if (value instanceof boolean[]) {
+        } else if (value instanceof boolean[]) {
             configs.putBooleanArray(key, (boolean[]) value);
-        }
-
-        if (value instanceof long[]) {
+        } else if (value instanceof long[]) {
             configs.putLongArray(key, (long[]) value);
+        } else if (value instanceof PersistableBundle) {
+            configs.putPersistableBundle(key, (PersistableBundle) value);
         }
     }
 }

@@ -281,6 +281,7 @@ public class RecentsAnimationController implements DeathRecipient {
                             task.setCanAffectSystemUiFlags(behindSystemBars);
                         }
                     }
+                    InputMethodManagerInternal.get().maybeFinishStylusHandwriting();
                     if (!behindSystemBars) {
                         // Hiding IME if IME window is not attached to app.
                         // Since some windowing mode is not proper to snapshot Task with IME window
@@ -552,10 +553,6 @@ public class RecentsAnimationController implements DeathRecipient {
             final RemoteAnimationTarget[] wallpaperTargets = createWallpaperAnimations();
 
             mPendingStart = false;
-
-            // Perform layout if it was scheduled before to make sure that we get correct content
-            // insets for the target app window after a rotation
-            mDisplayContent.performLayout(false /* initial */, false /* updateInputWindows */);
 
             final Rect contentInsets;
             final WindowState targetAppMainWindow = getTargetAppMainWindow();

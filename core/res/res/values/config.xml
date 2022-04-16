@@ -2934,8 +2934,8 @@
     <!-- Apps that are authorized to access shared accounts, overridden by product overlays -->
     <string name="config_appsAuthorizedForSharedAccounts" translatable="false">;com.android.settings;</string>
 
-    <!-- Settings intelligence package name -->
-    <string name="config_settingsIntelligencePackageName" translatable="false">
+    <!-- System settings intelligence package name -->
+    <string name="config_systemSettingsIntelligence" translatable="false">
         com.android.settings.intelligence
     </string>
 
@@ -2966,6 +2966,11 @@
      the currently focused view is a text editor. -->
     <bool name="config_preventImeStartupUnlessTextEditor">false</bool>
 
+    <!-- These IMEs are known not to behave well when evicted from memory and thus are exempt
+         from the IME startup prevention behavior that is enabled by
+         config_preventImeStartupUnlessTextEditor. -->
+    <string-array name="config_nonPreemptibleInputMethods" translatable="false" />
+
     <!-- The list of classes that should be added to the notification ranking pipeline.
      See {@link com.android.server.notification.NotificationSignalExtractor}
       If you add a new extractor to this list make sure to update
@@ -2990,6 +2995,12 @@
         <item>com.android.server.notification.CriticalNotificationExtractor</item>
 
     </string-array>
+
+    <!-- When migrating notification settings into the permission framework, whether all existing
+         apps should be marked as 'user-set' (true) or whether only the apps that have explicitly
+         modified notification settings should be marked as 'user-set' (false). Users will not see
+         system generated permission prompts for 'user-set' apps. -->
+    <bool name="config_notificationForceUserSetOnUpgrade">true</bool>
 
     <!-- Default Gravity setting for the system Toast view. Equivalent to: Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM -->
     <integer name="config_toastDefaultGravity">0x00000051</integer>
@@ -4874,6 +4885,7 @@
         <item>0.25</item>
         <item>0.5</item>
         <item>0.75</item>
+        <item>0.875</item>
     </string-array>
 
     <!-- Messages that should not be shown to the user during face auth enrollment. This should be
@@ -5758,13 +5770,13 @@
         exceeds the threshold, it'll be moved to restricted standby bucket. The value must be
         one of or combination of the definitions in AppBatteryPolicy.
     -->
-    <integer name="config_bg_current_drain_types_to_restricted_bucket">4</integer>
+    <integer name="config_bg_current_drain_types_to_restricted_bucket">20</integer>
 
     <!-- The types of battery drain we're checking on each app; if the sum of the battery drain
         exceeds the threshold, it'll be moved to background restricted level. The value must be
         one of or combination of the definitions in AppBatteryPolicy.
     -->
-    <integer name="config_bg_current_drain_types_to_bg_restricted">12</integer>
+    <integer name="config_bg_current_drain_types_to_bg_restricted">28</integer>
 
     <!-- The power usage components we're monitoring. Must one of the definition in BatteryConsumer.
     -->
@@ -5812,13 +5824,23 @@
     <!-- The types of state where we'll exempt its battery usage during that state.
          The state here must be one or a combination of STATE_TYPE_* in BaseAppStateTracker.
     -->
-    <integer name="config_bg_current_drain_exempted_types">9</integer>
+    <integer name="config_bg_current_drain_exempted_types">25</integer>
 
     <!-- The behavior when an app has the permission ACCESS_BACKGROUND_LOCATION granted,
          whether or not the system will use a higher threshold towards its background battery usage
          because of it.
     -->
     <bool name="config_bg_current_drain_high_threshold_by_bg_location">false</bool>
+
+    <!-- Start safety protection resources to be overlaid -->
+
+    <!-- Safety protection icon to be overlaid -->
+    <item name="ic_safety_protection" type="drawable">@null</item>
+
+    <!-- Display text for safety protection to be overlaid. This is translatable -->
+    <string name="safety_protection_display_text"></string>
+
+    <!-- End safety protection resources to be overlaid -->
 
     <!-- Maximum time in millisecs for telephony should wait to deactivate data call
          when user turned off mobile data or data roaming during CIWLAN -->

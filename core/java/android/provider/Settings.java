@@ -78,6 +78,7 @@ import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.speech.tts.TextToSpeech;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.AndroidException;
 import android.util.ArrayMap;
@@ -86,6 +87,7 @@ import android.util.Log;
 import android.util.MemoryIntArray;
 import android.view.Display;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.Window;
 import android.view.WindowManager.LayoutParams;
 import android.widget.Editor;
@@ -2143,10 +2145,10 @@ public final class Settings {
     /**
      * Intent extra: The id of a setting restricted by supervisors.
      * <p>
-     * Type: Integer with a value from the SupervisorVerificationSetting annotation below.
+     * Type: Integer with a value from the one of the SUPERVISOR_VERIFICATION_* constants below.
      * <ul>
-     * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_UNKNOWN}
-     * <li>{@link #SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS}
+     * <li>{@see #SUPERVISOR_VERIFICATION_SETTING_UNKNOWN}
+     * <li>{@see #SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS}
      * </ul>
      * </p>
      */
@@ -2154,12 +2156,14 @@ public final class Settings {
             "android.provider.extra.SUPERVISOR_RESTRICTED_SETTING_KEY";
 
     /**
-     * Unknown setting.
+     * The unknown setting can usually be ignored and is used for compatibility with future
+     * supervisor settings.
      */
     public static final int SUPERVISOR_VERIFICATION_SETTING_UNKNOWN = 0;
 
     /**
-     * Biometric settings for supervisors.
+     * Settings for supervisors to control what kinds of biometric sensors, such a face and
+     * fingerprint scanners, can be used on the device.
      */
     public static final int SUPERVISOR_VERIFICATION_SETTING_BIOMETRICS = 1;
 
@@ -7486,6 +7490,16 @@ public final class Settings {
                 "accessibility_shortcut_dialog_shown";
 
         /**
+         * Setting specifying if the timeout restriction
+         * {@link ViewConfiguration#getAccessibilityShortcutKeyTimeout()}
+         * of the accessibility shortcut dialog is skipped.
+         *
+         * @hide
+         */
+        public static final String SKIP_ACCESSIBILITY_SHORTCUT_DIALOG_TIMEOUT_RESTRICTION =
+                "skip_accessibility_shortcut_dialog_timeout_restriction";
+
+        /**
          * Setting specifying the accessibility services, accessibility shortcut targets,
          * or features to be toggled via the accessibility shortcut.
          *
@@ -11314,8 +11328,9 @@ public final class Settings {
 
         /**
          * Whether or not data roaming is enabled. (0 = false, 1 = true)
+         * Use {@link TelephonyManager#isDataRoamingEnabled} instead of calling via settings.
          */
-        @Readable
+        @Readable(maxTargetSdk = Build.VERSION_CODES.S)
         public static final String DATA_ROAMING = "data_roaming";
 
         /**

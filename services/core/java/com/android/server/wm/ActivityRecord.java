@@ -116,6 +116,7 @@ import static android.view.WindowManager.TRANSIT_FLAG_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_OLD_UNSET;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ANIM;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
@@ -155,6 +156,7 @@ import static com.android.server.wm.ActivityRecordProto.IN_SIZE_COMPAT_MODE;
 import static com.android.server.wm.ActivityRecordProto.IS_ANIMATING;
 import static com.android.server.wm.ActivityRecordProto.IS_WAITING_FOR_TRANSITION_START;
 import static com.android.server.wm.ActivityRecordProto.LAST_ALL_DRAWN;
+import static com.android.server.wm.ActivityRecordProto.LAST_DROP_INPUT_MODE;
 import static com.android.server.wm.ActivityRecordProto.LAST_SURFACE_SHOWING;
 import static com.android.server.wm.ActivityRecordProto.MIN_ASPECT_RATIO;
 import static com.android.server.wm.ActivityRecordProto.NAME;
@@ -217,7 +219,6 @@ import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowContainerChildProto.ACTIVITY;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW_VERBOSE;
@@ -543,7 +544,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // activity can enter picture in picture while pausing (only when switching to another task)
     PictureInPictureParams pictureInPictureArgs = new PictureInPictureParams.Builder().build();
         // The PiP params used when deferring the entering of picture-in-picture.
-    boolean preferDockBigOverlays;
+    boolean shouldDockBigOverlays;
     int launchCount;        // count of launches since last state
     long lastLaunchTime;    // time of last launch of this activity
     ComponentName requestedVrComponent; // the requested component for handling VR mode.
@@ -559,7 +560,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     private void updateEnterpriseThumbnailDrawable(Context context) {
         DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
-        mEnterpriseThumbnailDrawable = dpm.getDrawable(
+        mEnterpriseThumbnailDrawable = dpm.getResources().getDrawable(
                 WORK_PROFILE_ICON, OUTLINE, PROFILE_SWITCH_ANIMATION,
                 () -> context.getDrawable(R.drawable.ic_corp_badge));
     }
@@ -798,6 +799,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     /** The last set {@link DropInputMode} for this activity surface. */
     @DropInputMode
     private int mLastDropInputMode = DropInputMode.NONE;
+    /** Whether the input to this activity will be dropped during the current playing animation. */
+    private boolean mIsInputDroppedForAnimation;
 
     /**
      * If it is non-null, it requires all activities who have the same starting data to be drawn
@@ -865,6 +868,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     boolean mEnteringAnimation;
     boolean mOverrideTaskTransition;
+    boolean mDismissKeyguardIfInsecure;
 
     boolean mAppStopped;
     // A hint to override the window specified rotation animation, or -1 to use the window specified
@@ -1579,6 +1583,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
     }
 
+    /** Sets if all input will be dropped as a protection during the client-driven animation. */
+    void setDropInputForAnimation(boolean isInputDroppedForAnimation) {
+        if (mIsInputDroppedForAnimation == isInputDroppedForAnimation) {
+            return;
+        }
+        mIsInputDroppedForAnimation = isInputDroppedForAnimation;
+        updateUntrustedEmbeddingInputProtection();
+    }
+
     /**
      * Sets to drop input when obscured to activity if it is embedded in untrusted mode.
      *
@@ -1588,11 +1601,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * all untrusted activities.
      */
     private void updateUntrustedEmbeddingInputProtection() {
-        final SurfaceControl sc = getSurfaceControl();
-        if (sc == null) {
+        if (getSurfaceControl() == null) {
             return;
         }
-        if (isEmbeddedInUntrustedMode()) {
+        if (mIsInputDroppedForAnimation) {
+            // Disable all input during the animation.
+            setDropInputMode(DropInputMode.ALL);
+        } else if (isEmbeddedInUntrustedMode()) {
             // Set drop input to OBSCURED when untrusted embedded.
             setDropInputMode(DropInputMode.OBSCURED);
         } else {
@@ -1603,7 +1618,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @VisibleForTesting
     void setDropInputMode(@DropInputMode int mode) {
-        if (mLastDropInputMode != mode && getSurfaceControl() != null) {
+        if (mLastDropInputMode != mode) {
             mLastDropInputMode = mode;
             mWmService.mTransactionFactory.get()
                     .setDropInputMode(getSurfaceControl(), mode)
@@ -1951,6 +1966,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
 
             mOverrideTaskTransition = options.getOverrideTaskTransition();
+            mDismissKeyguardIfInsecure = options.getDismissKeyguardIfInsecure();
         }
 
         ColorDisplayService.ColorDisplayServiceInternal cds = LocalServices.getService(
@@ -2057,7 +2073,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mLetterboxUiController = new LetterboxUiController(mWmService, this);
         mCameraCompatControlEnabled = mWmService.mContext.getResources()
                 .getBoolean(R.bool.config_isCameraCompatControlForStretchedIssuesEnabled);
-        preferDockBigOverlays = mWmService.mContext.getResources()
+        shouldDockBigOverlays = mWmService.mContext.getResources()
                 .getBoolean(R.bool.config_dockBigOverlayWindows);
 
         if (_createTime > 0) {
@@ -2495,7 +2511,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     private boolean transferSplashScreenIfNeeded() {
-        if (!mHandleExitSplashScreen || mStartingSurface == null || mStartingWindow == null
+        if (finishing || !mHandleExitSplashScreen || mStartingSurface == null
+                || mStartingWindow == null
                 || mTransferringSplashScreenState == TRANSFER_SPLASH_SCREEN_FINISH) {
             return false;
         }
@@ -3028,6 +3045,14 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         // Check to see if we are in VR mode, and disallow PiP if so
         if (mAtmService.shouldDisableNonVrUiLocked()) {
+            return false;
+        }
+
+        // Check to see if PiP is supported for the display this container is on.
+        if (mDisplayContent != null && !mDisplayContent.mDwpcHelper.isWindowingModeSupported(
+                WINDOWING_MODE_PINNED)) {
+            Slog.w(TAG, "Display " + mDisplayContent.getDisplayId()
+                    + " doesn't support enter picture-in-picture mode. caller = " + caller);
             return false;
         }
 
@@ -5700,19 +5725,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     "makeInvisible", true /* beforeStopping */);
             // Defer telling the client it is hidden if it can enter Pip and isn't current paused,
             // stopped or stopping. This gives it a chance to enter Pip in onPause().
-            // TODO: There is still a question surrounding activities in multi-window mode that want
-            // to enter Pip after they are paused, but are still visible. I they should be okay to
-            // enter Pip in those cases, but not "auto-Pip" which is what this condition covers and
-            // the current contract for "auto-Pip" is that the app should enter it before onPause
-            // returns. Just need to confirm this reasoning makes sense.
             final boolean deferHidingClient = canEnterPictureInPicture
                     && !isState(STARTED, STOPPING, STOPPED, PAUSED);
-            if (!mTransitionController.isShellTransitionsEnabled()
-                    && deferHidingClient && pictureInPictureArgs.isAutoEnterEnabled()) {
-                // Go ahead and just put the activity in pip if it supports auto-pip.
-                mAtmService.enterPictureInPictureMode(this, pictureInPictureArgs);
-                return;
-            }
             setDeferHidingClient(deferHidingClient);
             setVisibility(false);
 
@@ -7363,11 +7377,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         getDisplayContent().computeImeTargetIfNeeded(this);
 
-        if (DEBUG_ANIM) Slog.v(TAG, "Animation done in " + this
-                + ": reportedVisible=" + reportedVisible
-                + " okToDisplay=" + okToDisplay()
-                + " okToAnimate=" + okToAnimate()
-                + " startingDisplayed=" + startingDisplayed);
+        ProtoLog.v(WM_DEBUG_ANIM, "Animation done in %s"
+                + ": reportedVisible=%b okToDisplay=%b okToAnimate=%b startingDisplayed=%b",
+                this, reportedVisible, okToDisplay(), okToAnimate(), startingDisplayed);
 
         // clean up thumbnail window
         if (mThumbnail != null) {
@@ -9429,6 +9441,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // permission to access the device configs.
         proto.write(PROVIDES_MAX_BOUNDS, providesMaxBounds());
         proto.write(ENABLE_RECENTS_SCREENSHOT, mEnableRecentsScreenshot);
+        proto.write(LAST_DROP_INPUT_MODE, mLastDropInputMode);
     }
 
     @Override
@@ -9701,9 +9714,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         getTask().getRootTask().onPictureInPictureParamsChanged();
     }
 
-    void setPreferDockBigOverlays(boolean preferDockBigOverlays) {
-        this.preferDockBigOverlays = preferDockBigOverlays;
-        getTask().getRootTask().onPreferDockBigOverlaysChanged();
+    void setShouldDockBigOverlays(boolean shouldDockBigOverlays) {
+        this.shouldDockBigOverlays = shouldDockBigOverlays;
+        getTask().getRootTask().onShouldDockBigOverlaysChanged();
     }
 
     @Override

@@ -76,7 +76,6 @@ import com.android.internal.annotations.Immutable;
 import com.android.internal.util.CollectionUtils;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -251,6 +250,10 @@ public final class PermissionManager {
      * will evaluate the permission access based on the current fg/bg state of the app and
      * leave a record that the data was accessed.
      *
+     * <p>Requires the start of the AttributionSource chain to have the UPDATE_APP_OPS_STATS
+     * permission for the app op accesses to be given the TRUSTED_PROXY/PROXIED flags, otherwise the
+     * accesses will have the UNTRUSTED flags.
+     *
      * @param permission The permission to check.
      * @param attributionSource the permission identity
      * @param message A message describing the reason the permission was checked
@@ -260,6 +263,7 @@ public final class PermissionManager {
      * @see #checkPermissionForPreflight(String, AttributionSource)
      */
     @PermissionCheckerManager.PermissionResult
+    @RequiresPermission(value = Manifest.permission.UPDATE_APP_OPS_STATS, conditional = true)
     public int checkPermissionForDataDelivery(@NonNull String permission,
             @NonNull AttributionSource attributionSource, @Nullable String message) {
         return PermissionChecker.checkPermissionForDataDelivery(mContext, permission,
@@ -279,9 +283,14 @@ public final class PermissionManager {
      * @return The permission check result which is either {@link #PERMISSION_GRANTED}
      *     or {@link #PERMISSION_SOFT_DENIED} or {@link #PERMISSION_HARD_DENIED}.
      *
+     * <p>Requires the start of the AttributionSource chain to have the UPDATE_APP_OPS_STATS
+     * permission for the app op accesses to be given the TRUSTED_PROXY/PROXIED flags, otherwise the
+     * accesses will have the UNTRUSTED flags.
+     *
      * @see #checkPermissionForDataDelivery(String, AttributionSource, String)
      */
     @PermissionCheckerManager.PermissionResult
+    @RequiresPermission(value = Manifest.permission.UPDATE_APP_OPS_STATS, conditional = true)
     public int checkPermissionForStartDataDelivery(@NonNull String permission,
             @NonNull AttributionSource attributionSource, @Nullable String message) {
         return PermissionChecker.checkPermissionForDataDelivery(mContext, permission,
@@ -321,6 +330,10 @@ public final class PermissionManager {
      * will evaluate the permission access based on the current fg/bg state of the app and
      * leave a record that the data was accessed.
      *
+     * <p>Requires the start of the AttributionSource chain to have the UPDATE_APP_OPS_STATS
+     * permission for the app op accesses to be given the TRUSTED_PROXY/PROXIED flags, otherwise the
+     * accesses will have the UNTRUSTED flags.
+     *
      * @param permission The permission to check.
      * @param attributionSource the permission identity
      * @param message A message describing the reason the permission was checked
@@ -330,6 +343,7 @@ public final class PermissionManager {
      * @see #checkPermissionForPreflight(String, AttributionSource)
      */
     @PermissionCheckerManager.PermissionResult
+    @RequiresPermission(value = Manifest.permission.UPDATE_APP_OPS_STATS, conditional = true)
     public int checkPermissionForDataDeliveryFromDataSource(@NonNull String permission,
             @NonNull AttributionSource attributionSource, @Nullable String message) {
         return PermissionChecker.checkPermissionForDataDeliveryFromDataSource(mContext, permission,
@@ -620,19 +634,6 @@ public final class PermissionManager {
         try {
             mPermissionManager
                     .revokeRuntimePermission(packageName, permName, user.getIdentifier(), reason);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * @see Context#revokeOwnPermissionsOnKill(Collection)
-     * @hide
-     */
-    public void revokeOwnPermissionsOnKill(@NonNull Collection<String> permissions) {
-        try {
-            mPermissionManager.revokeOwnPermissionsOnKill(mContext.getPackageName(),
-                    new ArrayList<String>(permissions));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

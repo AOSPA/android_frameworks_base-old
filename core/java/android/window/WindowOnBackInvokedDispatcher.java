@@ -53,7 +53,7 @@ public class WindowOnBackInvokedDispatcher implements OnBackInvokedDispatcher {
     private static final String TAG = "WindowOnBackDispatcher";
     private static final String BACK_PREDICTABILITY_PROP = "persist.debug.back_predictability";
     private static final boolean IS_BACK_PREDICTABILITY_ENABLED = SystemProperties
-            .getInt(BACK_PREDICTABILITY_PROP, 0) > 0;
+            .getInt(BACK_PREDICTABILITY_PROP, 1) > 0;
 
     /** Convenience hashmap to quickly decide if a callback has been added. */
     private final HashMap<OnBackInvokedCallback, Integer> mAllCallbacks = new HashMap<>();
@@ -83,7 +83,7 @@ public class WindowOnBackInvokedDispatcher implements OnBackInvokedDispatcher {
     // TODO: Take an Executor for the callback to run on.
     @Override
     public void registerOnBackInvokedCallback(
-            @NonNull OnBackInvokedCallback callback, @Priority int priority) {
+            @Priority int priority, @NonNull OnBackInvokedCallback callback) {
         if (priority < 0) {
             throw new IllegalArgumentException("Application registered OnBackInvokedCallback "
                     + "cannot have negative priority. Priority: " + priority);

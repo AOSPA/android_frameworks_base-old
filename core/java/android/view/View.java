@@ -11939,13 +11939,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @NonNull
     List<Rect> collectPreferKeepClearRects() {
         ListenerInfo info = mListenerInfo;
-        final List<Rect> list = new ArrayList<>();
+        boolean keepBoundsClear =
+                (info != null && info.mPreferKeepClear) || mPreferKeepClearForFocus;
+        boolean hasCustomKeepClearRects = info != null && info.mKeepClearRects != null;
 
-        if ((info != null && info.mPreferKeepClear) || mPreferKeepClearForFocus) {
+        if (!keepBoundsClear && !hasCustomKeepClearRects) {
+            return Collections.emptyList();
+        } else if (keepBoundsClear && !hasCustomKeepClearRects) {
+            return Collections.singletonList(new Rect(0, 0, getWidth(), getHeight()));
+        }
+
+        final List<Rect> list = new ArrayList<>();
+        if (keepBoundsClear) {
             list.add(new Rect(0, 0, getWidth(), getHeight()));
         }
 
-        if (info != null && info.mKeepClearRects != null) {
+        if (hasCustomKeepClearRects) {
             list.addAll(info.mKeepClearRects);
         }
 
@@ -12016,7 +12025,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Return the handwriting areas set on this view, in its local coordinates.
-     * Notice: the caller of this method should not modify the Rect returned.
      * @see #setHandwritingArea(Rect)
      *
      * @hide
@@ -12025,7 +12033,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public Rect getHandwritingArea() {
         final ListenerInfo info = mListenerInfo;
         if (info != null) {
-            return info.mHandwritingArea;
+            return new Rect(info.mHandwritingArea);
         }
         return null;
     }
@@ -14650,6 +14658,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         int selectionStart;
         int selectionEnd;
         if (extendSelection && isAccessibilitySelectionExtendable()) {
+            prepareForExtendedAccessibilitySelection();
             selectionStart = getAccessibilitySelectionStart();
             if (selectionStart == ACCESSIBILITY_CURSOR_POSITION_UNDEFINED) {
                 selectionStart = forward ? segmentStart : segmentEnd;
@@ -14686,6 +14695,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean isAccessibilitySelectionExtendable() {
         return false;
+    }
+
+    /**
+     * Prepare for extended selection.
+     * @hide
+     */
+    public void prepareForExtendedAccessibilitySelection() {
+        return;
     }
 
     /**
@@ -15619,7 +15636,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         android.util.SeempLog.record(4);
-        if (event.hasNoModifiers() && KeyEvent.isConfirmKey(keyCode)) {
+        if (KeyEvent.isConfirmKey(keyCode) && event.hasNoModifiers()) {
             if ((mViewFlags & ENABLED_MASK) == DISABLED) {
                 return true;
             }
@@ -15677,7 +15694,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         android.util.SeempLog.record(5);
-        if (event.hasNoModifiers() && KeyEvent.isConfirmKey(keyCode)) {
+        if (KeyEvent.isConfirmKey(keyCode) && event.hasNoModifiers()) {
             if ((mViewFlags & ENABLED_MASK) == DISABLED) {
                 return true;
             }

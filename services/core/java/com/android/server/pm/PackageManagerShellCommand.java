@@ -188,6 +188,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runDump();
                 case "list":
                     return runList();
+                case "gc":
+                    return runGc();
                 case "resolve-activity":
                     return runResolveActivity();
                 case "query-activities":
@@ -685,6 +687,13 @@ class PackageManagerShellCommand extends ShellCommand {
         }
         pw.println("Error: unknown list type '" + type + "'");
         return -1;
+    }
+
+    private int runGc() throws RemoteException {
+        Runtime.getRuntime().gc();
+        final PrintWriter pw = getOutPrintWriter();
+        pw.println("Ok");
+        return 0;
     }
 
     private int runListFeatures() throws RemoteException {
@@ -2540,8 +2549,10 @@ class PackageManagerShellCommand extends ShellCommand {
             privAppPermissions = SystemConfig.getInstance()
                     .getSystemExtPrivAppPermissions(pkg);
         } else if (isApexApp(pkg)) {
+            final String apexName = ApexManager.getInstance().getApexModuleNameForPackageName(
+                    getApexPackageNameContainingPackage(pkg));
             privAppPermissions = SystemConfig.getInstance()
-                    .getApexPrivAppPermissions(getApexPackageNameContainingPackage(pkg), pkg);
+                    .getApexPrivAppPermissions(apexName, pkg);
         } else {
             privAppPermissions = SystemConfig.getInstance().getPrivAppPermissions(pkg);
         }
@@ -2567,8 +2578,10 @@ class PackageManagerShellCommand extends ShellCommand {
             privAppPermissions = SystemConfig.getInstance()
                     .getSystemExtPrivAppDenyPermissions(pkg);
         } else if (isApexApp(pkg)) {
+            final String apexName = ApexManager.getInstance().getApexModuleNameForPackageName(
+                    getApexPackageNameContainingPackage(pkg));
             privAppPermissions = SystemConfig.getInstance()
-                    .getApexPrivAppDenyPermissions(getApexPackageNameContainingPackage(pkg), pkg);
+                    .getApexPrivAppDenyPermissions(apexName, pkg);
         } else {
             privAppPermissions = SystemConfig.getInstance().getPrivAppDenyPermissions(pkg);
         }

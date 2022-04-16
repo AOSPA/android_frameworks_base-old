@@ -488,7 +488,8 @@ public class ShortcutService extends IShortcutService.Stub {
         mShortcutBitmapSaver = new ShortcutBitmapSaver(this);
         mShortcutDumpFiles = new ShortcutDumpFiles(this);
         mIsAppSearchEnabled = DeviceConfig.getBoolean(NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SHORTCUT_APPSEARCH_INTEGRATION, true);
+                SystemUiDeviceConfigFlags.SHORTCUT_APPSEARCH_INTEGRATION, true)
+                && !injectIsLowRamDevice();
 
         if (onlyForPackageManagerApis) {
             return; // Don't do anything further.  For unit tests only.
@@ -2227,7 +2228,7 @@ public class ShortcutService extends IShortcutService.Stub {
         Objects.requireNonNull(shortcut);
         Preconditions.checkArgument(shortcut.isEnabled(), "Shortcut must be enabled");
         Preconditions.checkArgument(
-                shortcut.isIncludedIn(ShortcutInfo.SURFACE_LAUNCHER),
+                !shortcut.isExcludedFromSurfaces(ShortcutInfo.SURFACE_LAUNCHER),
                 "Shortcut excluded from launcher cannot be pinned");
         ret.complete(String.valueOf(requestPinItem(
                 packageName, userId, shortcut, null, null, resultIntent)));

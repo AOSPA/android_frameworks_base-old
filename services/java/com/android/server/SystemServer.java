@@ -297,8 +297,6 @@ public final class SystemServer implements Dumpable {
             "com.android.server.wifi.p2p.WifiP2pService";
     private static final String LOWPAN_SERVICE_CLASS =
             "com.android.server.lowpan.LowpanService";
-    private static final String ETHERNET_SERVICE_CLASS =
-            "com.android.server.ethernet.EthernetService";
     private static final String JOB_SCHEDULER_SERVICE_CLASS =
             "com.android.server.job.JobSchedulerService";
     private static final String LOCK_SETTINGS_SERVICE_CLASS =
@@ -1493,8 +1491,9 @@ public final class SystemServer implements Dumpable {
 
             // TelecomLoader hooks into classes with defined HFP logic,
             // so check for either telephony or microphone.
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE) ||
-                    mPackageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+                    || mPackageManager.hasSystemFeature(PackageManager.FEATURE_TELECOM)
+                    || mPackageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
                 t.traceBegin("StartTelecomLoaderService");
                 mSystemServiceManager.startService(TelecomLoaderService.class);
                 t.traceEnd();
@@ -1998,13 +1997,6 @@ public final class SystemServer implements Dumpable {
                     PackageManager.FEATURE_LOWPAN)) {
                 t.traceBegin("StartLowpan");
                 mSystemServiceManager.startService(LOWPAN_SERVICE_CLASS);
-                t.traceEnd();
-            }
-
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_ETHERNET) ||
-                    mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
-                t.traceBegin("StartEthernet");
-                mSystemServiceManager.startService(ETHERNET_SERVICE_CLASS);
                 t.traceEnd();
             }
 

@@ -617,8 +617,8 @@ public class TransitionTests extends WindowTestsBase {
         }
         player.startTransition();
 
-        assertFalse(statusBar.mToken.inTransition());
-        assertFalse(decorToken.inTransition());
+        assertFalse(mDisplayContent.mTransitionController.isCollecting(statusBar.mToken));
+        assertFalse(mDisplayContent.mTransitionController.isCollecting(decorToken));
         assertTrue(ime.mToken.inTransition());
         assertTrue(task.inTransition());
         assertTrue(asyncRotationController.isTargetToken(decorToken));
@@ -692,7 +692,8 @@ public class TransitionTests extends WindowTestsBase {
         statusBar.mWinAnimator.mDrawState = WindowStateAnimator.DRAW_PENDING;
         final SurfaceControl.Transaction postDrawTransaction =
                 mock(SurfaceControl.Transaction.class);
-        final boolean layoutNeeded = statusBar.finishDrawing(postDrawTransaction);
+        final boolean layoutNeeded = statusBar.finishDrawing(postDrawTransaction,
+                Integer.MAX_VALUE);
         assertFalse(layoutNeeded);
 
         transactionCommittedListener.onTransactionCommitted();
@@ -734,7 +735,7 @@ public class TransitionTests extends WindowTestsBase {
         statusBar.setOrientationChanging(true);
         player.startTransition();
         // Non-app windows should not be collected.
-        assertFalse(statusBar.mToken.inTransition());
+        assertFalse(mDisplayContent.mTransitionController.isCollecting(statusBar.mToken));
 
         onRotationTransactionReady(player, mWm.mTransactionFactory.get()).onTransactionCommitted();
         assertEquals(ROTATION_ANIMATION_SEAMLESS, player.mLastReady.getChange(
@@ -742,7 +743,7 @@ public class TransitionTests extends WindowTestsBase {
         player.finish();
 
         // The controller should be cleared if the target windows are drawn.
-        statusBar.finishDrawing(mWm.mTransactionFactory.get());
+        statusBar.finishDrawing(mWm.mTransactionFactory.get(), Integer.MAX_VALUE);
         statusBar.setOrientationChanging(false);
         assertNull(mDisplayContent.getAsyncRotationController());
     }
