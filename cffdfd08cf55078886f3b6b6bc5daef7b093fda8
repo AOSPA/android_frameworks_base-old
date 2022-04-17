@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "67de6325_3db8724c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2022-04-17T05:19:20Z",
+      "side": 1,
+      "message": "thought this was merged already with qssi but oh well",
+      "revId": "cffdfd08cf55078886f3b6b6bc5daef7b093fda8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
