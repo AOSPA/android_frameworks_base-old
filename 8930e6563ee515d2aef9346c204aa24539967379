@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b4b7513f_2884076e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-04-19T08:11:00Z",
+      "side": 1,
+      "message": "Passes CTS\ngets rid of any potential edgeTPU spam",
+      "revId": "8930e6563ee515d2aef9346c204aa24539967379",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
