@@ -345,7 +345,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
     }
 
-    private void resetAdjacentTaskFragment() {
+    void resetAdjacentTaskFragment() {
         // Reset the adjacent TaskFragment if its adjacent TaskFragment is also this TaskFragment.
         if (mAdjacentTaskFragment != null && mAdjacentTaskFragment.mAdjacentTaskFragment == this) {
             mAdjacentTaskFragment.mAdjacentTaskFragment = null;
@@ -1258,6 +1258,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             // This activity is now becoming visible.
             if (!next.mVisibleRequested || next.stopped || lastActivityTranslucent) {
+                next.app.addToPendingTop();
                 next.setVisibility(true);
             }
 
@@ -2294,7 +2295,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 mFragmentToken,
                 mRemoteToken.toWindowContainerToken(),
                 getConfiguration(),
-                getChildCount() == 0,
+                runningActivityCount[0] == 0,
                 runningActivityCount[0],
                 isVisible(),
                 childActivities,
@@ -2346,6 +2347,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
         mMinWidth = minWidth;
         mMinHeight = minHeight;
+    }
+
+    /**
+     * Whether this is an embedded TaskFragment in PIP Task. We don't allow any client config
+     * override for such TaskFragment to prevent flight with PipTaskOrganizer.
+     */
+    boolean isEmbeddedTaskFragmentInPip() {
+        return isOrganizedTaskFragment() && getTask() != null && getTask().inPinnedWindowingMode();
     }
 
     boolean shouldRemoveSelfOnLastChildRemoval() {

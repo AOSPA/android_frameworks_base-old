@@ -64,11 +64,13 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.assist.ui.DisplayUtils;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.DozeReceiver;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.Execution;
 
 import java.util.ArrayList;
@@ -139,6 +141,7 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     private boolean mAllAuthenticatorsRegistered;
     @NonNull private final UserManager mUserManager;
     @NonNull private final LockPatternUtils mLockPatternUtils;
+    private final @Background DelayableExecutor mBackgroundExecutor;
 
     @VisibleForTesting
     final TaskStackListener mTaskStackListener = new TaskStackListener() {
@@ -507,13 +510,15 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
             @NonNull UserManager userManager,
             @NonNull LockPatternUtils lockPatternUtils,
             @NonNull StatusBarStateController statusBarStateController,
-            @Main Handler handler) {
+            @Main Handler handler,
+            @Background DelayableExecutor bgExecutor) {
         super(context);
         mExecution = execution;
         mWakefulnessLifecycle = wakefulnessLifecycle;
         mUserManager = userManager;
         mLockPatternUtils = lockPatternUtils;
         mHandler = handler;
+        mBackgroundExecutor = bgExecutor;
         mCommandQueue = commandQueue;
         mActivityTaskManager = activityTaskManager;
         mFingerprintManager = fingerprintManager;
@@ -768,13 +773,18 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     }
 
     @Override
-    public void hideAuthenticationDialog() {
+    public void hideAuthenticationDialog(long requestId) {
         if (DEBUG) Log.d(TAG, "hideAuthenticationDialog: " + mCurrentDialog);
 
         if (mCurrentDialog == null) {
             // Could be possible if the caller canceled authentication after credential success
             // but before the client was notified.
             if (DEBUG) Log.d(TAG, "dialog already gone");
+            return;
+        }
+        if (requestId != mCurrentDialog.getRequestId()) {
+            Log.w(TAG, "ignore - ids do not match: " + requestId + " current: "
+                    + mCurrentDialog.getRequestId());
             return;
         }
 
@@ -834,6 +844,7 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
 
         // Create a new dialog but do not replace the current one yet.
         final AuthDialog newDialog = buildDialog(
+                mBackgroundExecutor,
                 promptInfo,
                 requireConfirmation,
                 userId,
@@ -929,9 +940,9 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
         }
     }
 
-    protected AuthDialog buildDialog(PromptInfo promptInfo, boolean requireConfirmation,
-            int userId, int[] sensorIds, String opPackageName,
-            boolean skipIntro, long operationId, long requestId,
+    protected AuthDialog buildDialog(@Background DelayableExecutor bgExecutor,
+            PromptInfo promptInfo, boolean requireConfirmation, int userId, int[] sensorIds,
+            String opPackageName, boolean skipIntro, long operationId, long requestId,
             @BiometricMultiSensorMode int multiSensorConfig,
             @NonNull WakefulnessLifecycle wakefulnessLifecycle,
             @NonNull UserManager userManager,
@@ -946,8 +957,8 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
                 .setOperationId(operationId)
                 .setRequestId(requestId)
                 .setMultiSensorConfig(multiSensorConfig)
-                .build(sensorIds, mFpProps, mFaceProps, wakefulnessLifecycle, userManager,
-                        lockPatternUtils);
+                .build(bgExecutor, sensorIds, mFpProps, mFaceProps, wakefulnessLifecycle,
+                        userManager, lockPatternUtils);
     }
 
     /**

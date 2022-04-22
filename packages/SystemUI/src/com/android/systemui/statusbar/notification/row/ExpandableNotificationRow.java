@@ -32,6 +32,7 @@ import android.annotation.Nullable;
 import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
+import android.app.role.RoleManager;
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -121,7 +122,6 @@ import com.android.systemui.util.Compile;
 import com.android.systemui.util.DumpUtilsKt;
 import com.android.systemui.wmshell.BubblesManager;
 
-import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -381,12 +381,22 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 Settings.Secure.NOTIFICATION_PERMISSION_ENABLED, 0, USER_SYSTEM) == 1) {
             INotificationManager iNm = INotificationManager.Stub.asInterface(
                     ServiceManager.getService(Context.NOTIFICATION_SERVICE));
+
+            boolean isSystem = false;
             try {
-                return iNm.isPermissionFixed(sbn.getPackageName(), sbn.getUserId());
+                isSystem = iNm.isPermissionFixed(sbn.getPackageName(), sbn.getUserId());
             } catch (RemoteException e) {
                 Log.e(TAG, "cannot reach NMS");
             }
-            return false;
+            RoleManager rm = context.getSystemService(RoleManager.class);
+            List<String> fixedRoleHolders = new ArrayList<>();
+            fixedRoleHolders.addAll(rm.getRoleHolders(RoleManager.ROLE_DIALER));
+            fixedRoleHolders.addAll(rm.getRoleHolders(RoleManager.ROLE_EMERGENCY));
+            if (fixedRoleHolders.contains(sbn.getPackageName())) {
+                isSystem = true;
+            }
+
+            return isSystem;
         } else {
             PackageManager packageManager = CentralSurfaces.getPackageManagerForUser(
                     context, sbn.getUser().getIdentifier());
@@ -3474,7 +3484,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     @Override
-    public void dump(FileDescriptor fd, PrintWriter pwOriginal, String[] args) {
+    public void dump(PrintWriter pwOriginal, String[] args) {
         IndentingPrintWriter pw = DumpUtilsKt.asIndenting(pwOriginal);
         // Skip super call; dump viewState ourselves
         pw.println("Notification: " + mEntry.getKey());
@@ -3487,10 +3497,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             NotificationContentView showingLayout = getShowingLayout();
             pw.print(", privateShowing: " + (showingLayout == mPrivateLayout));
             pw.println();
-            showingLayout.dump(fd, pw, args);
+            showingLayout.dump(pw, args);
 
             if (getViewState() != null) {
-                getViewState().dump(fd, pw, args);
+                getViewState().dump(pw, args);
                 pw.println();
             } else {
                 pw.println("no viewState!!!");
@@ -3509,7 +3519,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 pw.increaseIndent();
                 for (ExpandableNotificationRow child : notificationChildren) {
                     pw.println();
-                    child.dump(fd, pw, args);
+                    child.dump(pw, args);
                 }
                 pw.decreaseIndent();
                 pw.println("}");

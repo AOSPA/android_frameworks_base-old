@@ -20,6 +20,7 @@ import static android.Manifest.permission.BIND_VPN_SERVICE;
 import static android.Manifest.permission.CONTROL_VPN;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN;
 import static android.net.RouteInfo.RTN_THROW;
 import static android.net.RouteInfo.RTN_UNREACHABLE;
 import static android.net.VpnManager.NOTIFICATION_CHANNEL_VPN;
@@ -2313,6 +2314,13 @@ public class Vpn {
                     "usepeerdns", "idle", "1800", "mtu", "1270", "mru", "1270",
                     (profile.mppe ? "+mppe" : "nomppe"),
                 };
+                if (profile.mppe) {
+                    // Disallow PAP authentication when MPPE is requested, as MPPE cannot work
+                    // with PAP anyway, and users may not expect PAP (plain text) to be used when
+                    // MPPE was requested.
+                    mtpd = Arrays.copyOf(mtpd, mtpd.length + 1);
+                    mtpd[mtpd.length - 1] = "-pap";
+                }
                 break;
             case VpnProfile.TYPE_L2TP_IPSEC_PSK:
             case VpnProfile.TYPE_L2TP_IPSEC_RSA:
@@ -2542,6 +2550,7 @@ public class Vpn {
                 req = new NetworkRequest.Builder()
                         .clearCapabilities()
                         .addTransportType(NetworkCapabilities.TRANSPORT_TEST)
+                        .addCapability(NET_CAPABILITY_NOT_VPN)
                         .build();
             } else {
                 // Basically, the request here is referring to the default request which is defined

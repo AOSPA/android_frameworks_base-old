@@ -601,6 +601,12 @@
         <item name="android:textColor">?android:attr/textColorSecondary</item>
     </style>
 
+    <style name="MediaPlayer.ScrubbingTime">
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:gravity">center</item>
+    </style>
+
     <style name="MediaPlayer.Action" parent="@android:style/Widget.Material.Button.Borderless.Small">
         <item name="android:background">@drawable/qs_media_light_source</item>
         <item name="android:tint">?android:attr/textColorPrimary</item>
@@ -958,6 +964,16 @@
         <item name="android:textAlignment">center</item>
     </style>
 
+    <!-- We explicitly overload this because we don't have control over the style or layout for
+         the cast dialog items, as it's in `@android:layout/media_route_list_item. -->
+    <style name="TextAppearance.CastItem" parent="@android:style/TextAppearance.DeviceDefault.Medium">
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+    </style>
+
+    <style name="Theme.SystemUI.Dialog.Cast">
+        <item name="android:textAppearanceMedium">@style/TextAppearance.CastItem</item>
+    </style>
+    <!-- ************************************************************************************* -->
 
     <style name="Widget" />
     <style name="Widget.Dialog" />
@@ -1064,6 +1080,10 @@
     <style name="FgsManagerDialogTitle">
         <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:textDirection">locale</item>
+    </style>
+
+    <style name="FgsManagerAppLabel" parent="TextAppearance.Dialog.Body">
         <item name="android:textDirection">locale</item>
     </style>
 

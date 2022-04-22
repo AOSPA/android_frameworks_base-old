@@ -30,6 +30,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Icon;
 import android.platform.test.annotations.RootPermissionTest;
+import android.platform.test.rule.UnlockScreenRule;
 import android.provider.Settings;
 import android.view.KeyEvent;
 
@@ -42,10 +43,12 @@ import androidx.test.uiautomator.Until;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 @RootPermissionTest
 @RunWith(AndroidJUnit4.class)
@@ -70,6 +73,13 @@ public final class NotificationTest {
     private static final BySelector REPLY_SEND_BUTTON_SELECTOR =
             By.res("com.android.systemui", "remote_input_send");
 
+    @Rule
+    public UnlockScreenRule mUnlockScreenRule = new UnlockScreenRule();
+
+    @Rule
+    public ScreenCaptureRule mScreenCaptureRule =
+            new ScreenCaptureRule("/sdcard/InputMethodStressTest");
+
     private Context mContext;
     private NotificationManager mNotificationManager;
     private UiDevice mUiDevice;
@@ -90,7 +100,9 @@ public final class NotificationTest {
     public void testDirectReply() {
         postMessagingNotification();
         mUiDevice.openNotification();
-        mUiDevice.wait(Until.findObject(By.text(REPLY_ACTION_LABEL)), TIMEOUT).click();
+        // The text can be shown as-is, or all-caps, depending on the system.
+        Pattern actionLabelPattern = Pattern.compile(REPLY_ACTION_LABEL, Pattern.CASE_INSENSITIVE);
+        mUiDevice.wait(Until.findObject(By.text(actionLabelPattern)), TIMEOUT).click();
         // Verify that IME is visible.
         assertThat(mUiDevice.wait(Until.findObject(By.pkg(getImePackage(mContext))), TIMEOUT))
                 .isNotNull();
