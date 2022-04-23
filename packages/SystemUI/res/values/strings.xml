@@ -1373,6 +1373,9 @@
     <!-- Notification: Control panel: Label that displays when the app's notifications cannot be blocked. -->
     <string name="notification_unblockable_desc">These notifications can\'t be modified.</string>
 
+    <!-- Notification: Control panel: Label that displays when a notification cannot be blocked because it's attached to a phone/voip call. -->
+    <string name="notification_unblockable_call_desc">Call notifications can\'t be modified.</string>
+
     <!-- Notification: Control panel: label that displays when viewing settings for a group of notifications posted to multiple channels. -->
     <string name="notification_multichannel_desc">This group of notifications cannot be configured here</string>
 
@@ -2202,6 +2205,8 @@
     <string name="controls_media_button_prev">Previous track</string>
     <!-- Description for button in media controls. Pressing button goes to next track [CHAR_LIMIT=NONE] -->
     <string name="controls_media_button_next">Next track</string>
+    <!-- Description for button in media controls. Used when media is connecting to a remote device (via something like chromecast). Pressing button does nothing [CHAR_LIMIT=NONE] -->
+    <string name="controls_media_button_connecting">Connecting</string>
 
     <!-- Title for Smartspace recommendation card within media controls. The "Play" means the action to play a media [CHAR_LIMIT=10] -->
     <string name="controls_media_smartspace_rec_title">Play</string>

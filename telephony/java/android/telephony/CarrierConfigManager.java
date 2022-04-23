@@ -853,6 +853,17 @@ public class CarrierConfigManager {
             "dial_string_replace_string_array";
 
     /**
+     * Specifies a map from dialstrings to replacements for international roaming network service
+     * numbers which cannot be replaced on the carrier side.
+     * <p>
+     * Individual entries have the format:
+     * [dialstring to replace]:[replacement]
+     * @hide
+     */
+    public static final String KEY_INTERNATIONAL_ROAMING_DIAL_STRING_REPLACE_STRING_ARRAY =
+            "international_roaming_dial_string_replace_string_array";
+
+    /**
      * Flag specifying whether WFC over IMS supports the "wifi only" option.  If false, the wifi
      * calling settings will not include an option for "wifi only".  If true, the wifi calling
      * settings will include an option for "wifi only"
@@ -1019,6 +1030,12 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_VT_TTY_SUPPORT_BOOL =
             "carrier_vt_tty_support_bool";
+
+    /** Flag specifying whether VoWIFI TTY is supported.
+     * @hide
+     */
+    public static final String KEY_CARRIER_VOWIFI_TTY_SUPPORTED_BOOL =
+            "carrier_vowifi_tty_supported_bool";
 
     /**
      * Flag specifying whether IMS service can be turned off. If false then the service will not be
@@ -1973,6 +1990,13 @@ public class CarrierConfigManager {
             "show_4g_for_lte_data_icon_bool";
 
     /**
+     * Boolean indicating if default data account should show 4G LTE or 4G icon.
+     * @hide
+     */
+    public static final String KEY_SHOW_4GLTE_FOR_LTE_DATA_ICON_BOOL =
+            "show_4glte_for_lte_data_icon_bool";
+
+    /**
      * Boolean indicating if default data account should show 4G icon when in 3G.
      */
     public static final String KEY_SHOW_4G_FOR_3G_DATA_ICON_BOOL =
@@ -2006,6 +2030,13 @@ public class CarrierConfigManager {
      */
     public static final String KEY_NR_ADVANCED_THRESHOLD_BANDWIDTH_KHZ_INT =
             "nr_advanced_threshold_bandwidth_khz_int";
+
+    /**
+     * Boolean indicating if operator name should be shown in the status bar
+     * @hide
+     */
+    public static final String KEY_SHOW_OPERATOR_NAME_IN_STATUSBAR_BOOL =
+            "show_operator_name_in_statusbar_bool";
 
     /**
      * The string is used to filter redundant string from PLMN Network Name that's supplied by
@@ -8672,6 +8703,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_OVERRIDE_WFC_PROVISIONING_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_VT_TTY_SUPPORT_BOOL, false);
+        sDefaults.putBoolean(KEY_CARRIER_VOWIFI_TTY_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_ALLOW_TURNOFF_IMS_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_IMS_GBA_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_INSTANT_LETTERING_AVAILABLE_BOOL, false);
@@ -8799,6 +8831,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_CDMA_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_CDMA_NONROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_DIAL_STRING_REPLACE_STRING_ARRAY, null);
+        sDefaults.putStringArray(KEY_INTERNATIONAL_ROAMING_DIAL_STRING_REPLACE_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_FORCE_HOME_NETWORK_BOOL, false);
         sDefaults.putInt(KEY_GSM_DTMF_TONE_DELAY_INT, 0);
         sDefaults.putInt(KEY_IMS_DTMF_TONE_DELAY_INT, 0);
@@ -9009,6 +9042,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SPN_DISPLAY_RULE_USE_ROAMING_FROM_SERVICE_STATE_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_SHOW_DATA_RAT_ICON_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_4G_FOR_LTE_DATA_ICON_BOOL, false);
+        sDefaults.putBoolean(KEY_SHOW_4GLTE_FOR_LTE_DATA_ICON_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_4G_FOR_3G_DATA_ICON_BOOL, false);
         sDefaults.putString(KEY_OPERATOR_NAME_FILTER_PATTERN_STRING, "");
         sDefaults.putString(KEY_SHOW_CARRIER_DATA_ICON_PATTERN_STRING, "");
@@ -9022,6 +9056,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_SUPPORT_TDSCDMA_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_WORLD_MODE_ENABLED_BOOL, false);
         sDefaults.putString(KEY_CARRIER_SETTINGS_ACTIVITY_COMPONENT_NAME_STRING, "");
+        sDefaults.putBoolean(KEY_SHOW_OPERATOR_NAME_IN_STATUSBAR_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_CONFIG_APPLIED_BOOL, false);
         sDefaults.putBoolean(KEY_CHECK_PRICING_WITH_CARRIER_FOR_DATA_ROAMING_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_DATA_CONNECTED_ROAMING_NOTIFICATION_BOOL, false);

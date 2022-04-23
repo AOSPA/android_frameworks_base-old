@@ -1191,6 +1191,8 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                     + mMobileStatusHistory[i & (STATUS_HISTORY_SIZE - 1)]);
         }
         pw.println("  mFiveGState=" + mFiveGState + ",");
+
+        dumpTableData(pw);
     }
 
     class FiveGStateListener implements IFiveGStateListener{

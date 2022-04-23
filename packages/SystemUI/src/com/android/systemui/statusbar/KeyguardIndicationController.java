@@ -90,7 +90,6 @@ import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.wakelock.SettableWakeLock;
 import com.android.systemui.util.wakelock.WakeLock;
 
-import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.text.NumberFormat;
 
@@ -897,21 +896,8 @@ public class KeyguardIndicationController {
         }
     }
 
-    private void showTryFingerprintMsg(int msgId, String a11yString) {
-        if (mKeyguardUpdateMonitor.isUdfpsSupported()) {
-            // if udfps available, there will always be a tappable affordance to unlock
-            // For example, the lock icon
-            if (mKeyguardBypassController.getUserHasDeviceEntryIntent()) {
-                showBiometricMessage(R.string.keyguard_unlock_press);
-            } else if (msgId == FaceManager.FACE_ERROR_LOCKOUT_PERMANENT) {
-                // since face is locked out, simply show "try fingerprint"
-                showBiometricMessage(R.string.keyguard_try_fingerprint);
-            } else {
-                showBiometricMessage(R.string.keyguard_face_failed_use_fp);
-            }
-        } else {
-            showBiometricMessage(R.string.keyguard_try_fingerprint);
-        }
+    private void showFaceFailedTryFingerprintMsg(int msgId, String a11yString) {
+        showBiometricMessage(R.string.keyguard_face_failed_use_fp);
 
         // Although we suppress face auth errors visually, we still announce them for a11y
         if (!TextUtils.isEmpty(a11yString)) {
@@ -919,7 +905,7 @@ public class KeyguardIndicationController {
         }
     }
 
-    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+    public void dump(PrintWriter pw, String[] args) {
         pw.println("KeyguardIndicationController:");
         pw.println("  mInitialTextColorState: " + mInitialTextColorState);
         pw.println("  mPowerPluggedInWired: " + mPowerPluggedInWired);
@@ -937,7 +923,7 @@ public class KeyguardIndicationController {
                 mTopIndicationView == null ? null : mTopIndicationView.getText()));
         pw.println("  computePowerIndication(): " + computePowerIndication());
         pw.println("  trustGrantedIndication: " + getTrustGrantedIndication());
-        mRotateTextViewController.dump(fd, pw, args);
+        mRotateTextViewController.dump(pw, args);
     }
 
     protected class BaseKeyguardCallback extends KeyguardUpdateMonitorCallback {
@@ -1003,7 +989,7 @@ public class KeyguardIndicationController {
             } else if (mScreenLifecycle.getScreenState() == SCREEN_ON) {
                 if (biometricSourceType == BiometricSourceType.FACE
                         && shouldSuppressFaceMsgAndShowTryFingerprintMsg()) {
-                    showTryFingerprintMsg(msgId, helpString);
+                    showFaceFailedTryFingerprintMsg(msgId, helpString);
                     return;
                 }
                 showBiometricMessage(helpString);
@@ -1023,7 +1009,7 @@ public class KeyguardIndicationController {
                     && shouldSuppressFaceMsgAndShowTryFingerprintMsg()
                     && !mStatusBarKeyguardViewManager.isBouncerShowing()
                     && mScreenLifecycle.getScreenState() == SCREEN_ON) {
-                showTryFingerprintMsg(msgId, errString);
+                showFaceFailedTryFingerprintMsg(msgId, errString);
                 return;
             }
             if (msgId == FaceManager.FACE_ERROR_TIMEOUT) {
@@ -1032,10 +1018,10 @@ public class KeyguardIndicationController {
                 if (!mStatusBarKeyguardViewManager.isBouncerShowing()
                         && mKeyguardUpdateMonitor.isUdfpsEnrolled()
                         && mKeyguardUpdateMonitor.isFingerprintDetectionRunning()) {
-                    showTryFingerprintMsg(msgId, errString);
+                    showFaceFailedTryFingerprintMsg(msgId, errString);
                 } else if (mStatusBarKeyguardViewManager.isShowingAlternateAuth()) {
                     mStatusBarKeyguardViewManager.showBouncerMessage(
-                            mContext.getResources().getString(R.string.keyguard_unlock_press),
+                            mContext.getResources().getString(R.string.keyguard_try_fingerprint),
                             mInitialTextColorState
                     );
                 } else {

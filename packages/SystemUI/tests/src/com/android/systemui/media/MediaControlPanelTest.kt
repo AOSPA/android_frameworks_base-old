@@ -16,22 +16,32 @@
 
 package com.android.systemui.media
 
+import android.animation.Animator
+import android.animation.AnimatorSet
+import android.app.PendingIntent
+import android.app.smartspace.SmartspaceAction
+import android.content.Context
 import org.mockito.Mockito.`when` as whenever
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.Animatable2
 import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Icon
 import android.graphics.drawable.RippleDrawable
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Bundle
 import android.os.Handler
 import android.provider.Settings.ACTION_MEDIA_CONTROLS_SETTINGS
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.Interpolator
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -51,7 +61,9 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.util.animation.TransitionLayout
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.KotlinArgumentCaptor
+import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.eq
+import com.android.systemui.util.mockito.withArgCaptor
 import com.android.systemui.util.time.FakeSystemClock
 import com.google.common.truth.Truth.assertThat
 import dagger.Lazy
@@ -65,8 +77,10 @@ import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
 import org.mockito.Mockito.any
+import org.mockito.Mockito.anyString
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
+import org.mockito.Mockito.reset
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
@@ -90,6 +104,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     private lateinit var player: MediaControlPanel
 
     private lateinit var bgExecutor: FakeExecutor
+    private lateinit var mainExecutor: FakeExecutor
     @Mock private lateinit var activityStarter: ActivityStarter
     @Mock private lateinit var broadcastSender: BroadcastSender
 
@@ -103,7 +118,9 @@ public class MediaControlPanelTest : SysuiTestCase() {
     @Mock private lateinit var collapsedSet: ConstraintSet
     @Mock private lateinit var mediaOutputDialogFactory: MediaOutputDialogFactory
     @Mock private lateinit var mediaCarouselController: MediaCarouselController
+    @Mock private lateinit var mediaCarouselScrollHandler: MediaCarouselScrollHandler
     @Mock private lateinit var falsingManager: FalsingManager
+    @Mock private lateinit var transitionParent: ViewGroup
     private lateinit var appIcon: ImageView
     private lateinit var albumView: ImageView
     private lateinit var titleText: TextView
@@ -114,8 +131,6 @@ public class MediaControlPanelTest : SysuiTestCase() {
     private lateinit var seamlessIcon: ImageView
     private lateinit var seamlessText: TextView
     private lateinit var seekBar: SeekBar
-    private lateinit var elapsedTimeView: TextView
-    private lateinit var totalTimeView: TextView
     private lateinit var action0: ImageButton
     private lateinit var action1: ImageButton
     private lateinit var action2: ImageButton
@@ -124,9 +139,12 @@ public class MediaControlPanelTest : SysuiTestCase() {
     private lateinit var actionPlayPause: ImageButton
     private lateinit var actionNext: ImageButton
     private lateinit var actionPrev: ImageButton
+    private lateinit var scrubbingElapsedTimeView: TextView
+    private lateinit var scrubbingTotalTimeView: TextView
     private lateinit var actionsTopBarrier: Barrier
     @Mock private lateinit var longPressText: TextView
     @Mock private lateinit var handler: Handler
+    @Mock private lateinit var mockAnimator: AnimatorSet
     private lateinit var settings: ImageButton
     private lateinit var cancel: View
     private lateinit var cancelText: TextView
@@ -140,62 +158,55 @@ public class MediaControlPanelTest : SysuiTestCase() {
     private val clock = FakeSystemClock()
     @Mock private lateinit var logger: MediaUiEventLogger
     @Mock private lateinit var instanceId: InstanceId
+    @Mock private lateinit var packageManager: PackageManager
+    @Mock private lateinit var applicationInfo: ApplicationInfo
+
+    @Mock private lateinit var recommendationViewHolder: RecommendationViewHolder
+    @Mock private lateinit var smartspaceAction: SmartspaceAction
+    private lateinit var smartspaceData: SmartspaceMediaData
+    @Mock private lateinit var coverContainer: ViewGroup
+    private lateinit var coverItem: ImageView
 
     @JvmField @Rule val mockito = MockitoJUnit.rule()
 
     @Before
     fun setUp() {
         bgExecutor = FakeExecutor(FakeSystemClock())
+        mainExecutor = FakeExecutor(FakeSystemClock())
         whenever(mediaViewController.expandedLayout).thenReturn(expandedSet)
         whenever(mediaViewController.collapsedLayout).thenReturn(collapsedSet)
 
-        player = MediaControlPanel(context, bgExecutor, activityStarter, broadcastSender,
-            mediaViewController, seekBarViewModel, Lazy { mediaDataManager },
-            mediaOutputDialogFactory, mediaCarouselController, falsingManager, clock, logger)
-        whenever(seekBarViewModel.progress).thenReturn(seekBarData)
+        // Set up package manager mocks
+        val icon = context.getDrawable(R.drawable.ic_android)
+        whenever(packageManager.getApplicationIcon(anyString())).thenReturn(icon)
+        whenever(packageManager.getApplicationIcon(any(ApplicationInfo::class.java)))
+            .thenReturn(icon)
+        whenever(packageManager.getApplicationInfo(eq(PACKAGE), anyInt()))
+            .thenReturn(applicationInfo)
+        whenever(packageManager.getApplicationLabel(any())).thenReturn(PACKAGE)
+        context.setMockPackageManager(packageManager)
 
-        // Set up mock views for the players
-        appIcon = ImageView(context)
-        albumView = ImageView(context)
-        titleText = TextView(context)
-        artistText = TextView(context)
-        seamless = FrameLayout(context)
-        seamless.foreground = seamlessBackground
-        seamlessButton = View(context)
-        seamlessIcon = ImageView(context)
-        seamlessText = TextView(context)
-        seekBar = SeekBar(context)
-        elapsedTimeView = TextView(context)
-        totalTimeView = TextView(context)
-        settings = ImageButton(context)
-        cancel = View(context)
-        cancelText = TextView(context)
-        dismiss = FrameLayout(context)
-        dismissText = TextView(context)
-
-        action0 = ImageButton(context).also { it.setId(R.id.action0) }
-        action1 = ImageButton(context).also { it.setId(R.id.action1) }
-        action2 = ImageButton(context).also { it.setId(R.id.action2) }
-        action3 = ImageButton(context).also { it.setId(R.id.action3) }
-        action4 = ImageButton(context).also { it.setId(R.id.action4) }
-
-        actionPlayPause = ImageButton(context).also { it.setId(R.id.actionPlayPause) }
-        actionPrev = ImageButton(context).also { it.setId(R.id.actionPrev) }
-        actionNext = ImageButton(context).also { it.setId(R.id.actionNext) }
-
-        actionsTopBarrier =
-            Barrier(context).also {
-                it.id = R.id.media_action_barrier_top
-                it.referencedIds =
-                    intArrayOf(
-                        actionPrev.id,
-                        seekBar.id,
-                        actionNext.id,
-                        action0.id,
-                        action1.id,
-                        action2.id,
-                        action3.id,
-                        action4.id)
+        player = object : MediaControlPanel(
+            context,
+            bgExecutor,
+            mainExecutor,
+            activityStarter,
+            broadcastSender,
+            mediaViewController,
+            seekBarViewModel,
+            Lazy { mediaDataManager },
+            mediaOutputDialogFactory,
+            mediaCarouselController,
+            falsingManager,
+            clock,
+            logger) {
+                override fun loadAnimator(
+                    animId: Int,
+                    otionInterpolator: Interpolator,
+                    vararg targets: View
+                ): AnimatorSet {
+                    return mockAnimator
+                }
             }
 
         initMediaViewHolderMocks()
@@ -223,12 +234,81 @@ public class MediaControlPanelTest : SysuiTestCase() {
                 token = session.sessionToken,
                 device = device,
                 instanceId = instanceId)
+
+        // Set up recommendation view
+        initRecommendationViewHolderMocks()
+
+        // Set valid recommendation data
+        val extras = Bundle()
+        val intent = Intent().apply {
+            putExtras(extras)
+            setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        whenever(smartspaceAction.intent).thenReturn(intent)
+        whenever(smartspaceAction.extras).thenReturn(extras)
+        smartspaceData = EMPTY_SMARTSPACE_MEDIA_DATA.copy(
+            packageName = PACKAGE,
+            instanceId = instanceId,
+            recommendations = listOf(smartspaceAction),
+            cardAction = smartspaceAction
+        )
     }
 
     /**
      * Initialize elements in media view holder
      */
     private fun initMediaViewHolderMocks() {
+        whenever(seekBarViewModel.progress).thenReturn(seekBarData)
+        whenever(mediaCarouselController.mediaCarouselScrollHandler)
+            .thenReturn(mediaCarouselScrollHandler)
+        whenever(mediaCarouselScrollHandler.qsExpanded).thenReturn(false)
+
+        // Set up mock views for the players
+        appIcon = ImageView(context)
+        albumView = ImageView(context)
+        titleText = TextView(context)
+        artistText = TextView(context)
+        seamless = FrameLayout(context)
+        seamless.foreground = seamlessBackground
+        seamlessButton = View(context)
+        seamlessIcon = ImageView(context)
+        seamlessText = TextView(context)
+        seekBar = SeekBar(context)
+        settings = ImageButton(context)
+        cancel = View(context)
+        cancelText = TextView(context)
+        dismiss = FrameLayout(context)
+        dismissText = TextView(context)
+
+        action0 = ImageButton(context).also { it.setId(R.id.action0) }
+        action1 = ImageButton(context).also { it.setId(R.id.action1) }
+        action2 = ImageButton(context).also { it.setId(R.id.action2) }
+        action3 = ImageButton(context).also { it.setId(R.id.action3) }
+        action4 = ImageButton(context).also { it.setId(R.id.action4) }
+
+        actionPlayPause = ImageButton(context).also { it.setId(R.id.actionPlayPause) }
+        actionPrev = ImageButton(context).also { it.setId(R.id.actionPrev) }
+        actionNext = ImageButton(context).also { it.setId(R.id.actionNext) }
+        scrubbingElapsedTimeView =
+            TextView(context).also { it.setId(R.id.media_scrubbing_elapsed_time) }
+        scrubbingTotalTimeView =
+            TextView(context).also { it.setId(R.id.media_scrubbing_total_time) }
+
+        actionsTopBarrier =
+            Barrier(context).also {
+                it.id = R.id.media_action_barrier_top
+                it.referencedIds =
+                    intArrayOf(
+                        actionPrev.id,
+                        seekBar.id,
+                        actionNext.id,
+                        action0.id,
+                        action1.id,
+                        action2.id,
+                        action3.id,
+                        action4.id)
+            }
+
         whenever(viewHolder.player).thenReturn(view)
         whenever(viewHolder.appIcon).thenReturn(appIcon)
         whenever(viewHolder.albumView).thenReturn(albumView)
@@ -240,6 +320,12 @@ public class MediaControlPanelTest : SysuiTestCase() {
         whenever(viewHolder.seamlessIcon).thenReturn(seamlessIcon)
         whenever(viewHolder.seamlessText).thenReturn(seamlessText)
         whenever(viewHolder.seekBar).thenReturn(seekBar)
+        whenever(viewHolder.scrubbingElapsedTimeView).thenReturn(scrubbingElapsedTimeView)
+        whenever(viewHolder.scrubbingTotalTimeView).thenReturn(scrubbingTotalTimeView)
+
+        // Transition View
+        whenever(view.parent).thenReturn(transitionParent)
+        whenever(view.rootView).thenReturn(transitionParent)
 
         // Action buttons
         whenever(viewHolder.actionPlayPause).thenReturn(actionPlayPause)
@@ -269,6 +355,38 @@ public class MediaControlPanelTest : SysuiTestCase() {
         whenever(viewHolder.dismissText).thenReturn(dismissText)
 
         whenever(viewHolder.actionsTopBarrier).thenReturn(actionsTopBarrier)
+    }
+
+    /**
+     * Initialize elements for the recommendation view holder
+     */
+    private fun initRecommendationViewHolderMocks() {
+        whenever(recommendationViewHolder.recommendations).thenReturn(view)
+        whenever(recommendationViewHolder.cardIcon).thenReturn(appIcon)
+        whenever(recommendationViewHolder.cardText).thenReturn(titleText)
+
+        // Add a recommendation item
+        coverItem = ImageView(context).also { it.setId(R.id.media_cover1) }
+        whenever(coverContainer.id).thenReturn(R.id.media_cover1_container)
+        whenever(recommendationViewHolder.mediaCoverItems).thenReturn(listOf(coverItem))
+        whenever(recommendationViewHolder.mediaCoverContainers).thenReturn(listOf(coverContainer))
+        whenever(recommendationViewHolder.mediaCoverItemsResIds)
+            .thenReturn(listOf(R.id.media_cover1))
+        whenever(recommendationViewHolder.mediaCoverContainersResIds)
+            .thenReturn(listOf(R.id.media_cover1_container))
+
+        // Long press menu
+        whenever(recommendationViewHolder.settings).thenReturn(settings)
+        whenever(recommendationViewHolder.cancel).thenReturn(cancel)
+        whenever(recommendationViewHolder.dismiss).thenReturn(dismiss)
+
+        val actionIcon = Icon.createWithResource(context, R.drawable.ic_android)
+        whenever(smartspaceAction.icon).thenReturn(actionIcon)
+
+        // Needed for card and item action click
+        val mockContext = mock(Context::class.java)
+        whenever(view.context).thenReturn(mockContext)
+        whenever(coverContainer.context).thenReturn(mockContext)
     }
 
     @After
@@ -357,6 +475,128 @@ public class MediaControlPanelTest : SysuiTestCase() {
         player.bindPlayer(state, PACKAGE)
 
         verify(expandedSet).setVisibility(R.id.media_progress_bar, ConstraintSet.INVISIBLE)
+    }
+
+    @Test
+    fun bind_notScrubbing_scrubbingViewsGone() {
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val semanticActions = MediaButton(
+            prevOrCustom = MediaAction(icon, {}, "prev", null),
+            nextOrCustom = MediaAction(icon, {}, "next", null)
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_elapsed_time, ConstraintSet.GONE)
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_total_time, ConstraintSet.GONE)
+    }
+
+    @Test
+    fun setIsScrubbing_noSemanticActions_viewsNotChanged() {
+        val state = mediaData.copy(semanticActions = null)
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+        reset(expandedSet)
+
+        val listener = getScrubbingChangeListener()
+
+        listener.onScrubbingChanged(true)
+        mainExecutor.runAllReady()
+
+        verify(expandedSet, never()).setVisibility(eq(R.id.actionPrev), anyInt())
+        verify(expandedSet, never()).setVisibility(eq(R.id.actionNext), anyInt())
+        verify(expandedSet, never()).setVisibility(eq(R.id.media_scrubbing_elapsed_time), anyInt())
+        verify(expandedSet, never()).setVisibility(eq(R.id.media_scrubbing_total_time), anyInt())
+    }
+
+    @Test
+    fun setIsScrubbing_noPrevButton_scrubbingTimesNotShown() {
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val semanticActions = MediaButton(
+            prevOrCustom = null,
+            nextOrCustom = MediaAction(icon, {}, "next", null)
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+        reset(expandedSet)
+
+        getScrubbingChangeListener().onScrubbingChanged(true)
+        mainExecutor.runAllReady()
+
+        verify(expandedSet).setVisibility(R.id.actionNext, View.VISIBLE)
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_elapsed_time, View.GONE)
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_total_time, View.GONE)
+    }
+
+    @Test
+    fun setIsScrubbing_noNextButton_scrubbingTimesNotShown() {
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val semanticActions = MediaButton(
+            prevOrCustom = MediaAction(icon, {}, "prev", null),
+            nextOrCustom = null
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+        reset(expandedSet)
+
+        getScrubbingChangeListener().onScrubbingChanged(true)
+        mainExecutor.runAllReady()
+
+        verify(expandedSet).setVisibility(R.id.actionPrev, View.VISIBLE)
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_elapsed_time, View.GONE)
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_total_time, View.GONE)
+    }
+
+    @Test
+    fun setIsScrubbing_true_scrubbingViewsShownAndPrevNextHiddenOnlyInExpanded() {
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val semanticActions = MediaButton(
+            prevOrCustom = MediaAction(icon, {}, "prev", null),
+            nextOrCustom = MediaAction(icon, {}, "next", null)
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+        reset(expandedSet)
+
+        getScrubbingChangeListener().onScrubbingChanged(true)
+        mainExecutor.runAllReady()
+
+        // Only in expanded, we should show the scrubbing times and hide prev+next
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_elapsed_time, ConstraintSet.VISIBLE)
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_total_time, ConstraintSet.VISIBLE)
+        verify(expandedSet).setVisibility(R.id.actionPrev, ConstraintSet.GONE)
+        verify(expandedSet).setVisibility(R.id.actionNext, ConstraintSet.GONE)
+    }
+
+    @Test
+    fun setIsScrubbing_trueThenFalse_scrubbingTimeGoneAtEnd() {
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val semanticActions = MediaButton(
+            prevOrCustom = MediaAction(icon, {}, "prev", null),
+            nextOrCustom = MediaAction(icon, {}, "next", null)
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+
+        getScrubbingChangeListener().onScrubbingChanged(true)
+        mainExecutor.runAllReady()
+        reset(expandedSet)
+
+        getScrubbingChangeListener().onScrubbingChanged(false)
+        mainExecutor.runAllReady()
+
+        // Only in expanded, we should hide the scrubbing times and show prev+next
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_elapsed_time, ConstraintSet.GONE)
+        verify(expandedSet).setVisibility(R.id.media_scrubbing_total_time, ConstraintSet.GONE)
+        verify(expandedSet).setVisibility(R.id.actionPrev, ConstraintSet.VISIBLE)
+        verify(expandedSet).setVisibility(R.id.actionNext, ConstraintSet.VISIBLE)
     }
 
     @Test
@@ -481,8 +721,53 @@ public class MediaControlPanelTest : SysuiTestCase() {
     fun bindText() {
         player.attachPlayer(viewHolder)
         player.bindPlayer(mediaData, PACKAGE)
+
+        // Capture animation handler
+        val captor = argumentCaptor<Animator.AnimatorListener>()
+        verify(mockAnimator, times(2)).addListener(captor.capture())
+        val handler = captor.value
+
+        // Validate text views unchanged but animation started
+        assertThat(titleText.getText()).isEqualTo("")
+        assertThat(artistText.getText()).isEqualTo("")
+        verify(mockAnimator, times(1)).start()
+
+        // Binding only after animator runs
+        handler.onAnimationEnd(mockAnimator)
         assertThat(titleText.getText()).isEqualTo(TITLE)
         assertThat(artistText.getText()).isEqualTo(ARTIST)
+
+        // Rebinding should not trigger animation
+        player.bindPlayer(mediaData, PACKAGE)
+        verify(mockAnimator, times(1)).start()
+    }
+
+    @Test
+    fun bindTextInterrupted() {
+        val data0 = mediaData.copy(artist = "ARTIST_0")
+        val data1 = mediaData.copy(artist = "ARTIST_1")
+        val data2 = mediaData.copy(artist = "ARTIST_2")
+
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(data0, PACKAGE)
+
+        // Capture animation handler
+        val captor = argumentCaptor<Animator.AnimatorListener>()
+        verify(mockAnimator, times(2)).addListener(captor.capture())
+        val handler = captor.value
+
+        handler.onAnimationEnd(mockAnimator)
+        assertThat(artistText.getText()).isEqualTo("ARTIST_0")
+
+        // Bind trigges new animation
+        player.bindPlayer(data1, PACKAGE)
+        verify(mockAnimator, times(2)).start()
+        whenever(mockAnimator.isRunning()).thenReturn(true)
+
+        // Rebind before animation end binds corrct data
+        player.bindPlayer(data2, PACKAGE)
+        handler.onAnimationEnd(mockAnimator)
+        assertThat(artistText.getText()).isEqualTo("ARTIST_2")
     }
 
     @Test
@@ -749,6 +1034,20 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
+    fun tapContentView_isLogged() {
+        val pendingIntent = mock(PendingIntent::class.java)
+        val captor = ArgumentCaptor.forClass(View.OnClickListener::class.java)
+        val data = mediaData.copy(clickIntent = pendingIntent)
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(data, KEY)
+        verify(viewHolder.player).setOnClickListener(captor.capture())
+
+        captor.value.onClick(viewHolder.player)
+
+        verify(logger).logTapContentView(anyInt(), eq(PACKAGE), eq(instanceId))
+    }
+
+    @Test
     fun logSeek() {
         player.attachPlayer(viewHolder)
         player.bindPlayer(mediaData, KEY)
@@ -760,4 +1059,68 @@ public class MediaControlPanelTest : SysuiTestCase() {
 
         verify(logger).logSeek(anyInt(), eq(PACKAGE), eq(instanceId))
     }
+
+    @Test
+    fun recommendation_gutsClosed_longPressOpens() {
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+        whenever(mediaViewController.isGutsVisible).thenReturn(false)
+
+        val captor = ArgumentCaptor.forClass(View.OnLongClickListener::class.java)
+        verify(recommendationViewHolder.recommendations).setOnLongClickListener(captor.capture())
+
+        captor.value.onLongClick(recommendationViewHolder.recommendations)
+        verify(mediaViewController).openGuts()
+        verify(logger).logLongPressOpen(anyInt(), eq(PACKAGE), eq(instanceId))
+    }
+
+    @Test
+    fun recommendation_settingsButtonClick_isLogged() {
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+
+        settings.callOnClick()
+        verify(logger).logLongPressSettings(anyInt(), eq(PACKAGE), eq(instanceId))
+
+        val captor = ArgumentCaptor.forClass(Intent::class.java)
+        verify(activityStarter).startActivity(captor.capture(), eq(true))
+
+        assertThat(captor.value.action).isEqualTo(ACTION_MEDIA_CONTROLS_SETTINGS)
+    }
+
+    @Test
+    fun recommendation_dismissButton_isLogged() {
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+
+        dismiss.callOnClick()
+        verify(logger).logLongPressDismiss(anyInt(), eq(PACKAGE), eq(instanceId))
+    }
+
+    @Test
+    fun recommendation_tapOnCard_isLogged() {
+        val captor = ArgumentCaptor.forClass(View.OnClickListener::class.java)
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+
+        verify(recommendationViewHolder.recommendations).setOnClickListener(captor.capture())
+        captor.value.onClick(recommendationViewHolder.recommendations)
+
+        verify(logger).logRecommendationCardTap(eq(PACKAGE), eq(instanceId))
+    }
+
+    @Test
+    fun recommendation_tapOnItem_isLogged() {
+        val captor = ArgumentCaptor.forClass(View.OnClickListener::class.java)
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+
+        verify(coverContainer).setOnClickListener(captor.capture())
+        captor.value.onClick(recommendationViewHolder.recommendations)
+
+        verify(logger).logRecommendationItemTap(eq(PACKAGE), eq(instanceId), eq(0))
+    }
+
+    private fun getScrubbingChangeListener(): SeekBarViewModel.ScrubbingChangeListener =
+        withArgCaptor { verify(seekBarViewModel).setScrubbingChangeListener(capture()) }
 }

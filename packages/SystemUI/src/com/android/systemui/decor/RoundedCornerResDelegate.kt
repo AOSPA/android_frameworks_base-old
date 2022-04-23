@@ -25,7 +25,6 @@ import android.util.Size
 import android.view.RoundedCorners
 import com.android.systemui.Dumpable
 import com.android.systemui.R
-import java.io.FileDescriptor
 import java.io.PrintWriter
 
 class RoundedCornerResDelegate(
@@ -35,6 +34,8 @@ class RoundedCornerResDelegate(
 
     private val density: Float
         get() = res.displayMetrics.density
+
+    private var reloadToken: Int = 0
 
     var isMultipleRadius: Boolean = false
         private set
@@ -60,10 +61,24 @@ class RoundedCornerResDelegate(
         reloadMeasures()
     }
 
-    fun reloadAll(newDisplayUniqueId: String?) {
-        displayUniqueId = newDisplayUniqueId
+    private fun reloadAll(newReloadToken: Int) {
+        if (reloadToken == newReloadToken) {
+            return
+        }
+        reloadToken = newReloadToken
         reloadRes()
         reloadMeasures()
+    }
+
+    fun updateDisplayUniqueId(newDisplayUniqueId: String?, newReloadToken: Int?) {
+        if (displayUniqueId != newDisplayUniqueId) {
+            displayUniqueId = newDisplayUniqueId
+            newReloadToken ?.let { reloadToken = it }
+            reloadRes()
+            reloadMeasures()
+        } else {
+            newReloadToken?.let { reloadAll(it) }
+        }
     }
 
     private fun reloadRes() {
@@ -123,7 +138,11 @@ class RoundedCornerResDelegate(
         }
     }
 
-    fun updateTuningSizeFactor(factor: Int) {
+    fun updateTuningSizeFactor(factor: Int?, newReloadToken: Int) {
+        if (reloadToken == newReloadToken) {
+            return
+        }
+        reloadToken = newReloadToken
         reloadMeasures(factor)
     }
 
@@ -163,7 +182,7 @@ class RoundedCornerResDelegate(
         return drawable
     }
 
-    override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
+    override fun dump(pw: PrintWriter, args: Array<out String>) {
         pw.println("RoundedCornerResDelegate state:")
         pw.println("  isMultipleRadius:$isMultipleRadius")
         pw.println("  roundedSize(w,h)=(${roundedSize.width},${roundedSize.height})")

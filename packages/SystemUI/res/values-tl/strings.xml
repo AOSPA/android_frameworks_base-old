@@ -135,8 +135,7 @@
     <string name="biometric_dialog_face_icon_description_authenticated" msgid="2242167416140740920">"Na-authenticate ang mukha"</string>
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Nakumpirma"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"I-tap ang Kumpirmahin para kumpletuhin"</string>
-    <!-- no translation found for biometric_dialog_tap_confirm_with_face (7538145860465755864) -->
-    <skip />
+    <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Na-unlock gamit ang mukha. Pindutin ang icon ng unlock para magpatuloy."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"Na-authenticate"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"Gumamit ng PIN"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"Gumamit ng pattern"</string>
@@ -292,24 +291,15 @@
     <string name="sensor_privacy_start_use_mic_dialog_content" msgid="1624701280680913717">"Ina-unblock nito ang access para sa lahat ng app at serbisyong pinapayagang gumamit ng iyong mikropono."</string>
     <string name="sensor_privacy_start_use_camera_dialog_content" msgid="4704948062372435963">"Ina-unblock nito ang access para sa lahat ng app at serbisyong pinapayagang gumamit ng iyong camera."</string>
     <string name="sensor_privacy_start_use_mic_camera_dialog_content" msgid="3577642558418404919">"Ina-unblock nito ang access para sa lahat ng app at serbisyong pinapayagang gumamit ng iyong camera o mikropono."</string>
-    <!-- no translation found for sensor_privacy_start_use_mic_blocked_dialog_title (2640140287496469689) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_start_use_camera_blocked_dialog_title (7398084286822440384) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_start_use_mic_camera_blocked_dialog_title (195236134743281973) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_start_use_mic_blocked_dialog_content (2138318880682877747) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_start_use_camera_blocked_dialog_content (7216015168047965948) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_start_use_mic_camera_blocked_dialog_content (3960837827570483762) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_mic_unblocked_toast_content (306555320557065068) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_camera_unblocked_toast_content (7843105715964332311) -->
-    <skip />
-    <!-- no translation found for sensor_privacy_mic_camera_unblocked_toast_content (7339355093282661115) -->
-    <skip />
+    <string name="sensor_privacy_start_use_mic_blocked_dialog_title" msgid="2640140287496469689">"Naka-block ang mikropono"</string>
+    <string name="sensor_privacy_start_use_camera_blocked_dialog_title" msgid="7398084286822440384">"Naka-block ang camera"</string>
+    <string name="sensor_privacy_start_use_mic_camera_blocked_dialog_title" msgid="195236134743281973">"Naka-block ang mic at camera"</string>
+    <string name="sensor_privacy_start_use_mic_blocked_dialog_content" msgid="2138318880682877747">"Para i-unblock, ilipat sa naka-on na posisyon ang switch ng privacy sa iyong device sa mikropono para payagan ang access sa mikropono. Sumangguni sa manual ng device para mahanap ang switch ng privacy sa iyong device."</string>
+    <string name="sensor_privacy_start_use_camera_blocked_dialog_content" msgid="7216015168047965948">"Para i-unblock, ilipat sa naka-on na posisyon ang switch ng privacy sa iyong device sa camera para payagan ang access sa camera. Sumangguni sa manual ng device para mahanap ang switch ng privacy sa iyong device."</string>
+    <string name="sensor_privacy_start_use_mic_camera_blocked_dialog_content" msgid="3960837827570483762">"Para i-unblock ang mga ito, ilipat sa naka-unblock na posisyon ang switch ng privacy sa iyong device para payagan ang access. Sumangguni sa manual ng device para mahanap ang switch ng privacy sa iyong device."</string>
+    <string name="sensor_privacy_mic_unblocked_toast_content" msgid="306555320557065068">"Available ang mikropono"</string>
+    <string name="sensor_privacy_camera_unblocked_toast_content" msgid="7843105715964332311">"Available ang camera"</string>
+    <string name="sensor_privacy_mic_camera_unblocked_toast_content" msgid="7339355093282661115">"Available ang mikropono at camera"</string>
     <string name="media_seamless_other_device" msgid="4654849800789196737">"Iba pang device"</string>
     <string name="quick_step_accessibility_toggle_overview" msgid="7908949976727578403">"I-toggle ang Overview"</string>
     <string name="zen_priority_introduction" msgid="3159291973383796646">"Hindi ka maiistorbo ng mga tunog at pag-vibrate, maliban mula sa mga alarm, paalala, event, at tumatawag na tutukuyin mo. Maririnig mo pa rin ang kahit na anong piliin mong i-play kabilang ang mga musika, video, at laro."</string>
@@ -320,7 +310,8 @@
     <string name="notification_tap_again" msgid="4477318164947497249">"I-tap ulit upang buksan"</string>
     <string name="tap_again" msgid="1315420114387908655">"I-tap ulit"</string>
     <string name="keyguard_unlock" msgid="8031975796351361601">"Mag-swipe pataas para buksan"</string>
-    <string name="keyguard_unlock_press" msgid="8488350566398524740">"Pindutin para buksan"</string>
+    <string name="keyguard_unlock_press" msgid="9140109453735019209">"Pindutin ang icon ng unlock para buksan"</string>
+    <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"Na-unlock gamit ang mukha. Pindutin ang icon ng unlock para buksan."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Mag-swipe pataas para subukan ulit"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"I-unlock para magamit ang NFC"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Pagmamay-ari ng iyong organisasyon ang device na ito"</string>
@@ -463,7 +454,7 @@
     <string name="enable_demo_mode" msgid="3180345364745966431">"I-enable ang demo mode"</string>
     <string name="show_demo_mode" msgid="3677956462273059726">"Ipakita ang demo mode"</string>
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
-    <string name="status_bar_alarm" msgid="87160847643623352">"Alarma"</string>
+    <string name="status_bar_alarm" msgid="87160847643623352">"Alarm"</string>
     <string name="wallet_title" msgid="5369767670735827105">"Wallet"</string>
     <string name="wallet_empty_state_label" msgid="7776761245237530394">"I-set up para makapagsagawa ng mas mabibilis, mas secure na pagbili gamit ang telepono mo"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Ipakita lahat"</string>
@@ -814,6 +805,8 @@
     <string name="controls_media_button_pause" msgid="8614887780950376258">"I-pause"</string>
     <string name="controls_media_button_prev" msgid="8126822360056482970">"Nakaraang track"</string>
     <string name="controls_media_button_next" msgid="6662636627525947610">"Susunod na track"</string>
+    <!-- no translation found for controls_media_button_connecting (3138354625847598095) -->
+    <skip />
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"I-play"</string>
     <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"Buksan ang <xliff:g id="APP_LABEL">%1$s</xliff:g>"</string>
     <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"I-play ang <xliff:g id="SONG_NAME">%1$s</xliff:g> ni/ng <xliff:g id="ARTIST_NAME">%2$s</xliff:g> mula sa <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
@@ -843,20 +836,13 @@
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"Para ma-cast ang session na ito, buksan ang app."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"Hindi kilalang app"</string>
     <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"Ihinto ang pag-cast"</string>
-    <!-- no translation found for media_output_first_broadcast_title (6292237789860753022) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast (3555580945878071543) -->
-    <skip />
-    <!-- no translation found for media_output_first_notify_broadcast_message (6353857724136398494) -->
-    <skip />
-    <!-- no translation found for media_output_broadcasting_message (4150299923404886073) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_name (8786127091542624618) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_code (870795639644728542) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_dialog_save (7910865591430010198) -->
-    <skip />
+    <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"Paano gumagana ang pag-broadcast"</string>
+    <string name="media_output_broadcast" msgid="3555580945878071543">"Broadcast"</string>
+    <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"Makakapakinig ang mga taong malapit sa iyo na may mga compatible na Bluetooth device sa media na bino-broadcast mo"</string>
+    <string name="media_output_broadcasting_message" msgid="4150299923404886073">"Para makinig sa iyong broadcast, puwedeng i-scan ng mga tao sa malapit na may mga compatible na Bluetooth device ang QR code mo o puwede nilang gamitin ang pangalan at password ng iyong broadcast"</string>
+    <string name="media_output_broadcast_name" msgid="8786127091542624618">"Pangalan ng Broadcast"</string>
+    <string name="media_output_broadcast_code" msgid="870795639644728542">"Password"</string>
+    <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"I-save"</string>
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Numero ng build"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Nakopya sa clipboard ang numero ng build."</string>
     <string name="basic_status" msgid="2315371112182658176">"Buksan ang pag-uusap"</string>

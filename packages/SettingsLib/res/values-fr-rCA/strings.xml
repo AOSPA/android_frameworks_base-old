@@ -518,7 +518,7 @@
     <string name="ims_reg_title" msgid="8197592958123671062">"État d\'enregistrement IMS"</string>
     <string name="ims_reg_status_registered" msgid="884916398194885457">"Enregistré"</string>
     <string name="ims_reg_status_not_registered" msgid="2989287366045704694">"Non enregistré"</string>
-    <string name="status_unavailable" msgid="5279036186589861608">"Non accessible"</string>
+    <string name="status_unavailable" msgid="5279036186589861608">"Non disponible"</string>
     <string name="wifi_status_mac_randomized" msgid="466382542497832189">"Les adresses MAC sont randomisées"</string>
     <string name="wifi_tether_connected_summary" msgid="5282919920463340158">"{count,plural, =0{Aucun appareil connecté}=1{1 appareil connecté}one{# appareil connecté}other{# appareils connectés}}"</string>
     <string name="accessibility_manual_zen_more_time" msgid="5141801092071134235">"Plus longtemps."</string>
@@ -596,8 +596,7 @@
     <string name="guest_reset_guest_dialog_title" msgid="8047270010895437534">"Réinitialiser la session Invité?"</string>
     <string name="guest_remove_guest_dialog_title" msgid="4548511006624088072">"Retirer l\'invité?"</string>
     <string name="guest_reset_guest_confirm_button" msgid="2989915693215617237">"Réinitialiser"</string>
-    <!-- no translation found for guest_remove_guest_confirm_button (7858123434954143879) -->
-    <skip />
+    <string name="guest_remove_guest_confirm_button" msgid="7858123434954143879">"Retirer"</string>
     <string name="guest_resetting" msgid="7822120170191509566">"Réinitialisation de la session Invité en cours…"</string>
     <string name="user_image_take_photo" msgid="467512954561638530">"Prendre une photo"</string>
     <string name="user_image_choose_photo" msgid="1363820919146782908">"Sélectionner une image"</string>
@@ -653,10 +652,15 @@
     <string name="turn_screen_on_title" msgid="3266937298097573424">"Activation de l\'écran"</string>
     <string name="allow_turn_screen_on" msgid="6194845766392742639">"Autoriser l\'activation de l\'écran"</string>
     <string name="allow_turn_screen_on_description" msgid="43834403291575164">"Autorisez une application à activer l\'écran. Lorsque vous accordez cette autorisation, l\'application peut activer l\'écran à tout moment sans votre volonté explicite."</string>
-    <!-- no translation found for bt_le_audio_scan_qr_code (3521809854780392679) -->
+    <string name="bt_le_audio_scan_qr_code" msgid="3521809854780392679">"Numériser le code QR"</string>
+    <string name="bt_le_audio_scan_qr_code_scanner" msgid="4679500020630341107">"Pour commencer à écouter, centrez le code QR ci-dessous"</string>
+    <string name="bt_le_audio_qr_code_is_not_valid_format" msgid="6092191081849434734">"Le format du code QR est incorrect"</string>
+    <!-- no translation found for bt_le_audio_broadcast_dialog_title (5392738488989777074) -->
     <skip />
-    <!-- no translation found for bt_le_audio_scan_qr_code_scanner (4679500020630341107) -->
+    <!-- no translation found for bt_le_audio_broadcast_dialog_sub_title (268234802198852753) -->
     <skip />
-    <!-- no translation found for bt_le_audio_qr_code_is_not_valid_format (6092191081849434734) -->
+    <!-- no translation found for bt_le_audio_broadcast_dialog_switch_app (5749813313369517812) -->
+    <skip />
+    <!-- no translation found for bt_le_audio_broadcast_dialog_different_output (2638402023060391333) -->
     <skip />
 </resources>

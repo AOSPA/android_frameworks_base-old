@@ -1415,6 +1415,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                             + "activityRecord=%s", this);
             return false;
         }
+        if (onTop) {
+            app.addToPendingTop();
+        }
         try {
             ProtoLog.v(WM_DEBUG_STATES, "Sending position change to %s, onTop: %b",
                     this, onTop);
@@ -3992,6 +3995,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } else {
             onRemovedFromDisplay();
         }
+        mActivityRecordInputSink.releaseSurfaceControl();
+
         super.removeImmediately();
     }
 
@@ -5648,7 +5653,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * this activity when embedded in untrusted mode.
      */
     boolean hasOverlayOverUntrustedModeEmbedded() {
-        if (!isEmbeddedInUntrustedMode() || getRootTask() == null) {
+        if (!isEmbeddedInUntrustedMode() || getTask() == null) {
             // The activity is not embedded in untrusted mode.
             return false;
         }
@@ -5656,7 +5661,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Check if there are any activities with different UID over the activity that is embedded
         // in untrusted mode. Traverse bottom to top with boundary so that it will only check
         // activities above this activity.
-        final ActivityRecord differentUidOverlayActivity = getRootTask().getActivity(
+        final ActivityRecord differentUidOverlayActivity = getTask().getActivity(
                 a -> a.getUid() != getUid(), this /* boundary */, false /* includeBoundary */,
                 false /* traverseTopToBottom */);
         return differentUidOverlayActivity != null;
@@ -6408,7 +6413,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // starting window is drawn, the transition can start earlier. Exclude finishing and bubble
         // because it may be a trampoline.
         if (!wasTaskVisible && mStartingData != null && !finishing && !mLaunchedFromBubble
-                && !mDisplayContent.mAppTransition.isReady()
+                && mVisibleRequested && !mDisplayContent.mAppTransition.isReady()
                 && !mDisplayContent.mAppTransition.isRunning()
                 && mDisplayContent.isNextTransitionForward()) {
             // The pending transition state will be cleared after the transition is started, so
@@ -8211,7 +8216,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final boolean orientationRequested = requestedOrientation != ORIENTATION_UNDEFINED;
         final int orientation = orientationRequested
                 ? requestedOrientation
-                : newParentConfiguration.orientation;
+                // We should use the original orientation of the activity when possible to avoid
+                // forcing the activity in the opposite orientation.
+                : mCompatDisplayInsets.mOriginalRequestedOrientation != ORIENTATION_UNDEFINED
+                        ? mCompatDisplayInsets.mOriginalRequestedOrientation
+                        : newParentConfiguration.orientation;
         int rotation = newParentConfiguration.windowConfiguration.getRotation();
         final boolean isFixedToUserRotation = mDisplayContent == null
                 || mDisplayContent.getDisplayRotation().isFixedToUserRotation();
@@ -9482,8 +9491,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * compatibility mode activity compute the configuration without relying on its current display.
      */
     static class CompatDisplayInsets {
-        /** The original rotation the compat insets were computed in */
+        /** The original rotation the compat insets were computed in. */
         final @Rotation int mOriginalRotation;
+        /** The original requested orientation for the activity. */
+        final @Configuration.Orientation int mOriginalRequestedOrientation;
         /** The container width on rotation 0. */
         private final int mWidth;
         /** The container height on rotation 0. */
@@ -9512,6 +9523,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 @Nullable Rect fixedOrientationBounds) {
             mOriginalRotation = display.getRotation();
             mIsFloating = container.getWindowConfiguration().tasksAreFloating();
+            mOriginalRequestedOrientation = container.getRequestedConfigurationOrientation();
             if (mIsFloating) {
                 final Rect containerBounds = container.getWindowConfiguration().getBounds();
                 mWidth = containerBounds.width();

@@ -4528,13 +4528,6 @@ public final class Settings {
         public static final String SCREEN_OFF_TIMEOUT = "screen_off_timeout";
 
         /**
-         * The amount of time in milliseconds before the device goes to sleep or begins to dream
-         * after a period of inactivity while it is docked.
-         * @hide
-         */
-        public static final String SCREEN_OFF_TIMEOUT_DOCKED = "screen_off_timeout_docked";
-
-        /**
          * The screen backlight brightness between 0 and 255.
          */
         @Readable
@@ -14292,6 +14285,14 @@ public final class Settings {
          */
         public static final String EMERGENCY_GESTURE_POWER_BUTTON_COOLDOWN_PERIOD_MS =
                 "emergency_gesture_power_button_cooldown_period_ms";
+
+        /**
+         * The minimum time in milliseconds to perform the emergency gesture.
+         *
+         * @hide
+         */
+        public static final String EMERGENCY_GESTURE_TAP_DETECTION_MIN_TIME_MS =
+                "emergency_gesture_tap_detection_min_time_ms";
 
         /**
          * Whether to enable automatic system server heap dumps. This only works on userdebug or
