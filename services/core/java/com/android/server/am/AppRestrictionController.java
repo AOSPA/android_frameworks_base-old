@@ -223,6 +223,11 @@ public final class AppRestrictionController {
     private static final String ATTR_LEVEL_TS = "levelts";
     private static final String ATTR_REASON = "reason";
 
+    private static final String[] ROLES_IN_INTEREST = {
+        RoleManager.ROLE_DIALER,
+        RoleManager.ROLE_EMERGENCY,
+    };
+
     private final Context mContext;
     private final HandlerThread mBgHandlerThread;
     private final BgHandler mBgHandler;
@@ -1386,6 +1391,7 @@ public final class AppRestrictionController {
         initBgRestrictionExemptioFromSysConfig();
         initRestrictionStates();
         initSystemModuleNames();
+        initRolesInInterest();
         registerForUidObservers();
         registerForSystemBroadcasts();
         mNotificationHelper.onSystemReady();
@@ -1975,6 +1981,9 @@ public final class AppRestrictionController {
         }
         try {
             final PackageInfo pkg = pm.getPackageInfo(packageName, 0 /* flags */);
+            if (pkg == null || pkg.applicationInfo == null) {
+                return FrameworkStatsLog.APP_BACKGROUND_RESTRICTIONS_INFO__TARGET_SDK__SDK_UNKNOWN;
+            }
             final int targetSdk = pkg.applicationInfo.targetSdkVersion;
             if (targetSdk < Build.VERSION_CODES.S) {
                 return FrameworkStatsLog.APP_BACKGROUND_RESTRICTIONS_INFO__TARGET_SDK__SDK_PRE_S;
@@ -2289,9 +2298,10 @@ public final class AppRestrictionController {
         void postRequestBgRestrictedIfNecessary(String packageName, int uid) {
             final Intent intent = new Intent(Settings.ACTION_VIEW_ADVANCED_POWER_USAGE_DETAIL);
             intent.setData(Uri.fromParts(PACKAGE_SCHEME, packageName, null));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
             final PendingIntent pendingIntent = PendingIntent.getActivityAsUser(mContext, 0,
-                    intent, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE, null,
+                    intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE, null,
                     UserHandle.of(UserHandle.getUserId(uid)));
             Notification.Action[] actions = null;
             final boolean hasForegroundServices =
@@ -2347,13 +2357,14 @@ public final class AppRestrictionController {
                 intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
                 // Task manager runs in SystemUI, which is SYSTEM user only.
                 pendingIntent = PendingIntent.getBroadcastAsUser(mContext, 0,
-                        intent, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+                        intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE,
                         UserHandle.SYSTEM);
             } else {
                 final Intent intent = new Intent(Settings.ACTION_VIEW_ADVANCED_POWER_USAGE_DETAIL);
                 intent.setData(Uri.fromParts(PACKAGE_SCHEME, packageName, null));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 pendingIntent = PendingIntent.getActivityAsUser(mContext, 0,
-                        intent, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+                        intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE,
                         null, UserHandle.of(UserHandle.getUserId(uid)));
             }
 
@@ -2658,6 +2669,18 @@ public final class AppRestrictionController {
         synchronized (mLock) {
             final ArrayList<String> roles = mUidRolesMapping.get(uid);
             return roles != null && roles.indexOf(roleName) >= 0;
+        }
+    }
+
+    private void initRolesInInterest() {
+        final int[] allUsers = mInjector.getUserManagerInternal().getUserIds();
+        for (String role : ROLES_IN_INTEREST) {
+            if (mInjector.getRoleManager().isRoleAvailable(role)) {
+                for (int userId : allUsers) {
+                    final UserHandle user = UserHandle.of(userId);
+                    onRoleHoldersChanged(role, user);
+                }
+            }
         }
     }
 

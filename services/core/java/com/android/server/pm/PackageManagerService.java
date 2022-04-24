@@ -721,7 +721,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     }
 
     @Watched
-    final AppsFilter mAppsFilter;
+    final AppsFilterImpl mAppsFilter;
 
     final PackageParser2.Callback mPackageParserCallback;
 
@@ -981,7 +981,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         public final InstantAppRegistry instantAppRegistry;
         public final ApplicationInfo androidApplication;
         public final String appPredictionServicePackage;
-        public final AppsFilter appsFilter;
+        public final AppsFilterSnapshot appsFilter;
         public final ComponentResolverApi componentResolver;
         public final PackageManagerService service;
         public final WatchedArrayMap<String, Integer> frozenPackages;
@@ -1433,7 +1433,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                         RuntimePermissionsPersistence.createInstance(),
                         i.getPermissionManagerServiceInternal(),
                         domainVerificationService, lock),
-                (i, pm) -> AppsFilter.create(i, i.getLocalService(PackageManagerInternal.class)),
+                (i, pm) -> AppsFilterImpl.create(i,
+                        i.getLocalService(PackageManagerInternal.class)),
                 (i, pm) -> (PlatformCompat) ServiceManager.getService("platform_compat"),
                 (i, pm) -> SystemConfig.getInstance(),
                 (i, pm) -> new PackageDexOptimizer(i.getInstaller(), i.getInstallLock(),
@@ -2909,8 +2910,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         synchronized (mLock) {
             mPackageUsage.writeNow(mSettings.getPackagesLocked());
 
-            if (mHandler.hasMessages(WRITE_SETTINGS)) {
-                mHandler.removeMessages(WRITE_SETTINGS);
+            if (mHandler.hasMessages(WRITE_SETTINGS)
+                    || mHandler.hasMessages(WRITE_PACKAGE_RESTRICTIONS)
+                    || mHandler.hasMessages(WRITE_PACKAGE_LIST)) {
                 writeSettings();
             }
         }
@@ -3569,6 +3571,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     EventLog.writeEvent(0x534e4554, "145981139", packageInfo.applicationInfo.uid,
                             "");
                 }
+                Log.w(TAG, "Missing required system package: " + packageName + (packageInfo != null
+                        ? ", but found with extended search." : "."));
                 return null;
             }
         } finally {
@@ -7197,5 +7201,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
     void notifyInstantAppPackageInstalled(String packageName, int[] newUsers) {
         mInstantAppRegistry.onPackageInstalled(snapshotComputer(), packageName, newUsers);
+    }
+
+    void addInstallerPackageName(InstallSource installSource) {
+        synchronized (mLock) {
+            mSettings.addInstallerPackageNames(installSource);
+        }
     }
 }

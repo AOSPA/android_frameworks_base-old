@@ -109,7 +109,7 @@ final class DeletePackageHelper {
     }
 
     /**
-     *  This method is an internal method that could be get invoked either
+     *  This method is an internal method that could be invoked either
      *  to delete an installed package or to clean up a failed installation.
      *  After deleting an installed package, a broadcast is sent to notify any
      *  listeners that the package has been removed. For cleaning up a failed
@@ -147,6 +147,8 @@ final class DeletePackageHelper {
         int[] allUsers;
         final int freezeUser;
         final SparseArray<TempUserState> priorUserStates;
+
+        final boolean isInstallerPackage;
         /** enabled state of the uninstalled application */
         synchronized (mPm.mLock) {
             final Computer computer = mPm.snapshotComputer();
@@ -227,6 +229,8 @@ final class DeletePackageHelper {
                 freezeUser = removeUser;
                 priorUserStates = null;
             }
+
+            isInstallerPackage = mPm.mSettings.isInstallerPackage(packageName);
         }
 
         synchronized (mPm.mInstallLock) {
@@ -323,6 +327,12 @@ final class DeletePackageHelper {
                     }
                 }
             }
+        }
+
+        if (res && isInstallerPackage) {
+            final PackageInstallerService packageInstallerService =
+                    mPm.mInjector.getPackageInstallerService();
+            packageInstallerService.onInstallerPackageDeleted(uninstalledPs.getAppId(), removeUser);
         }
 
         if (res && packageName != null) {

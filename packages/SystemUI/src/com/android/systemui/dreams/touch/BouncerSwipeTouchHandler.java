@@ -20,6 +20,8 @@ import static com.android.systemui.dreams.touch.dagger.BouncerSwipeModule.SWIPE_
 import static com.android.systemui.dreams.touch.dagger.BouncerSwipeModule.SWIPE_TO_BOUNCER_FLING_ANIMATION_UTILS_OPENING;
 import static com.android.systemui.dreams.touch.dagger.BouncerSwipeModule.SWIPE_TO_BOUNCER_START_REGION;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.graphics.Rect;
 import android.graphics.Region;
@@ -117,15 +119,23 @@ public class BouncerSwipeTouchHandler implements DreamTouchHandler {
                         return false;
                     }
 
+                    // Don't set expansion for downward scroll when the bouncer is hidden.
+                    if (!mBouncerInitiallyShowing && (e1.getY() < e2.getY())) {
+                        return true;
+                    }
+
+                    // Don't set expansion for upward scroll when the bouncer is shown.
+                    if (mBouncerInitiallyShowing && (e1.getY() > e2.getY())) {
+                        return true;
+                    }
+
                     // For consistency, we adopt the expansion definition found in the
                     // PanelViewController. In this case, expansion refers to the view above the
                     // bouncer. As that view's expansion shrinks, the bouncer appears. The bouncer
                     // is fully hidden at full expansion (1) and fully visible when fully collapsed
                     // (0).
-                    final float dy = mBouncerInitiallyShowing ? e2.getY() - e1.getY()
-                            : e1.getY() - e2.getY();
-                    final float screenTravelPercentage = Math.max(0,
-                            dy / mCentralSurfaces.getDisplayHeight());
+                    final float screenTravelPercentage = Math.abs(e1.getY() - e2.getY())
+                            / mCentralSurfaces.getDisplayHeight();
                     setPanelExpansion(mBouncerInitiallyShowing
                             ? screenTravelPercentage : 1 - screenTravelPercentage);
                     return true;
@@ -140,7 +150,10 @@ public class BouncerSwipeTouchHandler implements DreamTouchHandler {
     @VisibleForTesting
     public enum DreamEvent implements UiEventLogger.UiEventEnum {
         @UiEvent(doc = "The screensaver has been swiped up.")
-        DREAM_SWIPED(988);
+        DREAM_SWIPED(988),
+
+        @UiEvent(doc = "The bouncer has become fully visible over dream.")
+        DREAM_BOUNCER_FULLY_VISIBLE(1056);
 
         private final int mId;
 
@@ -270,6 +283,15 @@ public class BouncerSwipeTouchHandler implements DreamTouchHandler {
                 animation -> {
                     setPanelExpansion((float) animation.getAnimatedValue());
                 });
+        if (!mBouncerInitiallyShowing && targetExpansion == KeyguardBouncer.EXPANSION_VISIBLE) {
+            animator.addListener(
+                    new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            mUiEventLogger.log(DreamEvent.DREAM_BOUNCER_FULLY_VISIBLE);
+                        }
+                    });
+        }
         return animator;
     }
 

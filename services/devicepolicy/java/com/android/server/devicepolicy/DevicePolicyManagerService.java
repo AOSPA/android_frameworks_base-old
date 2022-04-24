@@ -1544,23 +1544,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             return StorageManager.isFileEncryptedNativeOnly();
         }
 
-        boolean storageManagerIsNonDefaultBlockEncrypted() {
-            final long identity = Binder.clearCallingIdentity();
-            try {
-                return StorageManager.isNonDefaultBlockEncrypted();
-            } finally {
-                Binder.restoreCallingIdentity(identity);
-            }
-        }
-
-        boolean storageManagerIsEncrypted() {
-            return StorageManager.isEncrypted();
-        }
-
-        boolean storageManagerIsEncryptable() {
-            return StorageManager.isEncryptable();
-        }
-
         Looper getMyLooper() {
             return Looper.myLooper();
         }
@@ -1798,7 +1781,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @VisibleForTesting
     DevicePolicyManagerService(Injector injector) {
-        DevicePolicyManager.disableGetKeyguardDisabledFeaturesCache();
+        DevicePolicyManager.disableLocalCaches();
 
         mInjector = injector;
         mContext = Objects.requireNonNull(injector.mContext);
@@ -7823,21 +7806,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     /**
      * Hook to low-levels:  Reporting the current status of encryption.
-     * @return A value such as {@link DevicePolicyManager#ENCRYPTION_STATUS_UNSUPPORTED},
-     * {@link DevicePolicyManager#ENCRYPTION_STATUS_INACTIVE},
-     * {@link DevicePolicyManager#ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY},
-     * {@link DevicePolicyManager#ENCRYPTION_STATUS_ACTIVE_PER_USER}, or
-     * {@link DevicePolicyManager#ENCRYPTION_STATUS_ACTIVE}.
+     * @return Either {@link DevicePolicyManager#ENCRYPTION_STATUS_UNSUPPORTED}
+     * or {@link DevicePolicyManager#ENCRYPTION_STATUS_ACTIVE_PER_USER}.
      */
     private int getEncryptionStatus() {
         if (mInjector.storageManagerIsFileBasedEncryptionEnabled()) {
             return DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_PER_USER;
-        } else if (mInjector.storageManagerIsNonDefaultBlockEncrypted()) {
-            return DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE;
-        } else if (mInjector.storageManagerIsEncrypted()) {
-            return DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY;
-        } else if (mInjector.storageManagerIsEncryptable()) {
-            return DevicePolicyManager.ENCRYPTION_STATUS_INACTIVE;
         } else {
             return DevicePolicyManager.ENCRYPTION_STATUS_UNSUPPORTED;
         }
@@ -13354,8 +13328,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 if (receivers.isEmpty()) {
                     return;
                 }
-                packageIntent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-                mContext.sendBroadcastAsUser(packageIntent, userHandle);
+                for (ResolveInfo receiver : receivers) {
+                    final Intent componentIntent = new Intent(packageIntent)
+                            .setComponent(receiver.getComponentInfo().getComponentName())
+                            .addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+                    mContext.sendBroadcastAsUser(componentIntent, userHandle);
+                }
             } catch (RemoteException ex) {
                 Slogf.w(LOG_TAG, "Cannot get list of broadcast receivers for %s because: %s.",
                         intent.getAction(), ex);

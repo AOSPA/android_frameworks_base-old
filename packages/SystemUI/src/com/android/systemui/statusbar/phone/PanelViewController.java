@@ -67,7 +67,6 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import android.util.BoostFramework;
 import com.android.wm.shell.animation.FlingAnimationUtils;
 
-import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
 public abstract class PanelViewController {
@@ -816,7 +815,7 @@ public abstract class PanelViewController {
             mExpandedFraction = Math.min(1f,
                     maxPanelHeight == 0 ? 0 : mExpandedHeight / maxPanelHeight);
             mAmbientState.setExpansionFraction(mStatusBarKeyguardViewManager.bouncerIsInTransit()
-                    ? BouncerPanelExpansionCalculator.getBackScrimScaledExpansion(mExpandedFraction)
+                    ? BouncerPanelExpansionCalculator.aboutToShowBouncerProgress(mExpandedFraction)
                     : mExpandedFraction);
             onHeightUpdated(mExpandedHeight);
             updatePanelExpansionAndVisibility();
@@ -1162,7 +1161,7 @@ public abstract class PanelViewController {
 
     protected abstract boolean isDozing();
 
-    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+    public void dump(PrintWriter pw, String[] args) {
         pw.println(String.format("[PanelView(%s): expandedHeight=%f maxPanelHeight=%d closing=%s"
                         + " tracking=%s timeAnim=%s%s "
                         + "touchDisabled=%s" + "]",
