@@ -113,6 +113,9 @@ public class BluetoothEventManager {
         // Pairing broadcasts
         addHandler(BluetoothDevice.ACTION_BOND_STATE_CHANGED, new BondStateChangedHandler());
 
+        // CSIS Device broadcasts
+        addHandler(BluetoothCsipSetCoordinator.ACTION_CSIS_DEVICE_AVAILABLE,
+                new CsipGroupFoundHandler());
         // Fine-grained state broadcasts
         addHandler(BluetoothDevice.ACTION_CLASS_CHANGED, new ClassChangedHandler());
         addHandler(BluetoothDevice.ACTION_UUID, new UuidChangedHandler());
@@ -697,10 +700,10 @@ public class BluetoothEventManager {
         boolean isGroup = cachedDevice.isGroupDevice();
         Log.d(TAG, "updateCacheDeviceInfo groupId " + groupId
                 + ", cachedDevice :" + cachedDevice + ", name :" + cachedDevice.getName()
-                +" isGroup :" + isGroup + " groupId " + cachedDevice.getGroupId());
+                +" isGroup :" + isGroup + " qgroupId " + cachedDevice.getQGroupId());
         if (isGroup) {
-            if (groupId !=  cachedDevice.getGroupId()) {
-                Log.d(TAG, "groupId mismatch ignore" + cachedDevice.getGroupId());
+            if (groupId !=  cachedDevice.getQGroupId()) {
+                Log.d(TAG, "groupId mismatch ignore " + cachedDevice.getQGroupId());
                 return;
             }
             Log.d(TAG, "updateCacheDeviceInfo update ignored ");
@@ -711,5 +714,17 @@ public class BluetoothEventManager {
 
     private void updateIgnoreDeviceFlag(CachedBluetoothDevice cachedDevice) {
         cachedDevice.setDeviceType(CachedBluetoothDevice.PRIVATE_ADDR);
+    }
+
+    private class CsipGroupFoundHandler implements Handler {
+        public void onReceive(Context context, Intent intent, BluetoothDevice device) {
+            CachedBluetoothDevice cachedDevice = mDeviceManager.findDevice(device);
+            int groupId = intent.getIntExtra(BluetoothCsipSetCoordinator.EXTRA_CSIS_GROUP_ID,
+                    BluetoothCsipSetCoordinator.GROUP_ID_INVALID);
+            Log.d(TAG, "CsipGroupFoundHandler  " + cachedDevice + "  " + groupId);
+            if (cachedDevice != null) {
+                cachedDevice.setGroupId(groupId);
+            }
+        }
     }
 }

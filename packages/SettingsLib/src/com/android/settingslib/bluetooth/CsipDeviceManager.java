@@ -68,9 +68,10 @@ public class CsipDeviceManager {
             }
 
             for (Map.Entry<Integer, ParcelUuid> entry: groupIdMap.entrySet()) {
-                if (entry.getValue().equals(BluetoothUuid.CAP)) {
+                // Based on Spec CAP UUID is not mandatory, also we see failures with PTS
+                //if (entry.getValue().equals(BluetoothUuid.CAP)) {
                     return entry.getKey();
-                }
+                //}
             }
         }
         return BluetoothCsipSetCoordinator.GROUP_ID_INVALID;
