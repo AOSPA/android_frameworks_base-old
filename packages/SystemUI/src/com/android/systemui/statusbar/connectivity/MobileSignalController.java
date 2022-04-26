@@ -15,6 +15,8 @@
  */
 package com.android.systemui.statusbar.connectivity;
 
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE;
 import static com.android.settingslib.mobile.MobileMappings.getDefaultIcons;
 import static com.android.settingslib.mobile.MobileMappings.getIconKey;
 import static com.android.settingslib.mobile.MobileMappings.mapIconSets;
@@ -166,6 +168,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         public void onRegistered(ImsRegistrationAttributes attributes) {
             Log.d(mTag, "onRegistered: " + "attributes=" + attributes);
             mCurrentState.imsRegistered = true;
+            mCurrentState.imsRegistrationTech = attributes.getRegistrationTechnology();
             notifyListenersIfNecessary();
             if (!mProviderModelBehavior) {
                 return;
@@ -205,6 +208,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         public void onUnregistered(ImsReasonInfo info) {
             Log.d(mTag, "onDeregistered: " + "info=" + info);
             mCurrentState.imsRegistered = false;
+            mCurrentState.imsRegistrationTech = REGISTRATION_TECH_NONE;
             notifyListenersIfNecessary();
             if (!mProviderModelBehavior) {
                 return;
@@ -1121,8 +1125,8 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     }
 
     private boolean isVowifiAvailable() {
-        return mCurrentState.voiceCapable &&  mCurrentState.imsRegistered
-                && mCurrentState.getDataNetworkType() == TelephonyManager.NETWORK_TYPE_IWLAN;
+        return mCurrentState.voiceCapable
+                && mCurrentState.imsRegistrationTech == REGISTRATION_TECH_IWLAN;
     }
 
     private MobileIconGroup getVowifiIconGroup() {
