@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4476ebbe_da674701",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-04-26T08:23:21Z",
+      "side": 1,
+      "message": "328659: Revert \"sm8250-common: enable unspecialized app process pool\" | https://review.lineageos.org/c/LineageOS/android_device_oneplus_sm8350-common/+/328659\n\nneed to fix authorship",
+      "revId": "26dd62efa45b52cb92aced46585649ae417cde4a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
