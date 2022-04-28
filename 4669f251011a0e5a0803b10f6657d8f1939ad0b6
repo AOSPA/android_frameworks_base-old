@@ -16,6 +16,23 @@
       "message": "weak commit message",
       "revId": "4669f251011a0e5a0803b10f6657d8f1939ad0b6",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8b8a7fcb_0393fc31",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2022-04-28T01:50:36Z",
+      "side": 1,
+      "message": "needs to be adapted",
+      "revId": "4669f251011a0e5a0803b10f6657d8f1939ad0b6",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
