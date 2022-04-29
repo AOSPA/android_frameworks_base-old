@@ -931,16 +931,6 @@ public class AudioDeviceInventory {
                 delay = 0;
             }
 
-            if (info.mState == AudioService.CONNECTION_STATE_DISCONNECTED) {
-                final String key = DeviceInfo.makeDeviceListKey(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP,
-                        info.mDevice.getAddress());
-                final DeviceInfo di = mConnectedDevices.get(key);
-                if (di == null) {
-                    Log.e(TAG, "invalid null DeviceInfo in setBluetoothA2dpDeviceConnectionState");
-                    return 0;
-                }
-            }
-
             if (AudioService.DEBUG_DEVICES) {
                 Log.i(TAG, "setBluetoothActiveDevice device: " + info.mDevice
                         + " profile: " + BluetoothProfile.getProfileName(info.mProfile)
