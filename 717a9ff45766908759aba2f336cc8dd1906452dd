@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d5915862_d16ef238",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2022-04-30T21:25:45Z",
+      "side": 1,
+      "message": "for me it\u0027s useful to see overlay packages there sometimes.",
+      "revId": "717a9ff45766908759aba2f336cc8dd1906452dd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
