@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5f1eb250_2c751a20",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000062
+      },
+      "writtenOn": "2022-04-30T08:33:46Z",
+      "side": 1,
+      "message": "If the problem here is only the SELinux denials, fix it instead.\n\nIf it\u0027s not, please elaborate it on the commit message.",
+      "revId": "7b4546eb3b1f3fd6e5094d72ad0e2c0e6a415b56",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
