@@ -16,6 +16,23 @@
       "message": "Holding it until we run rome tests",
       "revId": "178dcfbe338bdce77c3cfcb77a6aab02c58006e5",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3ebab281_df65f473",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000580
+      },
+      "writtenOn": "2022-05-01T22:46:04Z",
+      "side": 1,
+      "message": "the icon doesn\u0027t shows again after reboot, and to show, need turn on nfc again",
+      "revId": "178dcfbe338bdce77c3cfcb77a6aab02c58006e5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
