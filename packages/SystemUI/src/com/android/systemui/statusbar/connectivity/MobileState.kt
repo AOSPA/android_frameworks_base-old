@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.connectivity
 
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
+
 import android.telephony.ServiceState
 import android.telephony.SignalStrength
 import android.telephony.TelephonyDisplayInfo
@@ -46,7 +48,8 @@ internal class MobileState(
     @JvmField var voiceCapable: Boolean = false,
     @JvmField var videoCapable: Boolean = false,
     @JvmField var mobileDataEnabled: Boolean = false,
-    @JvmField var roamingDataEnabled: Boolean = false
+    @JvmField var roamingDataEnabled: Boolean = false,
+    @JvmField var imsRegistrationTech: Int = REGISTRATION_TECH_NONE
 ) : ConnectivityState() {
 
     @JvmField var telephonyDisplayInfo = TelephonyDisplayInfo(TelephonyManager.NETWORK_TYPE_UNKNOWN,
@@ -92,6 +95,7 @@ internal class MobileState(
         dataState = o.dataState
         defaultDataOff = o.defaultDataOff
         imsRegistered = o.imsRegistered
+        imsRegistrationTech = o.imsRegistrationTech
         voiceCapable = o.voiceCapable
         videoCapable = o.videoCapable
         mobileDataEnabled = o.mobileDataEnabled
@@ -170,6 +174,7 @@ internal class MobileState(
         builder.append("dataState=$dataState,")
         builder.append("defaultDataOff=$defaultDataOff,")
         builder.append("imsRegistered=$imsRegistered,")
+        builder.append("imsRegistrationTech=$imsRegistrationTech,")
         builder.append("voiceCapable=$voiceCapable,")
         builder.append("videoCapable=$videoCapable,")
         builder.append("mobileDataEnabled=$mobileDataEnabled,")
@@ -251,6 +256,7 @@ internal class MobileState(
         if (dataState != other.dataState) return false
         if (defaultDataOff != other.defaultDataOff) return false
         if (imsRegistered != other.imsRegistered) return false
+        if (imsRegistrationTech != other.imsRegistrationTech) return false
         if (voiceCapable != other.voiceCapable) return false
         if (videoCapable != other.videoCapable) return false
         if (mobileDataEnabled != other.mobileDataEnabled) return false
@@ -277,6 +283,7 @@ internal class MobileState(
         result = 31 * result + dataState
         result = 31 * result + defaultDataOff.hashCode()
         result = 31 * result + imsRegistered.hashCode()
+        result = 31 * result + imsRegistrationTech.hashCode()
         result = 31 * result + voiceCapable.hashCode()
         result = 31 * result + videoCapable.hashCode()
         result = 31 * result + mobileDataEnabled.hashCode()
