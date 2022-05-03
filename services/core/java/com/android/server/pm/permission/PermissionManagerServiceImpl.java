@@ -195,6 +195,11 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
     /** All storage permissions */
     private static final List<String> STORAGE_PERMISSIONS = new ArrayList<>();
+
+    private static final Set<String> READ_MEDIA_AURAL_PERMISSIONS = new ArraySet<>();
+
+    private static final Set<String> READ_MEDIA_VISUAL_PERMISSIONS = new ArraySet<>();
+
     /** All nearby devices permissions */
     private static final List<String> NEARBY_DEVICES_PERMISSIONS = new ArrayList<>();
 
@@ -222,7 +227,10 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                 Manifest.permission.INTERACT_ACROSS_USERS_FULL);
         STORAGE_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
         STORAGE_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        STORAGE_PERMISSIONS.add(Manifest.permission.ACCESS_MEDIA_LOCATION);
+        READ_MEDIA_AURAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_AUDIO);
+        READ_MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_VIDEO);
+        READ_MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.READ_MEDIA_IMAGES);
+        READ_MEDIA_VISUAL_PERMISSIONS.add(Manifest.permission.ACCESS_MEDIA_LOCATION);
         NEARBY_DEVICES_PERMISSIONS.add(Manifest.permission.BLUETOOTH_ADVERTISE);
         NEARBY_DEVICES_PERMISSIONS.add(Manifest.permission.BLUETOOTH_CONNECT);
         NEARBY_DEVICES_PERMISSIONS.add(Manifest.permission.BLUETOOTH_SCAN);
@@ -764,8 +772,10 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             flagValues &= ~FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
             flagValues &= ~FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
             flagValues &= ~PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION;
-            // REVIEW_REQUIRED can only be set by non-system apps for for POST_NOTIFICATIONS
-            if (!POST_NOTIFICATIONS.equals(permName)) {
+            // REVIEW_REQUIRED can only be set by non-system apps for POST_NOTIFICATIONS, or by the
+            // shell or root UID.
+            if (!POST_NOTIFICATIONS.equals(permName) && callingUid != Process.SHELL_UID
+                    && callingUid != Process.ROOT_UID) {
                 flagValues &= ~PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
             }
         }
@@ -2065,7 +2075,10 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                 PermissionInfo permInfo = getPermissionInfo(
                         newPackage.getRequestedPermissions().get(i),
                         newPackage.getPackageName(), 0);
-                if (permInfo == null || !STORAGE_PERMISSIONS.contains(permInfo.name)) {
+                boolean isStorageOrMedia = STORAGE_PERMISSIONS.contains(permInfo.name)
+                        || READ_MEDIA_AURAL_PERMISSIONS.contains(permInfo.name)
+                        || READ_MEDIA_VISUAL_PERMISSIONS.contains(permInfo.name);
+                if (permInfo == null || !isStorageOrMedia) {
                     continue;
                 }
 
@@ -2640,12 +2653,9 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
                     // Cache newImplicitPermissions before modifing permissionsState as for the
                     // shared uids the original and new state are the same object
-                    // TODO(205888750): remove the line for LEGACY_REVIEW once propagated through
-                    // droidfood
                     if (!origState.hasPermissionState(permName)
                             && (pkg.getImplicitPermissions().contains(permName)
-                            || (permName.equals(Manifest.permission.ACTIVITY_RECOGNITION)))
-                            || NOTIFICATION_PERMISSIONS.contains(permName)) {
+                            || (permName.equals(Manifest.permission.ACTIVITY_RECOGNITION)))) {
                         if (pkg.getImplicitPermissions().contains(permName)) {
                             // If permName is an implicit permission, try to auto-grant
                             newImplicitPermissions.add(permName);
@@ -2803,12 +2813,14 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                             }
 
                             // Remove review flag as it is not necessary anymore
-                            if (!NOTIFICATION_PERMISSIONS.contains(perm)) {
+                            // TODO(b/227186603) re-enable check for notification permission once
+                            // droidfood state has been cleared
+                            //if (!NOTIFICATION_PERMISSIONS.contains(perm)) {
                                 if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
                                     flags &= ~FLAG_PERMISSION_REVIEW_REQUIRED;
                                     wasChanged = true;
                                 }
-                            }
+                            //}
 
                             if ((flags & FLAG_PERMISSION_REVOKED_COMPAT) != 0
                                     && !isPermissionSplitFromNonRuntime(permName,
@@ -3140,7 +3152,9 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                 }
                 if (bp.isRuntime()) {
 
-                    if (!newPerm.equals(Manifest.permission.ACTIVITY_RECOGNITION)) {
+                    if (!(newPerm.equals(Manifest.permission.ACTIVITY_RECOGNITION)
+                            || READ_MEDIA_AURAL_PERMISSIONS.contains(newPerm)
+                            || READ_MEDIA_VISUAL_PERMISSIONS.contains(newPerm))) {
                         ps.updatePermissionFlags(bp,
                                 FLAG_PERMISSION_REVOKE_WHEN_REQUESTED,
                                 FLAG_PERMISSION_REVOKE_WHEN_REQUESTED);

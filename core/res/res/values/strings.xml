@@ -878,19 +878,19 @@
     <string name="permgroupdesc_sms">send and view SMS messages</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permgrouplab_storage">Files &amp; documents</string>
+    <string name="permgrouplab_storage">Files and documents</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_storage">access files and documents on your device</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=40]-->
-    <string name="permgrouplab_readMediaAural">Music &amp; other audio</string>
+    <string name="permgrouplab_readMediaAural">Music and audio</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=NONE]-->
-    <string name="permgroupdesc_readMediaAural">access audio files on your device</string>
+    <string name="permgroupdesc_readMediaAural">access music and audio on your device</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=40]-->
-    <string name="permgrouplab_readMediaVisual">Photos &amp; videos</string>
+    <string name="permgrouplab_readMediaVisual">Photos and videos</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=NONE]-->
-    <string name="permgroupdesc_readMediaVisual">access images and video files on your device</string>
+    <string name="permgroupdesc_readMediaVisual">access photos and videos on your device</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_microphone">Microphone</string>
@@ -5775,7 +5775,7 @@
     <!-- Title for notification inviting users to review their notification settings [CHAR LIMIT=NONE] -->
     <string name="review_notification_settings_title">Review notification settings</string>
     <!-- Content of notification informing users of notification permission change, and inviting them to modify current settings. [CHAR LIMIT=NONE]-->
-    <string name="review_notification_settings_text">In Android 13, apps that you install need your permission to send notifications. Tap to change this permission for existing apps.</string>
+    <string name="review_notification_settings_text">Starting in Android 13, apps that you install need your permission to send notifications. Tap to change this permission for existing apps.</string>
     <!-- Notification action text for having this notification come back later [CHAR LIMIT=20] -->
     <string name="review_notification_settings_remind_me_action">Remind me later</string>
     <!-- Notification action text to dismiss this notification [CHAR LIMIT=20]-->

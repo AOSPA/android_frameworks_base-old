@@ -506,6 +506,7 @@
     <string name="notification_priority_title" msgid="2079708866333537093">"മുൻഗണന"</string>
     <string name="no_shortcut" msgid="8257177117568230126">"സംഭാഷണ ഫീച്ചറുകളെ <xliff:g id="APP_NAME">%1$s</xliff:g> പിന്തുണയ്‌ക്കുന്നില്ല"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"ഈ അറിയിപ്പുകൾ പരിഷ്ക്കരിക്കാനാവില്ല."</string>
+    <string name="notification_unblockable_call_desc" msgid="5907328164696532169">"കോൾ അറിയിപ്പുകൾ പരിഷ്‌കരിക്കാനാകുന്നില്ല."</string>
     <string name="notification_multichannel_desc" msgid="7414593090056236179">"അറിയിപ്പുകളുടെ ഈ ഗ്രൂപ്പ് ഇവിടെ കോണ്‍ഫിഗര്‍ ചെയ്യാൻ കഴിയില്ല"</string>
     <string name="notification_delegate_header" msgid="1264510071031479920">"പ്രോക്‌സി അറിയിപ്പ്"</string>
     <string name="notification_channel_dialog_title" msgid="6856514143093200019">"എല്ലാ <xliff:g id="APP_NAME">%1$s</xliff:g> അറിയിപ്പുകളും"</string>
@@ -564,7 +565,7 @@
     <string name="keyboard_key_numpad_template" msgid="7316338238459991821">"നംപാഡ് <xliff:g id="NAME">%1$s</xliff:g>"</string>
     <string name="notif_inline_reply_remove_attachment_description" msgid="7954075334095405429">"അറ്റാച്ച്മെന്റ് നീക്കം ചെയ്യുക"</string>
     <string name="keyboard_shortcut_group_system" msgid="1583416273777875970">"സിസ്‌റ്റം"</string>
-    <string name="keyboard_shortcut_group_system_home" msgid="7465138628692109907">"വീട്"</string>
+    <string name="keyboard_shortcut_group_system_home" msgid="7465138628692109907">"ഹോം"</string>
     <string name="keyboard_shortcut_group_system_recents" msgid="8628108256824616927">"പുതിയവ"</string>
     <string name="keyboard_shortcut_group_system_back" msgid="1055709713218453863">"മടങ്ങുക"</string>
     <string name="keyboard_shortcut_group_system_notifications" msgid="3615971650562485878">"അറിയിപ്പുകൾ"</string>
@@ -805,8 +806,7 @@
     <string name="controls_media_button_pause" msgid="8614887780950376258">"താൽക്കാലികമായി നിർത്തുക"</string>
     <string name="controls_media_button_prev" msgid="8126822360056482970">"മുമ്പത്തെ ട്രാക്ക്"</string>
     <string name="controls_media_button_next" msgid="6662636627525947610">"അടുത്ത ട്രാക്ക്"</string>
-    <!-- no translation found for controls_media_button_connecting (3138354625847598095) -->
-    <skip />
+    <string name="controls_media_button_connecting" msgid="3138354625847598095">"കണക്റ്റ് ചെയ്യുന്നു"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"പ്ലേ ചെയ്യുക"</string>
     <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"<xliff:g id="APP_LABEL">%1$s</xliff:g> തുറക്കുക"</string>
     <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"<xliff:g id="ARTIST_NAME">%2$s</xliff:g> എന്ന ആർട്ടിസ്റ്റിന്റെ <xliff:g id="SONG_NAME">%1$s</xliff:g> എന്ന ഗാനം <xliff:g id="APP_LABEL">%3$s</xliff:g> ആപ്പിൽ പ്ലേ ചെയ്യുക"</string>
@@ -911,12 +911,11 @@
     <string name="qs_tile_request_dialog_add" msgid="4888460910694986304">"ടൈൽ ചേർക്കുക"</string>
     <string name="qs_tile_request_dialog_not_add" msgid="4168716573114067296">"ടൈൽ ചേർക്കരുത്"</string>
     <string name="qs_user_switch_dialog_title" msgid="3045189293587781366">"ഉപയോക്താവിനെ തിരഞ്ഞെടുക്കൂ"</string>
-    <plurals name="fgs_manager_footer_label" formatted="false" msgid="9091110396713032871">
-      <item quantity="other"><xliff:g id="COUNT_1">%s</xliff:g> സജീവ ആപ്പുകൾ</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%s</xliff:g> സജീവ ആപ്പ്</item>
-    </plurals>
+    <!-- no translation found for fgs_manager_footer_label (790443735462280164) -->
     <string name="fgs_dot_content_description" msgid="2865071539464777240">"പുതിയ വിവരങ്ങൾ"</string>
     <string name="fgs_manager_dialog_title" msgid="5879184257257718677">"സജീവമായ ആപ്പുകൾ"</string>
+    <!-- no translation found for fgs_manager_dialog_message (6839542063522121108) -->
+    <skip />
     <string name="fgs_manager_app_item_stop_button_label" msgid="7188317969020801156">"നിർത്തുക"</string>
     <string name="fgs_manager_app_item_stop_button_stopped_label" msgid="6950382004441263922">"നിർത്തി"</string>
     <string name="clipboard_edit_text_done" msgid="4551887727694022409">"പൂർത്തിയായി"</string>

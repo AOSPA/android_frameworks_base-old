@@ -1093,6 +1093,12 @@ class Task extends TaskFragment {
             updateTaskDescription();
         }
         mSupportsPictureInPicture = info.supportsPictureInPicture();
+
+        // Re-adding the task to Recents once updated
+        if (inRecents) {
+            mTaskSupervisor.mRecentTasks.remove(this);
+            mTaskSupervisor.mRecentTasks.add(this);
+        }
     }
 
     /** Sets the original minimal width and height. */
@@ -1385,14 +1391,6 @@ class Task extends TaskFragment {
             return null;
         }
         return getActivity(ActivityRecord::canBeTopRunning);
-    }
-
-    int getActivityCount() {
-        final int[] activityCount = new int[1];
-        forAllActivities(ar -> {
-            activityCount[0]++;
-        });
-        return activityCount[0];
     }
 
     /**
@@ -2050,7 +2048,7 @@ class Task extends TaskFragment {
         Rect outOverrideBounds = getResolvedOverrideConfiguration().windowConfiguration.getBounds();
 
         if (windowingMode == WINDOWING_MODE_FULLSCREEN) {
-            if (!mCreatedByOrganizer) {
+            if (!isOrganized()) {
                 // Use empty bounds to indicate "fill parent".
                 outOverrideBounds.setEmpty();
             }

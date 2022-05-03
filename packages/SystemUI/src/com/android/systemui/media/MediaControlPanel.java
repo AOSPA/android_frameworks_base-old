@@ -61,6 +61,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.InstanceId;
 import com.android.settingslib.widget.AdaptiveIcon;
+import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.GhostedViewLaunchAnimatorController;
@@ -73,6 +74,8 @@ import com.android.systemui.monet.ColorScheme;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.shared.system.SysUiStatsLog;
+import com.android.systemui.statusbar.NotificationLockscreenUserManager;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.animation.TransitionLayout;
 import com.android.systemui.util.time.SystemClock;
 
@@ -97,8 +100,7 @@ public class MediaControlPanel {
             + ".android.apps.gsa.staticplugins.opa.smartspace.ExportedSmartspaceTrampolineActivity";
     private static final String EXTRAS_SMARTSPACE_INTENT =
             "com.google.android.apps.gsa.smartspace.extra.SMARTSPACE_INTENT";
-    private static final int MEDIA_RECOMMENDATION_ITEMS_PER_ROW = 3;
-    private static final int MEDIA_RECOMMENDATION_MAX_NUM = 6;
+    private static final int MEDIA_RECOMMENDATION_MAX_NUM = 3;
     private static final String KEY_SMARTSPACE_ARTIST_NAME = "artist_name";
     private static final String KEY_SMARTSPACE_OPEN_IN_FOREGROUND = "KEY_OPEN_IN_FOREGROUND";
     private static final String KEY_SMARTSPACE_APP_NAME = "KEY_SMARTSPACE_APP_NAME";
@@ -148,7 +150,6 @@ public class MediaControlPanel {
     private MediaSession.Token mToken;
     private MediaController mController;
     private Lazy<MediaDataManager> mMediaDataManagerLazy;
-    private int mBackgroundColor;
     // Uid for the media app.
     protected int mUid = Process.INVALID_UID;
     private int mSmartspaceMediaItemsCount;
@@ -161,6 +162,10 @@ public class MediaControlPanel {
     private int mArtworkBoundId = 0;
     private int mArtworkNextBindRequestId = 0;
 
+    private final KeyguardStateController mKeyguardStateController;
+    private final ActivityIntentHelper mActivityIntentHelper;
+    private final NotificationLockscreenUserManager mLockscreenUserManager;
+
     // Used for logging.
     protected boolean mIsImpressed = false;
     private SystemClock mSystemClock;
@@ -170,9 +175,12 @@ public class MediaControlPanel {
     private String mPackageName;
 
     private boolean mIsScrubbing = false;
+    private boolean mIsSeekBarEnabled = false;
 
     private final SeekBarViewModel.ScrubbingChangeListener mScrubbingChangeListener =
             this::setIsScrubbing;
+    private final SeekBarViewModel.EnabledChangeListener mEnabledChangeListener =
+            this::setIsSeekBarEnabled;
 
     /**
      * Initialize a new control panel
@@ -196,7 +204,10 @@ public class MediaControlPanel {
             MediaCarouselController mediaCarouselController,
             FalsingManager falsingManager,
             SystemClock systemClock,
-            MediaUiEventLogger logger) {
+            MediaUiEventLogger logger,
+            KeyguardStateController keyguardStateController,
+            ActivityIntentHelper activityIntentHelper,
+            NotificationLockscreenUserManager lockscreenUserManager) {
         mContext = context;
         mBackgroundExecutor = backgroundExecutor;
         mMainExecutor = mainExecutor;
@@ -210,6 +221,9 @@ public class MediaControlPanel {
         mFalsingManager = falsingManager;
         mSystemClock = systemClock;
         mLogger = logger;
+        mKeyguardStateController = keyguardStateController;
+        mActivityIntentHelper = activityIntentHelper;
+        mLockscreenUserManager = lockscreenUserManager;
 
         mSeekBarViewModel.setLogSeek(() -> {
             if (mPackageName != null && mInstanceId != null) {
@@ -223,8 +237,9 @@ public class MediaControlPanel {
     public void onDestroy() {
         if (mSeekBarObserver != null) {
             mSeekBarViewModel.getProgress().removeObserver(mSeekBarObserver);
-            mSeekBarViewModel.removeScrubbingChangeListener(mScrubbingChangeListener);
         }
+        mSeekBarViewModel.removeScrubbingChangeListener(mScrubbingChangeListener);
+        mSeekBarViewModel.removeEnabledChangeListener(mEnabledChangeListener);
         mSeekBarViewModel.onDestroy();
         mMediaViewController.onDestroy();
     }
@@ -271,7 +286,7 @@ public class MediaControlPanel {
     }
 
     /** Sets whether the user is touching the seek bar to change the track position. */
-    public void setIsScrubbing(boolean isScrubbing) {
+    private void setIsScrubbing(boolean isScrubbing) {
         if (mMediaData == null || mMediaData.getSemanticActions() == null) {
             return;
         }
@@ -281,6 +296,14 @@ public class MediaControlPanel {
         this.mIsScrubbing = isScrubbing;
         mMainExecutor.execute(() ->
                 updateDisplayForScrubbingChange(mMediaData.getSemanticActions()));
+    }
+
+    private void setIsSeekBarEnabled(boolean isSeekBarEnabled) {
+        if (isSeekBarEnabled == this.mIsSeekBarEnabled) {
+            return;
+        }
+        this.mIsSeekBarEnabled = isSeekBarEnabled;
+        updateSeekBarVisibility();
     }
 
     /**
@@ -301,6 +324,7 @@ public class MediaControlPanel {
         mSeekBarViewModel.getProgress().observeForever(mSeekBarObserver);
         mSeekBarViewModel.attachTouchHandlers(vh.getSeekBar());
         mSeekBarViewModel.setScrubbingChangeListener(mScrubbingChangeListener);
+        mSeekBarViewModel.setEnabledChangeListener(mEnabledChangeListener);
         mMediaViewController.attach(player, MediaViewController.TYPE.PLAYER);
 
         vh.getPlayer().setOnLongClickListener(v -> {
@@ -312,17 +336,6 @@ public class MediaControlPanel {
                 return true;
             }
         });
-        vh.getCancel().setOnClickListener(v -> {
-            if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
-                closeGuts();
-            }
-        });
-        vh.getSettings().setOnClickListener(v -> {
-            if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
-                mLogger.logLongPressSettings(mUid, mPackageName, mInstanceId);
-                mActivityStarter.startActivity(SETTINGS_INTENT, true /* dismissShade */);
-            }
-        });
 
         TextView titleText = mMediaViewHolder.getTitleText();
         TextView artistText = mMediaViewHolder.getArtistText();
@@ -331,8 +344,7 @@ public class MediaControlPanel {
         AnimatorSet exit = loadAnimator(R.anim.media_metadata_exit,
                 Interpolators.EMPHASIZED_ACCELERATE, titleText, artistText);
 
-        mColorSchemeTransition = new ColorSchemeTransition(
-            mContext, mBackgroundColor, mMediaViewHolder);
+        mColorSchemeTransition = new ColorSchemeTransition(mContext, mMediaViewHolder);
         mMetadataAnimationHandler = new MetadataAnimationHandler(exit, enter);
     }
 
@@ -368,17 +380,6 @@ public class MediaControlPanel {
                 return true;
             }
         });
-        mRecommendationViewHolder.getCancel().setOnClickListener(v -> {
-            if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
-                closeGuts();
-            }
-        });
-        mRecommendationViewHolder.getSettings().setOnClickListener(v -> {
-            if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
-                mLogger.logLongPressSettings(mUid, mPackageName, mInstanceId);
-                mActivityStarter.startActivity(SETTINGS_INTENT, true /* dismissShade */);
-            }
-        });
     }
 
     /** Bind this player view based on the data given. */
@@ -397,7 +398,6 @@ public class MediaControlPanel {
         }
         mInstanceId = data.getInstanceId();
 
-        mBackgroundColor = data.getBackgroundColor();
         if (mToken == null || !mToken.equals(token)) {
             mToken = token;
         }
@@ -416,8 +416,21 @@ public class MediaControlPanel {
                 if (mMediaViewController.isGutsVisible()) return;
                 mLogger.logTapContentView(mUid, mPackageName, mInstanceId);
                 logSmartspaceCardReported(SMARTSPACE_CARD_CLICK_EVENT);
-                mActivityStarter.postStartActivityDismissingKeyguard(clickIntent,
-                        buildLaunchAnimatorController(mMediaViewHolder.getPlayer()));
+
+                // See StatusBarNotificationActivityStarter#onNotificationClicked
+                boolean showOverLockscreen = mKeyguardStateController.isShowing()
+                        && mActivityIntentHelper.wouldShowOverLockscreen(clickIntent.getIntent(),
+                        mLockscreenUserManager.getCurrentUserId());
+
+                if (showOverLockscreen) {
+                    mActivityStarter.startActivity(clickIntent.getIntent(),
+                            /* dismissShade */ true,
+                            /* animationController */ null,
+                            /* showOverLockscreenWhenLocked */ true);
+                } else {
+                    mActivityStarter.postStartActivityDismissingKeyguard(clickIntent,
+                            buildLaunchAnimatorController(mMediaViewHolder.getPlayer()));
+                }
             });
         }
 
@@ -426,9 +439,9 @@ public class MediaControlPanel {
         mBackgroundExecutor.execute(() -> mSeekBarViewModel.updateController(controller));
 
         bindOutputSwitcherChip(data);
-        bindLongPressMenu(data);
-        bindActionButtons(data);
+        bindGutsMenuForPlayer(data);
         bindScrubbingTime(data);
+        bindActionButtons(data);
 
         boolean isSongUpdated = bindSongMetadata(data);
         bindArtworkAndColors(data, isSongUpdated);
@@ -460,7 +473,7 @@ public class MediaControlPanel {
             Drawable icon = device.getIcon();
             if (icon instanceof AdaptiveIcon) {
                 AdaptiveIcon aIcon = (AdaptiveIcon) icon;
-                aIcon.setBackgroundColor(mBackgroundColor);
+                aIcon.setBackgroundColor(mColorSchemeTransition.getBgColor());
                 iconView.setImageDrawable(aIcon);
             } else {
                 iconView.setImageDrawable(icon);
@@ -496,24 +509,8 @@ public class MediaControlPanel {
                 });
     }
 
-    private void bindLongPressMenu(MediaData data) {
-        boolean isDismissible = data.isClearable();
-        String dismissText;
-        if (isDismissible) {
-            dismissText = mContext.getString(R.string.controls_media_close_session, data.getApp());
-        } else {
-            dismissText = mContext.getString(R.string.controls_media_active_session);
-        }
-        mMediaViewHolder.getLongPressText().setText(dismissText);
-
-        // Dismiss button
-        mMediaViewHolder.getDismissText().setAlpha(isDismissible ? 1 : DISABLED_ALPHA);
-        mMediaViewHolder.getDismiss().setEnabled(isDismissible);
-        mMediaViewHolder.getDismiss().setOnClickListener(v -> {
-            if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) return;
-            logSmartspaceCardReported(SMARTSPACE_CARD_DISMISS_EVENT);
-            mLogger.logLongPressDismiss(mUid, mPackageName, mInstanceId);
-
+    private void bindGutsMenuForPlayer(MediaData data) {
+        Runnable onDismissClickedRunnable = () -> {
             if (mKey != null) {
                 closeGuts();
                 if (!mMediaDataManagerLazy.get().dismissMediaData(mKey,
@@ -526,7 +523,13 @@ public class MediaControlPanel {
                 Log.w(TAG, "Dismiss media with null notification. Token uid="
                         + data.getToken().getUid());
             }
-        });
+        };
+
+        bindGutsMenuCommon(
+                /* isDismissible= */ data.isClearable(),
+                data.getApp(),
+                mMediaViewHolder.getGutsViewHolder(),
+                onDismissClickedRunnable);
     }
 
     private boolean bindSongMetadata(MediaData data) {
@@ -712,13 +715,18 @@ public class MediaControlPanel {
                         /* showInCompact= */ false);
             }
         }
+
+        updateSeekBarVisibility();
+    }
+
+    private void updateSeekBarVisibility() {
+        ConstraintSet expandedSet = mMediaViewController.getExpandedLayout();
         expandedSet.setVisibility(R.id.media_progress_bar, getSeekBarVisibility());
-        expandedSet.setAlpha(R.id.media_progress_bar, mSeekBarViewModel.getEnabled() ? 1.0f : 0.0f);
+        expandedSet.setAlpha(R.id.media_progress_bar, mIsSeekBarEnabled ? 1.0f : 0.0f);
     }
 
     private int getSeekBarVisibility() {
-        boolean seekbarEnabled = mSeekBarViewModel.getEnabled();
-        if (seekbarEnabled) {
+        if (mIsSeekBarEnabled) {
             return ConstraintSet.VISIBLE;
         }
         // If disabled and "neighbours" are visible, set progress bar to INVISIBLE instead of GONE
@@ -728,8 +736,7 @@ public class MediaControlPanel {
 
     private boolean areAnyExpandedBottomActionsVisible() {
         ConstraintSet expandedSet = mMediaViewController.getExpandedLayout();
-        int[] referencedIds = mMediaViewHolder.getActionsTopBarrier().getReferencedIds();
-        for (int id : referencedIds) {
+        for (int id : MediaViewHolder.Companion.getExpandedBottomActionIds()) {
             if (expandedSet.getVisibility(id) == ConstraintSet.VISIBLE) {
                 return true;
             }
@@ -837,12 +844,18 @@ public class MediaControlPanel {
                 scrubbingTimeViewsEnabled(semanticActions) && hideWhenScrubbing && mIsScrubbing;
         boolean visible = mediaAction != null && !shouldBeHiddenDueToScrubbing;
 
-        setVisibleAndAlpha(expandedSet, buttonId, visible);
+        int notVisibleValue;
+        if ((buttonId == R.id.actionPrev && semanticActions.getReservePrev())
+                || (buttonId == R.id.actionNext && semanticActions.getReserveNext())) {
+            notVisibleValue = ConstraintSet.INVISIBLE;
+        } else {
+            notVisibleValue = ConstraintSet.GONE;
+        }
+        setVisibleAndAlpha(expandedSet, buttonId, visible, notVisibleValue);
         setVisibleAndAlpha(collapsedSet, buttonId, visible && showInCompact);
     }
 
     /** Updates all the views that might change due to a scrubbing state change. */
-    // TODO(b/209656742): Handle scenarios where actionPrev and/or actionNext aren't active.
     private void updateDisplayForScrubbingChange(@NonNull MediaButton semanticActions) {
         // Update visibilities of the scrubbing time views and the scrubbing-dependent buttons.
         bindScrubbingTime(mMediaData);
@@ -924,11 +937,9 @@ public class MediaControlPanel {
         }
 
         mSmartspaceId = SmallHash.hash(data.getTargetId());
-        mBackgroundColor = data.getBackgroundColor();
         mPackageName = data.getPackageName();
         mInstanceId = data.getInstanceId();
         TransitionLayout recommendationCard = mRecommendationViewHolder.getRecommendations();
-        recommendationCard.setBackgroundTintList(ColorStateList.valueOf(mBackgroundColor));
 
         List<SmartspaceAction> mediaRecommendationList = data.getRecommendations();
         if (mediaRecommendationList == null || mediaRecommendationList.isEmpty()) {
@@ -950,9 +961,9 @@ public class MediaControlPanel {
         PackageManager packageManager = mContext.getPackageManager();
         // Set up media source app's logo.
         Drawable icon = packageManager.getApplicationIcon(applicationInfo);
-        icon.setColorFilter(getGrayscaleFilter());
         ImageView headerLogoImageView = mRecommendationViewHolder.getCardIcon();
         headerLogoImageView.setImageDrawable(icon);
+        fetchAndUpdateRecommendationColors(icon);
 
         // Set up media source app's label text.
         CharSequence appName = getAppName(data.getCardAction());
@@ -968,11 +979,6 @@ public class MediaControlPanel {
                 appName = packageManager.getApplicationLabel(applicationInfo);
             }
         }
-        // Set the app name as card's title.
-        if (!TextUtils.isEmpty(appName)) {
-            TextView headerTitleText = mRecommendationViewHolder.getCardText();
-            headerTitleText.setText(appName);
-        }
 
         // Set up media rec card's tap action if applicable.
         setSmartspaceRecItemOnClickListener(recommendationCard, data.getCardAction(),
@@ -983,11 +989,6 @@ public class MediaControlPanel {
 
         List<ImageView> mediaCoverItems = mRecommendationViewHolder.getMediaCoverItems();
         List<ViewGroup> mediaCoverContainers = mRecommendationViewHolder.getMediaCoverContainers();
-        List<Integer> mediaCoverItemsResIds = mRecommendationViewHolder.getMediaCoverItemsResIds();
-        List<Integer> mediaCoverContainersResIds =
-                mRecommendationViewHolder.getMediaCoverContainersResIds();
-        ConstraintSet expandedSet = mMediaViewController.getExpandedLayout();
-        ConstraintSet collapsedSet = mMediaViewController.getCollapsedLayout();
         int mediaRecommendationNum = Math.min(mediaRecommendationList.size(),
                 MEDIA_RECOMMENDATION_MAX_NUM);
         int uiComponentIndex = 0;
@@ -1032,33 +1033,31 @@ public class MediaControlPanel {
                                 recommendation.getTitle(), artistName, appName));
             }
 
-            if (uiComponentIndex < MEDIA_RECOMMENDATION_ITEMS_PER_ROW) {
-                setVisibleAndAlpha(collapsedSet,
-                        mediaCoverItemsResIds.get(uiComponentIndex), true);
-                setVisibleAndAlpha(collapsedSet,
-                        mediaCoverContainersResIds.get(uiComponentIndex), true);
-            } else {
-                setVisibleAndAlpha(collapsedSet,
-                        mediaCoverItemsResIds.get(uiComponentIndex), false);
-                setVisibleAndAlpha(collapsedSet,
-                        mediaCoverContainersResIds.get(uiComponentIndex), false);
-            }
-            setVisibleAndAlpha(expandedSet,
-                    mediaCoverItemsResIds.get(uiComponentIndex), true);
-            setVisibleAndAlpha(expandedSet,
-                    mediaCoverContainersResIds.get(uiComponentIndex), true);
+
+            // Set up title
+            CharSequence title = recommendation.getTitle();
+            TextView titleView =
+                    mRecommendationViewHolder.getMediaTitles().get(uiComponentIndex);
+            titleView.setText(title);
+            // TODO(b/223603970): If none of them have titles, should we then hide the views?
+
+            // Set up subtitle
+            CharSequence subtitle = recommendation.getSubtitle();
+            TextView subtitleView =
+                    mRecommendationViewHolder.getMediaSubtitles().get(uiComponentIndex);
+            // It would look awkward to show a subtitle if we don't have a title.
+            boolean shouldShowSubtitleText = !TextUtils.isEmpty(title);
+            CharSequence subtitleText = shouldShowSubtitleText ? subtitle : "";
+            subtitleView.setText(subtitleText);
+            // TODO(b/223603970): If none of them have subtitles, should we then hide the views?
+
             uiComponentIndex++;
         }
 
         mSmartspaceMediaItemsCount = uiComponentIndex;
-        // Set up long press to show guts setting panel.
-        mRecommendationViewHolder.getDismiss().setOnClickListener(v -> {
-            if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) return;
 
-            mLogger.logLongPressDismiss(mUid, mPackageName, mInstanceId);
-            logSmartspaceCardReported(
-                    761 // SMARTSPACE_CARD_DISMISS
-            );
+        // Guts
+        Runnable onDismissClickedRunnable = () -> {
             closeGuts();
             mMediaDataManagerLazy.get().dismissSmartspaceRecommendation(
                     data.getTargetId(), MediaViewController.GUTS_ANIMATION_DURATION + 100L);
@@ -1078,12 +1077,85 @@ public class MediaControlPanel {
             } else {
                 mBroadcastSender.sendBroadcast(dismissIntent);
             }
-        });
+        };
+        bindGutsMenuCommon(
+                /* isDismissible= */ true,
+                appName.toString(),
+                mRecommendationViewHolder.getGutsViewHolder(),
+                onDismissClickedRunnable);
 
         mController = null;
         if (mMetadataAnimationHandler == null || !mMetadataAnimationHandler.isRunning()) {
             mMediaViewController.refreshState();
         }
+    }
+
+    private void fetchAndUpdateRecommendationColors(Drawable appIcon) {
+        mBackgroundExecutor.execute(() -> {
+            ColorScheme colorScheme = new ColorScheme(
+                    WallpaperColors.fromDrawable(appIcon), /* darkTheme= */ true);
+            mMainExecutor.execute(() -> setRecommendationColors(colorScheme));
+        });
+    }
+
+    private void setRecommendationColors(ColorScheme colorScheme) {
+        if (mRecommendationViewHolder == null) {
+            return;
+        }
+
+        int backgroundColor = MediaColorSchemesKt.surfaceFromScheme(colorScheme);
+        int textPrimaryColor = MediaColorSchemesKt.textPrimaryFromScheme(colorScheme);
+        int textSecondaryColor = MediaColorSchemesKt.textSecondaryFromScheme(colorScheme);
+
+        mRecommendationViewHolder.getRecommendations()
+                .setBackgroundTintList(ColorStateList.valueOf(backgroundColor));
+        mRecommendationViewHolder.getMediaTitles().forEach(
+                (title) -> title.setTextColor(textPrimaryColor));
+        mRecommendationViewHolder.getMediaSubtitles().forEach(
+                (subtitle) -> subtitle.setTextColor(textSecondaryColor));
+
+        mRecommendationViewHolder.getGutsViewHolder().setColors(colorScheme);
+    }
+
+    private void bindGutsMenuCommon(
+            boolean isDismissible,
+            String appName,
+            GutsViewHolder gutsViewHolder,
+            Runnable onDismissClickedRunnable) {
+        // Text
+        String text;
+        if (isDismissible) {
+            text = mContext.getString(R.string.controls_media_close_session, appName);
+        } else {
+            text = mContext.getString(R.string.controls_media_active_session);
+        }
+        gutsViewHolder.getGutsText().setText(text);
+
+        // Dismiss button
+        gutsViewHolder.getDismissText().setAlpha(isDismissible ? 1 : DISABLED_ALPHA);
+        gutsViewHolder.getDismiss().setEnabled(isDismissible);
+        gutsViewHolder.getDismiss().setOnClickListener(v -> {
+            if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) return;
+            logSmartspaceCardReported(SMARTSPACE_CARD_DISMISS_EVENT);
+            mLogger.logLongPressDismiss(mUid, mPackageName, mInstanceId);
+
+            onDismissClickedRunnable.run();
+        });
+
+        // Cancel button
+        gutsViewHolder.getCancel().setOnClickListener(v -> {
+            if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
+                closeGuts();
+            }
+        });
+
+        // Settings button
+        gutsViewHolder.getSettings().setOnClickListener(v -> {
+            if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
+                mLogger.logLongPressSettings(mUid, mPackageName, mInstanceId);
+                mActivityStarter.startActivity(SETTINGS_INTENT, /* dismissShade= */true);
+            }
+        });
     }
 
     /**
@@ -1177,7 +1249,12 @@ public class MediaControlPanel {
     }
 
     private void setVisibleAndAlpha(ConstraintSet set, int actionId, boolean visible) {
-        set.setVisibility(actionId, visible ? ConstraintSet.VISIBLE : ConstraintSet.GONE);
+        setVisibleAndAlpha(set, actionId, visible, ConstraintSet.GONE);
+    }
+
+    private void setVisibleAndAlpha(ConstraintSet set, int actionId, boolean visible,
+            int notVisibleValue) {
+        set.setVisibility(actionId, visible ? ConstraintSet.VISIBLE : notVisibleValue);
         set.setAlpha(actionId, visible ? 1.0f : 0.0f);
     }
 
