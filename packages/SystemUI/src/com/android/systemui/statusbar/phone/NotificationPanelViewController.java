@@ -2166,8 +2166,6 @@ public class NotificationPanelViewController extends PanelViewController {
             mNotificationsQSContainerController.setQsExpanded(expanded);
             mPulseExpansionHandler.setQsExpanded(expanded);
             mKeyguardBypassController.setQSExpanded(expanded);
-            mStatusBarKeyguardViewManager.setQsExpanded(expanded);
-            mLockIconViewController.setQsExpanded(expanded);
             mPrivacyDotViewController.setQsExpanded(expanded);
         }
     }
@@ -2280,6 +2278,7 @@ public class NotificationPanelViewController extends PanelViewController {
         }
 
         mDepthController.setQsPanelExpansion(qsExpansionFraction);
+        mStatusBarKeyguardViewManager.setQsExpansion(qsExpansionFraction);
 
         // updateQsExpansion will get called whenever mTransitionToFullShadeProgress or
         // mLockscreenShadeTransitionController.getDragProgress change.
@@ -3176,7 +3175,10 @@ public class NotificationPanelViewController extends PanelViewController {
         mFalsingCollector.onTrackingStarted(!mKeyguardStateController.canDismissLockScreen());
         super.onTrackingStarted();
         mScrimController.onTrackingStarted();
-        if (mShouldUseSplitNotificationShade) {
+        // normally we want to set mQsExpandImmediate for every split shade case (at least when
+        // expanding), but keyguard tracking logic is different - this callback is called when
+        // unlocking with swipe up but not when swiping down to reveal shade
+        if (mShouldUseSplitNotificationShade && !mKeyguardShowing) {
             mQsExpandImmediate = true;
         }
         if (mQsFullyExpanded) {
@@ -3218,7 +3220,7 @@ public class NotificationPanelViewController extends PanelViewController {
 
     @Override
     protected void startUnlockHintAnimation() {
-        if (mPowerManager.isPowerSaveMode()) {
+        if (mPowerManager.isPowerSaveMode() || mAmbientState.getDozeAmount() > 0f) {
             onUnlockHintStarted();
             onUnlockHintFinished();
             return;
@@ -3343,6 +3345,12 @@ public class NotificationPanelViewController extends PanelViewController {
                         mLockscreenGestureLogger
                             .log(LockscreenUiEvent.LOCKSCREEN_LOCK_SHOW_HINT);
                         startUnlockHintAnimation();
+                    }
+                    if (mUpdateMonitor.isFaceEnrolled()
+                            && mUpdateMonitor.mRequestActiveUnlockOnUnlockIntent
+                            && mKeyguardBypassController.canBypass()) {
+                        mUpdateMonitor.requestActiveUnlock("unlock-intent,"
+                                + " extra=lockScreenEmptySpaceTap", true);
                     }
                 }
                 return true;
@@ -4141,6 +4149,10 @@ public class NotificationPanelViewController extends PanelViewController {
 
     public NotificationStackScrollLayoutController getNotificationStackScrollLayoutController() {
         return mNotificationStackScrollLayoutController;
+    }
+
+    public void disable(int state1, int state2, boolean animated) {
+        mLargeScreenShadeHeaderController.disable(state1, state2, animated);
     }
 
     /**

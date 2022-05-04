@@ -25,7 +25,6 @@ import org.mockito.Mockito.`when` as whenever
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.graphics.drawable.Animatable2
 import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -35,7 +34,6 @@ import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Bundle
-import android.os.Handler
 import android.provider.Settings.ACTION_MEDIA_CONTROLS_SETTINGS
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
@@ -52,17 +50,22 @@ import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.LiveData
 import androidx.test.filters.SmallTest
 import com.android.internal.logging.InstanceId
+import com.android.systemui.ActivityIntentHelper
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.broadcast.BroadcastSender
 import com.android.systemui.media.dialog.MediaOutputDialogFactory
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
+import com.android.systemui.statusbar.NotificationLockscreenUserManager
+import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.animation.TransitionLayout
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.KotlinArgumentCaptor
 import com.android.systemui.util.mockito.argumentCaptor
+import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.eq
+import com.android.systemui.util.mockito.nullable
 import com.android.systemui.util.mockito.withArgCaptor
 import com.android.systemui.util.time.FakeSystemClock
 import com.google.common.truth.Truth.assertThat
@@ -76,7 +79,6 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
-import org.mockito.Mockito.any
 import org.mockito.Mockito.anyString
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
@@ -86,7 +88,6 @@ import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
 
 private const val KEY = "TEST_KEY"
-private const val BG_COLOR = Color.RED
 private const val PACKAGE = "PKG"
 private const val ARTIST = "ARTIST"
 private const val TITLE = "TITLE"
@@ -108,6 +109,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     @Mock private lateinit var activityStarter: ActivityStarter
     @Mock private lateinit var broadcastSender: BroadcastSender
 
+    @Mock private lateinit var gutsViewHolder: GutsViewHolder
     @Mock private lateinit var viewHolder: MediaViewHolder
     @Mock private lateinit var view: TransitionLayout
     @Mock private lateinit var seekBarViewModel: SeekBarViewModel
@@ -142,8 +144,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     private lateinit var scrubbingElapsedTimeView: TextView
     private lateinit var scrubbingTotalTimeView: TextView
     private lateinit var actionsTopBarrier: Barrier
-    @Mock private lateinit var longPressText: TextView
-    @Mock private lateinit var handler: Handler
+    @Mock private lateinit var gutsText: TextView
     @Mock private lateinit var mockAnimator: AnimatorSet
     private lateinit var settings: ImageButton
     private lateinit var cancel: View
@@ -160,12 +161,25 @@ public class MediaControlPanelTest : SysuiTestCase() {
     @Mock private lateinit var instanceId: InstanceId
     @Mock private lateinit var packageManager: PackageManager
     @Mock private lateinit var applicationInfo: ApplicationInfo
+    @Mock private lateinit var keyguardStateController: KeyguardStateController
+    @Mock private lateinit var activityIntentHelper: ActivityIntentHelper
+    @Mock private lateinit var lockscreenUserManager: NotificationLockscreenUserManager
 
     @Mock private lateinit var recommendationViewHolder: RecommendationViewHolder
     @Mock private lateinit var smartspaceAction: SmartspaceAction
     private lateinit var smartspaceData: SmartspaceMediaData
-    @Mock private lateinit var coverContainer: ViewGroup
-    private lateinit var coverItem: ImageView
+    @Mock private lateinit var coverContainer1: ViewGroup
+    @Mock private lateinit var coverContainer2: ViewGroup
+    @Mock private lateinit var coverContainer3: ViewGroup
+    private lateinit var coverItem1: ImageView
+    private lateinit var coverItem2: ImageView
+    private lateinit var coverItem3: ImageView
+    private lateinit var recTitle1: TextView
+    private lateinit var recTitle2: TextView
+    private lateinit var recTitle3: TextView
+    private lateinit var recSubtitle1: TextView
+    private lateinit var recSubtitle2: TextView
+    private lateinit var recSubtitle3: TextView
 
     @JvmField @Rule val mockito = MockitoJUnit.rule()
 
@@ -199,7 +213,10 @@ public class MediaControlPanelTest : SysuiTestCase() {
             mediaCarouselController,
             falsingManager,
             clock,
-            logger) {
+            logger,
+            keyguardStateController,
+            activityIntentHelper,
+            lockscreenUserManager) {
                 override fun loadAnimator(
                     animId: Int,
                     otionInterpolator: Interpolator,
@@ -209,6 +226,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
                 }
             }
 
+        initGutsViewHolderMocks()
         initMediaViewHolderMocks()
 
         // Create media session
@@ -227,7 +245,6 @@ public class MediaControlPanelTest : SysuiTestCase() {
         session.setActive(true)
 
         mediaData = MediaTestUtils.emptyMediaData.copy(
-                backgroundColor = BG_COLOR,
                 artist = ARTIST,
                 song = TITLE,
                 packageName = PACKAGE,
@@ -254,6 +271,20 @@ public class MediaControlPanelTest : SysuiTestCase() {
         )
     }
 
+    private fun initGutsViewHolderMocks() {
+        settings = ImageButton(context)
+        cancel = View(context)
+        cancelText = TextView(context)
+        dismiss = FrameLayout(context)
+        dismissText = TextView(context)
+        whenever(gutsViewHolder.gutsText).thenReturn(gutsText)
+        whenever(gutsViewHolder.settings).thenReturn(settings)
+        whenever(gutsViewHolder.cancel).thenReturn(cancel)
+        whenever(gutsViewHolder.cancelText).thenReturn(cancelText)
+        whenever(gutsViewHolder.dismiss).thenReturn(dismiss)
+        whenever(gutsViewHolder.dismissText).thenReturn(dismissText)
+    }
+
     /**
      * Initialize elements in media view holder
      */
@@ -273,12 +304,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
         seamlessButton = View(context)
         seamlessIcon = ImageView(context)
         seamlessText = TextView(context)
-        seekBar = SeekBar(context)
-        settings = ImageButton(context)
-        cancel = View(context)
-        cancelText = TextView(context)
-        dismiss = FrameLayout(context)
-        dismissText = TextView(context)
+        seekBar = SeekBar(context).also { it.id = R.id.media_progress_bar }
 
         action0 = ImageButton(context).also { it.setId(R.id.action0) }
         action1 = ImageButton(context).also { it.setId(R.id.action1) }
@@ -323,6 +349,8 @@ public class MediaControlPanelTest : SysuiTestCase() {
         whenever(viewHolder.scrubbingElapsedTimeView).thenReturn(scrubbingElapsedTimeView)
         whenever(viewHolder.scrubbingTotalTimeView).thenReturn(scrubbingTotalTimeView)
 
+        whenever(viewHolder.gutsViewHolder).thenReturn(gutsViewHolder)
+
         // Transition View
         whenever(view.parent).thenReturn(transitionParent)
         whenever(view.rootView).thenReturn(transitionParent)
@@ -345,15 +373,6 @@ public class MediaControlPanelTest : SysuiTestCase() {
         whenever(viewHolder.action4).thenReturn(action4)
         whenever(viewHolder.getAction(R.id.action4)).thenReturn(action4)
 
-        // Long press menu
-        whenever(viewHolder.longPressText).thenReturn(longPressText)
-        whenever(longPressText.handler).thenReturn(handler)
-        whenever(viewHolder.settings).thenReturn(settings)
-        whenever(viewHolder.cancel).thenReturn(cancel)
-        whenever(viewHolder.cancelText).thenReturn(cancelText)
-        whenever(viewHolder.dismiss).thenReturn(dismiss)
-        whenever(viewHolder.dismissText).thenReturn(dismissText)
-
         whenever(viewHolder.actionsTopBarrier).thenReturn(actionsTopBarrier)
     }
 
@@ -361,24 +380,32 @@ public class MediaControlPanelTest : SysuiTestCase() {
      * Initialize elements for the recommendation view holder
      */
     private fun initRecommendationViewHolderMocks() {
+        recTitle1 = TextView(context)
+        recTitle2 = TextView(context)
+        recTitle3 = TextView(context)
+        recSubtitle1 = TextView(context)
+        recSubtitle2 = TextView(context)
+        recSubtitle3 = TextView(context)
+
         whenever(recommendationViewHolder.recommendations).thenReturn(view)
         whenever(recommendationViewHolder.cardIcon).thenReturn(appIcon)
-        whenever(recommendationViewHolder.cardText).thenReturn(titleText)
 
         // Add a recommendation item
-        coverItem = ImageView(context).also { it.setId(R.id.media_cover1) }
-        whenever(coverContainer.id).thenReturn(R.id.media_cover1_container)
-        whenever(recommendationViewHolder.mediaCoverItems).thenReturn(listOf(coverItem))
-        whenever(recommendationViewHolder.mediaCoverContainers).thenReturn(listOf(coverContainer))
-        whenever(recommendationViewHolder.mediaCoverItemsResIds)
-            .thenReturn(listOf(R.id.media_cover1))
-        whenever(recommendationViewHolder.mediaCoverContainersResIds)
-            .thenReturn(listOf(R.id.media_cover1_container))
+        coverItem1 = ImageView(context).also { it.setId(R.id.media_cover1) }
+        coverItem2 = ImageView(context).also { it.setId(R.id.media_cover2) }
+        coverItem3 = ImageView(context).also { it.setId(R.id.media_cover3) }
 
-        // Long press menu
-        whenever(recommendationViewHolder.settings).thenReturn(settings)
-        whenever(recommendationViewHolder.cancel).thenReturn(cancel)
-        whenever(recommendationViewHolder.dismiss).thenReturn(dismiss)
+        whenever(recommendationViewHolder.mediaCoverItems)
+            .thenReturn(listOf(coverItem1, coverItem2, coverItem3))
+        whenever(recommendationViewHolder.mediaCoverContainers)
+            .thenReturn(listOf(coverContainer1, coverContainer2, coverContainer3))
+        whenever(recommendationViewHolder.mediaTitles)
+            .thenReturn(listOf(recTitle1, recTitle2, recTitle3))
+        whenever(recommendationViewHolder.mediaSubtitles).thenReturn(
+            listOf(recSubtitle1, recSubtitle2, recSubtitle3)
+        )
+
+        whenever(recommendationViewHolder.gutsViewHolder).thenReturn(gutsViewHolder)
 
         val actionIcon = Icon.createWithResource(context, R.drawable.ic_android)
         whenever(smartspaceAction.icon).thenReturn(actionIcon)
@@ -386,7 +413,10 @@ public class MediaControlPanelTest : SysuiTestCase() {
         // Needed for card and item action click
         val mockContext = mock(Context::class.java)
         whenever(view.context).thenReturn(mockContext)
-        whenever(coverContainer.context).thenReturn(mockContext)
+        whenever(coverContainer1.context).thenReturn(mockContext)
+        whenever(coverContainer2.context).thenReturn(mockContext)
+        whenever(coverContainer3.context).thenReturn(mockContext)
+
     }
 
     @After
@@ -449,8 +479,66 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
-    fun bind_seekBarDisabled_seekBarVisibilityIsSetToInvisible() {
-        whenever(seekBarViewModel.getEnabled()).thenReturn(false)
+    fun bindSemanticActions_reservedPrev() {
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val bg = context.getDrawable(R.drawable.qs_media_round_button_background)
+
+        // Setup button state: no prev or next button and their slots reserved
+        val semanticActions = MediaButton(
+            playOrPause = MediaAction(icon, Runnable {}, "play", bg),
+            nextOrCustom = null,
+            prevOrCustom = null,
+            custom0 = MediaAction(icon, null, "custom 0", bg),
+            custom1 = MediaAction(icon, null, "custom 1", bg),
+            false,
+            true
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+
+        assertThat(actionPrev.isEnabled()).isFalse()
+        assertThat(actionPrev.drawable).isNull()
+        verify(expandedSet).setVisibility(R.id.actionPrev, ConstraintSet.INVISIBLE)
+
+        assertThat(actionNext.isEnabled()).isFalse()
+        assertThat(actionNext.drawable).isNull()
+        verify(expandedSet).setVisibility(R.id.actionNext, ConstraintSet.GONE)
+    }
+
+    @Test
+    fun bindSemanticActions_reservedNext() {
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val bg = context.getDrawable(R.drawable.qs_media_round_button_background)
+
+        // Setup button state: no prev or next button and their slots reserved
+        val semanticActions = MediaButton(
+            playOrPause = MediaAction(icon, Runnable {}, "play", bg),
+            nextOrCustom = null,
+            prevOrCustom = null,
+            custom0 = MediaAction(icon, null, "custom 0", bg),
+            custom1 = MediaAction(icon, null, "custom 1", bg),
+            true,
+            false
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+
+        assertThat(actionPrev.isEnabled()).isFalse()
+        assertThat(actionPrev.drawable).isNull()
+        verify(expandedSet).setVisibility(R.id.actionPrev, ConstraintSet.GONE)
+
+        assertThat(actionNext.isEnabled()).isFalse()
+        assertThat(actionNext.drawable).isNull()
+        verify(expandedSet).setVisibility(R.id.actionNext, ConstraintSet.INVISIBLE)
+    }
+
+    @Test
+    fun bind_seekBarDisabled_hasActions_seekBarVisibilityIsSetToInvisible() {
+        useRealConstraintSets()
 
         val icon = context.getDrawable(android.R.drawable.ic_media_play)
         val semanticActions = MediaButton(
@@ -460,21 +548,84 @@ public class MediaControlPanelTest : SysuiTestCase() {
         val state = mediaData.copy(semanticActions = semanticActions)
 
         player.attachPlayer(viewHolder)
+        getEnabledChangeListener().onEnabledChanged(enabled = false)
+
         player.bindPlayer(state, PACKAGE)
 
-        verify(expandedSet).setVisibility(R.id.media_progress_bar, ConstraintSet.INVISIBLE)
+        assertThat(expandedSet.getVisibility(seekBar.id)).isEqualTo(ConstraintSet.INVISIBLE)
     }
 
     @Test
     fun bind_seekBarDisabled_noActions_seekBarVisibilityIsSetToGone() {
-        whenever(seekBarViewModel.getEnabled()).thenReturn(false)
+        useRealConstraintSets()
+
+        val state = mediaData.copy(semanticActions = MediaButton())
+        player.attachPlayer(viewHolder)
+        getEnabledChangeListener().onEnabledChanged(enabled = false)
+
+        player.bindPlayer(state, PACKAGE)
+
+        assertThat(expandedSet.getVisibility(seekBar.id)).isEqualTo(ConstraintSet.GONE)
+    }
+
+    @Test
+    fun bind_seekBarEnabled_seekBarVisible() {
+        useRealConstraintSets()
+
+        val state = mediaData.copy(semanticActions = MediaButton())
+        player.attachPlayer(viewHolder)
+        getEnabledChangeListener().onEnabledChanged(enabled = true)
+
+        player.bindPlayer(state, PACKAGE)
+
+        assertThat(expandedSet.getVisibility(seekBar.id)).isEqualTo(ConstraintSet.VISIBLE)
+    }
+
+    @Test
+    fun seekBarChangesToEnabledAfterBind_seekBarChangesToVisible() {
+        useRealConstraintSets()
+
+        val state = mediaData.copy(semanticActions = MediaButton())
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(state, PACKAGE)
+
+        getEnabledChangeListener().onEnabledChanged(enabled = true)
+
+        assertThat(expandedSet.getVisibility(seekBar.id)).isEqualTo(ConstraintSet.VISIBLE)
+    }
+
+    @Test
+    fun seekBarChangesToDisabledAfterBind_noActions_seekBarChangesToGone() {
+        useRealConstraintSets()
 
         val state = mediaData.copy(semanticActions = MediaButton())
 
         player.attachPlayer(viewHolder)
+        getEnabledChangeListener().onEnabledChanged(enabled = true)
         player.bindPlayer(state, PACKAGE)
 
-        verify(expandedSet).setVisibility(R.id.media_progress_bar, ConstraintSet.INVISIBLE)
+        getEnabledChangeListener().onEnabledChanged(enabled = false)
+
+        assertThat(expandedSet.getVisibility(seekBar.id)).isEqualTo(ConstraintSet.GONE)
+    }
+
+    @Test
+    fun seekBarChangesToDisabledAfterBind_hasActions_seekBarChangesToInvisible() {
+        useRealConstraintSets()
+
+        val icon = context.getDrawable(android.R.drawable.ic_media_play)
+        val semanticActions = MediaButton(
+            nextOrCustom = MediaAction(icon, Runnable {}, "next", null)
+        )
+        val state = mediaData.copy(semanticActions = semanticActions)
+
+        player.attachPlayer(viewHolder)
+        getEnabledChangeListener().onEnabledChanged(enabled = true)
+        player.bindPlayer(state, PACKAGE)
+
+        getEnabledChangeListener().onEnabledChanged(enabled = false)
+
+        assertThat(expandedSet.getVisibility(seekBar.id)).isEqualTo(ConstraintSet.INVISIBLE)
     }
 
     @Test
@@ -610,9 +761,11 @@ public class MediaControlPanelTest : SysuiTestCase() {
             MediaAction(icon, null, "custom 0", bg),
             MediaAction(icon, Runnable {}, "custom 1", bg)
         )
-        val state = mediaData.copy(actions = actions,
+        val state = mediaData.copy(
+            actions = actions,
             actionsToShowInCompact = listOf(1, 2),
-            semanticActions = null)
+            semanticActions = null
+        )
 
         player.attachPlayer(viewHolder)
         player.bindPlayer(state, PACKAGE)
@@ -661,11 +814,14 @@ public class MediaControlPanelTest : SysuiTestCase() {
         val icon = context.getDrawable(R.drawable.ic_media_play)
         val bg = context.getDrawable(R.drawable.ic_media_play_container)
         val semanticActions0 = MediaButton(
-                playOrPause = MediaAction(mockAvd0, Runnable {}, "play", null))
+            playOrPause = MediaAction(mockAvd0, Runnable {}, "play", null)
+        )
         val semanticActions1 = MediaButton(
-                playOrPause = MediaAction(mockAvd1, Runnable {}, "pause", null))
+            playOrPause = MediaAction(mockAvd1, Runnable {}, "pause", null)
+        )
         val semanticActions2 = MediaButton(
-                playOrPause = MediaAction(mockAvd2, Runnable {}, "loading", null))
+            playOrPause = MediaAction(mockAvd2, Runnable {}, "loading", null)
+        )
         val state0 = mediaData.copy(semanticActions = semanticActions0)
         val state1 = mediaData.copy(semanticActions = semanticActions1)
         val state2 = mediaData.copy(semanticActions = semanticActions2)
@@ -705,8 +861,8 @@ public class MediaControlPanelTest : SysuiTestCase() {
         assertThat(actionPlayPause.getBackground()).isNull()
         verify(mockAvd0, times(1))
             .registerAnimationCallback(any(Animatable2.AnimationCallback::class.java))
-        verify(mockAvd1, times(1)
-            ).registerAnimationCallback(any(Animatable2.AnimationCallback::class.java))
+        verify(mockAvd1, times(1))
+            .registerAnimationCallback(any(Animatable2.AnimationCallback::class.java))
         verify(mockAvd2, times(1))
             .registerAnimationCallback(any(Animatable2.AnimationCallback::class.java))
         verify(mockAvd0, times(1))
@@ -810,8 +966,10 @@ public class MediaControlPanelTest : SysuiTestCase() {
         assertThat(seamless.isEnabled()).isFalse()
     }
 
+    /* ***** Guts tests for the player ***** */
+
     @Test
-    fun longClick_gutsClosed() {
+    fun player_longClickWhenGutsClosed_gutsOpens() {
         player.attachPlayer(viewHolder)
         player.bindPlayer(mediaData, KEY)
         whenever(mediaViewController.isGutsVisible).thenReturn(false)
@@ -825,7 +983,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
-    fun longClick_gutsOpen() {
+    fun player_longClickWhenGutsOpen_gutsCloses() {
         player.attachPlayer(viewHolder)
         whenever(mediaViewController.isGutsVisible).thenReturn(true)
 
@@ -838,8 +996,9 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
-    fun cancelButtonClick_animation() {
+    fun player_cancelButtonClick_animation() {
         player.attachPlayer(viewHolder)
+        player.bindPlayer(mediaData, KEY)
 
         cancel.callOnClick()
 
@@ -847,7 +1006,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
-    fun settingsButtonClick() {
+    fun player_settingsButtonClick() {
         player.attachPlayer(viewHolder)
         player.bindPlayer(mediaData, KEY)
 
@@ -861,7 +1020,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
-    fun dismissButtonClick() {
+    fun player_dismissButtonClick() {
         val mediaKey = "key for dismissal"
         player.attachPlayer(viewHolder)
         val state = mediaData.copy(notificationKey = KEY)
@@ -874,7 +1033,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
-    fun dismissButtonDisabled() {
+    fun player_dismissButtonDisabled() {
         val mediaKey = "key for dismissal"
         player.attachPlayer(viewHolder)
         val state = mediaData.copy(isClearable = false, notificationKey = KEY)
@@ -884,7 +1043,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
-    fun dismissButtonClick_notInManager() {
+    fun player_dismissButtonClick_notInManager() {
         val mediaKey = "key for dismissal"
         whenever(mediaDataManager.dismissMediaData(eq(mediaKey), anyLong())).thenReturn(false)
 
@@ -898,6 +1057,76 @@ public class MediaControlPanelTest : SysuiTestCase() {
         verify(mediaDataManager).dismissMediaData(eq(mediaKey), anyLong())
         verify(mediaCarouselController).removePlayer(eq(mediaKey), eq(false), eq(false))
     }
+
+    /* ***** END guts tests for the player ***** */
+
+    /* ***** Guts tests for the recommendations ***** */
+
+    @Test
+    fun recommendations_longClickWhenGutsClosed_gutsOpens() {
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+        whenever(mediaViewController.isGutsVisible).thenReturn(false)
+
+        val captor = ArgumentCaptor.forClass(View.OnLongClickListener::class.java)
+        verify(viewHolder.player).onLongClickListener = captor.capture()
+
+        captor.value.onLongClick(viewHolder.player)
+        verify(mediaViewController).openGuts()
+        verify(logger).logLongPressOpen(anyInt(), eq(PACKAGE), eq(instanceId))
+    }
+
+    @Test
+    fun recommendations_longClickWhenGutsOpen_gutsCloses() {
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+        whenever(mediaViewController.isGutsVisible).thenReturn(true)
+
+        val captor = ArgumentCaptor.forClass(View.OnLongClickListener::class.java)
+        verify(viewHolder.player).onLongClickListener = captor.capture()
+
+        captor.value.onLongClick(viewHolder.player)
+        verify(mediaViewController, never()).openGuts()
+        verify(mediaViewController).closeGuts(false)
+    }
+
+    @Test
+    fun recommendations_cancelButtonClick_animation() {
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+
+        cancel.callOnClick()
+
+        verify(mediaViewController).closeGuts(false)
+    }
+
+    @Test
+    fun recommendations_settingsButtonClick() {
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData)
+
+        settings.callOnClick()
+        verify(logger).logLongPressSettings(anyInt(), eq(PACKAGE), eq(instanceId))
+
+        val captor = ArgumentCaptor.forClass(Intent::class.java)
+        verify(activityStarter).startActivity(captor.capture(), eq(true))
+
+        assertThat(captor.value.action).isEqualTo(ACTION_MEDIA_CONTROLS_SETTINGS)
+    }
+
+    @Test
+    fun recommendations_dismissButtonClick() {
+        val mediaKey = "key for dismissal"
+        player.attachRecommendation(recommendationViewHolder)
+        player.bindRecommendation(smartspaceData.copy(targetId = mediaKey))
+
+        assertThat(dismiss.isEnabled).isEqualTo(true)
+        dismiss.callOnClick()
+        verify(logger).logLongPressDismiss(anyInt(), eq(PACKAGE), eq(instanceId))
+        verify(mediaDataManager).dismissSmartspaceRecommendation(eq(mediaKey), anyLong())
+    }
+
+    /* ***** END guts tests for the recommendations ***** */
 
     @Test
     fun actionPlayPauseClick_isLogged() {
@@ -1061,6 +1290,47 @@ public class MediaControlPanelTest : SysuiTestCase() {
     }
 
     @Test
+    fun tapContentView_showOverLockscreen_openActivity() {
+        // WHEN we are on lockscreen and this activity can show over lockscreen
+        whenever(keyguardStateController.isShowing).thenReturn(true)
+        whenever(activityIntentHelper.wouldShowOverLockscreen(any(), any())).thenReturn(true)
+
+        val clickIntent = mock(Intent::class.java)
+        val pendingIntent = mock(PendingIntent::class.java)
+        whenever(pendingIntent.intent).thenReturn(clickIntent)
+        val captor = ArgumentCaptor.forClass(View.OnClickListener::class.java)
+        val data = mediaData.copy(clickIntent = pendingIntent)
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(data, KEY)
+        verify(viewHolder.player).setOnClickListener(captor.capture())
+
+        // THEN it shows without dismissing keyguard first
+        captor.value.onClick(viewHolder.player)
+        verify(activityStarter).startActivity(eq(clickIntent), eq(true),
+                nullable(), eq(true))
+    }
+
+    @Test
+    fun tapContentView_noShowOverLockscreen_dismissKeyguard() {
+        // WHEN we are on lockscreen and the activity cannot show over lockscreen
+        whenever(keyguardStateController.isShowing).thenReturn(true)
+        whenever(activityIntentHelper.wouldShowOverLockscreen(any(), any())).thenReturn(false)
+
+        val clickIntent = mock(Intent::class.java)
+        val pendingIntent = mock(PendingIntent::class.java)
+        whenever(pendingIntent.intent).thenReturn(clickIntent)
+        val captor = ArgumentCaptor.forClass(View.OnClickListener::class.java)
+        val data = mediaData.copy(clickIntent = pendingIntent)
+        player.attachPlayer(viewHolder)
+        player.bindPlayer(data, KEY)
+        verify(viewHolder.player).setOnClickListener(captor.capture())
+
+        // THEN keyguard has to be dismissed
+        captor.value.onClick(viewHolder.player)
+        verify(activityStarter).postStartActivityDismissingKeyguard(eq(pendingIntent), any())
+    }
+
+    @Test
     fun recommendation_gutsClosed_longPressOpens() {
         player.attachRecommendation(recommendationViewHolder)
         player.bindRecommendation(smartspaceData)
@@ -1115,12 +1385,90 @@ public class MediaControlPanelTest : SysuiTestCase() {
         player.attachRecommendation(recommendationViewHolder)
         player.bindRecommendation(smartspaceData)
 
-        verify(coverContainer).setOnClickListener(captor.capture())
+        verify(coverContainer1).setOnClickListener(captor.capture())
         captor.value.onClick(recommendationViewHolder.recommendations)
 
         verify(logger).logRecommendationItemTap(eq(PACKAGE), eq(instanceId), eq(0))
     }
 
+    @Test
+    fun bindRecommendation_hasTitlesAndSubtitles() {
+        player.attachRecommendation(recommendationViewHolder)
+
+        val title1 = "Title1"
+        val title2 = "Title2"
+        val title3 = "Title3"
+        val subtitle1 = "Subtitle1"
+        val subtitle2 = "Subtitle2"
+        val subtitle3 = "Subtitle3"
+
+        val data = smartspaceData.copy(
+            recommendations = listOf(
+                SmartspaceAction.Builder("id1", title1)
+                    .setSubtitle(subtitle1)
+                    .setIcon(Icon.createWithResource(context, R.drawable.ic_1x_mobiledata))
+                    .setExtras(Bundle.EMPTY)
+                    .build(),
+                SmartspaceAction.Builder("id2", title2)
+                    .setSubtitle(subtitle2)
+                    .setIcon(Icon.createWithResource(context, R.drawable.ic_alarm))
+                    .setExtras(Bundle.EMPTY)
+                    .build(),
+                SmartspaceAction.Builder("id3", title3)
+                    .setSubtitle(subtitle3)
+                    .setIcon(Icon.createWithResource(context, R.drawable.ic_3g_mobiledata))
+                    .setExtras(Bundle.EMPTY)
+                    .build()
+            )
+        )
+        player.bindRecommendation(data)
+
+        assertThat(recTitle1.text).isEqualTo(title1)
+        assertThat(recTitle2.text).isEqualTo(title2)
+        assertThat(recTitle3.text).isEqualTo(title3)
+        assertThat(recSubtitle1.text).isEqualTo(subtitle1)
+        assertThat(recSubtitle2.text).isEqualTo(subtitle2)
+        assertThat(recSubtitle3.text).isEqualTo(subtitle3)
+    }
+
+    @Test
+    fun bindRecommendation_noTitle_subtitleNotShown() {
+        player.attachRecommendation(recommendationViewHolder)
+
+        val data = smartspaceData.copy(
+            recommendations = listOf(
+                SmartspaceAction.Builder("id1", "")
+                    .setSubtitle("fake subtitle")
+                    .setIcon(Icon.createWithResource(context, R.drawable.ic_1x_mobiledata))
+                    .setExtras(Bundle.EMPTY)
+                    .build()
+            )
+        )
+        player.bindRecommendation(data)
+
+        assertThat(recSubtitle1.text).isEqualTo("")
+    }
+
     private fun getScrubbingChangeListener(): SeekBarViewModel.ScrubbingChangeListener =
         withArgCaptor { verify(seekBarViewModel).setScrubbingChangeListener(capture()) }
+
+    private fun getEnabledChangeListener(): SeekBarViewModel.EnabledChangeListener =
+        withArgCaptor { verify(seekBarViewModel).setEnabledChangeListener(capture()) }
+
+    /**
+     *  Update our test to use real ConstraintSets instead of mocks.
+     *
+     *  Some item visibilities, such as the seekbar visibility, are dependent on other action's
+     *  visibilities. If we use mocks for the ConstraintSets, then action visibility changes are
+     *  just thrown away instead of being saved for reference later. This method sets us up to use
+     *  ConstraintSets so that we do save visibility changes.
+     *
+     *  TODO(b/229740380): Can/should we use real expanded and collapsed sets for all tests?
+     */
+    private fun useRealConstraintSets() {
+        expandedSet = ConstraintSet()
+        collapsedSet = ConstraintSet()
+        whenever(mediaViewController.expandedLayout).thenReturn(expandedSet)
+        whenever(mediaViewController.collapsedLayout).thenReturn(collapsedSet)
+    }
 }

@@ -199,6 +199,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     boolean mClearedTaskForReuse;
 
     /**
+     * The last running activity of the TaskFragment was reparented to a different Task because it
+     * is entering PiP.
+     */
+    boolean mClearedTaskFragmentForPip;
+
+    /**
      * When we are in the process of pausing an activity, before starting the
      * next one, this variable holds the activity that is currently being paused.
      *
@@ -853,6 +859,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return getActivity((r) -> r.canBeTopRunning() && r.getTask() == this.getTask());
     }
 
+    int getNonFinishingActivityCount() {
+        final int[] runningActivityCount = new int[1];
+        forAllActivities(a -> {
+            if (!a.finishing) {
+                runningActivityCount[0]++;
+            }
+        });
+        return runningActivityCount[0];
+    }
+
     boolean isTopActivityFocusable() {
         final ActivityRecord r = topRunningActivity();
         return r != null ? r.isFocusable()
@@ -1024,19 +1040,19 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         // If the top activity is the resumed one, nothing to do.
         if (mResumedActivity == next && next.isState(RESUMED)
                 && taskDisplayArea.allResumedActivitiesComplete()) {
+            // Ensure the visibility gets updated before execute app transition.
+            taskDisplayArea.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
+                    false /* preserveWindows */, true /* notifyClients */);
             // Make sure we have executed any pending transitions, since there
             // should be nothing left to do at this point.
             executeAppTransition(options);
-            // For devices that are not in fullscreen mode (e.g. freeform windows), it's possible
-            // we still want to check if the visibility of other windows have changed (e.g. bringing
-            // a fullscreen window forward to cover another freeform activity.)
-            if (taskDisplayArea.inMultiWindowMode()) {
-                if (taskDisplayArea.mDisplayContent != null
-                        && taskDisplayArea.mDisplayContent.mFocusedApp != next) {
-                    taskDisplayArea.mDisplayContent.setFocusedApp(next);
-                }
-                taskDisplayArea.ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
-                        false /* preserveWindows */, true /* notifyClients */);
+
+            // In a multi-resumed environment, like in a freeform device, the top
+            // activity can be resumed, but it might not be the focused app.
+            // Set focused app when top activity is resumed
+            if (taskDisplayArea.inMultiWindowMode() && taskDisplayArea.mDisplayContent != null
+                    && taskDisplayArea.mDisplayContent.mFocusedApp != next) {
+                taskDisplayArea.mDisplayContent.setFocusedApp(next);
             }
             ProtoLog.d(WM_DEBUG_STATES, "resumeTopActivity: Top activity "
                     + "resumed %s", next);
@@ -1741,6 +1757,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     void addChild(WindowContainer child, int index) {
         ActivityRecord r = topRunningActivity();
         mClearedTaskForReuse = false;
+        mClearedTaskFragmentForPip = false;
 
         boolean isAddingActivity = child.asActivityRecord() != null;
         final Task task = isAddingActivity ? getTask() : null;
@@ -2285,22 +2302,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
         final Point positionInParent = new Point();
         getRelativePosition(positionInParent);
-        final int[] runningActivityCount = new int[1];
-        forAllActivities(a -> {
-            if (!a.finishing) {
-                runningActivityCount[0]++;
-            }
-        });
         return new TaskFragmentInfo(
                 mFragmentToken,
                 mRemoteToken.toWindowContainerToken(),
                 getConfiguration(),
-                runningActivityCount[0] == 0,
-                runningActivityCount[0],
+                getNonFinishingActivityCount(),
                 isVisible(),
                 childActivities,
                 positionInParent,
-                mClearedTaskForReuse);
+                mClearedTaskForReuse,
+                mClearedTaskFragmentForPip);
     }
 
     @Nullable

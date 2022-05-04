@@ -236,6 +236,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     private boolean mCommittedReparentToAnimationLeash;
 
+    private int mSyncTransactionCommitCallbackDepth = 0;
+
     /** Interface for {@link #isAnimating} to check which cases for the container is animating. */
     public interface AnimationFlags {
         /**
@@ -2688,6 +2690,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * {@link #getPendingTransaction()}
      */
     public Transaction getSyncTransaction() {
+        if (mSyncTransactionCommitCallbackDepth > 0) {
+            return mSyncTransaction;
+        }
         if (mSyncState != SYNC_STATE_NONE) {
             return mSyncTransaction;
         }
@@ -3742,13 +3747,20 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     void registerWindowContainerListener(WindowContainerListener listener) {
+        registerWindowContainerListener(listener, true /* shouldPropConfig */);
+    }
+
+    void registerWindowContainerListener(WindowContainerListener listener,
+            boolean shouldDispatchConfig) {
         if (mListeners.contains(listener)) {
             return;
         }
         mListeners.add(listener);
         // Also register to ConfigurationChangeListener to receive configuration changes.
-        registerConfigurationChangeListener(listener);
-        listener.onDisplayChanged(getDisplayContent());
+        registerConfigurationChangeListener(listener, shouldDispatchConfig);
+        if (shouldDispatchConfig) {
+            listener.onDisplayChanged(getDisplayContent());
+        }
     }
 
     void unregisterWindowContainerListener(WindowContainerListener listener) {
@@ -3909,4 +3921,29 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             p.updateOverlayInsetsState(originalChange);
         }
     }
+
+    void waitForSyncTransactionCommit(ArraySet<WindowContainer> wcAwaitingCommit) {
+        if (wcAwaitingCommit.contains(this)) {
+            return;
+        }
+        mSyncTransactionCommitCallbackDepth++;
+        wcAwaitingCommit.add(this);
+
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            mChildren.get(i).waitForSyncTransactionCommit(wcAwaitingCommit);
+        }
+    }
+
+    void onSyncTransactionCommitted(SurfaceControl.Transaction t) {
+        mSyncTransactionCommitCallbackDepth--;
+        if (mSyncTransactionCommitCallbackDepth > 0) {
+            return;
+        }
+        if (mSyncState != SYNC_STATE_NONE) {
+            return;
+        }
+
+        t.merge(mSyncTransaction);
+    }
+
 }

@@ -2471,6 +2471,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // Obsoleted snapshot.
             return false;
         }
+        final Rect taskBounds = task.getBounds();
+        final Point taskSize = snapshot.getTaskSize();
+        // Task size has changed? e.g. foldable device.
+        if (Math.abs(((float) taskSize.x / Math.max(taskSize.y, 1))
+                - ((float) taskBounds.width() / Math.max(taskBounds.height(), 1))) > 0.01f) {
+            return false;
+        }
         final int rotation = mDisplayContent.rotationForActivityInDifferentOrientation(this);
         final int targetRotation = rotation != ROTATION_UNDEFINED
                 // The display may rotate according to the orientation of this activity.

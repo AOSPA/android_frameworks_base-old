@@ -850,7 +850,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             // At the end of a launch animation over the lockscreen, the state is either KEYGUARD or
             // SHADE_LOCKED and this code is called. We have to set the notification alpha to 0
             // otherwise there is a flicker to its previous value.
-            if (mKeyguardOccluded) {
+            boolean hideNotificationScrim = (mState == ScrimState.KEYGUARD
+                    && mTransitionToFullShadeProgress == 0
+                    && mQsExpansion == 0
+                    && !mClipsQsScrim);
+            if (mKeyguardOccluded || hideNotificationScrim) {
                 mNotificationsAlpha = 0;
             }
             if (mUnOcclusionAnimationRunning && mState == ScrimState.KEYGUARD) {
@@ -1074,7 +1078,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     }
 
     private float getInterpolatedFraction() {
-        if (mStatusBarKeyguardViewManager.bouncerIsInTransit()) {
+        if (mStatusBarKeyguardViewManager.isBouncerInTransit()) {
             return BouncerPanelExpansionCalculator
                     .aboutToShowBouncerProgress(mPanelExpansionFraction);
         }

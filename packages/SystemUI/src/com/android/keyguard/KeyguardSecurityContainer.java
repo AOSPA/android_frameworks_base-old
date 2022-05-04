@@ -555,7 +555,9 @@ public class KeyguardSecurityContainer extends FrameLayout {
         int bottomInset = insets.getInsetsIgnoringVisibility(systemBars()).bottom;
         int imeInset = insets.getInsets(ime()).bottom;
         int inset = max(bottomInset, imeInset);
-        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), inset);
+        int paddingBottom = max(inset, getContext().getResources()
+                .getDimensionPixelSize(R.dimen.keyguard_security_view_bottom_margin));
+        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), paddingBottom);
         return insets.inset(0, 0, 0, inset);
     }
 
@@ -700,6 +702,7 @@ public class KeyguardSecurityContainer extends FrameLayout {
     }
 
     public void reset() {
+        mViewMode.reset();
         mDisappearAnimRunning = false;
     }
 
@@ -798,9 +801,6 @@ public class KeyguardSecurityContainer extends FrameLayout {
                 mUserSwitcherViewGroup =  mView.findViewById(R.id.keyguard_bouncer_user_switcher);
             }
 
-            Drawable userIcon = findUserIcon(KeyguardUpdateMonitor.getCurrentUser());
-            ((ImageView) mView.findViewById(R.id.user_icon)).setImageDrawable(userIcon);
-
             updateSecurityViewLocation();
 
             mUserSwitcher = mView.findViewById(R.id.user_switcher_header);
@@ -813,6 +813,7 @@ public class KeyguardSecurityContainer extends FrameLayout {
                 mPopup.dismiss();
                 mPopup = null;
             }
+            setupUserSwitcher();
         }
 
         private Drawable findUserIcon(int userId) {
@@ -858,6 +859,12 @@ public class KeyguardSecurityContainer extends FrameLayout {
 
         private void setupUserSwitcher() {
             final UserRecord currentUser = mUserSwitcherController.getCurrentUserRecord();
+            if (currentUser == null) {
+                Log.e(TAG, "Current user in user switcher is null.");
+                return;
+            }
+            Drawable userIcon = findUserIcon(currentUser.info.id);
+            ((ImageView) mView.findViewById(R.id.user_icon)).setImageDrawable(userIcon);
             mUserSwitcher.setText(mUserSwitcherController.getCurrentUserName());
 
             ViewGroup anchor = mView.findViewById(R.id.user_switcher_anchor);

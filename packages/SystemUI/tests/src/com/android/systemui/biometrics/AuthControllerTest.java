@@ -27,6 +27,7 @@ import static junit.framework.Assert.assertNull;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -46,10 +47,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Point;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricPrompt;
+import android.hardware.biometrics.BiometricStateListener;
 import android.hardware.biometrics.ComponentInfoInternal;
 import android.hardware.biometrics.IBiometricContextListener;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
@@ -60,7 +63,6 @@ import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorProperties;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
-import android.hardware.fingerprint.FingerprintStateListener;
 import android.hardware.fingerprint.IFingerprintAuthenticatorsRegisteredCallback;
 import android.os.Bundle;
 import android.os.Handler;
@@ -151,7 +153,7 @@ public class AuthControllerTest extends SysuiTestCase {
     @Captor
     ArgumentCaptor<IFingerprintAuthenticatorsRegisteredCallback> mAuthenticatorsRegisteredCaptor;
     @Captor
-    ArgumentCaptor<FingerprintStateListener> mFingerprintStateCaptor;
+    ArgumentCaptor<BiometricStateListener> mBiometricStateCaptor;
     @Captor
     ArgumentCaptor<StatusBarStateController.StateListener> mStatusBarStateListenerCaptor;
 
@@ -184,6 +186,8 @@ public class AuthControllerTest extends SysuiTestCase {
 
         when(mDialog1.getRequestId()).thenReturn(REQUEST_ID);
         when(mDialog2.getRequestId()).thenReturn(REQUEST_ID);
+
+        when(mDisplayManager.getStableDisplaySize()).thenReturn(new Point());
 
         when(mFingerprintManager.isHardwareDetected()).thenReturn(true);
 
@@ -226,7 +230,7 @@ public class AuthControllerTest extends SysuiTestCase {
     // Callback tests
 
     @Test
-    public void testRegistersFingerprintStateListener_afterAllAuthenticatorsAreRegistered()
+    public void testRegistersBiometricStateListener_afterAllAuthenticatorsAreRegistered()
             throws RemoteException {
         // This test is sensitive to prior FingerprintManager interactions.
         reset(mFingerprintManager);
@@ -242,12 +246,12 @@ public class AuthControllerTest extends SysuiTestCase {
                 mAuthenticatorsRegisteredCaptor.capture());
         mTestableLooper.processAllMessages();
 
-        verify(mFingerprintManager, never()).registerFingerprintStateListener(any());
+        verify(mFingerprintManager, never()).registerBiometricStateListener(any());
 
         mAuthenticatorsRegisteredCaptor.getValue().onAllAuthenticatorsRegistered(new ArrayList<>());
         mTestableLooper.processAllMessages();
 
-        verify(mFingerprintManager).registerFingerprintStateListener(any());
+        verify(mFingerprintManager).registerBiometricStateListener(any());
     }
 
     @Test
@@ -269,11 +273,11 @@ public class AuthControllerTest extends SysuiTestCase {
         mAuthenticatorsRegisteredCaptor.getValue().onAllAuthenticatorsRegistered(new ArrayList<>());
         mTestableLooper.processAllMessages();
 
-        verify(mFingerprintManager).registerFingerprintStateListener(
-                mFingerprintStateCaptor.capture());
+        verify(mFingerprintManager).registerBiometricStateListener(
+                mBiometricStateCaptor.capture());
 
         // Enrollments changed for an unknown sensor.
-        mFingerprintStateCaptor.getValue().onEnrollmentsChanged(0 /* userId */,
+        mBiometricStateCaptor.getValue().onEnrollmentsChanged(0 /* userId */,
                 0xbeef /* sensorId */, true /* hasEnrollments */);
         mTestableLooper.processAllMessages();
 
@@ -663,7 +667,7 @@ public class AuthControllerTest extends SysuiTestCase {
     public void testSubscribesToOrientationChangesWhenShowingDialog() {
         showDialog(new int[]{1} /* sensorIds */, false /* credentialAllowed */);
 
-        verify(mDisplayManager).registerDisplayListener(any(), eq(mHandler));
+        verify(mDisplayManager).registerDisplayListener(any(), eq(mHandler), anyLong());
 
         mAuthController.hideAuthenticationDialog(REQUEST_ID);
         verify(mDisplayManager).unregisterDisplayListener(any());

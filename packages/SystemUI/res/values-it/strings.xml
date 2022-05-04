@@ -27,7 +27,7 @@
     <string name="invalid_charger_title" msgid="938685362320735167">"Impossibile ricaricare tramite USB"</string>
     <string name="invalid_charger_text" msgid="2339310107232691577">"Utilizza il caricabatterie fornito in dotazione con il dispositivo"</string>
     <string name="battery_saver_confirmation_title" msgid="1234998463717398453">"Attivare il risparmio energetico?"</string>
-    <string name="battery_saver_confirmation_title_generic" msgid="2299231884234959849">"Informazioni su Risparmio energetico"</string>
+    <string name="battery_saver_confirmation_title_generic" msgid="2299231884234959849">"Informazioni sul risparmio energetico"</string>
     <string name="battery_saver_confirmation_ok" msgid="5042136476802816494">"Attiva"</string>
     <string name="battery_saver_start_action" msgid="8353766979886287140">"Attiva"</string>
     <string name="battery_saver_dismiss_action" msgid="7199342621040014738">"No, grazie"</string>
@@ -506,6 +506,7 @@
     <string name="notification_priority_title" msgid="2079708866333537093">"Priorità"</string>
     <string name="no_shortcut" msgid="8257177117568230126">"<xliff:g id="APP_NAME">%1$s</xliff:g> non supporta le funzionalità delle conversazioni"</string>
     <string name="notification_unblockable_desc" msgid="2073030886006190804">"Impossibile modificare queste notifiche."</string>
+    <string name="notification_unblockable_call_desc" msgid="5907328164696532169">"Impossibile modificare gli avvisi di chiamata."</string>
     <string name="notification_multichannel_desc" msgid="7414593090056236179">"Qui non è possibile configurare questo gruppo di notifiche"</string>
     <string name="notification_delegate_header" msgid="1264510071031479920">"Notifica inviata al proxy"</string>
     <string name="notification_channel_dialog_title" msgid="6856514143093200019">"Tutte le notifiche di <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
@@ -805,8 +806,7 @@
     <string name="controls_media_button_pause" msgid="8614887780950376258">"Metti in pausa"</string>
     <string name="controls_media_button_prev" msgid="8126822360056482970">"Traccia precedente"</string>
     <string name="controls_media_button_next" msgid="6662636627525947610">"Traccia successiva"</string>
-    <!-- no translation found for controls_media_button_connecting (3138354625847598095) -->
-    <skip />
+    <string name="controls_media_button_connecting" msgid="3138354625847598095">"Connessione in corso…"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"Riproduci"</string>
     <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"Apri <xliff:g id="APP_LABEL">%1$s</xliff:g>"</string>
     <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"Riproduci <xliff:g id="SONG_NAME">%1$s</xliff:g> di <xliff:g id="ARTIST_NAME">%2$s</xliff:g> da <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
@@ -905,18 +905,17 @@
     <string name="wifi_wont_autoconnect_for_now" msgid="5782282612749867762">"Connessione automatica rete Wi-Fi non attiva al momento"</string>
     <string name="see_all_networks" msgid="3773666844913168122">"Mostra tutte"</string>
     <string name="to_switch_networks_disconnect_ethernet" msgid="6698111101156951955">"Per cambiare rete, scollega il cavo Ethernet"</string>
-    <string name="wifi_scan_notify_message" msgid="3753839537448621794">"Per migliorare l\'esperienza con il dispositivo, le app e i servizi possono continuare a cercare reti Wi-Fi in qualsiasi momento, anche quando la connessione Wi-Fi non è attiva. Puoi modificare questa preferenza nelle impostazioni relative alla ricerca di reti Wi-Fi. "<annotation id="link">"Cambia"</annotation></string>
+    <string name="wifi_scan_notify_message" msgid="3753839537448621794">"Per migliorare l\'esperienza con il dispositivo, le app e i servizi possono continuare a cercare reti Wi-Fi in qualsiasi momento, anche quando la connessione Wi-Fi non è attiva. Puoi modificare questa preferenza nelle impostazioni relative alla ricerca di reti Wi-Fi. "<annotation id="link">"Modifica"</annotation></string>
     <string name="turn_off_airplane_mode" msgid="8425587763226548579">"Disattiva la modalità aereo"</string>
     <string name="qs_tile_request_dialog_text" msgid="3501359944139877694">"<xliff:g id="APPNAME">%1$s</xliff:g> vuole aggiungere il seguente riquadro alle Impostazioni rapide"</string>
     <string name="qs_tile_request_dialog_add" msgid="4888460910694986304">"Aggiungi riquadro"</string>
     <string name="qs_tile_request_dialog_not_add" msgid="4168716573114067296">"Non aggiungerlo"</string>
     <string name="qs_user_switch_dialog_title" msgid="3045189293587781366">"Seleziona utente"</string>
-    <plurals name="fgs_manager_footer_label" formatted="false" msgid="9091110396713032871">
-      <item quantity="other"><xliff:g id="COUNT_1">%s</xliff:g> app attive</item>
-      <item quantity="one"><xliff:g id="COUNT_0">%s</xliff:g> app attiva</item>
-    </plurals>
+    <!-- no translation found for fgs_manager_footer_label (790443735462280164) -->
     <string name="fgs_dot_content_description" msgid="2865071539464777240">"Nuove informazioni"</string>
     <string name="fgs_manager_dialog_title" msgid="5879184257257718677">"App attive"</string>
+    <!-- no translation found for fgs_manager_dialog_message (6839542063522121108) -->
+    <skip />
     <string name="fgs_manager_app_item_stop_button_label" msgid="7188317969020801156">"Interrompi"</string>
     <string name="fgs_manager_app_item_stop_button_stopped_label" msgid="6950382004441263922">"Interrotta"</string>
     <string name="clipboard_edit_text_done" msgid="4551887727694022409">"Fine"</string>
