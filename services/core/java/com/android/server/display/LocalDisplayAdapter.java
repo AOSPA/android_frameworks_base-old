@@ -76,6 +76,8 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
     private final boolean mIsBootDisplayModeSupported;
 
+    private Context mOverlayContext;
+
     // Called with SyncRoot lock held.
     public LocalDisplayAdapter(DisplayManagerService.SyncRoot syncRoot,
             Context context, Handler handler, Listener listener) {
@@ -469,12 +471,12 @@ final class LocalDisplayAdapter extends DisplayAdapter {
         }
 
         private int getLogicalDensity() {
-            DensityMap densityMap = getDisplayDeviceConfig().getDensityMap();
-            if (densityMap == null) {
+            DensityMapping densityMapping = getDisplayDeviceConfig().getDensityMapping();
+            if (densityMapping == null) {
                 return (int) (mStaticDisplayInfo.density * 160 + 0.5);
             }
 
-            return densityMap.getDensityForResolution(mInfo.width, mInfo.height);
+            return densityMapping.getDensityForResolution(mInfo.width, mInfo.height);
         }
 
         private void loadDisplayDeviceConfig() {
@@ -1246,7 +1248,10 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
     /** Supplies a context whose Resources apply runtime-overlays */
     Context getOverlayContext() {
-        return ActivityThread.currentActivityThread().getSystemUiContext();
+        if (mOverlayContext == null) {
+            mOverlayContext = ActivityThread.currentActivityThread().getSystemUiContext();
+        }
+        return mOverlayContext;
     }
 
     /**

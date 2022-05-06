@@ -30,7 +30,6 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.view.Choreographer;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
@@ -251,7 +250,6 @@ public class PipAnimationController {
         protected T mCurrentValue;
         protected T mStartValue;
         private T mEndValue;
-        private float mStartingAngle;
         private PipAnimationCallback mPipAnimationCallback;
         private PipTransactionHandler mPipTransactionHandler;
         private PipSurfaceTransactionHelper.SurfaceControlTransactionFactory
@@ -261,8 +259,8 @@ public class PipAnimationController {
         protected SurfaceControl mContentOverlay;
 
         private PipTransitionAnimator(TaskInfo taskInfo, SurfaceControl leash,
-                @AnimationType int animationType, Rect destinationBounds, T baseValue, T startValue,
-                T endValue, float startingAngle) {
+                @AnimationType int animationType,
+                Rect destinationBounds, T baseValue, T startValue, T endValue) {
             mTaskInfo = taskInfo;
             mLeash = leash;
             mAnimationType = animationType;
@@ -270,17 +268,17 @@ public class PipAnimationController {
             mBaseValue = baseValue;
             mStartValue = startValue;
             mEndValue = endValue;
-            mStartingAngle = startingAngle;
             addListener(this);
             addUpdateListener(this);
-            mSurfaceControlTransactionFactory = SurfaceControl.Transaction::new;
+            mSurfaceControlTransactionFactory =
+                    new PipSurfaceTransactionHelper.VsyncSurfaceControlTransactionFactory();
             mTransitionDirection = TRANSITION_DIRECTION_NONE;
         }
 
         @Override
         public void onAnimationStart(Animator animation) {
             mCurrentValue = mStartValue;
-            onStartTransaction(mLeash, newSurfaceControlTransaction());
+            onStartTransaction(mLeash, mSurfaceControlTransactionFactory.getTransaction());
             if (mPipAnimationCallback != null) {
                 mPipAnimationCallback.onPipAnimationStart(mTaskInfo, this);
             }
@@ -288,14 +286,16 @@ public class PipAnimationController {
 
         @Override
         public void onAnimationUpdate(ValueAnimator animation) {
-            applySurfaceControlTransaction(mLeash, newSurfaceControlTransaction(),
+            applySurfaceControlTransaction(mLeash,
+                    mSurfaceControlTransactionFactory.getTransaction(),
                     animation.getAnimatedFraction());
         }
 
         @Override
         public void onAnimationEnd(Animator animation) {
             mCurrentValue = mEndValue;
-            final SurfaceControl.Transaction tx = newSurfaceControlTransaction();
+            final SurfaceControl.Transaction tx =
+                    mSurfaceControlTransactionFactory.getTransaction();
             onEndTransaction(mLeash, tx, mTransitionDirection);
             if (mPipAnimationCallback != null) {
                 mPipAnimationCallback.onPipAnimationEnd(mTaskInfo, tx, this);
@@ -342,7 +342,8 @@ public class PipAnimationController {
         }
 
         PipTransitionAnimator<T> setUseContentOverlay(Context context) {
-            final SurfaceControl.Transaction tx = newSurfaceControlTransaction();
+            final SurfaceControl.Transaction tx =
+                    mSurfaceControlTransactionFactory.getTransaction();
             if (mContentOverlay != null) {
                 // remove existing content overlay if there is any.
                 tx.remove(mContentOverlay);
@@ -417,7 +418,7 @@ public class PipAnimationController {
         void setDestinationBounds(Rect destinationBounds) {
             mDestinationBounds.set(destinationBounds);
             if (mAnimationType == ANIM_TYPE_ALPHA) {
-                onStartTransaction(mLeash, newSurfaceControlTransaction());
+                onStartTransaction(mLeash, mSurfaceControlTransactionFactory.getTransaction());
             }
         }
 
@@ -427,6 +428,11 @@ public class PipAnimationController {
 
         boolean shouldApplyCornerRadius() {
             return !isOutPipDirection(mTransitionDirection);
+        }
+
+        boolean shouldApplyShadowRadius() {
+            return !isOutPipDirection(mTransitionDirection)
+                    && !isRemovePipDirection(mTransitionDirection);
         }
 
         boolean inScaleTransition() {
@@ -445,16 +451,6 @@ public class PipAnimationController {
          */
         public void updateEndValue(T endValue) {
             mEndValue = endValue;
-        }
-
-        /**
-         * @return {@link SurfaceControl.Transaction} instance with vsync-id.
-         */
-        protected SurfaceControl.Transaction newSurfaceControlTransaction() {
-            final SurfaceControl.Transaction tx =
-                    mSurfaceControlTransactionFactory.getTransaction();
-            tx.setFrameTimelineVsync(Choreographer.getSfInstance().getVsyncId());
-            return tx;
         }
 
         @VisibleForTesting
@@ -482,14 +478,15 @@ public class PipAnimationController {
         static PipTransitionAnimator<Float> ofAlpha(TaskInfo taskInfo, SurfaceControl leash,
                 Rect destinationBounds, float startValue, float endValue) {
             return new PipTransitionAnimator<Float>(taskInfo, leash, ANIM_TYPE_ALPHA,
-                    destinationBounds, startValue, startValue, endValue, 0) {
+                    destinationBounds, startValue, startValue, endValue) {
                 @Override
                 void applySurfaceControlTransaction(SurfaceControl leash,
                         SurfaceControl.Transaction tx, float fraction) {
                     final float alpha = getStartValue() * (1 - fraction) + getEndValue() * fraction;
                     setCurrentValue(alpha);
                     getSurfaceTransactionHelper().alpha(tx, leash, alpha)
-                            .round(tx, leash, shouldApplyCornerRadius());
+                            .round(tx, leash, shouldApplyCornerRadius())
+                            .shadow(tx, leash, shouldApplyShadowRadius());
                     tx.apply();
                 }
 
@@ -502,7 +499,8 @@ public class PipAnimationController {
                     getSurfaceTransactionHelper()
                             .resetScale(tx, leash, getDestinationBounds())
                             .crop(tx, leash, getDestinationBounds())
-                            .round(tx, leash, shouldApplyCornerRadius());
+                            .round(tx, leash, shouldApplyCornerRadius())
+                            .shadow(tx, leash, shouldApplyShadowRadius());
                     tx.show(leash);
                     tx.apply();
                 }
@@ -520,7 +518,7 @@ public class PipAnimationController {
                 @PipAnimationController.TransitionDirection int direction, float startingAngle,
                 @Surface.Rotation int rotationDelta) {
             final boolean isOutPipDirection = isOutPipDirection(direction);
-
+            final boolean isInPipDirection = isInPipDirection(direction);
             // Just for simplicity we'll interpolate between the source rect hint insets and empty
             // insets to calculate the window crop
             final Rect initialSourceValue;
@@ -559,8 +557,7 @@ public class PipAnimationController {
 
             // construct new Rect instances in case they are recycled
             return new PipTransitionAnimator<Rect>(taskInfo, leash, ANIM_TYPE_BOUNDS,
-                    endValue, new Rect(baseValue), new Rect(startValue), new Rect(endValue),
-                    startingAngle) {
+                    endValue, new Rect(baseValue), new Rect(startValue), new Rect(endValue)) {
                 private final RectEvaluator mRectEvaluator = new RectEvaluator(new Rect());
                 private final RectEvaluator mInsetsEvaluator = new RectEvaluator(new Rect());
 
@@ -589,17 +586,20 @@ public class PipAnimationController {
                         } else {
                             getSurfaceTransactionHelper().crop(tx, leash, base)
                                     .scale(tx, leash, base, bounds, angle)
-                                    .round(tx, leash, base, bounds);
+                                    .round(tx, leash, base, bounds)
+                                    .shadow(tx, leash, shouldApplyShadowRadius());
                         }
                     } else {
                         final Rect insets = computeInsets(fraction);
                         getSurfaceTransactionHelper().scaleAndCrop(tx, leash,
-                                initialSourceValue, bounds, insets);
+                                sourceHintRect, initialSourceValue, bounds, insets,
+                                isInPipDirection);
                         if (shouldApplyCornerRadius()) {
                             final Rect sourceBounds = new Rect(initialContainerRect);
                             sourceBounds.inset(insets);
-                            getSurfaceTransactionHelper().round(tx, leash,
-                                    sourceBounds, bounds);
+                            getSurfaceTransactionHelper()
+                                    .round(tx, leash, sourceBounds, bounds)
+                                    .shadow(tx, leash, shouldApplyShadowRadius());
                         }
                     }
                     if (!handlePipTransaction(leash, tx, bounds)) {
@@ -650,7 +650,9 @@ public class PipAnimationController {
                                     insets, degree, x, y, isOutPipDirection,
                                     rotationDelta == ROTATION_270 /* clockwise */);
                     if (shouldApplyCornerRadius()) {
-                        getSurfaceTransactionHelper().round(tx, leash, sourceBounds, bounds);
+                        getSurfaceTransactionHelper()
+                                .round(tx, leash, sourceBounds, bounds)
+                                .shadow(tx, leash, shouldApplyShadowRadius());
                     }
                     tx.apply();
                 }
@@ -668,7 +670,8 @@ public class PipAnimationController {
                 void onStartTransaction(SurfaceControl leash, SurfaceControl.Transaction tx) {
                     getSurfaceTransactionHelper()
                             .alpha(tx, leash, 1f)
-                            .round(tx, leash, shouldApplyCornerRadius());
+                            .round(tx, leash, shouldApplyCornerRadius())
+                            .shadow(tx, leash, shouldApplyShadowRadius());
                     // TODO(b/178632364): this is a work around for the black background when
                     // entering PiP in buttion navigation mode.
                     if (isInPipDirection(direction)) {

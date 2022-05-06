@@ -94,6 +94,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.provider.SettingsStringUtil.SettingStringHelper;
+import android.safetycenter.SafetyCenterManager;
 import android.text.TextUtils;
 import android.text.TextUtils.SimpleStringSplitter;
 import android.util.ArraySet;
@@ -414,11 +415,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mMainHandler = new MainHandler(mContext.getMainLooper());
         mActivityTaskManagerService = LocalServices.getService(ActivityTaskManagerInternal.class);
         mPackageManager = mContext.getPackageManager();
-        PolicyWarningUIController policyWarningUIController;
-        if (AccessibilitySecurityPolicy.POLICY_WARNING_ENABLED) {
-            policyWarningUIController = new PolicyWarningUIController(mMainHandler, context,
-                    new PolicyWarningUIController.NotificationController(context));
-        }
+        final PolicyWarningUIController policyWarningUIController = new PolicyWarningUIController(
+                mMainHandler, context,
+                new PolicyWarningUIController.NotificationController(context));
         mSecurityPolicy = new AccessibilitySecurityPolicy(policyWarningUIController, mContext,
                 this);
         mA11yWindowManager = new AccessibilityWindowManager(mLock, mMainHandler,
@@ -466,6 +465,19 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 mSecurityPolicy.setAppWidgetManager(
                         LocalServices.getService(AppWidgetManagerInternal.class));
             }
+        }
+
+        // SafetyCenterService is ready after this phase.
+        if (phase == SystemService.PHASE_THIRD_PARTY_APPS_CAN_START) {
+            setNonA11yToolNotificationToMatchSafetyCenter();
+        }
+    }
+
+    private void setNonA11yToolNotificationToMatchSafetyCenter() {
+        final boolean sendNotification = !mContext.getSystemService(
+                SafetyCenterManager.class).isSafetyCenterEnabled();
+        synchronized (mLock) {
+            mSecurityPolicy.setSendingNonA11yToolNotificationLocked(sendNotification);
         }
     }
 
@@ -722,6 +734,17 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 }
             }
         }, UserHandle.ALL, intentFilter, null, null);
+
+        final IntentFilter filter = new IntentFilter();
+        filter.addAction(SafetyCenterManager.ACTION_SAFETY_CENTER_ENABLED_CHANGED);
+        final BroadcastReceiver receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                setNonA11yToolNotificationToMatchSafetyCenter();
+            }
+        };
+        mContext.registerReceiverAsUser(receiver, UserHandle.ALL, filter, null, mMainHandler,
+                Context.RECEIVER_EXPORTED);
     }
 
     // Called only during settings restore; currently supports only the owner user
@@ -1301,25 +1324,24 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
     /** Send a motion event to the service to allow it to perform gesture detection. */
     public boolean sendMotionEventToListeningServices(MotionEvent event) {
-        synchronized (mLock) {
-            if (DEBUG) {
-                Slog.d(LOG_TAG, "Sending event to service: " + event);
-            }
-            return notifyMotionEvent(event);
+        boolean result;
+        event = MotionEvent.obtain(event);
+        if (DEBUG) {
+            Slog.d(LOG_TAG, "Sending event to service: " + event);
         }
+        result = scheduleNotifyMotionEvent(event);
+        return result;
     }
 
     /**
      * Notifies services that the touch state on a given display has changed.
      */
     public boolean onTouchStateChanged(int displayId, int state) {
-        synchronized (mLock) {
             if (DEBUG) {
                 Slog.d(LOG_TAG, "Notifying touch state:"
                         + TouchInteractionController.stateToString(state));
             }
-            return notifyTouchState(displayId, state);
-        }
+        return scheduleNotifyTouchState(displayId, state);
     }
 
     /**
@@ -1650,25 +1672,29 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         return false;
     }
 
-    private boolean notifyMotionEvent(MotionEvent event) {
-        AccessibilityUserState state = getCurrentUserStateLocked();
-        for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
-            AccessibilityServiceConnection service = state.mBoundServices.get(i);
-            if (service.mRequestTouchExplorationMode) {
-                service.notifyMotionEvent(event);
-                return true;
+    private boolean scheduleNotifyMotionEvent(MotionEvent event) {
+        synchronized (mLock) {
+            AccessibilityUserState state = getCurrentUserStateLocked();
+            for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
+                AccessibilityServiceConnection service = state.mBoundServices.get(i);
+                if (service.mRequestTouchExplorationMode) {
+                    service.notifyMotionEvent(event);
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    private boolean notifyTouchState(int displayId, int touchState) {
-        AccessibilityUserState state = getCurrentUserStateLocked();
-        for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
-            AccessibilityServiceConnection service = state.mBoundServices.get(i);
-            if (service.mRequestTouchExplorationMode) {
-                service.notifyTouchState(displayId, touchState);
-                return true;
+    private boolean scheduleNotifyTouchState(int displayId, int touchState) {
+        synchronized (mLock) {
+            AccessibilityUserState state = getCurrentUserStateLocked();
+            for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
+                AccessibilityServiceConnection service = state.mBoundServices.get(i);
+                if (service.mRequestTouchExplorationMode) {
+                    service.notifyTouchState(displayId, touchState);
+                    return true;
+                }
             }
         }
         return false;

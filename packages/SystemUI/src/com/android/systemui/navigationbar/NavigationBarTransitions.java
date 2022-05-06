@@ -31,8 +31,8 @@ import android.view.View;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.navigationbar.NavigationBarComponent.NavigationBarScope;
 import com.android.systemui.navigationbar.buttons.ButtonDispatcher;
-import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.phone.BarTransitions;
 import com.android.systemui.statusbar.phone.LightBarTransitionsController;
 
@@ -40,6 +40,10 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.inject.Inject;
+
+/** */
+@NavigationBarScope
 public final class NavigationBarTransitions extends BarTransitions implements
         LightBarTransitionsController.DarkIntensityApplier {
 
@@ -79,11 +83,13 @@ public final class NavigationBarTransitions extends BarTransitions implements
         }
     };
 
-    public NavigationBarTransitions(NavigationBarView view, CommandQueue commandQueue) {
+    @Inject
+    public NavigationBarTransitions(
+            NavigationBarView view,
+            LightBarTransitionsController.Factory lightBarTransitionsControllerFactory) {
         super(view, R.drawable.nav_background);
         mView = view;
-        mLightTransitionsController = new LightBarTransitionsController(
-                view.getContext(), this, commandQueue);
+        mLightTransitionsController = lightBarTransitionsControllerFactory.create(this);
         mAllowAutoDimWallpaperNotVisible = view.getContext().getResources()
                 .getBoolean(R.bool.config_navigation_bar_enable_auto_dim_no_visible_wallpaper);
         mDarkIntensityListeners = new ArrayList();
@@ -121,6 +127,7 @@ public final class NavigationBarTransitions extends BarTransitions implements
                     Display.DEFAULT_DISPLAY);
         } catch (RemoteException e) {
         }
+        mLightTransitionsController.destroy();
     }
 
     @Override

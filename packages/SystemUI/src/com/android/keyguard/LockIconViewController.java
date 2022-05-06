@@ -66,7 +66,6 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.ViewController;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 
-import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Objects;
 
@@ -377,7 +376,7 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
     }
 
     @Override
-    public void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
+    public void dump(@NonNull PrintWriter pw, @NonNull String[] args) {
         pw.println("mUdfpsSupported: " + mUdfpsSupported);
         pw.println("mUdfpsEnrolled: " + mUdfpsEnrolled);
         pw.println("mIsKeyguardShowing: " + mIsKeyguardShowing);
@@ -394,12 +393,12 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
         pw.println("  mUserUnlockedWithBiometric: " + mUserUnlockedWithBiometric);
         pw.println("  mRunningFPS: " + mRunningFPS);
         pw.println("  mCanDismissLockScreen: " + mCanDismissLockScreen);
-        pw.println("  mStatusBarState: " + StatusBarState.toShortString(mStatusBarState));
+        pw.println("  mStatusBarState: " + StatusBarState.toString(mStatusBarState));
         pw.println("  mQsExpanded: " + mQsExpanded);
         pw.println("  mInterpolatedDarkAmount: " + mInterpolatedDarkAmount);
 
         if (mView != null) {
-            mView.dump(fd, pw, args);
+            mView.dump(pw, args);
         }
     }
 
@@ -468,7 +467,7 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
                 }
 
                 @Override
-                public void onKeyguardBouncerChanged(boolean bouncer) {
+                public void onKeyguardBouncerStateChanged(boolean bouncer) {
                     mIsBouncerShowing = bouncer;
                     updateVisibility();
                 }
@@ -652,7 +651,7 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
         // pre-emptively set to true to hide view
         mIsBouncerShowing = true;
         if (mUdfpsSupported && mShowUnlockIcon && mAuthRippleController != null) {
-            mAuthRippleController.showRipple(FINGERPRINT);
+            mAuthRippleController.showUnlockRipple(FINGERPRINT);
         }
         updateVisibility();
         if (mOnGestureDetectedRunnable != null) {

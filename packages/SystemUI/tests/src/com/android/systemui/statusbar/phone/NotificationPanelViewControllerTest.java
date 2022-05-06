@@ -334,6 +334,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private NotificationListContainer mNotificationListContainer;
     @Mock
     private NotificationStackSizeCalculator mNotificationStackSizeCalculator;
+    @Mock
+    private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
     private NotificationPanelViewController.PanelEventsEmitter mPanelEventsEmitter;
     private Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
     private SysuiStatusBarStateController mStatusBarStateController;
@@ -515,6 +517,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mNotificationListContainer,
                 mPanelEventsEmitter,
                 mNotificationStackSizeCalculator,
+                mUnlockedScreenOffAnimationController,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
                 mCentralSurfaces,
@@ -880,7 +883,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     public void testSwitchesToBigClockInSplitShadeOnAod() {
         mStatusBarStateController.setState(KEYGUARD);
         enableSplitShade(/* enabled= */ true);
-        when(mMediaDataManager.hasActiveMedia()).thenReturn(true);
+        when(mMediaDataManager.hasActiveMediaOrRecommendation()).thenReturn(true);
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(2);
         clearInvocations(mKeyguardStatusViewController);
 
@@ -908,7 +911,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         mStatusBarStateController.setState(KEYGUARD);
         enableSplitShade(/* enabled= */ true);
         clearInvocations(mKeyguardStatusViewController);
-        when(mMediaDataManager.hasActiveMedia()).thenReturn(true);
+        when(mMediaDataManager.hasActiveMediaOrRecommendation()).thenReturn(true);
 
         // one notification + media player visible
         when(mNotificationStackScrollLayoutController.getVisibleNotificationCount()).thenReturn(1);
@@ -949,6 +952,15 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         mNotificationPanelViewController.setKeyguardStatusBarAlpha(statusBarAlpha);
 
         verify(mKeyguardStatusBarViewController).setAlpha(statusBarAlpha);
+    }
+
+    @Test
+    public void testQsToBeImmediatelyExpandedInSplitShade() {
+        enableSplitShade(/* enabled= */ true);
+
+        mNotificationPanelViewController.onTrackingStarted();
+
+        assertThat(mNotificationPanelViewController.mQsExpandImmediate).isTrue();
     }
 
     private void triggerPositionClockAndNotifications() {

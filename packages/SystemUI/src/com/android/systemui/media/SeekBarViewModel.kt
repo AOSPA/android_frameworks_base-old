@@ -121,17 +121,20 @@ class SeekBarViewModel @Inject constructor(
             }
         }
 
+    private var scrubbingChangeListener: ScrubbingChangeListener? = null
+
     /** Set to true when the user is touching the seek bar to change the position. */
     private var scrubbing = false
         set(value) {
             if (field != value) {
                 field = value
                 checkIfPollingNeeded()
+                scrubbingChangeListener?.onScrubbingChanged(value)
                 _data = _data.copy(scrubbing = value)
             }
         }
 
-    lateinit var logSmartspaceClick: () -> Unit
+    lateinit var logSeek: () -> Unit
 
     fun getEnabled() = _data.enabled
 
@@ -175,7 +178,7 @@ class SeekBarViewModel @Inject constructor(
             scrubbing = false
             checkPlaybackPosition()
         } else {
-            logSmartspaceClick()
+            logSeek()
             controller?.transportControls?.seekTo(position)
             // Invalidate the cached playbackState to avoid the thumb jumping back to the previous
             // position.
@@ -228,6 +231,7 @@ class SeekBarViewModel @Inject constructor(
         playbackState = null
         cancel?.run()
         cancel = null
+        scrubbingChangeListener = null
     }
 
     @WorkerThread
@@ -263,6 +267,21 @@ class SeekBarViewModel @Inject constructor(
     fun attachTouchHandlers(bar: SeekBar) {
         bar.setOnSeekBarChangeListener(seekBarListener)
         bar.setOnTouchListener(SeekBarTouchListener(this, bar))
+    }
+
+    fun setScrubbingChangeListener(listener: ScrubbingChangeListener) {
+        scrubbingChangeListener = listener
+    }
+
+    fun removeScrubbingChangeListener(listener: ScrubbingChangeListener) {
+        if (listener == scrubbingChangeListener) {
+            scrubbingChangeListener = null
+        }
+    }
+
+    /** Listener interface to be notified when the user starts or stops scrubbing. */
+    interface ScrubbingChangeListener {
+        fun onScrubbingChanged(scrubbing: Boolean)
     }
 
     private class SeekBarChangeListener(

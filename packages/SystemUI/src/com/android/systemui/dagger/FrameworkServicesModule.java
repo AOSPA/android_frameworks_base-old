@@ -61,9 +61,11 @@ import android.os.ServiceManager;
 import android.os.UserManager;
 import android.os.Vibrator;
 import android.permission.PermissionManager;
+import android.safetycenter.SafetyCenterManager;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
 import android.telecom.TelecomManager;
+import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.view.CrossWindowBlurListeners;
@@ -451,6 +453,12 @@ public class FrameworkServicesModule {
 
     @Provides
     @Singleton
+    static CarrierConfigManager provideCarrierConfigManager(Context context) {
+        return context.getSystemService(CarrierConfigManager.class);
+    }
+
+    @Provides
+    @Singleton
     static WindowManager provideWindowManager(Context context) {
         return context.getSystemService(WindowManager.class);
     }
@@ -476,4 +484,11 @@ public class FrameworkServicesModule {
     static SmartspaceManager provideSmartspaceManager(Context context) {
         return context.getSystemService(SmartspaceManager.class);
     }
+
+    @Provides
+    @Singleton
+    static SafetyCenterManager provideSafetyCenterManager(Context context) {
+        return context.getSystemService(SafetyCenterManager.class);
+    }
+
 }

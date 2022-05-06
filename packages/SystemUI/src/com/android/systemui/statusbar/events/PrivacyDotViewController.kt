@@ -134,7 +134,7 @@ class PrivacyDotViewController @Inject constructor(
         uiExecutor = e
     }
 
-    fun setShowingListener(l: ShowingListener) {
+    fun setShowingListener(l: ShowingListener?) {
         showingListener = l
     }
 
@@ -564,7 +564,7 @@ class PrivacyDotViewController @Inject constructor(
         }
     }
 
-    public interface ShowingListener {
+    interface ShowingListener {
         fun onPrivacyDotShown(v: View?)
         fun onPrivacyDotHidden(v: View?)
     }

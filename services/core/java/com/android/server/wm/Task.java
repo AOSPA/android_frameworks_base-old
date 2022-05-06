@@ -26,7 +26,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
-import static android.app.WindowConfiguration.PINNED_WINDOWING_MODE_ELEVATION_IN_DIP;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
@@ -975,17 +974,6 @@ class Task extends TaskFragment {
                 || targetWindowingMode == WINDOWING_MODE_FREEFORM;
     }
 
-    /**
-     * DO NOT HOLD THE ACTIVITY MANAGER LOCK WHEN CALLING THIS METHOD!
-     */
-    TaskSnapshot getSnapshot(boolean isLowResolution, boolean restoreFromDisk) {
-
-        // TODO: Move this to {@link TaskWindowContainerController} once recent tasks are more
-        // synchronized between AM and WM.
-        return mAtmService.mWindowManager.getTaskSnapshot(mTaskId, mUserId, isLowResolution,
-                restoreFromDisk);
-    }
-
     void touchActiveTime() {
         lastActiveTime = SystemClock.elapsedRealtime();
     }
@@ -1397,6 +1385,14 @@ class Task extends TaskFragment {
             return null;
         }
         return getActivity(ActivityRecord::canBeTopRunning);
+    }
+
+    int getActivityCount() {
+        final int[] activityCount = new int[1];
+        forAllActivities(ar -> {
+            activityCount[0]++;
+        });
+        return activityCount[0];
     }
 
     /**
@@ -2708,7 +2704,7 @@ class Task extends TaskFragment {
     @Override
     void onDisplayChanged(DisplayContent dc) {
         final boolean isRootTask = isRootTask();
-        if (!isRootTask) {
+        if (!isRootTask && !mCreatedByOrganizer) {
             adjustBoundsForDisplayChangeIfNeeded(dc);
         }
         super.onDisplayChanged(dc);
@@ -2799,9 +2795,11 @@ class Task extends TaskFragment {
         }
 
         final Rect visibleFrame = sTmpBounds;
+        final WindowManager.LayoutParams attrs = win.mAttrs;
         visibleFrame.set(win.getFrame());
         visibleFrame.inset(win.getInsetsStateWithVisibilityOverride().calculateVisibleInsets(
-                visibleFrame, win.mAttrs.softInputMode));
+                visibleFrame, attrs.type, win.getWindowingMode(), attrs.softInputMode,
+                attrs.flags));
         out.union(visibleFrame);
     }
 
@@ -3475,9 +3473,9 @@ class Task extends TaskFragment {
         forAllActivities(r -> {
             info.addLaunchCookie(r.mLaunchCookie);
         });
-        final Task rootTask = getRootTask();
-        info.parentTaskId = rootTask == getParent() && rootTask.mCreatedByOrganizer
-                ? rootTask.mTaskId
+        final Task parentTask = getParent() != null ? getParent().asTask() : null;
+        info.parentTaskId = parentTask != null && parentTask.mCreatedByOrganizer
+                ? parentTask.mTaskId
                 : INVALID_TASK_ID;
         info.isFocused = isFocused();
         info.isVisible = hasVisibleChildren();
@@ -4153,13 +4151,13 @@ class Task extends TaskFragment {
 
     private boolean canBeOrganized() {
         // All root tasks can be organized
-        if (isRootTask()) {
+        if (isRootTask() || mCreatedByOrganizer) {
             return true;
         }
 
-        // Task could be organized if it's the direct child of the root created by organizer.
-        final Task rootTask = getRootTask();
-        return rootTask == getParent() && rootTask.mCreatedByOrganizer;
+        // Task could be organized if it's the direct child of a task created by organizer.
+        final Task parentTask = getParent().asTask();
+        return parentTask != null && parentTask.mCreatedByOrganizer;
     }
 
     @Override
@@ -4348,9 +4346,7 @@ class Task extends TaskFragment {
         int elevation = 0;
 
         // Get elevation for a specific windowing mode.
-        if (inPinnedWindowingMode()) {
-            elevation = PINNED_WINDOWING_MODE_ELEVATION_IN_DIP;
-        } else if (inFreeformWindowingMode()) {
+        if (inFreeformWindowingMode()) {
             elevation = taskIsFocused
                     ? DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP : DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
         } else {
@@ -5050,9 +5046,9 @@ class Task extends TaskFragment {
         return mRootWindowContainer.resumeHomeActivity(prev, reason, getDisplayArea());
     }
 
-    void startActivityLocked(ActivityRecord r, @Nullable ActivityRecord focusedTopActivity,
-            boolean newTask, boolean isTaskSwitch, ActivityOptions options,
-            @Nullable ActivityRecord sourceRecord) {
+    void startActivityLocked(ActivityRecord r, @Nullable Task topTask, boolean newTask,
+            boolean isTaskSwitch, ActivityOptions options, @Nullable ActivityRecord sourceRecord) {
+        final ActivityRecord pipCandidate = findEnterPipOnTaskSwitchCandidate(topTask);
         Task rTask = r.getTask();
         final boolean allowMoveToFront = options == null || !options.getAvoidMoveToFront();
         final boolean isOrhasTask = rTask == this || hasChild(rTask);
@@ -5123,10 +5119,8 @@ class Task extends TaskFragment {
                         // supporting picture-in-picture while pausing only if the starting activity
                         // would not be considered an overlay on top of the current activity
                         // (eg. not fullscreen, or the assistant)
-                        if (canEnterPipOnTaskSwitch(focusedTopActivity,
-                                null /* toFrontTask */, r, options)) {
-                            focusedTopActivity.supportsEnterPipOnTaskSwitch = true;
-                        }
+                        enableEnterPipOnTaskSwitch(pipCandidate,
+                                null /* toFrontTask */, r, options);
                         transit = TRANSIT_OLD_TASK_OPEN;
                     }
                 }
@@ -5183,20 +5177,44 @@ class Task extends TaskFragment {
         }
     }
 
+    /** On Task switch, finds the top activity that supports PiP. */
+    @Nullable
+    static ActivityRecord findEnterPipOnTaskSwitchCandidate(@Nullable Task topTask) {
+        if (topTask == null) {
+            return null;
+        }
+        final ActivityRecord[] candidate = new ActivityRecord[1];
+        topTask.forAllLeafTaskFragments(tf -> {
+            // Find the top activity that may enter Pip while pausing.
+            final ActivityRecord topActivity = tf.getTopNonFinishingActivity();
+            if (topActivity != null && topActivity.isState(RESUMED, PAUSING)
+                    && topActivity.supportsPictureInPicture()) {
+                candidate[0] = topActivity;
+                return true;
+            }
+            return false;
+        });
+        return candidate[0];
+    }
+
     /**
-     * @return Whether the switch to another task can trigger the currently running activity to
+     * When switching to another Task, marks the currently PiP candidate activity as supporting to
      * enter PiP while it is pausing (if supported). Only one of {@param toFrontTask} or
      * {@param toFrontActivity} should be set.
      */
-    private boolean canEnterPipOnTaskSwitch(ActivityRecord pipCandidate,
-            Task toFrontTask, ActivityRecord toFrontActivity, ActivityOptions opts) {
+    private static void enableEnterPipOnTaskSwitch(@Nullable ActivityRecord pipCandidate,
+            @Nullable Task toFrontTask, @Nullable ActivityRecord toFrontActivity,
+            @Nullable ActivityOptions opts) {
+        if (pipCandidate == null) {
+            return;
+        }
         if (opts != null && opts.disallowEnterPictureInPictureWhileLaunching()) {
             // Ensure the caller has requested not to trigger auto-enter PiP
-            return false;
+            return;
         }
-        if (pipCandidate == null || pipCandidate.inPinnedWindowingMode()) {
-            // Ensure that we do not trigger entering PiP an activity on the root pinned task
-            return false;
+        if (pipCandidate.inPinnedWindowingMode()) {
+            // Ensure that we do not trigger entering PiP an activity on the root pinned task.
+            return;
         }
         final boolean isTransient = opts != null && opts.getTransientLaunch();
         final Task targetRootTask = toFrontTask != null
@@ -5205,9 +5223,10 @@ class Task extends TaskFragment {
             // Ensure the task/activity being brought forward is not the assistant and is not
             // transient. In the case of transient-launch, we want to wait until the end of the
             // transition and only allow switch if the transient launch was committed.
-            return false;
+            return;
         }
-        return true;
+        pipCandidate.supportsEnterPipOnTaskSwitch = true;
+
     }
 
     /**
@@ -5516,9 +5535,8 @@ class Task extends TaskFragment {
             AppTimeTracker timeTracker, boolean deferResume, String reason) {
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "moveTaskToFront: " + tr);
 
-        final Task topRootTask = getDisplayArea().getTopRootTask();
-        final ActivityRecord topActivity = topRootTask != null
-                ? topRootTask.getTopNonFinishingActivity() : null;
+        final ActivityRecord pipCandidate = findEnterPipOnTaskSwitchCandidate(
+                getDisplayArea().getTopRootTask());
 
         if (tr != this && !tr.isDescendantOf(this)) {
             // nothing to do!
@@ -5573,10 +5591,7 @@ class Task extends TaskFragment {
             // picture-in-picture while paused only if the task would not be considered an oerlay
             // on top
             // of the current activity (eg. not fullscreen, or the assistant)
-            if (canEnterPipOnTaskSwitch(topActivity, tr, null /* toFrontActivity */,
-                    options)) {
-                topActivity.supportsEnterPipOnTaskSwitch = true;
-            }
+            enableEnterPipOnTaskSwitch(pipCandidate, tr, null /* toFrontActivity */, options);
 
             if (!deferResume) {
                 mRootWindowContainer.resumeFocusedTasksTopActivities();

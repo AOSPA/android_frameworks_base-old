@@ -182,6 +182,7 @@ public class NotificationStackScrollLayoutController {
     private final NotificationStackSizeCalculator mNotificationStackSizeCalculator;
     private final StackStateLogger mStackStateLogger;
     private final NotificationStackScrollLogger mLogger;
+    private final GroupExpansionManager mGroupExpansionManager;
 
     private NotificationStackScrollLayout mView;
     private boolean mFadeNotificationsOnDismiss;
@@ -307,6 +308,14 @@ public class NotificationStackScrollLayoutController {
                 public void onStateChanged(int newState) {
                     mBarState = newState;
                     mView.setStatusBarState(mBarState);
+                    if (newState == KEYGUARD) {
+                        mGroupExpansionManager.collapseGroups();
+                    }
+                }
+
+                @Override
+                public void onUpcomingStateChanged(int newState) {
+                    mView.setUpcomingStatusBarState(newState);
                 }
 
                 @Override
@@ -674,8 +683,7 @@ public class NotificationStackScrollLayoutController {
         mScrimController = scrimController;
         mJankMonitor = jankMonitor;
         mNotificationStackSizeCalculator = notificationStackSizeCalculator;
-        groupManager.registerGroupExpansionChangeListener(
-                (changedRow, expanded) -> mView.onGroupExpandChanged(changedRow, expanded));
+        mGroupExpansionManager = groupManager;
         legacyGroupManager.registerGroupChangeListener(new OnGroupChangeListener() {
             @Override
             public void onGroupsChanged() {
@@ -808,6 +816,9 @@ public class NotificationStackScrollLayoutController {
         }
         mView.addOnAttachStateChangeListener(mOnAttachStateChangeListener);
         mSilentHeaderController.setOnClearSectionClickListener(v -> clearSilentNotifications());
+
+        mGroupExpansionManager.registerGroupExpansionChangeListener(
+                (changedRow, expanded) -> mView.onGroupExpandChanged(changedRow, expanded));
     }
 
     private boolean isInVisibleLocation(NotificationEntry entry) {
@@ -1234,8 +1245,9 @@ public class NotificationStackScrollLayoutController {
         mView.setExpandedHeight(expandedHeight);
     }
 
-    public void setQsContainer(ViewGroup view) {
-        mView.setQsContainer(view);
+    /** Sets the QS header. Used to check if a touch is within its bounds. */
+    public void setQsHeader(ViewGroup view) {
+        mView.setQsHeader(view);
     }
 
     public void setAnimationsEnabled(boolean enabled) {
@@ -1291,12 +1303,6 @@ public class NotificationStackScrollLayoutController {
      */
     public void setKeyguardBottomPaddingForDebug(float keyguardBottomPadding) {
         mView.setKeyguardBottomPadding(keyguardBottomPadding);
-    }
-
-    /** For debugging only. */
-    public void mKeyguardNotificationAvailableSpaceForDebug(
-            float keyguardNotificationAvailableSpace) {
-        mView.setKeyguardAvailableSpaceForDebug(keyguardNotificationAvailableSpace);
     }
 
     public RemoteInputController.Delegate createDelegate() {

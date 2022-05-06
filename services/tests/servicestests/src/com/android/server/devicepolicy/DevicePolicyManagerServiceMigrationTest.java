@@ -33,13 +33,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.admin.DevicePolicyManager;
-import android.app.admin.DevicePolicyManagerInternal;
-import android.app.admin.DevicePolicyManagerLiteInternal;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.IpcDataCache;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.platform.test.annotations.Presubmit;
@@ -49,7 +48,6 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.frameworks.servicestests.R;
-import com.android.server.LocalServices;
 import com.android.server.SystemService;
 
 import org.junit.Before;
@@ -74,6 +72,10 @@ public class DevicePolicyManagerServiceMigrationTest extends DpmTestBase {
 
     @Before
     public void setUp() throws Exception {
+
+        // Disable caches in this test process. This must happen early, since some of the
+        // following initialization steps invalidate caches.
+        IpcDataCache.disableForTestMode();
 
         mContext = getContext();
 
@@ -159,9 +161,6 @@ public class DevicePolicyManagerServiceMigrationTest extends DpmTestBase {
 
         final long ident = mContext.binder.clearCallingIdentity();
         try {
-            LocalServices.removeServiceForTest(DevicePolicyManagerLiteInternal.class);
-            LocalServices.removeServiceForTest(DevicePolicyManagerInternal.class);
-
             dpms = new DevicePolicyManagerServiceTestable(getServices(), mContext);
 
             dpms.systemReady(SystemService.PHASE_LOCK_SETTINGS_READY);
@@ -273,9 +272,6 @@ public class DevicePolicyManagerServiceMigrationTest extends DpmTestBase {
 
         final long ident = mContext.binder.clearCallingIdentity();
         try {
-            LocalServices.removeServiceForTest(DevicePolicyManagerLiteInternal.class);
-            LocalServices.removeServiceForTest(DevicePolicyManagerInternal.class);
-
             dpms = new DevicePolicyManagerServiceTestable(getServices(), mContext);
 
             dpms.systemReady(SystemService.PHASE_LOCK_SETTINGS_READY);
@@ -342,9 +338,6 @@ public class DevicePolicyManagerServiceMigrationTest extends DpmTestBase {
         // (Need clearCallingIdentity() to pass permission checks.)
         final long ident = mContext.binder.clearCallingIdentity();
         try {
-            LocalServices.removeServiceForTest(DevicePolicyManagerLiteInternal.class);
-            LocalServices.removeServiceForTest(DevicePolicyManagerInternal.class);
-
             dpms = new DevicePolicyManagerServiceTestable(getServices(), mContext);
 
             dpms.systemReady(SystemService.PHASE_LOCK_SETTINGS_READY);
@@ -503,9 +496,6 @@ public class DevicePolicyManagerServiceMigrationTest extends DpmTestBase {
         DevicePolicyManagerServiceTestable dpms;
         final long ident = mContext.binder.clearCallingIdentity();
         try {
-            LocalServices.removeServiceForTest(DevicePolicyManagerLiteInternal.class);
-            LocalServices.removeServiceForTest(DevicePolicyManagerInternal.class);
-
             dpms = new DevicePolicyManagerServiceTestable(getServices(), mContext);
 
             dpms.systemReady(SystemService.PHASE_LOCK_SETTINGS_READY);

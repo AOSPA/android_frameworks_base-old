@@ -94,7 +94,6 @@ import android.util.IndentingPrintWriter;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.server.FgThread;
@@ -284,6 +283,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 this::onLocationUserSettingsChanged);
         mInjector.getSettingsHelper().addOnLocationEnabledChangedListener(
                 this::onLocationModeChanged);
+        mInjector.getSettingsHelper().addAdasAllowlistChangedListener(
+                () -> refreshAppOpsRestrictions(UserHandle.USER_ALL)
+        );
         mInjector.getSettingsHelper().addIgnoreSettingsAllowlistChangedListener(
                 () -> refreshAppOpsRestrictions(UserHandle.USER_ALL));
         mInjector.getUserInfoHelper().addListener((userId, change) -> {
@@ -835,12 +837,6 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 throw new IllegalArgumentException(
                         "adas gnss bypass requests are only allowed on the \"gps\" provider");
             }
-            if (!ArrayUtils.contains(mContext.getResources().getStringArray(
-                    com.android.internal.R.array.config_locationDriverAssistancePackageNames),
-                    identity.getPackageName())) {
-                throw new SecurityException(
-                        "only verified adas packages may use adas gnss bypass requests");
-            }
             if (!isLocationProvider) {
                 LocationPermissions.enforceCallingOrSelfBypassPermission(mContext);
             }
@@ -934,12 +930,6 @@ public class LocationManagerService extends ILocationManager.Stub implements
             if (!GPS_PROVIDER.equals(provider)) {
                 throw new IllegalArgumentException(
                         "adas gnss bypass requests are only allowed on the \"gps\" provider");
-            }
-            if (!ArrayUtils.contains(mContext.getResources().getStringArray(
-                    com.android.internal.R.array.config_locationDriverAssistancePackageNames),
-                    identity.getPackageName())) {
-                throw new SecurityException(
-                        "only verified adas packages may use adas gnss bypass requests");
             }
             if (!isLocationProvider) {
                 LocationPermissions.enforceCallingOrSelfBypassPermission(mContext);
@@ -1554,6 +1544,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 }
             }
             builder.add(mInjector.getSettingsHelper().getIgnoreSettingsAllowlist());
+            builder.add(mInjector.getSettingsHelper().getAdasAllowlist());
             allowedPackages = builder.build();
         }
 

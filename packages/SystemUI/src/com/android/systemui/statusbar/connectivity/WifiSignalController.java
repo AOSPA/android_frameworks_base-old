@@ -312,6 +312,7 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
     public void dump(PrintWriter pw) {
         super.dump(pw);
         mWifiTracker.dump(pw);
+        dumpTableData(pw);
     }
 
     /**

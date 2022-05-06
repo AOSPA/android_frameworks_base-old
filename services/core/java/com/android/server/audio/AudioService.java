@@ -346,7 +346,8 @@ public class AudioService extends IAudioService.Stub
     private static final int MSG_DISPATCH_AUDIO_MODE = 40;
     private static final int MSG_ROUTING_UPDATED = 41;
     private static final int MSG_INIT_HEADTRACKING_SENSORS = 42;
-    private static final int MSG_PERSIST_SPATIAL_AUDIO_ENABLED = 43;
+    // commented out for now, will be reused for other SA persisting
+    //private static final int MSG_PERSIST_SPATIAL_AUDIO_ENABLED = 43;
     private static final int MSG_ADD_ASSISTANT_SERVICE_UID = 44;
     private static final int MSG_REMOVE_ASSISTANT_SERVICE_UID = 45;
     private static final int MSG_UPDATE_ACTIVE_ASSISTANT_SERVICE_UID = 46;
@@ -909,6 +910,9 @@ public class AudioService extends IAudioService.Stub
 
         @Override public void onUidCachedChanged(int uid, boolean cached) {
             disableAudioForUid(cached, uid);
+        }
+
+        @Override public void onUidProcAdjChanged(int uid) {
         }
 
         private void disableAudioForUid(boolean disable, int uid) {
@@ -1575,9 +1579,7 @@ public class AudioService extends IAudioService.Stub
             }
         }
 
-        if (mHasSpatializerEffect) {
-            mSpatializerHelper.reset(/* featureEnabled */ isSpatialAudioEnabled());
-        }
+        mSpatializerHelper.reset(/* featureEnabled */ mHasSpatializerEffect);
 
         onIndicateSystemReady();
         // indicate the end of reconfiguration phase to audio HAL
@@ -8190,9 +8192,7 @@ public class AudioService extends IAudioService.Stub
 
                 case MSG_INIT_SPATIALIZER:
                     mSpatializerHelper.init(/*effectExpected*/ mHasSpatializerEffect);
-                    if (mHasSpatializerEffect) {
-                        mSpatializerHelper.setFeatureEnabled(isSpatialAudioEnabled());
-                    }
+                    mSpatializerHelper.setFeatureEnabled(mHasSpatializerEffect);
                     mAudioEventWakeLock.release();
                     break;
 
@@ -8331,10 +8331,6 @@ public class AudioService extends IAudioService.Stub
 
                 case MSG_ROUTING_UPDATED:
                     onRoutingUpdatedFromAudioThread();
-                    break;
-
-                case MSG_PERSIST_SPATIAL_AUDIO_ENABLED:
-                    onPersistSpatialAudioEnabled(msg.arg1 == 1);
                     break;
 
                 case MSG_ADD_ASSISTANT_SERVICE_UID:
@@ -8938,31 +8934,6 @@ public class AudioService extends IAudioService.Stub
      * Default value for the spatial audio feature
      */
     private static final boolean SPATIAL_AUDIO_ENABLED_DEFAULT = true;
-
-    /**
-     * persist in user settings whether the feature is enabled.
-     * Can change when {@link Spatializer#setEnabled(boolean)} is called and successfully
-     * changes the state of the feature
-     * @param featureEnabled
-     */
-    void persistSpatialAudioEnabled(boolean featureEnabled) {
-        sendMsg(mAudioHandler,
-                MSG_PERSIST_SPATIAL_AUDIO_ENABLED,
-                SENDMSG_REPLACE, featureEnabled ? 1 : 0, 0, null,
-                /*delay ms*/ 100);
-    }
-
-    void onPersistSpatialAudioEnabled(boolean enabled) {
-        mSettings.putSecureIntForUser(mContentResolver,
-                Settings.Secure.SPATIAL_AUDIO_ENABLED, enabled ? 1 : 0,
-                UserHandle.USER_CURRENT);
-    }
-
-    boolean isSpatialAudioEnabled() {
-        return mSettings.getSecureIntForUser(mContentResolver,
-                Settings.Secure.SPATIAL_AUDIO_ENABLED, SPATIAL_AUDIO_ENABLED_DEFAULT ? 1 : 0,
-                UserHandle.USER_CURRENT) == 1;
-    }
 
     private void enforceModifyDefaultAudioEffectsPermission() {
         if (mContext.checkCallingOrSelfPermission(
@@ -9819,10 +9790,11 @@ public class AudioService extends IAudioService.Stub
     //==========================================================================================
     static final int LOG_NB_EVENTS_LIFECYCLE = 20;
     static final int LOG_NB_EVENTS_PHONE_STATE = 20;
-    static final int LOG_NB_EVENTS_DEVICE_CONNECTION = 30;
+    static final int LOG_NB_EVENTS_DEVICE_CONNECTION = 50;
     static final int LOG_NB_EVENTS_FORCE_USE = 20;
     static final int LOG_NB_EVENTS_VOLUME = 40;
     static final int LOG_NB_EVENTS_DYN_POLICY = 10;
+    static final int LOG_NB_EVENTS_SPATIAL = 30;
 
     static final AudioEventLogger sLifecycleLogger = new AudioEventLogger(LOG_NB_EVENTS_LIFECYCLE,
             "audio services lifecycle");
@@ -9842,6 +9814,9 @@ public class AudioService extends IAudioService.Stub
 
     static final AudioEventLogger sVolumeLogger = new AudioEventLogger(LOG_NB_EVENTS_VOLUME,
             "volume changes (logged when command received by AudioService)");
+
+    static final AudioEventLogger sSpatialLogger = new AudioEventLogger(LOG_NB_EVENTS_SPATIAL,
+            "spatial audio");
 
     final private AudioEventLogger mDynPolicyLogger = new AudioEventLogger(LOG_NB_EVENTS_DYN_POLICY,
             "dynamic policy events (logged when command received by AudioService)");
@@ -9982,10 +9957,10 @@ public class AudioService extends IAudioService.Stub
 
         pw.println("\n");
         pw.println("\nSpatial audio:");
-        pw.println("mHasSpatializerEffect:" + mHasSpatializerEffect);
-        pw.println("isSpatializerEnabled:" + isSpatializerEnabled());
-        pw.println("isSpatialAudioEnabled:" + isSpatialAudioEnabled());
+        pw.println("mHasSpatializerEffect:" + mHasSpatializerEffect + " (effect present)");
+        pw.println("isSpatializerEnabled:" + isSpatializerEnabled() + " (routing dependent)");
         mSpatializerHelper.dump(pw);
+        sSpatialLogger.dump(pw);
 
         mAudioSystem.dump(pw);
     }
@@ -10813,7 +10788,8 @@ public class AudioService extends IAudioService.Stub
         return mMediaFocusControl.sendFocusLoss(focusLoser);
     }
 
-    private static final String[] HAL_VERSIONS = new String[] {"7.1", "7.0", "6.0", "4.0", "2.0"};
+    private static final String[] HAL_VERSIONS =
+            new String[] {"7.1", "7.0", "6.0", "5.0", "4.0", "2.0"};
 
     /** @see AudioManager#getHalVersion */
     public @Nullable String getHalVersion() {

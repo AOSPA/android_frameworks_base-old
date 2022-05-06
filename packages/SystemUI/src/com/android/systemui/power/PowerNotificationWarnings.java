@@ -18,6 +18,7 @@ package com.android.systemui.power;
 
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
 
+import android.app.Dialog;
 import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -60,19 +61,24 @@ import com.android.settingslib.fuelgauge.BatterySaverUtils;
 import com.android.settingslib.utils.PowerUtil;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIApplication;
+import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastSender;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
+import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.util.NotificationChannels;
 import com.android.systemui.volume.Events;
 
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.text.NumberFormat;
 import java.util.Locale;
 import java.util.Objects;
 
 import javax.inject.Inject;
+
+import dagger.Lazy;
 
 /**
  */
@@ -120,7 +126,8 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
             "PNW.autoSaverNoThanks";
 
     private static final String ACTION_ENABLE_SEVERE_BATTERY_DIALOG = "PNW.enableSevereDialog";
-
+    private static final String EXTRA_SCHEDULED_BY_PERCENTAGE =
+            "extra_scheduled_by_percentage";
     public static final String BATTERY_SAVER_SCHEDULE_SCREEN_INTENT_ACTION =
             "com.android.settings.BATTERY_SAVER_SCHEDULE_SETTINGS";
 
@@ -163,11 +170,15 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
     private ActivityStarter mActivityStarter;
     private final BroadcastSender mBroadcastSender;
 
+    private final Lazy<BatteryController> mBatteryControllerLazy;
+    private final DialogLaunchAnimator mDialogLaunchAnimator;
+
     /**
      */
     @Inject
     public PowerNotificationWarnings(Context context, ActivityStarter activityStarter,
-            BroadcastSender broadcastSender) {
+            BroadcastSender broadcastSender, Lazy<BatteryController> batteryControllerLazy,
+            DialogLaunchAnimator dialogLaunchAnimator) {
         mContext = context;
         mNoMan = mContext.getSystemService(NotificationManager.class);
         mPowerMan = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -175,6 +186,8 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         mReceiver.init();
         mActivityStarter = activityStarter;
         mBroadcastSender = broadcastSender;
+        mBatteryControllerLazy = batteryControllerLazy;
+        mDialogLaunchAnimator = dialogLaunchAnimator;
         mUseSevereDialog = mContext.getResources().getBoolean(R.bool.config_severe_battery_dialog);
     }
 
@@ -264,6 +277,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         if (showSevereLowBatteryDialog()) {
             mBroadcastSender.sendBroadcast(new Intent(ACTION_ENABLE_SEVERE_BATTERY_DIALOG)
                     .setPackage(mContext.getPackageName())
+                    .putExtra(EXTRA_SCHEDULED_BY_PERCENTAGE, isScheduledByPercentage())
                     .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
                             | Intent.FLAG_RECEIVER_FOREGROUND));
             // Reset the state once dialog been enabled
@@ -271,7 +285,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
             mPlaySound = false;
             return;
         }
-        if (!showLowBatteryNotification()) {
+        if (isScheduledByPercentage()) {
             return;
         }
 
@@ -327,26 +341,19 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
     }
 
     /**
-     * Disable low battery warning notification if battery saver schedule mode set as
-     * "Based on percentage".
+     * Checking battery saver schedule mode is set as "Based on percentage" or not.
      *
-     * return {@code false} if scheduled by percentage.
+     * return {@code true} if scheduled by percentage.
      */
-    private boolean showLowBatteryNotification() {
+    private boolean isScheduledByPercentage() {
         final ContentResolver resolver = mContext.getContentResolver();
         final int mode = Settings.Global.getInt(resolver, Global.AUTOMATIC_POWER_SAVE_MODE,
                 PowerManager.POWER_SAVE_MODE_TRIGGER_PERCENTAGE);
 
-        // Return true if battery saver schedule mode will not trigger by percentage.
-        if (mode != PowerManager.POWER_SAVE_MODE_TRIGGER_PERCENTAGE) {
-            return true;
-        }
-
-        // Return true if battery saver mode trigger percentage is less than 0, which means it is
+        // Return false if battery saver mode trigger percentage is less than 0, which means it is
         // set as "Based on routine" mode, otherwise it will be "Based on percentage" mode.
-        final int threshold =
-                Settings.Global.getInt(resolver, Global.LOW_POWER_MODE_TRIGGER_LEVEL, 0);
-        return threshold <= 0;
+        return mode == PowerManager.POWER_SAVE_MODE_TRIGGER_PERCENTAGE
+                && Settings.Global.getInt(resolver, Global.LOW_POWER_MODE_TRIGGER_LEVEL, 0) > 0;
     }
 
     private void showAutoSaverSuggestionNotification() {
@@ -690,8 +697,19 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         }
         d.setShowForAllUsers(true);
         d.setOnDismissListener((dialog) -> mSaverConfirmation = null);
-        d.show();
+        WeakReference<View> ref = mBatteryControllerLazy.get().getLastPowerSaverStartView();
+        if (ref != null && ref.get() != null && ref.get().isAggregatedVisible()) {
+            mDialogLaunchAnimator.showFromView(d, ref.get());
+        } else {
+            d.show();
+        }
         mSaverConfirmation = d;
+        mBatteryControllerLazy.get().clearLastPowerSaverStartView();
+    }
+
+    @VisibleForTesting
+    Dialog getSaverConfirmationDialog() {
+        return mSaverConfirmation;
     }
 
     private boolean isEnglishLocale() {

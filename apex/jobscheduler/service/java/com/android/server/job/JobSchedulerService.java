@@ -159,8 +159,6 @@ public class JobSchedulerService extends com.android.server.SystemService
     public static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     public static final boolean DEBUG_STANDBY = DEBUG || false;
 
-    /** The maximum number of concurrent jobs we run at one time. */
-    static final int MAX_JOB_CONTEXTS_COUNT = 16;
     /** The maximum number of jobs that we allow an app to schedule */
     private static final int MAX_JOBS_PER_APP = 150;
     /** The number of the most recently completed jobs to keep track of for debugging purposes. */
@@ -286,7 +284,7 @@ public class JobSchedulerService extends com.android.server.SystemService
      * Queue of pending jobs. The JobServiceContext class will receive jobs from this list
      * when ready to execute them.
      */
-    final PendingJobQueue mPendingJobQueue = new PendingJobQueue();
+    private final PendingJobQueue mPendingJobQueue = new PendingJobQueue();
 
     int[] mStartedUsers = EmptyArray.INT;
 
@@ -1009,6 +1007,9 @@ public class JobSchedulerService extends com.android.server.SystemService
 
         @Override public void onUidCachedChanged(int uid, boolean cached) {
         }
+
+        @Override public void onUidProcAdjChanged(int uid) {
+        }
     };
 
     public Context getTestableContext() {
@@ -1025,6 +1026,11 @@ public class JobSchedulerService extends com.android.server.SystemService
 
     public Constants getConstants() {
         return mConstants;
+    }
+
+    @NonNull
+    PendingJobQueue getPendingJobQueue() {
+        return mPendingJobQueue;
     }
 
     @NonNull
@@ -1381,6 +1387,7 @@ public class JobSchedulerService extends com.android.server.SystemService
         if (mPendingJobQueue.remove(cancelled)) {
             mJobPackageTracker.noteNonpending(cancelled);
         }
+        mChangedJobList.remove(cancelled);
         // Cancel if running.
         mConcurrencyManager.stopJobOnServiceContextLocked(
                 cancelled, reason, internalReasonCode, debugReason);
@@ -1415,6 +1422,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                 for (int c = 0; c < mControllers.size(); ++c) {
                     mControllers.get(c).onUidBiasChangedLocked(uid, prevBias, newBias);
                 }
+                mConcurrencyManager.onUidBiasChangedLocked(prevBias, newBias);
             }
         }
     }
@@ -1738,7 +1746,13 @@ public class JobSchedulerService extends com.android.server.SystemService
 
         // Remove from store as well as controllers.
         final boolean removed = mJobs.remove(jobStatus, removeFromPersisted);
-        if (removed && mReadyToRock) {
+        if (!removed) {
+            // We never create JobStatus objects for the express purpose of removing them, and this
+            // method is only ever called for jobs that were saved in the JobStore at some point,
+            // so if we can't find it, something went seriously wrong.
+            Slog.wtfStack(TAG, "Job didn't exist in JobStore");
+        }
+        if (mReadyToRock) {
             for (int i = 0; i < mControllers.size(); i++) {
                 StateController controller = mControllers.get(i);
                 controller.maybeStopTrackingJobLocked(jobStatus, incomingJob, false);

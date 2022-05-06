@@ -514,9 +514,10 @@ public final class SystemUiDeviceConfigFlags {
             "is_nearby_share_first_target_in_ranked_app";
 
     /**
-     * (boolean) Whether to enable the new unbundled "delegate chooser" implementation.
+     * (boolean) Whether to enable the new unbundled sharesheet
+     * (com.android.intentresolver.ChooserActivity).
      */
-    public static final String USE_DELEGATE_CHOOSER = "use_delegate_chooser";
+    public static final String USE_UNBUNDLED_SHARESHEET = "use_unbundled_sharesheet";
 
     /**
      * (string) Name of the default QR code scanner activity. On the eligible devices this activity
@@ -534,6 +535,12 @@ public final class SystemUiDeviceConfigFlags {
      * (boolean) Whether the clipboard overlay is enabled.
      */
     public static final String CLIPBOARD_OVERLAY_ENABLED = "clipboard_overlay_enabled";
+
+    /**
+     * (boolean) Whether widget provider info would be saved to / loaded from system persistence
+     * layer as opposed to individual manifests in respective apps.
+     */
+    public static final String PERSISTS_WIDGET_PROVIDER_INFO = "persists_widget_provider_info";
 
     private SystemUiDeviceConfigFlags() {
     }
