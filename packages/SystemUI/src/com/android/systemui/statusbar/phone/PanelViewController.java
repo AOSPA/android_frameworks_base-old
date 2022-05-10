@@ -121,6 +121,7 @@ public abstract class PanelViewController {
     private float mInitialOffsetOnTouch;
     private boolean mCollapsedAndHeadsUpOnDown;
     private float mExpandedFraction = 0;
+    private float mExpansionDragDownAmountPx = 0;
     protected float mExpandedHeight = 0;
     private boolean mPanelClosedOnDown;
     private boolean mHasLayoutedSinceDown;
@@ -811,6 +812,7 @@ public abstract class PanelViewController {
                     mHeightAnimator.end();
                 }
             }
+            mExpansionDragDownAmountPx = h;
             mExpandedFraction = Math.min(1f,
                     maxPanelHeight == 0 ? 0 : mExpandedHeight / maxPanelHeight);
             mAmbientState.setExpansionFraction(mExpandedFraction);
@@ -1127,7 +1129,7 @@ public abstract class PanelViewController {
      */
     public void updatePanelExpansionAndVisibility() {
         mPanelExpansionStateManager.onPanelExpansionChanged(
-                mExpandedFraction, isExpanded(), mTracking);
+                mExpandedFraction, isExpanded(), mTracking, mExpansionDragDownAmountPx);
         updateVisibility();
     }
 
