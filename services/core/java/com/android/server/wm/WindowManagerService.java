@@ -426,7 +426,7 @@ public class WindowManagerService extends IWindowManager.Stub
             "persist.wm.enable_remote_keyguard_animation";
 
     private static final int sEnableRemoteKeyguardAnimation =
-            SystemProperties.getInt(ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY, 1);
+            SystemProperties.getInt(ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY, 2);
 
     /**
      * @see #ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY
@@ -2777,12 +2777,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 // TODO(b/155340867): Investigate if we still need roundedCornerOverlay after
                 // the feature b/155340867 is completed.
-                final DisplayArea da = dc.findAreaForWindowType(type, options,
+                final DisplayArea<?> da = dc.findAreaForWindowType(type, options,
                         callerCanManageAppTokens, false /* roundedCornerOverlay */);
-                // TODO(b/190019118): Avoid to send onConfigurationChanged because it has been done
-                //  in return value of attachWindowContextToDisplayArea.
                 mWindowContextListenerController.registerWindowContainerListener(clientToken, da,
-                        callingUid, type, options);
+                        callingUid, type, options, false /* shouDispatchConfigWhenRegistering */);
                 return da.getConfiguration();
             }
         } finally {
@@ -2878,7 +2876,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
 
                 mWindowContextListenerController.registerWindowContainerListener(clientToken, dc,
-                        callingUid, INVALID_WINDOW_TYPE, null /* options */);
+                        callingUid, INVALID_WINDOW_TYPE, null /* options */,
+                        false /* shouDispatchConfigWhenRegistering */);
                 return dc.getConfiguration();
             }
         } finally {
@@ -7229,18 +7228,42 @@ public class WindowManagerService extends IWindowManager.Stub
         private float mLatestMouseX;
         private float mLatestMouseY;
 
-        void updatePosition(float x, float y) {
+        /**
+         * The display that the pointer (mouse cursor) is currently shown on. This is updated
+         * directly by InputManagerService when the pointer display changes.
+         */
+        private int mPointerDisplayId = INVALID_DISPLAY;
+
+        /**
+         * Update the mouse cursor position as a result of a mouse movement.
+         * @return true if the position was successfully updated, false otherwise.
+         */
+        boolean updatePosition(int displayId, float x, float y) {
             synchronized (this) {
                 mLatestEventWasMouse = true;
+
+                if (displayId != mPointerDisplayId) {
+                    // The display of the position update does not match the display on which the
+                    // mouse pointer is shown, so do not update the position.
+                    return false;
+                }
                 mLatestMouseX = x;
                 mLatestMouseY = y;
+                return true;
+            }
+        }
+
+        void setPointerDisplayId(int displayId) {
+            synchronized (this) {
+                mPointerDisplayId = displayId;
             }
         }
 
         @Override
         public void onPointerEvent(MotionEvent motionEvent) {
             if (motionEvent.isFromSource(InputDevice.SOURCE_MOUSE)) {
-                updatePosition(motionEvent.getRawX(), motionEvent.getRawY());
+                updatePosition(motionEvent.getDisplayId(), motionEvent.getRawX(),
+                        motionEvent.getRawY());
             } else {
                 synchronized (this) {
                     mLatestEventWasMouse = false;
@@ -7250,6 +7273,7 @@ public class WindowManagerService extends IWindowManager.Stub
     };
 
     void updatePointerIcon(IWindow client) {
+        int pointerDisplayId;
         float mouseX, mouseY;
 
         synchronized(mMousePositionTracker) {
@@ -7258,6 +7282,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             mouseX = mMousePositionTracker.mLatestMouseX;
             mouseY = mMousePositionTracker.mLatestMouseY;
+            pointerDisplayId = mMousePositionTracker.mPointerDisplayId;
         }
 
         synchronized (mGlobalLock) {
@@ -7272,6 +7297,10 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             final DisplayContent displayContent = callingWin.getDisplayContent();
             if (displayContent == null) {
+                return;
+            }
+            if (pointerDisplayId != displayContent.getDisplayId()) {
+                // Do not let the pointer icon be updated by a window on a different display.
                 return;
             }
             WindowState windowUnderPointer =
@@ -7291,7 +7320,11 @@ public class WindowManagerService extends IWindowManager.Stub
 
     void restorePointerIconLocked(DisplayContent displayContent, float latestX, float latestY) {
         // Mouse position tracker has not been getting updates while dragging, update it now.
-        mMousePositionTracker.updatePosition(latestX, latestY);
+        if (!mMousePositionTracker.updatePosition(
+                displayContent.getDisplayId(), latestX, latestY)) {
+            // The mouse position could not be updated, so ignore this request.
+            return;
+        }
 
         WindowState windowUnderPointer =
                 displayContent.getTouchableWinAtPointLocked(latestX, latestY);
@@ -7313,6 +7346,10 @@ public class WindowManagerService extends IWindowManager.Stub
             return new PointF(mMousePositionTracker.mLatestMouseX,
                     mMousePositionTracker.mLatestMouseY);
         }
+    }
+
+    void setMousePointerDisplayId(int displayId) {
+        mMousePositionTracker.setPointerDisplayId(displayId);
     }
 
     /**
@@ -7709,6 +7746,18 @@ public class WindowManagerService extends IWindowManager.Stub
         public IBinder getFocusedWindowToken() {
             synchronized (mGlobalLock) {
                 return mAccessibilityController.getFocusedWindowToken();
+            }
+        }
+
+        // TODO (b/229837707): Delete this method after changing the solution.
+        @Override
+        public IBinder getFocusedWindowTokenFromWindowStates() {
+            synchronized (mGlobalLock) {
+                final WindowState windowState = getFocusedWindowLocked();
+                if (windowState != null) {
+                    return windowState.mClient.asBinder();
+                }
+                return null;
             }
         }
 
@@ -8786,8 +8835,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     return new ArrayList<>();
                 }
 
-                // Retrieve the DisplayInfo for all possible rotations across all possible display
-                // layouts.
+                // Retrieve the DisplayInfo across all possible display layouts.
                 return List.copyOf(mPossibleDisplayInfoMapper.getPossibleDisplayInfos(displayId));
             }
         } finally {
@@ -8849,16 +8897,18 @@ public class WindowManagerService extends IWindowManager.Stub
                 WindowState newFocusTarget =  displayContent == null
                         ? null : displayContent.findFocusedWindow();
                 if (newFocusTarget == null) {
-                    ProtoLog.v(WM_DEBUG_FOCUS, "grantEmbeddedWindowFocus remove request for "
-                                    + "win=%s dropped since no candidate was found",
+                    t.setFocusedWindow(null, null, displayId).apply();
+                    ProtoLog.v(WM_DEBUG_FOCUS, "grantEmbeddedWindowFocus win=%s"
+                                    + " dropped focus so setting focus to null since no candidate"
+                                    + " was found",
                             embeddedWindow);
                     return;
                 }
-                t.requestFocusTransfer(newFocusTarget.mInputChannelToken, newFocusTarget.getName(),
-                        inputToken, embeddedWindow.toString(),
+                t.setFocusedWindow(newFocusTarget.mInputChannelToken, newFocusTarget.getName(),
                         displayId).apply();
+
                 EventLog.writeEvent(LOGTAG_INPUT_FOCUS,
-                        "Transfer focus request " + newFocusTarget,
+                        "Focus request " + newFocusTarget,
                         "reason=grantEmbeddedWindowFocus(false)");
             }
             ProtoLog.v(WM_DEBUG_FOCUS, "grantEmbeddedWindowFocus win=%s grantFocus=%s",

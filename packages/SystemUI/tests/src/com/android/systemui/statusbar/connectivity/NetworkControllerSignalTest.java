@@ -70,7 +70,6 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mMockTm,
                 mTelephonyListenerManager,
                 mMockWm,
-                mMockNsm,
                 mMockSm,
                 mConfig,
                 TestableLooper.get(this).getLooper(),
@@ -83,6 +82,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mMockBd,
                 mDemoModeController,
                 mCarrierConfigTracker,
+                mWifiStatusTrackerFactory,
                 mMainHandler,
                 mFeatureFlags
         );
@@ -103,7 +103,6 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mMockTm,
                 mTelephonyListenerManager,
                 mMockWm,
-                mMockNsm,
                 mMockSm,
                 mConfig,
                 TestableLooper.get(this).getLooper(),
@@ -116,6 +115,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mMockBd,
                 mDemoModeController,
                 mCarrierConfigTracker,
+                mWifiStatusTrackerFactory,
                 mMainHandler,
                 mFeatureFlags
         );
@@ -131,11 +131,12 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
         when(mMockTm.isDataCapable()).thenReturn(false);
         // Create a new NetworkController as this is currently handled in constructor.
         mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm,
-                mTelephonyListenerManager, mMockWm, mMockNsm, mMockSm, mConfig,
+                mTelephonyListenerManager, mMockWm, mMockSm, mConfig,
                 Looper.getMainLooper(), mFakeExecutor, mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
                 mDemoModeController, mock(CarrierConfigTracker.class),
+                mWifiStatusTrackerFactory,
                 mMainHandler, mFeatureFlags);
         setupNetworkController();
 
@@ -152,11 +153,12 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
         when(mMockSm.getCompleteActiveSubscriptionInfoList()).thenReturn(Collections.emptyList());
 
         mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm,
-                mTelephonyListenerManager, mMockWm, mMockNsm, mMockSm, mConfig,
+                mTelephonyListenerManager, mMockWm, mMockSm, mConfig,
                 Looper.getMainLooper(), mFakeExecutor, mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
                 mDemoModeController, mock(CarrierConfigTracker.class),
+                mWifiStatusTrackerFactory,
                 mMainHandler, mFeatureFlags);
         mNetworkController.registerListeners();
 
@@ -221,11 +223,12 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
         when(mMockTm.isDataCapable()).thenReturn(false);
         // Create a new NetworkController as this is currently handled in constructor.
         mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm,
-                mTelephonyListenerManager, mMockWm, mMockNsm, mMockSm, mConfig,
+                mTelephonyListenerManager, mMockWm, mMockSm, mConfig,
                 Looper.getMainLooper(), mFakeExecutor, mCallbackHandler,
                 mock(AccessPointControllerImpl.class), mock(DataUsageController.class),
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
                 mDemoModeController, mock(CarrierConfigTracker.class),
+                mWifiStatusTrackerFactory,
                 mMainHandler, mFeatureFlags);
         setupNetworkController();
 

@@ -3490,7 +3490,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             if (record != null && record.isUid(uid)
                     && Objects.equals(pkgName, record.packageName)
                     && pPi.shouldShowNotificationDialogForTask(record.getTask().getTaskInfo(),
-                    pkgName, record.intent)) {
+                    pkgName, record.launchedFromPackage, record.intent, record.getName())) {
                 validTaskId[0] = record.getTask().mTaskId;
                 return true;
             }
