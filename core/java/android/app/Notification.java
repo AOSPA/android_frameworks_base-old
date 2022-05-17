@@ -1901,6 +1901,11 @@ public class Notification implements Parcelable
 
             /**
              * Construct a new builder for {@link Action} object.
+             * <p>As of Android {@link android.os.Build.VERSION_CODES#N},
+             * action button icons will not be displayed on action buttons, but are still required
+             * and are available to
+             * {@link android.service.notification.NotificationListenerService notification listeners},
+             * which may display them in other contexts, for example on a wearable device.
              * @param icon icon to show for this action
              * @param title the title of the action
              * @param intent the {@link PendingIntent} to fire when users trigger this action
@@ -1922,6 +1927,12 @@ public class Notification implements Parcelable
              * <p>How an Action is displayed, including whether the {@code icon}, {@code text}, or
              * both are displayed or required, depends on where and how the action is used, and the
              * {@link Style} applied to the Notification.
+             *
+             * <p>As of Android {@link android.os.Build.VERSION_CODES#N}, action button icons
+             * will not be displayed on action buttons, but are still required and are available
+             * to {@link android.service.notification.NotificationListenerService notification
+             * listeners}, which may display them in other contexts, for example on a wearable
+             * device.
              *
              * <p>When the {@code title} is a {@link android.text.Spanned}, any colors set by a
              * {@link ForegroundColorSpan} or {@link TextAppearanceSpan} may be removed or displayed
@@ -4918,6 +4929,12 @@ public class Notification implements Parcelable
          * while processing broadcast receivers or services in response to notification action
          * clicks. To launch an activity in those cases, provide a {@link PendingIntent} to the
          * activity itself.
+         * <p>
+         * As of Android {@link android.os.Build.VERSION_CODES#N},
+         * action button icons will not be displayed on action buttons, but are still required
+         * and are available to
+         * {@link android.service.notification.NotificationListenerService notification listeners},
+         * which may display them in other contexts, for example on a wearable device.
          *
          * @param icon Resource ID of a drawable that represents the action.
          * @param title Text describing the action.
@@ -7753,10 +7770,11 @@ public class Notification implements Parcelable
      * user will always see the normal notification view.
      *
      * <p>
-     * If the app is targeting Android P and above, it is required to use the {@link Person}
-     * class in order to get an optimal rendering of the notification and its avatars. For
-     * conversations involving multiple people, the app should also make sure that it marks the
-     * conversation as a group with {@link #setGroupConversation(boolean)}.
+     * If the app is targeting Android {@link android.os.Build.VERSION_CODES#P} and above, it is
+     * required to use the {@link Person} class in order to get an optimal rendering of the
+     * notification and its avatars. For conversations involving multiple people, the app should
+     * also make sure that it marks the conversation as a group with
+     * {@link #setGroupConversation(boolean)}.
      *
      * <p>
      * This class is a "rebuilder": It attaches to a Builder object and modifies its behavior.
@@ -7829,8 +7847,8 @@ public class Notification implements Parcelable
          * @param user Required - The person displayed for any messages that are sent by the
          * user. Any messages added with {@link #addMessage(Notification.MessagingStyle.Message)}
          * who don't have a Person associated with it will be displayed as if they were sent
-         * by this user. The user also needs to have a valid name associated with it, which will
-         * be enforced starting in Android P.
+         * by this user. The user also needs to have a valid name associated with it, which is
+         * enforced starting in Android {@link android.os.Build.VERSION_CODES#P}.
          */
         public MessagingStyle(@NonNull Person user) {
             mUser = user;
@@ -7887,9 +7905,9 @@ public class Notification implements Parcelable
         /**
          * Sets the title to be displayed on this conversation. May be set to {@code null}.
          *
-         * <p>Starting in {@link Build.VERSION_CODES#R, this conversation title will be ignored if a
-         * valid shortcutId is added via {@link Notification.Builder#setShortcutId(String)}. In this
-         * case, {@link ShortcutInfo#getLongLabel()} (or, if missing,
+         * <p>Starting in {@link Build.VERSION_CODES#R}, this conversation title will be ignored
+         * if a valid shortcutId is added via {@link Notification.Builder#setShortcutId(String)}.
+         * In this case, {@link ShortcutInfo#getLongLabel()} (or, if missing,
          * {@link ShortcutInfo#getShortLabel()}) will be shown as the conversation title
          * instead.
          *
@@ -8048,7 +8066,7 @@ public class Notification implements Parcelable
         }
 
         /**
-         * Gets the list of {@code Message} objects that represent the notification
+         * Gets the list of {@code Message} objects that represent the notification.
          */
         public List<Message> getMessages() {
             return mMessages;

@@ -352,7 +352,8 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             @Override
             public void onDisplayChanged(int displayId) {
                 final int newRotation = mContext.getDisplay().getRotation();
-                if (mOverlays != null && mRotation != newRotation) {
+                if ((mOverlays != null || mScreenDecorHwcWindow != null)
+                        && mRotation != newRotation) {
                     // We cannot immediately update the orientation. Otherwise
                     // WindowManager is still deferring layout until it has finished dispatching
                     // the config changes, which may cause divergence between what we draw
@@ -366,11 +367,13 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                                 + mRotation);
                     }
 
-                    for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
-                        if (mOverlays[i] != null) {
-                            final ViewGroup overlayView = mOverlays[i].getRootView();
-                            overlayView.getViewTreeObserver().addOnPreDrawListener(
-                                    new RestartingPreDrawListener(overlayView, i, newRotation));
+                    if (mOverlays != null) {
+                        for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
+                            if (mOverlays[i] != null) {
+                                final ViewGroup overlayView = mOverlays[i].getRootView();
+                                overlayView.getViewTreeObserver().addOnPreDrawListener(
+                                        new RestartingPreDrawListener(overlayView, i, newRotation));
+                            }
                         }
                     }
 
@@ -900,8 +903,8 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
         final DisplayInfo displayInfo = new DisplayInfo();
         mContext.getDisplay().getDisplayInfo(displayInfo);
         return DisplayUtils.getPhysicalPixelDisplaySizeRatio(
-                stableDisplaySize.x, stableDisplaySize.y, displayInfo.logicalWidth,
-                displayInfo.logicalHeight);
+                stableDisplaySize.x, stableDisplaySize.y, displayInfo.getNaturalWidth(),
+                displayInfo.getNaturalHeight());
     }
 
     @Override
