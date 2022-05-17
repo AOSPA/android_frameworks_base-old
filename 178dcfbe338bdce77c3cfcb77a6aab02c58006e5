@@ -33,6 +33,23 @@
       "message": "the icon doesn\u0027t shows again after reboot, and to show, need turn on nfc again",
       "revId": "178dcfbe338bdce77c3cfcb77a6aab02c58006e5",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "52e5eb70_a4ff5abd",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000765
+      },
+      "writtenOn": "2022-05-17T10:42:13Z",
+      "side": 1,
+      "message": "why...",
+      "revId": "178dcfbe338bdce77c3cfcb77a6aab02c58006e5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
