@@ -32,7 +32,6 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_N
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
-import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_FOLD_TO_AOD;
 import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_CLOSED;
 import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_OPEN;
@@ -328,6 +327,11 @@ public class NotificationPanelViewController extends PanelViewController {
     private boolean mShouldUseSplitNotificationShade;
     // The bottom padding reserved for elements of the keyguard measuring notifications
     private float mKeyguardNotificationBottomPadding;
+    /**
+     * The top padding from where notification should start in lockscreen.
+     * Should be static also during animations and should match the Y of the first notification.
+     */
+    private float mKeyguardNotificationTopPadding;
     // Current max allowed keyguard notifications determined by measuring the panel
     private int mMaxAllowedKeyguardNotifications;
 
@@ -1525,7 +1529,10 @@ public class NotificationPanelViewController extends PanelViewController {
      */
     @VisibleForTesting
     float getSpaceForLockscreenNotifications() {
-        float topPadding = mNotificationStackScrollLayoutController.getTopPadding();
+        float staticTopPadding = mClockPositionAlgorithm.getLockscreenMinStackScrollerPadding()
+                // getMinStackScrollerPadding is from the top of the screen,
+                // but we need it from the top of the NSSL.
+                - mNotificationStackScrollLayoutController.getTop();
 
         // Space between bottom of notifications and top of lock icon or udfps background.
         float lockIconPadding = mLockIconViewController.getTop();
@@ -1537,11 +1544,15 @@ public class NotificationPanelViewController extends PanelViewController {
 
         float bottomPadding = Math.max(lockIconPadding,
                 Math.max(mIndicationBottomPadding, mAmbientIndicationBottomPadding));
-        mKeyguardNotificationBottomPadding = bottomPadding;
 
+        mKeyguardNotificationBottomPadding = bottomPadding;
+        mKeyguardNotificationTopPadding = staticTopPadding;
+
+        // To debug the available space, enable debug lines in this class. If you change how the
+        // available space is calculated, please also update those lines.
         float availableSpace =
                 mNotificationStackScrollLayoutController.getHeight()
-                        - topPadding
+                        - staticTopPadding
                         - bottomPadding;
         return availableSpace;
     }
@@ -1689,7 +1700,17 @@ public class NotificationPanelViewController extends PanelViewController {
             mQsExpandImmediate = true;
             setShowShelfOnly(true);
         }
-        if (isFullyCollapsed()) {
+        if (mShouldUseSplitNotificationShade && isOnKeyguard()) {
+            // It's a special case as this method is likely to not be initiated by finger movement
+            // but rather called from adb shell or accessibility service.
+            // We're using LockscreenShadeTransitionController because on lockscreen that's the
+            // source of truth for all shade motion. Not using it would make part of state to be
+            // outdated and will cause bugs. Ideally we'd use this controller also for non-split
+            // case but currently motion in portrait looks worse than when using flingSettings.
+            // TODO: make below function transitioning smoothly also in portrait with null target
+            mLockscreenShadeTransitionController.goToLockedShade(
+                    /* expandedView= */null, /* needsQSAnimation= */false);
+        } else if (isFullyCollapsed()) {
             expand(true /* animate */);
         } else {
             traceQsJank(true /* startTracing */, false /* wasCancelled */);
@@ -2354,9 +2375,12 @@ public class NotificationPanelViewController extends PanelViewController {
         mScrimController.setQsPosition(qsExpansionFraction, qsPanelBottomY);
         setQSClippingBounds();
 
-        // Only need to notify the notification stack when we're not in split screen mode. If we
-        // do, then the notification panel starts scrolling along with the QS.
-        if (!mShouldUseSplitNotificationShade) {
+        if (mShouldUseSplitNotificationShade) {
+            // In split shade we want to pretend that QS are always collapsed so their behaviour and
+            // interactions don't influence notifications as they do in portrait. But we want to set
+            // 0 explicitly in case we're rotating from non-split shade with QS expansion of 1.
+            mNotificationStackScrollLayoutController.setQsExpansionFraction(0);
+        } else {
             mNotificationStackScrollLayoutController.setQsExpansionFraction(qsExpansionFraction);
         }
 
@@ -3209,6 +3233,8 @@ public class NotificationPanelViewController extends PanelViewController {
         updateTrackingHeadsUp(null);
         mExpandingFromHeadsUp = false;
         setPanelScrimMinFraction(0.0f);
+        // Reset status bar alpha so alpha can be calculated upon updating view state.
+        setKeyguardStatusBarAlpha(-1f);
     }
 
     private void updateTrackingHeadsUp(@Nullable ExpandableNotificationRow pickedChild) {
@@ -3926,10 +3952,6 @@ public class NotificationPanelViewController extends PanelViewController {
         if (mKeyguardStatusBarViewController != null) {
             mKeyguardStatusBarViewController.dump(pw, args);
         }
-    }
-
-    public boolean hasActiveClearableNotifications() {
-        return mNotificationStackScrollLayoutController.hasActiveClearableNotifications(ROWS_ALL);
     }
 
     public RemoteInputController.Delegate createRemoteInputDelegate() {
@@ -4934,6 +4956,20 @@ public class NotificationPanelViewController extends PanelViewController {
                     "mClockPositionResult.clockY");
             drawDebugInfo(canvas, (int) mLockIconViewController.getTop(), Color.GRAY,
                     "mLockIconViewController.getTop()");
+
+            if (mKeyguardShowing) {
+                // Notifications have the space between those two lines.
+                drawDebugInfo(canvas,
+                        mNotificationStackScrollLayoutController.getTop() +
+                                (int) mKeyguardNotificationTopPadding,
+                        Color.RED,
+                        "NSSL.getTop() + mKeyguardNotificationTopPadding");
+
+                drawDebugInfo(canvas, mNotificationStackScrollLayoutController.getBottom() -
+                                (int) mKeyguardNotificationBottomPadding,
+                        Color.RED,
+                        "NSSL.getBottom() - mKeyguardNotificationBottomPadding");
+            }
 
             mDebugPaint.setColor(Color.CYAN);
             canvas.drawLine(0, mClockPositionResult.stackScrollerPadding, mView.getWidth(),

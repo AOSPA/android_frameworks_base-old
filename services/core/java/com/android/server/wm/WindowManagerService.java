@@ -118,6 +118,7 @@ import static com.android.server.wm.DisplayContent.IME_TARGET_CONTROL;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
@@ -172,6 +173,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
@@ -224,6 +226,7 @@ import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.MergedConfiguration;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
@@ -3055,13 +3058,22 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+
     void cleanupRecentsAnimation(@RecentsAnimationController.ReorderMode int reorderMode) {
         if (mRecentsAnimationController != null) {
             final RecentsAnimationController controller = mRecentsAnimationController;
             mRecentsAnimationController = null;
             controller.cleanupAnimation(reorderMode);
-            // TODO(mult-display): currently only default display support recents animation.
-            getDefaultDisplayContentLocked().mAppTransition.updateBooster();
+            // TODO(multi-display): currently only default display support recents animation.
+            final DisplayContent dc = getDefaultDisplayContentLocked();
+            if (dc.mAppTransition.isTransitionSet()) {
+                dc.mSkipAppTransitionAnimation = true;
+            }
+            dc.forAllWindowContainers((wc) -> {
+                if (wc.isAnimating(TRANSITION, ANIMATION_TYPE_APP_TRANSITION)) {
+                    wc.cancelAnimation();
+                }
+            });
         }
     }
 
@@ -5713,25 +5725,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    void setSandboxDisplayApis(int displayId, boolean sandboxDisplayApis) {
-        if (mContext.checkCallingOrSelfPermission(WRITE_SECURE_SETTINGS)
-                != PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException("Must hold permission " + WRITE_SECURE_SETTINGS);
-        }
-
-        final long ident = Binder.clearCallingIdentity();
-        try {
-            synchronized (mGlobalLock) {
-                final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-                if (displayContent != null) {
-                    displayContent.setSandboxDisplayApis(sandboxDisplayApis);
-                }
-            }
-        } finally {
-            Binder.restoreCallingIdentity(ident);
-        }
-    }
-
     /** The global settings only apply to default display. */
     private boolean applyForcedPropertiesForDefaultDisplay() {
         boolean changed = false;
@@ -7789,6 +7782,13 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
+        public Pair<Matrix, MagnificationSpec> getWindowTransformationMatrixAndMagnificationSpec(
+                IBinder token) {
+            return mAccessibilityController
+                    .getWindowTransformationMatrixAndMagnificationSpec(token);
+        }
+
+        @Override
         public void waitForAllWindowsDrawn(Runnable callback, long timeout, int displayId) {
             final WindowContainer container = displayId == INVALID_DISPLAY
                     ? mRoot : mRoot.getDisplayContent(displayId);
@@ -8261,23 +8261,15 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void replaceInputSurfaceTouchableRegionWithWindowCrop(
-                @NonNull SurfaceControl inputSurface,
-                @NonNull InputWindowHandle inputWindowHandle,
-                @NonNull IBinder windowToken) {
+        public boolean isPointInsideWindow(@NonNull IBinder windowToken, int displayId,
+                float displayX, float displayY) {
             synchronized (mGlobalLock) {
                 final WindowState w = mWindowMap.get(windowToken);
-                if (w == null) {
-                    return;
+                if (w == null || w.getDisplayId() != displayId) {
+                    return false;
                 }
-                // Make a copy of the InputWindowHandle to avoid leaking the window's
-                // SurfaceControl.
-                final InputWindowHandle localHandle = new InputWindowHandle(inputWindowHandle);
-                localHandle.replaceTouchableRegionWithCrop(w.getSurfaceControl());
-                final SurfaceControl.Transaction t = mTransactionFactory.get();
-                t.setInputWindowInfo(inputSurface, localHandle);
-                t.apply();
-                t.close();
+
+                return w.getBounds().contains((int) displayX, (int) displayY);
             }
         }
     }
