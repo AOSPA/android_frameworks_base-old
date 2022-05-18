@@ -11941,7 +11941,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @NonNull
     public final List<Rect> getUnrestrictedPreferKeepClearRects() {
         final ListenerInfo info = mListenerInfo;
-        if (info != null && info.mKeepClearRects != null) {
+        if (info != null && info.mUnrestrictedKeepClearRects != null) {
             return new ArrayList(info.mUnrestrictedKeepClearRects);
         }
 
@@ -21174,6 +21174,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         AccessibilityNodeIdManager.getInstance().unregisterViewWithId(getAccessibilityViewId());
+
+        if (mBackgroundRenderNode != null) {
+            mBackgroundRenderNode.forceEndAnimators();
+        }
+        mRenderNode.forceEndAnimators();
     }
 
     private void cleanupDraw() {

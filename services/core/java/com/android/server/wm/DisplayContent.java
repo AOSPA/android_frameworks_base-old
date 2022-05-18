@@ -5264,7 +5264,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void prepareAppTransition(@WindowManager.TransitionType int transit,
             @WindowManager.TransitionFlags int flags) {
         final boolean prepared = mAppTransition.prepareAppTransition(transit, flags);
-        if (prepared && okToAnimate()) {
+        if (prepared && okToAnimate() && transit != TRANSIT_NONE) {
             mSkipAppTransitionAnimation = false;
         }
     }
@@ -6227,6 +6227,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /**
      * Sets if Display APIs should be sandboxed to the activity window bounds.
      */
+    @VisibleForTesting
     void setSandboxDisplayApis(boolean sandboxDisplayApis) {
         mSandboxDisplayApis = sandboxDisplayApis;
     }
