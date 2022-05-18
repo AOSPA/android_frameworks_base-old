@@ -674,6 +674,10 @@
     <!-- Indicates whether to enable hinge angle sensor when using unfold animation -->
     <bool name="config_unfoldTransitionHingeAngle">false</bool>
 
+    <!-- Indicates the time needed to time out the fold animation if the device stops in half folded
+         mode. -->
+    <integer name="config_unfoldTransitionHalfFoldedTimeout">600</integer>
+
     <!-- Indicates that the device supports having more than one internal display on at the same
          time. Only applicable to devices with more than one internal display. If this option is
          set to false, DisplayManager will make additional effort to ensure no more than 1 internal
@@ -1860,6 +1864,11 @@
      -->
     <string name="config_defaultNetworkRecommendationProviderPackage" translatable="false"></string>
 
+    <!-- The package name of the default search selector app. Must be granted the POST_NOTIFICATIONS
+         permission.
+    -->
+    <string name="config_defaultSearchSelectorPackageName" translatable="false"></string>
+
     <!-- Whether to enable geocoder overlay which allows geocoder to be replaced
          by an app at run-time. When disabled, only the
          config_geocoderProviderPackageName package will be searched for
@@ -2959,6 +2968,9 @@
          from the IME startup prevention behavior that is enabled by
          config_preventImeStartupUnlessTextEditor. -->
     <string-array name="config_nonPreemptibleInputMethods" translatable="false" />
+
+    <!-- Flag indicating that enhanced confirmation mode is enabled. -->
+    <bool name="config_enhancedConfirmationModeEnabled">true</bool>
 
     <!-- The list of classes that should be added to the notification ranking pipeline.
      See {@link com.android.server.notification.NotificationSignalExtractor}
@@ -5759,6 +5771,12 @@
     -->
     <bool name="config_bg_prompt_fgs_with_noti_to_bg_restricted">false</bool>
 
+    <!-- The behavior when the system detects it's abusive, should the system prompt the user
+         to put it into the bg restricted level.
+         True - we'll show the prompt to user, False - we'll not show it.
+    -->
+    <bool name="config_bg_prompt_abusive_apps_to_bg_restricted">false</bool>
+
     <!-- The types of state where we'll exempt its battery usage during that state.
          The state here must be one or a combination of STATE_TYPE_* in BaseAppStateTracker.
     -->
@@ -5779,6 +5797,9 @@
     <string name="safety_protection_display_text"></string>
 
     <!-- End safety protection resources to be overlaid -->
+
+    <!-- List of the labels of requestable device state config values -->
+    <string-array name="config_deviceStatesAvailableForAppRequests"/>
 
     <!-- Maximum time in millisecs for telephony should wait to deactivate data call
          when user turned off mobile data or data roaming during CIWLAN -->

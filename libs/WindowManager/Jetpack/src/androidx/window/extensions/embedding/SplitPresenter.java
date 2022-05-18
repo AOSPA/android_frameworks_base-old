@@ -19,9 +19,9 @@ package androidx.window.extensions.embedding;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 
 import android.app.Activity;
+import android.app.WindowConfiguration;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -36,7 +36,6 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.util.Collection;
 import java.util.concurrent.Executor;
 
 /**
@@ -73,16 +72,12 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
     }
 
     /**
-     * Updates the presentation of the provided containers.
+     * Deletes the specified container and all other associated and dependent containers in the same
+     * transaction.
      */
-    void updateContainers(@NonNull Collection<TaskFragmentContainer> containers) {
-        if (containers.isEmpty()) {
-            return;
-        }
+    void cleanupContainer(@NonNull TaskFragmentContainer container, boolean shouldFinishDependent) {
         final WindowContainerTransaction wct = new WindowContainerTransaction();
-        for (TaskFragmentContainer container : containers) {
-            mController.updateContainer(wct, container);
-        }
+        cleanupContainer(container, shouldFinishDependent, wct);
         applyTransaction(wct);
     }
 
@@ -90,9 +85,8 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
      * Deletes the specified container and all other associated and dependent containers in the same
      * transaction.
      */
-    void cleanupContainer(@NonNull TaskFragmentContainer container, boolean shouldFinishDependent) {
-        final WindowContainerTransaction wct = new WindowContainerTransaction();
-
+    void cleanupContainer(@NonNull TaskFragmentContainer container, boolean shouldFinishDependent,
+            @NonNull WindowContainerTransaction wct) {
         container.finish(shouldFinishDependent, this, wct, mController);
 
         final TaskFragmentContainer newTopContainer = mController.getTopActiveContainer(
@@ -100,8 +94,6 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
         if (newTopContainer != null) {
             mController.updateContainer(wct, newTopContainer);
         }
-
-        applyTransaction(wct);
     }
 
     /**
@@ -119,8 +111,8 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
                 primaryActivity, primaryRectBounds, null);
 
         // Create new empty task fragment
-        final TaskFragmentContainer secondaryContainer = mController.newContainer(null,
-                primaryContainer.getTaskId());
+        final TaskFragmentContainer secondaryContainer = mController.newContainer(
+                null /* activity */, primaryActivity, primaryContainer.getTaskId());
         final Rect secondaryRectBounds = getBoundsForPosition(POSITION_END, parentBounds,
                 rule, isLtr(primaryActivity, rule));
         createTaskFragment(wct, secondaryContainer.getTaskFragmentToken(),
@@ -176,8 +168,8 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
      * Creates a new expanded container.
      */
     TaskFragmentContainer createNewExpandedContainer(@NonNull Activity launchingActivity) {
-        final TaskFragmentContainer newContainer = mController.newContainer(null,
-                launchingActivity.getTaskId());
+        final TaskFragmentContainer newContainer = mController.newContainer(null /* activity */,
+                launchingActivity, launchingActivity.getTaskId());
 
         final WindowContainerTransaction wct = new WindowContainerTransaction();
         createTaskFragment(wct, newContainer.getTaskFragmentToken(),
@@ -244,8 +236,8 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
                     launchingActivity.getTaskId());
         }
 
-        TaskFragmentContainer secondaryContainer = mController.newContainer(null,
-                primaryContainer.getTaskId());
+        TaskFragmentContainer secondaryContainer = mController.newContainer(null /* activity */,
+                launchingActivity, primaryContainer.getTaskId());
         final WindowContainerTransaction wct = new WindowContainerTransaction();
         mController.registerSplit(wct, primaryContainer, launchingActivity, secondaryContainer,
                 rule);
@@ -406,20 +398,12 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
 
     @NonNull
     Rect getParentContainerBounds(@NonNull TaskFragmentContainer container) {
-        final Configuration parentConfig = mFragmentParentConfigs.get(
-                container.getTaskFragmentToken());
-        if (parentConfig != null) {
-            return parentConfig.windowConfiguration.getBounds();
+        final int taskId = container.getTaskId();
+        final TaskContainer taskContainer = mController.getTaskContainer(taskId);
+        if (taskContainer == null) {
+            throw new IllegalStateException("Can't find TaskContainer taskId=" + taskId);
         }
-
-        // If there is no parent yet - then assuming that activities are running in full task bounds
-        final Activity topActivity = container.getTopNonFinishingActivity();
-        final Rect bounds = topActivity != null ? getParentContainerBounds(topActivity) : null;
-
-        if (bounds == null) {
-            throw new IllegalStateException("Unknown parent bounds");
-        }
-        return bounds;
+        return taskContainer.getTaskBounds();
     }
 
     @NonNull
@@ -427,22 +411,19 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
         final TaskFragmentContainer container = mController.getContainerWithActivity(
                 activity.getActivityToken());
         if (container != null) {
-            final Configuration parentConfig = mFragmentParentConfigs.get(
-                    container.getTaskFragmentToken());
-            if (parentConfig != null) {
-                return parentConfig.windowConfiguration.getBounds();
-            }
+            return getParentContainerBounds(container);
         }
-
         return getTaskBoundsFromActivity(activity);
     }
 
     @NonNull
     static Rect getTaskBoundsFromActivity(@NonNull Activity activity) {
+        final WindowConfiguration windowConfiguration =
+                activity.getResources().getConfiguration().windowConfiguration;
         if (!activity.isInMultiWindowMode()) {
             // In fullscreen mode the max bounds should correspond to the task bounds.
-            return activity.getResources().getConfiguration().windowConfiguration.getMaxBounds();
+            return windowConfiguration.getMaxBounds();
         }
-        return activity.getResources().getConfiguration().windowConfiguration.getBounds();
+        return windowConfiguration.getBounds();
     }
 }

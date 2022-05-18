@@ -234,6 +234,7 @@ class FgsManagerController @Inject constructor(
 
                 val dialog = SystemUIDialog(context)
                 dialog.setTitle(R.string.fgs_manager_dialog_title)
+                dialog.setMessage(R.string.fgs_manager_dialog_message)
 
                 val dialogContext = dialog.context
 
@@ -241,7 +242,9 @@ class FgsManagerController @Inject constructor(
                 recyclerView.layoutManager = LinearLayoutManager(dialogContext)
                 recyclerView.adapter = appListAdapter
 
-                dialog.setView(recyclerView)
+                val topSpacing = dialogContext.resources
+                        .getDimensionPixelSize(R.dimen.fgs_manager_list_top_spacing)
+                dialog.setView(recyclerView, 0, topSpacing, 0, 0)
 
                 this.dialog = dialog
 
@@ -419,6 +422,8 @@ class FgsManagerController @Inject constructor(
 
                 PowerExemptionManager.REASON_ALLOWLISTED_PACKAGE,
                 PowerExemptionManager.REASON_DEVICE_OWNER,
+                PowerExemptionManager.REASON_DISALLOW_APPS_CONTROL,
+                PowerExemptionManager.REASON_DPO_PROTECTED_APP,
                 PowerExemptionManager.REASON_PROFILE_OWNER,
                 PowerExemptionManager.REASON_PROC_STATE_PERSISTENT,
                 PowerExemptionManager.REASON_PROC_STATE_PERSISTENT_UI,

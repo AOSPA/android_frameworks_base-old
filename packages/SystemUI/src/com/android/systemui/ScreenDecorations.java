@@ -19,8 +19,6 @@ import static android.view.DisplayCutout.BOUNDS_POSITION_LEFT;
 import static android.view.DisplayCutout.BOUNDS_POSITION_LENGTH;
 import static android.view.DisplayCutout.BOUNDS_POSITION_RIGHT;
 import static android.view.DisplayCutout.BOUNDS_POSITION_TOP;
-import static android.view.Surface.ROTATION_270;
-import static android.view.Surface.ROTATION_90;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
@@ -38,10 +36,10 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
@@ -51,10 +49,12 @@ import android.os.Handler;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings.Secure;
+import android.util.DisplayUtils;
 import android.util.Log;
 import android.util.Size;
 import android.view.DisplayCutout;
 import android.view.DisplayCutout.BoundsPosition;
+import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -64,7 +64,6 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -136,9 +135,6 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
     private final ThreadFactory mThreadFactory;
     private final DecorProviderFactory mDotFactory;
 
-    //TODO: These are piecemeal being updated to Points for now to support non-square rounded
-    // corners. for now it is only supposed when reading the intrinsic size from the drawables with
-    // mIsRoundedCornerMultipleRadius is set
     @VisibleForTesting
     protected RoundedCornerResDelegate mRoundedCornerResDelegate;
     @VisibleForTesting
@@ -299,11 +295,6 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
         return decorProviders;
     }
 
-    private void updateDisplayIdToProviderFactories() {
-        mDotFactory.onDisplayUniqueIdChanged(mDisplayUniqueId);
-        mRoundedCornerFactory.onDisplayUniqueIdChanged(mDisplayUniqueId);
-    }
-
     /**
      * Check that newProviders is the same list with decorProviders inside mOverlay.
      * @param newProviders expected comparing DecorProviders
@@ -333,13 +324,15 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
     }
 
     private void startOnScreenDecorationsThread() {
+        mWindowManager = mContext.getSystemService(WindowManager.class);
+        mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mRotation = mContext.getDisplay().getRotation();
         mDisplayUniqueId = mContext.getDisplay().getUniqueId();
         mRoundedCornerResDelegate = new RoundedCornerResDelegate(mContext.getResources(),
                 mDisplayUniqueId);
+        mRoundedCornerResDelegate.setPhysicalPixelDisplaySizeRatio(
+                getPhysicalPixelDisplaySizeRatio());
         mRoundedCornerFactory = new RoundedCornerDecorProviderFactory(mRoundedCornerResDelegate);
-        mWindowManager = mContext.getSystemService(WindowManager.class);
-        mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mHwcScreenDecorationSupport = mContext.getDisplay().getDisplayDecorationSupport();
         updateHwLayerRoundedCornerDrawable();
         setupDecorations();
@@ -396,7 +389,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                     final DisplayDecorationSupport newScreenDecorationSupport =
                             mContext.getDisplay().getDisplayDecorationSupport();
 
-                    updateDisplayIdToProviderFactories();
+                    mRoundedCornerResDelegate.updateDisplayUniqueId(newUniqueId, null);
 
                     // When providers or the value of mSupportHwcScreenDecoration is changed,
                     // re-setup the whole screen decoration.
@@ -410,11 +403,21 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
 
                     if (mScreenDecorHwcLayer != null) {
                         updateHwLayerRoundedCornerDrawable();
-                        updateHwLayerRoundedCornerSize();
+                        updateHwLayerRoundedCornerExistAndSize();
                     }
 
                     updateOverlayProviderViews();
                 }
+
+                final float newRatio = getPhysicalPixelDisplaySizeRatio();
+                if (mRoundedCornerResDelegate.getPhysicalPixelDisplaySizeRatio() != newRatio) {
+                    mRoundedCornerResDelegate.setPhysicalPixelDisplaySizeRatio(newRatio);
+                    if (mScreenDecorHwcLayer != null) {
+                        updateHwLayerRoundedCornerExistAndSize();
+                    }
+                    updateOverlayProviderViews();
+                }
+
                 if (mCutoutViews != null) {
                     final int size = mCutoutViews.length;
                     for (int i = 0; i < size; i++) {
@@ -703,7 +706,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
         mScreenDecorHwcWindow.addView(mScreenDecorHwcLayer, new FrameLayout.LayoutParams(
                 MATCH_PARENT, MATCH_PARENT, Gravity.TOP | Gravity.START));
         mWindowManager.addView(mScreenDecorHwcWindow, getHwcWindowLayoutParams());
-        updateHwLayerRoundedCornerSize();
+        updateHwLayerRoundedCornerExistAndSize();
         updateHwLayerRoundedCornerDrawable();
         mScreenDecorHwcWindow.getViewTreeObserver().addOnPreDrawListener(
                 new ValidatingPreDrawListener(mScreenDecorHwcWindow));
@@ -864,6 +867,15 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
         }
 
         ColorStateList tintList = ColorStateList.valueOf(mTintColor);
+        mRoundedCornerResDelegate.setColorTintList(tintList);
+
+        Integer[] roundedCornerIds = {
+                R.id.rounded_corner_top_left,
+                R.id.rounded_corner_top_right,
+                R.id.rounded_corner_bottom_left,
+                R.id.rounded_corner_bottom_right
+        };
+
         for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
             if (mOverlays[i] == null) {
                 continue;
@@ -873,20 +885,23 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             View child;
             for (int j = 0; j < size; j++) {
                 child = overlayView.getChildAt(j);
-                if (child.getId() == R.id.privacy_dot_top_left_container
-                        || child.getId() == R.id.privacy_dot_top_right_container
-                        || child.getId() == R.id.privacy_dot_bottom_left_container
-                        || child.getId() == R.id.privacy_dot_bottom_right_container) {
-                    // Exclude privacy dot from color inversion (for now?)
-                    continue;
-                }
-                if (child instanceof ImageView) {
-                    ((ImageView) child).setImageTintList(tintList);
-                } else if (child instanceof DisplayCutoutView) {
+                if (child instanceof DisplayCutoutView) {
                     ((DisplayCutoutView) child).setColor(mTintColor);
                 }
             }
+            mOverlays[i].onReloadResAndMeasure(roundedCornerIds, mProviderRefreshToken, mRotation,
+                    mDisplayUniqueId);
         }
+    }
+
+    @VisibleForTesting
+    float getPhysicalPixelDisplaySizeRatio() {
+        final Point stableDisplaySize = mDisplayManager.getStableDisplaySize();
+        final DisplayInfo displayInfo = new DisplayInfo();
+        mContext.getDisplay().getDisplayInfo(displayInfo);
+        return DisplayUtils.getPhysicalPixelDisplaySizeRatio(
+                stableDisplaySize.x, stableDisplaySize.y, displayInfo.logicalWidth,
+                displayInfo.logicalHeight);
     }
 
     @Override
@@ -965,7 +980,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             if (mScreenDecorHwcLayer != null) {
                 mScreenDecorHwcLayer.pendingRotationChange = false;
                 mScreenDecorHwcLayer.updateRotation(mRotation);
-                updateHwLayerRoundedCornerSize();
+                updateHwLayerRoundedCornerExistAndSize();
                 updateHwLayerRoundedCornerDrawable();
             }
             updateLayoutParams();
@@ -978,10 +993,10 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                     cutoutView.updateRotation(mRotation);
                 }
             }
-        }
 
-        // update all provider views inside overlay
-        updateOverlayProviderViews();
+            // update all provider views inside overlay
+            updateOverlayProviderViews();
+        }
     }
 
     private boolean hasRoundedCorners() {
@@ -1078,12 +1093,11 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             if (mOverlays == null || !SIZE.equals(key)) {
                 return;
             }
-            ++mProviderRefreshToken;
             try {
                 final int sizeFactor = Integer.parseInt(newValue);
-                mRoundedCornerResDelegate.updateTuningSizeFactor(sizeFactor, mProviderRefreshToken);
+                mRoundedCornerResDelegate.setTuningSizeFactor(sizeFactor);
             } catch (NumberFormatException e) {
-                mRoundedCornerResDelegate.updateTuningSizeFactor(null, mProviderRefreshToken);
+                mRoundedCornerResDelegate.setTuningSizeFactor(null);
             }
             Integer[] filterIds = {
                     R.id.rounded_corner_top_left,
@@ -1098,7 +1112,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                 overlay.onReloadResAndMeasure(filterIds, mProviderRefreshToken, mRotation,
                         mDisplayUniqueId);
             }
-            updateHwLayerRoundedCornerSize();
+            updateHwLayerRoundedCornerExistAndSize();
         });
     }
 
@@ -1116,15 +1130,15 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
         mScreenDecorHwcLayer.updateRoundedCornerDrawable(topDrawable, bottomDrawable);
     }
 
-    private void updateHwLayerRoundedCornerSize() {
+    private void updateHwLayerRoundedCornerExistAndSize() {
         if (mScreenDecorHwcLayer == null) {
             return;
         }
-
-        final int topWidth = mRoundedCornerResDelegate.getTopRoundedSize().getWidth();
-        final int bottomWidth = mRoundedCornerResDelegate.getBottomRoundedSize().getWidth();
-
-        mScreenDecorHwcLayer.updateRoundedCornerSize(topWidth, bottomWidth);
+        mScreenDecorHwcLayer.updateRoundedCornerExistenceAndSize(
+                mRoundedCornerResDelegate.getHasTop(),
+                mRoundedCornerResDelegate.getHasBottom(),
+                mRoundedCornerResDelegate.getTopRoundedSize().getWidth(),
+                mRoundedCornerResDelegate.getBottomRoundedSize().getWidth());
     }
 
     @VisibleForTesting
@@ -1198,25 +1212,12 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
         }
 
         private void updateBoundingPath() {
-            int lw = displayInfo.logicalWidth;
-            int lh = displayInfo.logicalHeight;
-
-            boolean flipped = displayInfo.rotation == ROTATION_90
-                    || displayInfo.rotation == ROTATION_270;
-
-            int dw = flipped ? lh : lw;
-            int dh = flipped ? lw : lh;
-
-            Path path = DisplayCutout.pathFromResources(
-                    getResources(), getDisplay().getUniqueId(), dw, dh);
+            final Path path = displayInfo.displayCutout.getCutoutPath();
             if (path != null) {
                 cutoutPath.set(path);
             } else {
                 cutoutPath.reset();
             }
-            Matrix m = new Matrix();
-            transformPhysicalToLogicalCoordinates(displayInfo.rotation, dw, dh, m);
-            cutoutPath.transform(m);
         }
 
         private void updateGravity() {

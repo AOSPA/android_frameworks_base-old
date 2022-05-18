@@ -130,7 +130,9 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     @VisibleForTesting
     LruCache<String, BitmapDrawable> mDrawableCache;
 
-    private int mGroupId = -1;
+    private int mGroupId;
+
+    private int mQGroupId;
 
     private boolean mIsGroupDevice = false;
 
@@ -175,6 +177,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         fillData();
         mHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
         mGroupId = BluetoothCsipSetCoordinator.GROUP_ID_INVALID;
+        mQGroupId = BluetoothCsipSetCoordinator.GROUP_ID_INVALID;
         initDrawableCache();
         mTwspBatteryState = -1;
         mTwspBatteryLevel = -1;
@@ -425,6 +428,15 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     */
     public int getGroupId() {
         return mGroupId;
+    }
+
+    /**
+    * Get the coordinated set QC group id.
+    *
+    * @return the group id.
+    */
+    public int getQGroupId() {
+        return mQGroupId;
     }
 
     /**
@@ -1592,26 +1604,25 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     public void setDeviceType(int deviceType) {
         if (deviceType!= mType) {
-            // Log.d(TAG, "setDeviceType deviceType " + deviceType + " type " + mType);
             mType = deviceType;
             if (mType == UNKNOWN || mType == BREDR) {
                 mIsGroupDevice = false;
-                mGroupId = UNKNOWN;
+                mQGroupId = UNKNOWN;
                 mIsIgnore = false;
             } else if (mType == PRIVATE_ADDR) {
                 mIsGroupDevice = false;
-                mGroupId = UNKNOWN;
+                mQGroupId = UNKNOWN;
                 mIsIgnore = true;
             } else if (mType >= GROUPID_START && mType <= GROUPID_END ) {
-                mGroupId = mType;
+                mQGroupId = mType;
                 mIsIgnore = false;
                 mIsGroupDevice = true;
             } else {
                 Log.e(TAG, "setDeviceType error type " + mType);
             }
         }
-       /* Log.d(TAG, "setDeviceType mType " + mType + " mIsGroupDevice " + mIsGroupDevice
-                + " mGroupId " + mGroupId + " mIsIgnore " + mIsIgnore
+        /* Log.d(TAG, "setDeviceType mType " + mType + " mIsGroupDevice " + mIsGroupDevice
+                + " mQGroupId " + mQGroupId + " mIsIgnore " + mIsIgnore
                 + " name " + getName() + " addr " + getAddress()); */
     }
 

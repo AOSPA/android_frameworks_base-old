@@ -127,7 +127,6 @@ class MediaCarouselController @Inject constructor(
     private val visualStabilityCallback: OnReorderingAllowedListener
     private var needsReordering: Boolean = false
     private var keysNeedRemoval = mutableSetOf<String>()
-    private var bgColor = getBackgroundColor()
     protected var shouldScrollToActivePlayer: Boolean = false
     private var isRtl: Boolean = false
         set(value) {
@@ -488,7 +487,7 @@ class MediaCarouselController @Inject constructor(
         val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT)
         newRecs.recommendationViewHolder?.recommendations?.setLayoutParams(lp)
-        newRecs.bindRecommendation(data.copy(backgroundColor = bgColor))
+        newRecs.bindRecommendation(data)
         val curVisibleMediaKey = MediaPlayerData.playerKeys()
                 .elementAtOrNull(mediaCarouselScrollHandler.visibleMediaIndex)
         MediaPlayerData.addMediaRecommendation(key, data, newRecs, shouldPrioritize, systemClock)
@@ -534,8 +533,9 @@ class MediaCarouselController @Inject constructor(
     }
 
     private fun recreatePlayers() {
-        bgColor = getBackgroundColor()
-        pageIndicator.tintList = ColorStateList.valueOf(R.color.material_dynamic_neutral_variant80)
+        pageIndicator.tintList = ColorStateList.valueOf(
+            context.getColor(R.color.media_paging_indicator)
+        )
 
         MediaPlayerData.mediaData().forEach { (key, data, isSsMediaRec) ->
             if (isSsMediaRec) {
@@ -552,10 +552,6 @@ class MediaCarouselController @Inject constructor(
                         key = key, oldKey = null, data = data, isSsReactivated = isSsReactivated)
             }
         }
-    }
-
-    private fun getBackgroundColor(): Int {
-        return context.getColor(R.color.material_dynamic_secondary95)
     }
 
     private fun updatePageIndicator() {
@@ -904,7 +900,6 @@ internal object MediaPlayerData {
     private val EMPTY = MediaData(
             userId = -1,
             initialized = false,
-            backgroundColor = 0,
             app = null,
             appIcon = null,
             artist = null,

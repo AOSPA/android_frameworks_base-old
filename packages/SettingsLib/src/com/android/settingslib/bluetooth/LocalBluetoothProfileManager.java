@@ -432,10 +432,11 @@ public class LocalBluetoothProfileManager {
                             .getGroupUuidMapByDevice(cachedDevice.getDevice());
                     if (groupIdMap != null) {
                         for (Map.Entry<Integer, ParcelUuid> entry: groupIdMap.entrySet()) {
-                            if (entry.getValue().equals(BluetoothUuid.CAP)) {
+                            //Based on spec CAP UUID is not mandatory,also we see failures with PTS
+                            //if (entry.getValue().equals(BluetoothUuid.CAP)) {
                                 cachedDevice.setGroupId(entry.getKey());
                                 break;
-                            }
+                            //}
                         }
                     }
                 }

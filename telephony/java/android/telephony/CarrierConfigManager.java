@@ -176,7 +176,7 @@ public class CarrierConfigManager {
      * This flag specifies whether VoLTE availability is based on provisioning. By default this is
      * false.
      * Used for UCE to determine if EAB provisioning checks should be based on provisioning.
-     * @deprecated Use {@link Ims#KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE} instead.
+     * @deprecated Use {@link Ims#KEY_CARRIER_RCS_PROVISIONING_REQUIRED_BOOL} instead.
      */
     @Deprecated
     public static final String
@@ -941,6 +941,9 @@ public class CarrierConfigManager {
      * Combines VoLTE, VT, VoWiFI calling provisioning into one parameter.
      * @deprecated Use {@link Ims#KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE} instead for
      * finer-grained control.
+     * changing carrier_volte_provisioning_required_bool requires changes to
+     * mmtel_requires_provisioning_bundle and vice versa
+     * {@link Ims#KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE}
      */
     @Deprecated
     public static final String KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL
@@ -2964,11 +2967,11 @@ public class CarrierConfigManager {
      * <p>
      * 4 threshold integers must be within the boundaries [-140 dB, -44 dB], and the levels are:
      * <UL>
-     *     <LI>"NONE: [-140, threshold1]"</LI>
-     *     <LI>"POOR: (threshold1, threshold2]"</LI>
-     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
-     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
-     *     <LI>"EXCELLENT:  (threshold4, -44]"</LI>
+     *     <LI>"NONE: [-140, threshold1)"</LI>
+     *     <LI>"POOR: [threshold1, threshold2)"</LI>
+     *     <LI>"MODERATE: [threshold2, threshold3)"</LI>
+     *     <LI>"GOOD:  [threshold3, threshold4)"</LI>
+     *     <LI>"EXCELLENT:  [threshold4, -44]"</LI>
      * </UL>
      * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
@@ -2984,11 +2987,11 @@ public class CarrierConfigManager {
      * <p>
      * 4 threshold integers must be within the boundaries [-43 dB, 20 dB], and the levels are:
      * <UL>
-     *     <LI>"NONE: [-43, threshold1]"</LI>
-     *     <LI>"POOR: (threshold1, threshold2]"</LI>
-     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
-     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
-     *     <LI>"EXCELLENT:  (threshold4, 20]"</LI>
+     *     <LI>"NONE: [-43, threshold1)"</LI>
+     *     <LI>"POOR: [threshold1, threshold2)"</LI>
+     *     <LI>"MODERATE: [threshold2, threshold3)"</LI>
+     *     <LI>"GOOD:  [threshold3, threshold4)"</LI>
+     *     <LI>"EXCELLENT:  [threshold4, 20]"</LI>
      * </UL>
      * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
@@ -3005,11 +3008,11 @@ public class CarrierConfigManager {
      * <p>
      * 4 threshold integers must be within the boundaries [-23 dB, 40 dB], and the levels are:
      * <UL>
-     *     <LI>"NONE: [-23, threshold1]"</LI>
-     *     <LI>"POOR: (threshold1, threshold2]"</LI>
-     *     <LI>"MODERATE: (threshold2, threshold3]"</LI>
-     *     <LI>"GOOD:  (threshold3, threshold4]"</LI>
-     *     <LI>"EXCELLENT:  (threshold4, 40]"</LI>
+     *     <LI>"NONE: [-23, threshold1)"</LI>
+     *     <LI>"POOR: [threshold1, threshold2)"</LI>
+     *     <LI>"MODERATE: [threshold2, threshold3)"</LI>
+     *     <LI>"GOOD:  [threshold3, threshold4)"</LI>
+     *     <LI>"EXCELLENT:  [threshold4, 40]"</LI>
      * </UL>
      * <p>
      * This key is considered invalid if the format is violated. If the key is invalid or
@@ -5500,6 +5503,10 @@ public class CarrierConfigManager {
          * </ul>
          * <p> The values are defined in
          * {@link android.telephony.ims.stub.ImsRegistrationImplBase.ImsRegistrationTech}
+         *
+         * changing mmtel_requires_provisioning_bundle requires changes to
+         * carrier_volte_provisioning_required_bool and vice versa
+         * {@link Ims#KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL}
          */
         public static final String KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE =
                 KEY_PREFIX + "mmtel_requires_provisioning_bundle";

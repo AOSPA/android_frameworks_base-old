@@ -1665,39 +1665,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertThat(deviceOwner.getUid()).isEqualTo(DpmMockContext.CALLER_SYSTEM_USER_UID);
     }
 
-    /**
-     * This essentially tests
-     * {@code DevicePolicyManagerService.findOwnerComponentIfNecessaryLocked()}. (which is
-     * private.)
-     *
-     * We didn't use to persist the DO component class name, but now we do, and the above method
-     * finds the right component from a package name upon migration.
-     */
-    @Test
-    public void testDeviceOwnerMigration() throws Exception {
-        checkDeviceOwnerWithMultipleDeviceAdmins();
-
-        // Overwrite the device owner setting and clears the class name.
-        dpms.mOwners.setDeviceOwner(
-                new ComponentName(admin2.getPackageName(), ""),
-                "owner-name", CALLER_USER_HANDLE);
-        dpms.mOwners.writeDeviceOwner();
-
-        // Make sure the DO component name doesn't have a class name.
-        assertThat(dpms.getDeviceOwnerComponent(/* callingUserOnly= */ false).getClassName())
-                .isEmpty();
-
-        // Then create a new DPMS to have it load the settings from files.
-        when(getServices().userManager.getUserRestrictions(any(UserHandle.class)))
-                .thenReturn(new Bundle());
-        initializeDpms();
-
-        // Now the DO component name is a full name.
-        // *BUT* because both admin1 and admin2 belong to the same package, we think admin1 is the
-        // DO.
-        assertThat(dpms.getDeviceOwnerComponent(/* callingUserOnly =*/ false)).isEqualTo(admin1);
-    }
-
     @Test
     public void testSetGetApplicationRestriction() {
         setAsProfileOwner(admin1);
@@ -5025,8 +4992,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 .thenReturn(12345 /* some UID in user 0 */);
         // Make personal apps look suspended
         dpms.getUserData(UserHandle.USER_SYSTEM).mAppsSuspended = true;
-
-        clearInvocations(getServices().iwindowManager);
+        // Screen capture
+        dpm.setScreenCaptureDisabled(admin1, true);
 
         dpm.wipeData(0);
         verify(getServices().userManagerInternal).removeUserEvenWhenDisallowed(CALLER_USER_HANDLE);
@@ -5036,6 +5003,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 UserManager.DISALLOW_REMOVE_MANAGED_PROFILE, false, UserHandle.SYSTEM);
         verify(getServices().userManager).setUserRestriction(
                 UserManager.DISALLOW_ADD_USER, false, UserHandle.SYSTEM);
+
+        clearInvocations(getServices().iwindowManager);
 
         // Some device-wide policies are getting cleaned-up after the user is removed.
         mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
@@ -5053,9 +5022,10 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 MockUtils.checkIntentAction(
                         DevicePolicyManager.ACTION_RESET_PROTECTION_POLICY_CHANGED),
                 MockUtils.checkUserHandle(UserHandle.USER_SYSTEM));
-        // Refresh strong auth timeout and screen capture
+        // Refresh strong auth timeout
         verify(getServices().lockSettingsInternal).refreshStrongAuthTimeout(UserHandle.USER_SYSTEM);
-        verify(getServices().iwindowManager).refreshScreenCaptureDisabled(UserHandle.USER_SYSTEM);
+        // Refresh screen capture
+        verify(getServices().iwindowManager).refreshScreenCaptureDisabled();
         // Unsuspend personal apps
         verify(getServices().packageManagerInternal)
                 .unsuspendForSuspendingPackage(PLATFORM_PACKAGE_NAME, UserHandle.USER_SYSTEM);

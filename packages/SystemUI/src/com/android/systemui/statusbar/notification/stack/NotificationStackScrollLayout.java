@@ -85,8 +85,8 @@ import com.android.systemui.statusbar.EmptyShadeView;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.notification.ExpandAnimationParameters;
 import com.android.systemui.statusbar.notification.FakeShadowView;
+import com.android.systemui.statusbar.notification.LaunchAnimationParameters;
 import com.android.systemui.statusbar.notification.NotificationLaunchAnimatorController;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.ShadeViewRefactor;
@@ -515,7 +515,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     /**
      * The current launch animation params when launching a notification
      */
-    private ExpandAnimationParameters mLaunchAnimationParams;
+    private LaunchAnimationParameters mLaunchAnimationParams;
 
     /**
      * Corner radii of the launched notification if it's clipped
@@ -2295,7 +2295,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             int visibleIndex
     ) {
        return mStackScrollAlgorithm.getGapHeightForChild(mSectionsManager, visibleIndex, current,
-                previous);
+                previous, mAmbientState.getFractionToShade(), mAmbientState.isOnKeyguard());
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
@@ -3016,7 +3016,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
-    public void applyExpandAnimationParams(ExpandAnimationParameters params) {
+    public void applyLaunchAnimationParams(LaunchAnimationParameters params) {
         // Modify the clipping for launching notifications
         mLaunchAnimationParams = params;
         setLaunchingNotification(params != null);
@@ -3615,7 +3615,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.INPUT)
     protected boolean isInsideQsHeader(MotionEvent ev) {
         mQsHeader.getBoundsOnScreen(mQsHeaderBound);
-        return mQsHeaderBound.contains((int) ev.getX(), (int) ev.getY());
+        return mQsHeaderBound.contains((int) ev.getRawX(), (int) ev.getRawY());
     }
 
     @ShadeViewRefactor(RefactorComponent.INPUT)
@@ -5501,7 +5501,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
      *                 where it remains until the next lockscreen-to-shade transition.
      */
     public void setFractionToShade(float fraction) {
-        mShelf.setFractionToShade(fraction);
+        mAmbientState.setFractionToShade(fraction);
         requestChildrenUpdate();
     }
 

@@ -85,7 +85,6 @@ private const val EXTRAS_SMARTSPACE_DISMISS_INTENT_KEY = "dismiss_intent"
 private val LOADING = MediaData(
         userId = -1,
         initialized = false,
-        backgroundColor = 0,
         app = null,
         appIcon = null,
         artist = null,
@@ -111,7 +110,6 @@ internal val EMPTY_SMARTSPACE_MEDIA_DATA = SmartspaceMediaData(
     cardAction = null,
     recommendations = emptyList(),
     dismissIntent = null,
-    backgroundColor = 0,
     headphoneConnectionTimeMillis = 0,
     instanceId = InstanceId.fakeInstanceId(-1))
 
@@ -173,15 +171,10 @@ class MediaDataManager(
         // Maximum number of actions allowed in expanded view
         @JvmField
         val MAX_NOTIFICATION_ACTIONS = MediaViewHolder.genericButtonIds.size
-
-        /** Maximum number of [PlaybackState.CustomAction] buttons supported */
-        @JvmField
-        val MAX_CUSTOM_ACTIONS = 4
     }
 
     private val themeText = com.android.settingslib.Utils.getColorAttr(context,
             com.android.internal.R.attr.textColorPrimary).defaultColor
-    private val bgColor = context.getColor(R.color.material_dynamic_secondary95)
 
     // Internal listeners are part of the internal pipeline. External listeners (those registered
     // with [MediaDeviceManager.addListener]) receive events after they have propagated through
@@ -595,7 +588,7 @@ class MediaDataManager(
         val mediaAction = getResumeMediaAction(resumeAction)
         val lastActive = systemClock.elapsedRealtime()
         foregroundExecutor.execute {
-            onMediaDataLoaded(packageName, null, MediaData(userId, true, bgColor, appName,
+            onMediaDataLoaded(packageName, null, MediaData(userId, true, appName,
                     null, desc.subtitle, desc.title, artworkIcon, listOf(mediaAction), listOf(0),
                     MediaButton(playOrPause = mediaAction), packageName, token, appIntent,
                     device = null, active = false,
@@ -605,14 +598,17 @@ class MediaDataManager(
         }
     }
 
-    private fun loadMediaDataInBg(
+    fun loadMediaDataInBg(
         key: String,
         sbn: StatusBarNotification,
         oldKey: String?,
         logEvent: Boolean = false
     ) {
-        val token = sbn.notification.extras.getParcelable(Notification.EXTRA_MEDIA_SESSION)
-                as MediaSession.Token?
+        val token = sbn.notification.extras.getParcelable(
+                Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
+        if (token == null) {
+            return
+        }
         val mediaController = mediaControllerFactory.create(token)
         val metadata = mediaController.metadata
 
@@ -659,8 +655,8 @@ class MediaDataManager(
             val extras = sbn.notification.extras
             val deviceName = extras.getCharSequence(Notification.EXTRA_MEDIA_REMOTE_DEVICE, null)
             val deviceIcon = extras.getInt(Notification.EXTRA_MEDIA_REMOTE_ICON, -1)
-            val deviceIntent = extras.getParcelable(Notification.EXTRA_MEDIA_REMOTE_INTENT)
-                    as PendingIntent?
+            val deviceIntent = extras.getParcelable(
+                    Notification.EXTRA_MEDIA_REMOTE_INTENT, PendingIntent::class.java)
             Log.d(TAG, "$key is RCN for $deviceName")
 
             if (deviceName != null && deviceIcon > -1) {
@@ -714,7 +710,7 @@ class MediaDataManager(
             val resumeAction: Runnable? = mediaEntries[key]?.resumeAction
             val hasCheckedForResume = mediaEntries[key]?.hasCheckedForResume == true
             val active = mediaEntries[key]?.active ?: true
-            onMediaDataLoaded(key, oldKey, MediaData(sbn.normalizedUserId, true, bgColor, app,
+            onMediaDataLoaded(key, oldKey, MediaData(sbn.normalizedUserId, true, app,
                     smallIcon, artist, song, artWorkIcon, actionIcons, actionsToShowCollapsed,
                     semanticActions, sbn.packageName, token, notif.contentIntent, device,
                     active, resumeAction = resumeAction, playbackLocation = playbackLocation,
@@ -795,71 +791,74 @@ class MediaDataManager(
      */
     private fun createActionsFromState(packageName: String, controller: MediaController):
             MediaButton? {
-        val actions = MediaButton()
-        controller.playbackState?.let { state ->
-            // First, check for standard actions
-            actions.playOrPause = if (isConnectingState(state.state)) {
-                // Spinner needs to be animating to render anything. Start it here.
-                val drawable = context.getDrawable(
-                        com.android.internal.R.drawable.progress_small_material)
-                (drawable as Animatable).start()
-                MediaAction(
-                    drawable,
-                    null, // no action to perform when clicked
-                    context.getString(R.string.controls_media_button_connecting),
-                    context.getDrawable(R.drawable.ic_media_connecting_container),
-                    // Specify a rebind id to prevent the spinner from restarting on later binds.
-                    com.android.internal.R.drawable.progress_small_material
-                )
-            } else if (isPlayingState(state.state)) {
-                getStandardAction(controller, state.actions, PlaybackState.ACTION_PAUSE)
-            } else {
-                getStandardAction(controller, state.actions, PlaybackState.ACTION_PLAY)
-            }
-            val prevButton = getStandardAction(controller, state.actions,
-                    PlaybackState.ACTION_SKIP_TO_PREVIOUS)
-            val nextButton = getStandardAction(controller, state.actions,
-                    PlaybackState.ACTION_SKIP_TO_NEXT)
-
-            // Then, check for custom actions
-            val customActions = MutableList<MediaAction?>(MAX_CUSTOM_ACTIONS) { null }
-            var customCount = 0
-            for (i in 0..(MAX_CUSTOM_ACTIONS - 1)) {
-                getCustomAction(state, packageName, controller, customCount)?.let {
-                    customActions[customCount++] = it
-                }
-            }
-
-            // Finally, assign the remaining button slots: play/pause A B C D
-            // A = previous, else custom action (if not reserved)
-            // B = next, else custom action (if not reserved)
-            // C and D are always custom actions
-            val reservePrev = controller.extras?.getBoolean(
-                    MediaConstants.SESSION_EXTRAS_KEY_SLOT_RESERVATION_SKIP_TO_PREV) == true
-            val reserveNext = controller.extras?.getBoolean(
-                    MediaConstants.SESSION_EXTRAS_KEY_SLOT_RESERVATION_SKIP_TO_NEXT) == true
-            var customIdx = 0
-
-            actions.prevOrCustom = if (prevButton != null) {
-                prevButton
-            } else if (!reservePrev) {
-                customActions[customIdx++]
-            } else {
-                null
-            }
-
-            actions.nextOrCustom = if (nextButton != null) {
-                nextButton
-            } else if (!reserveNext) {
-                customActions[customIdx++]
-            } else {
-                null
-            }
-
-            actions.custom0 = customActions[customIdx++]
-            actions.custom1 = customActions[customIdx++]
+        val state = controller.playbackState
+        if (state == null) {
+            return MediaButton()
         }
-        return actions
+        // First, check for} standard actions
+        val playOrPause = if (isConnectingState(state.state)) {
+            // Spinner needs to be animating to render anything. Start it here.
+            val drawable = context.getDrawable(
+                com.android.internal.R.drawable.progress_small_material)
+            (drawable as Animatable).start()
+            MediaAction(
+                drawable,
+                null, // no action to perform when clicked
+                context.getString(R.string.controls_media_button_connecting),
+                context.getDrawable(R.drawable.ic_media_connecting_container),
+                // Specify a rebind id to prevent the spinner from restarting on later binds.
+                com.android.internal.R.drawable.progress_small_material
+            )
+        } else if (isPlayingState(state.state)) {
+            getStandardAction(controller, state.actions, PlaybackState.ACTION_PAUSE)
+        } else {
+            getStandardAction(controller, state.actions, PlaybackState.ACTION_PLAY)
+        }
+        val prevButton = getStandardAction(controller, state.actions,
+            PlaybackState.ACTION_SKIP_TO_PREVIOUS)
+        val nextButton = getStandardAction(controller, state.actions,
+            PlaybackState.ACTION_SKIP_TO_NEXT)
+
+        // Then, create a way to build any custom actions that will be needed
+        val customActions = state.customActions.asSequence().filterNotNull().map {
+            getCustomAction(state, packageName, controller, it)
+        }.iterator()
+        fun nextCustomAction() = if (customActions.hasNext()) customActions.next() else null
+
+        // Finally, assign the remaining button slots: play/pause A B C D
+        // A = previous, else custom action (if not reserved)
+        // B = next, else custom action (if not reserved)
+        // C and D are always custom actions
+        val reservePrev = controller.extras?.getBoolean(
+            MediaConstants.SESSION_EXTRAS_KEY_SLOT_RESERVATION_SKIP_TO_PREV) == true
+        val reserveNext = controller.extras?.getBoolean(
+            MediaConstants.SESSION_EXTRAS_KEY_SLOT_RESERVATION_SKIP_TO_NEXT) == true
+
+        val prevOrCustom = if (prevButton != null) {
+            prevButton
+        } else if (!reservePrev) {
+            nextCustomAction()
+        } else {
+            null
+        }
+
+        val nextOrCustom = if (nextButton != null) {
+            nextButton
+        } else if (!reserveNext) {
+            nextCustomAction()
+        } else {
+            null
+        }
+
+        return MediaButton(
+            playOrPause,
+            nextOrCustom,
+            prevOrCustom,
+            nextCustomAction(),
+            nextCustomAction(),
+            reserveNext,
+            reservePrev
+        )
     }
 
     /**
@@ -938,18 +937,12 @@ class MediaDataManager(
         state: PlaybackState,
         packageName: String,
         controller: MediaController,
-        index: Int
-    ): MediaAction? {
-        if (state.customActions.size <= index || state.customActions[index] == null) {
-            if (DEBUG) { Log.d(TAG, "not enough actions or action was null at $index") }
-            return null
-        }
-
-        val it = state.customActions[index]
+        customAction: PlaybackState.CustomAction
+    ): MediaAction {
         return MediaAction(
-            Icon.createWithResource(packageName, it.icon).loadDrawable(context),
-            { controller.transportControls.sendCustomAction(it, it.extras) },
-            it.name,
+            Icon.createWithResource(packageName, customAction.icon).loadDrawable(context),
+            { controller.transportControls.sendCustomAction(customAction, customAction.extras) },
+            customAction.name,
             null
         )
     }
@@ -1234,7 +1227,6 @@ class MediaDataManager(
                 cardAction = target.baseAction,
                 recommendations = target.iconGrid,
                 dismissIntent = dismissIntent,
-                backgroundColor = 0,
                 headphoneConnectionTimeMillis = target.creationTimeMillis,
                 instanceId = logger.getNewInstanceId())
         }

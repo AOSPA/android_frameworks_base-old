@@ -651,9 +651,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     }
 
-    void setSecureSurfaceState(int userId) {
+    void refreshSecureSurfaceState() {
         forAllWindows((w) -> {
-            if (w.mHasSurface && userId == w.mShowUserId) {
+            if (w.mHasSurface) {
                 w.mWinAnimator.setSecureLocked(w.isSecureLocked());
             }
         }, true /* traverseTopToBottom */);
@@ -2014,8 +2014,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // of the activity entering PIP
             r.getDisplayContent().prepareAppTransition(TRANSIT_NONE);
 
-            // TODO: Does it make sense to only count non-finishing activities?
-            final boolean singleActivity = task.getActivityCount() == 1;
+            final TaskFragment organizedTf = r.getOrganizedTaskFragment();
+            final boolean singleActivity = task.getNonFinishingActivityCount() == 1;
             final Task rootTask;
             if (singleActivity) {
                 rootTask = task;
@@ -2049,6 +2049,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                             task.mLastRecentsAnimationTransaction,
                             task.mLastRecentsAnimationOverlay);
                     task.clearLastRecentsAnimationTransaction(false /* forceRemoveOverlay */);
+                }
+
+                // The organized TaskFragment is becoming empty because this activity is reparented
+                // to a new PIP Task. In this case, we should notify the organizer about why the
+                // TaskFragment becomes empty.
+                if (organizedTf != null && organizedTf.getNonFinishingActivityCount() == 1
+                        && organizedTf.getTopNonFinishingActivity() == r) {
+                    organizedTf.mClearedTaskFragmentForPip = true;
                 }
 
                 // There are multiple activities in the task and moving the top activity should
@@ -2097,11 +2105,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             r.setWindowingMode(intermediateWindowingMode);
             r.mWaitForEnteringPinnedMode = true;
             rootTask.forAllTaskFragments(tf -> {
-                // When the Task is entering picture-in-picture, we should clear all override from
-                // the client organizer, so the PIP activity can get the correct config from the
-                // Task, and prevent conflict with the PipTaskOrganizer.
-                if (tf.isOrganizedTaskFragment()) {
-                    tf.resetAdjacentTaskFragment();
+                if (!tf.isOrganizedTaskFragment()) {
+                    return;
+                }
+                tf.resetAdjacentTaskFragment();
+                if (tf.getTopNonFinishingActivity() != null) {
+                    // When the Task is entering picture-in-picture, we should clear all override
+                    // from the client organizer, so the PIP activity can get the correct config
+                    // from the Task, and prevent conflict with the PipTaskOrganizer.
                     tf.updateRequestedOverrideConfiguration(EMPTY);
                 }
             });
@@ -2115,6 +2126,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // Reset the state that indicates it can enter PiP while pausing after we've moved it
             // to the root pinned task
             r.supportsEnterPipOnTaskSwitch = false;
+
+            if (organizedTf != null && organizedTf.mClearedTaskFragmentForPip
+                    && organizedTf.isTaskVisibleRequested()) {
+                // Dispatch the pending info to TaskFragmentOrganizer before PIP animation.
+                // Otherwise, it will keep waiting for the empty TaskFragment to be non-empty.
+                mService.mTaskFragmentOrganizerController.dispatchPendingInfoChangedEvent(
+                        organizedTf);
+            }
         } finally {
             mService.continueWindowLayout();
         }
