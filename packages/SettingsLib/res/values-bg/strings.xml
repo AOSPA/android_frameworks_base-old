@@ -598,6 +598,21 @@
     <string name="guest_reset_guest_confirm_button" msgid="2989915693215617237">"Нулиране"</string>
     <string name="guest_remove_guest_confirm_button" msgid="7858123434954143879">"Премахване"</string>
     <string name="guest_resetting" msgid="7822120170191509566">"Сесията като гост се нулира…"</string>
+    <string name="guest_reset_and_restart_dialog_title" msgid="3396657008451616041">"Да се нулира ли сесията като гост?"</string>
+    <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"Така ще стартирате нова сесия като гост и ще изтриете всички приложения и данни от текущата сесия"</string>
+    <string name="guest_exit_dialog_title" msgid="1846494656849381804">"Изход от режима на гост?"</string>
+    <string name="guest_exit_dialog_message" msgid="1743218864242719783">"Така ще изтриете приложенията и данните от текущата сесия като гост"</string>
+    <string name="guest_exit_dialog_button" msgid="1736401897067442044">"Изход"</string>
+    <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"Активност като гост – запазване?"</string>
+    <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"Можете да запазите активността от сесията или да изтриете всички прил. и данни"</string>
+    <string name="guest_exit_clear_data_button" msgid="3425812652180679014">"Изтриване"</string>
+    <string name="guest_exit_save_data_button" msgid="3690974510644963547">"Запазване"</string>
+    <string name="guest_exit_button" msgid="5774985819191803960">"Изход от режима на гост"</string>
+    <string name="guest_reset_button" msgid="2515069346223503479">"Нулиране на сесията като гост"</string>
+    <string name="guest_exit_quick_settings_button" msgid="1912362095913765471">"Изход от сесията като гост"</string>
+    <string name="guest_notification_ephemeral" msgid="7263252466950923871">"Цялата активност ще бъде изтрита при изход"</string>
+    <string name="guest_notification_non_ephemeral" msgid="6843799963012259330">"При изход можете да запазите активността или да я изтриете"</string>
+    <string name="guest_notification_non_ephemeral_non_first_login" msgid="8009307983766934876">"Нулирайте, за да изтриете активността в сесията сега. Можете също да я запазите или изтриете при изход"</string>
     <string name="user_image_take_photo" msgid="467512954561638530">"Правене на снимка"</string>
     <string name="user_image_choose_photo" msgid="1363820919146782908">"Избиране на изображение"</string>
     <string name="user_image_photo_selector" msgid="433658323306627093">"Избиране на снимката"</string>

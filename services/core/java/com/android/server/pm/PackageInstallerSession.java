@@ -307,6 +307,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     final SessionParams params;
     final long createdMillis;
 
+    /** Used for tracking whether user action was required for an install. */
+    @Nullable
+    private Boolean mUserActionRequired;
+
     /** Staging location where client data is written. */
     final File stageDir;
     final String stageCid;
@@ -2151,9 +2155,25 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
          * in its belong session set. When the user answers the yes,
          * {@link #setPermissionsResult(boolean)} is called and then {@link #MSG_INSTALL} is
          * handled to come back here to check again.
+         *
+         * {@code mUserActionRequired} is used to track when user action is required for an
+         * install. Since control may come back here more than 1 time, we must ensure that it's
+         * value is not overwritten.
          */
-        if (sendPendingUserActionIntentIfNeeded()) {
+        boolean wasUserActionIntentSent = sendPendingUserActionIntentIfNeeded();
+        if (mUserActionRequired == null) {
+            mUserActionRequired = wasUserActionIntentSent;
+        }
+        if (wasUserActionIntentSent) {
+            // Commit was keeping session marked as active until now; release
+            // that extra refcount so session appears idle.
+            deactivate();
             return;
+        } else if (mUserActionRequired) {
+            // If user action is required, control comes back here when the user allows
+            // the installation. At this point, the session is marked active once again,
+            // since installation is in progress.
+            activate();
         }
 
         if (params.isStaged) {
@@ -2423,10 +2443,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         intent.putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId);
 
         sendOnUserActionRequired(mContext, target, sessionId, intent);
-
-        // Commit was keeping session marked as active until now; release
-        // that extra refcount so session appears idle.
-        closeInternal(false);
     }
 
     @WorkerThread
@@ -3343,6 +3359,18 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    /**
+     * @return a boolean value indicating whether user action was requested for the install.
+     * Returns {@code false} if {@code mUserActionRequired} is {@code null}
+     */
+    public boolean getUserActionRequired() {
+        if (mUserActionRequired != null) {
+            return mUserActionRequired.booleanValue();
+        }
+        Slog.wtf(TAG, "mUserActionRequired should not be null.");
+        return false;
+    }
+
     private static String getRelativePath(File file, File base) throws IOException {
         final String pathStr = file.getAbsolutePath();
         final String baseStr = base.getAbsolutePath();
@@ -3475,10 +3503,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     public void open() throws IOException {
-        if (mActiveCount.getAndIncrement() == 0) {
-            mCallback.onSessionActiveChanged(this, true);
-        }
-
+        activate();
         boolean wasPrepared;
         synchronized (mLock) {
             wasPrepared = mPrepared;
@@ -3500,21 +3525,31 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    private void activate() {
+        if (mActiveCount.getAndIncrement() == 0) {
+            mCallback.onSessionActiveChanged(this, true);
+        }
+    }
+
     @Override
     public void close() {
         closeInternal(true);
     }
 
     private void closeInternal(boolean checkCaller) {
-        int activeCount;
         synchronized (mLock) {
             if (checkCaller) {
                 assertCallerIsOwnerOrRoot();
             }
+        }
+        deactivate();
+    }
 
+    private void deactivate() {
+        int activeCount;
+        synchronized (mLock) {
             activeCount = mActiveCount.decrementAndGet();
         }
-
         if (activeCount == 0) {
             mCallback.onSessionActiveChanged(this, false);
         }

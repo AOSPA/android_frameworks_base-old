@@ -63,7 +63,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
@@ -288,25 +287,10 @@ public class CentralSurfacesImpl extends CoreStartable implements
      */
     private static final int HINT_RESET_DELAY_MS = 1200;
 
+    /** If true, the lockscreen will show a distinct wallpaper */
+    public static final boolean ENABLE_LOCKSCREEN_WALLPAPER = true;
+
     private static final UiEventLogger sUiEventLogger = new UiEventLoggerImpl();
-
-    /**
-     * If true, the system is in the half-boot-to-decryption-screen state.
-     * Prudently disable QS and notifications.
-     */
-    public static final boolean ONLY_CORE_APPS;
-
-    static {
-        boolean onlyCoreApps;
-        try {
-            IPackageManager packageManager =
-                    IPackageManager.Stub.asInterface(ServiceManager.getService("package"));
-            onlyCoreApps = packageManager != null && packageManager.isOnlyCoreApps();
-        } catch (RemoteException e) {
-            onlyCoreApps = false;
-        }
-        ONLY_CORE_APPS = onlyCoreApps;
-    }
 
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
     private final DreamOverlayStateController mDreamOverlayStateController;
@@ -444,6 +428,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
      */
     protected int mState; // TODO: remove this. Just use StatusBarStateController
     protected boolean mBouncerShowing;
+    private boolean mBouncerShowingOverDream;
 
     private final PhoneStatusBarPolicy mIconPolicy;
 
@@ -1655,8 +1640,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
                         || !mUserSwitcherController.isSimpleUserSwitcher())
                 && !isShadeDisabled()
                 && ((mDisabled2 & StatusBarManager.DISABLE2_QUICK_SETTINGS) == 0)
-                && !mDozing
-                && !ONLY_CORE_APPS;
+                && !mDozing;
         mNotificationPanelViewController.setQsExpansionEnabledPolicy(expandEnabled);
         Log.d(TAG, "updateQsExpansionEnabled - QS Expand enabled: " + expandEnabled);
     }
@@ -3321,9 +3305,13 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
     @Override
     public boolean onBackPressed() {
-        boolean isScrimmedBouncer = mScrimController.getState() == ScrimState.BOUNCER_SCRIMMED;
-        if (mStatusBarKeyguardViewManager.onBackPressed(isScrimmedBouncer /* hideImmediately */)) {
-            if (isScrimmedBouncer) {
+        final boolean isScrimmedBouncer =
+                mScrimController.getState() == ScrimState.BOUNCER_SCRIMMED;
+        final boolean isBouncerOverDream = isBouncerShowingOverDream();
+
+        if (mStatusBarKeyguardViewManager.onBackPressed(
+                isScrimmedBouncer || isBouncerOverDream /* hideImmediately */)) {
+            if (isScrimmedBouncer || isBouncerOverDream) {
                 mStatusBarStateController.setLeaveOpenOnKeyguardHide(false);
             } else {
                 mNotificationPanelViewController.expandWithoutQs();
@@ -3345,7 +3333,8 @@ public class CentralSurfacesImpl extends CoreStartable implements
         if (mNotificationPanelViewController.closeUserSwitcherIfOpen()) {
             return true;
         }
-        if (mState != StatusBarState.KEYGUARD && mState != StatusBarState.SHADE_LOCKED) {
+        if (mState != StatusBarState.KEYGUARD && mState != StatusBarState.SHADE_LOCKED
+                && !isBouncerOverDream) {
             if (mNotificationPanelViewController.canPanelBeCollapsed()) {
                 mShadeController.animateCollapsePanels();
             }
@@ -3560,6 +3549,17 @@ public class CentralSurfacesImpl extends CoreStartable implements
         if (!mBouncerShowing) {
             updatePanelExpansionForKeyguard();
         }
+    }
+
+    /**
+     * Sets whether the bouncer over dream is showing. Note that the bouncer over dream is handled
+     * independently of the rest of the notification panel. As a result, setting this state via
+     * {@link #setBouncerShowing(boolean)} leads to unintended side effects from states modified
+     * behind the dream.
+     */
+    @Override
+    public void setBouncerShowingOverDream(boolean bouncerShowingOverDream) {
+        mBouncerShowingOverDream = bouncerShowingOverDream;
     }
 
     /**
@@ -4206,7 +4206,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
     @Override
     public boolean isBouncerShowingOverDream() {
-        return isBouncerShowing() && mDreamOverlayStateController.isOverlayActive();
+        return mBouncerShowingOverDream;
     }
 
     /**

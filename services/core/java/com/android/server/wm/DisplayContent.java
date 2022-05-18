@@ -1581,8 +1581,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mAtmService.getTaskChangeNotificationController()
                         .notifyTaskRequestedOrientationChanged(task.mTaskId, orientation);
             }
-            // Currently there is no use case from non-activity.
-            if (handleTopActivityLaunchingInDifferentOrientation(r, true /* checkOpening */)) {
+            // The orientation source may not be the top if it uses SCREEN_ORIENTATION_BEHIND.
+            final ActivityRecord topCandidate = !r.mVisibleRequested ? topRunningActivity() : r;
+            if (handleTopActivityLaunchingInDifferentOrientation(
+                    topCandidate, r, true /* checkOpening */)) {
                 // Display orientation should be deferred until the top fixed rotation is finished.
                 return false;
             }
@@ -1599,7 +1601,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /**
      * Returns a valid rotation if the activity can use different orientation than the display.
-     * Otherwise {@link #ROTATION_UNDEFINED}.
+     * Otherwise {@link android.app.WindowConfiguration#ROTATION_UNDEFINED}.
      */
     @Rotation
     int rotationForActivityInDifferentOrientation(@NonNull ActivityRecord r) {
@@ -1608,6 +1610,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         if (!WindowManagerService.ENABLE_FIXED_ROTATION_TRANSFORM) {
             return ROTATION_UNDEFINED;
+        }
+        if (r.mOrientation == ActivityInfo.SCREEN_ORIENTATION_BEHIND) {
+            final ActivityRecord nextCandidate = getActivity(
+                    a -> a.mOrientation != SCREEN_ORIENTATION_UNSET
+                            && a.mOrientation != ActivityInfo.SCREEN_ORIENTATION_BEHIND,
+                    r, false /* includeBoundary */, true /* traverseTopToBottom */);
+            if (nextCandidate != null) {
+                r = nextCandidate;
+            }
         }
         if (r.inMultiWindowMode() || r.getRequestedConfigurationOrientation(true /* forDisplay */)
                 == getConfiguration().orientation) {
@@ -1622,18 +1633,25 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return rotation;
     }
 
+    boolean handleTopActivityLaunchingInDifferentOrientation(@NonNull ActivityRecord r,
+            boolean checkOpening) {
+        return handleTopActivityLaunchingInDifferentOrientation(r, r, checkOpening);
+    }
+
     /**
      * We need to keep display rotation fixed for a while when the activity in different orientation
      * is launching until the launch animation is done to avoid showing the previous activity
      * inadvertently in a wrong orientation.
      *
      * @param r The launching activity which may change display orientation.
+     * @param orientationSrc It may be different from {@param r} if the launching activity uses
+     *                       "behind" orientation.
      * @param checkOpening Whether to check if the activity is animating by transition. Set to
      *                     {@code true} if the caller is not sure whether the activity is launching.
      * @return {@code true} if the fixed rotation is started.
      */
-    boolean handleTopActivityLaunchingInDifferentOrientation(@NonNull ActivityRecord r,
-            boolean checkOpening) {
+    private boolean handleTopActivityLaunchingInDifferentOrientation(@NonNull ActivityRecord r,
+            @NonNull ActivityRecord orientationSrc, boolean checkOpening) {
         if (!WindowManagerService.ENABLE_FIXED_ROTATION_TRANSFORM) {
             return false;
         }
@@ -1682,7 +1700,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // animation is not running (it may be swiping to home).
             return false;
         }
-        final int rotation = rotationForActivityInDifferentOrientation(r);
+        final int rotation = rotationForActivityInDifferentOrientation(orientationSrc);
         if (rotation == ROTATION_UNDEFINED) {
             // The display rotation won't be changed by current top activity. The client side
             // adjustments of previous rotated activity should be cleared earlier. Otherwise if
@@ -2003,7 +2021,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 ProtoLog.v(WM_DEBUG_ORIENTATION, "Set mOrientationChanging of %s", w);
                 w.setOrientationChanging(true);
             }
-            w.mReportOrientationChanged = true;
         }, true /* traverseTopToBottom */);
 
         for (int i = mWmService.mRotationWatchers.size() - 1; i >= 0; i--) {
@@ -4509,8 +4526,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         boolean wallpaperEnabled = mWmService.mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_enableWallpaperService)
                 && mWmService.mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_checkWallpaperAtBoot)
-                && !mWmService.mOnlyCore;
+                com.android.internal.R.bool.config_checkWallpaperAtBoot);
 
         final boolean haveBootMsg = drawnWindowTypes.get(TYPE_BOOT_PROGRESS);
         final boolean haveApp = drawnWindowTypes.get(TYPE_BASE_APPLICATION);
@@ -5301,11 +5317,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mAppTransition.setReady();
             mWmService.mWindowPlacerLocked.requestTraversal();
         }
-    }
-
-    void cancelAppTransition() {
-        if (!mAppTransition.isTransitionSet() || mAppTransition.isRunning()) return;
-        mAppTransition.abort();
     }
 
     /**

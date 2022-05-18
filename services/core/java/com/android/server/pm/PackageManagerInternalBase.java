@@ -542,12 +542,6 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
 
     @Override
     @Deprecated
-    public final boolean isOnlyCoreApps() {
-        return mService.isOnlyCoreApps();
-    }
-
-    @Override
-    @Deprecated
     public final void freeStorage(String volumeUuid, long bytes,
             @StorageManager.AllocateFlags int flags) throws IOException {
         mService.freeStorage(volumeUuid, bytes, flags);
@@ -638,7 +632,7 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
     @Override
     @Deprecated
     public final boolean isApexPackage(String packageName) {
-        return getApexManager().isApexPackage(packageName);
+        return snapshot().isApexPackage(packageName);
     }
 
     @Override

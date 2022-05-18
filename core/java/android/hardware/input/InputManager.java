@@ -36,7 +36,6 @@ import android.hardware.lights.LightState;
 import android.hardware.lights.LightsManager;
 import android.hardware.lights.LightsRequest;
 import android.os.Binder;
-import android.os.BlockUntrustedTouchesMode;
 import android.os.Build;
 import android.os.CombinedVibration;
 import android.os.Handler;
@@ -45,6 +44,7 @@ import android.os.IVibratorStateListener;
 import android.os.InputEventInjectionSync;
 import android.os.Looper;
 import android.os.Message;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
@@ -67,7 +67,6 @@ import android.view.WindowManager.LayoutParams;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.SomeArgs;
-import com.android.internal.util.ArrayUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -80,18 +79,12 @@ import java.util.List;
 @SystemService(Context.INPUT_SERVICE)
 public final class InputManager {
     private static final String TAG = "InputManager";
-    private static final boolean DEBUG = false;
+    // To enable these logs, run: 'adb shell setprop log.tag.InputManager DEBUG' (requires restart)
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int MSG_DEVICE_ADDED = 1;
     private static final int MSG_DEVICE_REMOVED = 2;
     private static final int MSG_DEVICE_CHANGED = 3;
-
-    /** @hide */
-    public static final int[] BLOCK_UNTRUSTED_TOUCHES_MODES = {
-            BlockUntrustedTouchesMode.DISABLED,
-            BlockUntrustedTouchesMode.PERMISSIVE,
-            BlockUntrustedTouchesMode.BLOCK
-    };
 
     private static InputManager sInstance;
 
@@ -199,14 +192,6 @@ public final class InputManager {
     public static final float DEFAULT_MAXIMUM_OBSCURING_OPACITY_FOR_TOUCH = .8f;
 
     /**
-     * Default mode of the block untrusted touches mode feature.
-     * @hide
-     */
-    @BlockUntrustedTouchesMode
-    public static final int DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE =
-            BlockUntrustedTouchesMode.BLOCK;
-
-    /**
      * Prevent touches from being consumed by apps if these touches passed through a non-trusted
      * window from a different UID and are considered unsafe.
      *
@@ -272,8 +257,15 @@ public final class InputManager {
      */
     public static final int SWITCH_STATE_ON = 1;
 
+    private static String sVelocityTrackerStrategy;
+
     private InputManager(IInputManager im) {
         mIm = im;
+        try {
+            sVelocityTrackerStrategy = mIm.getVelocityTrackerStrategy();
+        } catch (RemoteException ex) {
+            Log.w(TAG, "Could not get VelocityTracker strategy: " + ex);
+        }
     }
 
     /**
@@ -326,10 +318,19 @@ public final class InputManager {
     }
 
     /**
+     * Get the current VelocityTracker strategy. Only works when the system has fully booted up.
+     * @hide
+     */
+    public String getVelocityTrackerStrategy() {
+        return sVelocityTrackerStrategy;
+    }
+
+    /**
      * Gets information about the input device with the specified id.
      * @param id The device id.
      * @return The input device or null if not found.
      */
+    @Nullable
     public InputDevice getInputDevice(int id) {
         synchronized (mInputDevicesLock) {
             populateInputDevicesLocked();
@@ -998,50 +999,6 @@ public final class InputManager {
     }
 
     /**
-     * Returns the current mode of the block untrusted touches feature, one of:
-     * <ul>
-     *     <li>{@link BlockUntrustedTouchesMode#DISABLED}
-     *     <li>{@link BlockUntrustedTouchesMode#PERMISSIVE}
-     *     <li>{@link BlockUntrustedTouchesMode#BLOCK}
-     * </ul>
-     *
-     * @hide
-     */
-    @TestApi
-    @BlockUntrustedTouchesMode
-    public int getBlockUntrustedTouchesMode(@NonNull Context context) {
-        int mode = Settings.Global.getInt(context.getContentResolver(),
-                Settings.Global.BLOCK_UNTRUSTED_TOUCHES_MODE, DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE);
-        if (!ArrayUtils.contains(BLOCK_UNTRUSTED_TOUCHES_MODES, mode)) {
-            Log.w(TAG, "Unknown block untrusted touches feature mode " + mode + ", using "
-                    + "default " + DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE);
-            return DEFAULT_BLOCK_UNTRUSTED_TOUCHES_MODE;
-        }
-        return mode;
-    }
-
-    /**
-     * Sets the mode of the block untrusted touches feature to one of:
-     * <ul>
-     *     <li>{@link BlockUntrustedTouchesMode#DISABLED}
-     *     <li>{@link BlockUntrustedTouchesMode#PERMISSIVE}
-     *     <li>{@link BlockUntrustedTouchesMode#BLOCK}
-     * </ul>
-     *
-     * @hide
-     */
-    @TestApi
-    @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-    public void setBlockUntrustedTouchesMode(@NonNull Context context,
-            @BlockUntrustedTouchesMode int mode) {
-        if (!ArrayUtils.contains(BLOCK_UNTRUSTED_TOUCHES_MODES, mode)) {
-            throw new IllegalArgumentException("Invalid feature mode " + mode);
-        }
-        Settings.Global.putInt(context.getContentResolver(),
-                Settings.Global.BLOCK_UNTRUSTED_TOUCHES_MODE, mode);
-    }
-
-    /**
      * Queries the framework about whether any physical keys exist on any currently attached input
      * devices that are capable of producing the given array of key codes.
      *
@@ -1107,14 +1064,58 @@ public final class InputManager {
         }
     }
 
+    /**
+     * Injects an input event into the event system, targeting windows owned by the provided uid.
+     *
+     * If a valid targetUid is provided, the system will only consider injecting the input event
+     * into windows owned by the provided uid. If the input event is targeted at a window that is
+     * not owned by the provided uid, input injection will fail and a RemoteException will be
+     * thrown.
+     *
+     * The synchronization mode determines whether the method blocks while waiting for
+     * input injection to proceed.
+     * <p>
+     * Requires the {@link android.Manifest.permission.INJECT_EVENTS} permission.
+     * </p><p>
+     * Make sure you correctly set the event time and input source of the event
+     * before calling this method.
+     * </p>
+     *
+     * @param event The event to inject.
+     * @param mode The synchronization mode.  One of:
+     * {@link android.os.InputEventInjectionSync.NONE},
+     * {@link android.os.InputEventInjectionSync.WAIT_FOR_RESULT}, or
+     * {@link android.os.InputEventInjectionSync.WAIT_FOR_FINISHED}.
+     * @param targetUid The uid to target, or {@link android.os.Process#INVALID_UID} to target all
+     *                 windows.
+     * @return True if input event injection succeeded.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.INJECT_EVENTS)
+    public boolean injectInputEvent(InputEvent event, int mode, int targetUid) {
+        if (event == null) {
+            throw new IllegalArgumentException("event must not be null");
+        }
+        if (mode != InputEventInjectionSync.NONE
+                && mode != InputEventInjectionSync.WAIT_FOR_FINISHED
+                && mode != InputEventInjectionSync.WAIT_FOR_RESULT) {
+            throw new IllegalArgumentException("mode is invalid");
+        }
+
+        try {
+            return mIm.injectInputEventToTarget(event, mode, targetUid);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
 
     /**
      * Injects an input event into the event system on behalf of an application.
      * The synchronization mode determines whether the method blocks while waiting for
      * input injection to proceed.
      * <p>
-     * Requires {@link android.Manifest.permission.INJECT_EVENTS} to inject into
-     * windows that are owned by other applications.
+     * Requires the {@link android.Manifest.permission.INJECT_EVENTS} permission.
      * </p><p>
      * Make sure you correctly set the event time and input source of the event
      * before calling this method.
@@ -1129,22 +1130,10 @@ public final class InputManager {
      *
      * @hide
      */
+    @RequiresPermission(Manifest.permission.INJECT_EVENTS)
     @UnsupportedAppUsage
     public boolean injectInputEvent(InputEvent event, int mode) {
-        if (event == null) {
-            throw new IllegalArgumentException("event must not be null");
-        }
-        if (mode != InputEventInjectionSync.NONE
-                && mode != InputEventInjectionSync.WAIT_FOR_FINISHED
-                && mode != InputEventInjectionSync.WAIT_FOR_RESULT) {
-            throw new IllegalArgumentException("mode is invalid");
-        }
-
-        try {
-            return mIm.injectInputEvent(event, mode);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        return injectInputEvent(event, mode, Process.INVALID_UID);
     }
 
     /**
@@ -1377,6 +1366,7 @@ public final class InputManager {
      * </p>
      * @hide
      */
+    @TestApi
     public void addUniqueIdAssociation(@NonNull String inputPort, @NonNull String displayUniqueId) {
         try {
             mIm.addUniqueIdAssociation(inputPort, displayUniqueId);
@@ -1393,6 +1383,7 @@ public final class InputManager {
      * </p>
      * @hide
      */
+    @TestApi
     public void removeUniqueIdAssociation(@NonNull String inputPort) {
         try {
             mIm.removeUniqueIdAssociation(inputPort);
@@ -1421,11 +1412,8 @@ public final class InputManager {
             }
 
             mInputDevices = new SparseArray<InputDevice>();
-            // TODO(b/223905476): remove when the rootcause is fixed.
-            if (ids != null) {
-                for (int i = 0; i < ids.length; i++) {
-                    mInputDevices.put(ids[i], null);
-                }
+            for (int i = 0; i < ids.length; i++) {
+                mInputDevices.put(ids[i], null);
             }
         }
     }

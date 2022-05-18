@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"स्क्रीनशॉट पुन्हा घेण्याचा प्रयत्न करा"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"स्क्रीनशॉट सेव्ह करू शकत नाही"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"अ‍ॅप किंवा आपल्या संस्थेद्वारे स्क्रीनशॉट घेण्याची अनुमती नाही"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"संपादित करा"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"स्क्रीनशॉट संपादित करा"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"स्क्रीनशॉट शेअर करा"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"निश्चित केले"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"पूर्ण करण्यासाठी खात्री करा वर टॅप करा"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"चेहऱ्याने अनलॉक केले. सुरू ठेवण्यासाठी अनलॉक करा आयकन दाबा."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"चेहऱ्याने अनलॉक केले आहे. पुढे सुरू ठेवण्यासाठी दाबा."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"चेहरा ओळखला आहे. पुढे सुरू ठेवण्यासाठी दाबा."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"चेहरा ओळखला आहे. पुढे सुरू ठेवण्यासाठी अनलॉक करा आयकन दाबा."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"ऑथेंटिकेशन केलेले"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"पिन वापरा"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"पॅटर्न वापरा"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"उघडण्यासाठी वर स्वाइप करा"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"उघडण्यासाठी अनलॉक करा आयकन दाबा"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"चेहऱ्याने अनलॉक केले. उघडण्यासाठी अनलॉक करा आयकन दाबा."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"चेहऱ्याने अनलॉक केले आहे. उघडण्यासाठी दाबा."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"चेहरा ओळखला आहे. उघडण्यासाठी दाबा."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"चेहरा ओळखला आहे. उघडण्यासाठी अनलॉक करा आयकन दाबा."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"पुन्हा प्रयत्न करण्यासाठी वर स्‍वाइप करा"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFC वापरण्यासाठी स्क्रीन अनलॉक करा"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"हे डिव्हाइस तुमच्या संस्थेचे आहे"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"तुम्ही तुमचे सत्र सुरू ठेवू इच्छिता?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"येथून सुरू करा"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"होय, सुरू ठेवा"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"अतिथी मोड"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"तुम्ही अतिथी मोडमध्ये आहात"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"नवीन वापरकर्ता जोडल्याने अतिथी मोडमधून बाहेर पडेल आणि सध्याच्या अतिथी सत्रातील सर्व अ‍ॅप्स व डेटा हटवला जाईल."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"वापरकर्ता मर्यादा गाठली"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other">तुम्ही <xliff:g id="COUNT">%d</xliff:g> वापरकर्त्यांपर्यंत जोडू शकता.</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"बॅटरी संपण्याची शक्यता असल्यास सुरू करा"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"नाही नको"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"SysUI हीप डंप करा"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"ॲप्लिकेशन्स तुमचे <xliff:g id="TYPES_LIST">%s</xliff:g> वापरत आहे."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" आणि "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"नवीन डिव्हाइससोबत पेअर करा"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"हे सेशन कास्ट करण्यासाठी, कृपया ॲप उघडा."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"अज्ञात अ‍ॅप"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"कास्ट करणे थांबवा"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"ब्रॉडकास्टिंग कसे काम करते"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"ब्रॉडकास्ट करा"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"कंपॅटिबिल ब्लूटूथ डिव्‍हाइस असलेले तुमच्या जवळपासचे लोक हे तुम्ही ब्रॉडकास्ट करत असलेला मीडिया ऐकू शकतात"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"सेव्ह करा"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"सुरू करत आहे…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"ब्रॉडकास्ट करू शकत नाही"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"बिल्ड नंबर"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"बिल्ड नंबर क्लिपबोर्डवर कॉपी केला."</string>
     <string name="basic_status" msgid="2315371112182658176">"संभाषण उघडा"</string>

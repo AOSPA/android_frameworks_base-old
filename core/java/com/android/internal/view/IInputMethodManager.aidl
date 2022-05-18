@@ -90,4 +90,6 @@ interface IInputMethodManager {
 
     /** Start Stylus handwriting session **/
     void startStylusHandwriting(in IInputMethodClient client);
+    /** Returns {@code true} if currently selected IME supports Stylus handwriting. */
+    boolean isStylusHandwritingAvailable();
 }

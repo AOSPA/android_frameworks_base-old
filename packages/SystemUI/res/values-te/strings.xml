@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"స్క్రీన్‌షాట్ తీయడానికి మళ్లీ ప్రయత్నించండి"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"స్క్రీన్‌షాట్‌ను సేవ్ చేయడం సాధ్యపడలేదు"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"స్క్రీన్‌షాట్‌లు తీయడానికి యాప్ లేదా మీ సంస్థ అనుమతించలేదు"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"ఎడిట్ చేయండి"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"స్క్రీన్‌షాట్‌ను ఎడిట్ చేయండి"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"స్క్రీన్‌షాట్‌ను షేర్ చేయండి"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"నిర్ధారించబడింది"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"పూర్తి చేయడానికి \"నిర్ధారించు\" నొక్కండి"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"ముఖం ద్వారా అన్‌లాక్ చేయబడింది. కొనసాగించడానికి అన్‌లాక్ చిహ్నాన్ని నొక్కండి."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"ముఖం ద్వారా అన్‌లాక్ చేయబడింది. కొనసాగించడానికి నొక్కండి."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"ముఖం గుర్తించబడింది. కొనసాగించడానికి నొక్కండి."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"ముఖం గుర్తించబడింది. కొనసాగడానికి అన్‌లాక్ చిహ్నం నొక్కండి."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"ప్రామాణీకరించబడింది"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"పిన్‌ను ఉపయోగించు"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"ఆకృతిని ఉపయోగించు"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"తెరవడానికి, పైకి స్వైప్ చేయండి"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"తెరవడానికి అన్‌లాక్ చిహ్నాన్ని నొక్కండి"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"ముఖం ద్వారా అన్‌లాక్ చేయబడింది. తెరవడానికి అన్‌లాక్ చిహ్నాన్ని నొక్కండి."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"ముఖం ద్వారా అన్‌లాక్ చేయబడింది. తెరవడానికి నొక్కండి."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"ముఖం గుర్తించబడింది. తెరవడానికి నొక్కండి."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"ముఖం గుర్తించబడింది. తెరవడానికి అన్‌లాక్ చిహ్నం నొక్కండి."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"మళ్ళీ ప్రయత్నించడానికి పైకి స్వైప్ చేయండి"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFCని ఉపయోగించడానికి అన్‌లాక్ చేయండి"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"ఈ పరికరం మీ సంస్థకు చెందినది"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"మీరు మీ సెషన్‌ని కొనసాగించాలనుకుంటున్నారా?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"మొదటి నుండి ప్రారంభించు"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"అవును, కొనసాగించు"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"గెస్ట్ మోడ్"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"మీరు గెస్ట్ మోడ్‌లో ఉన్నారు"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"కొత్త యూజర్‌ను జోడించడం వలన గెస్ట్ మోడ్ నుండి నిష్క్రమించబడుతుంది, ప్రస్తుత గెస్ట్ సెషన్ నుండి అన్ని యాప్‌లు, డేటా తొలగించండి."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"వినియోగదారు పరిమితిని చేరుకున్నారు"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other">మీరు <xliff:g id="COUNT">%d</xliff:g> వినియోగదారుల వరకు జోడించవచ్చు.</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"బ్యాటరీ ఛార్జింగ్ పూర్తిగా అయిపోతున్న తరుణంలో ఆన్ చేస్తుంది"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"వద్దు, ధన్యవాదాలు"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"డంప్ SysUI హీప్"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"అప్లికేషన్‌లు మీ <xliff:g id="TYPES_LIST">%s</xliff:g>ని ఉపయోగిస్తున్నాయి."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" మరియు "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"కొత్త పరికరాన్ని పెయిర్ చేయండి"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"ఈ సెషన్‌ను ప్రసారం చేయడానికి, దయచేసి యాప్‌ను తెరవండి."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"తెలియని యాప్"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"ప్రసారాన్ని ఆపివేయండి"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"ప్రసారం కావడం అనేది ఎలా పని చేస్తుంది"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"ప్రసారం"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"మీకు సమీపంలో ఉన్న వ్యక్తులు అనుకూలత ఉన్న బ్లూటూత్ పరికరాలతో మీరు ప్రసారం చేస్తున్న మీడియాను వినగలరు"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"సేవ్ చేయండి"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"ప్రారంభించబడుతోంది…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"ప్రసారం చేయడం సాధ్యపడలేదు"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"బిల్డ్ నంబర్"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"బిల్డ్ నంబర్, క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది."</string>
     <string name="basic_status" msgid="2315371112182658176">"సంభాషణను తెరవండి"</string>

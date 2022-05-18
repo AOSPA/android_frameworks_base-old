@@ -16,10 +16,12 @@
 
 package com.android.server.input;
 
+import static android.provider.DeviceConfig.NAMESPACE_INPUT_NATIVE_BOOT;
 import static android.view.KeyEvent.KEYCODE_UNKNOWN;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManagerInternal;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -114,7 +116,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.SomeArgs;
-import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
@@ -150,13 +151,16 @@ import java.util.OptionalInt;
 public class InputManagerService extends IInputManager.Stub
         implements Watchdog.Monitor {
     static final String TAG = "InputManager";
-    static final boolean DEBUG = false;
+    // To enable these logs, run: 'adb shell setprop log.tag.InputManager DEBUG' (requires restart)
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final String EXCLUDED_DEVICES_PATH = "etc/excluded-input-devices.xml";
     private static final String PORT_ASSOCIATIONS_PATH = "etc/input-port-associations.xml";
 
     // Feature flag name for the deep press feature
     private static final String DEEP_PRESS_ENABLED = "deep_press_enabled";
+    // Feature flag name for the strategy to be used in VelocityTracker
+    private static final String VELOCITYTRACKER_STRATEGY_PROPERTY = "velocitytracker_strategy";
 
     private static final int MSG_DELIVER_INPUT_DEVICES_CHANGED = 1;
     private static final int MSG_SWITCH_KEYBOARD_LAYOUT = 2;
@@ -167,19 +171,6 @@ public class InputManagerService extends IInputManager.Stub
     private static final int MSG_POINTER_DISPLAY_ID_CHANGED = 7;
 
     private static final int DEFAULT_VIBRATION_MAGNITUDE = 192;
-
-    /**
-     * We know the issue and are working to fix it, so suppressing the toast to not annoy
-     * dogfooders.
-     *
-     * TODO(b/169067926): Remove this
-     */
-    private static final String[] PACKAGE_BLOCKLIST_FOR_UNTRUSTED_TOUCHES_TOAST = {
-            "com.snapchat.android" // b/173297887
-    };
-
-    /** TODO(b/169067926): Remove this. */
-    private static final boolean UNTRUSTED_TOUCHES_TOAST = false;
 
     private final NativeInputManagerService mNative;
 
@@ -371,6 +362,8 @@ public class InputManagerService extends IInputManager.Stub
     public static final int SW_CAMERA_LENS_COVER_BIT = 1 << SW_CAMERA_LENS_COVER;
     public static final int SW_MUTE_DEVICE_BIT = 1 << SW_MUTE_DEVICE;
 
+    private final String mVelocityTrackerStrategy;
+
     /** Whether to use the dev/input/event or uevent subsystem for the audio jack. */
     final boolean mUseDevInputEventForAudioJack;
 
@@ -426,6 +419,9 @@ public class InputManagerService extends IInputManager.Stub
         mDoubleTouchGestureEnableFile = TextUtils.isEmpty(doubleTouchGestureEnablePath) ? null :
             new File(doubleTouchGestureEnablePath);
 
+        mVelocityTrackerStrategy = DeviceConfig.getProperty(
+                NAMESPACE_INPUT_NATIVE_BOOT, VELOCITYTRACKER_STRATEGY_PROPERTY);
+
         injector.registerLocalService(new LocalService());
     }
 
@@ -474,7 +470,6 @@ public class InputManagerService extends IInputManager.Stub
         registerAccessibilityLargePointerSettingObserver();
         registerLongPressTimeoutObserver();
         registerMaximumObscuringOpacityForTouchSettingObserver();
-        registerBlockUntrustedTouchesModeSettingObserver();
 
         mContext.registerReceiver(new BroadcastReceiver() {
             @Override
@@ -491,7 +486,6 @@ public class InputManagerService extends IInputManager.Stub
         updateAccessibilityLargePointerFromSettings();
         updateDeepPressStatusFromSettings("just booted");
         updateMaximumObscuringOpacityForTouchFromSettings();
-        updateBlockUntrustedTouchesModeFromSettings();
     }
 
     // TODO(BT) Pass in parameter for bluetooth system
@@ -860,6 +854,19 @@ public class InputManagerService extends IInputManager.Stub
 
     @Override // Binder call
     public boolean injectInputEvent(InputEvent event, int mode) {
+        return injectInputEventToTarget(event, mode, Process.INVALID_UID);
+    }
+
+    @Override // Binder call
+    public boolean injectInputEventToTarget(InputEvent event, int mode, int targetUid) {
+        if (!checkCallingPermission(android.Manifest.permission.INJECT_EVENTS,
+                "injectInputEvent()", true /*checkInstrumentationSource*/)) {
+            throw new SecurityException(
+                    "Injecting input events requires the caller (or the source of the "
+                            + "instrumentation, if any) to have the INJECT_EVENTS permission.");
+        }
+        // We are not checking if targetUid matches the callingUid, since having the permission
+        // already means you can inject into any window.
         Objects.requireNonNull(event, "event must not be null");
         if (mode != InputEventInjectionSync.NONE
                 && mode != InputEventInjectionSync.WAIT_FOR_FINISHED
@@ -868,22 +875,39 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         final int pid = Binder.getCallingPid();
-        final int uid = Binder.getCallingUid();
         final long ident = Binder.clearCallingIdentity();
+        final boolean injectIntoUid = targetUid != Process.INVALID_UID;
         final int result;
         try {
-            result = mNative.injectInputEvent(event, pid, uid, mode,
-                    INJECTION_TIMEOUT_MILLIS, WindowManagerPolicy.FLAG_DISABLE_KEY_REPEAT);
+            result = mNative.injectInputEvent(event, injectIntoUid,
+                    targetUid, mode, INJECTION_TIMEOUT_MILLIS,
+                    WindowManagerPolicy.FLAG_DISABLE_KEY_REPEAT);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
         switch (result) {
-            case InputEventInjectionResult.PERMISSION_DENIED:
-                Slog.w(TAG, "Input event injection from pid " + pid + " permission denied.");
-                throw new SecurityException(
-                        "Injecting to another application requires INJECT_EVENTS permission");
             case InputEventInjectionResult.SUCCEEDED:
                 return true;
+            case InputEventInjectionResult.TARGET_MISMATCH:
+                if (!injectIntoUid) {
+                    throw new IllegalStateException("Injection should not result in TARGET_MISMATCH"
+                            + " when it is not targeted into to a specific uid.");
+                }
+                // TODO(b/228161340): Remove the fallback of targeting injection into all windows
+                //  when the caller has the injection permission.
+                // Explicitly maintain the same behavior as previous versions of Android, where
+                // injection is allowed into all windows if the caller has the INJECT_EVENTS
+                // permission, even if it is targeting a certain uid.
+                if (checkCallingPermission(android.Manifest.permission.INJECT_EVENTS,
+                        "injectInputEvent-target-mismatch-fallback")) {
+                    Slog.w(TAG, "Targeted input event was not directed at a window owned by uid "
+                            + targetUid + ". Falling back to injecting into all windows.");
+                    return injectInputEventToTarget(event, mode, Process.INVALID_UID);
+                }
+                throw new IllegalArgumentException(
+                    "Targeted input event injection from pid " + pid
+                            + " was not directed at a window owned by uid "
+                            + targetUid + ".");
             case InputEventInjectionResult.TIMED_OUT:
                 Slog.w(TAG, "Input event injection from pid " + pid + " timed out.");
                 return false;
@@ -898,6 +922,11 @@ public class InputManagerService extends IInputManager.Stub
     public VerifiedInputEvent verifyInputEvent(InputEvent event) {
         Objects.requireNonNull(event, "event must not be null");
         return mNative.verifyInputEvent(event);
+    }
+
+    @Override // Binder call
+    public String getVelocityTrackerStrategy() {
+        return mVelocityTrackerStrategy;
     }
 
     /**
@@ -1026,6 +1055,10 @@ public class InputManagerService extends IInputManager.Stub
                 final InputDevice inputDevice = mInputDevices[i];
                 deviceIdAndGeneration[i * 2] = inputDevice.getId();
                 deviceIdAndGeneration[i * 2 + 1] = inputDevice.getGeneration();
+                if (DEBUG) {
+                    Log.d(TAG, "device " + inputDevice.getId() + " generation "
+                            + inputDevice.getGeneration());
+                }
 
                 if (!inputDevice.isVirtual() && inputDevice.isFullKeyboard()) {
                     if (!containsInputDeviceWithDescriptor(oldInputDevices,
@@ -1549,8 +1582,8 @@ public class InputManagerService extends IInputManager.Stub
                 layout = mDataStore.getCurrentKeyboardLayout(identifier.getDescriptor());
             }
             if (DEBUG) {
-                Slog.d(TAG, "Loaded keyboard layout id for " + key + " and got "
-                        + layout);
+                Slog.d(TAG, "getCurrentKeyboardLayoutForInputDevice() "
+                        + identifier.toString() + ": " + layout);
             }
             return layout;
         }
@@ -1572,7 +1605,9 @@ public class InputManagerService extends IInputManager.Stub
             try {
                 if (mDataStore.setCurrentKeyboardLayout(key, keyboardLayoutDescriptor)) {
                     if (DEBUG) {
-                        Slog.d(TAG, "Saved keyboard layout using " + key);
+                        Slog.d(TAG, "setCurrentKeyboardLayoutForInputDevice() " + identifier
+                                + " key: " + key
+                                + " keyboardLayoutDescriptor: " + keyboardLayoutDescriptor);
                     }
                     mHandler.sendEmptyMessage(MSG_RELOAD_KEYBOARD_LAYOUTS);
                 }
@@ -1939,23 +1974,6 @@ public class InputManagerService extends IInputManager.Stub
                         updateDeepPressStatusFromSettings("timeout changed");
                     }
                 }, UserHandle.USER_ALL);
-    }
-
-    private void registerBlockUntrustedTouchesModeSettingObserver() {
-        mContext.getContentResolver().registerContentObserver(
-                Settings.Global.getUriFor(Settings.Global.BLOCK_UNTRUSTED_TOUCHES_MODE),
-                /* notifyForDescendants */ true,
-                new ContentObserver(mHandler) {
-                    @Override
-                    public void onChange(boolean selfChange) {
-                        updateBlockUntrustedTouchesModeFromSettings();
-                    }
-                }, UserHandle.USER_ALL);
-    }
-
-    private void updateBlockUntrustedTouchesModeFromSettings() {
-        final int mode = InputManager.getInstance().getBlockUntrustedTouchesMode(mContext);
-        mNative.setBlockUntrustedTouchesMode(mode);
     }
 
     private void registerMaximumObscuringOpacityForTouchSettingObserver() {
@@ -2426,7 +2444,7 @@ public class InputManagerService extends IInputManager.Stub
     public void removePortAssociation(@NonNull String inputPort) {
         if (!checkCallingPermission(
                 android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY,
-                "clearPortAssociations()")) {
+                "removePortAssociation()")) {
             throw new SecurityException(
                     "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
         }
@@ -2442,7 +2460,7 @@ public class InputManagerService extends IInputManager.Stub
     public void addUniqueIdAssociation(@NonNull String inputPort, @NonNull String displayUniqueId) {
         if (!checkCallingPermission(
                 android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY,
-                "addNameAssociation()")) {
+                "addUniqueIdAssociation()")) {
             throw new SecurityException(
                     "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
         }
@@ -2780,8 +2798,12 @@ public class InputManagerService extends IInputManager.Stub
             }
         }
     }
-
     private boolean checkCallingPermission(String permission, String func) {
+        return checkCallingPermission(permission, func, false /*checkInstrumentationSource*/);
+    }
+
+    private boolean checkCallingPermission(String permission, String func,
+            boolean checkInstrumentationSource) {
         // Quick check: if the calling permission is me, it's all okay.
         if (Binder.getCallingPid() == Process.myPid()) {
             return true;
@@ -2790,6 +2812,28 @@ public class InputManagerService extends IInputManager.Stub
         if (mContext.checkCallingPermission(permission) == PackageManager.PERMISSION_GRANTED) {
             return true;
         }
+
+        if (checkInstrumentationSource) {
+            final ActivityManagerInternal ami =
+                    LocalServices.getService(ActivityManagerInternal.class);
+            Objects.requireNonNull(ami, "ActivityManagerInternal should not be null.");
+            final int instrumentationUid = ami.getInstrumentationSourceUid(Binder.getCallingUid());
+            if (instrumentationUid != Process.INVALID_UID) {
+                // Clear the calling identity when checking if the instrumentation source has
+                // permission because PackageManager will deny all permissions to some callers,
+                // such as instant apps.
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    if (mContext.checkPermission(permission, -1 /*pid*/, instrumentationUid)
+                            == PackageManager.PERMISSION_GRANTED) {
+                        return true;
+                    }
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
+            }
+        }
+
         String msg = "Permission Denial: " + func + " from pid="
                 + Binder.getCallingPid()
                 + ", uid=" + Binder.getCallingUid()
@@ -2911,22 +2955,6 @@ public class InputManagerService extends IInputManager.Stub
         mWindowManagerCallbacks.notifyDropWindow(token, x, y);
     }
 
-    // Native callback
-    @SuppressWarnings("unused")
-    private void notifyUntrustedTouch(String packageName) {
-        // TODO(b/169067926): Remove toast after gathering feedback on dogfood.
-        if (!UNTRUSTED_TOUCHES_TOAST || ArrayUtils.contains(
-                PACKAGE_BLOCKLIST_FOR_UNTRUSTED_TOUCHES_TOAST, packageName)) {
-            Log.i(TAG, "Suppressing untrusted touch toast for " + packageName);
-            return;
-        }
-        DisplayThread.getHandler().post(() ->
-                Toast.makeText(mContext,
-                        "Touch obscured by " + packageName
-                                + " will be blocked. Check go/untrusted-touches",
-                        Toast.LENGTH_SHORT).show());
-    }
-
     // Native callback.
     @SuppressWarnings("unused")
     private void notifyNoFocusedWindowAnr(InputApplicationHandle inputApplicationHandle) {
@@ -3031,13 +3059,6 @@ public class InputManagerService extends IInputManager.Stub
     @SuppressWarnings("unused")
     private KeyEvent dispatchUnhandledKey(IBinder focus, KeyEvent event, int policyFlags) {
         return mWindowManagerCallbacks.dispatchUnhandledKey(focus, event, policyFlags);
-    }
-
-    // Native callback.
-    @SuppressWarnings("unused")
-    private boolean checkInjectEventsPermission(int injectorPid, int injectorUid) {
-        return mContext.checkPermission(android.Manifest.permission.INJECT_EVENTS,
-                injectorPid, injectorUid) == PackageManager.PERMISSION_GRANTED;
     }
 
     // Native callback.
@@ -3501,12 +3522,17 @@ public class InputManagerService extends IInputManager.Stub
 
         @Override
         public void sendInputEvent(InputEvent event, int policyFlags) {
+            if (!checkCallingPermission(android.Manifest.permission.INJECT_EVENTS,
+                    "sendInputEvent()")) {
+                throw new SecurityException(
+                        "The INJECT_EVENTS permission is required for injecting input events.");
+            }
             Objects.requireNonNull(event, "event must not be null");
 
             synchronized (mInputFilterLock) {
                 if (!mDisconnected) {
-                    mNative.injectInputEvent(event, 0, 0,
-                            InputManager.INJECT_INPUT_EVENT_MODE_ASYNC, 0,
+                    mNative.injectInputEvent(event, false /* injectIntoUid */, -1 /* uid */,
+                            InputManager.INJECT_INPUT_EVENT_MODE_ASYNC, 0 /* timeout */,
                             policyFlags | WindowManagerPolicy.FLAG_FILTERED);
                 }
             }

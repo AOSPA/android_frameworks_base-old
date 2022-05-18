@@ -20,20 +20,14 @@ import android.content.Intent
 import android.content.pm.SuspendDialogInfo
 import android.os.Binder
 import android.os.PersistableBundle
-import android.util.ArrayMap
-import android.util.SparseArray
-import com.android.server.pm.pkg.PackageStateInternal
-import com.android.server.pm.snapshot.PackageDataSnapshot
 import com.android.server.testutils.any
 import com.android.server.testutils.eq
 import com.android.server.testutils.nullable
-import com.android.server.testutils.whenever
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
 import org.mockito.ArgumentMatchers.anyInt
-import org.mockito.Mockito.argThat
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 
@@ -304,14 +298,11 @@ class SuspendPackageHelperTest : PackageHelperTestBase() {
     @Test
     @Throws(Exception::class)
     fun sendPackagesSuspendedForUser_withSameVisibilityAllowList() {
-        mockAllowList(packageSetting1, allowList(10001, 10002, 10003))
-        mockAllowList(packageSetting2, allowList(10001, 10002, 10003))
-
         suspendPackageHelper.sendPackagesSuspendedForUser(pms.snapshotComputer(),
             Intent.ACTION_PACKAGES_SUSPENDED, packagesToChange, uidsToChange, TEST_USER_ID)
         testHandler.flush()
         verify(broadcastHelper).sendPackageBroadcast(any(), nullable(), bundleCaptor.capture(),
-                anyInt(), nullable(), nullable(), any(), nullable(), any(), nullable())
+                anyInt(), nullable(), nullable(), any(), nullable(), nullable(), nullable())
 
         var changedPackages = bundleCaptor.value.getStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST)
         var changedUids = bundleCaptor.value.getIntArray(Intent.EXTRA_CHANGED_UID_LIST)
@@ -323,8 +314,8 @@ class SuspendPackageHelperTest : PackageHelperTestBase() {
     @Test
     @Throws(Exception::class)
     fun sendPackagesSuspendedForUser_withDifferentVisibilityAllowList() {
-        mockAllowList(packageSetting1, allowList(10001, 10002, 10003))
-        mockAllowList(packageSetting2, allowList(10001, 10002, 10007))
+        mockDividedSeparatedBroadcastList(
+                intArrayOf(10001, 10002, 10003), intArrayOf(10001, 10002, 10007))
 
         suspendPackageHelper.sendPackagesSuspendedForUser(pms.snapshotComputer(),
             Intent.ACTION_PACKAGES_SUSPENDED, packagesToChange, uidsToChange, TEST_USER_ID)
@@ -333,21 +324,20 @@ class SuspendPackageHelperTest : PackageHelperTestBase() {
                 any(), nullable(), bundleCaptor.capture(), anyInt(), nullable(), nullable(), any(),
                 nullable(), any(), nullable())
 
-        bundleCaptor.allValues.forEach {
+        bundleCaptor.allValues.forEachIndexed { i, it ->
             var changedPackages = it.getStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST)
             var changedUids = it.getIntArray(Intent.EXTRA_CHANGED_UID_LIST)
             assertThat(changedPackages?.size).isEqualTo(1)
             assertThat(changedUids?.size).isEqualTo(1)
-            assertThat(changedPackages?.get(0)).isAnyOf(TEST_PACKAGE_1, TEST_PACKAGE_2)
-            assertThat(changedUids?.get(0)).isAnyOf(packageSetting1.appId, packageSetting2.appId)
+            assertThat(changedPackages?.get(0)).isEqualTo(packagesToChange[i])
+            assertThat(changedUids?.get(0)).isEqualTo(uidsToChange[i])
         }
     }
 
     @Test
     @Throws(Exception::class)
     fun sendPackagesSuspendedForUser_withNullVisibilityAllowList() {
-        mockAllowList(packageSetting1, allowList(10001, 10002, 10003))
-        mockAllowList(packageSetting2, null)
+        mockDividedSeparatedBroadcastList(intArrayOf(10001, 10002, 10003), null)
 
         suspendPackageHelper.sendPackagesSuspendedForUser(pms.snapshotComputer(),
             Intent.ACTION_PACKAGES_SUSPENDED, packagesToChange, uidsToChange, TEST_USER_ID)
@@ -356,13 +346,13 @@ class SuspendPackageHelperTest : PackageHelperTestBase() {
                 any(), nullable(), bundleCaptor.capture(), anyInt(), nullable(), nullable(), any(),
                 nullable(), nullable(), nullable())
 
-        bundleCaptor.allValues.forEach {
+        bundleCaptor.allValues.forEachIndexed { i, it ->
             var changedPackages = it.getStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST)
             var changedUids = it.getIntArray(Intent.EXTRA_CHANGED_UID_LIST)
             assertThat(changedPackages?.size).isEqualTo(1)
             assertThat(changedUids?.size).isEqualTo(1)
-            assertThat(changedPackages?.get(0)).isAnyOf(TEST_PACKAGE_1, TEST_PACKAGE_2)
-            assertThat(changedUids?.get(0)).isAnyOf(packageSetting1.appId, packageSetting2.appId)
+            assertThat(changedPackages?.get(0)).isEqualTo(packagesToChange[i])
+            assertThat(changedUids?.get(0)).isEqualTo(uidsToChange[i])
         }
     }
 
@@ -382,18 +372,5 @@ class SuspendPackageHelperTest : PackageHelperTestBase() {
         assertThat(modifiedPackages).asList().containsExactly(TEST_PACKAGE_1, TEST_PACKAGE_2)
         assertThat(modifiedUids).asList().containsExactly(
                 packageSetting1.appId, packageSetting2.appId)
-    }
-
-    private fun allowList(vararg uids: Int) = SparseArray<IntArray>().apply {
-        this.put(TEST_USER_ID, uids)
-    }
-
-    private fun mockAllowList(pkgSetting: PackageStateInternal, list: SparseArray<IntArray>?) {
-        whenever(rule.mocks().appsFilter.getVisibilityAllowList(
-                any(PackageDataSnapshot::class.java),
-            argThat { it?.packageName == pkgSetting.packageName }, any(IntArray::class.java),
-            any() as ArrayMap<String, out PackageStateInternal>
-        ))
-            .thenReturn(list)
     }
 }

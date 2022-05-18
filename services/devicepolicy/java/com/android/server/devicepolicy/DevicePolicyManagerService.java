@@ -2694,11 +2694,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final DevicePolicyData policy = getUserData(userId);
         if (who != null) {
             ActiveAdmin admin = policy.mAdminMap.get(who);
-            if (admin == null) {
-                throw new SecurityException("No active admin " + who);
-            }
-            if (admin.getUid() != uid) {
-                throw new SecurityException("Admin " + who + " is not owned by uid " + uid);
+            if (admin == null || admin.getUid() != uid) {
+                throw new SecurityException(
+                        "Admin " + who + " is not active or not owned by uid " + uid);
             }
             if (isActiveAdminWithPolicyForUserLocked(admin, reqPolicy, userId)) {
                 return admin;
@@ -9870,18 +9868,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     private String getEncryptionStatusName(int encryptionStatus) {
         switch (encryptionStatus) {
-            case DevicePolicyManager.ENCRYPTION_STATUS_INACTIVE:
-                return "inactive";
-            case DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY:
-                return "block default key";
-            case DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE:
-                return "block";
             case DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_PER_USER:
                 return "per-user";
             case DevicePolicyManager.ENCRYPTION_STATUS_UNSUPPORTED:
                 return "unsupported";
-            case DevicePolicyManager.ENCRYPTION_STATUS_ACTIVATING:
-                return "activating";
             default:
                 return "unknown";
         }
@@ -11759,6 +11749,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 ap = getParentOfAdminIfRequired(getOrganizationOwnedProfileOwnerLocked(caller),
                         parent);
             } else {
+                Preconditions.checkCallAuthorization(!isFinancedDeviceOwner(caller));
                 ap = getParentOfAdminIfRequired(getProfileOwnerOrDeviceOwnerLocked(caller), parent);
             }
 

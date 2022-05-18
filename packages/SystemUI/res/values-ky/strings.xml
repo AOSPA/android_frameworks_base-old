@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Скриншотту кайра тартып көрүңүз"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Скриншот сакталган жок"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Скриншот тартууга колдонмо же ишканаңыз тыюу салган."</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Түзөтүү"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Скриншотту түзөтүү"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"Скриншотту бөлүшүү"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Ырасталды"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"Бүтүрүү үчүн \"Ырастоо\" баскычын басыңыз"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Кулпусун жүзүңүз менен ачтыңыз. Улантуу үчүн кулпусун ачуу сүрөтчөсүн басыңыз."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"Кулпусун жүзүңүз менен ачтыңыз. Улантуу үчүн басыңыз."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"Жүз таанылды. Улантуу үчүн басыңыз."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"Жүз таанылды. Улантуу үчүн кулпусун ачуу сүрөтчөсүн басыңыз."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"Аныктыгы текшерилди"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"PIN кодду колдонуу"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"Графикалык ачкычты колдонуу"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"Ачуу үчүн өйдө сүрүңүз"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"Ачуу үчүн кулпусун ачуу сүрөтчөсүн басыңыз"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"Кулпусун жүзүңүз менен ачтыңыз. Ачуу үчүн кулпусун ачуу сүрөтчөсүн басыңыз."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"Кулпусун жүзүңүз менен ачтыңыз. Ачуу үчүн басыңыз."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"Жүз таанылды. Ачуу үчүн басыңыз."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"Жүз таанылды. Ачуу үчүн кулпусун ачуу сүрөтчөсүн басыңыз."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Кайталоо үчүн экранды өйдө сүрүңүз"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFC колдонуу үчүн түзмөктүн кулпусун ачыңыз"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Бул түзмөк уюмуңузга таандык"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"Сеансыңызды улантасызбы?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"Кайра баштоо"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"Ооба, уланта берели"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"Конок режими"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"Конок режиминдесиз"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"Жаңы колдонуучуну кошсоңуз, конок режими жабылат жана учурдагы конок сеансындагы бардык колдонмолор жана дайындар өчүрүлөт."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"Дагы колдонуучу кошууга болбойт"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> колдонуучуга чейин кошууга болот.</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"Батареянын кубаты түгөнүп калганда, күйгүзүлсүн"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"Жок, рахмат"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Колдонмолор төмөнкүлөрдү пайдаланып жатышат: <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" жана "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Жаңы түзмөк кошуу"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"Бул сеансты тышкы экранга чыгаруу үчүн колдонмону ачыңыз."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"Белгисиз колдонмо"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"Тышкы экранга чыгарууну токтотуу"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"Кабарлоо кантип иштейт"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"Кабарлоо"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"Шайкеш Bluetooth түзмөктөрү болгон жакын жердеги кишилер кабарлап жаткан медиаңызды уга алышат"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"Сактоо"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"Кабарлап баштады…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"Кабарлоого болбойт"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Курама номери"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Курама номери алмашуу буферине көчүрүлдү."</string>
     <string name="basic_status" msgid="2315371112182658176">"Ачык сүйлөшүү"</string>

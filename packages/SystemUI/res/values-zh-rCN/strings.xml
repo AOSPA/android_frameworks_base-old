@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"请再次尝试截屏"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"无法保存屏幕截图"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"此应用或您所在的单位不允许进行屏幕截图"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"编辑"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"编辑屏幕截图"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"分享屏幕截图"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"已确认"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"点按“确认”即可完成"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"已通过面孔识别解锁。按下解锁图标即可继续。"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"已通过面孔识别解锁。点按即可继续。"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"识别出面孔。点按即可继续。"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"识别出面孔。按下解锁图标即可继续。"</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"已经过身份验证"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"使用 PIN 码"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"使用图案"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"向上滑动即可打开"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"按下解锁图标即可打开"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"已通过面孔识别解锁。按下解锁图标即可打开。"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"已通过面孔识别解锁。点按即可打开。"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"识别出面孔。点按即可打开。"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"识别出面孔。按下解锁图标即可打开。"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"向上滑动即可重试"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"需要解锁才能使用 NFC"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"此设备归贵单位所有"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"要继续您的会话吗？"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"重新开始"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"是，继续"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"访客模式"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"您当前处于访客模式"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"如果添加新用户，系统将退出访客模式并删除当前访客会话中的所有应用和数据。"</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"已达到用户数上限"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other">您最多可以添加 <xliff:g id="COUNT">%d</xliff:g> 位用户。</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"在电池电量可能会耗尽时，系统会开启此模式"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"不用了"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"转储 SysUI 堆"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"有多个应用正在使用您的<xliff:g id="TYPES_LIST">%s</xliff:g>。"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">"、 "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" 和 "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"与新设备配对"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"如需投射此会话，请打开相关应用。"</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"未知应用"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"停止投射"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"广播的运作方式"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"广播"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"附近使用兼容蓝牙设备的用户可以收听您广播的媒体内容"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"保存"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"即将开始…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"无法广播"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"版本号"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"已将版本号复制到剪贴板。"</string>
     <string name="basic_status" msgid="2315371112182658176">"开放式对话"</string>

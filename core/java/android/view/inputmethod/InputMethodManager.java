@@ -1422,6 +1422,20 @@ public final class InputMethodManager {
     }
 
     /**
+     * Returns {@code true} if currently selected IME supports Stylus handwriting.
+     * If the method returns {@code false}, {@link #startStylusHandwriting(View)} shouldn't be
+     * called and Stylus touch should continue as normal touch input.
+     * @see #startStylusHandwriting(View)
+     */
+    public boolean isStylusHandwritingAvailable() {
+        try {
+            return mService.isStylusHandwritingAvailable();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns the list of installed input methods for the specified user.
      *
      * @param userId user ID to query
@@ -2013,10 +2027,13 @@ public final class InputMethodManager {
      * pointers will be {@code android.view.MotionEvent#FLAG_CANCELED} cancelled.
      *
      * If Stylus handwriting mode is not supported or cannot be fulfilled for any reason by IME,
-     * request will be ignored and Stylus touch will continue as normal touch input.
+     * request will be ignored and Stylus touch will continue as normal touch input. Ideally,
+     * {@link #isStylusHandwritingAvailable()} should be called first to determine if stylus
+     * handwriting is supported by IME.
      *
      * @param view the View for which stylus handwriting is requested. It and
      * {@link View#hasWindowFocus its window} must be {@link View#hasFocus focused}.
+     * @see #isStylusHandwritingAvailable()
      */
     public void startStylusHandwriting(@NonNull View view) {
         // Re-dispatch if there is a context mismatch.
@@ -2595,7 +2612,7 @@ public final class InputMethodManager {
                 try {
                     mService.hideSoftInput(mClient, windowToken, 0 /* flags */,
                             null /* resultReceiver */,
-                            SoftInputShowHideReason.HIDE_SOFT_INPUT);
+                            SoftInputShowHideReason.HIDE_SOFT_INPUT_BY_INSETS_API);
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
                 }
@@ -2988,7 +3005,8 @@ public final class InputMethodManager {
      */
     @Deprecated
     public void hideSoftInputFromInputMethod(IBinder token, int flags) {
-        InputMethodPrivilegedOperationsRegistry.get(token).hideMySoftInput(flags);
+        InputMethodPrivilegedOperationsRegistry.get(token).hideMySoftInput(
+                flags, SoftInputShowHideReason.HIDE_SOFT_INPUT_IMM_DEPRECATION);
     }
 
     /**

@@ -413,10 +413,8 @@ public abstract class VibrationEffect implements Parcelable {
      * {@link #startWaveform(VibrationEffect.VibrationParameter)}.
      *
      * @see VibrationEffect.WaveformBuilder
-     * @hide
      */
     @NonNull
-    @TestApi
     public static WaveformBuilder startWaveform() {
         return new WaveformBuilder();
     }
@@ -433,10 +431,8 @@ public abstract class VibrationEffect implements Parcelable {
      * @return The {@link VibrationEffect.WaveformBuilder} started with the initial parameters.
      *
      * @see VibrationEffect.WaveformBuilder
-     * @hide
      */
     @NonNull
-    @TestApi
     public static WaveformBuilder startWaveform(@NonNull VibrationParameter initialParameter) {
         WaveformBuilder builder = startWaveform();
         builder.addTransition(Duration.ZERO, initialParameter);
@@ -458,10 +454,8 @@ public abstract class VibrationEffect implements Parcelable {
      * @return The {@link VibrationEffect.WaveformBuilder} started with the initial parameters.
      *
      * @see VibrationEffect.WaveformBuilder
-     * @hide
      */
     @NonNull
-    @TestApi
     public static WaveformBuilder startWaveform(@NonNull VibrationParameter initialParameter1,
             @NonNull VibrationParameter initialParameter2) {
         WaveformBuilder builder = startWaveform();
@@ -875,9 +869,7 @@ public abstract class VibrationEffect implements Parcelable {
         /**
          * Exception thrown when adding an element to a {@link Composition} that already ends in an
          * indefinitely repeating effect.
-         * @hide
          */
-        @TestApi
         public static final class UnreachableAfterRepeatingIndefinitelyException
                 extends IllegalStateException {
             UnreachableAfterRepeatingIndefinitelyException() {
@@ -946,10 +938,8 @@ public abstract class VibrationEffect implements Parcelable {
          *
          * @throws UnreachableAfterRepeatingIndefinitelyException if the composition is currently
          * ending with a repeating effect.
-         * @hide
          */
         @NonNull
-        @TestApi
         public Composition addOffDuration(@NonNull Duration duration) {
             int durationMs = (int) duration.toMillis();
             Preconditions.checkArgumentNonnegative(durationMs, "Off period must be non-negative");
@@ -975,10 +965,8 @@ public abstract class VibrationEffect implements Parcelable {
          *
          * @throws UnreachableAfterRepeatingIndefinitelyException if the composition is currently
          * ending with a repeating effect.
-         * @hide
          */
         @NonNull
-        @TestApi
         public Composition addEffect(@NonNull VibrationEffect effect) {
             return addSegments(effect);
         }
@@ -999,10 +987,8 @@ public abstract class VibrationEffect implements Parcelable {
          * @throws IllegalArgumentException if the given effect is already repeating indefinitely.
          * @throws UnreachableAfterRepeatingIndefinitelyException if the composition is currently
          * ending with a repeating effect.
-         * @hide
          */
         @NonNull
-        @TestApi
         public Composition repeatEffectIndefinitely(@NonNull VibrationEffect effect) {
             Preconditions.checkArgument(effect.getDuration() < Long.MAX_VALUE,
                     "Can't repeat an indefinitely repeating effect. Consider addEffect instead.");
@@ -1216,9 +1202,7 @@ public abstract class VibrationEffect implements Parcelable {
      *     .build();}</pre>
      *
      * @see VibrationEffect#startWaveform
-     * @hide
      */
-    @TestApi
     public static final class WaveformBuilder {
         // Epsilon used for float comparison of amplitude and frequency values on transitions.
         private static final float EPSILON = 1e-5f;
@@ -1399,10 +1383,8 @@ public abstract class VibrationEffect implements Parcelable {
      * <p>Examples of concrete parameters are the vibration amplitude or frequency.
      *
      * @see VibrationEffect.WaveformBuilder
-     * @hide
      */
     @SuppressWarnings("UserHandleName") // This is not a regular set of parameters, no *Params.
-    @TestApi
     public static class VibrationParameter {
         VibrationParameter() {
         }

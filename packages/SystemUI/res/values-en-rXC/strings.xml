@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‏‏‎‏‎‎‏‏‏‎‏‎‎‎‏‎‎‏‏‎‎‎‎‏‎‏‏‏‎‎‏‏‏‏‏‏‏‏‏‎‏‎‎‎‏‎‏‎‎‎‎‎‎‏‎‏‏‎‎‎‎‏‎Try taking screenshot again‎‏‎‎‏‎"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‏‏‎‏‎‏‎‏‎‏‎‎‏‏‎‏‏‎‏‎‎‏‏‎‏‏‏‏‏‏‎‏‏‏‏‎‏‎‎‏‏‏‎‎‎‎Can\'t save screenshot‎‏‎‎‏‎"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‏‏‎‎‏‎‎‎‎‎‎‎‎‎‏‎‎‏‎‎‎‎‎‎‎‎‏‎‎‏‏‎‏‎‎‎‎‏‎‏‏‎‎‏‎‏‏‏‎‎‎‎‎‎‎‏‏‎‏‏‎Taking screenshots isn\'t allowed by the app or your organization‎‏‎‎‏‎"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‏‎‎‏‎‏‏‏‏‏‏‏‏‏‏‏‎‎‎‏‏‎‏‏‏‎‎‎‎‎‎‏‎‏‎‎‎‎‎‎‏‎‏‏‏‏‏‎‎‎‎‏‏‎‏‏‏‎‏‎‎Edit‎‏‎‎‏‎"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‏‏‏‎‎‏‎‎‎‎‎‏‏‎‎‎‎‏‎‏‏‎‏‏‏‏‏‏‎‎‎‎‎‏‎‏‎‏‏‎‎‏‏‏‎‏‏‎‏‎‏‎‎‎‏‎‏‎‏‎‎Edit screenshot‎‏‎‎‏‎"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‎‏‏‏‏‎‏‏‎‏‏‎‏‎‎‎‏‏‎‎‎‏‎‏‏‎‏‏‎‎‎‎‎‏‏‎‎‎‎‏‎‏‏‏‏‎‏‎‏‏‎‏‏‏‏‎‎‏‎‎‎Share screenshot‎‏‎‎‏‎"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‏‏‎‏‏‏‏‎‎‎‏‎‏‎‏‎‎‎‎‎‏‏‏‎‎‎‏‏‏‎‎‎‎‏‏‏‎‎‎‎‎‎‏‏‏‎‏‏‎‏‎‏‎‎‏‎‏‎‏‎‎Confirmed‎‏‎‎‏‎"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‏‏‏‏‎‎‏‏‎‏‎‏‎‏‏‎‏‎‏‏‎‏‏‎‏‏‏‎‎‏‏‏‏‏‎‎‎‏‎‏‎‏‏‎‏‎‏‏‎‎‎‎‏‎‏‏‏‏‏‎‎Tap Confirm to complete‎‏‎‎‏‎"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‎‏‏‏‏‎‎‏‎‎‏‏‏‏‎‏‏‏‏‏‎‎‎‏‎‏‏‏‏‎‏‏‏‏‏‏‎‎‎‏‏‏‎‎‎‏‎‏‏‏‎‏‎‏‎‏‎‎‏‏‏‎Unlocked by face. Press the unlock icon to continue.‎‏‎‎‏‎"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‎‏‏‏‏‎‎‎‎‏‏‎‎‎‎‎‏‎‏‏‏‎‏‏‏‏‏‎‏‏‏‎‎‎‏‏‏‏‎‎‎‏‎‎‎‎‎‏‎‏‏‏‏‎‏‏‏‎‏‎‎‏‎Unlocked by face. Press to continue.‎‏‎‎‏‎"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‎‏‏‏‎‎‏‎‏‎‎‏‏‏‎‎‎‎‏‎‏‎‏‎‎‏‏‎‏‏‎‏‏‎‏‏‎‏‎‎‎‎‎‎‏‏‏‎‏‎‎‎‏‎‎‏‎‏‎‎‎Face recognized. Press to continue.‎‏‎‎‏‎"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‏‏‏‏‏‎‎‏‏‎‏‏‎‏‏‏‏‎‏‏‏‎‎‎‏‎‏‏‎‏‎‏‎‎‏‏‎‎‏‏‏‎‏‎‎‏‎‏‏‏‎‎‏‏‏‏‎‎‏‎‏‏‎Face recognized. Press the unlock icon to continue.‎‏‎‎‏‎"</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‎‏‎‏‏‏‎‏‎‎‏‎‏‏‎‎‏‎‎‎‏‎‎‏‏‏‏‎‏‏‎‏‏‎‏‏‎‎‎‎‏‎‏‎‏‏‏‎‏‎‎‎‏‎‏‎‎‏‎‎‎Authenticated‎‏‎‎‏‎"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‎‏‎‎‎‏‎‏‏‏‏‎‏‎‎‎‏‏‎‎‏‎‎‏‎‎‏‎‎‎‎‏‎‏‏‎‏‎‎‏‏‏‎‏‏‏‎‏‏‏‎‏‏‎‎‎‎‏‎‏‎Use PIN‎‏‎‎‏‎"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‎‎‎‎‎‎‏‎‎‎‏‎‏‎‏‎‎‎‏‏‏‏‏‎‏‏‎‎‎‎‏‎‏‎‏‏‏‏‏‏‏‎‎‏‎‎‎‏‏‎‏‎‏‎‏‏‏‎‏‎‎Use pattern‎‏‎‎‏‎"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‏‏‏‏‎‏‏‏‎‏‏‏‎‏‎‎‏‏‏‏‎‏‏‎‏‏‏‎‎‏‏‏‏‎‏‎‎‎‎‎‏‏‏‎‏‏‏‎‎‎‏‎‎‏‎‎‎‎‎‏‎Swipe up to open‎‏‎‎‏‎"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‏‏‏‎‏‏‎‏‏‎‎‎‎‎‏‏‎‎‎‏‎‎‎‏‏‏‏‏‎‎‏‎‏‏‏‎‎‎‎‏‎‎‎‎‏‏‎‎‎‎‏‎‏‏‎‎‏‎‎‏‎Press the unlock icon to open‎‏‎‎‏‎"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‎‏‏‏‏‎‏‏‎‏‎‏‎‏‎‏‎‏‏‎‎‏‎‏‎‎‏‎‎‏‎‏‏‏‎‎‏‏‎‏‎‎‏‎‎‎‎‎‏‎‏‏‏‎‏‏‏‎‎‎Unlocked by face. Press the unlock icon to open.‎‏‎‎‏‎"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‎‏‏‏‏‎‏‎‏‎‎‎‏‎‏‏‎‎‏‎‏‏‎‎‏‎‏‏‏‏‎‎‏‏‎‏‎‎‏‎‎‏‏‎‎‏‏‏‏‎‎‏‏‎‏‏‏‎‎‏‎‎Unlocked by face. Press to open.‎‏‎‎‏‎"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‎‎‏‏‎‏‎‏‎‏‎‏‏‏‎‏‏‎‎‏‏‎‎‏‏‎‏‎‏‏‎‏‎‎‏‎‎‎‏‏‎‏‏‎‏‏‎‏‏‏‎‏‏‎‎‏‎‏‏‎‎Face recognized. Press to open.‎‏‎‎‏‎"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‎‏‎‎‎‎‏‎‏‏‏‏‎‎‏‎‎‏‎‏‏‏‏‏‏‎‎‏‏‎‎‎‎‎‎‏‏‏‏‏‎‏‎‎‏‎‏‎‏‎‎‏‏‏‎‎‏‎‏‎‎Face recognized. Press the unlock icon to open.‎‏‎‎‏‎"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‎‏‏‎‎‎‏‎‎‏‏‏‎‏‎‎‎‏‏‏‎‎‎‏‏‎‎‏‎‎‎‏‎‎‎‎‎‏‎‎‎‏‎‏‎‏‏‏‏‎‏‏‏‎‎‎‏‎‎‏‏‎Swipe up to try again‎‏‎‎‏‎"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‏‏‎‎‏‎‎‎‎‏‏‏‏‎‏‎‏‏‏‎‏‎‏‏‏‎‏‎‎‏‏‎‏‎‏‏‏‏‏‏‎‎‎‎‏‏‏‏‏‎‎‎‎‏‎‏‎‎‏‏‏‏‎Unlock to use NFC‎‏‎‎‏‎"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‎‎‎‏‏‏‏‏‏‎‎‏‏‏‏‎‎‏‏‎‏‎‎‏‎‏‏‏‏‎‎‎‏‎‏‎‎‏‎‎‏‏‎‏‎‏‏‎‎‏‎‏‏‏‏‎‏‏‏‏‏‎This device belongs to your organization‎‏‎‎‏‎"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‏‏‏‏‎‎‎‏‏‎‎‏‎‏‎‎‏‎‎‎‏‎‎‏‎‏‏‏‏‎‎‏‏‏‏‏‏‎‏‏‎‏‎‎‏‏‎‎‎‏‎‏‏‏‏‏‎‎‎‏‎Do you want to continue your session?‎‏‎‎‏‎"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‏‏‏‏‏‏‎‎‏‏‏‏‏‎‏‎‎‎‏‎‎‎‏‎‏‏‏‏‏‏‎‎‎‏‎‏‎‎‏‏‏‏‏‎‎‏‏‏‎‎‏‎‎‎‎‏‏‏‎‏‎Start over‎‏‎‎‏‎"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‏‏‎‎‏‎‎‎‏‏‏‏‏‏‏‏‎‎‏‎‏‏‎‏‎‎‏‏‎‎‏‏‎‏‎‎‎‏‏‎‎‎‎‏‏‏‏‎‎‎‎‏‏‎‎‎‏‏‎‏‎Yes, continue‎‏‎‎‏‎"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‏‏‏‏‎‏‎‏‎‎‏‎‎‏‏‎‏‏‏‏‎‎‏‏‎‏‎‎‎‏‎‎‎‏‏‏‏‏‎‎‎‎‎‎‏‎‎‎‎‏‎‏‏‏‎‏‎‎‎‏‎‏‎Guest mode‎‏‎‎‏‎"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‎‏‏‎‏‎‏‎‎‎‎‏‎‏‏‏‎‏‏‎‏‏‏‏‎‏‎‏‏‎‏‏‎‏‎‎‎‏‎‏‏‏‎‎‏‏‏‏‏‏‏‎‏‏‏‎‏‏‎‏‎‎You are in guest mode‎‏‎‎‏‎"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‎‏‏‎‏‏‎‎‏‎‎‎‏‎‎‏‎‎‎‏‎‏‎‎‎‏‏‎‏‏‎‏‏‎‎‏‏‏‎‏‎‎‏‏‏‏‏‏‎‏‎‎‎‎‏‏‏‏‏‏‏‎‎‏‎‎‏‏‎\n‎‏‎‎‏‏‏‎‎‏‎‎‏‏‎\n‎‏‎‎‏‏‏‎Adding a new user will exit guest mode and delete all apps and data from the current guest session.‎‏‎‎‏‎"</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‎‎‎‏‏‎‏‏‎‏‏‎‎‏‎‏‏‎‏‏‎‏‎‏‎‎‎‎‎‎‏‎‎‏‏‏‎‏‏‏‎‎‏‏‎‏‏‎‎‎‏‏‎‏‎‎‏‎‎‏‎User limit reached‎‏‎‎‏‎"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other">‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‎‎‏‏‏‎‏‏‎‏‏‏‎‎‎‎‏‎‎‏‎‎‏‎‏‎‎‏‏‏‏‏‎‎‎‎‏‎‏‏‏‏‏‏‎‏‎‏‎‏‏‎‏‏‏‎‏‏‏‎‎You can add up to ‎‏‎‎‏‏‎<xliff:g id="COUNT">%d</xliff:g>‎‏‎‎‏‏‏‎ users.‎‏‎‎‏‎</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‏‏‎‎‏‎‎‏‏‏‎‏‏‏‎‏‎‏‎‏‎‏‎‏‏‏‎‏‏‏‏‎‏‎‏‎‎‏‏‎‏‎‎‏‎‎‏‎‏‏‏‎‏‎‏‎‏‏‎‎‎Turn on when battery is likely to run out‎‏‎‎‏‎"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‎‏‏‏‏‎‏‎‎‎‏‏‎‏‏‎‎‏‎‏‏‎‏‎‏‎‏‎‎‏‏‎‎‏‎‎‎‎‏‎‏‎‏‎‏‎‎‏‏‎‏‏‎‎‎‎‏‎‏‏‎No thanks‎‏‎‎‏‎"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‎‎‏‎‎‎‏‏‎‎‏‎‏‎‎‎‏‏‏‏‏‎‎‏‏‏‏‎‎‏‎‏‏‏‏‎‏‎‎‎‏‎‏‎‏‎‎‎‎‎‏‎‏‎‎‎‎‏‏‎‎Dump SysUI Heap‎‏‎‎‏‎"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‎‎‏‏‏‏‎‎‎‎‎‏‏‏‏‏‎‎‏‏‏‏‎‎‎‏‏‏‎‏‎‏‏‏‎‎‎‏‏‏‏‎‎‏‏‎‎‏‏‎‏‎‎‏‎‏‎‎‏‎‎Applications are using your ‎‏‎‎‏‏‎<xliff:g id="TYPES_LIST">%s</xliff:g>‎‏‎‎‏‏‏‎.‎‏‎‎‏‎"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‏‏‏‎‎‏‏‏‏‎‎‏‏‎‎‎‏‎‎‏‏‏‎‏‏‏‏‎‎‏‏‏‎‏‎‎‎‎‎‎‎‏‏‏‎‎‏‎‎‎‏‎‎‎‎‏‎‎‏‎‏‏‎, ‎‏‎‎‏‎ "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" ‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‎‏‏‎‏‏‏‏‎‏‏‏‏‏‎‎‏‏‎‎‏‏‎‎‏‎‎‏‎‎‏‎‏‏‏‎‏‏‎‎‎‏‎‏‏‏‎‏‏‎‏‎‏‎‎‏‎‎‏‏‏‎ and ‎‏‎‎‏‎ "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‏‏‏‎‎‏‎‎‎‏‏‏‏‏‏‎‏‎‎‏‎‎‏‏‎‎‏‎‏‎‏‏‎‎‏‏‎‎‎‏‎‏‎‎‏‎‎‏‏‏‎‏‏‎‏‎‎‏‏‎‎Pair new device‎‏‎‎‏‎"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‏‏‎‏‎‏‎‎‏‏‎‎‏‎‎‏‏‏‎‏‏‎‎‏‎‏‎‎‏‎‎‏‎‏‎‏‎‏‏‏‏‎‎‏‏‎‏‎‎‎‎‏‏‎‎‎‎‏‎‎‏‏‎To cast this session, please open the app.‎‏‎‎‏‎"</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‎‏‏‏‏‎‎‎‎‏‏‏‎‎‏‎‏‎‏‏‎‎‎‏‏‎‎‎‏‎‏‎‎‎‎‏‏‏‎‎‎‏‎‎‏‏‏‏‏‏‏‎‏‏‏‎‎‏‎‎‎‎Unknown app‎‏‎‎‏‎"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‏‏‎‏‏‎‏‎‏‎‏‎‏‏‏‎‎‎‎‎‏‏‏‎‏‎‎‎‏‏‏‏‏‎‎‏‎‎‏‎‏‏‎‏‎‏‎‏‎‎‎‎‎‏‎‎‏‎‏‎‏‎Stop casting‎‏‎‎‏‎"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‏‎‏‏‏‎‏‎‏‎‎‏‎‏‎‎‎‎‏‎‎‏‏‏‎‏‏‏‎‏‎‏‎‎‎‏‎‏‏‏‏‎‎‎‎‎‏‏‎‏‏‏‎‎‏‏‏‏‏‏‎‎How broadcasting works‎‏‎‎‏‎"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‏‎‎‎‏‎‏‎‏‎‏‏‏‏‏‏‏‎‏‏‎‎‎‎‎‏‎‎‎‎‎‏‏‎‎‎‏‎‎‏‏‎‏‎‏‏‎‏‏‏‎‎‎‏‏‏‏‎‏‏‏‎Broadcast‎‏‎‎‏‎"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‎‏‏‎‎‎‎‎‏‎‏‏‎‏‎‏‏‎‏‏‏‏‏‏‏‎‏‏‏‏‏‎‎‏‏‎‎‎‏‎‎‎‎‏‎‏‏‎‎‏‏‏‏‎‏‎‎‏‏‏‏‎‎People near you with compatible Bluetooth devices can listen to the media you\'re broadcasting‎‏‎‎‏‎"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‏‏‎‏‏‏‎‎‏‎‎‏‎‎‎‎‏‎‏‎‎‏‎‏‎‏‏‏‏‎‎‎‎‎‏‏‎‎‎‎‏‎‏‏‏‏‎‏‎‏‎‏‎‏‎‏‎‏‏‎‎Save‎‏‎‎‏‎"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‎‎‎‎‏‏‎‏‎‏‎‎‎‎‎‏‏‎‏‏‏‎‏‎‏‏‎‎‎‏‎‎‏‏‎‏‏‏‏‎‏‏‎‎‎‎‏‎‏‎‎‏‏‎‏‎‎‏‎‏‎Starting…‎‏‎‎‏‎"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‏‎‎‏‎‏‏‏‏‎‎‎‏‎‏‏‎‏‏‎‏‏‏‎‏‏‎‎‎‎‏‎‎‎‎‎‏‎‎‎‏‏‎‎‎‎‎‏‎‎‏‎‎‏‏‏‎‏‏‏‏‎Can’t broadcast‎‏‎‎‏‎"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‏‎‎‏‎‎‏‎‎‏‎‎‎‎‎‎‏‏‏‎‎‎‎‎‎‏‎‎‏‏‎‏‏‏‏‏‏‎‏‏‏‏‏‏‎‎‎‎‏‏‏‏‎‎‎‎‏‎‎‏‎‎Build number‎‏‎‎‏‎"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‎‎‏‏‎‎‎‎‏‎‏‏‏‎‎‏‎‎‏‎‏‎‏‎‎‎‎‏‏‏‎‎‏‎‎‎‎‎‎‎‏‏‏‎‎‏‎‏‏‏‏‎‎‎‎‏‎‎‎‏‏‎‎Build number copied to clipboard.‎‏‎‎‏‎"</string>
     <string name="basic_status" msgid="2315371112182658176">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‎‏‎‎‎‎‎‎‎‏‎‎‎‎‏‏‏‎‏‏‎‎‏‏‏‎‎‎‎‏‎‎‏‎‏‏‎‎‎‏‏‎‏‏‎‎‏‎‎‏‏‎‏‎‎‏‎‎‎‎‎‎‎‎Open conversation‎‏‎‎‏‎"</string>

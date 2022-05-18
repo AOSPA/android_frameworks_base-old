@@ -334,7 +334,7 @@ public class SplitTransitionTests extends ShellTestCase {
         TransitionInfo info = new TransitionInfo(TRANSIT_TO_BACK, 0);
         info.addChange(mainChange);
         info.addChange(sideChange);
-        IBinder transition = mSplitScreenTransitions.startDismissTransition(null,
+        IBinder transition = mSplitScreenTransitions.startDismissTransition(
                 new WindowContainerTransaction(), mStageCoordinator,
                 EXIT_REASON_APP_DOES_NOT_SUPPORT_MULTIWINDOW, STAGE_TYPE_SIDE);
         boolean accepted = mStageCoordinator.startAnimation(transition, info,
@@ -356,7 +356,7 @@ public class SplitTransitionTests extends ShellTestCase {
         TransitionInfo info = new TransitionInfo(TRANSIT_TO_BACK, 0);
         info.addChange(mainChange);
         info.addChange(sideChange);
-        IBinder transition = mSplitScreenTransitions.startDismissTransition(null,
+        IBinder transition = mSplitScreenTransitions.startDismissTransition(
                 new WindowContainerTransaction(), mStageCoordinator, EXIT_REASON_DRAG_DIVIDER,
                 STAGE_TYPE_SIDE);
         mMainStage.onTaskVanished(mMainChild);

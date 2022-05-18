@@ -55,7 +55,6 @@ import com.android.wm.shell.common.SystemWindows;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ShellAnimationThread;
-import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
 import com.android.wm.shell.compatui.CompatUI;
@@ -319,26 +318,27 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<FullscreenUnfoldController> provideFullscreenUnfoldController(
-            @DynamicOverride Optional<FullscreenUnfoldController> fullscreenUnfoldController,
+            @DynamicOverride Lazy<Optional<FullscreenUnfoldController>> fullscreenUnfoldController,
             Optional<ShellUnfoldProgressProvider> progressProvider) {
         if (progressProvider.isPresent()
                 && progressProvider.get() != ShellUnfoldProgressProvider.NO_PROVIDER) {
-            return fullscreenUnfoldController;
+            return fullscreenUnfoldController.get();
         }
         return Optional.empty();
     }
+
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract UnfoldTransitionHandler optionalUnfoldTransitionHandler();
 
     @WMSingleton
     @Provides
     static Optional<UnfoldTransitionHandler> provideUnfoldTransitionHandler(
             Optional<ShellUnfoldProgressProvider> progressProvider,
-            TransactionPool transactionPool,
-            Transitions transitions,
-            @ShellMainThread ShellExecutor executor) {
-        if (progressProvider.isPresent()) {
-            return Optional.of(
-                    new UnfoldTransitionHandler(progressProvider.get(), transactionPool, executor,
-                            transitions));
+            @DynamicOverride Lazy<Optional<UnfoldTransitionHandler>> handler) {
+        if (progressProvider.isPresent()
+                && progressProvider.get() != ShellUnfoldProgressProvider.NO_PROVIDER) {
+            return handler.get();
         }
         return Optional.empty();
     }
@@ -726,12 +726,11 @@ public abstract class WMShellBaseModule {
     @Provides
     static Optional<BackAnimationController> provideBackAnimationController(
             Context context,
-            @ShellMainThread ShellExecutor shellExecutor,
-            @ShellBackgroundThread Handler backgroundHandler
+            @ShellMainThread ShellExecutor shellExecutor
     ) {
         if (BackAnimationController.IS_ENABLED) {
             return Optional.of(
-                    new BackAnimationController(shellExecutor, backgroundHandler, context));
+                    new BackAnimationController(shellExecutor, context));
         }
         return Optional.empty();
     }

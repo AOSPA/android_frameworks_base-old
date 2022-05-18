@@ -1059,17 +1059,11 @@ public class WindowManagerService extends IWindowManager.Stub
     // logical displays.
     final PossibleDisplayInfoMapper mPossibleDisplayInfoMapper;
 
-    // If true, only the core apps and services are being launched because the device
-    // is in a special boot mode, such as being encrypted or waiting for a decryption password.
-    // For example, when this flag is true, there will be no wallpaper service.
-    final boolean mOnlyCore;
-
     static WindowManagerThreadPriorityBooster sThreadPriorityBooster =
             new WindowManagerThreadPriorityBooster();
 
     Function<SurfaceSession, SurfaceControl.Builder> mSurfaceControlFactory;
     Supplier<SurfaceControl.Transaction> mTransactionFactory;
-    final Supplier<Surface> mSurfaceFactory;
 
     private final SurfaceControl.Transaction mTransaction;
 
@@ -1149,11 +1143,10 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public static WindowManagerService main(final Context context, final InputManagerService im,
-            final boolean showBootMsgs, final boolean onlyCore, WindowManagerPolicy policy,
+            final boolean showBootMsgs, WindowManagerPolicy policy,
             ActivityTaskManagerService atm) {
-        return main(context, im, showBootMsgs, onlyCore, policy, atm,
-                new DisplayWindowSettingsProvider(), SurfaceControl.Transaction::new, Surface::new,
-                SurfaceControl.Builder::new);
+        return main(context, im, showBootMsgs, policy, atm, new DisplayWindowSettingsProvider(),
+                SurfaceControl.Transaction::new, SurfaceControl.Builder::new);
     }
 
     /**
@@ -1162,15 +1155,14 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     @VisibleForTesting
     public static WindowManagerService main(final Context context, final InputManagerService im,
-            final boolean showBootMsgs, final boolean onlyCore, WindowManagerPolicy policy,
-            ActivityTaskManagerService atm, DisplayWindowSettingsProvider
-            displayWindowSettingsProvider, Supplier<SurfaceControl.Transaction> transactionFactory,
-            Supplier<Surface> surfaceFactory,
+            final boolean showBootMsgs, WindowManagerPolicy policy, ActivityTaskManagerService atm,
+            DisplayWindowSettingsProvider displayWindowSettingsProvider,
+            Supplier<SurfaceControl.Transaction> transactionFactory,
             Function<SurfaceSession, SurfaceControl.Builder> surfaceControlFactory) {
         final WindowManagerService[] wms = new WindowManagerService[1];
         DisplayThread.getHandler().runWithScissors(() ->
-                wms[0] = new WindowManagerService(context, im, showBootMsgs, onlyCore, policy,
-                        atm, displayWindowSettingsProvider, transactionFactory, surfaceFactory,
+                wms[0] = new WindowManagerService(context, im, showBootMsgs, policy, atm,
+                        displayWindowSettingsProvider, transactionFactory,
                         surfaceControlFactory), 0);
         return wms[0];
     }
@@ -1180,7 +1172,7 @@ public class WindowManagerService extends IWindowManager.Stub
             @Override
             public void run() {
                 WindowManagerPolicyThread.set(Thread.currentThread(), Looper.myLooper());
-                mPolicy.init(mContext, WindowManagerService.this, WindowManagerService.this);
+                mPolicy.init(mContext, WindowManagerService.this);
             }
         }, 0);
     }
@@ -1192,10 +1184,9 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private WindowManagerService(Context context, InputManagerService inputManager,
-            boolean showBootMsgs, boolean onlyCore, WindowManagerPolicy policy,
-            ActivityTaskManagerService atm, DisplayWindowSettingsProvider
-            displayWindowSettingsProvider, Supplier<SurfaceControl.Transaction> transactionFactory,
-            Supplier<Surface> surfaceFactory,
+            boolean showBootMsgs, WindowManagerPolicy policy, ActivityTaskManagerService atm,
+            DisplayWindowSettingsProvider displayWindowSettingsProvider,
+            Supplier<SurfaceControl.Transaction> transactionFactory,
             Function<SurfaceSession, SurfaceControl.Builder> surfaceControlFactory) {
         installLock(this, INDEX_WINDOW);
         mGlobalLock = atm.getGlobalLock();
@@ -1203,7 +1194,6 @@ public class WindowManagerService extends IWindowManager.Stub
         mContext = context;
         mIsPc = mContext.getPackageManager().hasSystemFeature(FEATURE_PC);
         mAllowBootMessages = showBootMsgs;
-        mOnlyCore = onlyCore;
         mLimitedAlphaCompositing = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_sf_limitedAlpha);
         mHasPermanentDpad = context.getResources().getBoolean(
@@ -1235,7 +1225,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mSurfaceControlFactory = surfaceControlFactory;
         mTransactionFactory = transactionFactory;
-        mSurfaceFactory = surfaceFactory;
         mTransaction = mTransactionFactory.get();
 
         mPolicy = policy;
@@ -3677,8 +3666,8 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mGlobalLock) {
             ProtoLog.i(WM_DEBUG_BOOT, "performEnableScreen: mDisplayEnabled=%b"
                             + " mForceDisplayEnabled=%b" + " mShowingBootMessages=%b"
-                            + " mSystemBooted=%b mOnlyCore=%b. %s", mDisplayEnabled,
-                    mForceDisplayEnabled, mShowingBootMessages, mSystemBooted, mOnlyCore,
+                            + " mSystemBooted=%b. %s", mDisplayEnabled,
+                    mForceDisplayEnabled, mShowingBootMessages, mSystemBooted,
                     new RuntimeException("here").fillInStackTrace());
             if (mDisplayEnabled) {
                 return;
@@ -3726,11 +3715,12 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             try {
-                IBinder surfaceFlinger = ServiceManager.getService("SurfaceFlinger");
+                // TODO(b/221898546): remove the following and convert to jni
+                IBinder surfaceFlinger = ServiceManager.getService("SurfaceFlingerAIDL");
                 if (surfaceFlinger != null) {
                     ProtoLog.i(WM_ERROR, "******* TELLING SURFACE FLINGER WE ARE BOOTED!");
                     Parcel data = Parcel.obtain();
-                    data.writeInterfaceToken("android.ui.ISurfaceComposer");
+                    data.writeInterfaceToken("android.gui.ISurfaceComposer");
                     surfaceFlinger.transact(IBinder.FIRST_CALL_TRANSACTION, // BOOT_FINISHED
                             data, null, 0);
                     data.recycle();

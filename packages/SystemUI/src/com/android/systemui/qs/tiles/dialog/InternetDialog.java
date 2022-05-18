@@ -338,12 +338,7 @@ public class InternetDialog extends SystemUIDialog implements
 
     private void setOnClickListener() {
         mMobileNetworkLayout.setOnClickListener(v -> {
-            if (mInternetDialogController.isMobileDataEnabled()
-                    && !mInternetDialogController.isDeviceLocked()) {
-                if (!mInternetDialogController.activeNetworkIsCellular()) {
-                    mInternetDialogController.connectCarrierNetwork();
-                }
-            }
+            mInternetDialogController.connectCarrierNetwork();
         });
         mMobileDataToggle.setOnCheckedChangeListener(
                 (buttonView, isChecked) -> {

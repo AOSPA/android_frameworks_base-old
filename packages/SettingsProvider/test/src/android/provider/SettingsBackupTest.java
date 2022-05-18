@@ -102,8 +102,7 @@ public class SettingsBackupTest {
                     Settings.System.PEAK_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.SCREEN_BRIGHTNESS_FLOAT,
                     Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
-                    Settings.System.MULTI_AUDIO_FOCUS_ENABLED, // form-factor/OEM specific
-                    Settings.System.WEAR_ACCESSIBILITY_GESTURE_ENABLED
+                    Settings.System.MULTI_AUDIO_FOCUS_ENABLED // form-factor/OEM specific
                     );
 
     private static final Set<String> BACKUP_DENY_LIST_GLOBAL_SETTINGS =
@@ -156,7 +155,6 @@ public class SettingsBackupTest {
                     Settings.Global.BLE_SCAN_LOW_LATENCY_WINDOW_MS,
                     Settings.Global.BLE_SCAN_LOW_LATENCY_INTERVAL_MS,
                     Settings.Global.BLE_SCAN_BACKGROUND_MODE,
-                    Settings.Global.BLOCK_UNTRUSTED_TOUCHES_MODE,
                     Settings.Global.BLOCKED_SLICES,
                     Settings.Global.BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT,
                     Settings.Global.BLOCKING_HELPER_STREAK_LIMIT,
@@ -422,6 +420,7 @@ public class SettingsBackupTest {
                     Settings.Global.RADIO_NFC,
                     Settings.Global.RADIO_WIFI,
                     Settings.Global.RADIO_WIMAX,
+                    Settings.Global.REMOVE_GUEST_ON_EXIT,
                     Settings.Global.RECOMMENDED_NETWORK_EVALUATOR_CACHE_EXPIRY_MS,
                     Settings.Global.READ_EXTERNAL_STORAGE_ENFORCED_DEFAULT,
                     Settings.Global.RESTRICTED_NETWORKING_MODE,
@@ -598,22 +597,16 @@ public class SettingsBackupTest {
                     Settings.Global.WATCHDOG_TIMEOUT_MILLIS,
                     Settings.Global.MANAGED_PROVISIONING_DEFER_PROVISIONING_TO_ROLE_HOLDER,
                     Settings.Global.REVIEW_PERMISSIONS_NOTIFICATION_STATE,
-                    Settings.Global.ENABLE_BACK_ANIMATION, // Temporary for T, dev option only
-                    Settings.Global.Wearable.BATTERY_SAVER_MODE,
                     Settings.Global.Wearable.COMBINED_LOCATION_ENABLED,
                     Settings.Global.Wearable.HAS_PAY_TOKENS,
                     Settings.Global.Wearable.GMS_CHECKIN_TIMEOUT_MIN,
                     Settings.Global.Wearable.HOTWORD_DETECTION_ENABLED,
-                    Settings.Global.Wearable.SMART_REPLIES_ENABLED,
                     Settings.Global.Wearable.DEFAULT_VIBRATION,
                     Settings.Global.Wearable.OBTAIN_PAIRED_DEVICE_LOCATION,
                     Settings.Global.Wearable.RETAIL_MODE,
                     Settings.Global.Wearable.PHONE_PLAY_STORE_AVAILABILITY,
                     Settings.Global.Wearable.BUG_REPORT,
                     Settings.Global.Wearable.SMART_ILLUMINATE_ENABLED,
-                    Settings.Global.Wearable.CLOCKWORK_AUTO_TIME,
-                    Settings.Global.Wearable.CLOCKWORK_AUTO_TIME_ZONE,
-                    Settings.Global.Wearable.CLOCKWORK_24HR_TIME,
                     Settings.Global.Wearable.AUTO_WIFI,
                     Settings.Global.Wearable.WIFI_POWER_SAVE,
                     Settings.Global.Wearable.ALT_BYPASS_WIFI_REQUIREMENT_TIME_MILLIS,
@@ -628,9 +621,7 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.STEM_3_TYPE,
                     Settings.Global.Wearable.STEM_3_DATA,
                     Settings.Global.Wearable.STEM_3_DEFAULT_DATA,
-                    Settings.Global.Wearable.MUTE_WHEN_OFF_BODY_ENABLED,
                     Settings.Global.Wearable.WEAR_OS_VERSION_STRING,
-                    Settings.Global.Wearable.CORNER_ROUNDNESS,
                     Settings.Global.Wearable.BUTTON_SET,
                     Settings.Global.Wearable.SIDE_BUTTON,
                     Settings.Global.Wearable.ANDROID_WEAR_VERSION,
@@ -638,10 +629,7 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.SYSTEM_EDITION,
                     Settings.Global.Wearable.WEAR_PLATFORM_MR_NUMBER,
                     Settings.Global.Wearable.MOBILE_SIGNAL_DETECTOR,
-                    Settings.Global.Wearable.AMBIENT_ENABLED,
-                    Settings.Global.Wearable.AMBIENT_TILT_TO_WAKE,
                     Settings.Global.Wearable.AMBIENT_LOW_BIT_ENABLED_DEV,
-                    Settings.Global.Wearable.AMBIENT_TOUCH_TO_WAKE,
                     Settings.Global.Wearable.AMBIENT_TILT_TO_BRIGHT,
                     Settings.Global.Wearable.DECOMPOSABLE_WATCHFACE,
                     Settings.Global.Wearable.AMBIENT_FORCE_WHEN_DOCKED,
@@ -657,7 +645,6 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.OEM_SETUP_VERSION,
                     Settings.Global.Wearable.MASTER_GESTURES_ENABLED,
                     Settings.Global.Wearable.UNGAZE_ENABLED,
-                    Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS,
                     Settings.Global.Wearable.BURN_IN_PROTECTION_ENABLED,
                     Settings.Global.Wearable.WRIST_ORIENTATION_MODE,
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_PACKAGE,
@@ -665,7 +652,9 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.CLOCKWORK_LONG_PRESS_TO_ASSISTANT_ENABLED,
                     Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER,
                     Settings.Global.Wearable.WET_MODE_ON,
-                    Settings.Global.Wearable.COOLDOWN_MODE_ON);
+                    Settings.Global.Wearable.COOLDOWN_MODE_ON,
+                    Settings.Global.Wearable.CHARGING_SOUNDS_ENABLED,
+                    Settings.Global.Wearable.SCREEN_UNLOCK_SOUND_ENABLED);
 
     private static final Set<String> BACKUP_DENY_LIST_SECURE_SETTINGS =
              newHashSet(

@@ -210,8 +210,8 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
     private final UiEventLogger mUiEventLogger;
     private final NavBarHelper mNavBarHelper;
     private final NotificationShadeDepthController mNotificationShadeDepthController;
-    private final UserContextProvider mUserContextProvider;
     private final OnComputeInternalInsetsListener mOnComputeInternalInsetsListener;
+    private final UserContextProvider mUserContextProvider;
     private NavigationBarFrame mFrame;
 
     private @WindowVisibleState int mNavigationBarWindowState = WINDOW_STATE_SHOWING;

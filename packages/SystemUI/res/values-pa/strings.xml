@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"ਸਕ੍ਰੀਨਸ਼ਾਟ ਦੁਬਾਰਾ ਲੈ ਕੇ ਦੇਖੋ"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"ਸਕ੍ਰੀਨਸ਼ਾਟ ਨੂੰ ਰੱਖਿਅਤ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"ਐਪ ਜਾਂ ਤੁਹਾਡੀ ਸੰਸਥਾ ਵੱਲੋਂ ਸਕ੍ਰੀਨਸ਼ਾਟ ਲੈਣ ਦੀ ਇਜਾਜ਼ਤ ਨਹੀਂ ਦਿੱਤੀ ਗਈ ਹੈ"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"ਸੰਪਾਦਨ ਕਰੋ"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"ਸਕ੍ਰੀਨਸ਼ਾਟ ਦਾ ਸੰਪਾਦਨ ਕਰੋ"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"ਸਕ੍ਰੀਨਸ਼ਾਟ ਸਾਂਝਾ ਕਰੋ"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"ਪੁਸ਼ਟੀ ਕੀਤੀ ਗਈ"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"ਪੂਰਾ ਕਰਨ ਲਈ ਪੁਸ਼ਟੀ ਕਰੋ \'ਤੇ ਟੈਪ ਕਰੋ"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"ਚਿਹਰੇ ਰਾਹੀਂ ਅਣਲਾਕ ਕੀਤਾ ਗਿਆ। ਜਾਰੀ ਰੱਖਣ ਲਈ \'ਅਣਲਾਕ ਕਰੋ\' ਪ੍ਰਤੀਕ ਨੂੰ ਦਬਾਓ।"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"ਚਿਹਰੇ ਰਾਹੀਂ ਅਣਲਾਕ ਕੀਤਾ ਗਿਆ। ਜਾਰੀ ਰੱਖਣ ਲਈ ਦਬਾਓ।"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"ਚਿਹਰੇ ਦੀ ਪਛਾਣ ਹੋਈ। ਜਾਰੀ ਰੱਖਣ ਲਈ ਦਬਾਓ।"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"ਚਿਹਰੇ ਦੀ ਪਛਾਣ ਹੋਈ। ਜਾਰੀ ਰੱਖਣ ਲਈ \'ਅਣਲਾਕ ਕਰੋ\' ਪ੍ਰਤੀਕ ਨੂੰ ਦਬਾਓ।"</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"ਪ੍ਰਮਾਣਿਤ ਹੋਇਆ"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"ਪਿੰਨ ਵਰਤੋ"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"ਪੈਟਰਨ ਵਰਤੋ"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"ਖੋਲ੍ਹਣ ਲਈ ਉੱਪਰ ਵੱਲ ਸਵਾਈਪ ਕਰੋ"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"ਖੋਲ੍ਹਣ ਲਈ \'ਅਣਲਾਕ ਕਰੋ\' ਪ੍ਰਤੀਕ ਨੂੰ ਦਬਾਓ"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"ਚਿਹਰੇ ਰਾਹੀਂ ਅਣਲਾਕ ਕੀਤਾ ਗਿਆ। ਖੋਲ੍ਹਣ ਲਈ \'ਅਣਲਾਕ ਕਰੋ\' ਪ੍ਰਤੀਕ ਨੂੰ ਦਬਾਓ।"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"ਚਿਹਰੇ ਰਾਹੀਂ ਅਣਲਾਕ ਕੀਤਾ ਗਿਆ। ਖੋਲ੍ਹਣ ਲਈ ਦਬਾਓ।"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"ਚਿਹਰੇ ਦੀ ਪਛਾਣ ਹੋਈ। ਖੋਲ੍ਹਣ ਲਈ ਦਬਾਓ।"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"ਚਿਹਰੇ ਦੀ ਪਛਾਣ ਹੋਈ। ਖੋਲ੍ਹਣ ਲਈ \'ਅਣਲਾਕ ਕਰੋ\' ਪ੍ਰਤੀਕ ਨੂੰ ਦਬਾਓ।"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰਨ ਲਈ ਉੱਤੇ ਵੱਲ ਸਵਾਈਪ ਕਰੋ"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFC ਵਰਤਣ ਲਈ ਅਣਲਾਕ ਕਰੋ"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"ਇਹ ਡੀਵਾਈਸ ਤੁਹਾਡੀ ਸੰਸਥਾ ਨਾਲ ਸੰਬੰਧਿਤ ਹੈ"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"ਕੀ ਤੁਸੀਂ ਆਪਣਾ ਸੈਸ਼ਨ ਜਾਰੀ ਰੱਖਣਾ ਚਾਹੁੰਦੇ ਹੋ?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"ਹਾਂ, ਜਾਰੀ ਰੱਖੋ"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"ਮਹਿਮਾਨ ਮੋਡ"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"ਤੁਸੀਂ ਮਹਿਮਾਨ ਮੋਡ ਵਿੱਚ ਹੋ"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"ਨਵੇਂ ਵਰਤੋਂਕਾਰ ਨੂੰ ਸ਼ਾਮਲ ਕਰਨ ਨਾਲ ਮੌਜੂਦਾ ਮਹਿਮਾਨ ਮੋਡ ਚਲਾ ਜਾਵੇਗਾ ਅਤੇ ਮੌਜੂਦਾ ਮਹਿਮਾਨ ਸੈਸ਼ਨ ਦੀਆਂ ਸਾਰੀਆਂ ਐਪਾਂ ਅਤੇ ਡਾਟਾ ਮਿਟ ਜਾਵੇਗਾ।"</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"ਵਰਤੋਂਕਾਰ ਸ਼ਾਮਲ ਕਰਨ ਦੀ ਸੀਮਾ ਪੂਰੀ ਹੋਈ"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="one">ਤੁਸੀਂ <xliff:g id="COUNT">%d</xliff:g> ਤੱਕ ਵਰਤੋਂਕਾਰ ਸ਼ਾਮਲ ਕਰ ਸਕਦੇ ਹੋ।</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"ਬੈਟਰੀ ਖਤਮ ਹੋਣ ਦੀ ਸੰਭਾਵਨਾ \'ਤੇ ਚਾਲੂ ਹੁੰਦਾ ਹੈ"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"ਨਹੀਂ ਧੰਨਵਾਦ"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"SysUI ਹੀਪ ਡੰਪ ਕਰੋ"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"ਐਪਲੀਕੇਸ਼ਨਾਂ ਤੁਹਾਡੇ <xliff:g id="TYPES_LIST">%s</xliff:g> ਦੀ ਵਰਤੋਂ ਕਰ ਰਹੀਆਂ ਹਨ।"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" ਅਤੇ "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"ਨਵਾਂ ਡੀਵਾਈਸ ਜੋੜਾਬੱਧ ਕਰੋ"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"ਇਸ ਸੈਸ਼ਨ ਨੂੰ ਕਾਸਟ ਕਰਨ ਲਈ, ਕਿਰਪਾ ਕਰਕੇ ਐਪ ਖੋਲ੍ਹੋ।"</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"ਅਗਿਆਤ ਐਪ"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"ਕਾਸਟ ਕਰਨਾ ਬੰਦ ਕਰੋ"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"ਪ੍ਰਸਾਰਨ ਕਿਵੇਂ ਕੰਮ ਕਰਦਾ ਹੈ"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"ਪ੍ਰਸਾਰਨ"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"ਅਨੁਰੂਪ ਬਲੂਟੁੱਥ ਡੀਵਾਈਸਾਂ ਨਾਲ ਨਜ਼ਦੀਕੀ ਲੋਕ ਤੁਹਾਡੇ ਵੱਲੋਂ ਪ੍ਰਸਾਰਨ ਕੀਤੇ ਜਾ ਰਹੇ ਮੀਡੀਆ ਨੂੰ ਸੁਣ ਸਕਦੇ ਹਨ"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"ਰੱਖਿਅਤ ਕਰੋ"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"ਸ਼ੁਰੂ ਹੋ ਰਿਹਾ ਹੈ…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"ਪ੍ਰਸਾਰਨ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"ਬਿਲਡ ਨੰਬਰ"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"ਬਿਲਡ ਨੰਬਰ ਨੂੰ ਕਲਿੱਪਬੋਰਡ \'ਤੇ ਕਾਪੀ ਕੀਤਾ ਗਿਆ।"</string>
     <string name="basic_status" msgid="2315371112182658176">"ਗੱਲਬਾਤ ਖੋਲ੍ਹੋ"</string>

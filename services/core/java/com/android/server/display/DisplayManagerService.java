@@ -242,10 +242,6 @@ public final class DisplayManagerService extends SystemService {
     // This option may disable certain display adapters.
     public boolean mSafeMode;
 
-    // True if we are in a special boot mode where only core applications and
-    // services should be started.  This option may disable certain display adapters.
-    public boolean mOnlyCore;
-
     // All callback records indexed by calling process id.
     public final SparseArray<CallbackRecord> mCallbacks =
             new SparseArray<CallbackRecord>();
@@ -627,10 +623,9 @@ public final class DisplayManagerService extends SystemService {
     /**
      * Called when the system is ready to go.
      */
-    public void systemReady(boolean safeMode, boolean onlyCore) {
+    public void systemReady(boolean safeMode) {
         synchronized (mSyncRoot) {
             mSafeMode = safeMode;
-            mOnlyCore = onlyCore;
             mSystemReady = true;
             // Just in case the top inset changed before the system was ready. At this point, any
             // relevant configuration should be in place.
@@ -1517,10 +1512,7 @@ public final class DisplayManagerService extends SystemService {
         // In safe mode, we disable non-essential display adapters to give the user
         // an opportunity to fix broken settings or other problems that might affect
         // system stability.
-        // In only-core mode, we disable non-essential display adapters to minimize
-        // the number of dependencies that are started while in this mode and to
-        // prevent problems that might occur due to the device being encrypted.
-        return !mSafeMode && !mOnlyCore;
+        return !mSafeMode;
     }
 
     private void registerDisplayAdapterLocked(DisplayAdapter adapter) {
@@ -2435,7 +2427,6 @@ public final class DisplayManagerService extends SystemService {
         pw.println("DISPLAY MANAGER (dumpsys display)");
 
         synchronized (mSyncRoot) {
-            pw.println("  mOnlyCode=" + mOnlyCore);
             pw.println("  mSafeMode=" + mSafeMode);
             pw.println("  mPendingTraversal=" + mPendingTraversal);
             pw.println("  mViewports=" + mViewports);

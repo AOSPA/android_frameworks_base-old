@@ -114,6 +114,63 @@ public class StagedInstallInternalTest {
         Uninstall.packages(TestApp.A, TestApp.B);
     }
 
+    private boolean isSystem(PackageInfo info) {
+        return (info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+    }
+
+    private boolean isUpdatedSystem(PackageInfo info) {
+        return (info.applicationInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+    }
+
+    @Test
+    public void testUpdateSystemApp_InstallV2() throws Exception {
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(1);
+
+        PackageManager pm =
+                InstrumentationRegistry.getInstrumentation().getContext().getPackageManager();
+        PackageInfo info;
+        // Check factory version
+        info = pm.getPackageInfo(TestApp.A,
+                PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY));
+        assertThat(isSystem(info)).isTrue();
+        assertThat(isUpdatedSystem(info)).isFalse();
+        // Check active version
+        info = pm.getPackageInfo(TestApp.A, PackageManager.PackageInfoFlags.of(0));
+        assertThat(isSystem(info)).isTrue();
+        assertThat(isUpdatedSystem(info)).isFalse();
+
+        Install.single(TestApp.A2).commit();
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(2);
+
+        // Check factory version
+        info = pm.getPackageInfo(TestApp.A,
+                PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY));
+        assertThat(isSystem(info)).isTrue();
+        assertThat(isUpdatedSystem(info)).isFalse();
+        // Check active version
+        info = pm.getPackageInfo(TestApp.A, PackageManager.PackageInfoFlags.of(0));
+        assertThat(isSystem(info)).isTrue();
+        assertThat(isUpdatedSystem(info)).isTrue();
+    }
+
+    @Test
+    public void testUpdateSystemApp_PostInstallV2() throws Exception {
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(2);
+
+        PackageManager pm =
+                InstrumentationRegistry.getInstrumentation().getContext().getPackageManager();
+        PackageInfo info;
+        // Check factory version
+        info = pm.getPackageInfo(TestApp.A,
+                PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY));
+        assertThat(isSystem(info)).isTrue();
+        assertThat(isUpdatedSystem(info)).isFalse();
+        // Check active version
+        info = pm.getPackageInfo(TestApp.A, PackageManager.PackageInfoFlags.of(0));
+        assertThat(isSystem(info)).isTrue();
+        assertThat(isUpdatedSystem(info)).isTrue();
+    }
+
     @Test
     public void testDuplicateApkInApexShouldFail_Commit() throws Exception {
         assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(1);
@@ -403,7 +460,8 @@ public class StagedInstallInternalTest {
         {
             PackageInfo apex = pm.getPackageInfo("test.apex.rebootless", PackageManager.MATCH_APEX);
             assertThat(apex.getLongVersionCode()).isEqualTo(1);
-            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM).isEqualTo(0);
+            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)
+                    .isEqualTo(ApplicationInfo.FLAG_UPDATED_SYSTEM_APP);
             assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED)
                     .isEqualTo(ApplicationInfo.FLAG_INSTALLED);
             assertThat(apex.applicationInfo.sourceDir).startsWith("/data/apex/active");
@@ -414,7 +472,8 @@ public class StagedInstallInternalTest {
             assertThat(apex.getLongVersionCode()).isEqualTo(1);
             assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM)
                     .isEqualTo(ApplicationInfo.FLAG_SYSTEM);
-            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED).isEqualTo(0);
+            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED)
+                    .isEqualTo(ApplicationInfo.FLAG_INSTALLED);
             assertThat(apex.applicationInfo.sourceDir).startsWith("/system/apex");
         }
 
@@ -425,7 +484,8 @@ public class StagedInstallInternalTest {
         {
             PackageInfo apex = pm.getPackageInfo("test.apex.rebootless", PackageManager.MATCH_APEX);
             assertThat(apex.getLongVersionCode()).isEqualTo(2);
-            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM).isEqualTo(0);
+            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)
+                    .isEqualTo(ApplicationInfo.FLAG_UPDATED_SYSTEM_APP);
             assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED)
                     .isEqualTo(ApplicationInfo.FLAG_INSTALLED);
             assertThat(apex.applicationInfo.sourceDir).startsWith("/data/apex/active");
@@ -436,7 +496,8 @@ public class StagedInstallInternalTest {
             assertThat(apex.getLongVersionCode()).isEqualTo(1);
             assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM)
                     .isEqualTo(ApplicationInfo.FLAG_SYSTEM);
-            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED).isEqualTo(0);
+            assertThat(apex.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED)
+                    .isEqualTo(ApplicationInfo.FLAG_INSTALLED);
             assertThat(apex.applicationInfo.sourceDir).startsWith("/system/apex");
         }
     }

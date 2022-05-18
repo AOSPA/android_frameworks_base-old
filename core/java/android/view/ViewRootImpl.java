@@ -565,7 +565,7 @@ public final class ViewRootImpl implements ViewParent,
     private final Rect mVisRect = new Rect(); // used to retrieve visible rect of focused view.
     private final Rect mTempRect = new Rect();
 
-    private final WindowLayout mWindowLayout = new WindowLayout();
+    private final WindowLayout mWindowLayout;
 
     private ViewRootImpl mParentViewRoot;
 
@@ -605,6 +605,7 @@ public final class ViewRootImpl implements ViewParent,
     int mSyncSeqId = 0;
     int mLastSyncSeqId = 0;
 
+    private boolean mUpdateSurfaceNeeded;
     boolean mFullRedrawNeeded;
     boolean mNewSurfaceNeeded;
     boolean mForceNextWindowRelayout;
@@ -884,18 +885,20 @@ public final class ViewRootImpl implements ViewParent,
     boolean mHaveMoveEvent = false;
 
     public ViewRootImpl(Context context, Display display) {
-        this(context, display, WindowManagerGlobal.getWindowSession(),
+        this(context, display, WindowManagerGlobal.getWindowSession(), new WindowLayout(),
                 false /* useSfChoreographer */);
     }
 
-    public ViewRootImpl(@UiContext Context context, Display display, IWindowSession session) {
-        this(context, display, session, false /* useSfChoreographer */);
+    public ViewRootImpl(@UiContext Context context, Display display, IWindowSession session,
+            WindowLayout windowLayout) {
+        this(context, display, session, windowLayout, false /* useSfChoreographer */);
     }
 
     public ViewRootImpl(@UiContext Context context, Display display, IWindowSession session,
-            boolean useSfChoreographer) {
+            WindowLayout windowLayout, boolean useSfChoreographer) {
         mContext = context;
         mWindowSession = session;
+        mWindowLayout = windowLayout;
         mDisplay = display;
         mBasePackageName = context.getBasePackageName();
         mThread = Thread.currentThread();
@@ -928,7 +931,8 @@ public final class ViewRootImpl implements ViewParent,
                 ? Choreographer.getSfInstance() : Choreographer.getInstance();
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
         mInsetsController = new InsetsController(new ViewRootInsetsControllerHost(this));
-        mHandwritingInitiator = new HandwritingInitiator(mViewConfiguration,
+        mHandwritingInitiator = new HandwritingInitiator(
+                mViewConfiguration,
                 mContext.getSystemService(InputMethodManager.class));
 
         String processorOverrideName = context.getResources().getString(
@@ -2898,7 +2902,6 @@ public final class ViewRootImpl implements ViewParent,
         final int surfaceGenerationId = mSurface.getGenerationId();
 
         final boolean isViewVisible = viewVisibility == View.VISIBLE;
-        final boolean windowRelayoutWasForced = mForceNextWindowRelayout;
         boolean surfaceSizeChanged = false;
         boolean surfaceCreated = false;
         boolean surfaceDestroyed = false;
@@ -3002,6 +3005,8 @@ public final class ViewRootImpl implements ViewParent,
                             !mFirst, INVALID_DISPLAY /* same display */);
                     updatedConfiguration = true;
                 }
+                final boolean updateSurfaceNeeded = mUpdateSurfaceNeeded;
+                mUpdateSurfaceNeeded = false;
 
                 surfaceSizeChanged = false;
                 if (!mLastSurfaceSize.equals(mSurfaceSize)) {
@@ -3080,8 +3085,7 @@ public final class ViewRootImpl implements ViewParent,
                     if (isHardwareEnabled()) {
                         mAttachInfo.mThreadedRenderer.destroy();
                     }
-                } else if ((surfaceReplaced
-                        || surfaceSizeChanged || windowRelayoutWasForced)
+                } else if ((surfaceReplaced || surfaceSizeChanged || updateSurfaceNeeded)
                         && mSurfaceHolder == null
                         && mAttachInfo.mThreadedRenderer != null
                         && mSurface.isValid()) {
@@ -5221,6 +5225,18 @@ public final class ViewRootImpl implements ViewParent,
             int newDisplayId) {
         if (mergedConfiguration == null) {
             throw new IllegalArgumentException("No merged config provided.");
+        }
+
+        final int lastRotation = mLastReportedMergedConfiguration.getMergedConfiguration()
+                .windowConfiguration.getRotation();
+        final int newRotation = mergedConfiguration.getMergedConfiguration()
+                .windowConfiguration.getRotation();
+        if (lastRotation != newRotation) {
+            // Trigger ThreadedRenderer#updateSurface() if the surface control doesn't change.
+            // Because even if the actual surface size is not changed, e.g. flip 180 degrees,
+            // the buffers may still have content in previous rotation. And the next draw may
+            // not update all regions, that causes some afterimages to flicker.
+            mUpdateSurfaceNeeded = true;
         }
 
         Configuration globalConfig = mergedConfiguration.getGlobalConfiguration();

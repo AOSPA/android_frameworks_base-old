@@ -24,6 +24,9 @@ import static android.content.om.OverlayInfo.STATE_OVERLAY_IS_BEING_REPLACED;
 import static android.content.om.OverlayInfo.STATE_TARGET_IS_BEING_REPLACED;
 import static android.os.UserHandle.USER_SYSTEM;
 
+import static com.android.server.om.IdmapManager.IDMAP_IS_MODIFIED;
+import static com.android.server.om.IdmapManager.IDMAP_IS_VERIFIED;
+import static com.android.server.om.IdmapManager.IDMAP_NOT_EXIST;
 import static com.android.server.om.OverlayManagerService.DEBUG;
 import static com.android.server.om.OverlayManagerService.TAG;
 
@@ -741,7 +744,7 @@ final class OverlayManagerServiceImpl {
     }
 
     OverlayPaths getEnabledOverlayPaths(@NonNull final String targetPackageName,
-            final int userId) {
+            final int userId, boolean includeImmutableOverlays) {
         final List<OverlayInfo> overlays = mSettings.getOverlaysForTarget(targetPackageName,
                 userId);
         final OverlayPaths.Builder paths = new OverlayPaths.Builder();
@@ -749,6 +752,9 @@ final class OverlayManagerServiceImpl {
         for (int i = 0; i < n; i++) {
             final OverlayInfo oi = overlays.get(i);
             if (!oi.isEnabled()) {
+                continue;
+            }
+            if (!includeImmutableOverlays && !oi.isMutable) {
                 continue;
             }
             if (oi.isFabricated()) {
@@ -785,15 +791,18 @@ final class OverlayManagerServiceImpl {
         // Immutable RROs targeting to "android", ie framework-res.apk, are handled by native
         // layers.
         final OverlayInfo updatedOverlayInfo = mSettings.getOverlayInfo(overlay, userId);
+        @IdmapManager.IdmapStatus int idmapStatus = IDMAP_NOT_EXIST;
         if (targetPackage != null && !("android".equals(info.getTargetPackageName())
                 && !isPackageConfiguredMutable(overlayPackage))) {
-            modified |= mIdmapManager.createIdmap(targetPackage, overlayPackage,
-                    updatedOverlayInfo.baseCodePath, overlay.getOverlayName(), userId);
+            idmapStatus = mIdmapManager.createIdmap(targetPackage,
+                    overlayPackage, updatedOverlayInfo.baseCodePath, overlay.getOverlayName(),
+                    userId);
+            modified |= (idmapStatus & IDMAP_IS_MODIFIED) != 0;
         }
 
         final @OverlayInfo.State int currentState = mSettings.getState(overlay, userId);
         final @OverlayInfo.State int newState = calculateNewState(updatedOverlayInfo, targetPackage,
-                userId, flags);
+                userId, flags, idmapStatus);
         if (currentState != newState) {
             if (DEBUG) {
                 Slog.d(TAG, String.format("%s:%d: %s -> %s",
@@ -808,7 +817,8 @@ final class OverlayManagerServiceImpl {
     }
 
     private @OverlayInfo.State int calculateNewState(@NonNull final OverlayInfo info,
-            @Nullable final AndroidPackage targetPackage, final int userId, final int flags)
+            @Nullable final AndroidPackage targetPackage, final int userId, final int flags,
+            @IdmapManager.IdmapStatus final int idmapStatus)
             throws OverlayManagerSettings.BadKeyException {
         if ((flags & FLAG_TARGET_IS_BEING_REPLACED) != 0) {
             return STATE_TARGET_IS_BEING_REPLACED;
@@ -822,8 +832,10 @@ final class OverlayManagerServiceImpl {
             return STATE_MISSING_TARGET;
         }
 
-        if (!mIdmapManager.idmapExists(info)) {
-            return STATE_NO_IDMAP;
+        if ((idmapStatus & IDMAP_IS_VERIFIED) == 0) {
+            if (!mIdmapManager.idmapExists(info)) {
+                return STATE_NO_IDMAP;
+            }
         }
 
         final boolean enabled = mSettings.getEnabled(info.getOverlayIdentifier(), userId);

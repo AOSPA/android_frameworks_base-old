@@ -5237,7 +5237,7 @@ public class SettingsProvider extends ContentProvider {
                                     .getResources()
                                     .getBoolean(R.bool.def_wearable_hotwordDetectionEnabled));
                     initGlobalSettingsDefaultValForWearLocked(
-                            Global.Wearable.SMART_REPLIES_ENABLED, false);
+                            Global.Wearable.SMART_REPLIES_ENABLED, true);
                     Setting locationMode =
                             getSecureSettingsLocked(userId).getSettingLocked(Secure.LOCATION_MODE);
                     initGlobalSettingsDefaultValForWearLocked(
@@ -5290,12 +5290,6 @@ public class SettingsProvider extends ContentProvider {
                                     .getBoolean(R.bool.def_wearable_muteWhenOffBodyEnabled));
                     initGlobalSettingsDefaultValForWearLocked(
                             Global.Wearable.WEAR_OS_VERSION_STRING, "");
-                    initGlobalSettingsDefaultValForWearLocked(
-                            Global.Wearable.CORNER_ROUNDNESS,
-                            getContext()
-                                    .getResources()
-                                    .getInteger(
-                                            R.integer.def_wearable_squareScreenCornerRoundness));
                     initGlobalSettingsDefaultValForWearLocked(Global.Wearable.BUTTON_SET, false);
                     initGlobalSettingsDefaultValForWearLocked(
                             Global.Wearable.SIDE_BUTTON,

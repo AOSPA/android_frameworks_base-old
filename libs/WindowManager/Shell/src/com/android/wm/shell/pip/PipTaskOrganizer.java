@@ -296,6 +296,10 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         displayController.addDisplayWindowListener(this);
     }
 
+    public PipTransitionController getTransitionController() {
+        return mPipTransitionController;
+    }
+
     public Rect getCurrentOrAnimatingBounds() {
         PipAnimationController.PipTransitionAnimator animator =
                 mPipAnimationController.getCurrentAnimator();

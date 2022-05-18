@@ -496,7 +496,7 @@ class InputController {
     }
 
     /** A helper class used to wait for an input device to be registered. */
-    private class WaitForDevice implements AutoCloseable {
+    private class WaitForDevice implements  AutoCloseable {
         private final CountDownLatch mDeviceAddedLatch = new CountDownLatch(1);
         private final InputManager.InputDeviceListener mListener;
 

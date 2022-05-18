@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"ลองบันทึกภาพหน้าจออีกครั้ง"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"บันทึกภาพหน้าจอไม่ได้"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"แอปหรือองค์กรของคุณไม่อนุญาตให้จับภาพหน้าจอ"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"แก้ไข"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"แก้ไขภาพหน้าจอ"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"แชร์ภาพหน้าจอ"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"ยืนยันแล้ว"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"แตะยืนยันเพื่อดำเนินการให้เสร็จสมบูรณ์"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"ปลดล็อกด้วยใบหน้าแล้ว กดไอคอนปลดล็อกเพื่อดำเนินการต่อ"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"ปลดล็อกด้วยใบหน้าแล้ว กดเพื่อดำเนินการต่อ"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"จดจำใบหน้าได้ กดเพื่อดำเนินการต่อ"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"จดจำใบหน้าได้ กดไอคอนปลดล็อกเพื่อดำเนินการต่อ"</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"ตรวจสอบสิทธิ์แล้ว"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"ใช้ PIN"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"ใช้รูปแบบ"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"เลื่อนขึ้นเพื่อเปิด"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"กดไอคอนปลดล็อกเพื่อเปิด"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"ปลดล็อกด้วยใบหน้าแล้ว กดไอคอนปลดล็อกเพื่อเปิด"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"ปลดล็อกด้วยใบหน้าแล้ว กดเพื่อเปิด"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"จดจำใบหน้าได้ กดเพื่อเปิด"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"จดจำใบหน้าได้ กดไอคอนปลดล็อกเพื่อเปิด"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"เลื่อนขึ้นเพื่อลองอีกครั้ง"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"ปลดล็อกเพื่อใช้ NFC"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"องค์กรของคุณเป็นเจ้าของอุปกรณ์นี้"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"คุณต้องการอยู่ในเซสชันต่อไปไหม"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"เริ่มต้นใหม่"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"ใช่ ดำเนินการต่อ"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"โหมดผู้มาเยือน"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"คุณอยู่ในโหมดผู้มาเยือน"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"การเพิ่มผู้ใช้ใหม่จะเป็นการออกจากโหมดผู้มาเยือน และจะลบแอปและข้อมูลจากเซสชันผู้มาเยือนในปัจจุบัน"</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"ถึงขีดจำกัดผู้ใช้แล้ว"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other">คุณเพิ่มผู้ใช้ได้สูงสุด <xliff:g id="COUNT">%d</xliff:g> คน</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"เปิดเมื่อมีแนวโน้มว่าแบตเตอรี่จะหมด"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"ไม่เป็นไร"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"หลายแอปพลิเคชันใช้<xliff:g id="TYPES_LIST">%s</xliff:g>ของคุณอยู่"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" และ "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"จับคู่อุปกรณ์ใหม่"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"โปรดเปิดแอปหากต้องการแคสต์เซสชันนี้"</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"แอปที่ไม่รู้จัก"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"หยุดแคสต์"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"วิธีการทำงานของการออกอากาศ"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"ประกาศ"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"ผู้ที่อยู่ใกล้คุณและมีอุปกรณ์บลูทูธที่รองรับสามารถรับฟังสื่อที่คุณกำลังออกอากาศได้"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"บันทึก"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"กำลังเริ่มต้น…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"ออกอากาศไม่ได้"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"หมายเลขบิลด์"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"คัดลอกหมายเลขบิลด์ไปยังคลิปบอร์ดแล้ว"</string>
     <string name="basic_status" msgid="2315371112182658176">"เปิดการสนทนา"</string>

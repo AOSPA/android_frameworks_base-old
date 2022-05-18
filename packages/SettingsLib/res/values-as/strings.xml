@@ -598,6 +598,21 @@
     <string name="guest_reset_guest_confirm_button" msgid="2989915693215617237">"ৰিছেট কৰক"</string>
     <string name="guest_remove_guest_confirm_button" msgid="7858123434954143879">"আঁতৰাওক"</string>
     <string name="guest_resetting" msgid="7822120170191509566">"অতিথিৰ ছেশ্বন ৰিছেট কৰি থকা হৈছে…"</string>
+    <string name="guest_reset_and_restart_dialog_title" msgid="3396657008451616041">"অতিথিৰ ছেশ্বন ৰিছেট কৰিবনে?"</string>
+    <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"এইটোৱে এটা অতিথিৰ ছেশ্বন আৰম্ভ কৰিব আৰু বৰ্তমানৰ ছেশ্বনটোৰ পৰা আটাইবোৰ এপ্ আৰু ডেটা মচিব"</string>
+    <string name="guest_exit_dialog_title" msgid="1846494656849381804">"অতিথি ম’ডৰ পৰা বাহিৰ হ’বনে?"</string>
+    <string name="guest_exit_dialog_message" msgid="1743218864242719783">"এইটোৱে বৰ্তমানৰ অতিথিৰ ছেশ্বনটোৰ পৰা এপ্ আৰু ডেটা মচিব"</string>
+    <string name="guest_exit_dialog_button" msgid="1736401897067442044">"বাহিৰ হওক"</string>
+    <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"অতিথিৰ কাৰ্যকলাপ ছেভ কৰিবনে?"</string>
+    <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"আপুনি বৰ্তমানৰ ছেশ্বনটোৰ পৰা কাৰ্যকলাপ ছেভ কৰিব পাৰে অথবা আটাইবোৰ এপ্ আৰু ডেটা মচিব পাৰে"</string>
+    <string name="guest_exit_clear_data_button" msgid="3425812652180679014">"মচক"</string>
+    <string name="guest_exit_save_data_button" msgid="3690974510644963547">"ছেভ কৰক"</string>
+    <string name="guest_exit_button" msgid="5774985819191803960">"অতিথি ম’ডৰ পৰা বাহিৰ হওক"</string>
+    <string name="guest_reset_button" msgid="2515069346223503479">"অতিথিৰ ছেশ্বন ৰিছেট কৰক"</string>
+    <string name="guest_exit_quick_settings_button" msgid="1912362095913765471">"অতিথিৰ ছেশ্বনৰ পৰা বাহিৰ হওক"</string>
+    <string name="guest_notification_ephemeral" msgid="7263252466950923871">"বাহিৰ হওঁতে আটাইবোৰ কাৰ্যকলাপ মচা হ’ব"</string>
+    <string name="guest_notification_non_ephemeral" msgid="6843799963012259330">"আপুনি বাহিৰ হওঁতে নিজৰ কাৰ্যকলাপ ছেভ কৰিব অথবা মচিব পাৰে"</string>
+    <string name="guest_notification_non_ephemeral_non_first_login" msgid="8009307983766934876">"এতিয়াই ছেশ্বনৰ কাৰ্যকলাপ ৰিছেট কৰক অথবা মচক অথবা আপুনি বাহিৰ হওঁতে কাৰ্যকলাপ ছেভ কৰিব অথবা মচিব পাৰে"</string>
     <string name="user_image_take_photo" msgid="467512954561638530">"এখন ফট’ তোলক"</string>
     <string name="user_image_choose_photo" msgid="1363820919146782908">"এখন প্ৰতিচ্ছবি বাছনি কৰক"</string>
     <string name="user_image_photo_selector" msgid="433658323306627093">"ফট’ বাছনি কৰক"</string>

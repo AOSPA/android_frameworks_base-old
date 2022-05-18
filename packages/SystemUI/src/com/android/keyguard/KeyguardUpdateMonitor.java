@@ -50,7 +50,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
@@ -230,21 +229,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     private static final ComponentName FALLBACK_HOME_COMPONENT = new ComponentName(
             "com.android.settings", "com.android.settings.FallbackHome");
-
-    /**
-     * If true, the system is in the half-boot-to-decryption-screen state.
-     * Prudently disable lockscreen.
-     */
-    public static final boolean CORE_APPS_ONLY;
-
-    static {
-        try {
-            CORE_APPS_ONLY = IPackageManager.Stub.asInterface(
-                    ServiceManager.getService("package")).isOnlyCoreApps();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
 
     private final Context mContext;
     private final boolean mIsPrimaryUser;
@@ -1489,6 +1473,20 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 handleFingerprintAuthenticated(userId, isStrongBiometric);
             };
 
+    /**
+     * Propagates a pointer down event to keyguard.
+     */
+    public void onUdfpsPointerDown(int sensorId) {
+        mFingerprintAuthenticationCallback.onUdfpsPointerDown(sensorId);
+    }
+
+    /**
+     * Propagates a pointer up event to keyguard.
+     */
+    public void onUdfpsPointerUp(int sensorId) {
+        mFingerprintAuthenticationCallback.onUdfpsPointerUp(sensorId);
+    }
+
     @VisibleForTesting
     final FingerprintManager.AuthenticationCallback mFingerprintAuthenticationCallback
             = new AuthenticationCallback() {
@@ -1529,6 +1527,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     Trace.endSection();
                 }
 
+                /**
+                 * Note, this is currently called from UdfpsController.
+                 */
                 @Override
                 public void onUdfpsPointerDown(int sensorId) {
                     Log.d(TAG, "onUdfpsPointerDown, sensorId: " + sensorId);
@@ -1538,6 +1539,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     }
                 }
 
+                /**
+                 * Note, this is currently called from UdfpsController.
+                 */
                 @Override
                 public void onUdfpsPointerUp(int sensorId) {
                     Log.d(TAG, "onUdfpsPointerUp, sensorId: " + sensorId);

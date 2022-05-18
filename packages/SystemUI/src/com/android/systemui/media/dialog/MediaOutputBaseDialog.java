@@ -184,19 +184,6 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
                 }
             };
 
-    private class LayoutManagerWrapper extends LinearLayoutManager {
-        LayoutManagerWrapper(Context context) {
-            super(context);
-        }
-
-        @Override
-        public void onLayoutCompleted(RecyclerView.State state) {
-            super.onLayoutCompleted(state);
-            mMediaOutputController.setRefreshing(false);
-            mMediaOutputController.refreshDataSetIfNeeded();
-        }
-    }
-
     public MediaOutputBaseDialog(Context context, BroadcastSender broadcastSender,
             MediaOutputController mediaOutputController) {
         super(context, R.style.Theme_SystemUI_Dialog_Media);
@@ -205,7 +192,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         mContext = getContext();
         mBroadcastSender = broadcastSender;
         mMediaOutputController = mediaOutputController;
-        mLayoutManager = new LayoutManagerWrapper(mContext);
+        mLayoutManager = new LinearLayoutManager(mContext);
         mListMaxHeight = context.getResources().getDimensionPixelSize(
                 R.dimen.media_output_dialog_list_max_height);
         mExecutor = Executors.newSingleThreadExecutor();
@@ -287,10 +274,6 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
     }
 
     void refresh(boolean deviceSetChanged) {
-        if (mMediaOutputController.isRefreshing()) {
-            return;
-        }
-        mMediaOutputController.setRefreshing(true);
         // Update header icon
         final int iconRes = getHeaderIconRes();
         final IconCompat iconCompat = getHeaderIcon();
@@ -324,9 +307,10 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
                 ColorFilter buttonColorFilter = new PorterDuffColorFilter(
                         mAdapter.getController().getColorButtonBackground(),
                         PorterDuff.Mode.SRC_IN);
+                ColorFilter onlineButtonColorFilter = new PorterDuffColorFilter(
+                        mAdapter.getController().getColorInactiveItem(), PorterDuff.Mode.SRC_IN);
                 mDoneButton.getBackground().setColorFilter(buttonColorFilter);
-                mStopButton.getBackground().setColorFilter(buttonColorFilter);
-                mDoneButton.setTextColor(mAdapter.getController().getColorPositiveButtonText());
+                mStopButton.getBackground().setColorFilter(onlineButtonColorFilter);
             }
             mHeaderIcon.setVisibility(View.VISIBLE);
             mHeaderIcon.setImageIcon(icon);
@@ -351,7 +335,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
             mHeaderSubtitle.setText(subTitle);
             mHeaderTitle.setGravity(Gravity.NO_GRAVITY);
         }
-        if (!mAdapter.isDragging()) {
+        if (!mAdapter.isDragging() && !mAdapter.isAnimating()) {
             int currentActivePosition = mAdapter.getCurrentActivePosition();
             if (!colorSetUpdated && !deviceSetChanged && currentActivePosition >= 0
                     && currentActivePosition < mAdapter.getItemCount()) {
@@ -449,7 +433,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
     abstract int getStopButtonVisibility();
 
     public CharSequence getStopButtonText() {
-        return mContext.getText(R.string.media_output_dialog_button_stop_casting);
+        return mContext.getText(R.string.keyboard_key_media_stop);
     }
 
     public void onStopButtonClick() {

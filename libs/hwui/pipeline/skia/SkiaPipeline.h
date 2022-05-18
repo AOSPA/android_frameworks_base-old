@@ -16,14 +16,16 @@
 
 #pragma once
 
-#include <SkSurface.h>
+#include <SkColorSpace.h>
 #include <SkDocument.h>
 #include <SkMultiPictureDocument.h>
+#include <SkSurface.h>
 #include "Lighting.h"
 #include "hwui/AnimatedImageDrawable.h"
 #include "renderthread/CanvasContext.h"
 #include "renderthread/IRenderPipeline.h"
 
+class SkFILEWStream;
 class SkPictureRecorder;
 struct SkSharingSerialContext;
 

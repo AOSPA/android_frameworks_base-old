@@ -637,6 +637,8 @@ class ActivityStarter {
      */
     int execute() {
         try {
+            onExecutionStarted();
+
             // Refuse possible leaked file descriptors
             if (mRequest.intent != null && mRequest.intent.hasFileDescriptors()) {
                 throw new IllegalArgumentException("File descriptors passed in Intent");
@@ -1251,6 +1253,10 @@ class ActivityStarter {
         mController.onExecutionComplete(this);
     }
 
+    private void onExecutionStarted() {
+        mController.onExecutionStarted(this);
+    }
+
     private boolean isHomeApp(int uid, @Nullable String packageName) {
         if (mService.mHomeProcess != null) {
             // Fast check
@@ -1744,6 +1750,10 @@ class ActivityStarter {
             // `started` isn't guaranteed to be the actual relevant activity, so we must wait
             // until after we launched to identify the relevant activity.
             transitionController.setTransientLaunch(mLastStartActivityRecord, mPriorAboveTask);
+        }
+        if (!mSupervisor.mUserLeaving) {
+            // no-user-leaving implies not entering PiP.
+            transitionController.setCanPipOnFinish(false /* canPipOnFinish */);
         }
         if (newTransition != null) {
             transitionController.requestStartTransition(newTransition,

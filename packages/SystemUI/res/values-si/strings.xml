@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"තිර රුව නැවත ගැනීමට උත්සාහ කරන්න"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"තිර රුව සුරැකීමට නොහැකිය"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"තිර රූ ගැනීමට යෙදුම හෝ ඔබගේ සංවිධානය ඉඩ නොදේ"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"සංස්කරණය කරන්න"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"තිර රුව සංස්කරණය කරන්න"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"තිර රුව බෙදා ගන්න"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"තහවුරු කළා"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"සම්පූර්ණ කිරීමට තහවුරු කරන්න තට්ටු කර."</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"මුහුණ මගින් අගුලු හරින ලදි. දිගටම කරගෙන යාමට අගුලු හැරීමේ නිරූපකය ඔබන්න."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"මුහුණ මගින් අගුලු හරින ලදි. ඉදිරියට යාමට ඔබන්න."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"මුහුණ හඳුනා ගන්නා ලදි. ඉදිරියට යාමට ඔබන්න."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"මුහුණ හඳුනා ගන්නා ලදි. ඉදිරියට යාමට අගුලු හැරීමේ නිරූපකය ඔබන්න."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"සත්‍යාපනය විය"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"PIN භාවිත කරන්න"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"රටාව භාවිත කරන්න"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"විවෘත කිරීමට ස්වයිප් කරන්න"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"විවෘත කිරීමට අගුලු හැරීමේ නිරූපකය ඔබන්න"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"මුහුණ මගින් අගුලු හරින ලදි. විවෘත කිරීමට අගුලු හැරීමේ නිරූපකය ඔබන්න."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"මුහුණ මගින් අගුලු හරින ලදි. විවෘත කිරීමට ඔබන්න."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"මුහුණ හඳුනා ගන්නා ලදි. විවෘත කිරීමට ඔබන්න."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"මුහුණ හඳුනා ගන්නා ලදි. විවෘත කිරීමට අගුලු හැරීමේ නිරූපකය ඔබන්න."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"නැවත උත්සාහ කිරීමට ඉහළට ස්වයිප් කරන්න"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFC භාවිත කිරීමට අගුලු හරින්න"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"මෙම උපාංගය ඔබේ සංවිධානයට අයිතිය"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"ඔබගේ සැසිය දිගටම කරගෙන යෑමට ඔබට අවශ්‍යද?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"යළි මුල සිට අරඹන්න"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"ඔව්, දිගටම කරගෙන යන්න"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"ආගන්තුක ප්‍රකාරය"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"ඔබ ආගන්තුක ප්‍රකාරයේ සිටී"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"නව පරිශීලකයෙකු එක් කිරීම ආගන්තුක මාදිලියෙන් පිටවී වත්මන් ආගන්තුක සැසියෙන් සියලුම යෙදුම් සහ දත්ත මකනු ඇත."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"පරිශීලක සීමාවට ළඟා විය"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="one">ඔබට පරිශීලකයින් <xliff:g id="COUNT">%d</xliff:g>ක් දක්වා එක් කළ හැකිය.</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"බැටරිය අවසන් වීමට යන විට සක්‍රීය කරන්න"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"එපා ස්තූතියි"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"යෙදුම් ඔබේ <xliff:g id="TYPES_LIST">%s</xliff:g> භාවිත කරමින් සිටී."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" සහ "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"නව උපාංගය යුගල කරන්න"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"මෙම සැසිය විකාශය කිරීමට, කරුණාකර යෙදුම විවෘත කරන්න."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"නොදන්නා යෙදුම"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"විකාශය නවතන්න"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"විකාශනය ක්‍රියා කරන ආකාරය"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"විකාශනය"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"ගැළපෙන බ්ලූටූත් උපාංග සහිත ඔබ අවට සිටින පුද්ගලයින්ට ඔබ විකාශනය කරන මාධ්‍යයට සවන් දිය හැකිය"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"සුරකින්න"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"ආරම්භ කරමින්…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"විකාශනය කළ නොහැකිය"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"නිමැවුම් අංකය"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"නිමැවුම් අංකය පසුරු පුවරුවට පිටපත් කරන ලදි."</string>
     <string name="basic_status" msgid="2315371112182658176">"සංවාදය විවෘත කරන්න"</string>

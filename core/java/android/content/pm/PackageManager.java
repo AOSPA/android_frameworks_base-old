@@ -2160,14 +2160,6 @@ public abstract class PackageManager {
     public static final int INSTALL_FAILED_PROCESS_NOT_DEFINED = -122;
 
     /**
-     * Installation parse return code: system is in a minimal boot state, and the parser only
-     * allows the package with {@code coreApp} manifest attribute to be a valid application.
-     *
-     * @hide
-     */
-    public static final int INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED = -123;
-
-    /**
      * Installation failed return code: the {@code resources.arsc} of one of the APKs being
      * installed is compressed or not aligned on a 4-byte boundary. Resource tables that cannot be
      * memory mapped exert excess memory pressure on the system and drastically slow down
@@ -4247,6 +4239,7 @@ public abstract class PackageManager {
      */
     public static final String EXTRA_VERIFICATION_PACKAGE_NAME
             = "android.content.pm.extra.VERIFICATION_PACKAGE_NAME";
+
     /**
      * Extra field name for the result of a verification, either
      * {@link #VERIFICATION_ALLOW}, or {@link #VERIFICATION_REJECT}.
@@ -4254,6 +4247,14 @@ public abstract class PackageManager {
      */
     public static final String EXTRA_VERIFICATION_RESULT
             = "android.content.pm.extra.VERIFICATION_RESULT";
+
+    /**
+     * Extra field name for tracking whether user action
+     * was requested for a particular install, either {@code true} or {@code false}.
+     * @hide
+     */
+    public static final String EXTRA_USER_ACTION_REQUIRED
+            = "android.content.pm.extra.USER_ACTION_REQUIRED";
 
     /**
      * Extra field name for the version code of a package pending verification.
@@ -4265,8 +4266,7 @@ public abstract class PackageManager {
             = "android.content.pm.extra.VERIFICATION_VERSION_CODE";
 
     /**
-     * Extra field name for the long version code of a package pending verification.
-     *
+     * Extra field name for the long version code of a package pending verification
      * @hide
      */
     public static final String EXTRA_VERIFICATION_LONG_VERSION_CODE =

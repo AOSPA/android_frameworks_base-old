@@ -284,6 +284,8 @@ class AnimatableClockView @JvmOverloads constructor(
         )
     }
 
+    private val glyphFilter: GlyphCallback? = null // Add text animation tweak here.
+
     /**
      * Set text style with an optional animation.
      *
@@ -315,6 +317,7 @@ class AnimatableClockView @JvmOverloads constructor(
                 delay = delay,
                 onAnimationEnd = onAnimationEnd
             )
+            textAnimator?.glyphFilter = glyphFilter
         } else {
             // when the text animator is set, update its start values
             onTextAnimatorInitialized = Runnable {
@@ -328,6 +331,7 @@ class AnimatableClockView @JvmOverloads constructor(
                     delay = delay,
                     onAnimationEnd = onAnimationEnd
                 )
+                textAnimator?.glyphFilter = glyphFilter
             }
         }
     }

@@ -786,6 +786,10 @@ package android {
     field public static final int hand_secondTintMode = 16844349; // 0x101063d
     field public static final int handle = 16843354; // 0x101025a
     field public static final int handleProfiling = 16842786; // 0x1010022
+    field public static final int handwritingBoundsOffsetBottom;
+    field public static final int handwritingBoundsOffsetLeft;
+    field public static final int handwritingBoundsOffsetRight;
+    field public static final int handwritingBoundsOffsetTop;
     field public static final int hapticFeedbackEnabled = 16843358; // 0x101025e
     field public static final int hardwareAccelerated = 16843475; // 0x10102d3
     field public static final int hasCode = 16842764; // 0x101000c
@@ -7669,11 +7673,11 @@ package android.app.admin {
     field public static final String DELEGATION_PACKAGE_ACCESS = "delegation-package-access";
     field public static final String DELEGATION_PERMISSION_GRANT = "delegation-permission-grant";
     field public static final String DELEGATION_SECURITY_LOGGING = "delegation-security-logging";
-    field public static final int ENCRYPTION_STATUS_ACTIVATING = 2; // 0x2
-    field public static final int ENCRYPTION_STATUS_ACTIVE = 3; // 0x3
-    field public static final int ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY = 4; // 0x4
+    field @Deprecated public static final int ENCRYPTION_STATUS_ACTIVATING = 2; // 0x2
+    field @Deprecated public static final int ENCRYPTION_STATUS_ACTIVE = 3; // 0x3
+    field @Deprecated public static final int ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY = 4; // 0x4
     field public static final int ENCRYPTION_STATUS_ACTIVE_PER_USER = 5; // 0x5
-    field public static final int ENCRYPTION_STATUS_INACTIVE = 1; // 0x1
+    field @Deprecated public static final int ENCRYPTION_STATUS_INACTIVE = 1; // 0x1
     field public static final int ENCRYPTION_STATUS_UNSUPPORTED = 0; // 0x0
     field public static final String EXTRA_ADD_EXPLANATION = "android.app.extra.ADD_EXPLANATION";
     field public static final String EXTRA_DELEGATION_SCOPES = "android.app.extra.DELEGATION_SCOPES";
@@ -8996,6 +9000,7 @@ package android.companion {
   public final class CompanionDeviceManager {
     method @RequiresPermission(anyOf={android.Manifest.permission.REQUEST_COMPANION_PROFILE_WATCH, android.Manifest.permission.REQUEST_COMPANION_PROFILE_COMPUTER, android.Manifest.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING, android.Manifest.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION}, conditional=true) public void associate(@NonNull android.companion.AssociationRequest, @NonNull android.companion.CompanionDeviceManager.Callback, @Nullable android.os.Handler);
     method @RequiresPermission(anyOf={android.Manifest.permission.REQUEST_COMPANION_PROFILE_WATCH, android.Manifest.permission.REQUEST_COMPANION_PROFILE_COMPUTER, android.Manifest.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING, android.Manifest.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION}, conditional=true) public void associate(@NonNull android.companion.AssociationRequest, @NonNull java.util.concurrent.Executor, @NonNull android.companion.CompanionDeviceManager.Callback);
+    method @Nullable public android.content.IntentSender buildPermissionTransferUserConsentIntent(int) throws android.companion.DeviceNotAssociatedException;
     method @Deprecated public void disassociate(@NonNull String);
     method public void disassociate(int);
     method @Deprecated @NonNull public java.util.List<java.lang.String> getAssociations();
@@ -9003,6 +9008,7 @@ package android.companion {
     method @Deprecated public boolean hasNotificationAccess(android.content.ComponentName);
     method public void requestNotificationAccess(android.content.ComponentName);
     method @RequiresPermission(android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE) public void startObservingDevicePresence(@NonNull String) throws android.companion.DeviceNotAssociatedException;
+    method public void startSystemDataTransfer(int) throws android.companion.DeviceNotAssociatedException;
     method @RequiresPermission(android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE) public void stopObservingDevicePresence(@NonNull String) throws android.companion.DeviceNotAssociatedException;
     field public static final String EXTRA_ASSOCIATION = "android.companion.extra.ASSOCIATION";
     field @Deprecated public static final String EXTRA_DEVICE = "android.companion.extra.DEVICE";
@@ -9018,11 +9024,13 @@ package android.companion {
 
   public abstract class CompanionDeviceService extends android.app.Service {
     ctor public CompanionDeviceService();
+    method @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES) public final void dispatchMessageToSystem(int, int, @NonNull byte[]) throws android.companion.DeviceNotAssociatedException;
     method @Nullable public final android.os.IBinder onBind(@NonNull android.content.Intent);
     method @Deprecated @MainThread public void onDeviceAppeared(@NonNull String);
     method @MainThread public void onDeviceAppeared(@NonNull android.companion.AssociationInfo);
     method @Deprecated @MainThread public void onDeviceDisappeared(@NonNull String);
     method @MainThread public void onDeviceDisappeared(@NonNull android.companion.AssociationInfo);
+    method public void onMessageDispatchedFromSystem(int, int, @NonNull byte[]);
     field public static final String SERVICE_INTERFACE = "android.companion.CompanionDeviceService";
   }
 
@@ -10878,7 +10886,7 @@ package android.content {
   }
 
   public static interface SharedPreferences.OnSharedPreferenceChangeListener {
-    method public void onSharedPreferenceChanged(android.content.SharedPreferences, String);
+    method public void onSharedPreferenceChanged(android.content.SharedPreferences, @Nullable String);
   }
 
   public class SyncAdapterType implements android.os.Parcelable {
@@ -18526,7 +18534,7 @@ package android.hardware.fingerprint {
 package android.hardware.input {
 
   public final class InputManager {
-    method public android.view.InputDevice getInputDevice(int);
+    method @Nullable public android.view.InputDevice getInputDevice(int);
     method public int[] getInputDeviceIds();
     method @FloatRange(from=0, to=1) public float getMaximumObscuringOpacityForTouch();
     method public void registerInputDeviceListener(android.hardware.input.InputManager.InputDeviceListener, android.os.Handler);
@@ -19107,41 +19115,41 @@ package android.location {
     field @NonNull public static final android.os.Parcelable.Creator<android.location.Address> CREATOR;
   }
 
-  public class Criteria implements android.os.Parcelable {
-    ctor public Criteria();
-    ctor public Criteria(android.location.Criteria);
-    method public int describeContents();
-    method public int getAccuracy();
-    method public int getBearingAccuracy();
-    method public int getHorizontalAccuracy();
-    method public int getPowerRequirement();
-    method public int getSpeedAccuracy();
-    method public int getVerticalAccuracy();
-    method public boolean isAltitudeRequired();
-    method public boolean isBearingRequired();
-    method public boolean isCostAllowed();
-    method public boolean isSpeedRequired();
-    method public void setAccuracy(int);
-    method public void setAltitudeRequired(boolean);
-    method public void setBearingAccuracy(int);
-    method public void setBearingRequired(boolean);
-    method public void setCostAllowed(boolean);
-    method public void setHorizontalAccuracy(int);
-    method public void setPowerRequirement(int);
-    method public void setSpeedAccuracy(int);
-    method public void setSpeedRequired(boolean);
-    method public void setVerticalAccuracy(int);
-    method public void writeToParcel(android.os.Parcel, int);
-    field public static final int ACCURACY_COARSE = 2; // 0x2
-    field public static final int ACCURACY_FINE = 1; // 0x1
-    field public static final int ACCURACY_HIGH = 3; // 0x3
-    field public static final int ACCURACY_LOW = 1; // 0x1
-    field public static final int ACCURACY_MEDIUM = 2; // 0x2
-    field @NonNull public static final android.os.Parcelable.Creator<android.location.Criteria> CREATOR;
-    field public static final int NO_REQUIREMENT = 0; // 0x0
-    field public static final int POWER_HIGH = 3; // 0x3
-    field public static final int POWER_LOW = 1; // 0x1
-    field public static final int POWER_MEDIUM = 2; // 0x2
+  @Deprecated public class Criteria implements android.os.Parcelable {
+    ctor @Deprecated public Criteria();
+    ctor @Deprecated public Criteria(android.location.Criteria);
+    method @Deprecated public int describeContents();
+    method @Deprecated public int getAccuracy();
+    method @Deprecated public int getBearingAccuracy();
+    method @Deprecated public int getHorizontalAccuracy();
+    method @Deprecated public int getPowerRequirement();
+    method @Deprecated public int getSpeedAccuracy();
+    method @Deprecated public int getVerticalAccuracy();
+    method @Deprecated public boolean isAltitudeRequired();
+    method @Deprecated public boolean isBearingRequired();
+    method @Deprecated public boolean isCostAllowed();
+    method @Deprecated public boolean isSpeedRequired();
+    method @Deprecated public void setAccuracy(int);
+    method @Deprecated public void setAltitudeRequired(boolean);
+    method @Deprecated public void setBearingAccuracy(int);
+    method @Deprecated public void setBearingRequired(boolean);
+    method @Deprecated public void setCostAllowed(boolean);
+    method @Deprecated public void setHorizontalAccuracy(int);
+    method @Deprecated public void setPowerRequirement(int);
+    method @Deprecated public void setSpeedAccuracy(int);
+    method @Deprecated public void setSpeedRequired(boolean);
+    method @Deprecated public void setVerticalAccuracy(int);
+    method @Deprecated public void writeToParcel(android.os.Parcel, int);
+    field @Deprecated public static final int ACCURACY_COARSE = 2; // 0x2
+    field @Deprecated public static final int ACCURACY_FINE = 1; // 0x1
+    field @Deprecated public static final int ACCURACY_HIGH = 3; // 0x3
+    field @Deprecated public static final int ACCURACY_LOW = 1; // 0x1
+    field @Deprecated public static final int ACCURACY_MEDIUM = 2; // 0x2
+    field @Deprecated @NonNull public static final android.os.Parcelable.Creator<android.location.Criteria> CREATOR;
+    field @Deprecated public static final int NO_REQUIREMENT = 0; // 0x0
+    field @Deprecated public static final int POWER_HIGH = 3; // 0x3
+    field @Deprecated public static final int POWER_LOW = 1; // 0x1
+    field @Deprecated public static final int POWER_MEDIUM = 2; // 0x2
   }
 
   public final class Geocoder {
@@ -19596,7 +19604,7 @@ package android.location {
     method @Deprecated public void clearTestProviderLocation(@NonNull String);
     method @Deprecated public void clearTestProviderStatus(@NonNull String);
     method @NonNull public java.util.List<java.lang.String> getAllProviders();
-    method @Nullable public String getBestProvider(@NonNull android.location.Criteria, boolean);
+    method @Deprecated @Nullable public String getBestProvider(@NonNull android.location.Criteria, boolean);
     method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void getCurrentLocation(@NonNull String, @Nullable android.os.CancellationSignal, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.location.Location>);
     method @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void getCurrentLocation(@NonNull String, @NonNull android.location.LocationRequest, @Nullable android.os.CancellationSignal, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.location.Location>);
     method @Nullable public java.util.List<android.location.GnssAntennaInfo> getGnssAntennaInfos();
@@ -19608,7 +19616,7 @@ package android.location {
     method @Deprecated @Nullable public android.location.LocationProvider getProvider(@NonNull String);
     method @Nullable public android.location.provider.ProviderProperties getProviderProperties(@NonNull String);
     method @NonNull public java.util.List<java.lang.String> getProviders(boolean);
-    method @NonNull public java.util.List<java.lang.String> getProviders(@NonNull android.location.Criteria, boolean);
+    method @Deprecated @NonNull public java.util.List<java.lang.String> getProviders(@NonNull android.location.Criteria, boolean);
     method public boolean hasProvider(@NonNull String);
     method public boolean isLocationEnabled();
     method public boolean isProviderEnabled(@NonNull String);
@@ -20081,14 +20089,14 @@ package android.media {
     method @Deprecated public int getVibrateSetting(int);
     method @Deprecated public boolean isBluetoothA2dpOn();
     method public boolean isBluetoothScoAvailableOffCall();
-    method public boolean isBluetoothScoOn();
+    method @Deprecated public boolean isBluetoothScoOn();
     method public boolean isCallScreeningModeSupported();
     method public static boolean isHapticPlaybackSupported();
     method public boolean isMicrophoneMute();
     method public boolean isMusicActive();
     method public static boolean isOffloadedPlaybackSupported(@NonNull android.media.AudioFormat, @NonNull android.media.AudioAttributes);
     method public boolean isRampingRingerEnabled();
-    method public boolean isSpeakerphoneOn();
+    method @Deprecated public boolean isSpeakerphoneOn();
     method public boolean isStreamMute(int);
     method public boolean isSurroundFormatEnabled(int);
     method public boolean isVolumeFixed();
@@ -20117,7 +20125,7 @@ package android.media {
     method public void setParameters(String);
     method public void setRingerMode(int);
     method @Deprecated public void setRouting(int, int, int);
-    method public void setSpeakerphoneOn(boolean);
+    method @Deprecated public void setSpeakerphoneOn(boolean);
     method @Deprecated public void setStreamMute(int, boolean);
     method @Deprecated public void setStreamSolo(int, boolean);
     method public void setStreamVolume(int, int, int);
@@ -20125,8 +20133,8 @@ package android.media {
     method @Deprecated public void setVibrateSetting(int, int);
     method @Deprecated public void setWiredHeadsetOn(boolean);
     method @Deprecated public boolean shouldVibrate(int);
-    method public void startBluetoothSco();
-    method public void stopBluetoothSco();
+    method @Deprecated public void startBluetoothSco();
+    method @Deprecated public void stopBluetoothSco();
     method public void unloadSoundEffects();
     method public void unregisterAudioDeviceCallback(android.media.AudioDeviceCallback);
     method public void unregisterAudioPlaybackCallback(@NonNull android.media.AudioManager.AudioPlaybackCallback);
@@ -24307,7 +24315,7 @@ package android.media.audiofx {
     method public int getWaveForm(byte[]) throws java.lang.IllegalStateException;
     method public void release();
     method public int setCaptureSize(int) throws java.lang.IllegalStateException;
-    method public int setDataCaptureListener(android.media.audiofx.Visualizer.OnDataCaptureListener, int, boolean, boolean);
+    method public int setDataCaptureListener(@Nullable android.media.audiofx.Visualizer.OnDataCaptureListener, int, boolean, boolean);
     method public int setEnabled(boolean) throws java.lang.IllegalStateException;
     method public int setMeasurementMode(int) throws java.lang.IllegalStateException;
     method public int setScalingMode(int) throws java.lang.IllegalStateException;
@@ -30978,6 +30986,7 @@ package android.os {
     field public static final int S = 31; // 0x1f
     field public static final int S_V2 = 32; // 0x20
     field public static final int TIRAMISU = 33; // 0x21
+    field public static final int UPSIDE_DOWN_CAKE = 10000; // 0x2710
   }
 
   public final class Bundle extends android.os.BaseBundle implements java.lang.Cloneable android.os.Parcelable {
@@ -32341,6 +32350,9 @@ package android.os {
     method public static android.os.VibrationEffect createWaveform(long[], int[], int);
     method public int describeContents();
     method @NonNull public static android.os.VibrationEffect.Composition startComposition();
+    method @NonNull public static android.os.VibrationEffect.WaveformBuilder startWaveform();
+    method @NonNull public static android.os.VibrationEffect.WaveformBuilder startWaveform(@NonNull android.os.VibrationEffect.VibrationParameter);
+    method @NonNull public static android.os.VibrationEffect.WaveformBuilder startWaveform(@NonNull android.os.VibrationEffect.VibrationParameter, @NonNull android.os.VibrationEffect.VibrationParameter);
     field @NonNull public static final android.os.Parcelable.Creator<android.os.VibrationEffect> CREATOR;
     field public static final int DEFAULT_AMPLITUDE = -1; // 0xffffffff
     field public static final int EFFECT_CLICK = 0; // 0x0
@@ -32350,10 +32362,13 @@ package android.os {
   }
 
   public static final class VibrationEffect.Composition {
+    method @NonNull public android.os.VibrationEffect.Composition addEffect(@NonNull android.os.VibrationEffect);
+    method @NonNull public android.os.VibrationEffect.Composition addOffDuration(@NonNull java.time.Duration);
     method @NonNull public android.os.VibrationEffect.Composition addPrimitive(int);
     method @NonNull public android.os.VibrationEffect.Composition addPrimitive(int, @FloatRange(from=0.0f, to=1.0f) float);
     method @NonNull public android.os.VibrationEffect.Composition addPrimitive(int, @FloatRange(from=0.0f, to=1.0f) float, @IntRange(from=0) int);
     method @NonNull public android.os.VibrationEffect compose();
+    method @NonNull public android.os.VibrationEffect.Composition repeatEffectIndefinitely(@NonNull android.os.VibrationEffect);
     field public static final int PRIMITIVE_CLICK = 1; // 0x1
     field public static final int PRIMITIVE_LOW_TICK = 8; // 0x8
     field public static final int PRIMITIVE_QUICK_FALL = 6; // 0x6
@@ -32364,15 +32379,34 @@ package android.os {
     field public static final int PRIMITIVE_TICK = 7; // 0x7
   }
 
+  public static final class VibrationEffect.Composition.UnreachableAfterRepeatingIndefinitelyException extends java.lang.IllegalStateException {
+  }
+
+  public static class VibrationEffect.VibrationParameter {
+    method @NonNull public static android.os.VibrationEffect.VibrationParameter targetAmplitude(@FloatRange(from=0, to=1) float);
+    method @NonNull public static android.os.VibrationEffect.VibrationParameter targetFrequency(@FloatRange(from=1) float);
+  }
+
+  public static final class VibrationEffect.WaveformBuilder {
+    method @NonNull public android.os.VibrationEffect.WaveformBuilder addSustain(@NonNull java.time.Duration);
+    method @NonNull public android.os.VibrationEffect.WaveformBuilder addTransition(@NonNull java.time.Duration, @NonNull android.os.VibrationEffect.VibrationParameter);
+    method @NonNull public android.os.VibrationEffect.WaveformBuilder addTransition(@NonNull java.time.Duration, @NonNull android.os.VibrationEffect.VibrationParameter, @NonNull android.os.VibrationEffect.VibrationParameter);
+    method @NonNull public android.os.VibrationEffect build();
+  }
+
   public abstract class Vibrator {
     method public final int areAllEffectsSupported(@NonNull int...);
     method public final boolean areAllPrimitivesSupported(@NonNull int...);
     method @NonNull public int[] areEffectsSupported(@NonNull int...);
     method @NonNull public boolean[] arePrimitivesSupported(@NonNull int...);
     method @RequiresPermission(android.Manifest.permission.VIBRATE) public abstract void cancel();
+    method @Nullable public android.os.vibrator.VibratorFrequencyProfile getFrequencyProfile();
     method public int getId();
     method @NonNull public int[] getPrimitiveDurations(@NonNull int...);
+    method public float getQFactor();
+    method public float getResonantFrequency();
     method public abstract boolean hasAmplitudeControl();
+    method public boolean hasFrequencyControl();
     method public abstract boolean hasVibrator();
     method @Deprecated @RequiresPermission(android.Manifest.permission.VIBRATE) public void vibrate(long);
     method @Deprecated @RequiresPermission(android.Manifest.permission.VIBRATE) public void vibrate(long, android.media.AudioAttributes);
@@ -32696,6 +32730,17 @@ package android.os.strictmode {
   }
 
   public final class WebViewMethodCalledOnWrongThreadViolation extends android.os.strictmode.Violation {
+  }
+
+}
+
+package android.os.vibrator {
+
+  public final class VibratorFrequencyProfile {
+    method public float getMaxAmplitudeMeasurementInterval();
+    method @FloatRange(from=0, to=1) @NonNull public float[] getMaxAmplitudeMeasurements();
+    method public float getMaxFrequency();
+    method public float getMinFrequency();
   }
 
 }
@@ -36093,7 +36138,7 @@ package android.provider {
     field public static final int RESULT_SMS_NULL_MESSAGE = 8; // 0x8
     field public static final int RESULT_SMS_NULL_PDU = 7; // 0x7
     field public static final int RESULT_SMS_OUT_OF_MEMORY = 3; // 0x3
-    field public static final int RESULT_SMS_RECEIVED_WHILE_ENCRYPTED = 9; // 0x9
+    field @Deprecated public static final int RESULT_SMS_RECEIVED_WHILE_ENCRYPTED = 9; // 0x9
     field public static final int RESULT_SMS_UNSUPPORTED = 4; // 0x4
     field @Deprecated public static final String SECRET_CODE_ACTION = "android.provider.Telephony.SECRET_CODE";
     field public static final String SIM_FULL_ACTION = "android.provider.Telephony.SIM_FULL";
@@ -39029,6 +39074,7 @@ package android.service.notification {
     field public static final int REASON_GROUP_SUMMARY_CANCELED = 12; // 0xc
     field public static final int REASON_LISTENER_CANCEL = 10; // 0xa
     field public static final int REASON_LISTENER_CANCEL_ALL = 11; // 0xb
+    field public static final int REASON_LOCKDOWN = 23; // 0x17
     field public static final int REASON_PACKAGE_BANNED = 7; // 0x7
     field public static final int REASON_PACKAGE_CHANGED = 5; // 0x5
     field public static final int REASON_PACKAGE_SUSPENDED = 14; // 0xe
@@ -48126,7 +48172,7 @@ package android.view {
     method @NonNull public android.hardware.BatteryState getBatteryState();
     method public int getControllerNumber();
     method public String getDescriptor();
-    method public static android.view.InputDevice getDevice(int);
+    method @Nullable public static android.view.InputDevice getDevice(int);
     method public static int[] getDeviceIds();
     method public int getId();
     method public android.view.KeyCharacterMap getKeyCharacterMap();
@@ -49672,6 +49718,10 @@ package android.view {
     method public boolean getGlobalVisibleRect(android.graphics.Rect, android.graphics.Point);
     method public final boolean getGlobalVisibleRect(android.graphics.Rect);
     method public android.os.Handler getHandler();
+    method public float getHandwritingBoundsOffsetBottom();
+    method public float getHandwritingBoundsOffsetLeft();
+    method public float getHandwritingBoundsOffsetRight();
+    method public float getHandwritingBoundsOffsetTop();
     method public final boolean getHasOverlappingRendering();
     method public final int getHeight();
     method public void getHitRect(android.graphics.Rect);
@@ -50035,6 +50085,7 @@ package android.view {
     method public void setForegroundTintBlendMode(@Nullable android.graphics.BlendMode);
     method public void setForegroundTintList(@Nullable android.content.res.ColorStateList);
     method public void setForegroundTintMode(@Nullable android.graphics.PorterDuff.Mode);
+    method public void setHandwritingBoundsOffsets(float, float, float, float);
     method public void setHapticFeedbackEnabled(boolean);
     method public void setHasTransientState(boolean);
     method public void setHorizontalFadingEdgeEnabled(boolean);
@@ -51431,6 +51482,7 @@ package android.view {
     ctor public WindowManager.LayoutParams(int, int, int, int, int);
     ctor public WindowManager.LayoutParams(int, int, int, int, int, int, int);
     ctor public WindowManager.LayoutParams(android.os.Parcel);
+    method public boolean areWallpaperTouchEventsEnabled();
     method public final int copyFrom(android.view.WindowManager.LayoutParams);
     method public String debug(String);
     method public int describeContents();
@@ -51447,6 +51499,7 @@ package android.view {
     method public void setFitInsetsSides(int);
     method public void setFitInsetsTypes(int);
     method public final void setTitle(CharSequence);
+    method public void setWallpaperTouchEventsEnabled(boolean);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final int ALPHA_CHANGED = 128; // 0x80
     field public static final int ANIMATION_CHANGED = 16; // 0x10
@@ -52505,6 +52558,7 @@ package android.view.autofill {
 
   public final class AutofillManager {
     method public void cancel();
+    method public void clearAutofillRequestCallback();
     method public void commit();
     method public void disableAutofillServices();
     method @Nullable public android.content.ComponentName getAutofillServiceComponentName();
@@ -52530,6 +52584,7 @@ package android.view.autofill {
     method public void registerCallback(@Nullable android.view.autofill.AutofillManager.AutofillCallback);
     method public void requestAutofill(@NonNull android.view.View);
     method public void requestAutofill(@NonNull android.view.View, int, @NonNull android.graphics.Rect);
+    method public void setAutofillRequestCallback(@NonNull java.util.concurrent.Executor, @NonNull android.view.autofill.AutofillRequestCallback);
     method public void setUserData(@Nullable android.service.autofill.UserData);
     method public boolean showAutofillDialog(@NonNull android.view.View);
     method public boolean showAutofillDialog(@NonNull android.view.View, int);
@@ -52548,6 +52603,10 @@ package android.view.autofill {
     field public static final int EVENT_INPUT_HIDDEN = 2; // 0x2
     field public static final int EVENT_INPUT_SHOWN = 1; // 0x1
     field public static final int EVENT_INPUT_UNAVAILABLE = 3; // 0x3
+  }
+
+  public interface AutofillRequestCallback {
+    method public void onFillRequest(@Nullable android.view.inputmethod.InlineSuggestionsRequest, @NonNull android.os.CancellationSignal, @NonNull android.service.autofill.FillCallback);
   }
 
   public final class AutofillValue implements android.os.Parcelable {
@@ -52937,10 +52996,12 @@ package android.view.inputmethod {
     ctor public InlineSuggestionsRequest.Builder(@NonNull java.util.List<android.widget.inline.InlinePresentationSpec>);
     method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder addInlinePresentationSpecs(@NonNull android.widget.inline.InlinePresentationSpec);
     method @NonNull public android.view.inputmethod.InlineSuggestionsRequest build();
+    method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder setClientSupported(boolean);
     method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder setExtras(@NonNull android.os.Bundle);
     method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder setInlinePresentationSpecs(@NonNull java.util.List<android.widget.inline.InlinePresentationSpec>);
     method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder setInlineTooltipPresentationSpec(@NonNull android.widget.inline.InlinePresentationSpec);
     method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder setMaxSuggestionCount(int);
+    method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder setServiceSupported(boolean);
     method @NonNull public android.view.inputmethod.InlineSuggestionsRequest.Builder setSupportedLocales(@NonNull android.os.LocaleList);
   }
 
@@ -53117,6 +53178,7 @@ package android.view.inputmethod {
     method public boolean isActive();
     method public boolean isFullscreenMode();
     method public boolean isInputMethodSuppressingSpellChecker();
+    method public boolean isStylusHandwritingAvailable();
     method @Deprecated public boolean isWatchingCursor(android.view.View);
     method public void restartInput(android.view.View);
     method public void sendAppPrivateCommand(android.view.View, String, android.os.Bundle);

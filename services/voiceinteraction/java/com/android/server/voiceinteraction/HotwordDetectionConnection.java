@@ -80,6 +80,7 @@ import android.service.voice.IDspHotwordDetectionCallback;
 import android.service.voice.IHotwordDetectionService;
 import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
 import android.service.voice.VoiceInteractionManagerInternal.HotwordDetectionServiceIdentity;
+import android.speech.IRecognitionServiceManager;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.util.Slog;
@@ -516,6 +517,7 @@ final class HotwordDetectionConnection {
                     if (mValidatingDspTrigger) {
                         mValidatingDspTrigger = false;
                         enforcePermissionsForDataDelivery();
+                        enforceExtraKeyphraseIdNotLeaked(result, recognitionEvent);
                         externalCallback.onKeyphraseDetected(recognitionEvent, result);
                         if (result != null) {
                             Slog.i(TAG, "Egressed " + HotwordDetectedResult.getUsageSize(result)
@@ -591,6 +593,7 @@ final class HotwordDetectionConnection {
                     mValidatingDspTrigger = false;
                     try {
                         enforcePermissionsForDataDelivery();
+                        enforceExtraKeyphraseIdNotLeaked(result, recognitionEvent);
                     } catch (SecurityException e) {
                         HotwordMetricsLogger.writeKeyphraseTriggerEvent(
                                 mDetectorType,
@@ -921,6 +924,7 @@ final class HotwordDetectionConnection {
 
             updateAudioFlinger(connection, mAudioFlinger);
             updateContentCaptureManager(connection);
+            updateSpeechService(connection);
             updateServiceIdentity(connection);
             return connection;
         }
@@ -1058,6 +1062,14 @@ final class HotwordDetectionConnection {
                         new ContentCaptureOptions(null)));
     }
 
+    private static void updateSpeechService(ServiceConnection connection) {
+        IBinder b = ServiceManager.getService(Context.SPEECH_RECOGNITION_SERVICE);
+        IRecognitionServiceManager binderService = IRecognitionServiceManager.Stub.asInterface(b);
+        connection.run(service -> {
+            service.updateRecognitionServiceManager(binderService);
+        });
+    }
+
     private void updateServiceIdentity(ServiceConnection connection) {
         connection.run(service -> service.ping(new IRemoteCallback.Stub() {
             @Override
@@ -1141,6 +1153,19 @@ final class HotwordDetectionConnection {
                             permission,
                             SoundTriggerSessionPermissionsDecorator.toString(identity)));
         }
+    }
+
+    private static void enforceExtraKeyphraseIdNotLeaked(HotwordDetectedResult result,
+            SoundTrigger.KeyphraseRecognitionEvent recognitionEvent) {
+        // verify the phrase ID in HotwordDetectedResult is not exposing extra phrases
+        // the DSP did not detect
+        for (SoundTrigger.KeyphraseRecognitionExtra keyphrase : recognitionEvent.keyphraseExtras) {
+            if (keyphrase.getKeyphraseId() == result.getHotwordPhraseId()) {
+                return;
+            }
+        }
+        throw new SecurityException("Ignoring #onDetected due to trusted service "
+                + "sharing a keyphrase ID which the DSP did not detect");
     }
 
     private static final String OP_MESSAGE =

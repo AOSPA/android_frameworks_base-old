@@ -85,6 +85,14 @@ public class FeatureFlagUtils {
     public static final String SETTINGS_HIDE_SECOND_LAYER_PAGE_NAVIGATE_UP_BUTTON_IN_TWO_PANE =
             "settings_hide_second_layer_page_navigate_up_button_in_two_pane";
 
+    /** @hide */
+    public static final String SETTINGS_AUTO_TEXT_WRAPPING = "settings_auto_text_wrapping";
+
+    /** Flag to enable/disable guest mode UX changes as mentioned in b/214031645
+     *  @hide
+     */
+    public static  final String SETTINGS_GUEST_MODE_UX_CHANGES = "settings_guest_mode_ux_changes";
+
     private static final Map<String, String> DEFAULT_FLAGS;
 
     static {
@@ -113,6 +121,8 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put(SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS, "true");
         DEFAULT_FLAGS.put(SETTINGS_APP_ALLOW_DARK_THEME_ACTIVATION_AT_BEDTIME, "true");
         DEFAULT_FLAGS.put(SETTINGS_HIDE_SECOND_LAYER_PAGE_NAVIGATE_UP_BUTTON_IN_TWO_PANE, "true");
+        DEFAULT_FLAGS.put(SETTINGS_AUTO_TEXT_WRAPPING, "false");
+        DEFAULT_FLAGS.put(SETTINGS_GUEST_MODE_UX_CHANGES, "true");
     }
 
     private static final Set<String> PERSISTENT_FLAGS;
@@ -125,6 +135,7 @@ public class FeatureFlagUtils {
         PERSISTENT_FLAGS.add(SETTINGS_APP_ALLOW_DARK_THEME_ACTIVATION_AT_BEDTIME);
         PERSISTENT_FLAGS.add(SETTINGS_HIDE_SECOND_LAYER_PAGE_NAVIGATE_UP_BUTTON_IN_TWO_PANE);
         PERSISTENT_FLAGS.add(SETTINGS_PROVIDER_MODEL);
+        PERSISTENT_FLAGS.add(SETTINGS_AUTO_TEXT_WRAPPING);
     }
 
     /**

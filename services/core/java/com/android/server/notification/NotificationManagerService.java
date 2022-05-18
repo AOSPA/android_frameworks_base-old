@@ -95,6 +95,7 @@ import static android.service.notification.NotificationListenerService.REASON_ER
 import static android.service.notification.NotificationListenerService.REASON_GROUP_SUMMARY_CANCELED;
 import static android.service.notification.NotificationListenerService.REASON_LISTENER_CANCEL;
 import static android.service.notification.NotificationListenerService.REASON_LISTENER_CANCEL_ALL;
+import static android.service.notification.NotificationListenerService.REASON_LOCKDOWN;
 import static android.service.notification.NotificationListenerService.REASON_PACKAGE_BANNED;
 import static android.service.notification.NotificationListenerService.REASON_PACKAGE_CHANGED;
 import static android.service.notification.NotificationListenerService.REASON_PACKAGE_SUSPENDED;
@@ -516,7 +517,7 @@ public class NotificationManagerService extends SystemService {
     private ActivityManagerInternal mAmi;
     private IPackageManager mPackageManager;
     private PackageManager mPackageManagerClient;
-    private PackageManagerInternal mPackageManagerInternal;
+    PackageManagerInternal mPackageManagerInternal;
     private PermissionPolicyInternal mPermissionPolicyInternal;
     AudioManager mAudioManager;
     AudioManagerInternal mAudioManagerInternal;
@@ -9634,7 +9635,7 @@ public class NotificationManagerService extends SystemService {
             int numNotifications = mNotificationList.size();
             for (int i = 0; i < numNotifications; i++) {
                 NotificationRecord rec = mNotificationList.get(i);
-                mListeners.notifyRemovedLocked(rec, REASON_CANCEL_ALL,
+                mListeners.notifyRemovedLocked(rec, REASON_LOCKDOWN,
                         rec.getStats());
             }
 
@@ -9821,7 +9822,7 @@ public class NotificationManagerService extends SystemService {
      * notifications visible to the given listener.
      */
     @GuardedBy("mNotificationLock")
-    private NotificationRankingUpdate makeRankingUpdateLocked(ManagedServiceInfo info) {
+    NotificationRankingUpdate makeRankingUpdateLocked(ManagedServiceInfo info) {
         final int N = mNotificationList.size();
         final ArrayList<NotificationListenerService.Ranking> rankings = new ArrayList<>();
 
@@ -10936,7 +10937,7 @@ public class NotificationManagerService extends SystemService {
                 TrimCache trimCache = new TrimCache(sbn);
 
                 for (final ManagedServiceInfo info : getServices()) {
-                    boolean sbnVisible = isVisibleToListener(sbn, r. getNotificationType(), info);
+                    boolean sbnVisible = isVisibleToListener(sbn, r.getNotificationType(), info);
                     boolean oldSbnVisible = (oldSbn != null)
                             && isVisibleToListener(oldSbn, old.getNotificationType(), info);
                     // This notification hasn't been and still isn't visible -> ignore.
@@ -10966,11 +10967,16 @@ public class NotificationManagerService extends SystemService {
                                 info, oldSbnLightClone, update, null, REASON_USER_STOPPED));
                         continue;
                     }
-
                     // Grant access before listener is notified
                     final int targetUserId = (info.userid == UserHandle.USER_ALL)
                             ? UserHandle.USER_SYSTEM : info.userid;
                     updateUriPermissions(r, old, info.component.getPackageName(), targetUserId);
+
+                    mPackageManagerInternal.grantImplicitAccess(
+                            targetUserId, null /* intent */,
+                            UserHandle.getAppId(info.uid),
+                            sbn.getUid(),
+                            false /* direct */, false /* retainOnUpdate */);
 
                     final StatusBarNotification sbnToPost = trimCache.ForListener(info);
                     mHandler.post(() -> notifyPosted(info, sbnToPost, update));

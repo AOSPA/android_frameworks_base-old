@@ -63,7 +63,7 @@ import static android.service.notification.Adjustment.KEY_USER_SENTIMENT;
 import static android.service.notification.NotificationListenerService.FLAG_FILTER_TYPE_ALERTING;
 import static android.service.notification.NotificationListenerService.FLAG_FILTER_TYPE_CONVERSATIONS;
 import static android.service.notification.NotificationListenerService.FLAG_FILTER_TYPE_ONGOING;
-import static android.service.notification.NotificationListenerService.REASON_CANCEL_ALL;
+import static android.service.notification.NotificationListenerService.REASON_LOCKDOWN;
 import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEGATIVE;
 import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
@@ -9293,10 +9293,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mStrongAuthTracker.onStrongAuthRequiredChanged(mContext.getUserId());
         assertTrue(mStrongAuthTracker.isInLockDownMode());
 
-        // the notifyRemovedLocked function is called twice due to REASON_CANCEL_ALL.
+        // the notifyRemovedLocked function is called twice due to REASON_LOCKDOWN.
         ArgumentCaptor<Integer> captor = ArgumentCaptor.forClass(Integer.class);
         verify(mListeners, times(2)).notifyRemovedLocked(any(), captor.capture(), any());
-        assertEquals(REASON_CANCEL_ALL, captor.getValue().intValue());
+        assertEquals(REASON_LOCKDOWN, captor.getValue().intValue());
 
         // exit lockdown mode.
         mStrongAuthTracker.setGetStrongAuthForUserReturnValue(0);

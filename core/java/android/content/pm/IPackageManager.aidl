@@ -100,8 +100,7 @@ interface IPackageManager {
 
     boolean isProtectedBroadcast(String actionName);
 
-    @UnsupportedAppUsage
-    int checkSignatures(String pkg1, String pkg2);
+    int checkSignatures(String pkg1, String pkg2, int userId);
 
     @UnsupportedAppUsage
     int checkUidSignatures(int uid1, int uid2);
@@ -620,7 +619,6 @@ interface IPackageManager {
     VerifierDeviceIdentity getVerifierDeviceIdentity();
 
     boolean isFirstBoot();
-    boolean isOnlyCoreApps();
     boolean isDeviceUpgrading();
 
     /** Reflects current DeviceStorageMonitorService state */

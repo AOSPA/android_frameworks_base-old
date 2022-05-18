@@ -1255,7 +1255,7 @@ public final class OverlayManagerService extends SystemService {
             // to be installed for different users: ignore userId for now.
             try {
                 return mPackageManager.checkSignatures(
-                        packageName1, packageName2) == SIGNATURE_MATCH;
+                        packageName1, packageName2, userId) == SIGNATURE_MATCH;
             } catch (RemoteException e) {
                 // Intentionally left blank
             }
@@ -1477,22 +1477,25 @@ public final class OverlayManagerService extends SystemService {
                 targetPackageNames = pm.getTargetPackageNames(userId);
             }
 
-            final Map<String, OverlayPaths> pendingChanges =
+            final ArrayMap<String, OverlayPaths> pendingChanges =
                     new ArrayMap<>(targetPackageNames.size());
             synchronized (mLock) {
                 final OverlayPaths frameworkOverlays =
-                        mImpl.getEnabledOverlayPaths("android", userId);
+                        mImpl.getEnabledOverlayPaths("android", userId, false);
                 for (final String targetPackageName : targetPackageNames) {
                     final OverlayPaths.Builder list = new OverlayPaths.Builder();
+                    list.addAll(frameworkOverlays);
                     if (!"android".equals(targetPackageName)) {
-                        list.addAll(frameworkOverlays);
+                        list.addAll(mImpl.getEnabledOverlayPaths(targetPackageName, userId, true));
                     }
-                    list.addAll(mImpl.getEnabledOverlayPaths(targetPackageName, userId));
                     pendingChanges.put(targetPackageName, list.build());
                 }
             }
 
             final HashSet<String> updatedPackages = new HashSet<>();
+            final HashSet<String> invalidPackages = new HashSet<>();
+            pm.setEnabledOverlayPackages(userId, pendingChanges, updatedPackages, invalidPackages);
+
             for (final String targetPackageName : targetPackageNames) {
                 if (DEBUG) {
                     Slog.d(TAG, "-> Updating overlay: target=" + targetPackageName + " overlays=["
@@ -1500,11 +1503,10 @@ public final class OverlayManagerService extends SystemService {
                             + "] userId=" + userId);
                 }
 
-                if (!pm.setEnabledOverlayPackages(
-                        userId, targetPackageName, pendingChanges.get(targetPackageName),
-                        updatedPackages)) {
-                    Slog.e(TAG, String.format("Failed to change enabled overlays for %s user %d",
-                            targetPackageName, userId));
+                if (invalidPackages.contains(targetPackageName)) {
+                    Slog.e(TAG, TextUtils.formatSimple(
+                            "Failed to change enabled overlays for %s user %d", targetPackageName,
+                            userId));
                 }
             }
             return new ArrayList<>(updatedPackages);

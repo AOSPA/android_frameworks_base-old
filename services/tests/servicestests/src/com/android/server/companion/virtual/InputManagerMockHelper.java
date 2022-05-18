@@ -83,10 +83,8 @@ class InputManagerMockHelper {
         // We only use a subset of the fields of InputDevice in InputController.
         final InputDevice device = new InputDevice(mDevices.size() /*id*/, 1 /*generation*/, 0,
                 inv.getArgument(0) /*name*/, inv.getArgument(1) /*vendorId*/,
-                inv.getArgument(2) /*productId*/, inv.getArgument(3) /*descriptor*/,
-                true /*isExternal*/, 0 /*sources*/, 0 /*keyboardType*/,
-                null /*keyCharacterMap*/, false /*hasVibrator*/, false /*hasMic*/,
-                false /*hasButtonUnderPad*/, false /*hasSensor*/, false /*hasBattery*/);
+                inv.getArgument(2) /*productId*/, inv.getArgument(3) /*descriptor*/, true, 0, 0,
+                null, false, false, false, false, false);
         mDevices.add(device);
         try {
             mDevicesChangedListener.onInputDevicesChanged(

@@ -76,6 +76,7 @@ android_library {
         "SettingsLibTwoTargetPreference",
         "SettingsLibSettingsTransition",
         "SettingsLibButtonPreference",
+        "SettingsLibDeviceStateRotationLock",
         "setupdesign",
         "zxing-core-1.7",
     ],

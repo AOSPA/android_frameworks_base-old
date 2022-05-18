@@ -23,6 +23,8 @@ import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_WHEN_REQU
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
 
+import static com.android.server.LocalManagerRegistry.ManagerNotFoundException;
+
 import android.accounts.IAccountManager;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
@@ -109,8 +111,10 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.server.FgThread;
+import com.android.server.LocalManagerRegistry;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
+import com.android.server.art.ArtManagerLocal;
 import com.android.server.pm.PackageManagerShellCommandDataLoader.Metadata;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal;
 import com.android.server.pm.verify.domain.DomainVerificationShell;
@@ -347,6 +351,13 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runBypassAllowedApexUpdateCheck();
                 case "set-silent-updates-policy":
                     return runSetSilentUpdatesPolicy();
+                case "art":
+                    // Remove the first arg "art" and forward to ART module.
+                    String[] args = getAllArgs();
+                    args = Arrays.copyOfRange(args, 1, args.length);
+                    return LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class)
+                            .handleShellCommand(getTarget(), getInFileDescriptor(),
+                                    getOutFileDescriptor(), getErrFileDescriptor(), args);
                 default: {
                     Boolean domainVerificationResult =
                             mDomainVerificationShell.runCommand(this, cmd);
@@ -371,6 +382,8 @@ class PackageManagerShellCommand extends ShellCommand {
             }
         } catch (RemoteException e) {
             pw.println("Remote exception: " + e);
+        } catch (ManagerNotFoundException e) {
+            pw.println(e);
         }
         return -1;
     }
@@ -894,6 +907,9 @@ class PackageManagerShellCommand extends ShellCommand {
                     case "--apex-only":
                         getFlags |= PackageManager.MATCH_APEX;
                         listApexOnly = true;
+                        break;
+                    case "--factory-only":
+                        getFlags |= PackageManager.MATCH_FACTORY_ONLY;
                         break;
                     case "--user":
                         defaultUserId = UserHandle.parseUserArg(getNextArgRequired());
@@ -3887,7 +3903,8 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("    Prints all system libraries.");
         pw.println("");
         pw.println("  list packages [-f] [-d] [-e] [-s] [-3] [-i] [-l] [-u] [-U] ");
-        pw.println("      [--show-versioncode] [--apex-only] [--uid UID] [--user USER_ID] [FILTER]");
+        pw.println("      [--show-versioncode] [--apex-only] [--factory-only]");
+        pw.println("      [--uid UID] [--user USER_ID] [FILTER]");
         pw.println("    Prints all packages; optionally only those whose name contains");
         pw.println("    the text in FILTER.  Options are:");
         pw.println("      -f: see their associated file");
@@ -3902,6 +3919,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -u: also include uninstalled packages");
         pw.println("      --show-versioncode: also show the version code");
         pw.println("      --apex-only: only show APEX packages");
+        pw.println("      --factory-only: only show system packages excluding updates");
         pw.println("      --uid UID: filter to only show packages with the given UID");
         pw.println("      --user USER_ID: only list packages belonging to the given user");
         pw.println("");
@@ -4236,6 +4254,9 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      --throttle-time: update the silent updates throttle time in seconds.");
         pw.println("      --reset: restore the installer and throttle time to the default, and");
         pw.println("        clear tracks of silent updates in the system.");
+        pw.println("");
+        pw.println("  art [<SUB-COMMANDS>]");
+        pw.println("    Invokes ART services commands. (Run `pm art help` for details.)");
         pw.println("");
         mDomainVerificationShell.printHelp(pw);
         pw.println("");

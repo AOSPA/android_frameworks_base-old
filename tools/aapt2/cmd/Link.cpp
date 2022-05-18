@@ -556,7 +556,7 @@ bool ResourceFileFlattener::Flatten(ResourceTable* table, IArchiveWriter* archiv
           file_op.config = config_value->config;
           file_op.file_to_copy = file;
 
-          if (type->type != ResourceType::kRaw &&
+          if (type->named_type.type != ResourceType::kRaw &&
               (file_ref->type == ResourceFile::Type::kBinaryXml ||
                file_ref->type == ResourceFile::Type::kProtoXml)) {
             std::unique_ptr<io::IData> data = file->OpenAsData();
@@ -596,7 +596,8 @@ bool ResourceFileFlattener::Flatten(ResourceTable* table, IArchiveWriter* archiv
 
             file_op.xml_to_flatten->file.config = config_value->config;
             file_op.xml_to_flatten->file.source = file_ref->GetSource();
-            file_op.xml_to_flatten->file.name = ResourceName(pkg->name, type->type, entry->name);
+            file_op.xml_to_flatten->file.name =
+                ResourceName(pkg->name, type->named_type, entry->name);
           }
 
           // NOTE(adamlesinski): Explicitly construct a StringPiece here, or
@@ -1009,7 +1010,7 @@ class Linker {
         // We have a package that is not related to the one we're building!
         for (const auto& type : package->types) {
           for (const auto& entry : type->entries) {
-            ResourceNameRef res_name(package->name, type->type, entry->name);
+            ResourceNameRef res_name(package->name, type->named_type, entry->name);
 
             for (const auto& config_value : entry->values) {
               // Special case the occurrence of an ID that is being generated
@@ -1046,7 +1047,7 @@ class Linker {
       for (const auto& type : package->types) {
         for (const auto& entry : type->entries) {
           if (entry->id) {
-            ResourceNameRef res_name(package->name, type->type, entry->name);
+            ResourceNameRef res_name(package->name, type->named_type, entry->name);
             context_->GetDiagnostics()->Error(DiagMessage() << "resource " << res_name << " has ID "
                                                             << entry->id.value() << " assigned");
             return false;
@@ -1055,6 +1056,83 @@ class Linker {
       }
     }
     return true;
+  }
+
+  bool VerifyLocaleFormat(xml::XmlResource* manifest, IDiagnostics* diag) {
+    // Skip it if the Manifest doesn't declare the localeConfig attribute within the <application>
+    // element.
+    const xml::Element* application = manifest->root->FindChild("", "application");
+    if (!application) {
+      return true;
+    }
+    const xml::Attribute* localeConfig =
+        application->FindAttribute(xml::kSchemaAndroid, "localeConfig");
+    if (!localeConfig) {
+      return true;
+    }
+
+    if (localeConfig->compiled_value) {
+      const auto localeconfig_reference = ValueCast<Reference>(localeConfig->compiled_value.get());
+      const auto localeconfig_entry =
+          ResolveTableEntry(context_, &final_table_, localeconfig_reference);
+      if (!localeconfig_entry) {
+        return true;
+      }
+
+      for (const auto& value : localeconfig_entry->values) {
+        // Load an XML file which is linked from the localeConfig attribute.
+        const std::string& path = value->value->GetSource().path;
+        std::unique_ptr<xml::XmlResource> localeConfig_xml = LoadXml(path, diag);
+        if (!localeConfig_xml) {
+          diag->Error(DiagMessage(path) << "can't load the XML");
+          return false;
+        }
+
+        xml::Element* localeConfig_el = xml::FindRootElement(localeConfig_xml->root.get());
+        if (!localeConfig_el) {
+          diag->Error(DiagMessage(path) << "no root tag defined");
+          return false;
+        }
+        if (localeConfig_el->name != "locale-config") {
+          diag->Error(DiagMessage(path) << "invalid element name: " << localeConfig_el->name
+                                        << ", expected: locale-config");
+          return false;
+        }
+
+        for (const xml::Element* child_el : localeConfig_el->GetChildElements()) {
+          if (child_el->name == "locale") {
+            if (const xml::Attribute* locale_name_attr =
+                    child_el->FindAttribute(xml::kSchemaAndroid, "name")) {
+              const std::string& locale_name = locale_name_attr->value;
+              const std::string valid_name = ConvertToBCP47Tag(locale_name);
+
+              // Start to verify the locale format
+              ConfigDescription config;
+              if (!ConfigDescription::Parse(valid_name, &config)) {
+                diag->Error(DiagMessage(path) << "invalid configuration: " << locale_name);
+                return false;
+              }
+            } else {
+              diag->Error(DiagMessage(path) << "the attribute android:name is not found");
+              return false;
+            }
+          } else {
+            diag->Error(DiagMessage(path)
+                        << "invalid element name: " << child_el->name << ", expected: locale");
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  std::string ConvertToBCP47Tag(const std::string& locale) {
+    std::string bcp47tag = "b+";
+    bcp47tag += locale;
+    std::replace(bcp47tag.begin(), bcp47tag.end(), '-', '+');
+
+    return bcp47tag;
   }
 
   std::unique_ptr<IArchiveWriter> MakeArchiveWriter(const StringPiece& out) {
@@ -1939,7 +2017,7 @@ class Linker {
         for (auto& package : final_table_.packages) {
           for (auto& type : package->types) {
             for (auto& entry : type->entries) {
-              ResourceName name(package->name, type->type, entry->name);
+              ResourceName name(package->name, type->named_type, entry->name);
               // The IDs are guaranteed to exist.
               options_.stable_id_map[std::move(name)] = entry->id.value();
             }
@@ -2179,6 +2257,10 @@ class Linker {
       context_->GetDiagnostics()->Error(DiagMessage() << "failed processing manifest");
       return 1;
     }
+
+    if (!VerifyLocaleFormat(manifest_xml.get(), context_->GetDiagnostics())) {
+      return 1;
+    };
 
     if (!WriteApk(archive_writer.get(), &proguard_keep_set, manifest_xml.get(), &final_table_)) {
       return 1;
