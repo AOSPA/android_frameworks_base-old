@@ -34,6 +34,24 @@
       "parentUuid": "5cad3f43_76b163c3",
       "revId": "42436eb85816bfa80611af51e545f9299e4ed32c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "7447d217_0f69682a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-05-19T12:21:12Z",
+      "side": 1,
+      "message": "\u003e ofc, everyone that owns a device with AMOLED screen uses it i guess.\n\nThat\u0027s a WILD assumption. Majority of users don\u0027t.",
+      "parentUuid": "2ddc9322_3bc16f14",
+      "revId": "42436eb85816bfa80611af51e545f9299e4ed32c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
