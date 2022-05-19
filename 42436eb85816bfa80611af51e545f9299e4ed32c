@@ -16,6 +16,24 @@
       "message": "does someone use it?",
       "revId": "42436eb85816bfa80611af51e545f9299e4ed32c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2ddc9322_3bc16f14",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2022-05-19T02:55:16Z",
+      "side": 1,
+      "message": "ofc, everyone that owns a device with AMOLED screen uses it i guess.\n\nI don\u0027t use it all the time, I use only when I\u0027m out home so to have an easy access to enable/disable it is welcome.",
+      "parentUuid": "5cad3f43_76b163c3",
+      "revId": "42436eb85816bfa80611af51e545f9299e4ed32c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
