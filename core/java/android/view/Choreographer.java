@@ -865,7 +865,7 @@ public final class Choreographer {
                     frameTimeNanos = startNanos - lastFrameOffset;
                     DisplayEventReceiver.VsyncEventData latestVsyncEventData =
                             mDisplayEventReceiver.getLatestVsyncEventData();
-                    frameData.updateFrameData(-lastFrameOffset, latestVsyncEventData);
+                    frameData.updateFrameData(frameTimeNanos, latestVsyncEventData);
                 }
 
                 if (frameTimeNanos < mLastFrameTimeNanos) {
