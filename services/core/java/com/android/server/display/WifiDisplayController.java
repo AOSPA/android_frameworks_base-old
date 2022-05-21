@@ -786,7 +786,8 @@ final class WifiDisplayController implements DumpUtils.Dump {
         *R2 source - R2 sink ->3*/
         if(WFDR2Info==2 || WFDR2Info==3){
             WifiP2pWfdInfo wfdInfo = mThisDevice.getWfdInfo();
-            mWifiP2pManager.setWFDR2Info(mWifiP2pChannel, wfdInfo, new ActionListener() {
+            wfdInfo.setR2DeviceType(WifiP2pWfdInfo.DEVICE_TYPE_WFD_SOURCE);
+            mWifiP2pManager.setWfdInfo(mWifiP2pChannel, wfdInfo, new ActionListener() {
                     @Override
                     public void onSuccess() {
                         if (DEBUG) {
