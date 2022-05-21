@@ -863,7 +863,7 @@ public final class Choreographer {
                         }
                     }
                     frameTimeNanos = startNanos - lastFrameOffset;
-                    frameData.updateFrameData(-lastFrameOffset);
+                    frameData.updateFrameData(frameTimeNanos);
                 }
 
                 if (frameTimeNanos < mLastFrameTimeNanos) {
