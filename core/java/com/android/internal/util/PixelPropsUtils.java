@@ -17,6 +17,7 @@
 package com.android.internal.util;
 
 import android.os.Build;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import java.util.Arrays;
@@ -32,6 +33,7 @@ public class PixelPropsUtils {
 
     private static volatile boolean sIsGms = false;
     public static final String PACKAGE_GMS = "com.google.android.gms";
+    public static final String PACKAGE_ARCORE = "com.google.ar.core";
 
     private static final Map<String, Object> propsToChange;
     private static final Map<String, Object> propsToChangeP5;
@@ -54,8 +56,7 @@ public class PixelPropsUtils {
         "com.google.android.GoogleCameraEng2",
         "com.google.android.MTCL83",
         "com.google.android.UltraCVM",
-        "com.google.android.apps.cameralite",
-        "com.google.ar.core"
+        "com.google.android.apps.cameralite"
     };
 
     static {
@@ -81,6 +82,13 @@ public class PixelPropsUtils {
         }
         if (packageName.equals(PACKAGE_GMS)) {
             sIsGms = true;
+        }
+        if (packageName.equals(PACKAGE_ARCORE)) {
+            String stockFp = SystemProperties.get("ro.stock.build.fingerprint");
+            if (!stockFp.isEmpty()) {
+                setPropValue("FINGERPRINT", stockFp);
+            }
+            return;
         }
         if ((packageName.startsWith("com.google.") && !Arrays.asList(packagesToKeep).contains(packageName))
                 || Arrays.asList(extraPackagesToChange).contains(packageName)) {
