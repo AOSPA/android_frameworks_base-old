@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "fe74754d_f5f2d51f",
+        "filename": "packages/SystemUI/res/values/styles.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 602,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-05-23T12:24:50Z",
+      "side": 1,
+      "message": "no need to remove them",
+      "revId": "d34a31a36272cc7b624d062f05a550d96e619b02",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "eaefd4d5_906c0240",
+        "filename": "packages/SystemUI/src/com/android/systemui/charging/WirelessChargingLayout.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 78,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-05-23T12:24:50Z",
+      "side": 1,
+      "message": "No need of this check now",
+      "revId": "d34a31a36272cc7b624d062f05a550d96e619b02",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
