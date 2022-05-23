@@ -88,6 +88,7 @@ class ProcessRecord implements WindowProcessListener {
     final String processName;   // name of the process
     final String sdkSandboxClientAppPackage; // if this is an sdk sandbox process, name of the
                                              // app package for which it is running
+    final String sdkSandboxClientAppVolumeUuid; // uuid of the app for which the sandbox is running
 
     /**
      * Overall state of process's uid.
@@ -536,6 +537,11 @@ class ProcessRecord implements WindowProcessListener {
         userId = UserHandle.getUserId(_uid);
         processName = _processName;
         sdkSandboxClientAppPackage = _sdkSandboxClientAppPackage;
+        if (isSdkSandbox) {
+            sdkSandboxClientAppVolumeUuid = getClientInfoForSdkSandbox().volumeUuid;
+        } else {
+            sdkSandboxClientAppVolumeUuid = null;
+        }
         mPersistent = false;
         mRemoved = false;
         mProfile = new ProcessProfileRecord(this);
