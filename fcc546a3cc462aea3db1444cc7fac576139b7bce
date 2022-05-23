@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "326e2a8c_dfb54ff7",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000715
+      },
+      "writtenOn": "2022-05-23T10:59:11Z",
+      "side": 1,
+      "message": "https://github.com/ProjectRadiant/frameworks_base/commit/0b8ad316e96a754045dd771e9e13e807d686c474\n\nanother slightly less irritating fix for the issue ",
+      "revId": "fcc546a3cc462aea3db1444cc7fac576139b7bce",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
