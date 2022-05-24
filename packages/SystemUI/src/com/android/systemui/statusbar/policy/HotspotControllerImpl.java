@@ -188,9 +188,6 @@ public class HotspotControllerImpl implements HotspotController, WifiManager.Sof
     }
 
     public int getHotspotWifiStandard() {
-        if (mWifiManager != null) {
-            return mWifiManager.getSoftApWifiStandard();
-        }
         return ScanResult.WIFI_STANDARD_LEGACY;
     }
 

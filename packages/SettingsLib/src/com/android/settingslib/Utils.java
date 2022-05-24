@@ -454,7 +454,7 @@ public class Utils {
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
     public static int getWifiIconResource(int level) {
-        return getWifiIconResource(false /* showX */, level, 0 /* standard */, false /* isReady */);
+        return getWifiIconResource(false /* showX */, level, 0 /* standard */);
     }
 
     /**
@@ -466,7 +466,7 @@ public class Utils {
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
     public static int getWifiIconResource(boolean showX, int level) {
-        return getWifiIconResource(showX, level, 0 /* standard */, false /* isReady */);
+        return getWifiIconResource(showX, level, 0 /* standard */);
     }
 
     /**
@@ -475,8 +475,8 @@ public class Utils {
      * @param level The number of bars to show (0-4)
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(int level, int standard, boolean isReady) {
-        return getWifiIconResource(false /* showX */, level,  standard, isReady);
+    public static int getWifiIconResource(int level, int standard) {
+        return getWifiIconResource(false /* showX */, level,  standard);
     }
 
     /**
@@ -487,7 +487,7 @@ public class Utils {
      * @param level The number of bars to show (0-4)
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(boolean showX, int level, int standard, boolean isReady) {
+    public static int getWifiIconResource(boolean showX, int level, int standard) {
         if (level < 0 || level >= WIFI_PIE.length) {
             throw new IllegalArgumentException("No Wifi icon found for level: " + level);
         }
@@ -498,11 +498,7 @@ public class Utils {
             case 4:
                 return WIFI_4_PIE[level];
             case 5:
-                if (isReady) {
-                    return WIFI_6_PIE[level];
-                } else {
-                    return WIFI_5_PIE[level];
-                }
+                return WIFI_5_PIE[level];
             case 6:
                 return WIFI_6_PIE[level];
             default:
