@@ -2961,16 +2961,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    /**
-     * Updates the current content mirroring session.
-     */
-    @Override
-    public void setContentRecordingSession(@Nullable ContentRecordingSession incomingSession) {
-        synchronized (mGlobalLock) {
-            mContentRecordingController.setContentRecordingSessionLocked(incomingSession, this);
-        }
-    }
-
     // TODO(multi-display): remove when no default display use case.
     void prepareAppTransitionNone() {
         if (!checkCallingPermission(MANAGE_APP_TOKENS, "prepareAppTransition()")) {
@@ -8270,6 +8260,14 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
 
                 return w.getBounds().contains((int) displayX, (int) displayY);
+            }
+        }
+
+        @Override
+        public void setContentRecordingSession(@Nullable ContentRecordingSession incomingSession) {
+            synchronized (mGlobalLock) {
+                mContentRecordingController.setContentRecordingSessionLocked(incomingSession,
+                        WindowManagerService.this);
             }
         }
     }
