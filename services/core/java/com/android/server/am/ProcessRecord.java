@@ -1102,6 +1102,10 @@ class ProcessRecord implements WindowProcessListener {
             @SubReason int subReason, boolean noisy) {
         if (!mKilledByAm) {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "kill");
+            if (reasonCode == ApplicationExitInfo.REASON_ANR
+                    && mErrorState.getAnrAnnotation() != null) {
+                description = description + ": " + mErrorState.getAnrAnnotation();
+            }
             BoostFramework ux_perf = new BoostFramework();
             if (mService != null && (noisy || info.uid == mService.mCurOomAdjUid)) {
                 mService.reportUidInfoMessageLocked(TAG,
