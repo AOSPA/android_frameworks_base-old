@@ -350,9 +350,9 @@ public class QuickStatusBarHeader extends FrameLayout {
                 .addFloat(mQSCarriers, "alpha", 0, 1)
                 // Use statusbar paddings when collapsed,
                 // align with QS when expanded, and animate translation
-                .addFloat(mClockContainer, "translationX",
+                .addFloat(isRtl() ? mRightLayout : mClockContainer, "translationX",
                     mHeaderPaddingLeft + mStatusBarPaddingStart, 0)
-                .addFloat(mRightLayout, "translationX",
+                .addFloat(isRtl() ? mClockContainer: mRightLayout, "translationX",
                     -(mHeaderPaddingRight + mStatusBarPaddingEnd), 0)
                 .setListener(new TouchAnimator.ListenerAdapter() {
                     @Override
@@ -588,5 +588,9 @@ public class QuickStatusBarHeader extends FrameLayout {
     public void setExpandedScrollAmount(int scrollY) {
         mStatusIconsView.setScrollY(scrollY);
         mDatePrivacyView.setScrollY(scrollY);
+    }
+
+    private boolean isRtl() {
+        return getLayoutDirection() == LAYOUT_DIRECTION_RTL;
     }
 }
