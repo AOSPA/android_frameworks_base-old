@@ -37,6 +37,7 @@ import android.testing.TestableLooper.RunWithLooper;
 
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.DataUsageController;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.util.CarrierConfigTracker;
 
@@ -133,7 +134,8 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
                 mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
                 new Handler(TestableLooper.get(this).getLooper()),
-                mFeatureFlags);
+                mFeatureFlags,
+                mock(DumpManager.class));
         setupNetworkController();
 
         setupDefaultSignal();

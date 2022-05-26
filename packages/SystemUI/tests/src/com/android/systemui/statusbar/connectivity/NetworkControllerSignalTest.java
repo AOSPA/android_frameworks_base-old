@@ -42,6 +42,7 @@ import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.DataUsageController;
 import com.android.systemui.R;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.util.CarrierConfigTracker;
 
@@ -84,7 +85,8 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mCarrierConfigTracker,
                 mWifiStatusTrackerFactory,
                 mMainHandler,
-                mFeatureFlags
+                mFeatureFlags,
+                mock(DumpManager.class)
         );
         TestableLooper.get(this).processAllMessages();
 
@@ -117,7 +119,8 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mCarrierConfigTracker,
                 mWifiStatusTrackerFactory,
                 mMainHandler,
-                mFeatureFlags
+                mFeatureFlags,
+                mock(DumpManager.class)
         );
         TestableLooper.get(this).processAllMessages();
 
@@ -137,7 +140,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
                 mDemoModeController, mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
-                mMainHandler, mFeatureFlags);
+                mMainHandler, mFeatureFlags, mock(DumpManager.class));
         setupNetworkController();
 
         verifyLastMobileDataIndicators(false, -1, 0);
@@ -159,7 +162,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
                 mDemoModeController, mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
-                mMainHandler, mFeatureFlags);
+                mMainHandler, mFeatureFlags, mock(DumpManager.class));
         mNetworkController.registerListeners();
 
         // Wait for the main looper to execute the previous command
@@ -229,7 +232,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mMockSubDefaults, mock(DeviceProvisionedController.class), mMockBd,
                 mDemoModeController, mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
-                mMainHandler, mFeatureFlags);
+                mMainHandler, mFeatureFlags, mock(DumpManager.class));
         setupNetworkController();
 
         // No Subscriptions.
