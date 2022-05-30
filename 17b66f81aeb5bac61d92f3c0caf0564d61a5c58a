@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1d26ebd0_0ee0cda3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-05-30T05:54:46Z",
+      "side": 1,
+      "message": "I am personally not against this, we also had this before too.\n\nBut I am not sure about having this as an option or not, we should just discuss if having or not. In case we do it has to be enforced without toggle.",
+      "revId": "17b66f81aeb5bac61d92f3c0caf0564d61a5c58a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
