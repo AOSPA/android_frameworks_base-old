@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0deadf84_7e090b2b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000795
+      },
+      "writtenOn": "2022-05-30T17:49:35Z",
+      "side": 1,
+      "message": "Screenshots attached of\n\nBefore changes: https://imgur.com/a/7seV3Pa\n\nAfter changes: https://imgur.com/a/FtX98Oc",
+      "revId": "0dbd443c6a018f71aaa5fd833cba42090f69ae2a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
