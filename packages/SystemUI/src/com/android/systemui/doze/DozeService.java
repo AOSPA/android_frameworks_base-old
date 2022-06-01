@@ -120,6 +120,12 @@ public class DozeService extends DreamService
     }
 
     @Override
+    public void requestGoToSleep() {
+        PowerManager pm = getSystemService(PowerManager.class);
+        pm.goToSleep(SystemClock.uptimeMillis());
+    }
+
+    @Override
     public void onRequestShowDoze() {
         if (mDozeMachine != null) {
             mDozeMachine.requestState(DozeMachine.State.DOZE_AOD);

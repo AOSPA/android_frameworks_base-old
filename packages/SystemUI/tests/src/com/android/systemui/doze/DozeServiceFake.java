@@ -30,6 +30,7 @@ public class DozeServiceFake implements DozeMachine.Service {
     public int screenState;
     public boolean screenStateSet;
     public boolean requestedWakeup;
+    public boolean requestedGoToSleep;
     public int screenBrightness;
 
     public DozeServiceFake() {
@@ -53,6 +54,11 @@ public class DozeServiceFake implements DozeMachine.Service {
     }
 
     @Override
+    public void requestGoToSleep() {
+        requestedGoToSleep = true;
+    }
+
+    @Override
     public void setDozeScreenBrightness(int brightness) {
         screenBrightness = brightness;
     }
@@ -62,6 +68,7 @@ public class DozeServiceFake implements DozeMachine.Service {
         screenState = Display.STATE_UNKNOWN;
         screenStateSet = false;
         requestedWakeup = false;
+        requestedGoToSleep = false;
         screenBrightness = PowerManager.BRIGHTNESS_DEFAULT;
     }
 }

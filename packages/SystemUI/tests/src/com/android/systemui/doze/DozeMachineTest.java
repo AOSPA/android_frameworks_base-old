@@ -444,4 +444,11 @@ public class DozeMachineTest extends SysuiTestCase {
 
         assertTrue(mServiceFake.requestedWakeup);
     }
+
+    @Test
+    public void testWakeUp_wakesUp() {
+        mMachine.goToSleep();
+
+        assertTrue(mServiceFake.requestedGoToSleep);
+    }
 }
