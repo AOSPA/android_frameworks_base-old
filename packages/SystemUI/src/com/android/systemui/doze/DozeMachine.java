@@ -267,6 +267,11 @@ public class DozeMachine {
         mDozeService.requestWakeUp();
     }
 
+    /** Requests the PowerManager to sleep now. */
+    public void goToSleep() {
+        mDozeService.requestGoToSleep();
+    }
+
     public boolean isExecutingTransition() {
         return !mQueuedRequests.isEmpty();
     }
@@ -457,6 +462,9 @@ public class DozeMachine {
         /** Request waking up. */
         void requestWakeUp();
 
+        /** Request going to sleep. */
+        void requestGoToSleep();
+
         /** Set screen brightness */
         void setDozeScreenBrightness(int brightness);
 
@@ -480,6 +488,11 @@ public class DozeMachine {
             @Override
             public void requestWakeUp() {
                 mDelegate.requestWakeUp();
+            }
+
+            @Override
+            public void requestGoToSleep() {
+                mDelegate.requestGoToSleep();
             }
 
             @Override

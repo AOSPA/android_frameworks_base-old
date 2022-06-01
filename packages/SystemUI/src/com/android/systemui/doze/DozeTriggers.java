@@ -325,6 +325,10 @@ public class DozeTriggers implements DozeMachine.Part {
                         mDozeLog.traceSensorEventDropped(pulseReason, "keyguard occluded");
                         return;
                     }
+                    if (rawValues[0] == 2) {
+                        mMachine.goToSleep();
+                        return;
+                    }
                     gentleWakeUp(pulseReason);
                 } else if (isUdfpsLongPress) {
                     final State state = mMachine.getState();
