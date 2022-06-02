@@ -75,8 +75,6 @@ public class AccessPointPreference extends Preference {
     private Drawable mBadge;
     private int mLevel;
     private int mWifiStandard;
-    private boolean mHe8ssCapableAp;
-    private boolean mVhtMax8SpatialStreamsSupport;
     private CharSequence mContentDescription;
     private int mDefaultIconResId;
     private int mWifiSpeed = Speed.NONE;
@@ -177,14 +175,14 @@ public class AccessPointPreference extends Preference {
         notifyChanged();
     }
 
-    protected void updateIcon(int level, int standard, boolean isReady, Context context) {
+    protected void updateIcon(int level, int standard, Context context) {
         if (level == -1) {
             safeSetDefaultIcon();
             return;
         }
         TronUtils.logWifiSettingsSpeed(context, mWifiSpeed);
 
-        Drawable drawable = mIconInjector.getIcon(level, standard, isReady);
+        Drawable drawable = mIconInjector.getIcon(level, standard);
         if (!mForSavedNetworks && drawable != null) {
             drawable.setTintList(Utils.getColorAttr(context, android.R.attr.colorControlNormal));
             setIcon(drawable);
@@ -240,20 +238,14 @@ public class AccessPointPreference extends Preference {
         int level = mAccessPoint.getLevel();
         int wifiSpeed = mAccessPoint.getSpeed();
         int wifiStandard = mAccessPoint.getWifiStandard();
-        boolean vhtMax8SpatialStreamsSupport = mAccessPoint.isVhtMax8SpatialStreamsSupported();
-        boolean he8ssCapableAp = mAccessPoint.isHe8ssCapableAp();
 
         if (level != mLevel ||
             wifiSpeed != mWifiSpeed ||
-            wifiStandard != mWifiStandard ||
-            mVhtMax8SpatialStreamsSupport != vhtMax8SpatialStreamsSupport ||
-            mHe8ssCapableAp != he8ssCapableAp) {
+            wifiStandard != mWifiStandard) {
             mLevel = level;
             mWifiSpeed = wifiSpeed;
             mWifiStandard = wifiStandard;
-            mVhtMax8SpatialStreamsSupport = vhtMax8SpatialStreamsSupport;
-            mHe8ssCapableAp = he8ssCapableAp;
-            updateIcon(mLevel, mWifiStandard, mVhtMax8SpatialStreamsSupport && mHe8ssCapableAp, context);
+            updateIcon(mLevel, mWifiStandard, context);
             notifyChanged();
         }
 
@@ -360,8 +352,8 @@ public class AccessPointPreference extends Preference {
             return mContext.getDrawable(Utils.getWifiIconResource(level));
         }
 
-        public Drawable getIcon(int level, int standard, boolean isReady) {
-            return mContext.getDrawable(Utils.getWifiIconResource(level, standard, isReady));
+        public Drawable getIcon(int level, int standard) {
+            return mContext.getDrawable(Utils.getWifiIconResource(level, standard));
         }
     }
 }
