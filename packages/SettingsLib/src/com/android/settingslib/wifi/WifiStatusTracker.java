@@ -166,8 +166,6 @@ public class WifiStatusTracker {
     public int level;
     public String statusLabel;
     public int wifiStandard;
-    public boolean vhtMax8SpatialStreamsSupport;
-    public boolean he8ssCapableAp;
 
     public WifiStatusTracker(Context context, WifiManager wifiManager,
             NetworkScoreManager networkScoreManager, ConnectivityManager connectivityManager,
@@ -275,8 +273,6 @@ public class WifiStatusTracker {
             updateRssi(mWifiInfo.getRssi());
             maybeRequestNetworkScore();
             wifiStandard = mWifiInfo.getWifiStandard();
-            vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
-            he8ssCapableAp = mWifiInfo.isHe8ssCapableAp();
             isCarrierMerged = mWifiInfo.isCarrierMerged();
             subId = mWifiInfo.getSubscriptionId();
             updateRssi(mWifiInfo.getRssi());
