@@ -56,7 +56,6 @@ import android.os.BatteryConsumer.Dimensions;
 import android.os.BatteryStatsInternal;
 import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
-import android.os.Build;
 import android.os.PowerExemptionManager;
 import android.os.PowerExemptionManager.ReasonCode;
 import android.os.SystemClock;
@@ -68,6 +67,7 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.util.SparseLongArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 
@@ -97,7 +97,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
     static final boolean DEBUG_BACKGROUND_BATTERY_TRACKER = false;
 
     static final boolean DEBUG_BACKGROUND_BATTERY_TRACKER_VERBOSE =
-            DEBUG_BACKGROUND_BATTERY_TRACKER | Build.IS_DEBUGGABLE;
+            DEBUG_BACKGROUND_BATTERY_TRACKER | false;
 
     // As we don't support realtime per-UID battery usage stats yet, we're polling the stats
     // in a regular time basis.
@@ -276,7 +276,9 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                         AppBackgroundRestrictionsInfo.REASON_UNKNOWN, // ExemptionReason
                         AppBackgroundRestrictionsInfo.UNKNOWN, // OptimizationLevel
                         AppBackgroundRestrictionsInfo.SDK_UNKNOWN, // TargetSdk
-                        isLowRamDeviceStatic());
+                        isLowRamDeviceStatic(),
+                        AppBackgroundRestrictionsInfo.LEVEL_UNKNOWN // previous RestrictionLevel
+                );
             }
         }
     }
@@ -304,11 +306,17 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                 bgUsage.mPercentage[BatteryUsage.BATTERY_USAGE_INDEX_BACKGROUND];
         final double usageFgs =
                 bgUsage.mPercentage[BatteryUsage.BATTERY_USAGE_INDEX_FOREGROUND_SERVICE];
+        final double usageForeground =
+                bgUsage.mPercentage[BatteryUsage.BATTERY_USAGE_INDEX_FOREGROUND];
+        final double usageCached =
+                bgUsage.mPercentage[BatteryUsage.BATTERY_USAGE_INDEX_CACHED];
         if (DEBUG_BACKGROUND_BATTERY_TRACKER_VERBOSE) {
             Slog.d(TAG, "getBatteryTrackerInfoProtoLocked uid:" + uid
                     + " allUsage:" + String.format("%4.2f%%", allUsage)
                     + " usageBackground:" + String.format("%4.2f%%", usageBackground)
-                    + " usageFgs:" + String.format("%4.2f%%", usageFgs));
+                    + " usageFgs:" + String.format("%4.2f%%", usageFgs)
+                    + " usageForeground:" + String.format("%4.2f%%", usageForeground)
+                    + " usageCached:" + String.format("%4.2f%%", usageCached));
         }
         final ProtoOutputStream proto = new ProtoOutputStream();
         proto.write(AppBackgroundRestrictionsInfo.BatteryTrackerInfo.BATTERY_24H,
@@ -317,6 +325,10 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                 usageBackground * 10000);
         proto.write(AppBackgroundRestrictionsInfo.BatteryTrackerInfo.BATTERY_USAGE_FGS,
                 usageFgs * 10000);
+        proto.write(AppBackgroundRestrictionsInfo.BatteryTrackerInfo.BATTERY_USAGE_FOREGROUND,
+                usageForeground * 10000);
+        proto.write(AppBackgroundRestrictionsInfo.BatteryTrackerInfo.BATTERY_USAGE_CACHED,
+                usageCached * 10000);
         proto.flush();
         return proto.getBytes();
     }
@@ -349,6 +361,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                     mUidBatteryUsageInWindow.removeAt(i);
                 }
             }
+            mInjector.getPolicy().onUserRemovedLocked(userId);
         }
     }
 
@@ -357,6 +370,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
         synchronized (mLock) {
             mUidBatteryUsage.delete(uid);
             mUidBatteryUsageInWindow.delete(uid);
+            mInjector.getPolicy().onUidRemovedLocked(uid);
         }
     }
 
@@ -1197,6 +1211,14 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                 DEVICE_CONFIG_SUBNAMESPACE_PREFIX + "current_drain_window";
 
         /**
+         * The grace period after an interaction event with the app, if the background current
+         * drain goes beyond the threshold within that period, the system won't apply the
+         * restrictions.
+         */
+        static final String KEY_BG_CURRENT_DRAIN_INTERACTION_GRACE_PERIOD =
+                DEVICE_CONFIG_SUBNAMESPACE_PREFIX + "current_drain_interaction_grace_period";
+
+        /**
          * Similar to {@link #KEY_BG_CURRENT_DRAIN_THRESHOLD_TO_RESTRICTED_BUCKET}, but a higher
          * value for the legitimate cases with higher background current drain.
          */
@@ -1299,6 +1321,11 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
         final long mDefaultBgCurrentDrainWindowMs;
 
         /**
+         * Default value to {@link #mBgCurrentDrainInteractionGracePeriodMs}.
+         */
+        final long mDefaultBgCurrentDrainInteractionGracePeriodMs;
+
+        /**
          * Default value to the {@link #INDEX_HIGH_CURRENT_DRAIN_THRESHOLD} of
          * the {@link #mBgCurrentDrainRestrictedBucketThreshold}.
          */
@@ -1383,6 +1410,11 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
         volatile long mBgCurrentDrainWindowMs;
 
         /**
+         * @see #KEY_BG_CURRENT_DRAIN_INTERACTION_GRACE_PERIOD.
+         */
+        volatile long mBgCurrentDrainInteractionGracePeriodMs;
+
+        /**
          * @see #KEY_BG_CURRENT_DRAIN_MEDIA_PLAYBACK_MIN_DURATION.
          */
         volatile long mBgCurrentDrainMediaPlaybackMinDuration;
@@ -1444,6 +1476,12 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
         private final SparseArray<Pair<long[], ImmutableBatteryUsage[]>> mHighBgBatteryPackages =
                 new SparseArray<>();
 
+        /**
+         * The timestamp of the last interaction, key is the UID.
+         */
+        @GuardedBy("mLock")
+        private final SparseLongArray mLastInteractionTime = new SparseLongArray();
+
         @NonNull
         private final Object mLock;
 
@@ -1467,6 +1505,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                     isLowRamDeviceStatic() ? val[1] : val[0];
             mDefaultBgCurrentDrainWindowMs = resources.getInteger(
                     R.integer.config_bg_current_drain_window) * 1_000;
+            mDefaultBgCurrentDrainInteractionGracePeriodMs = mDefaultBgCurrentDrainWindowMs;
             val = getFloatArray(resources.obtainTypedArray(
                     R.array.config_bg_current_drain_high_threshold_to_restricted_bucket));
             mDefaultBgCurrentDrainRestrictedBucketHighThreshold =
@@ -1500,6 +1539,8 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
             mBgCurrentDrainBgRestrictedThreshold[1] =
                     mDefaultBgCurrentDrainBgRestrictedHighThreshold;
             mBgCurrentDrainWindowMs = mDefaultBgCurrentDrainWindowMs;
+            mBgCurrentDrainInteractionGracePeriodMs =
+                    mDefaultBgCurrentDrainInteractionGracePeriodMs;
             mBgCurrentDrainMediaPlaybackMinDuration =
                     mDefaultBgCurrentDrainMediaPlaybackMinDuration;
             mBgCurrentDrainLocationMinDuration = mDefaultBgCurrentDrainLocationMinDuration;
@@ -1530,6 +1571,9 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                     break;
                 case KEY_BG_CURRENT_DRAIN_WINDOW:
                     updateCurrentDrainWindow();
+                    break;
+                case KEY_BG_CURRENT_DRAIN_INTERACTION_GRACE_PERIOD:
+                    updateCurrentDrainInteractionGracePeriod();
                     break;
                 case KEY_BG_CURRENT_DRAIN_MEDIA_PLAYBACK_MIN_DURATION:
                     updateCurrentDrainMediaPlaybackMinDuration();
@@ -1615,6 +1659,13 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                     mDefaultBgCurrentDrainWindowMs);
         }
 
+        private void updateCurrentDrainInteractionGracePeriod() {
+            mBgCurrentDrainInteractionGracePeriodMs = DeviceConfig.getLong(
+                    DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                    KEY_BG_CURRENT_DRAIN_INTERACTION_GRACE_PERIOD,
+                    mDefaultBgCurrentDrainInteractionGracePeriodMs);
+        }
+
         private void updateCurrentDrainMediaPlaybackMinDuration() {
             mBgCurrentDrainMediaPlaybackMinDuration = DeviceConfig.getLong(
                     DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
@@ -1657,6 +1708,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
             super.onSystemReady();
             updateCurrentDrainThreshold();
             updateCurrentDrainWindow();
+            updateCurrentDrainInteractionGracePeriod();
             updateCurrentDrainMediaPlaybackMinDuration();
             updateCurrentDrainLocationMinDuration();
             updateCurrentDrainEventDurationBasedThresholdEnabled();
@@ -1674,8 +1726,10 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
             synchronized (mLock) {
                 final Pair<long[], ImmutableBatteryUsage[]> pair = mHighBgBatteryPackages.get(uid);
                 if (pair != null) {
+                    final long lastInteractionTime = mLastInteractionTime.get(uid, 0L);
                     final long[] ts = pair.first;
-                    final int restrictedLevel = ts[TIME_STAMP_INDEX_RESTRICTED_BUCKET] > 0
+                    final int restrictedLevel = ts[TIME_STAMP_INDEX_RESTRICTED_BUCKET]
+                            > (lastInteractionTime + mBgCurrentDrainInteractionGracePeriodMs)
                             && mTracker.mAppRestrictionController.isAutoRestrictAbusiveAppEnabled()
                             ? RESTRICTION_LEVEL_RESTRICTED_BUCKET
                             : RESTRICTION_LEVEL_ADAPTIVE_BUCKET;
@@ -1766,6 +1820,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                     // We're already in the background restricted level, nothing more we could do.
                     return;
                 }
+                final long lastInteractionTime = mLastInteractionTime.get(uid, 0L);
                 final long now = SystemClock.elapsedRealtime();
                 final int thresholdIndex = getCurrentDrainThresholdIndex(uid, now,
                         mBgCurrentDrainWindowMs);
@@ -1777,13 +1832,17 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                     long[] ts = null;
                     ImmutableBatteryUsage[] usages = null;
                     if (rbPercentage >= rbThreshold) {
-                        // New findings to us, track it and let the controller know.
-                        ts = new long[TIME_STAMP_INDEX_LAST];
-                        ts[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = now;
-                        usages = new ImmutableBatteryUsage[TIME_STAMP_INDEX_LAST];
-                        usages[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = usage;
-                        mHighBgBatteryPackages.put(uid, Pair.create(ts, usages));
-                        notifyController = excessive = true;
+                        if (now > lastInteractionTime + mBgCurrentDrainInteractionGracePeriodMs) {
+                            // New findings to us, track it and let the controller know.
+                            ts = new long[TIME_STAMP_INDEX_LAST];
+                            ts[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = now;
+                            usages = new ImmutableBatteryUsage[TIME_STAMP_INDEX_LAST];
+                            usages[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = usage;
+                            mHighBgBatteryPackages.put(uid, Pair.create(ts, usages));
+                            // It's beeen long enough since last interaction with this app.
+                            notifyController = true;
+                        }
+                        excessive = true;
                     }
                     if (decoupleThresholds && brPercentage >= brThreshold) {
                         if (ts == null) {
@@ -1801,11 +1860,15 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                     final long[] ts = pair.first;
                     final long lastRestrictBucketTs = ts[TIME_STAMP_INDEX_RESTRICTED_BUCKET];
                     if (rbPercentage >= rbThreshold) {
-                        if (lastRestrictBucketTs == 0) {
-                            ts[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = now;
-                            pair.second[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = usage;
+                        if (now > lastInteractionTime + mBgCurrentDrainInteractionGracePeriodMs) {
+                            if (lastRestrictBucketTs == 0) {
+                                ts[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = now;
+                                pair.second[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = usage;
+                            }
+                            // It's been long enough since last interaction with this app.
+                            notifyController = true;
                         }
-                        notifyController = excessive = true;
+                        excessive = true;
                     } else {
                         // It's actually back to normal, but we don't untrack it until
                         // explicit user interactions, because the restriction could be the cause
@@ -1822,7 +1885,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                                 && (now > lastRestrictBucketTs + mBgCurrentDrainWindowMs));
                         if (notifyController) {
                             ts[TIME_STAMP_INDEX_BG_RESTRICTED] = now;
-                            pair.second[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = usage;
+                            pair.second[TIME_STAMP_INDEX_BG_RESTRICTED] = usage;
                         }
                         excessive = true;
                     } else {
@@ -1830,7 +1893,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                         // user consent to unrestrict it; or if it's in restricted bucket level,
                         // resetting this won't lift it from that level.
                         ts[TIME_STAMP_INDEX_BG_RESTRICTED] = 0;
-                        pair.second[TIME_STAMP_INDEX_RESTRICTED_BUCKET] = null;
+                        pair.second[TIME_STAMP_INDEX_BG_RESTRICTED] = null;
                         // Now need to notify the controller.
                     }
                 }
@@ -1891,6 +1954,7 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
         void onUserInteractionStarted(String packageName, int uid) {
             boolean changed = false;
             synchronized (mLock) {
+                mLastInteractionTime.put(uid, SystemClock.elapsedRealtime());
                 final int curLevel = mTracker.mAppRestrictionController.getRestrictionLevel(
                         uid, packageName);
                 if (curLevel == RESTRICTION_LEVEL_BACKGROUND_RESTRICTED) {
@@ -1929,7 +1993,28 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
         @VisibleForTesting
         void reset() {
             mHighBgBatteryPackages.clear();
+            mLastInteractionTime.clear();
             mTracker.reset();
+        }
+
+        @GuardedBy("mLock")
+        void onUserRemovedLocked(final @UserIdInt int userId) {
+            for (int i = mHighBgBatteryPackages.size() - 1; i >= 0; i--) {
+                if (UserHandle.getUserId(mHighBgBatteryPackages.keyAt(i)) == userId) {
+                    mHighBgBatteryPackages.removeAt(i);
+                }
+            }
+            for (int i = mLastInteractionTime.size() - 1; i >= 0; i--) {
+                if (UserHandle.getUserId(mLastInteractionTime.keyAt(i)) == userId) {
+                    mLastInteractionTime.removeAt(i);
+                }
+            }
+        }
+
+        @GuardedBy("mLock")
+        void onUidRemovedLocked(final int uid) {
+            mHighBgBatteryPackages.remove(uid);
+            mLastInteractionTime.delete(uid);
         }
 
         @Override
@@ -1964,6 +2049,10 @@ final class AppBatteryTracker extends BaseAppStateTracker<AppBatteryPolicy>
                 pw.print(KEY_BG_CURRENT_DRAIN_WINDOW);
                 pw.print('=');
                 pw.println(mBgCurrentDrainWindowMs);
+                pw.print(prefix);
+                pw.print(KEY_BG_CURRENT_DRAIN_INTERACTION_GRACE_PERIOD);
+                pw.print('=');
+                pw.println(mBgCurrentDrainInteractionGracePeriodMs);
                 pw.print(prefix);
                 pw.print(KEY_BG_CURRENT_DRAIN_MEDIA_PLAYBACK_MIN_DURATION);
                 pw.print('=');

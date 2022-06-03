@@ -62,7 +62,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.UserInfo;
@@ -81,7 +80,6 @@ import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.text.BidiFormatter;
 import android.util.ArraySet;
 import android.util.ExceptionUtils;
 import android.util.Log;
@@ -294,6 +292,14 @@ public class CompanionDeviceManagerService extends SystemService {
 
     private boolean onCompanionApplicationBindingDiedInternal(
             @UserIdInt int userId, @NonNull String packageName) {
+        for (AssociationInfo ai :
+                mAssociationStore.getAssociationsForPackage(userId, packageName)) {
+            final int associationId = ai.getId();
+            if (ai.isSelfManaged()
+                    && mDevicePresenceMonitor.isDevicePresent(associationId)) {
+                mDevicePresenceMonitor.onSelfManagedDeviceReporterBinderDied(associationId);
+            }
+        }
         // TODO(b/218613015): implement.
         return false;
     }
@@ -529,20 +535,12 @@ public class CompanionDeviceManagerService extends SystemService {
             String callingPackage = component.getPackageName();
             checkCanCallNotificationApi(callingPackage);
             // TODO: check userId.
-            String packageTitle = BidiFormatter.getInstance().unicodeWrap(
-                    getPackageInfo(getContext(), userId, callingPackage)
-                            .applicationInfo
-                            .loadSafeLabel(getContext().getPackageManager(),
-                                    PackageItemInfo.DEFAULT_MAX_LABEL_SIZE_PX,
-                                    PackageItemInfo.SAFE_LABEL_FLAG_TRIM
-                                            | PackageItemInfo.SAFE_LABEL_FLAG_FIRST_LINE)
-                            .toString());
             final long identity = Binder.clearCallingIdentity();
             try {
                 return PendingIntent.getActivityAsUser(getContext(),
                         0 /* request code */,
                         NotificationAccessConfirmationActivityContract.launcherIntent(
-                                getContext(), userId, component, packageTitle),
+                                getContext(), userId, component),
                         PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_ONE_SHOT
                                 | PendingIntent.FLAG_CANCEL_CURRENT,
                         null /* options */,
@@ -651,6 +649,12 @@ public class CompanionDeviceManagerService extends SystemService {
 
         private void registerDevicePresenceListenerActive(String packageName, String deviceAddress,
                 boolean active) throws RemoteException {
+            if (DEBUG) {
+                Log.i(TAG, "registerDevicePresenceListenerActive()"
+                        + " active=" + active
+                        + " deviceAddress=" + deviceAddress);
+            }
+
             getContext().enforceCallingOrSelfPermission(
                     android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE,
                     "[un]registerDevicePresenceListenerService");
@@ -666,6 +670,12 @@ public class CompanionDeviceManagerService extends SystemService {
                         + " for user " + userId));
             }
 
+            // If already at specified state, then no-op.
+            if (active == association.isNotifyOnDeviceNearby()) {
+                if (DEBUG) Log.d(TAG, "Device presence listener is already at desired state.");
+                return;
+            }
+
             // AssociationInfo class is immutable: create a new AssociationInfo object with updated
             // flag.
             association = AssociationInfo.builder(association)
@@ -676,7 +686,17 @@ public class CompanionDeviceManagerService extends SystemService {
             // an application sets/unsets the mNotifyOnDeviceNearby flag.
             mAssociationStore.updateAssociation(association);
 
-            // TODO(b/218615198): correctly handle the case when the device is currently present.
+            // If device is already present, then trigger callback.
+            if (active && mDevicePresenceMonitor.isDevicePresent(association.getId())) {
+                if (DEBUG) Log.d(TAG, "Device is already present. Triggering callback.");
+                onDeviceAppearedInternal(association.getId());
+            }
+
+            // If last listener is unregistered, then unbind application.
+            if (!active && !shouldBindPackage(userId, packageName)) {
+                if (DEBUG) Log.d(TAG, "Last listener unregistered. Unbinding application.");
+                mCompanionAppController.unbindCompanionApplication(userId, packageName);
+            }
         }
 
         @Override
@@ -723,9 +743,12 @@ public class CompanionDeviceManagerService extends SystemService {
                 String[] args, ShellCallback callback, ResultReceiver resultReceiver)
                 throws RemoteException {
             enforceCallerCanManageCompanionDevice(getContext(), "onShellCommand");
-            new CompanionDeviceShellCommand(
-                    CompanionDeviceManagerService.this, mAssociationStore)
-                    .exec(this, in, out, err, args, callback, resultReceiver);
+
+            final CompanionDeviceShellCommand cmd = new CompanionDeviceShellCommand(
+                    CompanionDeviceManagerService.this,
+                    mAssociationStore,
+                    mDevicePresenceMonitor);
+            cmd.exec(this, in, out, err, args, callback, resultReceiver);
         }
 
         @Override

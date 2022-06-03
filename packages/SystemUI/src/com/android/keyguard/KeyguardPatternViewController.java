@@ -283,7 +283,7 @@ public class KeyguardPatternViewController
         super.reloadColors();
         mMessageAreaController.reloadColors();
         int textColor = Utils.getColorAttr(mLockPatternView.getContext(),
-                android.R.attr.textColorPrimary).getDefaultColor();
+                android.R.attr.textColorSecondary).getDefaultColor();
         int errorColor = Utils.getColorError(mLockPatternView.getContext()).getDefaultColor();
         mLockPatternView.setColors(textColor, textColor, errorColor);
     }

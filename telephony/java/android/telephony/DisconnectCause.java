@@ -458,6 +458,12 @@ public final class DisconnectCause {
     /** @hide */
     public static final int CONCURRENT_CALLS_NOT_POSSIBLE = 127;
 
+    /**
+     * Call failed due to device being in Secure Mode
+     */
+    /** @hide */
+    public static final int SECURE_MODE = 128;
+
     //*********************************************************************************************
     // When adding a disconnect type:
     // 1) Please assign the new type the next id value below.
@@ -466,7 +472,7 @@ public final class DisconnectCause {
     // 4) Update toString() with the newly added disconnect type.
     // 5) Update android.telecom.DisconnectCauseUtil with any mappings to a telecom.DisconnectCause.
     //
-    // NextId: 128
+    // NextId: 129
     //*********************************************************************************************
 
     /**
@@ -479,7 +485,7 @@ public final class DisconnectCause {
      * Largest valid value for call disconnect codes.
      * @hide
      */
-    public static final int MAXIMUM_VALID_VALUE = CONCURRENT_CALLS_NOT_POSSIBLE;
+    public static final int MAXIMUM_VALID_VALUE = SECURE_MODE;
 
     /** Private constructor to avoid class instantiation. */
     private DisconnectCause() {
@@ -745,6 +751,8 @@ public final class DisconnectCause {
             return "NON_SELECTED_USER_CLEARING";
         case CONCURRENT_CALLS_NOT_POSSIBLE:
             return "CONCURRENT_CALLS_NOT_POSSIBLE";
+        case SECURE_MODE:
+            return "SECURE_MODE";
         default:
             return "INVALID: " + cause;
         }

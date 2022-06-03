@@ -597,8 +597,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * @see #isAllowedToEmbedActivityInTrustedMode(ActivityRecord)
      */
     boolean isAllowedToBeEmbeddedInTrustedMode() {
-        final Predicate<ActivityRecord> callback = this::isAllowedToEmbedActivityInTrustedMode;
-        return forAllActivities(callback);
+        // Traverse all activities to see if any of them are not in the trusted mode.
+        final Predicate<ActivityRecord> callback = r -> !isAllowedToEmbedActivityInTrustedMode(r);
+        return !forAllActivities(callback);
     }
 
     /**
@@ -2187,7 +2188,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (applicationType != ACTIVITY_TYPE_UNDEFINED || !hasChild()) {
             return applicationType;
         }
-        return getTopChild().getActivityType();
+        final ActivityRecord activity = getTopNonFinishingActivity();
+        return activity != null ? activity.getActivityType() : getTopChild().getActivityType();
     }
 
     @Override

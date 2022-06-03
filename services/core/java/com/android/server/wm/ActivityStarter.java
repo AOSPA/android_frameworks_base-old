@@ -1811,6 +1811,10 @@ class ActivityStarter {
         // Check if starting activity on given task or on a new task is allowed.
         int startResult = isAllowedToStart(r, newTask, targetTask);
         if (startResult != START_SUCCESS) {
+            if (r.resultTo != null) {
+                r.resultTo.sendResult(INVALID_UID, r.resultWho, r.requestCode, RESULT_CANCELED,
+                        null /* data */, null /* dataGrants */);
+            }
             return startResult;
         }
 
@@ -1980,13 +1984,9 @@ class ActivityStarter {
         mPreferredWindowingMode = mLaunchParams.mWindowingMode;
     }
 
-    private int isAllowedToStart(ActivityRecord r, boolean newTask, Task targetTask) {
-        if (mStartActivity.packageName == null) {
-            if (mStartActivity.resultTo != null) {
-                mStartActivity.resultTo.sendResult(INVALID_UID, mStartActivity.resultWho,
-                        mStartActivity.requestCode, RESULT_CANCELED,
-                        null /* data */, null /* dataGrants */);
-            }
+    @VisibleForTesting
+    int isAllowedToStart(ActivityRecord r, boolean newTask, Task targetTask) {
+        if (r.packageName == null) {
             ActivityOptions.abort(mOptions);
             return START_CLASS_NOT_FOUND;
         }
@@ -2009,8 +2009,7 @@ class ActivityStarter {
                 || !targetTask.isUidPresent(mCallingUid)
                 || (LAUNCH_SINGLE_INSTANCE == mLaunchMode && targetTask.inPinnedWindowingMode()));
 
-        if (mRestrictedBgActivity && blockBalInTask
-                && handleBackgroundActivityAbort(mStartActivity)) {
+        if (mRestrictedBgActivity && blockBalInTask && handleBackgroundActivityAbort(r)) {
             Slog.e(TAG, "Abort background activity starts from " + mCallingUid);
             return START_ABORTED;
         }
@@ -2024,12 +2023,12 @@ class ActivityStarter {
         if (!newTask) {
             if (mService.getLockTaskController().isLockTaskModeViolation(targetTask,
                     isNewClearTask)) {
-                Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
+                Slog.e(TAG, "Attempted Lock Task Mode violation r=" + r);
                 return START_RETURN_LOCK_TASK_MODE_VIOLATION;
             }
         } else {
-            if (mService.getLockTaskController().isNewTaskLockTaskModeViolation(mStartActivity)) {
-                Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
+            if (mService.getLockTaskController().isNewTaskLockTaskModeViolation(r)) {
+                Slog.e(TAG, "Attempted Lock Task Mode violation r=" + r);
                 return START_RETURN_LOCK_TASK_MODE_VIOLATION;
             }
         }
@@ -2737,8 +2736,8 @@ class ActivityStarter {
         intentActivity.getTaskFragment().clearLastPausedActivity();
         Task intentTask = intentActivity.getTask();
 
-        // Only update the target-root-task when it is not indicated.
         if (mTargetRootTask == null) {
+            // Update launch target task when it is not indicated.
             if (mSourceRecord != null && mSourceRecord.mLaunchRootTask != null) {
                 // Inherit the target-root-task from source to ensure trampoline activities will be
                 // launched into the same root task.
@@ -2746,6 +2745,17 @@ class ActivityStarter {
             } else {
                 mTargetRootTask = getOrCreateRootTask(mStartActivity, mLaunchFlags, intentTask,
                         mOptions);
+            }
+        } else {
+            // If a launch target indicated, and the matching task is already in the adjacent task
+            // of the launch target. Adjust to use the adjacent task as its launch target. So the
+            // existing task will be launched into the closer one and won't be reparent redundantly.
+            // TODO(b/231541706): Migrate the logic to wm-shell after having proper APIs to help
+            //  resolve target task without actually starting the activity.
+            final Task adjacentTargetTask = mTargetRootTask.getAdjacentTaskFragment() != null
+                    ? mTargetRootTask.getAdjacentTaskFragment().asTask() : null;
+            if (adjacentTargetTask != null && intentActivity.isDescendantOf(adjacentTargetTask)) {
+                mTargetRootTask = adjacentTargetTask;
             }
         }
 
@@ -2776,7 +2786,7 @@ class ActivityStarter {
                     intentActivity.setTaskToAffiliateWith(mSourceRecord.getTask());
                 }
 
-                if (mTargetRootTask == intentActivity.getRootTask()) {
+                if (intentActivity.isDescendantOf(mTargetRootTask)) {
                     // TODO(b/151572268): Figure out a better way to move tasks in above 2-levels
                     //  tasks hierarchies.
                     if (mTargetRootTask != intentTask
@@ -2823,19 +2833,6 @@ class ActivityStarter {
         mTargetRootTask = intentActivity.getRootTask();
         mSupervisor.handleNonResizableTaskIfNeeded(intentTask, WINDOWING_MODE_UNDEFINED,
                 mRootWindowContainer.getDefaultTaskDisplayArea(), mTargetRootTask);
-
-        // We need to check if there is a launch root task in TDA for this target root task.
-        // If it exist, we need to reparent target root task from TDA to launch root task.
-        final TaskDisplayArea tda = mTargetRootTask.getDisplayArea();
-        final Task launchRootTask = tda.getLaunchRootTask(mTargetRootTask.getWindowingMode(),
-                mTargetRootTask.getActivityType(), null /** options */, mSourceRootTask,
-                mLaunchFlags);
-        // If target root task is created by organizer, let organizer handle reparent itself.
-        if (!mTargetRootTask.mCreatedByOrganizer && launchRootTask != null
-                && launchRootTask != mTargetRootTask) {
-            mTargetRootTask.reparent(launchRootTask, POSITION_TOP);
-            mTargetRootTask = launchRootTask;
-        }
     }
 
     private void resumeTargetRootTaskIfNeeded() {
@@ -2897,6 +2894,10 @@ class ActivityStarter {
                                         BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName,
                                         -1, BoostFramework.Launch.ACTIVITY_LAUNCH_BOOST, 1, pkgType);
             } else {
+                    if (mStartActivity.perfActivityBoostHandler > 0) {
+                       Slog.i(TAG, "Activity boosted, release it firstly");
+                       mPerf.perfLockReleaseHandler(mStartActivity.perfActivityBoostHandler);
+                    }
                 mStartActivity.perfActivityBoostHandler =
                     mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                                     packageName, -1, BoostFramework.Launch.BOOST_V1);

@@ -55,31 +55,12 @@ public final class PermissionHelper {
     private final PermissionManagerServiceInternal mPmi;
     private final IPackageManager mPackageManager;
     private final IPermissionManager mPermManager;
-    // TODO (b/194833441): Remove this boolean (but keep the isMigrationEnabled() method)
-    //  when the migration is enabled
-    private final boolean mMigrationEnabled;
-    private final boolean mIsTv;
-    private final boolean mForceUserSetOnUpgrade;
 
     public PermissionHelper(PermissionManagerServiceInternal pmi, IPackageManager packageManager,
-            IPermissionManager permManager, boolean migrationEnabled,
-            boolean forceUserSetOnUpgrade) {
+            IPermissionManager permManager) {
         mPmi = pmi;
         mPackageManager = packageManager;
         mPermManager = permManager;
-        mMigrationEnabled = migrationEnabled;
-        mForceUserSetOnUpgrade = forceUserSetOnUpgrade;
-        boolean isTv;
-        try {
-            isTv = mPackageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK, 0);
-        } catch (RemoteException e) {
-            isTv = false;
-        }
-        mIsTv = isTv;
-    }
-
-    public boolean isMigrationEnabled() {
-        return mMigrationEnabled && !mIsTv;
     }
 
     /**
@@ -87,7 +68,6 @@ public final class PermissionHelper {
      * with a lock held.
      */
     public boolean hasPermission(int uid) {
-        assertFlag();
         final long callingId = Binder.clearCallingIdentity();
         try {
             return mPmi.checkPostNotificationsPermissionGrantedOrLegacyAccess(uid)
@@ -102,7 +82,6 @@ public final class PermissionHelper {
      * Must not be called with a lock held. Format: uid, packageName
      */
     Set<Pair<Integer, String>> getAppsRequestingPermission(int userId) {
-        assertFlag();
         Set<Pair<Integer, String>> requested = new HashSet<>();
         List<PackageInfo> pkgs = getInstalledPackages(userId);
         for (PackageInfo pi : pkgs) {
@@ -140,7 +119,6 @@ public final class PermissionHelper {
      * with a lock held. Format: uid, packageName.
      */
     Set<Pair<Integer, String>> getAppsGrantedPermission(int userId) {
-        assertFlag();
         Set<Pair<Integer, String>> granted = new HashSet<>();
         ParceledListSlice<PackageInfo> parceledList = null;
         try {
@@ -162,7 +140,6 @@ public final class PermissionHelper {
     public @NonNull
             ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>>
                     getNotificationPermissionValues(int userId) {
-        assertFlag();
         ArrayMap<Pair<Integer, String>, Pair<Boolean, Boolean>> notifPermissions = new ArrayMap<>();
         Set<Pair<Integer, String>> allRequestingUids = getAppsRequestingPermission(userId);
         Set<Pair<Integer, String>> allApprovedUids = getAppsGrantedPermission(userId);
@@ -189,7 +166,6 @@ public final class PermissionHelper {
      */
     public void setNotificationPermission(String packageName, @UserIdInt int userId, boolean grant,
             boolean userSet, boolean reviewRequired) {
-        assertFlag();
         final long callingId = Binder.clearCallingIdentity();
         try {
             // Do not change the permission if the package doesn't request it, do not change fixed
@@ -230,19 +206,16 @@ public final class PermissionHelper {
      * restoring a pre-T backup on a T+ device
      */
     public void setNotificationPermission(PackagePermission pkgPerm) {
-        assertFlag();
         if (pkgPerm == null || pkgPerm.packageName == null) {
             return;
         }
         if (!isPermissionFixed(pkgPerm.packageName, pkgPerm.userId)) {
-            boolean userSet = mForceUserSetOnUpgrade ? true : pkgPerm.userModifiedSettings;
             setNotificationPermission(pkgPerm.packageName, pkgPerm.userId, pkgPerm.granted,
-                    userSet, !userSet);
+                    true /* userSet always true on upgrade */);
         }
     }
 
     public boolean isPermissionFixed(String packageName, @UserIdInt int userId) {
-        assertFlag();
         final long callingId = Binder.clearCallingIdentity();
         try {
             try {
@@ -260,7 +233,6 @@ public final class PermissionHelper {
     }
 
     boolean isPermissionUserSet(String packageName, @UserIdInt int userId) {
-        assertFlag();
         final long callingId = Binder.clearCallingIdentity();
         try {
             try {
@@ -278,7 +250,6 @@ public final class PermissionHelper {
     }
 
     boolean isPermissionGrantedByDefaultOrRole(String packageName, @UserIdInt int userId) {
-        assertFlag();
         final long callingId = Binder.clearCallingIdentity();
         try {
             try {
@@ -297,7 +268,6 @@ public final class PermissionHelper {
 
     private boolean packageRequestsNotificationPermission(String packageName,
             @UserIdInt int userId) {
-        assertFlag();
         try {
             String[] permissions = mPackageManager.getPackageInfo(packageName, GET_PERMISSIONS,
                     userId).requestedPermissions;
@@ -306,12 +276,6 @@ public final class PermissionHelper {
             Slog.e(TAG, "Could not reach system server", e);
         }
         return false;
-    }
-
-    private void assertFlag() {
-        if (!mMigrationEnabled) {
-            throw new IllegalStateException("Method called without checking flag value");
-        }
     }
 
     public static class PackagePermission {

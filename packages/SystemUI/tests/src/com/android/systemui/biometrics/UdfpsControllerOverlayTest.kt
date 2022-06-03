@@ -40,6 +40,7 @@ import com.android.keyguard.KeyguardUpdateMonitor
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.animation.ActivityLaunchAnimator
+import com.android.systemui.broadcast.BroadcastSender
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.LockscreenShadeTransitionController
@@ -65,6 +66,7 @@ import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
 import org.mockito.Mockito.`when` as whenever
 
+private const val HAL_CONTROLS_ILLUMINATION = true
 private const val REQUEST_ID = 2L
 
 // Dimensions for the current display resolution.
@@ -101,6 +103,7 @@ class UdfpsControllerOverlayTest : SysuiTestCase() {
     @Mock private lateinit var udfpsView: UdfpsView
     @Mock private lateinit var udfpsEnrollView: UdfpsEnrollView
     @Mock private lateinit var activityLaunchAnimator: ActivityLaunchAnimator
+    @Mock private lateinit var broadcastSender: BroadcastSender
     @Captor private lateinit var layoutParamsCaptor: ArgumentCaptor<WindowManager.LayoutParams>
 
     private val onTouch = { _: View, _: MotionEvent, _: Boolean -> true }
@@ -129,8 +132,9 @@ class UdfpsControllerOverlayTest : SysuiTestCase() {
             statusBarStateController, panelExpansionStateManager, statusBarKeyguardViewManager,
             keyguardUpdateMonitor, dialogManager, dumpManager, transitionController,
             configurationController, systemClock, keyguardStateController,
-            unlockedScreenOffAnimationController, hbmProvider, REQUEST_ID, reason,
-            controllerCallback, onTouch, activityLaunchAnimator)
+            unlockedScreenOffAnimationController, HAL_CONTROLS_ILLUMINATION, hbmProvider,
+            REQUEST_ID, reason, controllerCallback, onTouch, activityLaunchAnimator,
+            broadcastSender)
         block()
     }
 

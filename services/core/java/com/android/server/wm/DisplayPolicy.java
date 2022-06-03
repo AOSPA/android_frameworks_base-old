@@ -143,8 +143,8 @@ import android.window.ClientWindowFrames;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.policy.ForceShowNavBarSettingsObserver;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
-import com.android.internal.policy.KidsModeSettingsObserver;
 import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.policy.SystemBarUtils;
 import com.android.internal.protolog.common.ProtoLog;
@@ -318,10 +318,6 @@ public class DisplayPolicy {
     // needs to be opaque.
     private WindowState mNavBarBackgroundWindow;
 
-    // The window that draws fake rounded corners and should provide insets to calculate the correct
-    // rounded corner insets.
-    private WindowState mRoundedCornerWindow;
-
     /**
      * A collection of {@link AppearanceRegion} to indicate that which region of status bar applies
      * which appearance.
@@ -396,7 +392,7 @@ public class DisplayPolicy {
 
     private final WindowManagerInternal.AppTransitionListener mAppTransitionListener;
 
-    private final KidsModeSettingsObserver mKidsModeSettingsObserver;
+    private final ForceShowNavBarSettingsObserver mForceShowNavBarSettingsObserver;
     private boolean mForceShowNavigationBarEnabled;
 
     private class PolicyHandler extends Handler {
@@ -808,17 +804,19 @@ public class DisplayPolicy {
         });
         mHandler.post(mGestureNavigationSettingsObserver::register);
 
-        mKidsModeSettingsObserver = new KidsModeSettingsObserver(
+        mForceShowNavBarSettingsObserver = new ForceShowNavBarSettingsObserver(
                 mHandler, mContext);
-        mKidsModeSettingsObserver.setOnChangeRunnable(() -> {
-            synchronized (mLock) {
-                mForceShowNavigationBarEnabled =
-                        mKidsModeSettingsObserver.isEnabled();
-                updateSystemBarAttributes();
-            }
-        });
-        mForceShowNavigationBarEnabled = mKidsModeSettingsObserver.isEnabled();
-        mHandler.post(mKidsModeSettingsObserver::register);
+        mForceShowNavBarSettingsObserver.setOnChangeRunnable(this::updateForceShowNavBarSettings);
+        mForceShowNavigationBarEnabled = mForceShowNavBarSettingsObserver.isEnabled();
+        mHandler.post(mForceShowNavBarSettingsObserver::register);
+    }
+
+    private void updateForceShowNavBarSettings() {
+        synchronized (mLock) {
+            mForceShowNavigationBarEnabled =
+                    mForceShowNavBarSettingsObserver.isEnabled();
+            updateSystemBarAttributes();
+        }
     }
 
     /**
@@ -1125,16 +1123,10 @@ public class DisplayPolicy {
             mExtraNavBarAltPosition = getAltBarPosition(attrs);
         }
 
-        if (attrs.insetsRoundedCornerFrame) {
-            // Currently, only support one rounded corner window which is the TaskBar.
-            if (mRoundedCornerWindow != null && mRoundedCornerWindow != win) {
-                throw new IllegalArgumentException("Found multiple rounded corner window :"
-                        + " current = " + mRoundedCornerWindow
-                        + " new = " + win);
-            }
-            mRoundedCornerWindow = win;
-        } else if (mRoundedCornerWindow == win) {
-            mRoundedCornerWindow = null;
+        final InsetsSourceProvider provider = win.getControllableInsetProvider();
+        if (provider != null && provider.getSource().getInsetsRoundedCornerFrame()
+                != attrs.insetsRoundedCornerFrame) {
+            provider.getSource().setInsetsRoundedCornerFrame(attrs.insetsRoundedCornerFrame);
         }
     }
 
@@ -1481,9 +1473,6 @@ public class DisplayPolicy {
         if (mLastFocusedWindow == win) {
             mLastFocusedWindow = null;
         }
-        if (mRoundedCornerWindow == win) {
-            mRoundedCornerWindow = null;
-        }
 
         mInsetsSourceWindowsExceptIme.remove(win);
     }
@@ -1513,10 +1502,6 @@ public class DisplayPolicy {
 
     WindowState getNavigationBar() {
         return mNavigationBar != null ? mNavigationBar : mNavigationBarAlt;
-    }
-
-    WindowState getRoundedCornerWindow() {
-        return mRoundedCornerWindow;
     }
 
     /**
@@ -1973,6 +1958,7 @@ public class DisplayPolicy {
      */
     public void switchUser() {
         updateCurrentUserResources();
+        updateForceShowNavBarSettings();
     }
 
     /**
@@ -3016,7 +3002,7 @@ public class DisplayPolicy {
     void release() {
         mDisplayContent.mTransitionController.unregisterLegacyListener(mAppTransitionListener);
         mHandler.post(mGestureNavigationSettingsObserver::unregister);
-        mHandler.post(mKidsModeSettingsObserver::unregister);
+        mHandler.post(mForceShowNavBarSettingsObserver::unregister);
         mImmersiveModeConfirmation.release();
     }
 

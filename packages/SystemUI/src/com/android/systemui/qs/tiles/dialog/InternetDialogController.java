@@ -22,6 +22,7 @@ import static com.android.wifitrackerlib.WifiEntry.CONNECTED_STATE_CONNECTED;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.annotation.AnyThread;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -158,6 +159,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     private LocationController mLocationController;
     private DialogLaunchAnimator mDialogLaunchAnimator;
     private boolean mHasWifiEntries;
+    private WifiStateWorker mWifiStateWorker;
     private int mNonDdsCallState = TelephonyManager.CALL_STATE_IDLE;
 
     @VisibleForTesting
@@ -213,7 +215,9 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             @Background Handler workerHandler,
             CarrierConfigTracker carrierConfigTracker,
             LocationController locationController,
-            DialogLaunchAnimator dialogLaunchAnimator) {
+            DialogLaunchAnimator dialogLaunchAnimator,
+            WifiStateWorker wifiStateWorker
+    ) {
         if (DEBUG) {
             Log.d(TAG, "Init InternetDialogController");
         }
@@ -244,6 +248,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mLocationController = locationController;
         mDialogLaunchAnimator = dialogLaunchAnimator;
         mConnectedWifiInternetMonitor = new ConnectedWifiInternetMonitor();
+        mWifiStateWorker = wifiStateWorker;
         mNonDdsCallStateCallbacksMap = new HashMap<Integer, NonDdsCallStateCallback>();
     }
 
@@ -346,7 +351,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
 
     @Nullable
     CharSequence getSubtitleText(boolean isProgressBarVisible) {
-        if (mCanConfigWifi && !mWifiManager.isWifiEnabled()) {
+        if (mCanConfigWifi && !isWifiEnabled()) {
             // When Wi-Fi is disabled.
             //   Sub-Title: Wi-Fi is off
             if (DEBUG) {
@@ -669,6 +674,27 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         final Intent intent = new Intent(ACTION_WIFI_SCANNING_SETTINGS);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent, view);
+    }
+
+    /**
+     * Enable or disable Wi-Fi.
+     *
+     * @param enabled {@code true} to enable, {@code false} to disable.
+     */
+    @AnyThread
+    public void setWifiEnabled(boolean enabled) {
+        mWifiStateWorker.setWifiEnabled(enabled);
+    }
+
+    /**
+     * Return whether Wi-Fi is enabled or disabled.
+     *
+     * @return {@code true} if Wi-Fi is enabled or enabling
+     * @see WifiManager#getWifiState()
+     */
+    @AnyThread
+    public boolean isWifiEnabled() {
+        return mWifiStateWorker.isWifiEnabled();
     }
 
     void connectCarrierNetwork() {

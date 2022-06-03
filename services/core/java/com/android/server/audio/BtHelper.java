@@ -655,6 +655,7 @@ public class BtHelper {
         mDeviceBroker.postBtProfileDisconnected(BluetoothProfile.HEADSET);
         mDeviceBroker.postBtProfileDisconnected(BluetoothProfile.HEARING_AID);
         mDeviceBroker.postBtProfileDisconnected(BluetoothProfile.LE_AUDIO);
+        mDeviceBroker.postBtProfileDisconnected(BluetoothProfile.LE_AUDIO_BROADCAST);
     }
 
     // @GuardedBy("AudioDeviceBroker.mSetModeLock")
@@ -930,6 +931,7 @@ public class BtHelper {
                         case BluetoothProfile.HEADSET:
                         case BluetoothProfile.HEARING_AID:
                         case BluetoothProfile.LE_AUDIO:
+                        case BluetoothProfile.LE_AUDIO_BROADCAST:
                             mDeviceBroker.postBtProfileDisconnected(profile);
                             break;
 

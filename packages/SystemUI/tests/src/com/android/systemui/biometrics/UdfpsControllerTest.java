@@ -66,6 +66,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.animation.ActivityLaunchAnimator;
+import com.android.systemui.broadcast.BroadcastSender;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.plugins.FalsingManager;
@@ -150,6 +151,8 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Mock
     private UdfpsHapticsSimulator mUdfpsHapticsSimulator;
     @Mock
+    private UdfpsShell mUdfpsShell;
+    @Mock
     private KeyguardStateController mKeyguardStateController;
     @Mock
     private DisplayManager mDisplayManager;
@@ -184,6 +187,8 @@ public class UdfpsControllerTest extends SysuiTestCase {
     private ActivityLaunchAnimator mActivityLaunchAnimator;
     @Mock
     private AlternateUdfpsTouchProvider mAlternateTouchProvider;
+    @Mock
+    private BroadcastSender mBroadcastSender;
 
     // Capture listeners so that they can be used to send events
     @Captor private ArgumentCaptor<IUdfpsOverlayController> mOverlayCaptor;
@@ -210,6 +215,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 .thenReturn(mFpmOtherView);
         when(mEnrollView.getContext()).thenReturn(mContext);
         when(mKeyguardStateController.isOccluded()).thenReturn(false);
+        when(mKeyguardUpdateMonitor.isFingerprintDetectionRunning()).thenReturn(true);
         final List<FingerprintSensorPropertiesInternal> props = new ArrayList<>();
 
         final List<ComponentInfoInternal> componentInfo = new ArrayList<>();
@@ -247,6 +253,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mScreenLifecycle,
                 mVibrator,
                 mUdfpsHapticsSimulator,
+                mUdfpsShell,
                 Optional.of(mHbmProvider),
                 mKeyguardStateController,
                 mDisplayManager,
@@ -257,7 +264,8 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mSystemUIDialogManager,
                 mLatencyTracker,
                 mActivityLaunchAnimator,
-                Optional.of(mAlternateTouchProvider));
+                Optional.of(mAlternateTouchProvider),
+                mBroadcastSender);
         verify(mFingerprintManager).setUdfpsOverlayController(mOverlayCaptor.capture());
         mOverlayController = mOverlayCaptor.getValue();
         verify(mScreenLifecycle).addObserver(mScreenObserverCaptor.capture());
@@ -590,9 +598,8 @@ public class UdfpsControllerTest extends SysuiTestCase {
         verify(mLatencyTracker, never()).onActionEnd(eq(LatencyTracker.ACTION_UDFPS_ILLUMINATE));
         // AND onIlluminatedRunnable notifies FingerprintManager about onUiReady
         mOnIlluminatedRunnableCaptor.getValue().run();
-        InOrder inOrder = inOrder(mFingerprintManager, mLatencyTracker);
-        inOrder.verify(mFingerprintManager).onUiReady(
-                eq(TEST_REQUEST_ID), eq(mUdfpsController.mSensorId));
+        InOrder inOrder = inOrder(mAlternateTouchProvider, mLatencyTracker);
+        inOrder.verify(mAlternateTouchProvider).onUiReady();
         inOrder.verify(mLatencyTracker).onActionEnd(eq(LatencyTracker.ACTION_UDFPS_ILLUMINATE));
     }
 

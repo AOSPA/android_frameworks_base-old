@@ -202,9 +202,17 @@ public class TaskFragmentOrganizerControllerTest extends WindowTestsBase {
 
         verify(mOrganizer, never()).onTaskFragmentParentInfoChanged(any(), any());
 
-        // Trigger callback if the info is changed.
+        // Trigger callback if the size is changed.
         parentConfig.smallestScreenWidthDp = 100;
+        mController.onTaskFragmentParentInfoChanged(
+                mTaskFragment.getTaskFragmentOrganizer(), mTaskFragment);
+        mController.dispatchPendingEvents();
 
+        verify(mOrganizer).onTaskFragmentParentInfoChanged(eq(mFragmentToken), any());
+
+        // Trigger callback if the windowing mode is changed.
+        clearInvocations(mOrganizer);
+        parentConfig.windowConfiguration.setWindowingMode(WINDOWING_MODE_PINNED);
         mController.onTaskFragmentParentInfoChanged(
                 mTaskFragment.getTaskFragmentOrganizer(), mTaskFragment);
         mController.dispatchPendingEvents();
@@ -522,6 +530,55 @@ public class TaskFragmentOrganizerControllerTest extends WindowTestsBase {
     }
 
     @Test
+    public void testApplyTransaction_requestFocusOnTaskFragment() {
+        mOrganizer.applyTransaction(mTransaction);
+        mController.registerOrganizer(mIOrganizer);
+        final Task task = createTask(mDisplayContent);
+        final IBinder token0 = new Binder();
+        final TaskFragment tf0 = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .setFragmentToken(token0)
+                .setOrganizer(mOrganizer)
+                .createActivityCount(1)
+                .build();
+        final IBinder token1 = new Binder();
+        final TaskFragment tf1 = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .setFragmentToken(token1)
+                .setOrganizer(mOrganizer)
+                .createActivityCount(1)
+                .build();
+        mAtm.mWindowOrganizerController.mLaunchTaskFragments.put(token0, tf0);
+        mAtm.mWindowOrganizerController.mLaunchTaskFragments.put(token1, tf1);
+        final ActivityRecord activity0 = tf0.getTopMostActivity();
+        final ActivityRecord activity1 = tf1.getTopMostActivity();
+
+        // No effect if the current focus is in a different Task.
+        final ActivityRecord activityInOtherTask = createActivityRecord(mDefaultDisplay);
+        mDisplayContent.setFocusedApp(activityInOtherTask);
+        mTransaction.requestFocusOnTaskFragment(token0);
+        mAtm.mWindowOrganizerController.applyTransaction(mTransaction);
+
+        assertEquals(activityInOtherTask, mDisplayContent.mFocusedApp);
+
+        // No effect if there is no resumed activity in the request TaskFragment.
+        activity0.setState(ActivityRecord.State.PAUSED, "test");
+        activity1.setState(ActivityRecord.State.RESUMED, "test");
+        mDisplayContent.setFocusedApp(activity1);
+        mAtm.mWindowOrganizerController.applyTransaction(mTransaction);
+
+        assertEquals(activity1, mDisplayContent.mFocusedApp);
+
+        // Set focus to the request TaskFragment when the current focus is in the same Task, and it
+        // has a resumed activity.
+        activity0.setState(ActivityRecord.State.RESUMED, "test");
+        mDisplayContent.setFocusedApp(activity1);
+        mAtm.mWindowOrganizerController.applyTransaction(mTransaction);
+
+        assertEquals(activity0, mDisplayContent.mFocusedApp);
+    }
+
+    @Test
     public void testTaskFragmentInPip_startActivityInTaskFragment() {
         setupTaskFragmentInPip();
         final ActivityRecord activity = mTaskFragment.getTopMostActivity();
@@ -716,6 +773,47 @@ public class TaskFragmentOrganizerControllerTest extends WindowTestsBase {
 
         // Verify the info changed callback still occurred despite the task being invisible
         reset(mOrganizer);
+        mController.onTaskFragmentInfoChanged(mIOrganizer, taskFragment);
+        mController.dispatchPendingEvents();
+        verify(mOrganizer).onTaskFragmentInfoChanged(any());
+    }
+
+    /**
+     * Tests that a task fragment info changed event is sent if the TaskFragment becomes empty
+     * even if the Task is invisible.
+     */
+    @Test
+    public void testPendingTaskFragmentInfoChangedEvent_emptyTaskFragment() {
+        // Create a TaskFragment with an activity, all within a parent task
+        final Task task = createTask(mDisplayContent);
+        final TaskFragment taskFragment = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .setOrganizer(mOrganizer)
+                .setFragmentToken(mFragmentToken)
+                .createActivityCount(1)
+                .build();
+        final ActivityRecord embeddedActivity = taskFragment.getTopNonFinishingActivity();
+        // Add another activity in the Task so that it always contains a non-finishing activitiy.
+        final ActivityRecord nonEmbeddedActivity = createActivityRecord(task);
+        assertTrue(task.shouldBeVisible(null));
+
+        // Dispatch pending info changed event from creating the activity
+        mController.registerOrganizer(mIOrganizer);
+        taskFragment.mTaskFragmentAppearedSent = true;
+        mController.onTaskFragmentInfoChanged(mIOrganizer, taskFragment);
+        mController.dispatchPendingEvents();
+        verify(mOrganizer).onTaskFragmentInfoChanged(any());
+
+        // Verify the info changed callback is not called when the task is invisible
+        reset(mOrganizer);
+        doReturn(false).when(task).shouldBeVisible(any());
+        mController.onTaskFragmentInfoChanged(mIOrganizer, taskFragment);
+        mController.dispatchPendingEvents();
+        verify(mOrganizer, never()).onTaskFragmentInfoChanged(any());
+
+        // Finish the embedded activity, and verify the info changed callback is called because the
+        // TaskFragment is becoming empty.
+        embeddedActivity.finishing = true;
         mController.onTaskFragmentInfoChanged(mIOrganizer, taskFragment);
         mController.dispatchPendingEvents();
         verify(mOrganizer).onTaskFragmentInfoChanged(any());

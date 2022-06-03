@@ -95,7 +95,7 @@
     <string name="bluetooth_disconnecting" msgid="7638892134401574338">"Адключэнне..."</string>
     <string name="bluetooth_connecting" msgid="5871702668260192755">"Злучэнне..."</string>
     <string name="bluetooth_connected" msgid="8065345572198502293">"Падключана прылада <xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
-    <string name="bluetooth_pairing" msgid="4269046942588193600">"Спарванне..."</string>
+    <string name="bluetooth_pairing" msgid="4269046942588193600">"Спалучэнне..."</string>
     <string name="bluetooth_connected_no_headset" msgid="2224101138659967604">"Падключана прылада <xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g> (без званкоў)"</string>
     <string name="bluetooth_connected_no_a2dp" msgid="8566874395813947092">"Падключана прылада <xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g> (без аўдыя)"</string>
     <string name="bluetooth_connected_no_map" msgid="3381860077002724689">"Падключана прылада <xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g> (без паведамленняў)"</string>
@@ -659,4 +659,10 @@
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"Пры пераключэнні на праграму \"<xliff:g id="SWITCHAPP">%1$s</xliff:g>\" ці змяненні вываду бягучая трансляцыя спыняецца"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"Трансляцыя праграмы \"<xliff:g id="SWITCHAPP">%1$s</xliff:g>\""</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"Змяненне вываду"</string>
+    <!-- no translation found for back_navigation_animation (8105467568421689484) -->
+    <skip />
+    <!-- no translation found for back_navigation_animation_summary (741292224121599456) -->
+    <skip />
+    <!-- no translation found for back_navigation_animation_dialog (8696966520944625596) -->
+    <skip />
 </resources>

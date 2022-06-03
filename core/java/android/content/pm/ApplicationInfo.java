@@ -2778,5 +2778,23 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             mKnownActivityEmbeddingCerts.add(knownCert.toUpperCase(Locale.US));
         }
     }
+
+    /**
+     * Sets whether the application will use the {@link android.window.OnBackInvokedCallback}
+     * navigation system instead of the {@link android.view.KeyEvent#KEYCODE_BACK} and related
+     * callbacks. Intended to be used from tests only.
+     *
+     * @see #isOnBackInvokedCallbackEnabled()
+     * @hide
+     */
+    @TestApi
+    public void setEnableOnBackInvokedCallback(boolean isEnable) {
+        if (isEnable) {
+            privateFlagsExt |= PRIVATE_FLAG_EXT_ENABLE_ON_BACK_INVOKED_CALLBACK;
+        } else {
+            privateFlagsExt &= ~PRIVATE_FLAG_EXT_ENABLE_ON_BACK_INVOKED_CALLBACK;
+        }
+    }
+
     /** {@hide} */ public int canOverrideRes() { return overrideRes; }
 }
