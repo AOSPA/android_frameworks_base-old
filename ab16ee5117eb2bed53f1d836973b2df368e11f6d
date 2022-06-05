@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4305bd7d_86fcc233",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 10
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-06-05T17:32:03Z",
+      "side": 1,
+      "message": "reverted PS 9, broke it - kept import placement",
+      "revId": "ab16ee5117eb2bed53f1d836973b2df368e11f6d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
