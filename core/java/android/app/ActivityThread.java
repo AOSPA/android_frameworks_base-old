@@ -6867,10 +6867,15 @@ public final class ActivityThread extends ClientTransactionHandler
             {
                 Slog.e(TAG, "HeavyGameThread () : Exception_1 = " + e);
             }
-            ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0,
-                                           pkg_name,
-                                           bindApp_dur,
-                                           pkgDir);
+            if (ux_perf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                ux_perf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0,
+                                               pkg_name,
+                                               bindApp_dur,
+                                               pkgDir);
+            } else {
+                ux_perf.perfEvent(BoostFramework.VENDOR_HINT_BINDAPP, pkg_name, 2, bindApp_dur, 0);
+            }
         }
     }
 

@@ -1207,10 +1207,13 @@ final class InstallPackageHelper {
                     replace = true;
                     if (DEBUG_INSTALL) Slog.d(TAG, "Replace existing package: " + pkgName);
                     if (pkgName != null) {
-                        acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 1);
                         BoostFramework mPerf = new BoostFramework();
                         if (mPerf != null) {
-                            mPerf.perfHint(BoostFramework.VENDOR_HINT_APP_UPDATE, pkgName, -1, 0);
+                            if (mPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                                mPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                                mPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_PKG_INSTALL, 0, pkgName, 1);
+                            }
+                            mPerf.perfEvent(BoostFramework.VENDOR_HINT_APP_UPDATE, pkgName, 2, 0, -1);
                         }
                     }
                 }
@@ -2032,8 +2035,17 @@ final class InstallPackageHelper {
         final String installerPackageName = installSource.installerPackageName;
 
         if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.getPath());
-        if (pkgName != null)
-            acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 0);
+        if (pkgName != null) {
+            BoostFramework mPerf = new BoostFramework();
+            if (mPerf != null) {
+                if (mPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    mPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_PKG_INSTALL, 0, pkgName, 0);
+                } else {
+                    mPerf.perfEvent(BoostFramework.VENDOR_HINT_PKG_INSTALL, pkgName, 2, 0, 0);
+                }
+            }
+        }
         synchronized (mPm.mLock) {
             // For system-bundled packages, we assume that installing an upgraded version
             // of the package implies that the user actually wants to run that new code,
@@ -2208,13 +2220,6 @@ final class InstallPackageHelper {
         }
 
         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-    }
-
-    private void acquireUxPerfLock(int opcode, String pkgName, int dat) {
-       BoostFramework ux_perf = new BoostFramework();
-        if (ux_perf != null) {
-            ux_perf.perfUXEngine_events(opcode, 0, pkgName, dat);
-        }
     }
 
     private void enableRestrictedSettings(String pkgName, int appId) {
