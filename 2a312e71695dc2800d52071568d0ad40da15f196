@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2d153ec4_099cb466",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-06-07T16:44:34Z",
+      "side": 1,
+      "message": "is this really good ux, lockscreen fonts has weights set which would change for every font",
+      "revId": "2a312e71695dc2800d52071568d0ad40da15f196",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
