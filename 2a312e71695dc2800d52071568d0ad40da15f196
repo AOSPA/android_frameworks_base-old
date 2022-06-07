@@ -16,6 +16,24 @@
       "message": "is this really good ux, lockscreen fonts has weights set which would change for every font",
       "revId": "2a312e71695dc2800d52071568d0ad40da15f196",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0b21af63_22caddb1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-06-07T16:48:10Z",
+      "side": 1,
+      "message": "https://github.com/ProtonAOSP/android_frameworks_base/commit/c0af2b57e5f9a8c1cdd1cb790ec70077f0c900e6\nhttps://github.com/yaap/frameworks_base/commit/9d0240aa7b6179baeecab6b3c41a9716d15c0f53",
+      "parentUuid": "2d153ec4_099cb466",
+      "revId": "2a312e71695dc2800d52071568d0ad40da15f196",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
