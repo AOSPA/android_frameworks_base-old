@@ -1130,7 +1130,10 @@ class ProcessRecord implements WindowProcessListener {
             }
             if (ux_perf != null && !mService.mForceStopKill && !mErrorState.isNotResponding()
                 && !mErrorState.isCrashing()) {
-                ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+                if (ux_perf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    ux_perf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+                }
                 ux_perf.perfEvent(BoostFramework.VENDOR_HINT_KILL,this.processName, 2, 0,getPid());
             } else {
                 mService.mForceStopKill = false;

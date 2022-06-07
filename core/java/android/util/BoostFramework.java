@@ -50,6 +50,9 @@ public class BoostFramework {
     private static final String UXPERFORMANCE_CLASS = "com.qualcomm.qti.UxPerformance";
     public  static final float PERF_HAL_V22 = 2.2f;
     public  static final float PERF_HAL_V23 = 2.3f;
+    public static final int VENDOR_T_API_LEVEL = 32;
+    public final int board_first_api_lvl = SystemProperties.getInt("ro.board.first_api_level", 0);
+    public final int board_api_lvl = SystemProperties.getInt("ro.board.api_level", 0);
 
 /** @hide */
     private static boolean sIsLoaded = false;
@@ -66,6 +69,7 @@ public class BoostFramework {
     private static Method sperfHintRenewFunc = null;
     private static Method sPerfEventFunc = null;
     private static Method sPerfGetPerfHalVerFunc = null;
+    private static Method sPerfSyncRequest = null;
 
     private static Method sIOPStart = null;
     private static Method sIOPStop  = null;
@@ -107,6 +111,7 @@ public class BoostFramework {
     //feedback hints
     public static final int VENDOR_FEEDBACK_WORKLOAD_TYPE = 0x00001601;
     public static final int VENDOR_FEEDBACK_LAUNCH_END_POINT = 0x00001602;
+    public static final int VENDOR_FEEDBACK_PA_FW = 0x00001604;
 
     //UXE Events and Triggers
     public static final int UXE_TRIGGER = 1;
@@ -117,6 +122,13 @@ public class BoostFramework {
     public static final int UXE_EVENT_SUB_LAUNCH = 6;
     public static final int UXE_EVENT_PKG_UNINSTALL = 7;
     public static final int UXE_EVENT_PKG_INSTALL = 8;
+
+    //New Hints while porting IOP to Perf Hal.
+    public static final int VENDOR_HINT_BINDAPP = 0x000010A0;
+    public static final int VENDOR_HINT_WARM_LAUNCH = 0x000010A1; //SUB_LAUNCH
+    // 0x000010A2 is added in UXPerformance.java for SPEED Hints
+    public static final int VENDOR_HINT_PKG_INSTALL = 0x000010A3;
+    public static final int VENDOR_HINT_PKG_UNINSTALL = 0x000010A4;
 
     //perf opcodes
     public static final int MPCTLV3_GPU_IS_APP_FG = 0X42820000;
@@ -262,6 +274,9 @@ public class BoostFramework {
 
                     argClasses = new Class[] {int.class, String.class, int.class, int[].class};
                     sPerfEventFunc = sPerfClass.getMethod("perfEvent", argClasses);
+
+                    argClasses = new Class[] {int.class};
+                    sPerfSyncRequest = sPerfClass.getMethod("perfSyncRequest", argClasses);
 
                     argClasses = new Class[] {int.class, int.class, String.class, int.class,
                                               int.class, int.class, int[].class};
@@ -490,6 +505,20 @@ public class BoostFramework {
         return ret;
     }
 
+/** @hide */
+    public String perfSyncRequest(int opcode) {
+        String ret = null;
+        try {
+            if (sPerfSyncRequest == null) {
+                return ret;
+            }
+            Object retVal = sPerfSyncRequest.invoke(mPerf, opcode);
+            ret = (String) retVal;
+        } catch (Exception e) {
+            Log.e(TAG, "Exception " + e);
+        }
+        return ret;
+    }
 
 /** @hide */
     public String perfGetProp(String prop_name, String def_val) {
