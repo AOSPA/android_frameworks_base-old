@@ -88,6 +88,23 @@
       "parentUuid": "4c3a031b_7d95d14d",
       "revId": "01902105b209d5b62afe4e209258009714c378d3",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d0317e86_b04a00e8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000715
+      },
+      "writtenOn": "2022-06-11T18:11:17Z",
+      "side": 1,
+      "message": "Had a small discussion on slack, people seem to be in favor and some maintainers even shared screenshots of users complaining, hopefully you\u0027re satisfied kunmun.",
+      "revId": "01902105b209d5b62afe4e209258009714c378d3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
