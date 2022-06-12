@@ -44,17 +44,14 @@ abstract class AbstractHotwordDetector implements HotwordDetector {
     private final IVoiceInteractionManagerService mManagerService;
     private final Handler mHandler;
     private final HotwordDetector.Callback mCallback;
-    private final int mDetectorType;
 
     AbstractHotwordDetector(
             IVoiceInteractionManagerService managerService,
-            HotwordDetector.Callback callback,
-            int detectorType) {
+            HotwordDetector.Callback callback) {
         mManagerService = managerService;
         // TODO: this needs to be supplied from above
         mHandler = new Handler(Looper.getMainLooper());
         mCallback = callback;
-        mDetectorType = detectorType;
     }
 
     /**
@@ -107,20 +104,19 @@ abstract class AbstractHotwordDetector implements HotwordDetector {
             Slog.d(TAG, "updateState()");
         }
         synchronized (mLock) {
-            updateStateLocked(options, sharedMemory, null /* callback */, mDetectorType);
+            updateStateLocked(options, sharedMemory, null /* callback */);
         }
     }
 
     protected void updateStateLocked(@Nullable PersistableBundle options,
-            @Nullable SharedMemory sharedMemory, IHotwordRecognitionStatusCallback callback,
-            int detectorType) {
+            @Nullable SharedMemory sharedMemory, IHotwordRecognitionStatusCallback callback) {
         if (DEBUG) {
             Slog.d(TAG, "updateStateLocked()");
         }
         Identity identity = new Identity();
         identity.packageName = ActivityThread.currentOpPackageName();
         try {
-            mManagerService.updateState(identity, options, sharedMemory, callback, detectorType);
+            mManagerService.updateState(identity, options, sharedMemory, callback);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

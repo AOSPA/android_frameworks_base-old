@@ -2,9 +2,7 @@
   "presubmit": [
     {
       "name": "CtsResourcesLoaderTests"
-    }
-  ],
-  "presubmit-large": [
+    },
     {
       "name": "CtsContentTestCases",
       "options": [

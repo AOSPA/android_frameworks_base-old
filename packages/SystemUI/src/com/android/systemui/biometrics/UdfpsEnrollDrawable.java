@@ -97,8 +97,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
     @NonNull private final ValueAnimator.AnimatorUpdateListener mEdgeHintWidthUpdateListener;
     @NonNull private final Animator.AnimatorListener mEdgeHintPulseListener;
 
-    private boolean mShowingNewUdfpsEnroll = false;
-
     UdfpsEnrollDrawable(@NonNull Context context) {
         super(context);
 
@@ -213,8 +211,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
             @Override
             public void onAnimationRepeat(Animator animation) {}
         };
-        mShowingNewUdfpsEnroll = context.getResources().getBoolean(
-                com.android.internal.R.bool.config_udfpsSupportsNewUi);
     }
 
     void setEnrollHelper(@NonNull UdfpsEnrollHelper helper) {
@@ -296,10 +292,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
         }
         mShouldShowTipHint = shouldShow;
 
-        if (mShowingNewUdfpsEnroll) {
-            return;
-        }
-
         if (mTipHintWidthAnimator != null && mTipHintWidthAnimator.isRunning()) {
             mTipHintWidthAnimator.cancel();
         }
@@ -314,7 +306,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
         } else {
             mTipHintWidthAnimator.start();
         }
-
     }
 
     private void updateEdgeHintVisibility() {
@@ -323,10 +314,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
             return;
         }
         mShouldShowEdgeHint = shouldShow;
-
-        if (mShowingNewUdfpsEnroll) {
-            return;
-        }
 
         if (mEdgeHintWidthAnimator != null && mEdgeHintWidthAnimator.isRunning()) {
             mEdgeHintWidthAnimator.cancel();
@@ -346,10 +333,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
     }
 
     private void startTipHintPulseAnimation() {
-        if (mShowingNewUdfpsEnroll) {
-            return;
-        }
-
         mHandler.removeCallbacksAndMessages(null);
         if (mTipHintAnimatorSet != null && mTipHintAnimatorSet.isRunning()) {
             mTipHintAnimatorSet.cancel();
@@ -370,10 +353,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
     }
 
     private void startEdgeHintPulseAnimation() {
-        if (mShowingNewUdfpsEnroll) {
-            return;
-        }
-
         mHandler.removeCallbacksAndMessages(null);
         if (mEdgeHintAnimatorSet != null && mEdgeHintAnimatorSet.isRunning()) {
             mEdgeHintAnimatorSet.cancel();
@@ -428,10 +407,6 @@ public class UdfpsEnrollDrawable extends UdfpsDrawable {
             mFingerprintDrawable.draw(canvas);
             mFingerprintDrawable.setAlpha(mAlpha);
             mSensorOutlinePaint.setAlpha(mAlpha);
-        }
-
-        if (mShowingNewUdfpsEnroll) {
-            return;
         }
 
         // Draw the finger tip or edges hint.

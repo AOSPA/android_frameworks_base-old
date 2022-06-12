@@ -25,7 +25,6 @@ import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_CHANGE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_CLOSE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_OPEN;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
-import static android.view.WindowManagerPolicyConstants.TYPE_LAYER_OFFSET;
 
 import android.animation.Animator;
 import android.animation.ValueAnimator;
@@ -182,22 +181,18 @@ class TaskFragmentAnimationRunner extends IRemoteAnimationRunner.Stub {
 
     private List<TaskFragmentAnimationAdapter> createOpenAnimationAdapters(
             @NonNull RemoteAnimationTarget[] targets) {
-        return createOpenCloseAnimationAdapters(targets, true /* isOpening */,
+        return createOpenCloseAnimationAdapters(targets,
                 mAnimationSpec::loadOpenAnimation);
     }
 
     private List<TaskFragmentAnimationAdapter> createCloseAnimationAdapters(
             @NonNull RemoteAnimationTarget[] targets) {
-        return createOpenCloseAnimationAdapters(targets, false /* isOpening */,
+        return createOpenCloseAnimationAdapters(targets,
                 mAnimationSpec::loadCloseAnimation);
     }
 
-    /**
-     * Creates {@link TaskFragmentAnimationAdapter} for OPEN and CLOSE types of transition.
-     * @param isOpening {@code true} for OPEN type, {@code false} for CLOSE type.
-     */
     private List<TaskFragmentAnimationAdapter> createOpenCloseAnimationAdapters(
-            @NonNull RemoteAnimationTarget[] targets, boolean isOpening,
+            @NonNull RemoteAnimationTarget[] targets,
             @NonNull BiFunction<RemoteAnimationTarget, Rect, Animation> animationProvider) {
         // We need to know if the target window is only a partial of the whole animation screen.
         // If so, we will need to adjust it to make the whole animation screen looks like one.
@@ -215,25 +210,14 @@ class TaskFragmentAnimationRunner extends IRemoteAnimationRunner.Stub {
             }
         }
 
-        // For OPEN transition, open windows should be above close windows.
-        // For CLOSE transition, open windows should be below close windows.
-        int offsetLayer = TYPE_LAYER_OFFSET;
         final List<TaskFragmentAnimationAdapter> adapters = new ArrayList<>();
         for (RemoteAnimationTarget target : openingTargets) {
-            final TaskFragmentAnimationAdapter adapter = createOpenCloseAnimationAdapter(target,
-                    animationProvider, openingWholeScreenBounds);
-            if (isOpening) {
-                adapter.overrideLayer(offsetLayer++);
-            }
-            adapters.add(adapter);
+            adapters.add(createOpenCloseAnimationAdapter(target, animationProvider,
+                    openingWholeScreenBounds));
         }
         for (RemoteAnimationTarget target : closingTargets) {
-            final TaskFragmentAnimationAdapter adapter = createOpenCloseAnimationAdapter(target,
-                    animationProvider, closingWholeScreenBounds);
-            if (!isOpening) {
-                adapter.overrideLayer(offsetLayer++);
-            }
-            adapters.add(adapter);
+            adapters.add(createOpenCloseAnimationAdapter(target, animationProvider,
+                    closingWholeScreenBounds));
         }
         return adapters;
     }

@@ -567,13 +567,7 @@ public class VcnManagementService extends IVcnManagementService.Stub {
     @GuardedBy("mLock")
     private void notifyAllPolicyListenersLocked() {
         for (final PolicyListenerBinderDeath policyListener : mRegisteredPolicyListeners.values()) {
-            Binder.withCleanCallingIdentity(() -> {
-                try {
-                    policyListener.mListener.onPolicyChanged();
-                } catch (RemoteException e) {
-                    logDbg("VcnStatusCallback threw on VCN status change", e);
-                }
-            });
+            Binder.withCleanCallingIdentity(() -> policyListener.mListener.onPolicyChanged());
         }
     }
 
@@ -582,13 +576,8 @@ public class VcnManagementService extends IVcnManagementService.Stub {
             @NonNull ParcelUuid subGroup, @VcnStatusCode int statusCode) {
         for (final VcnStatusCallbackInfo cbInfo : mRegisteredStatusCallbacks.values()) {
             if (isCallbackPermissioned(cbInfo, subGroup)) {
-                Binder.withCleanCallingIdentity(() -> {
-                    try {
-                        cbInfo.mCallback.onVcnStatusChanged(statusCode);
-                    } catch (RemoteException e) {
-                        logDbg("VcnStatusCallback threw on VCN status change", e);
-                    }
-                });
+                Binder.withCleanCallingIdentity(
+                        () -> cbInfo.mCallback.onVcnStatusChanged(statusCode));
             }
         }
     }
@@ -1261,17 +1250,13 @@ public class VcnManagementService extends IVcnManagementService.Stub {
                 // Notify all registered StatusCallbacks for this subGroup
                 for (VcnStatusCallbackInfo cbInfo : mRegisteredStatusCallbacks.values()) {
                     if (isCallbackPermissioned(cbInfo, mSubGroup)) {
-                        Binder.withCleanCallingIdentity(() -> {
-                            try {
-                                cbInfo.mCallback.onGatewayConnectionError(
-                                        gatewayConnectionName,
-                                        errorCode,
-                                        exceptionClass,
-                                        exceptionMessage);
-                            } catch (RemoteException e) {
-                                logDbg("VcnStatusCallback threw on VCN status change", e);
-                            }
-                        });
+                        Binder.withCleanCallingIdentity(
+                                () ->
+                                        cbInfo.mCallback.onGatewayConnectionError(
+                                                gatewayConnectionName,
+                                                errorCode,
+                                                exceptionClass,
+                                                exceptionMessage));
                     }
                 }
             }

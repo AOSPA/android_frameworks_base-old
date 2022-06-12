@@ -1,16 +1,6 @@
 {
   "presubmit": [
     {
-      "name": "FrameworksCoreTests",
-      "options": [
-        {
-          "include-filter": "android.util.apk.SourceStampVerifierTest"
-        }
-      ]
-    }
-  ],
-  "presubmit-large": [
-    {
       "name": "CtsContentTestCases",
       "options": [
         {
@@ -18,6 +8,14 @@
         },
         {
           "include-filter": "android.content.pm.cts.PackageManagerShellCommandTest"
+        }
+      ]
+    },
+    {
+      "name": "FrameworksCoreTests",
+      "options": [
+        {
+          "include-filter": "android.util.apk.SourceStampVerifierTest"
         }
       ]
     }

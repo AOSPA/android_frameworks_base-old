@@ -335,24 +335,24 @@ void GnssMeasurementCallbackAidl::translateSingleGnssMeasurement(JNIEnv* env,
                                        satellitePvt.satClockInfo.satHardwareCodeBiasMeters,
                                        satellitePvt.satClockInfo.satTimeCorrectionMeters,
                                        satellitePvt.satClockInfo.satClkDriftMps);
-            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
-                                           method_satellitePvtBuilderSetPositionEcef, positionEcef);
-            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
-                                           method_satellitePvtBuilderSetVelocityEcef, velocityEcef);
-            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
-                                           method_satellitePvtBuilderSetClockInfo, clockInfo);
+            env->CallObjectMethod(satellitePvtBuilderObject,
+                                  method_satellitePvtBuilderSetPositionEcef, positionEcef);
+            env->CallObjectMethod(satellitePvtBuilderObject,
+                                  method_satellitePvtBuilderSetVelocityEcef, velocityEcef);
+            env->CallObjectMethod(satellitePvtBuilderObject, method_satellitePvtBuilderSetClockInfo,
+                                  clockInfo);
         }
 
         if (satFlags & SatellitePvt::HAS_IONO) {
-            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
-                                           method_satellitePvtBuilderSetIonoDelayMeters,
-                                           satellitePvt.ionoDelayMeters);
+            env->CallObjectMethod(satellitePvtBuilderObject,
+                                  method_satellitePvtBuilderSetIonoDelayMeters,
+                                  satellitePvt.ionoDelayMeters);
         }
 
         if (satFlags & SatellitePvt::HAS_TROPO) {
-            callObjectMethodIgnoringResult(env, satellitePvtBuilderObject,
-                                           method_satellitePvtBuilderSetTropoDelayMeters,
-                                           satellitePvt.tropoDelayMeters);
+            env->CallObjectMethod(satellitePvtBuilderObject,
+                                  method_satellitePvtBuilderSetTropoDelayMeters,
+                                  satellitePvt.tropoDelayMeters);
         }
 
         jobject satellitePvtObject =
@@ -380,19 +380,17 @@ void GnssMeasurementCallbackAidl::translateSingleGnssMeasurement(JNIEnv* env,
             jobject correlationVectorBuilderObject =
                     env->NewObject(class_correlationVectorBuilder,
                                    method_correlationVectorBuilderCtor);
-            callObjectMethodIgnoringResult(env, correlationVectorBuilderObject,
-                                           method_correlationVectorBuilderSetMagnitude,
-                                           magnitudeArray);
-            callObjectMethodIgnoringResult(
-                    env, correlationVectorBuilderObject,
-                    method_correlationVectorBuilderSetFrequencyOffsetMetersPerSecond,
-                    correlationVector.frequencyOffsetMps);
-            callObjectMethodIgnoringResult(env, correlationVectorBuilderObject,
-                                           method_correlationVectorBuilderSetSamplingStartMeters,
-                                           correlationVector.samplingStartM);
-            callObjectMethodIgnoringResult(env, correlationVectorBuilderObject,
-                                           method_correlationVectorBuilderSetSamplingWidthMeters,
-                                           correlationVector.samplingWidthM);
+            env->CallObjectMethod(correlationVectorBuilderObject,
+                                  method_correlationVectorBuilderSetMagnitude, magnitudeArray);
+            env->CallObjectMethod(correlationVectorBuilderObject,
+                                  method_correlationVectorBuilderSetFrequencyOffsetMetersPerSecond,
+                                  correlationVector.frequencyOffsetMps);
+            env->CallObjectMethod(correlationVectorBuilderObject,
+                                  method_correlationVectorBuilderSetSamplingStartMeters,
+                                  correlationVector.samplingStartM);
+            env->CallObjectMethod(correlationVectorBuilderObject,
+                                  method_correlationVectorBuilderSetSamplingWidthMeters,
+                                  correlationVector.samplingWidthM);
             jobject correlationVectorObject =
                     env->CallObjectMethod(correlationVectorBuilderObject,
                                           method_correlationVectorBuilderBuild);

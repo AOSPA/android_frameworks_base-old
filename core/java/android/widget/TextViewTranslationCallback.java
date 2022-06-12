@@ -89,7 +89,7 @@ public class TextViewTranslationCallback implements ViewTranslationCallback {
                     originalTranslationMethod);
         }
         final TransformationMethod transformation = mTranslationTransformation;
-        runChangeTextWithAnimationIfNeeded(
+        runWithAnimation(
                 (TextView) view,
                 () -> {
                     mIsShowingTranslation = true;
@@ -122,7 +122,7 @@ public class TextViewTranslationCallback implements ViewTranslationCallback {
         if (mTranslationTransformation != null) {
             final TransformationMethod transformation =
                     mTranslationTransformation.getOriginalTransformationMethod();
-            runChangeTextWithAnimationIfNeeded(
+            runWithAnimation(
                     (TextView) view,
                     () -> {
                         mIsShowingTranslation = false;
@@ -232,16 +232,10 @@ public class TextViewTranslationCallback implements ViewTranslationCallback {
      * Applies a simple text alpha animation when toggling between original and translated text. The
      * text is fully faded out, then swapped to the new text, then the fading is reversed.
      *
-     * @param changeTextRunnable the operation to run on the view after the text is faded out, to
-     * change to displaying the original or translated text.
+     * @param runnable the operation to run on the view after the text is faded out, to change to
+     * displaying the original or translated text.
      */
-    private void runChangeTextWithAnimationIfNeeded(TextView view, Runnable changeTextRunnable) {
-        boolean areAnimatorsEnabled = ValueAnimator.areAnimatorsEnabled();
-        if (!areAnimatorsEnabled) {
-            // The animation is disabled, just change display text
-            changeTextRunnable.run();
-            return;
-        }
+    private void runWithAnimation(TextView view, Runnable runnable) {
         if (mAnimator != null) {
             mAnimator.end();
             // Note: mAnimator is now null; do not use again here.
@@ -275,7 +269,7 @@ public class TextViewTranslationCallback implements ViewTranslationCallback {
 
             @Override
             public void onAnimationRepeat(Animator animation) {
-                changeTextRunnable.run();
+                runnable.run();
             }
         });
         mAnimator.start();

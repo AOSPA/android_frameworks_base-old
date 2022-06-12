@@ -263,8 +263,7 @@ public class MessagingGroup extends LinearLayout implements MessagingLinearLayou
         return createdGroup;
     }
 
-    public void removeMessage(MessagingMessage messagingMessage,
-            ArrayList<MessagingLinearLayout.MessagingChild> toRecycle) {
+    public void removeMessage(MessagingMessage messagingMessage) {
         View view = messagingMessage.getView();
         boolean wasShown = view.isShown();
         ViewGroup messageParent = (ViewGroup) view.getParent();
@@ -272,14 +271,15 @@ public class MessagingGroup extends LinearLayout implements MessagingLinearLayou
             return;
         }
         messageParent.removeView(view);
+        Runnable recycleRunnable = () -> {
+            messageParent.removeTransientView(view);
+            messagingMessage.recycle();
+        };
         if (wasShown && !MessagingLinearLayout.isGone(view)) {
             messageParent.addTransientView(view, 0);
-            performRemoveAnimation(view, () -> {
-                messageParent.removeTransientView(view);
-                messagingMessage.recycle();
-            });
+            performRemoveAnimation(view, recycleRunnable);
         } else {
-            toRecycle.add(messagingMessage);
+            recycleRunnable.run();
         }
     }
 

@@ -90,7 +90,6 @@ public class SpatializerHelper {
     private @Nullable SpatializerCallback mSpatCallback;
     private @Nullable SpatializerHeadTrackingCallback mSpatHeadTrackingCallback;
     private @Nullable HelperDynamicSensorCallback mDynSensorCallback;
-    private boolean mIsHeadTrackingSupported = false;
 
     // default attributes and format that determine basic availability of spatialization
     private static final AudioAttributes DEFAULT_ATTRIBUTES = new AudioAttributes.Builder()
@@ -177,7 +176,6 @@ public class SpatializerHelper {
      */
     synchronized void reset(boolean featureEnabled) {
         Log.i(TAG, "Resetting");
-        releaseSpat();
         mState = STATE_UNINITIALIZED;
         mSpatLevel = Spatializer.SPATIALIZER_IMMERSIVE_LEVEL_NONE;
         mCapableSpatLevel = Spatializer.SPATIALIZER_IMMERSIVE_LEVEL_NONE;
@@ -498,9 +496,8 @@ public class SpatializerHelper {
             mSpat = AudioSystem.getSpatializer(mSpatCallback);
             try {
                 mSpat.setLevel((byte)  Spatializer.SPATIALIZER_IMMERSIVE_LEVEL_MULTICHANNEL);
-                mIsHeadTrackingSupported = mSpat.isHeadTrackingSupported();
                 //TODO: register heatracking callback only when sensors are registered
-                if (mIsHeadTrackingSupported) {
+                if (mSpat.isHeadTrackingSupported()) {
                     mSpat.registerHeadTrackingCallback(mSpatHeadTrackingCallback);
                 }
             } catch (RemoteException e) {
@@ -518,15 +515,12 @@ public class SpatializerHelper {
         if (mSpat != null) {
             mSpatCallback = null;
             try {
-                if (mIsHeadTrackingSupported) {
-                    mSpat.registerHeadTrackingCallback(null);
-                }
+                mSpat.registerHeadTrackingCallback(null);
                 mSpat.release();
+                mSpat = null;
             } catch (RemoteException e) {
                 Log.e(TAG, "Can't set release spatializer cleanly", e);
             }
-            mIsHeadTrackingSupported = false;
-            mSpat = null;
         }
     }
 
@@ -692,6 +686,7 @@ public class SpatializerHelper {
                 mDesiredHeadTrackingMode = mode;
                 dispatchDesiredHeadTrackingMode(mode);
             }
+
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling setDesiredHeadTrackingMode", e);
         }
@@ -712,7 +707,7 @@ public class SpatializerHelper {
                 }
                 break;
         }
-        return mIsHeadTrackingSupported;
+        return true;
     }
 
     private void dispatchActualHeadTrackingMode(int newMode) {
@@ -886,8 +881,13 @@ public class SpatializerHelper {
             Log.e(TAG, "not " + action + " sensors, null spatializer");
             return;
         }
-        if (!mIsHeadTrackingSupported) {
-            Log.e(TAG, "not " + action + " sensors, spatializer doesn't support headtracking");
+        try {
+            if (!mSpat.isHeadTrackingSupported()) {
+                Log.e(TAG, "not " + action + " sensors, spatializer doesn't support headtracking");
+                return;
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "not " + action + " sensors, error querying headtracking", e);
             return;
         }
         int headHandle = -1;

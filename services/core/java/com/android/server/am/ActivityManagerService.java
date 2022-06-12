@@ -555,7 +555,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final String EXTRA_TITLE = "android.intent.extra.TITLE";
     static final String EXTRA_DESCRIPTION = "android.intent.extra.DESCRIPTION";
     static final String EXTRA_BUGREPORT_TYPE = "android.intent.extra.BUGREPORT_TYPE";
-    static final String EXTRA_BUGREPORT_NONCE = "android.intent.extra.BUGREPORT_NONCE";
 
     /**
      * The maximum number of bytes that {@link #setProcessStateSummary} accepts.
@@ -6682,7 +6681,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @Override
     public void requestBugReport(@BugreportParams.BugreportMode int bugreportType) {
-        requestBugReportWithDescription(null, null, bugreportType, 0L);
+        requestBugReportWithDescription(null, null, bugreportType);
     }
 
     /**
@@ -6692,15 +6691,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public void requestBugReportWithDescription(@Nullable String shareTitle,
             @Nullable String shareDescription, int bugreportType) {
-        requestBugReportWithDescription(shareTitle, shareDescription, bugreportType, /*nonce*/ 0L);
-    }
-
-    /**
-     * Takes a bugreport using bug report API ({@code BugreportManager}) which gets
-     * triggered by sending a broadcast to Shell.
-     */
-    public void requestBugReportWithDescription(@Nullable String shareTitle,
-            @Nullable String shareDescription, int bugreportType, long nonce) {
         String type = null;
         switch (bugreportType) {
             case BugreportParams.BUGREPORT_MODE_FULL:
@@ -6751,7 +6741,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         triggerShellBugreport.setAction(INTENT_BUGREPORT_REQUESTED);
         triggerShellBugreport.setPackage(SHELL_APP_PACKAGE);
         triggerShellBugreport.putExtra(EXTRA_BUGREPORT_TYPE, bugreportType);
-        triggerShellBugreport.putExtra(EXTRA_BUGREPORT_NONCE, nonce);
         triggerShellBugreport.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         triggerShellBugreport.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
         if (shareTitle != null) {
@@ -6818,8 +6807,8 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Takes a bugreport remotely
      */
     @Override
-    public void requestRemoteBugReport(long nonce) {
-        requestBugReportWithDescription(null, null, BugreportParams.BUGREPORT_MODE_REMOTE, nonce);
+    public void requestRemoteBugReport() {
+        requestBugReportWithDescription(null, null, BugreportParams.BUGREPORT_MODE_REMOTE);
     }
 
     /**
@@ -13927,26 +13916,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 return false;
             }
 
-            int match = mContext.getPackageManager().checkSignatures(
-                    ii.targetPackage, ii.packageName);
-            if (match < 0 && match != PackageManager.SIGNATURE_FIRST_NOT_SIGNED) {
-                if (Build.IS_DEBUGGABLE) {
-                    String message = "Instrumentation test " + ii.packageName
-                            + " doesn't have a signature matching the target "
-                            + ii.targetPackage
-                            + ", which would not be allowed on the production Android builds";
-                    if (callingUid != Process.ROOT_UID) {
-                        Slog.e(TAG, message
-                                + ". THIS WILL BE DISALLOWED ON FUTURE ANDROID VERSIONS"
-                                + " unless from a rooted ADB shell.");
-                    } else {
-                        Slog.w(TAG, message);
-                    }
-                } else {
+            if (!Build.IS_DEBUGGABLE) {
+                int match = mContext.getPackageManager().checkSignatures(
+                        ii.targetPackage, ii.packageName);
+                if (match < 0 && match != PackageManager.SIGNATURE_FIRST_NOT_SIGNED) {
                     String msg = "Permission Denial: starting instrumentation "
                             + className + " from pid="
                             + Binder.getCallingPid()
-                            + ", uid=" + Binder.getCallingUid()
+                            + ", uid=" + Binder.getCallingPid()
                             + " not allowed because package " + ii.packageName
                             + " does not have a signature matching the target "
                             + ii.targetPackage;

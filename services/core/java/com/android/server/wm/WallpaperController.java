@@ -202,11 +202,8 @@ class WallpaperController {
                         "Win " + w + ": token animating, looking behind.");
             }
             mFindResults.setIsWallpaperTargetForLetterbox(w.hasWallpaperForLetterboxBackground());
-            // While the keyguard is going away, both notification shade and a normal activity such
-            // as a launcher can satisfy criteria for a wallpaper target. In this case, we should
-            // chose the normal activity, otherwise wallpaper becomes invisible when a new animation
-            // starts before the keyguard going away animation finishes.
-            return w.mActivityRecord != null;
+            // Found a target! End search.
+            return true;
         }
         return false;
     };

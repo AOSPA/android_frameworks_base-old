@@ -231,7 +231,7 @@ public class SurfaceControlViewHost {
     public @Nullable SurfacePackage getSurfacePackage() {
         if (mSurfaceControl != null && mAccessibilityEmbeddedConnection != null) {
             return new SurfacePackage(mSurfaceControl, mAccessibilityEmbeddedConnection,
-                    mWm.getFocusGrantToken());
+                    mViewRoot.getInputToken());
         } else {
             return null;
         }

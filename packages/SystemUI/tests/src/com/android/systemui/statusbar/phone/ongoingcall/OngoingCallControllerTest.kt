@@ -22,6 +22,7 @@ import android.app.IUidObserver
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Person
+import android.content.Intent
 import android.service.notification.NotificationListenerService.REASON_USER_STOPPED
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
@@ -428,19 +429,6 @@ class OngoingCallControllerTest : SysuiTestCase() {
                 .isEqualTo(OngoingCallLogger.OngoingCallEvents.ONGOING_CALL_CLICKED.id)
     }
 
-    /** Regression test for b/212467440. */
-    @Test
-    fun chipClicked_activityStarterTriggeredWithUnmodifiedIntent() {
-        val notifEntry = createOngoingCallNotifEntry()
-        val pendingIntent = notifEntry.sbn.notification.contentIntent
-        notifCollectionListener.onEntryUpdated(notifEntry)
-
-        chipView.performClick()
-
-        // Ensure that the sysui didn't modify the notification's intent -- see b/212467440.
-        verify(mockActivityStarter).postStartActivityDismissingKeyguard(eq(pendingIntent), any())
-    }
-
     @Test
     fun notifyChipVisibilityChanged_visibleEventLogged() {
         controller.notifyChipVisibilityChanged(true)
@@ -582,6 +570,7 @@ class OngoingCallControllerTest : SysuiTestCase() {
             notificationEntryBuilder.modifyNotification(context).setContentIntent(null)
         } else {
             val contentIntent = mock(PendingIntent::class.java)
+            `when`(contentIntent.intent).thenReturn(mock(Intent::class.java))
             notificationEntryBuilder.modifyNotification(context).setContentIntent(contentIntent)
         }
 

@@ -103,7 +103,7 @@ public class DragLayout extends LinearLayout {
                 MATCH_PARENT));
         ((LayoutParams) mDropZoneView1.getLayoutParams()).weight = 1;
         ((LayoutParams) mDropZoneView2.getLayoutParams()).weight = 1;
-        updateContainerMargins(getResources().getConfiguration().orientation);
+        updateContainerMargins();
     }
 
     @Override
@@ -128,18 +128,20 @@ public class DragLayout extends LinearLayout {
     }
 
     public void onConfigChanged(Configuration newConfig) {
-        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+        final int orientation = getResources().getConfiguration().orientation;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE
                 && getOrientation() != HORIZONTAL) {
             setOrientation(LinearLayout.HORIZONTAL);
-            updateContainerMargins(newConfig.orientation);
-        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT
+            updateContainerMargins();
+        } else if (orientation == Configuration.ORIENTATION_PORTRAIT
                 && getOrientation() != VERTICAL) {
             setOrientation(LinearLayout.VERTICAL);
-            updateContainerMargins(newConfig.orientation);
+            updateContainerMargins();
         }
     }
 
-    private void updateContainerMargins(int orientation) {
+    private void updateContainerMargins() {
+        final int orientation = getResources().getConfiguration().orientation;
         final float halfMargin = mDisplayMargin / 2f;
         if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
             mDropZoneView1.setContainerMargin(

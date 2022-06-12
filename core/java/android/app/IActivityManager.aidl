@@ -438,7 +438,7 @@ interface IActivityManager {
 
     void requestInteractiveBugReport();
     void requestFullBugReport();
-    void requestRemoteBugReport(long nonce);
+    void requestRemoteBugReport();
     boolean launchBugReportHandlerApp();
     List<String> getBugreportWhitelistedPackages();
 

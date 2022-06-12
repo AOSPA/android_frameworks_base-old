@@ -80,7 +80,7 @@ public final class TimingsTraceAndSlog extends TimingsTraceLog {
 
     @Override
     public void traceBegin(@NonNull String name) {
-        Slog.d(mTag, name);
+        Slog.i(mTag, name);
         super.traceBegin(name);
     }
 

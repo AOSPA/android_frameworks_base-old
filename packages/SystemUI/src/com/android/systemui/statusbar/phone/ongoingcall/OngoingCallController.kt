@@ -21,7 +21,7 @@ import android.app.IActivityManager
 import android.app.IUidObserver
 import android.app.Notification
 import android.app.Notification.CallStyle.CALL_TYPE_ONGOING
-import android.app.PendingIntent
+import android.content.Intent
 import android.util.Log
 import android.view.View
 import androidx.annotation.VisibleForTesting
@@ -98,7 +98,7 @@ class OngoingCallController @Inject constructor(
                 val newOngoingCallInfo = CallNotificationInfo(
                         entry.sbn.key,
                         entry.sbn.notification.`when`,
-                        entry.sbn.notification.contentIntent,
+                        entry.sbn.notification.contentIntent?.intent,
                         entry.sbn.uid,
                         entry.sbn.notification.extras.getInt(
                                 Notification.EXTRA_CALL_TYPE, -1) == CALL_TYPE_ONGOING,
@@ -230,6 +230,7 @@ class OngoingCallController @Inject constructor(
                     logger.logChipClicked()
                     activityStarter.postStartActivityDismissingKeyguard(
                         intent,
+                        0,
                         ActivityLaunchAnimator.Controller.fromView(
                             backgroundView,
                             InteractionJankMonitor.CUJ_STATUS_BAR_APP_LAUNCH_FROM_CALL_CHIP)
@@ -350,7 +351,7 @@ class OngoingCallController @Inject constructor(
     private data class CallNotificationInfo(
         val key: String,
         val callStartTime: Long,
-        val intent: PendingIntent?,
+        val intent: Intent?,
         val uid: Int,
         /** True if the call is currently ongoing (as opposed to incoming, screening, etc.). */
         val isOngoing: Boolean,

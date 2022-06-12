@@ -517,8 +517,8 @@ public class ActivityStartController {
     }
 
     void registerRemoteAnimationForNextActivityStart(String packageName,
-            RemoteAnimationAdapter adapter, @Nullable IBinder launchCookie) {
-        mPendingRemoteAnimationRegistry.addPendingAnimation(packageName, adapter, launchCookie);
+            RemoteAnimationAdapter adapter) {
+        mPendingRemoteAnimationRegistry.addPendingAnimation(packageName, adapter);
     }
 
     PendingRemoteAnimationRegistry getPendingRemoteAnimationRegistry() {

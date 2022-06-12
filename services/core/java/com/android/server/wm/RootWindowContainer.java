@@ -1987,8 +1987,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         try {
             if (mTaskSupervisor.realStartActivityLocked(r, app,
-                    top == r && r.getTask().canBeResumed(r) /*andResume*/,
-                    true /*checkConfig*/)) {
+                    top == r && r.isFocusable() /*andResume*/, true /*checkConfig*/)) {
                 mTmpBoolean = true;
             }
         } catch (RemoteException e) {
@@ -3732,17 +3731,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 return new ArrayList<>();
             }
         } else {
-            final RecentTasks recentTasks = mWindowManager.mAtmService.getRecentTasks();
-            final int recentsComponentUid = recentTasks != null
-                    ? recentTasks.getRecentsComponentUid()
-                    : -1;
             final ArrayList<ActivityRecord> activities = new ArrayList<>();
-            forAllLeafTasks(task -> {
-                final boolean isRecents = (task.effectiveUid == recentsComponentUid);
-                if (!dumpVisibleRootTasksOnly || task.shouldBeVisible(null) || isRecents) {
-                    activities.addAll(task.getDumpActivitiesLocked(name));
+            forAllRootTasks(rootTask -> {
+                if (!dumpVisibleRootTasksOnly || rootTask.shouldBeVisible(null)) {
+                    activities.addAll(rootTask.getDumpActivitiesLocked(name));
                 }
-                return false;
             });
             return activities;
         }

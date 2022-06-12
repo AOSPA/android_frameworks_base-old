@@ -4534,15 +4534,13 @@ public class AlarmManagerService extends SystemService {
             filter.addAction(Intent.ACTION_PACKAGE_RESTARTED);
             filter.addAction(Intent.ACTION_QUERY_PACKAGE_RESTART);
             filter.addDataScheme(IntentFilter.SCHEME_PACKAGE);
-            getContext().registerReceiverForAllUsers(this, filter,
-                    /* broadcastPermission */ null, /* scheduler */ null);
+            getContext().registerReceiver(this, filter);
             // Register for events related to sdcard installation.
             IntentFilter sdFilter = new IntentFilter();
             sdFilter.addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE);
             sdFilter.addAction(Intent.ACTION_USER_STOPPED);
             sdFilter.addAction(Intent.ACTION_UID_REMOVED);
-            getContext().registerReceiverForAllUsers(this, sdFilter,
-                    /* broadcastPermission */ null, /* scheduler */ null);
+            getContext().registerReceiver(this, sdFilter);
         }
 
         @Override

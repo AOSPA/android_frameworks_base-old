@@ -99,9 +99,9 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
             calculateApp(app, uid, powerPerPacketMah, total, query);
         }
 
-        final long totalConsumptionUC = batteryStats.getMobileRadioMeasuredBatteryConsumptionUC();
-        final int powerModel = getPowerModel(totalConsumptionUC, query);
-        calculateRemaining(total, powerModel, batteryStats, rawRealtimeUs, totalConsumptionUC);
+        final long consumptionUC = batteryStats.getMobileRadioMeasuredBatteryConsumptionUC();
+        final int powerModel = getPowerModel(consumptionUC, query);
+        calculateRemaining(total, powerModel, batteryStats, rawRealtimeUs, consumptionUC);
 
         if (total.remainingPowerMah != 0 || total.totalAppPowerMah != 0) {
             builder.getAggregateBatteryConsumerBuilder(
@@ -229,13 +229,12 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
 
     private void calculateRemaining(PowerAndDuration total,
             @BatteryConsumer.PowerModel int powerModel, BatteryStats batteryStats,
-            long rawRealtimeUs, long totalConsumptionUC) {
+            long rawRealtimeUs, long consumptionUC) {
         long signalTimeMs = 0;
         double powerMah = 0;
 
         if (powerModel == BatteryConsumer.POWER_MODEL_MEASURED_ENERGY) {
-            powerMah = uCtoMah(totalConsumptionUC) - total.totalAppPowerMah;
-            if (powerMah < 0) powerMah = 0;
+            powerMah = uCtoMah(consumptionUC);
         }
 
         for (int i = 0; i < NUM_SIGNAL_STRENGTH_LEVELS; i++) {

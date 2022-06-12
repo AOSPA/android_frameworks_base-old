@@ -658,14 +658,7 @@ public class NotificationManagerService extends SystemService {
             return mBuffer.descendingIterator();
         }
 
-        public StatusBarNotification[] getArray(UserManager um, int count, boolean includeSnoozed) {
-            ArrayList<Integer> currentUsers = new ArrayList<>();
-            currentUsers.add(UserHandle.USER_ALL);
-            Binder.withCleanCallingIdentity(() -> {
-                for (int user : um.getProfileIds(ActivityManager.getCurrentUser(), false)) {
-                    currentUsers.add(user);
-                }
-            });
+        public StatusBarNotification[] getArray(int count, boolean includeSnoozed) {
             synchronized (mBufferLock) {
                 if (count == 0) count = mBufferSize;
                 List<StatusBarNotification> a = new ArrayList();
@@ -674,10 +667,8 @@ public class NotificationManagerService extends SystemService {
                 while (iter.hasNext() && i < count) {
                     Pair<StatusBarNotification, Integer> pair = iter.next();
                     if (pair.second != REASON_SNOOZED || includeSnoozed) {
-                        if (currentUsers.contains(pair.first.getUserId())) {
-                            i++;
-                            a.add(pair.first);
-                        }
+                        i++;
+                        a.add(pair.first);
                     }
                 }
                 return a.toArray(new StatusBarNotification[a.size()]);
@@ -4051,32 +4042,22 @@ public class NotificationManagerService extends SystemService {
                     android.Manifest.permission.ACCESS_NOTIFICATIONS,
                     "NotificationManagerService.getActiveNotifications");
 
-            ArrayList<StatusBarNotification> tmp = new ArrayList<>();
+            StatusBarNotification[] tmp = null;
             int uid = Binder.getCallingUid();
-
-            ArrayList<Integer> currentUsers = new ArrayList<>();
-            currentUsers.add(UserHandle.USER_ALL);
-            Binder.withCleanCallingIdentity(() -> {
-                for (int user : mUm.getProfileIds(ActivityManager.getCurrentUser(), false)) {
-                    currentUsers.add(user);
-                }
-            });
 
             // noteOp will check to make sure the callingPkg matches the uid
             if (mAppOps.noteOpNoThrow(AppOpsManager.OP_ACCESS_NOTIFICATIONS, uid, callingPkg,
                     callingAttributionTag, null)
                     == AppOpsManager.MODE_ALLOWED) {
                 synchronized (mNotificationLock) {
+                    tmp = new StatusBarNotification[mNotificationList.size()];
                     final int N = mNotificationList.size();
-                    for (int i = 0; i < N; i++) {
-                        final StatusBarNotification sbn = mNotificationList.get(i).getSbn();
-                        if (currentUsers.contains(sbn.getUserId())) {
-                            tmp.add(sbn);
-                        }
+                    for (int i=0; i<N; i++) {
+                        tmp[i] = mNotificationList.get(i).getSbn();
                     }
                 }
             }
-            return tmp.toArray(new StatusBarNotification[tmp.size()]);
+            return tmp;
         }
 
         /**
@@ -4185,7 +4166,7 @@ public class NotificationManagerService extends SystemService {
                     callingAttributionTag, null)
                     == AppOpsManager.MODE_ALLOWED) {
                 synchronized (mArchive) {
-                    tmp = mArchive.getArray(mUm, count, includeSnoozed);
+                    tmp = mArchive.getArray(count, includeSnoozed);
                 }
             }
             return tmp;
@@ -7714,9 +7695,7 @@ public class NotificationManagerService extends SystemService {
 
             int index = mToastQueue.indexOf(record);
             if (index >= 0) {
-                ToastRecord toast = mToastQueue.remove(index);
-                mWindowManagerInternal.removeWindowToken(
-                        toast.windowToken, true /* removeWindows */, toast.displayId);
+                mToastQueue.remove(index);
             }
             record = (mToastQueue.size() > 0) ? mToastQueue.get(0) : null;
         }
@@ -10075,10 +10054,10 @@ public class NotificationManagerService extends SystemService {
                 boolean isPrimary, boolean enabled, boolean userSet) {
             super.setPackageOrComponentEnabled(pkgOrComponent, userId, isPrimary, enabled, userSet);
 
-            mContext.sendBroadcastAsUser(
+            getContext().sendBroadcastAsUser(
                     new Intent(ACTION_NOTIFICATION_LISTENER_ENABLED_CHANGED)
                             .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY),
-                    UserHandle.of(userId), null);
+                    UserHandle.ALL, null);
         }
 
         @Override

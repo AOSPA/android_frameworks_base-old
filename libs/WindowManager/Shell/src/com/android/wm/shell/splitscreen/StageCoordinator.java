@@ -365,10 +365,8 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
     void startTasksWithLegacyTransition(int mainTaskId, @Nullable Bundle mainOptions,
             int sideTaskId, @Nullable Bundle sideOptions, @SplitPosition int sidePosition,
             float splitRatio, RemoteAnimationAdapter adapter) {
-        // Ensure divider is invisible before transition.
-        setDividerVisibility(false /* visible */);
         // Init divider first to make divider leash for remote animation target.
-        mSplitLayout.init();
+        setDividerVisibility(true /* visible */);
         // Set false to avoid record new bounds with old task still on top;
         mShouldUpdateRecents = false;
         final WindowContainerTransaction wct = new WindowContainerTransaction();
@@ -398,7 +396,6 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                             public void onAnimationFinished() throws RemoteException {
                                 mIsDividerRemoteAnimating = false;
                                 mShouldUpdateRecents = true;
-                                setDividerVisibility(true /* visible */);
                                 mSyncQueue.queue(evictWct);
                                 mSyncQueue.runInSync(t -> applyDividerVisibility(t));
                                 finishedCallback.onAnimationFinished();
@@ -423,7 +420,6 @@ class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             public void onAnimationCancelled() {
                 mIsDividerRemoteAnimating = false;
                 mShouldUpdateRecents = true;
-                setDividerVisibility(true /* visible */);
                 mSyncQueue.queue(evictWct);
                 mSyncQueue.runInSync(t -> applyDividerVisibility(t));
                 try {

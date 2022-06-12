@@ -17,7 +17,6 @@
 
 package android.app.admin;
 
-import android.accounts.Account;
 import android.app.admin.NetworkEvent;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
@@ -97,8 +96,6 @@ interface IDevicePolicyManager {
     boolean isUsingUnifiedPassword(in ComponentName admin);
     int getCurrentFailedPasswordAttempts(int userHandle, boolean parent);
     int getProfileWithMinimumFailedPasswordsForWipe(int userHandle, boolean parent);
-
-    void finalizeWorkProfileProvisioning(in UserHandle managedProfileUser, in Account migratedAccount);
 
     void setMaximumFailedPasswordsForWipe(in ComponentName admin, int num, boolean parent);
     int getMaximumFailedPasswordsForWipe(in ComponentName admin, int userHandle, boolean parent);
@@ -267,8 +264,7 @@ interface IDevicePolicyManager {
     int getLogoutUserId();
     void clearLogoutUser();
     List<UserHandle> getSecondaryUsers(in ComponentName who);
-    void acknowledgeNewUserDisclaimer();
-    boolean isNewUserDisclaimerAcknowledged();
+    void resetNewUserDisclaimer();
 
     void enableSystemApp(in ComponentName admin, in String callerPackage, in String packageName);
     int enableSystemAppWithIntent(in ComponentName admin, in String callerPackage, in Intent intent);

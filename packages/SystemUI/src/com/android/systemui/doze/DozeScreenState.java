@@ -105,7 +105,17 @@ public class DozeScreenState implements DozeMachine.Part {
 
         updateUdfpsController();
         if (mUdfpsController == null) {
-            mAuthController.addCallback(mAuthControllerCallback);
+            mAuthController.addCallback(new AuthController.Callback() {
+                @Override
+                public void onAllAuthenticatorsRegistered() {
+                    updateUdfpsController();
+                }
+
+                @Override
+                public void onEnrollmentsChanged() {
+                    updateUdfpsController();
+                }
+            });
         }
     }
 
@@ -115,11 +125,6 @@ public class DozeScreenState implements DozeMachine.Part {
         } else {
             mUdfpsController = null;
         }
-    }
-
-    @Override
-    public void destroy() {
-        mAuthController.removeCallback(mAuthControllerCallback);
     }
 
     @Override
@@ -217,16 +222,4 @@ public class DozeScreenState implements DozeMachine.Part {
             mWakeLock.setAcquired(false);
         }
     }
-
-    private final AuthController.Callback mAuthControllerCallback = new AuthController.Callback() {
-        @Override
-        public void onAllAuthenticatorsRegistered() {
-            updateUdfpsController();
-        }
-
-        @Override
-        public void onEnrollmentsChanged() {
-            updateUdfpsController();
-        }
-    };
 }

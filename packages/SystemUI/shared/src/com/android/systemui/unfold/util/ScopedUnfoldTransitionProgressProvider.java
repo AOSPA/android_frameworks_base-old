@@ -111,7 +111,6 @@ public final class ScopedUnfoldTransitionProgressProvider implements
     @Override
     public void destroy() {
         mSource.removeCallback(this);
-        mSource.destroy();
     }
 
     @Override

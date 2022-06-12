@@ -462,9 +462,9 @@ public class AlarmManagerServiceTest {
 
         final ArgumentCaptor<AlarmManagerService.UninstallReceiver> packageReceiverCaptor =
                 ArgumentCaptor.forClass(AlarmManagerService.UninstallReceiver.class);
-        verify(mMockContext).registerReceiverForAllUsers(packageReceiverCaptor.capture(),
+        verify(mMockContext).registerReceiver(packageReceiverCaptor.capture(),
                 argThat((filter) -> filter.hasAction(Intent.ACTION_PACKAGE_ADDED)
-                        && filter.hasAction(Intent.ACTION_PACKAGE_REMOVED)), isNull(), isNull());
+                        && filter.hasAction(Intent.ACTION_PACKAGE_REMOVED)));
         mPackageChangesReceiver = packageReceiverCaptor.getValue();
 
         assertEquals(mService.mExactAlarmCandidates, Collections.emptySet());

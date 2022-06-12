@@ -147,7 +147,6 @@ import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
-import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.RemoteInputController;
@@ -670,9 +669,7 @@ public class NotificationPanelViewController extends PanelViewController {
             NotificationLockscreenUserManager notificationLockscreenUserManager,
             NotificationEntryManager notificationEntryManager,
             KeyguardStateController keyguardStateController,
-            StatusBarStateController statusBarStateController,
-            NotificationShadeWindowController notificationShadeWindowController,
-            DozeLog dozeLog,
+            StatusBarStateController statusBarStateController, DozeLog dozeLog,
             DozeParameters dozeParameters, CommandQueue commandQueue, VibratorHelper vibratorHelper,
             LatencyTracker latencyTracker, PowerManager powerManager,
             AccessibilityManager accessibilityManager, @DisplayId int displayId,
@@ -725,7 +722,6 @@ public class NotificationPanelViewController extends PanelViewController {
                 dozeLog,
                 keyguardStateController,
                 (SysuiStatusBarStateController) statusBarStateController,
-                notificationShadeWindowController,
                 vibratorHelper,
                 statusBarKeyguardViewManager,
                 latencyTracker,
@@ -1308,11 +1304,9 @@ public class NotificationPanelViewController extends PanelViewController {
         int userSwitcherPreferredY = mStatusBarHeaderHeightKeyguard;
         boolean bypassEnabled = mKeyguardBypassController.getBypassEnabled();
         final boolean hasVisibleNotifications = mNotificationStackScrollLayoutController
-                .getVisibleNotificationCount() != 0
-                || mMediaDataManager.hasActiveMediaOrRecommendation();
+                .getVisibleNotificationCount() != 0 || mMediaDataManager.hasActiveMedia();
         boolean splitShadeWithActiveMedia =
-                mShouldUseSplitNotificationShade
-                        && mMediaDataManager.hasActiveMediaOrRecommendation();
+                mShouldUseSplitNotificationShade && mMediaDataManager.hasActiveMedia();
         if ((hasVisibleNotifications && !mShouldUseSplitNotificationShade)
                 || (splitShadeWithActiveMedia && !mDozing)) {
             mKeyguardStatusViewController.displayClock(SMALL);
@@ -1378,8 +1372,7 @@ public class NotificationPanelViewController extends PanelViewController {
 
     private void updateKeyguardStatusViewAlignment(boolean animate) {
         boolean hasVisibleNotifications = mNotificationStackScrollLayoutController
-                .getVisibleNotificationCount() != 0
-                || mMediaDataManager.hasActiveMediaOrRecommendation();
+                .getVisibleNotificationCount() != 0 || mMediaDataManager.hasActiveMedia();
         boolean shouldBeCentered =
                 !mShouldUseSplitNotificationShade || !hasVisibleNotifications || mDozing;
         if (mStatusViewCentered != shouldBeCentered) {
@@ -2594,7 +2587,7 @@ public class NotificationPanelViewController extends PanelViewController {
         float endPosition = 0;
         if (pxAmount > 0.0f) {
             if (mNotificationStackScrollLayoutController.getVisibleNotificationCount() == 0
-                    && !mMediaDataManager.hasActiveMediaOrRecommendation()) {
+                    && !mMediaDataManager.hasActiveMedia()) {
                 // No notifications are visible, let's animate to the height of qs instead
                 if (mQs != null) {
                     // Let's interpolate to the header height instead of the top padding,

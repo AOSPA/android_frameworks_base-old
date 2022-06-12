@@ -116,7 +116,6 @@ import com.android.server.pm.permission.LegacyPermissionState.PermissionState;
 import com.android.server.pm.verify.domain.DomainVerificationLegacySettings;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 import com.android.server.pm.verify.domain.DomainVerificationPersistence;
-import com.android.server.utils.Slogf;
 import com.android.server.utils.Snappable;
 import com.android.server.utils.SnapshotCache;
 import com.android.server.utils.TimingsTraceAndSlog;
@@ -945,8 +944,7 @@ public final class Settings implements Watchable, Snappable {
                     Slog.i(PackageManagerService.TAG, "Stopping package " + pkgName, e);
                 }
                 List<UserInfo> users = getAllUsers(userManager);
-                int installUserId = installUser != null ? installUser.getIdentifier()
-                        : UserHandle.USER_SYSTEM;
+                final int installUserId = installUser != null ? installUser.getIdentifier() : 0;
                 if (users != null && allowInstall) {
                     for (UserInfo user : users) {
                         // By default we consider this app to be installed
@@ -957,14 +955,8 @@ public final class Settings implements Watchable, Snappable {
                         // user we are installing for.
                         final boolean installed = installUser == null
                                 || (installUserId == UserHandle.USER_ALL
-                                    && !isAdbInstallDisallowed(userManager, user.id)
-                                    && !user.preCreated)
+                                    && !isAdbInstallDisallowed(userManager, user.id))
                                 || installUserId == user.id;
-                        if (DEBUG_MU) {
-                            Slogf.d(TAG, "createNewSetting(pkg=%s, installUserId=%s, user=%s, "
-                                    + "installed=%b)",
-                                    pkgName, installUserId, user.toFullString(), installed);
-                        }
                         pkgSetting.setUserState(user.id, 0, COMPONENT_ENABLED_STATE_DEFAULT,
                                 installed,
                                 true /*stopped*/,
@@ -1988,14 +1980,11 @@ public final class Settings implements Watchable, Snappable {
 
             serializer.startTag(null, TAG_PACKAGE_RESTRICTIONS);
 
-            if (DEBUG_MU) {
-                Slogf.i(TAG, "Writing %s (%d packages)", userPackagesStateFile,
-                        mPackages.values().size());
-            }
+            if (DEBUG_MU) Log.i(TAG, "Writing " + userPackagesStateFile);
             for (final PackageSetting pkg : mPackages.values()) {
                 final PackageUserState ustate = pkg.readUserState(userId);
                 if (DEBUG_MU) {
-                    Log.v(TAG, "  pkg=" + pkg.name + ", installed=" + ustate.installed
+                    Log.i(TAG, "  pkg=" + pkg.name + ", installed=" + ustate.installed
                             + ", state=" + ustate.enabled);
                 }
 

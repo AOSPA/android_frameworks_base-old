@@ -29,7 +29,6 @@ import android.content.res.ColorStateList;
 import android.hardware.biometrics.BiometricSourceType;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.os.Trace;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -378,7 +377,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
      */
     @Override
     public void show(Bundle options) {
-        Trace.beginSection("StatusBarKeyguardViewManager#show");
         mShowing = true;
         mNotificationShadeWindowController.setKeyguardShowing(true);
         mKeyguardStateController.notifyKeyguardState(mShowing,
@@ -386,7 +384,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         reset(true /* hideBouncerWhenShowing */);
         SysUiStatsLog.write(SysUiStatsLog.KEYGUARD_STATE_CHANGED,
                 SysUiStatsLog.KEYGUARD_STATE_CHANGED__STATE__SHOWN);
-        Trace.endSection();
     }
 
     /**
@@ -725,7 +722,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     @Override
     public void hide(long startTime, long fadeoutDuration) {
-        Trace.beginSection("StatusBarKeyguardViewManager#hide");
         mShowing = false;
         mKeyguardStateController.notifyKeyguardState(mShowing,
                 mKeyguardStateController.isOccluded());
@@ -825,7 +821,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         }
         SysUiStatsLog.write(SysUiStatsLog.KEYGUARD_STATE_CHANGED,
                 SysUiStatsLog.KEYGUARD_STATE_CHANGED__STATE__HIDDEN);
-        Trace.endSection();
     }
 
     private boolean needsBypassFading() {

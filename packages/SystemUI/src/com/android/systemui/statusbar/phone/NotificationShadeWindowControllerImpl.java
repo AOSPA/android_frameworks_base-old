@@ -107,12 +107,6 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
     private final SysuiColorExtractor mColorExtractor;
     private final UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
     private float mFaceAuthDisplayBrightness = LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
-    /**
-     * Layout params would be aggregated and dispatched all at once if this is > 0.
-     *
-     * @see #batchApplyWindowLayoutParams(Runnable)
-     */
-    private int mDeferWindowLayoutParams;
 
     @Inject
     public NotificationShadeWindowControllerImpl(Context context, WindowManager windowManager,
@@ -439,20 +433,6 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         }
     }
 
-    private void applyWindowLayoutParams() {
-        if (mDeferWindowLayoutParams == 0 && mLp != null && mLp.copyFrom(mLpChanged) != 0) {
-            mWindowManager.updateViewLayout(mNotificationShadeView, mLp);
-        }
-    }
-
-    @Override
-    public void batchApplyWindowLayoutParams(Runnable scope) {
-        mDeferWindowLayoutParams++;
-        scope.run();
-        mDeferWindowLayoutParams--;
-        applyWindowLayoutParams();
-    }
-
     private void apply(State state) {
         applyKeyguardFlags(state);
         applyFocusableFlag(state);
@@ -467,8 +447,9 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         applyHasTopUi(state);
         applyNotTouchable(state);
         applyStatusBarColorSpaceAgnosticFlag(state);
-        applyWindowLayoutParams();
-
+        if (mLp != null && mLp.copyFrom(mLpChanged) != 0) {
+            mWindowManager.updateViewLayout(mNotificationShadeView, mLp);
+        }
         if (mHasTopUi != mHasTopUiChanged) {
             whitelistIpcs(() -> {
                 try {
@@ -741,7 +722,6 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         pw.println(TAG + ":");
         pw.println("  mKeyguardMaxRefreshRate=" + mKeyguardMaxRefreshRate);
         pw.println("  mKeyguardPreferredRefreshRate=" + mKeyguardPreferredRefreshRate);
-        pw.println("  mDeferWindowLayoutParams=" + mDeferWindowLayoutParams);
         pw.println(mCurrentState);
         if (mNotificationShadeView != null && mNotificationShadeView.getViewRootImpl() != null) {
             mNotificationShadeView.getViewRootImpl().dump("  ", pw);

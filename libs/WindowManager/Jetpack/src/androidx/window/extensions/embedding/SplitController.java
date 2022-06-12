@@ -28,6 +28,7 @@ import android.app.Activity;
 import android.app.ActivityClient;
 import android.app.ActivityOptions;
 import android.app.ActivityThread;
+import android.app.Application.ActivityLifecycleCallbacks;
 import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
@@ -39,8 +40,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.window.TaskFragmentInfo;
 import android.window.WindowContainerTransaction;
-
-import androidx.window.common.EmptyLifecycleCallbacksAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -760,7 +759,11 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
         return shouldRetainAssociatedContainer(finishingContainer, associatedContainer);
     }
 
-    private final class LifecycleCallbacks extends EmptyLifecycleCallbacksAdapter {
+    private final class LifecycleCallbacks implements ActivityLifecycleCallbacks {
+
+        @Override
+        public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+        }
 
         @Override
         public void onActivityPostCreated(Activity activity, Bundle savedInstanceState) {
@@ -769,6 +772,30 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             // that we don't launch it if an activity itself already requested something to be
             // launched to side.
             SplitController.this.onActivityCreated(activity);
+        }
+
+        @Override
+        public void onActivityStarted(Activity activity) {
+        }
+
+        @Override
+        public void onActivityResumed(Activity activity) {
+        }
+
+        @Override
+        public void onActivityPaused(Activity activity) {
+        }
+
+        @Override
+        public void onActivityStopped(Activity activity) {
+        }
+
+        @Override
+        public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
+        }
+
+        @Override
+        public void onActivityDestroyed(Activity activity) {
         }
 
         @Override
@@ -806,8 +833,8 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
 
             if (shouldExpand(null, intent, getSplitRules())) {
                 setLaunchingInExpandedContainer(launchingActivity, options);
-            } else if (!splitWithLaunchingActivity(launchingActivity, intent, options)) {
-                setLaunchingInSameSideContainer(launchingActivity, intent, options);
+            } else if (!setLaunchingToSideContainer(launchingActivity, intent, options)) {
+                setLaunchingInSameContainer(launchingActivity, intent, options);
             }
 
             return super.onStartActivity(who, intent, options);
@@ -826,9 +853,9 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
         /**
          * Returns {@code true} if the activity that is going to be started via the
          * {@code intent} should be paired with the {@code launchingActivity} and is set to be
-         * launched in the side container.
+         * launched in an empty side container.
          */
-        private boolean splitWithLaunchingActivity(Activity launchingActivity, Intent intent,
+        private boolean setLaunchingToSideContainer(Activity launchingActivity, Intent intent,
                 Bundle options) {
             final SplitPairRule splitPairRule = getSplitRule(launchingActivity, intent,
                     getSplitRules());
@@ -836,14 +863,9 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                 return false;
             }
 
-            // Check if there is any existing side container to launch into.
-            TaskFragmentContainer secondaryContainer = findSideContainerForNewLaunch(
-                    launchingActivity, splitPairRule);
-            if (secondaryContainer == null) {
-                // Create a new split with an empty side container.
-                secondaryContainer = mPresenter
-                        .createNewSplitWithEmptySideContainer(launchingActivity, splitPairRule);
-            }
+            // Create a new split with an empty side container
+            final TaskFragmentContainer secondaryContainer = mPresenter
+                    .createNewSplitWithEmptySideContainer(launchingActivity, splitPairRule);
 
             // Amend the request to let the WM know that the activity should be placed in the
             // dedicated container.
@@ -853,39 +875,12 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
         }
 
         /**
-         * Finds if there is an existing split side {@link TaskFragmentContainer} that can be used
-         * for the new rule.
-         */
-        @Nullable
-        private TaskFragmentContainer findSideContainerForNewLaunch(Activity launchingActivity,
-                SplitPairRule splitPairRule) {
-            final TaskFragmentContainer launchingContainer = getContainerWithActivity(
-                    launchingActivity.getActivityToken());
-            if (launchingContainer == null) {
-                return null;
-            }
-
-            // We only check if the launching activity is the primary of the split. We will check
-            // if the launching activity is the secondary in #setLaunchingInSameSideContainer.
-            final SplitContainer splitContainer = getActiveSplitForContainer(launchingContainer);
-            if (splitContainer == null
-                    || splitContainer.getPrimaryContainer() != launchingContainer) {
-                return null;
-            }
-
-            if (canReuseContainer(splitPairRule, splitContainer.getSplitRule())) {
-                return splitContainer.getSecondaryContainer();
-            }
-            return null;
-        }
-
-        /**
          * Checks if the activity that is going to be started via the {@code intent} should be
          * paired with the existing top activity which is currently paired with the
-         * {@code launchingActivity}. If so, set the activity to be launched in the same side
+         * {@code launchingActivity}. If so, set the activity to be launched in the same
          * container of the {@code launchingActivity}.
          */
-        private void setLaunchingInSameSideContainer(Activity launchingActivity, Intent intent,
+        private void setLaunchingInSameContainer(Activity launchingActivity, Intent intent,
                 Bundle options) {
             final TaskFragmentContainer launchingContainer = getContainerWithActivity(
                     launchingActivity.getActivityToken());
@@ -916,11 +911,6 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                 return;
             }
 
-            // Can only launch in the same container if the rules share the same presentation.
-            if (!canReuseContainer(splitPairRule, splitContainer.getSplitRule())) {
-                return;
-            }
-
             // Amend the request to let the WM know that the activity should be placed in the
             // dedicated container. This is necessary for the case that the activity is started
             // into a new Task, or new Task will be escaped from the current host Task and be
@@ -936,32 +926,5 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
      */
     public boolean isActivityEmbedded(@NonNull Activity activity) {
         return mPresenter.isActivityEmbedded(activity.getActivityToken());
-    }
-
-    /**
-     * If the two rules have the same presentation, we can reuse the same {@link SplitContainer} if
-     * there is any.
-     */
-    private static boolean canReuseContainer(SplitRule rule1, SplitRule rule2) {
-        if (!isContainerReusableRule(rule1) || !isContainerReusableRule(rule2)) {
-            return false;
-        }
-        return rule1.getSplitRatio() == rule2.getSplitRatio()
-                && rule1.getLayoutDirection() == rule2.getLayoutDirection();
-    }
-
-    /**
-     * Whether it is ok for other rule to reuse the {@link TaskFragmentContainer} of the given
-     * rule.
-     */
-    private static boolean isContainerReusableRule(SplitRule rule) {
-        // We don't expect to reuse the placeholder rule.
-        if (!(rule instanceof SplitPairRule)) {
-            return false;
-        }
-        final SplitPairRule pairRule = (SplitPairRule) rule;
-
-        // Not reuse if it needs to destroy the existing.
-        return !pairRule.shouldClearTop();
     }
 }

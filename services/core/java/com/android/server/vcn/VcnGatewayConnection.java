@@ -78,7 +78,6 @@ import android.os.PowerManager.WakeLock;
 import android.os.Process;
 import android.os.SystemClock;
 import android.provider.Settings;
-import android.telephony.TelephonyManager;
 import android.util.ArraySet;
 import android.util.Slog;
 
@@ -100,7 +99,6 @@ import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -162,14 +160,6 @@ import java.util.function.Consumer;
  */
 public class VcnGatewayConnection extends StateMachine {
     private static final String TAG = VcnGatewayConnection.class.getSimpleName();
-
-    // Matches DataConnection.NETWORK_TYPE private constant, and magic string from
-    // ConnectivityManager#getNetworkTypeName()
-    @VisibleForTesting(visibility = Visibility.PRIVATE)
-    static final String NETWORK_INFO_NETWORK_TYPE_STRING = "MOBILE";
-
-    @VisibleForTesting(visibility = Visibility.PRIVATE)
-    static final String NETWORK_INFO_EXTRA_INFO = "VCN";
 
     @VisibleForTesting(visibility = Visibility.PRIVATE)
     static final InetAddress DUMMY_ADDR = InetAddresses.parseNumericAddress("192.0.2.0");
@@ -1634,12 +1624,6 @@ public class VcnGatewayConnection extends StateMachine {
             final NetworkAgentConfig nac =
                     new NetworkAgentConfig.Builder()
                             .setLegacyType(ConnectivityManager.TYPE_MOBILE)
-                            .setLegacyTypeName(NETWORK_INFO_NETWORK_TYPE_STRING)
-                            .setLegacySubType(TelephonyManager.NETWORK_TYPE_UNKNOWN)
-                            .setLegacySubTypeName(
-                                    TelephonyManager.getNetworkTypeName(
-                                            TelephonyManager.NETWORK_TYPE_UNKNOWN))
-                            .setLegacyExtraInfo(NETWORK_INFO_EXTRA_INFO)
                             .build();
 
             final VcnNetworkAgent agent =
@@ -2077,8 +2061,7 @@ public class VcnGatewayConnection extends StateMachine {
         return builder.build();
     }
 
-    @VisibleForTesting(visibility = Visibility.PRIVATE)
-    LinkProperties buildConnectedLinkProperties(
+    private static LinkProperties buildConnectedLinkProperties(
             @NonNull VcnGatewayConnectionConfig gatewayConnectionConfig,
             @NonNull IpSecTunnelInterface tunnelIface,
             @NonNull VcnChildSessionConfiguration childConfig,
@@ -2106,13 +2089,6 @@ public class VcnGatewayConnection extends StateMachine {
 
             lp.setTcpBufferSizes(underlyingLp.getTcpBufferSizes());
             underlyingMtu = underlyingLp.getMtu();
-
-            // WiFi LinkProperties uses DHCP as the sole source of MTU information, and as a result
-            // often lists MTU as 0 (see b/184678973). Use the interface MTU as retrieved by
-            // NetworkInterface APIs.
-            if (underlyingMtu == 0 && underlyingLp.getInterfaceName() != null) {
-                underlyingMtu = mDeps.getUnderlyingIfaceMtu(underlyingLp.getInterfaceName());
-            }
         } else {
             Slog.wtf(
                     TAG,
@@ -2459,17 +2435,6 @@ public class VcnGatewayConnection extends StateMachine {
         /** Gets the elapsed real time since boot, in millis. */
         public long getElapsedRealTime() {
             return SystemClock.elapsedRealtime();
-        }
-
-        /** Gets the MTU for the given underlying interface. */
-        public int getUnderlyingIfaceMtu(String ifaceName) {
-            try {
-                final NetworkInterface underlyingIface = NetworkInterface.getByName(ifaceName);
-                return underlyingIface == null ? 0 : underlyingIface.getMTU();
-            } catch (IOException e) {
-                Slog.d(TAG, "Could not get MTU of underlying network", e);
-                return 0;
-            }
         }
     }
 

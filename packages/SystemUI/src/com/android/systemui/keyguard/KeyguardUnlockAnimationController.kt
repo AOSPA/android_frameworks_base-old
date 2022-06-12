@@ -21,7 +21,6 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Matrix
-import android.util.Log
 import android.view.RemoteAnimationTarget
 import android.view.SyncRtSurfaceTransactionApplier
 import android.view.View
@@ -38,8 +37,6 @@ import com.android.systemui.statusbar.phone.BiometricUnlockController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import dagger.Lazy
 import javax.inject.Inject
-
-const val TAG = "KeyguardUnlock"
 
 /**
  * Starting scale factor for the app/launcher surface behind the keyguard, when it's animating
@@ -257,12 +254,7 @@ class KeyguardUnlockAnimationController @Inject constructor(
     }
 
     fun hideKeyguardViewAfterRemoteAnimation() {
-        if (keyguardViewController.isShowing) {
-            keyguardViewController.hide(surfaceBehindRemoteAnimationStartTime, 350)
-        } else {
-            Log.e(TAG, "#hideKeyguardViewAfterRemoteAnimation called when keyguard view is not " +
-                    "showing. Ignoring...")
-        }
+        keyguardViewController.hide(surfaceBehindRemoteAnimationStartTime, 350)
     }
 
     /**
