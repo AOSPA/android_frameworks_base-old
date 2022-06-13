@@ -846,8 +846,9 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
 
                 @Override
                 public void onLaunchAnimationCancelled() {
-                    Log.d(TAG, "Occlude launch animation cancelled. "
-                            + "Occluded state is now: " + mOccluded);
+                    setOccluded(true /* occluded */, false /* animate */);
+                    Log.d(TAG, "Occlude launch animation cancelled. Occluded state is now: "
+                            + mOccluded);
                 }
 
                 @NonNull
@@ -910,6 +911,10 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
                     if (mUnoccludeAnimator != null) {
                         mUnoccludeAnimator.cancel();
                     }
+
+                    setOccluded(false /* isOccluded */, false /* animate */);
+                    Log.d(TAG, "Unocclude animation cancelled. Occluded state is now: "
+                            + mOccluded);
                 }
 
                 @Override
@@ -2505,6 +2510,8 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
                 // supported, so it's always null.
                 mContext.getMainExecutor().execute(() -> {
                     if (finishedCallback == null) {
+                        mKeyguardUnlockAnimationControllerLazy.get()
+                                .notifyFinishedKeyguardExitAnimation(false /* cancelled */);
                         mInteractionJankMonitor.end(CUJ_LOCKSCREEN_UNLOCK_ANIMATION);
                         return;
                     }
