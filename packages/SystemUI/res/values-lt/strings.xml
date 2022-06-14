@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Pabandykite padaryti ekrano kopiją dar kartą"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Ekrano kopijos išsaugoti nepavyko"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Jūsų organizacijoje arba naudojant šią programą neleidžiama daryti ekrano kopijų"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Redaguoti"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Redaguoti ekrano kopiją"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"Bendrinti ekrano kopiją"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Patvirtinta"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"Paliesk. „Patvirtinti“, kad užbaigtumėte"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Atrakinta pagal veidą. Pasp. atrak. pikt., kad tęstumėte."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"Atrakinta pagal veidą. Paspauskite, jei norite tęsti."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"Veidas atpažintas. Paspauskite, jei norite tęsti."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"Veidas atpažintas. Tęskite paspaudę atrakinimo piktogramą."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"Autentifikuota"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"Naudoti PIN kodą"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"Naudoti atrakinimo piešinį"</string>
@@ -318,6 +319,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"Perbraukite aukštyn, kad atidarytumėte"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"Paspauskite atrakinimo piktogramą, kad atidarytumėte"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"Atrakinta pagal veidą. Pasp. atr. pikt., kad atidarytumėte."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"Atrakinta pagal veidą. Paspauskite, kad atidarytumėte."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"Veidas atpažintas. Paspauskite, kad atidarytumėte."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"Veidas atpažintas. Atidarykite paspaudę atrakin. piktogramą."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Jei norite bandyti dar kartą, perbraukite aukštyn"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Norėdami naudoti NFC, atrakinkite"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Šis įrenginys priklauso jūsų organizacijai"</string>
@@ -344,6 +348,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"Ar norite tęsti sesiją?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"Pradėti iš naujo"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"Taip, tęsti"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"Svečio režimas"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"Naudojatės svečio režimu"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"Pridėjus naują naudotoją, bus išeita iš svečio režimo ir iš dabartinės svečio sesijos bus ištrintos visos programos ir duomenys."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"Pasiekta naudotojų riba"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="one">Galite pridėti iki <xliff:g id="COUNT">%d</xliff:g> naudotojo.</item>
@@ -730,8 +737,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"Įjunkite, jei akumuliatorius gali greitai išsekti"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"Ne, ačiū"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Pat. „SysUI“ krūvą"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Programos naudoja: <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" ir "</string>
@@ -851,7 +856,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Naujo įrenginio susiejimas"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"Jei norite perduoti šį seansą, atidarykite programą."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"Nežinoma programa"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"Sustabdyti perdavimą"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"Kaip veikia transliacija"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"Transliacija"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"Netoliese esantys žmonės, turintys suderinamus „Bluetooth“ įrenginius, gali klausyti jūsų transliuojamos medijos"</string>
@@ -861,10 +865,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"Išsaugoti"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"Pradedama…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"Nepavyko transliuoti"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Versijos numeris"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Versijos numeris nukopijuotas į iškarpinę."</string>
     <string name="basic_status" msgid="2315371112182658176">"Atidaryti pokalbį"</string>

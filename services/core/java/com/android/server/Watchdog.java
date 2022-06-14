@@ -402,11 +402,16 @@ public class Watchdog {
         // potentially hold longer running operations with no guarantees about the timeliness
         // of operations there.
         //
-        // The shared foreground thread is the main checker.  It is where we
-        // will also dispatch monitor checks and do other work.
-        mMonitorChecker = new HandlerChecker(FgThread.getHandler(),
-                "foreground thread");
+        // Use a custom thread to check monitors to avoid lock contention from impacted other
+        // threads.
+        ServiceThread t = new ServiceThread("watchdog.monitor",
+                android.os.Process.THREAD_PRIORITY_DEFAULT, true /*allowIo*/);
+        t.start();
+        mMonitorChecker = new HandlerChecker(new Handler(t.getLooper()), "monitor thread");
         mHandlerCheckers.add(withDefaultTimeout(mMonitorChecker));
+
+        mHandlerCheckers.add(withDefaultTimeout(
+                new HandlerChecker(FgThread.getHandler(), "foreground thread")));
         // Add checker for main thread.  We only do a quick check since there
         // can be UI running on the thread.
         mHandlerCheckers.add(withDefaultTimeout(
@@ -884,6 +889,7 @@ public class Watchdog {
         if (halfWatchdog) {
             dropboxTag = "pre_watchdog";
             CriticalEventLog.getInstance().logHalfWatchdog(subject);
+            FrameworkStatsLog.write(FrameworkStatsLog.SYSTEM_SERVER_PRE_WATCHDOG_OCCURRED);
         } else {
             dropboxTag = "watchdog";
             CriticalEventLog.getInstance().logWatchdog(subject, errorId);

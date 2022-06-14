@@ -42,6 +42,6 @@
     <string name="consent_yes" msgid="8344487259618762872">"அனுமதி"</string>
     <string name="consent_no" msgid="2640796915611404382">"அனுமதிக்க வேண்டாம்"</string>
     <string name="consent_back" msgid="2560683030046918882">"பின்செல்"</string>
-    <string name="permission_sync_confirmation_title" msgid="667074294393493186">"ஆப்ஸ் அனுமதிகளை உங்கள் வாட்ச்சிற்கு மாற்றுதல்"</string>
-    <string name="permission_sync_summary" msgid="8873391306499120778">"உங்கள் வாட்ச் அமைவை எளிதாக்க, உங்கள் மொபைலில் வழங்கியுள்ள அனுமதிகளையே அமைவின்போது வாட்ச்சில் நிறுவப்பட்ட ஆப்ஸும் பயன்படுத்தும்.\n\n உங்கள் வாட்ச்சிலுள்ள மைக்ரோஃபோன், இருப்பிடம் ஆகியவற்றுக்கான அணுகலும் இந்த அனுமதிகளில் அடங்கக்கூடும்."</string>
+    <string name="permission_sync_confirmation_title" msgid="4409622174437248702">"&lt;strong&gt;<xliff:g id="PRIMARY_DEVICE_NAME">%2$s</xliff:g>&lt;/strong&gt; சாதனத்தில் இருக்கும் அதே அனுமதிகளை &lt;strong&gt;<xliff:g id="COMPANION_DEVICE_NAME">%1$s</xliff:g>&lt;/strong&gt; சாதனத்தில் உள்ள ஆப்ஸுக்கும் வழங்கவா?"</string>
+    <string name="permission_sync_summary" msgid="4866838188678457084">"&lt;p&gt;&lt;strong&gt;<xliff:g id="COMPANION_DEVICE_NAME_0">%1$s</xliff:g>&lt;/strong&gt;.&lt;/p&gt; &lt;p&gt; சாதனத்தில் உள்ள மைக்ரோஃபோன், கேமரா, இருப்பிட அணுகல், பாதுகாக்கவேண்டிய பிற தகவல்கள் ஆகியவற்றுக்கான அனுமதிகள் இதிலடங்கும்.&lt;strong&gt;<xliff:g id="COMPANION_DEVICE_NAME_1">%1$s</xliff:g>&lt;/strong&gt;.&lt;/p&gt; சாதனத்தில் உள்ள அமைப்புகளில் இந்த அனுமதிகளை எப்போது வேண்டுமானாலும் நீங்கள் மாற்றிக்கொள்ளலாம்."</string>
 </resources>

@@ -14,7 +14,15 @@
  * limitations under the License.
  */
 
+#include <SkBitmap.h>
+#include <SkCanvas.h>
+#include <SkColor.h>
 #include <SkFont.h>
+#include <SkFontTypes.h>
+#include <SkPaint.h>
+#include <SkPoint.h>
+#include <SkRefCnt.h>
+#include <SkRRect.h>
 #include <cstdio>
 #include "TestSceneBase.h"
 #include "hwui/Paint.h"

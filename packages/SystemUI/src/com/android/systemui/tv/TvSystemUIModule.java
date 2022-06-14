@@ -165,7 +165,8 @@ public abstract class TvSystemUIModule {
             KeyguardBypassController bypassController,
             GroupMembershipManager groupManager,
             VisualStabilityProvider visualStabilityProvider,
-            ConfigurationController configurationController) {
+            ConfigurationController configurationController,
+            @Main Handler handler) {
         return new HeadsUpManagerPhone(
                 context,
                 headsUpManagerLogger,
@@ -173,7 +174,8 @@ public abstract class TvSystemUIModule {
                 bypassController,
                 groupManager,
                 visualStabilityProvider,
-                configurationController
+                configurationController,
+                handler
         );
     }
 

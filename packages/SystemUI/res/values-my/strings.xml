@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"မျက်နှာပြင်ပုံကို ထပ်ရိုက်ကြည့်ပါ"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"ဖန်သားပြင်ဓာတ်ပုံကို သိမ်း၍မရပါ"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"ဖန်သားပြင်ဓာတ်ပုံရိုက်ကူးခြင်းကို ဤအက်ပ် သို့မဟုတ် သင်၏အဖွဲ့အစည်းက ခွင့်မပြုပါ"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"တည်းဖြတ်ရန်"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"ဖန်သားပြင်ဓာတ်ပုံကို တည်းဖြတ်သည်"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"ဖန်သားပြင်ဓာတ်ပုံကို မျှဝေနိုင်သည်"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"အတည်ပြုပြီးပြီ"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"အပြီးသတ်ရန်အတွက် \'အတည်ပြုရန်\' ကို တို့ပါ"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"မျက်နှာဖြင့် ဖွင့်ထားသည်။ ရှေ့ဆက်ရန် လော့ခ်ဖွင့်သင်္ကေတကို နှိပ်ပါ။"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"မျက်နှာဖြင့် ဖွင့်ထားသည်။ ရှေ့ဆက်ရန် နှိပ်ပါ။"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"မျက်နှာ မှတ်မိသည်။ ရှေ့ဆက်ရန် နှိပ်ပါ။"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"မျက်နှာ မှတ်မိသည်။ ရှေ့ဆက်ရန် လော့ခ်ဖွင့်သင်္ကေတကို နှိပ်ပါ။"</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"အထောက်အထားစိစစ်ပြီးပြီ"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"ပင်နံပါတ်သုံးရန်"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"ပုံစံကို သုံးရန်"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"ဖွင့်ရန် အပေါ်သို့ပွတ်ဆွဲပါ"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"ဖွင့်ရန် လော့ခ်ဖွင့်သင်္ကေတကို နှိပ်ပါ"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"မျက်နှာဖြင့် ဖွင့်ထားသည်။ ဖွင့်ရန် လော့ခ်ဖွင့်သင်္ကေတကို နှိပ်ပါ။"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"မျက်နှာဖြင့် ဖွင့်ထားသည်။ ဖွင့်ရန် နှိပ်ပါ။"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"မျက်နှာ မှတ်မိသည်။ ဖွင့်ရန် နှိပ်ပါ။"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"မျက်နှာ မှတ်မိသည်။ ဖွင့်ရန် လော့ခ်ဖွင့်သင်္ကေတကို နှိပ်ပါ။"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"ထပ်စမ်းကြည့်ရန် အပေါ်သို့ပွတ်ဆွဲပါ"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFC ကို အသုံးပြုရန် လော့ခ်ဖွင့်ပါ"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"ဤစက်ကို သင့်အဖွဲ့အစည်းက ပိုင်ဆိုင်သည်"</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"သင်၏ စက်ရှင်ကို ဆက်လုပ်လိုပါသလား။"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"ပြန်စပါ"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"ဆက်လုပ်ပါ"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"ဧည့်သည်မုဒ်"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"သင်သည် ဧည့်သည်မုဒ်တွင် ဖြစ်သည်"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"အသုံးပြုသူ အသစ်ထည့်ခြင်းက ဧည့်သည်မုဒ်မှ ထွက်သွားမည်ဖြစ်ပြီး လက်ရှိဧည့်သည် စက်ရှင်မှ အက်ပ်နှင့် ဒေတာအားလုံးကို ဖျက်လိုက်ပါမည်။"</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"အသုံးပြုသူ အကန့်အသတ် ပြည့်သွားပါပြီ"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other">အသုံးပြုသူ <xliff:g id="COUNT">%d</xliff:g> ဦးအထိ ထည့်နိုင်သည်။</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"ဘက်ထရီကုန်ခါနီးတွင် ဖွင့်ပါ"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"မလိုပါ"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"အပလီကေးရှင်းများက သင်၏ <xliff:g id="TYPES_LIST">%s</xliff:g> ကို အသုံးပြုနေသည်။"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">"၊ "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" နှင့် "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"စက်အသစ် တွဲချိတ်ရန်"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"အက်ပ်ဖွင့်ပြီး ဤစက်ရှင်ကို ကာစ်လုပ်နိုင်သည်။"</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"အမည်မသိ အက်ပ်"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"ကာစ် ရပ်ရန်"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"ထုတ်လွှင့်မှုဆောင်ရွက်ပုံ"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"ထုတ်လွှင့်ခြင်း"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"အနီးရှိတွဲသုံးနိုင်သော ဘလူးတုသ်သုံးစက် အသုံးပြုသူများက သင်ထုတ်လွှင့်နေသော မီဒီယာကို နားဆင်နိုင်သည်"</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"သိမ်းရန်"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"စတင်နေသည်…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"ထုတ်လွှင့်၍ မရပါ"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"တည်ဆောက်မှုနံပါတ်"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"တည်ဆောက်မှုနံပါတ်ကို ကလစ်ဘုတ်သို့ မိတ္တူကူးပြီးပါပြီ။"</string>
     <string name="basic_status" msgid="2315371112182658176">"စကားဝိုင်းကို ဖွင့်ရန်"</string>

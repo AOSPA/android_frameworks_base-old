@@ -50,6 +50,7 @@
 #include <nativehelper/ScopedLocalRef.h>
 #include <nativehelper/ScopedPrimitiveArray.h>
 #include <nativehelper/ScopedUtfChars.h>
+#include <server_configurable_flags/get_flags.h>
 #include <ui/Region.h>
 #include <utils/Log.h>
 #include <utils/Looper.h>
@@ -70,7 +71,6 @@
 
 using android::base::ParseUint;
 using android::base::StringPrintf;
-using android::os::BlockUntrustedTouchesMode;
 using android::os::InputEventInjectionResult;
 using android::os::InputEventInjectionSync;
 
@@ -87,6 +87,13 @@ namespace android {
 // where the speed ranges from -7 to + 7 and is supplied by the user.
 static const float POINTER_SPEED_EXPONENT = 1.0f / 4;
 
+// Category (=namespace) name for the input settings that are applied at boot time
+static const char* INPUT_NATIVE_BOOT = "input_native_boot";
+/**
+ * Feature flag name. This flag determines which VelocityTracker strategy is used by default.
+ */
+static const char* VELOCITYTRACKER_STRATEGY = "velocitytracker_strategy";
+
 static struct {
     jclass clazz;
     jmethodID notifyConfigurationChanged;
@@ -100,13 +107,11 @@ static struct {
     jmethodID notifySensorEvent;
     jmethodID notifySensorAccuracy;
     jmethodID notifyVibratorState;
-    jmethodID notifyUntrustedTouch;
     jmethodID filterInputEvent;
     jmethodID interceptKeyBeforeQueueing;
     jmethodID interceptMotionBeforeQueueingNonInteractive;
     jmethodID interceptKeyBeforeDispatching;
     jmethodID dispatchUnhandledKey;
-    jmethodID checkInjectEventsPermission;
     jmethodID onPointerDisplayIdChanged;
     jmethodID onPointerDownOutsideFocus;
     jmethodID getVirtualKeyQuietTimeMillis;
@@ -322,7 +327,6 @@ public:
     void notifySensorAccuracy(int32_t deviceId, InputDeviceSensorType sensorType,
                               InputDeviceSensorAccuracy accuracy) override;
     void notifyVibratorState(int32_t deviceId, bool isOn) override;
-    void notifyUntrustedTouch(const std::string& obscuringPackage) override;
     bool filterInputEvent(const InputEvent* inputEvent, uint32_t policyFlags) override;
     void getDispatcherConfiguration(InputDispatcherConfiguration* outConfig) override;
     void interceptKeyBeforeQueueing(const KeyEvent* keyEvent, uint32_t& policyFlags) override;
@@ -333,7 +337,6 @@ public:
     bool dispatchUnhandledKey(const sp<IBinder>& token, const KeyEvent* keyEvent,
                               uint32_t policyFlags, KeyEvent* outFallbackKeyEvent) override;
     void pokeUserActivity(nsecs_t eventTime, int32_t eventType, int32_t displayId) override;
-    bool checkInjectEventsPermissionNonReentrant(int32_t injectorPid, int32_t injectorUid) override;
     void onPointerDownOutsideFocus(const sp<IBinder>& touchedToken) override;
     void setPointerCapture(const PointerCaptureRequest& request) override;
     void notifyDropWindow(const sp<IBinder>& token, float x, float y) override;
@@ -883,17 +886,6 @@ void NativeInputManager::notifyInputChannelBroken(const sp<IBinder>& token) {
     }
 }
 
-void NativeInputManager::notifyUntrustedTouch(const std::string& obscuringPackage) {
-#if DEBUG_INPUT_DISPATCHER_POLICY
-    ALOGD("notifyUntrustedTouch - obscuringPackage=%s", obscuringPackage.c_str());
-#endif
-    ATRACE_CALL();
-    JNIEnv* env = jniEnv();
-    jstring jPackage = env->NewStringUTF(obscuringPackage.c_str());
-    env->CallVoidMethod(mServiceObj, gServiceClassInfo.notifyUntrustedTouch, jPackage);
-    checkAndClearExceptionFromCallback(env, "notifyUntrustedTouch");
-}
-
 void NativeInputManager::notifyFocusChanged(const sp<IBinder>& oldToken,
         const sp<IBinder>& newToken) {
 #if DEBUG_INPUT_DISPATCHER_POLICY
@@ -1380,19 +1372,6 @@ void NativeInputManager::pokeUserActivity(nsecs_t eventTime, int32_t eventType, 
     android_server_PowerManagerService_userActivity(eventTime, eventType, displayId);
 }
 
-bool NativeInputManager::checkInjectEventsPermissionNonReentrant(int32_t injectorPid,
-                                                                 int32_t injectorUid) {
-    ATRACE_CALL();
-    JNIEnv* env = jniEnv();
-    jboolean result =
-            env->CallBooleanMethod(mServiceObj, gServiceClassInfo.checkInjectEventsPermission,
-                                   injectorPid, injectorUid);
-    if (checkAndClearExceptionFromCallback(env, "checkInjectEventsPermission")) {
-        result = false;
-    }
-    return result;
-}
-
 void NativeInputManager::onPointerDownOutsideFocus(const sp<IBinder>& touchedToken) {
     ATRACE_CALL();
     JNIEnv* env = jniEnv();
@@ -1701,18 +1680,12 @@ static void nativeSetMaximumObscuringOpacityForTouch(JNIEnv* env, jobject native
     im->getInputManager()->getDispatcher().setMaximumObscuringOpacityForTouch(opacity);
 }
 
-static void nativeSetBlockUntrustedTouchesMode(JNIEnv* env, jobject nativeImplObj, jint mode) {
-    NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
-
-    im->getInputManager()->getDispatcher().setBlockUntrustedTouchesMode(
-            static_cast<BlockUntrustedTouchesMode>(mode));
-}
-
 static jint nativeInjectInputEvent(JNIEnv* env, jobject nativeImplObj, jobject inputEventObj,
-                                   jint injectorPid, jint injectorUid, jint syncMode,
+                                   jboolean injectIntoUid, jint uid, jint syncMode,
                                    jint timeoutMillis, jint policyFlags) {
     NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
 
+    const std::optional<int32_t> targetUid = injectIntoUid ? std::make_optional(uid) : std::nullopt;
     // static_cast is safe because the value was already checked at the Java layer
     InputEventInjectionSync mode = static_cast<InputEventInjectionSync>(syncMode);
 
@@ -1725,8 +1698,7 @@ static jint nativeInjectInputEvent(JNIEnv* env, jobject nativeImplObj, jobject i
         }
 
         const InputEventInjectionResult result =
-                im->getInputManager()->getDispatcher().injectInputEvent(&keyEvent, injectorPid,
-                                                                        injectorUid, mode,
+                im->getInputManager()->getDispatcher().injectInputEvent(&keyEvent, targetUid, mode,
                                                                         std::chrono::milliseconds(
                                                                                 timeoutMillis),
                                                                         uint32_t(policyFlags));
@@ -1739,8 +1711,8 @@ static jint nativeInjectInputEvent(JNIEnv* env, jobject nativeImplObj, jobject i
         }
 
         const InputEventInjectionResult result =
-                im->getInputManager()->getDispatcher().injectInputEvent(motionEvent, injectorPid,
-                                                                        injectorUid, mode,
+                im->getInputManager()->getDispatcher().injectInputEvent(motionEvent, targetUid,
+                                                                        mode,
                                                                         std::chrono::milliseconds(
                                                                                 timeoutMillis),
                                                                         uint32_t(policyFlags));
@@ -2117,8 +2089,10 @@ static void nativeReloadDeviceAliases(JNIEnv* env, jobject nativeImplObj) {
 static std::string dumpInputProperties() {
     std::string out = "Input properties:\n";
     const std::string strategy =
-            sysprop::InputProperties::velocitytracker_strategy().value_or("default");
-    out += "  persist.input.velocitytracker.strategy = " + strategy + "\n";
+            server_configurable_flags::GetServerConfigurableFlag(INPUT_NATIVE_BOOT,
+                                                                 VELOCITYTRACKER_STRATEGY,
+                                                                 "default");
+    out += "  velocitytracker_strategy (flag value) = " + strategy + "\n";
     out += "\n";
     return out;
 }
@@ -2344,8 +2318,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"setInTouchMode", "(ZIIZ)Z", (void*)nativeSetInTouchMode},
         {"setMaximumObscuringOpacityForTouch", "(F)V",
          (void*)nativeSetMaximumObscuringOpacityForTouch},
-        {"setBlockUntrustedTouchesMode", "(I)V", (void*)nativeSetBlockUntrustedTouchesMode},
-        {"injectInputEvent", "(Landroid/view/InputEvent;IIIII)I", (void*)nativeInjectInputEvent},
+        {"injectInputEvent", "(Landroid/view/InputEvent;ZIIII)I", (void*)nativeInjectInputEvent},
         {"verifyInputEvent", "(Landroid/view/InputEvent;)Landroid/view/VerifiedInputEvent;",
          (void*)nativeVerifyInputEvent},
         {"toggleCapsLock", "(I)V", (void*)nativeToggleCapsLock},
@@ -2463,9 +2436,6 @@ int register_android_server_InputManager(JNIEnv* env) {
 
     GET_METHOD_ID(gServiceClassInfo.notifyVibratorState, clazz, "notifyVibratorState", "(IZ)V");
 
-    GET_METHOD_ID(gServiceClassInfo.notifyUntrustedTouch, clazz, "notifyUntrustedTouch",
-                  "(Ljava/lang/String;)V");
-
     GET_METHOD_ID(gServiceClassInfo.notifyNoFocusedWindowAnr, clazz, "notifyNoFocusedWindowAnr",
                   "(Landroid/view/InputApplicationHandle;)V");
 
@@ -2491,9 +2461,6 @@ int register_android_server_InputManager(JNIEnv* env) {
     GET_METHOD_ID(gServiceClassInfo.dispatchUnhandledKey, clazz,
             "dispatchUnhandledKey",
             "(Landroid/os/IBinder;Landroid/view/KeyEvent;I)Landroid/view/KeyEvent;");
-
-    GET_METHOD_ID(gServiceClassInfo.checkInjectEventsPermission, clazz,
-                  "checkInjectEventsPermission", "(II)Z");
 
     GET_METHOD_ID(gServiceClassInfo.onPointerDisplayIdChanged, clazz, "onPointerDisplayIdChanged",
                   "(IFF)V");

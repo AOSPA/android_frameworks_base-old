@@ -1958,8 +1958,10 @@ static void nativeSetFrameTimelineVsync(JNIEnv* env, jclass clazz, jlong transac
                                         jlong frameTimelineVsyncId) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
 
-    transaction->setFrameTimelineInfo(
-            {frameTimelineVsyncId, android::os::IInputConstants::INVALID_INPUT_EVENT_ID});
+    FrameTimelineInfo ftInfo;
+    ftInfo.vsyncId = frameTimelineVsyncId;
+    ftInfo.inputEventId = android::os::IInputConstants::INVALID_INPUT_EVENT_ID;
+    transaction->setFrameTimelineInfo(ftInfo);
 }
 
 static void nativeAddTransactionCommittedListener(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -2044,7 +2046,7 @@ static jlong nativeCreateJankDataListenerWrapper(JNIEnv* env, jclass clazz,
 }
 
 static jint nativeGetGPUContextPriority(JNIEnv* env, jclass clazz) {
-    return static_cast<jint>(SurfaceComposerClient::getGPUContextPriority());
+    return static_cast<jint>(SurfaceComposerClient::getGpuContextPriority());
 }
 
 static void nativeSetTransformHint(JNIEnv* env, jclass clazz, jlong nativeSurfaceControl,

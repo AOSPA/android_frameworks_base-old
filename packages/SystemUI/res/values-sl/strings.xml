@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Poskusite znova ustvariti posnetek zaslona"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Posnetka zaslona ni mogoče shraniti"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Aplikacija ali vaša organizacija ne dovoljuje posnetkov zaslona"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Uredi"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Urejanje posnetka zaslona"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"Deljenje posnetka zaslona"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Potrjeno"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"Za dokončanje se dotaknite »Potrdite«"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Odklenjeno z obrazom. Za nadaljevanje pritisnite ikono za odklepanje."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"Odklenjeno z obrazom. Pritisnite za nadaljevanje."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"Obraz je prepoznan. Pritisnite za nadaljevanje."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"Obraz je prepoznan. Za nadaljevanje pritisnite ikono za odklepanje."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"Preverjena pristnost"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"Uporabi kodo PIN"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"Uporabi vzorec"</string>
@@ -318,6 +319,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"Povlecite navzgor, da odprete"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"Za odpiranje pritisnite ikono za odklepanje."</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"Odklenjeno z obrazom. Za odpiranje pritisnite ikono za odklepanje."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"Odklenjeno z obrazom. Pritisnite za odpiranje."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"Obraz je prepoznan. Pritisnite za odpiranje."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"Obraz je prepoznan. Za odpiranje pritisnite ikono za odklepanje."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Povlecite navzgor za vnovičen poskus"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Odklenite napravo, če želite uporabljati NFC."</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Ta naprava pripada vaši organizaciji"</string>
@@ -344,6 +348,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"Želite nadaljevati sejo?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"Začni znova"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"Da, nadaljuj"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"Način za goste"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"Ste v načinu za goste"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"Če dodate novega uporabnika, se bo način za goste zaprl, aplikacije in podatki v trenutni seji gosta pa bodo izbrisani."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"Omejitev uporabnikov je dosežena"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="one">Dodate lahko do <xliff:g id="COUNT">%d</xliff:g> uporabnika.</item>
@@ -730,8 +737,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"Vklop, če je verjetno, da se bo baterija izpraznila"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"Ne, hvala"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Izvoz kopice SysUI"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Aplikacije uporabljajo <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" in "</string>
@@ -851,7 +856,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Seznanitev nove naprave"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"Če želite predvajati to sejo, odprite aplikacijo."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"Neznana aplikacija"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"Ustavi predvajanje"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"Kako deluje oddajanje"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"Oddajanje"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"Osebe v bližini z združljivo napravo Bluetooth lahko poslušajo predstavnost, ki jo oddajate."</string>
@@ -861,10 +865,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"Shrani"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"Začenjanje …"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"Oddajanje ni mogoče"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Delovna različica"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Delovna različica je bila kopirana v odložišče."</string>
     <string name="basic_status" msgid="2315371112182658176">"Odprt pogovor"</string>

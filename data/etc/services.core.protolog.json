@@ -889,6 +889,12 @@
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1256520588": {
+      "message": "performEnableScreen: mDisplayEnabled=%b mForceDisplayEnabled=%b mShowingBootMessages=%b mSystemBooted=%b. %s",
+      "level": "INFO",
+      "group": "WM_DEBUG_BOOT",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "-1248645819": {
       "message": "\tAdd container=%s",
       "level": "DEBUG",
@@ -1519,12 +1525,6 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/TransitionController.java"
     },
-    "-618015844": {
-      "message": "performEnableScreen: mDisplayEnabled=%b mForceDisplayEnabled=%b mShowingBootMessages=%b mSystemBooted=%b mOnlyCore=%b. %s",
-      "level": "INFO",
-      "group": "WM_DEBUG_BOOT",
-      "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
     "-597091183": {
       "message": "Delete TaskDisplayArea uid=%d",
       "level": "VERBOSE",
@@ -2077,6 +2077,12 @@
       "group": "WM_DEBUG_IME",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
+    "-57572004": {
+      "message": "applyAnimation: anim=%s animAttr=0x%x transit=%s isEntrance=%b  canCustomizeAppTransition=%b Callers=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
+      "at": "com\/android\/server\/wm\/AppTransition.java"
+    },
     "-55185509": {
       "message": "setFocusedTask: taskId=%d touchedActivity=%s",
       "level": "DEBUG",
@@ -2148,6 +2154,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
+    },
+    "25888308": {
+      "message": "Resize reasons for w=%s:  %s configChanged=%b dragResizingChanged=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_RESIZE",
+      "at": "com\/android\/server\/wm\/WindowState.java"
     },
     "35398067": {
       "message": "goodToGo(): onAnimationStart, transit=%s, apps=%d, wallpapers=%d, nonApps=%d",
@@ -2802,12 +2814,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_FOCUS_LIGHT",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
-    },
-    "625447638": {
-      "message": "Resize reasons for w=%s:  %s configChanged=%b dragResizingChanged=%b reportOrientationChanged=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_RESIZE",
-      "at": "com\/android\/server\/wm\/WindowState.java"
     },
     "628276090": {
       "message": "Delaying app transition for screen rotation animation to finish",
@@ -4201,6 +4207,12 @@
       "group": "WM_DEBUG_ANIM",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "2079410261": {
+      "message": "applyAnimation:  override requested, but it is prohibited by policy.",
+      "level": "ERROR",
+      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
+      "at": "com\/android\/server\/wm\/AppTransition.java"
+    },
     "2083556954": {
       "message": "Set mOrientationChanging of %s",
       "level": "VERBOSE",
@@ -4254,12 +4266,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayRotation.java"
-    },
-    "2137411379": {
-      "message": "applyAnimation: anim=%s animAttr=0x%x transit=%s isEntrance=%b Callers=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
-      "at": "com\/android\/server\/wm\/AppTransition.java"
     }
   },
   "groups": {

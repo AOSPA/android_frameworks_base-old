@@ -24,18 +24,12 @@ import android.annotation.Nullable;
 import android.app.ActivityTaskManager;
 import android.app.IActivityTaskManager;
 import android.app.WindowConfiguration;
-import android.content.ContentResolver;
 import android.content.Context;
-import android.database.ContentObserver;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.hardware.HardwareBuffer;
-import android.net.Uri;
-import android.os.Handler;
 import android.os.RemoteException;
 import android.os.SystemProperties;
-import android.os.UserHandle;
-import android.provider.Settings.Global;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.RemoteAnimationTarget;
@@ -48,27 +42,22 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.common.RemoteCallable;
 import com.android.wm.shell.common.ShellExecutor;
-import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Controls the window animation run when a user initiates a back gesture.
  */
 public class BackAnimationController implements RemoteCallable<BackAnimationController> {
     private static final String TAG = "BackAnimationController";
-    private static final int SETTING_VALUE_OFF = 0;
-    private static final int SETTING_VALUE_ON = 1;
     private static final String PREDICTIVE_BACK_PROGRESS_THRESHOLD_PROP =
             "persist.wm.debug.predictive_back_progress_threshold";
     public static final boolean IS_ENABLED =
-            SystemProperties.getInt("persist.wm.debug.predictive_back",
-                    SETTING_VALUE_ON) != SETTING_VALUE_OFF;
+            SystemProperties.getInt("persist.wm.debug.predictive_back", 1) != 0;
     private static final int PROGRESS_THRESHOLD = SystemProperties
             .getInt(PREDICTIVE_BACK_PROGRESS_THRESHOLD_PROP, -1);
-
-    private final AtomicBoolean mEnableAnimations = new AtomicBoolean(false);
+    @VisibleForTesting
+    boolean mEnableAnimations = SystemProperties.getInt(
+            "persist.wm.debug.predictive_back_anim", 0) != 0;
 
     /**
      * Location of the initial touch event of the back gesture.
@@ -98,50 +87,21 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
     private float mProgressThreshold;
 
     public BackAnimationController(
-            @NonNull @ShellMainThread ShellExecutor shellExecutor,
-            @NonNull @ShellBackgroundThread Handler backgroundHandler,
+            @ShellMainThread ShellExecutor shellExecutor,
             Context context) {
-        this(shellExecutor, backgroundHandler, new SurfaceControl.Transaction(),
-                ActivityTaskManager.getService(), context, context.getContentResolver());
+        this(shellExecutor, new SurfaceControl.Transaction(), ActivityTaskManager.getService(),
+                context);
     }
 
     @VisibleForTesting
-    BackAnimationController(@NonNull @ShellMainThread ShellExecutor shellExecutor,
-            @NonNull @ShellBackgroundThread Handler handler,
+    BackAnimationController(@NonNull ShellExecutor shellExecutor,
             @NonNull SurfaceControl.Transaction transaction,
             @NonNull IActivityTaskManager activityTaskManager,
-            Context context, ContentResolver contentResolver) {
+            Context context) {
         mShellExecutor = shellExecutor;
         mTransaction = transaction;
         mActivityTaskManager = activityTaskManager;
         mContext = context;
-        setupAnimationDeveloperSettingsObserver(contentResolver, handler);
-    }
-
-    private void setupAnimationDeveloperSettingsObserver(
-            @NonNull ContentResolver contentResolver,
-            @NonNull @ShellBackgroundThread final Handler backgroundHandler) {
-        ContentObserver settingsObserver = new ContentObserver(backgroundHandler) {
-            @Override
-            public void onChange(boolean selfChange, Uri uri) {
-                updateEnableAnimationFromSetting();
-            }
-        };
-        contentResolver.registerContentObserver(
-                Global.getUriFor(Global.ENABLE_BACK_ANIMATION),
-                false, settingsObserver, UserHandle.USER_SYSTEM
-        );
-        updateEnableAnimationFromSetting();
-    }
-
-    @ShellBackgroundThread
-    private void updateEnableAnimationFromSetting() {
-        int settingValue = Global.getInt(mContext.getContentResolver(),
-                Global.ENABLE_BACK_ANIMATION, SETTING_VALUE_OFF);
-        boolean isEnabled = settingValue == SETTING_VALUE_ON;
-        mEnableAnimations.set(isEnabled);
-        ProtoLog.d(WM_SHELL_BACK_PREVIEW, "Back animation enabled=%s",
-                isEnabled);
     }
 
     public BackAnimation getBackAnimationImpl() {
@@ -384,7 +344,12 @@ public class BackAnimationController implements RemoteCallable<BackAnimationCont
     private boolean shouldDispatchToLauncher(int backType) {
         return backType == BackNavigationInfo.TYPE_RETURN_TO_HOME
                 && mBackToLauncherCallback != null
-                && mEnableAnimations.get();
+                && mEnableAnimations;
+    }
+
+    @VisibleForTesting
+    void setEnableAnimations(boolean shouldEnable) {
+        mEnableAnimations = shouldEnable;
     }
 
     private static void dispatchOnBackStarted(IOnBackInvokedCallback callback) {

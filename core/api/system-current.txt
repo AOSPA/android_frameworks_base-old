@@ -199,6 +199,7 @@ package android {
     field public static final String MANAGE_WEAK_ESCROW_TOKEN = "android.permission.MANAGE_WEAK_ESCROW_TOKEN";
     field public static final String MANAGE_WIFI_COUNTRY_CODE = "android.permission.MANAGE_WIFI_COUNTRY_CODE";
     field public static final String MARK_DEVICE_ORGANIZATION_OWNED = "android.permission.MARK_DEVICE_ORGANIZATION_OWNED";
+    field public static final String MEDIA_RESOURCE_OVERRIDE_PID = "android.permission.MEDIA_RESOURCE_OVERRIDE_PID";
     field public static final String MODIFY_APPWIDGET_BIND_PERMISSIONS = "android.permission.MODIFY_APPWIDGET_BIND_PERMISSIONS";
     field public static final String MODIFY_AUDIO_ROUTING = "android.permission.MODIFY_AUDIO_ROUTING";
     field public static final String MODIFY_CELL_BROADCASTS = "android.permission.MODIFY_CELL_BROADCASTS";
@@ -1050,7 +1051,7 @@ package android.app {
 
   public class WallpaperManager {
     method @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL) public void clearWallpaper(int, int);
-    method @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_DIM_AMOUNT) public float getWallpaperDimAmount();
+    method @FloatRange(from=0.0f, to=1.0f) @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_DIM_AMOUNT) public float getWallpaperDimAmount();
     method public void setDisplayOffset(android.os.IBinder, int, int);
     method @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_COMPONENT) public boolean setWallpaperComponent(android.content.ComponentName);
     method @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_DIM_AMOUNT) public void setWallpaperDimAmount(@FloatRange(from=0.0f, to=1.0f) float);
@@ -5875,7 +5876,7 @@ package android.location {
   }
 
   public class LocationManager {
-    method @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public void addProviderRequestChangedListener(@NonNull java.util.concurrent.Executor, @NonNull android.location.provider.ProviderRequest.ChangedListener);
+    method @RequiresPermission(allOf={android.Manifest.permission.LOCATION_HARDWARE, android.Manifest.permission.INTERACT_ACROSS_USERS}) public void addProviderRequestChangedListener(@NonNull java.util.concurrent.Executor, @NonNull android.location.provider.ProviderRequest.ChangedListener);
     method @Deprecated @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE) public void flushGnssBatch();
     method @Deprecated @RequiresPermission(anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}) public void getCurrentLocation(@NonNull android.location.LocationRequest, @Nullable android.os.CancellationSignal, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.location.Location>);
     method @Nullable public String getExtraLocationControllerPackage();
@@ -6334,7 +6335,7 @@ package android.media {
   }
 
   public final class MediaCodec {
-    method @NonNull @RequiresPermission("android.permission.MEDIA_RESOURCE_OVERRIDE_PID") public static android.media.MediaCodec createByCodecNameForClient(@NonNull String, int, int) throws java.io.IOException;
+    method @NonNull @RequiresPermission(android.Manifest.permission.MEDIA_RESOURCE_OVERRIDE_PID) public static android.media.MediaCodec createByCodecNameForClient(@NonNull String, int, int) throws java.io.IOException;
   }
 
   public class MediaPlayer implements android.media.AudioRouting android.media.VolumeAutomation {
@@ -11873,19 +11874,20 @@ package android.service.trust {
 package android.service.voice {
 
   public class AlwaysOnHotwordDetector implements android.service.voice.HotwordDetector {
-    method @Nullable public android.content.Intent createEnrollIntent();
-    method @Nullable public android.content.Intent createReEnrollIntent();
-    method @Nullable public android.content.Intent createUnEnrollIntent();
-    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public int getParameter(int);
+    method @Nullable public android.content.Intent createEnrollIntent() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @Nullable public android.content.Intent createReEnrollIntent() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @Nullable public android.content.Intent createUnEnrollIntent() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public int getParameter(int) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
     method public int getSupportedAudioCapabilities();
-    method public int getSupportedRecognitionModes();
-    method @Nullable @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public android.service.voice.AlwaysOnHotwordDetector.ModelParamRange queryParameter(int);
-    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public int setParameter(int, int);
-    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean startRecognition(int);
-    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean startRecognition();
-    method public boolean startRecognition(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, @Nullable android.os.PersistableBundle);
-    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean stopRecognition();
-    method public final void updateState(@Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory);
+    method public int getSupportedRecognitionModes() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @Nullable @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public android.service.voice.AlwaysOnHotwordDetector.ModelParamRange queryParameter(int) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public int setParameter(int, int) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean startRecognition(int, @NonNull byte[]) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean startRecognition(int) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean startRecognition() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method public boolean startRecognition(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, @Nullable android.os.PersistableBundle) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean stopRecognition() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method public final void updateState(@Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
     field public static final int AUDIO_CAPABILITY_ECHO_CANCELLATION = 1; // 0x1
     field public static final int AUDIO_CAPABILITY_NOISE_SUPPRESSION = 2; // 0x2
     field public static final int MODEL_PARAM_THRESHOLD_FACTOR = 0; // 0x0
@@ -11992,10 +11994,10 @@ package android.service.voice {
 
   public interface HotwordDetector {
     method public default void destroy();
-    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean startRecognition();
-    method public boolean startRecognition(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, @Nullable android.os.PersistableBundle);
-    method public boolean stopRecognition();
-    method public void updateState(@Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory);
+    method @RequiresPermission(allOf={android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.CAPTURE_AUDIO_HOTWORD}) public boolean startRecognition() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method public boolean startRecognition(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, @Nullable android.os.PersistableBundle) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method public boolean stopRecognition() throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
+    method public void updateState(@Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory) throws android.service.voice.HotwordDetector.IllegalDetectorStateException;
   }
 
   public static interface HotwordDetector.Callback {
@@ -12006,6 +12008,9 @@ package android.service.voice {
     method public void onRecognitionPaused();
     method public void onRecognitionResumed();
     method public void onRejected(@NonNull android.service.voice.HotwordRejectedResult);
+  }
+
+  public static class HotwordDetector.IllegalDetectorStateException extends android.util.AndroidException {
   }
 
   public final class HotwordRejectedResult implements android.os.Parcelable {

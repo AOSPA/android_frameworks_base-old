@@ -449,6 +449,8 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void setBouncerShowing(boolean bouncerShowing);
 
+    void setBouncerShowingOverDream(boolean bouncerShowingOverDream);
+
     void collapseShade();
 
     int getWakefulnessState();

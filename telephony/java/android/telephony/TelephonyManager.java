@@ -7779,7 +7779,7 @@ public class TelephonyManager {
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
      * TODO: remove this one. use {@link #rebootModem()} for reset type 1 and
-     * {@link #resetRadioConfig()} for reset type 3
+     * {@link #resetRadioConfig()} for reset type 3 (b/116476729)
      *
      * @param resetType reset type: 1: reload NV reset, 2: erase NV reset, 3: factory NV reset
      * @return true on success; false on any failure.
@@ -9325,6 +9325,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
+                networkTypeBitmask = checkNetworkTypeBitmask(networkTypeBitmask);
                 return telephony.setAllowedNetworkTypesForReason(getSubId(),
                         TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER, networkTypeBitmask);
             }
@@ -9332,6 +9333,20 @@ public class TelephonyManager {
             Rlog.e(TAG, "setPreferredNetworkTypeBitmask RemoteException", ex);
         }
         return false;
+    }
+
+    /**
+     * If {@link #NETWORK_TYPE_BITMASK_LTE_CA} bit is set, convert it to NETWORK_TYPE_BITMASK_LTE.
+     *
+     * @param networkTypeBitmask The networkTypeBitmask being checked
+     * @return The checked/converted networkTypeBitmask
+     */
+    private long checkNetworkTypeBitmask(@NetworkTypeBitMask long networkTypeBitmask) {
+        if ((networkTypeBitmask & NETWORK_TYPE_BITMASK_LTE_CA) != 0) {
+            networkTypeBitmask ^= NETWORK_TYPE_BITMASK_LTE_CA;
+            networkTypeBitmask |= NETWORK_TYPE_BITMASK_LTE;
+        }
+        return networkTypeBitmask;
     }
 
     /**
@@ -9360,6 +9375,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
+                allowedNetworkTypes = checkNetworkTypeBitmask(allowedNetworkTypes);
                 return telephony.setAllowedNetworkTypesForReason(getSubId(),
                         TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_CARRIER, allowedNetworkTypes);
             }
@@ -9445,6 +9461,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
+                allowedNetworkTypes = checkNetworkTypeBitmask(allowedNetworkTypes);
                 telephony.setAllowedNetworkTypesForReason(getSubId(), reason,
                         allowedNetworkTypes);
             } else {
@@ -13762,7 +13779,11 @@ public class TelephonyManager {
      */
     public static final long NETWORK_TYPE_BITMASK_LTE = (1 << (NETWORK_TYPE_LTE -1));
     /**
+     * NOT USED; this bitmask is exposed accidentally, will be deprecated in U.
+     * If used, will be converted to {@link #NETWORK_TYPE_BITMASK_LTE}.
      * network type bitmask indicating the support of radio tech LTE CA (carrier aggregation).
+     *
+     * @see #NETWORK_TYPE_BITMASK_LTE
      */
     public static final long NETWORK_TYPE_BITMASK_LTE_CA = (1 << (NETWORK_TYPE_LTE_CA -1));
 
@@ -16223,7 +16244,8 @@ public class TelephonyManager {
      * may encounter an {@link IllegalStateException} when trying to register more callbacks.
      *
      * @param executor The executor of where the callback will execute.
-     * @param callback The {@link TelephonyCallback} object to register.
+     * @param callback The {@link TelephonyCallback} object to register. The caller should hold a
+     * reference to the callback. The framework only holds a weak reference.
      */
     public void registerTelephonyCallback(@NonNull @CallbackExecutor Executor executor,
             @NonNull TelephonyCallback callback) {
@@ -16318,7 +16340,8 @@ public class TelephonyManager {
      * @param includeLocationData Specifies if the caller would like to receive
      * location related information.
      * @param executor The executor of where the callback will execute.
-     * @param callback The {@link TelephonyCallback} object to register.
+     * @param callback The {@link TelephonyCallback} object to register. The caller should hold a
+     * reference to the callback. The framework only holds a weak reference.
      */
     public void registerTelephonyCallback(@IncludeLocationData int includeLocationData,
             @NonNull @CallbackExecutor Executor executor,

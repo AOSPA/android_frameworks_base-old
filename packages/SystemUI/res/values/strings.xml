@@ -341,6 +341,12 @@
     <string name="biometric_dialog_tap_confirm">Tap Confirm to complete</string>
     <!-- Message shown when a biometric has authenticated with a user's face and is waiting for the user to confirm authentication [CHAR LIMIT=60]-->
     <string name="biometric_dialog_tap_confirm_with_face">Unlocked by face. Press the unlock icon to continue.</string>
+    <!-- Message shown when a biometric has authenticated with a user's face and is waiting for the user to confirm authentication [CHAR LIMIT=60]-->
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1">Unlocked by face. Press to continue.</string>
+    <!-- Message shown when a biometric has authenticated with a user's face and is waiting for the user to confirm authentication [CHAR LIMIT=60]-->
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2">Face recognized. Press to continue.</string>
+    <!-- Message shown when a biometric has authenticated with a user's face and is waiting for the user to confirm authentication [CHAR LIMIT=60]-->
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3">Face recognized. Press the unlock icon to continue.</string>
     <!-- Talkback string when a biometric is authenticated [CHAR LIMIT=NONE] -->
     <string name="biometric_dialog_authenticated">Authenticated</string>
 
@@ -572,6 +578,8 @@
     <!-- QuickSettings: Location [CHAR LIMIT=NONE] -->
     <string name="quick_settings_location_label">Location</string>
     <!-- QuickSettings: Location (Off) [CHAR LIMIT=NONE] -->
+    <!-- QuickSettings: Screen saver [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_screensaver_label">Screen saver</string>
     <!-- QuickSettings: Camera [CHAR LIMIT=NONE] -->
     <string name="quick_settings_camera_label">Camera access</string>
     <!-- QuickSettings: Microphone [CHAR LIMIT=NONE] -->
@@ -803,6 +811,13 @@
 
     <!-- Message shown when non-bypass face authentication succeeds and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
     <string name="keyguard_face_successful_unlock_press">Unlocked by face. Press the unlock icon to open.</string>
+    <!-- Message shown when non-bypass face authentication succeeds and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
+    <string name="keyguard_face_successful_unlock_press_alt_1">Unlocked by face. Press to open.</string>
+    <!-- Message shown when non-bypass face authentication succeeds and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
+    <string name="keyguard_face_successful_unlock_press_alt_2">Face recognized. Press to open.</string>
+    <!-- Message shown when non-bypass face authentication succeeds and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
+    <string name="keyguard_face_successful_unlock_press_alt_3">Face recognized. Press the unlock icon to open.</string>
+
 
     <!-- Message shown when face authentication fails and the pin pad is visible. [CHAR LIMIT=60] -->
     <string name="keyguard_retry">Swipe up to try again</string>
@@ -889,6 +904,17 @@
 
     <!-- Notification when resuming an existing guest session: Action that continues with the current session [CHAR LIMIT=35] -->
     <string name="guest_wipe_session_dontwipe">Yes, continue</string>
+
+    <!-- App name of the notification when guest mode is entered [CHAR LIMIT=35] -->
+    <string name="guest_notification_app_name">Guest mode</string>
+    <!-- Title of the notification when guest mode is entered [CHAR LIMIT=35] -->
+    <string name="guest_notification_session_active">You are in guest mode</string>
+
+    <!-- Additional message for add user confirmation dialog that is appended when current user is
+         guest and guest is ephemeral. This is to warn users that current guest session
+         would get removed after a new user is added and switched to [CHAR LIMIT=none] -->
+    <string name="user_add_user_message_guest_remove">\n\nAdding a new user will exit guest mode
+        and delete all apps and data from the current guest session.</string>
 
     <!-- Title for the dialog that lets users know that the maximum allowed number of users on the device has been reached. [CHAR LIMIT=35]-->
     <string name="user_limit_reached_title">User limit reached</string>
@@ -2272,8 +2298,6 @@
     <string name="media_output_dialog_launch_app_text">To cast this session, please open the app.</string>
     <!-- App name when can't get app name [CHAR LIMIT=60] -->
     <string name="media_output_dialog_unknown_launch_app_name">Unknown app</string>
-    <!-- Button text for stopping casting [CHAR LIMIT=60] -->
-    <string name="media_output_dialog_button_stop_casting">Stop casting</string>
 
     <!-- Media Output Broadcast Dialog -->
     <!-- Title for Broadcast First Notify Dialog [CHAR LIMIT=60] -->

@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Қайта скриншот жасап көріңіз"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Скриншотты сақтау мүмкін емес."</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Қолданба немесе ұйым скриншоттар түсіруге рұқсат етпейді"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Өзгерту"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Скриншотты өзгерту"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"Скриншотты бөлісу"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Расталды"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"Аяқтау үшін \"Растау\" түймесін түртіңіз."</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Бет үлгісі арқылы ашылды. Жалғастыру үшін құлыпты ашу белгішесін басыңыз."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"Бетпен ашылды. Жалғастыру үшін басыңыз."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"Бет танылды. Жалғастыру үшін басыңыз."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"Бет танылды. Жалғастыру үшін құлыпты ашу белгішесін басыңыз."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"Аутентификацияланған"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"PIN кодын пайдалану"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"Өрнекті пайдалану"</string>
@@ -314,6 +315,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"Ашу үшін жоғары қарай сырғытыңыз."</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"Ашу үшін құлыпты ашу белгішесін басыңыз."</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"Бет үлгісі арқылы ашылды. Ашу үшін құлыпты ашу белгішесін басыңыз."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"Бетпен ашылды. Ашу үшін басыңыз."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"Бет танылды. Ашу үшін басыңыз."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"Бет танылды. Ашу үшін құлыпты ашу белгішесін басыңыз."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Әрекетті қайталау үшін жоғары сырғытыңыз."</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFC пайдалану үшін құлыпты ашыңыз."</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Бұл құрылғы ұйымыңызға тиесілі."</string>
@@ -340,6 +344,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"Сеансты жалғастыру керек пе?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"Қайта бастау"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"Иә, жалғастыру"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"Қонақ режимі"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"Сіз қонақ режиміндесіз"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"Жаңа пайдаланушы қосылған кезде, қонақ режимі жабылады, ағымдағы қонақ сеансындағы барлық қолданба мен дерек жойылады."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"Пайдаланушылар саны шегіне жетті"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="other"><xliff:g id="COUNT">%d</xliff:g> пайдаланушыға дейін енгізуге болады.</item>
@@ -720,8 +727,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"Батареяның заряды бітуге жақындағанда қосыңыз."</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"Жоқ, рақмет"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Қолданбаларда <xliff:g id="TYPES_LIST">%s</xliff:g> пайдаланылуда."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" және "</string>
@@ -839,7 +844,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Жаңа құрылғымен жұптау"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"Бұл сеансты трансляциялау үшін қолданбаны ашыңыз."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"Белгісіз қолданба"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"Трансляцияны тоқтату"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"Тарату қалай жүзеге асады"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"Тарату"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"Үйлесімді Bluetooth құрылғылары бар маңайдағы адамдар сіз таратып жатқан медиамазмұнды тыңдай алады."</string>
@@ -849,10 +853,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"Сақтау"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"Басталып жатыр…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"Тарату мүмкін емес"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Құрама нөмірі"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Құрама нөмірі буферге көшірілді."</string>
     <string name="basic_status" msgid="2315371112182658176">"Ашық әңгіме"</string>

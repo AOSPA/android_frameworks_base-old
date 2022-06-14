@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Пробајте да поново направите снимак екрана"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Чување снимка екрана није успело"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Апликација или организација не дозвољавају прављење снимака екрана"</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Измени"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Измените снимак екрана"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"Делите снимак екрана"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Потврђено"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"Додирните Потврди да бисте завршили"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Откључано је лицем. Притисните икону откључавања за наставак"</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"Откључано је лицем. Притисните да бисте наставили."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"Лице је препознато. Притисните да бисте наставили."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"Лице препознато. Притисните икону откључавања за наставак."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"Идентитет је потврђен"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"Користите PIN"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"Користите шаблон"</string>
@@ -316,6 +317,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"Превуците нагоре да бисте отворили"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"Притисните икону откључавања за отварање"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"Откључано је лицем. Притисните икону откључавања за отварање"</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"Откључано је лицем. Притисните да бисте отворили."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"Лице је препознато. Притисните да бисте отворили."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"Лице препознато. Притисните икону откључавања за отварање."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Превуците нагоре да бисте пробали поново"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Откључајте да бисте користили NFC"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Овај уређај припада организацији"</string>
@@ -342,6 +346,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"Желите ли да наставите сесију?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"Почни из почетка"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"Да, настави"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"Режим госта"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"Користите режим госта"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"Додавањем новог корисника изаћи ћете из режима госта и избрисаћете све апликације и податке из актуелне сесије госта."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"Достигнут максимални број корисника"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="one">Можете да додате највише <xliff:g id="COUNT">%d</xliff:g> корисника.</item>
@@ -725,8 +732,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"Укључите ако ће батерија вероватно да се испразни"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"Не, хвала"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Издвоји SysUI мем."</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Апликације користе <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" и "</string>
@@ -845,7 +850,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Упари нови уређај"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"Да бисте пребацивали ову сесију, отворите апликацију."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"Непозната апликација"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"Заустави пребацивање"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"Како функционише емитовање"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"Емитовање"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"Људи у близини са компатибилним Bluetooth уређајима могу да слушају медијски садржај који емитујете"</string>
@@ -855,10 +859,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"Сачувај"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"Покреће се…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"Емитовање није успело"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Број верзије"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Број верзије је копиран у привремену меморију."</string>
     <string name="basic_status" msgid="2315371112182658176">"Отворите конверзацију"</string>

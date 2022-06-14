@@ -52,6 +52,7 @@ import static android.window.TransitionInfo.FLAG_SHOW_WALLPAPER;
 import static android.window.TransitionInfo.FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
 import static android.window.TransitionInfo.FLAG_TRANSLUCENT;
 
+import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_RECENTS_ANIM;
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_SPLASH_SCREEN;
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_WINDOWS_DRAWN;
 
@@ -419,7 +420,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         for (int i = mTargets.size() - 1; i >= 0; --i) {
             final WindowContainer target = mTargets.get(i);
             if (target.getParent() != null) {
-                final SurfaceControl targetLeash = getLeashSurface(target);
+                final SurfaceControl targetLeash = getLeashSurface(target, null /* t */);
                 final SurfaceControl origParent = getOrigParentSurface(target);
                 // Ensure surfaceControls are re-parented back into the hierarchy.
                 t.reparent(targetLeash, origParent);
@@ -489,7 +490,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
 
         // Commit all going-invisible containers
-        boolean activitiesWentInvisible = false;
         for (int i = 0; i < mParticipants.size(); ++i) {
             final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
             if (ar != null) {
@@ -540,7 +540,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                         }
                         ar.commitVisibility(false /* visible */, false /* performLayout */,
                                 true /* fromTransition */);
-                        activitiesWentInvisible = true;
                     }
                 }
                 if (mChanges.get(ar).mVisible != visibleAtTransitionEnd) {
@@ -567,12 +566,10 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 mController.dispatchLegacyAppTransitionFinished(ar);
             }
         }
-        if (activitiesWentInvisible) {
-            // Always schedule stop processing when transition finishes because activities don't
-            // stop while they are in a transition thus their stop could still be pending.
-            mController.mAtm.mTaskSupervisor
-                    .scheduleProcessStoppingAndFinishingActivitiesIfNeeded();
-        }
+        // Always schedule stop processing when transition finishes because activities don't
+        // stop while they are in a transition thus their stop could still be pending.
+        mController.mAtm.mTaskSupervisor
+                .scheduleProcessStoppingAndFinishingActivitiesIfNeeded();
 
         sendRemoteCallback(mClientAnimationFinishCallback);
 
@@ -675,7 +672,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
         // Resolve the animating targets from the participants
         mTargets = calculateTargets(mParticipants, mChanges);
-        final TransitionInfo info = calculateTransitionInfo(mType, mFlags, mTargets, mChanges);
+        final TransitionInfo info = calculateTransitionInfo(mType, mFlags, mTargets, mChanges,
+                transaction);
         if (mOverrideOptions != null) {
             info.setAnimationOptions(mOverrideOptions);
         }
@@ -684,8 +682,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         handleLegacyRecentsStartBehavior(dc, info);
 
         handleNonAppWindowsInTransition(dc, mType, mFlags);
-
-        reportStartReasonsToLogger();
 
         // The callback is only populated for custom activity-level client animations
         sendRemoteCallback(mClientAnimationStartCallback);
@@ -728,6 +724,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         for (int i = mParticipants.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mParticipants.valueAt(i);
             if (wc.asWindowToken() == null || !wc.isVisibleRequested()) continue;
+            // don't include transient launches, though, since those are only temporarily visible.
+            if (mTransientLaunches != null && wc.asActivityRecord() != null
+                    && mTransientLaunches.containsKey(wc.asActivityRecord())) continue;
             mVisibleAtTransitionEndTokens.add(wc.asWindowToken());
         }
 
@@ -775,6 +774,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
         mSyncId = -1;
         mOverrideOptions = null;
+
+        reportStartReasonsToLogger();
     }
 
     /**
@@ -987,11 +988,15 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         for (int i = mParticipants.size() - 1; i >= 0; --i) {
             ActivityRecord r = mParticipants.valueAt(i).asActivityRecord();
             if (r == null || !r.mVisibleRequested) continue;
+            int transitionReason = APP_TRANSITION_WINDOWS_DRAWN;
             // At this point, r is "ready", but if it's not "ALL ready" then it is probably only
             // ready due to starting-window.
-            reasons.put(r, (r.mStartingData instanceof SplashScreenStartingData
-                    && !r.mLastAllReadyAtSync)
-                    ? APP_TRANSITION_SPLASH_SCREEN : APP_TRANSITION_WINDOWS_DRAWN);
+            if (r.mStartingData instanceof SplashScreenStartingData && !r.mLastAllReadyAtSync) {
+                transitionReason = APP_TRANSITION_SPLASH_SCREEN;
+            } else if (r.isActivityTypeHomeOrRecents() && isTransientLaunch(r)) {
+                transitionReason = APP_TRANSITION_RECENTS_ANIM;
+            }
+            reasons.put(r, transitionReason);
         }
         mController.mAtm.mTaskSupervisor.getActivityMetricsLogger().notifyTransitionStarting(
                 reasons);
@@ -1226,8 +1231,15 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
     }
 
-    /** Gets the leash surface for a window container */
-    private static SurfaceControl getLeashSurface(WindowContainer wc) {
+    /**
+     * Gets the leash surface for a window container.
+     * @param t a transaction to create leashes on when necessary (fixed rotation at token-level).
+     *          If t is null, then this will not create any leashes, just use one if it is there --
+     *          this is relevant for building the finishTransaction since it needs to match the
+     *          start state and not erroneously create a leash of its own.
+     */
+    private static SurfaceControl getLeashSurface(WindowContainer wc,
+            @Nullable SurfaceControl.Transaction t) {
         final DisplayContent asDC = wc.asDisplayContent();
         if (asDC != null) {
             // DisplayContent is the "root", so we use the windowing layer instead to avoid
@@ -1239,7 +1251,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             if (asToken != null) {
                 // WindowTokens can have a fixed-rotation applied to them. In the current
                 // implementation this fact is hidden from the player, so we must create a leash.
-                final SurfaceControl leash = asToken.getOrCreateFixedRotationLeash();
+                final SurfaceControl leash = t != null ? asToken.getOrCreateFixedRotationLeash(t)
+                        : asToken.getFixedRotationLeash();
                 if (leash != null) return leash;
             }
         }
@@ -1268,12 +1281,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
      * Construct a TransitionInfo object from a set of targets and changes. Also populates the
      * root surface.
      * @param sortedTargets The targets sorted by z-order from top (index 0) to bottom.
+     * @param startT The start transaction - used to set-up new leashes.
      */
     @VisibleForTesting
     @NonNull
     static TransitionInfo calculateTransitionInfo(@TransitionType int type, int flags,
             ArrayList<WindowContainer> sortedTargets,
-            ArrayMap<WindowContainer, ChangeInfo> changes) {
+            ArrayMap<WindowContainer, ChangeInfo> changes,
+            @Nullable SurfaceControl.Transaction startT) {
         final TransitionInfo out = new TransitionInfo(type, flags);
 
         WindowContainer<?> topApp = null;
@@ -1311,10 +1326,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
         final SurfaceControl rootLeash = leashReference.makeAnimationLeash().setName(
                 "Transition Root: " + leashReference.getName()).build();
-        SurfaceControl.Transaction t = ancestor.mWmService.mTransactionFactory.get();
-        t.setLayer(rootLeash, leashReference.getLastLayer());
-        t.apply();
-        t.close();
+        startT.setLayer(rootLeash, leashReference.getLastLayer());
         out.setRootLeash(rootLeash, ancestor.getBounds().left, ancestor.getBounds().top);
 
         // Convert all the resolved ChangeInfos into TransactionInfo.Change objects in order.
@@ -1324,7 +1336,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             final ChangeInfo info = changes.get(target);
             final TransitionInfo.Change change = new TransitionInfo.Change(
                     target.mRemoteToken != null ? target.mRemoteToken.toWindowContainerToken()
-                            : null, getLeashSurface(target));
+                            : null, getLeashSurface(target, startT));
             // TODO(shell-transitions): Use leash for non-organized windows.
             if (info.mParent != null) {
                 change.setParent(info.mParent.mRemoteToken.toWindowContainerToken());
@@ -1610,6 +1622,19 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     }
 
     /**
+     * This transition will be considered not-ready until a corresponding call to
+     * {@link #continueTransitionReady}
+     */
+    void deferTransitionReady() {
+        ++mReadyTracker.mDeferReadyDepth;
+    }
+
+    /** This undoes one call to {@link #deferTransitionReady}. */
+    void continueTransitionReady() {
+        --mReadyTracker.mDeferReadyDepth;
+    }
+
+    /**
      * The transition sync mechanism has 2 parts:
      *   1. Whether all WM operations for a particular transition are "ready" (eg. did the app
      *      launch or stop or get a new configuration?).
@@ -1637,6 +1662,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
          * transitions via {@link #setAllReady()}.
          */
         private boolean mReadyOverride = false;
+
+        /**
+         * When non-zero, this transition is forced not-ready (even over setAllReady()). Use this
+         * (via deferTransitionReady/continueTransitionReady) for situations where we want to do
+         * bulk operations which could trigger surface-placement but the existing ready-state
+         * isn't known.
+         */
+        private int mDeferReadyDepth = 0;
 
         /**
          * Adds a ready-group. Any setReady calls in this subtree will be tracked together. For
@@ -1679,7 +1712,13 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         boolean allReady() {
             ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, " allReady query: used=%b "
                     + "override=%b states=[%s]", mUsed, mReadyOverride, groupsToString());
+            // If the readiness has never been touched, mUsed will be false. We never want to
+            // consider a transition ready if nothing has been reported on it.
             if (!mUsed) return false;
+            // If we are deferring readiness, we never report ready. This is usually temporary.
+            if (mDeferReadyDepth > 0) return false;
+            // Next check all the ready groups to see if they are ready. We can short-cut this if
+            // ready-override is set (which is treated as "everything is marked ready").
             if (mReadyOverride) return true;
             for (int i = mReadyGroups.size() - 1; i >= 0; --i) {
                 final WindowContainer wc = mReadyGroups.keyAt(i);

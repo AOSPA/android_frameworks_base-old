@@ -682,7 +682,9 @@ public class PackageInstaller {
      * </ul>
      *
      * @param packageName The package to uninstall.
-     * @param statusReceiver Where to deliver the result.
+     * @param statusReceiver Where to deliver the result of the operation indicated by the extra
+     *                       {@link #EXTRA_STATUS}. Refer to the individual status codes
+     *                       on how to handle them.
      *
      * @see android.app.admin.DevicePolicyManager
      */
@@ -700,7 +702,9 @@ public class PackageInstaller {
      *
      * @param packageName The package to uninstall.
      * @param flags Flags for uninstall.
-     * @param statusReceiver Where to deliver the result.
+     * @param statusReceiver Where to deliver the result of the operation indicated by the extra
+     *                       {@link #EXTRA_STATUS}. Refer to the individual status codes
+     *                       on how to handle them.
      *
      * @hide
      */
@@ -725,7 +729,9 @@ public class PackageInstaller {
      * </ul>
      *
      * @param versionedPackage The versioned package to uninstall.
-     * @param statusReceiver Where to deliver the result.
+     * @param statusReceiver Where to deliver the result of the operation indicated by the extra
+     *                       {@link #EXTRA_STATUS}. Refer to the individual status codes
+     *                       on how to handle them.
      *
      * @see android.app.admin.DevicePolicyManager
      */
@@ -747,7 +753,9 @@ public class PackageInstaller {
      *
      * @param versionedPackage The versioned package to uninstall.
      * @param flags Flags for uninstall.
-     * @param statusReceiver Where to deliver the result.
+     * @param statusReceiver Where to deliver the result of the operation indicated by the extra
+     *                       {@link #EXTRA_STATUS}. Refer to the individual status codes
+     *                       on how to handle them.
      *
      * @hide
      */
@@ -775,7 +783,9 @@ public class PackageInstaller {
      *
      * @param packageName The package to install.
      * @param installReason Reason for install.
-     * @param statusReceiver Where to deliver the result.
+     * @param statusReceiver Where to deliver the result of the operation indicated by the extra
+     *                       {@link #EXTRA_STATUS}. Refer to the individual status codes
+     *                       on how to handle them.
      */
     @RequiresPermission(allOf = {
             Manifest.permission.INSTALL_PACKAGES,
@@ -797,8 +807,10 @@ public class PackageInstaller {
      * Uninstall the given package for the user for which this installer was created if the package
      * will still exist for other users on the device.
      *
-     * @param packageName The package to install.
-     * @param statusReceiver Where to deliver the result.
+     * @param packageName The package to uninstall.
+     * @param statusReceiver Where to deliver the result of the operation indicated by the extra
+     *                       {@link #EXTRA_STATUS}. Refer to the individual status codes
+     *                       on how to handle them.
      */
     @RequiresPermission(Manifest.permission.DELETE_PACKAGES)
     public void uninstallExistingPackage(@NonNull String packageName,
@@ -1705,20 +1717,22 @@ public class PackageInstaller {
         public @interface UserActionRequirement {}
 
         /**
-         * The installer did not call {@link SessionParams#setRequireUserAction(int)} to
-         * specify whether user action should be required for the install.
+         * This value is passed by the installer to {@link SessionParams#setRequireUserAction(int)}
+         * to indicate that user action is unspecified for this install.
+         * {@code requireUserAction} also defaults to this value unless modified by
+         * {@link SessionParams#setRequireUserAction(int)}
          */
         public static final int USER_ACTION_UNSPECIFIED = 0;
 
         /**
-         * The installer called {@link SessionParams#setRequireUserAction(int)} with
-         * {@code true} to require user action for the install to complete.
+         * This value is passed by the installer to {@link SessionParams#setRequireUserAction(int)}
+         * to indicate that user action is required for this install.
          */
         public static final int USER_ACTION_REQUIRED = 1;
 
         /**
-         * The installer called {@link SessionParams#setRequireUserAction(int)} with
-         * {@code false} to request that user action not be required for this install.
+         * This value is passed by the installer to {@link SessionParams#setRequireUserAction(int)}
+         * to indicate that user action is not required for this install.
          */
         public static final int USER_ACTION_NOT_REQUIRED = 2;
 

@@ -3786,6 +3786,10 @@ public final class Settings {
 
         private static boolean putStringForUser(ContentResolver resolver, String name, String value,
                 String tag, boolean makeDefault, int userHandle, boolean overrideableByRestore) {
+            if (LOCAL_LOGV) {
+                Log.v(TAG, "System.putString(name=" + name + ", value=" + value + ") for "
+                        + userHandle);
+            }
             android.util.SeempLog.record(android.util.SeempLog.getSeempPutApiIdFromValue(name));
             if (MOVED_TO_SECURE.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
@@ -5688,6 +5692,33 @@ public final class Settings {
         @Readable
         public static final String WHEN_TO_MAKE_WIFI_CALLS = "when_to_make_wifi_calls";
 
+        /** Controls whether bluetooth is on or off on wearable devices.
+         *
+         * <p>The valid values for this key are: 0 (disabled) or 1 (enabled).
+         *
+         * @hide
+         */
+        public static final String CLOCKWORK_BLUETOOTH_SETTINGS_PREF = "cw_bt_settings_pref";
+
+        /**
+         * Controls whether the unread notification dot indicator is shown on wearable devices.
+         *
+         * <p>The valid values for this key are: 0 (disabled) or 1 (enabled).
+         *
+         * @hide
+         */
+        public static final String UNREAD_NOTIFICATION_DOT_INDICATOR =
+                "unread_notification_dot_indicator";
+
+        /**
+         * Controls whether auto-launching media controls is enabled on wearable devices.
+         *
+         * <p>The valid values for this key are: 0 (disabled) or 1 (enabled).
+         *
+         * @hide
+         */
+        public static final String AUTO_LAUNCH_MEDIA_CONTROLS = "auto_launch_media_controls";
+
         // Settings moved to Settings.Secure
 
         /**
@@ -6217,6 +6248,10 @@ public final class Settings {
         public static boolean putStringForUser(@NonNull ContentResolver resolver,
                 @NonNull String name, @Nullable String value, @Nullable String tag,
                 boolean makeDefault, @UserIdInt int userHandle, boolean overrideableByRestore) {
+            if (LOCAL_LOGV) {
+                Log.v(TAG, "Secure.putString(name=" + name + ", value=" + value + ") for "
+                        + userHandle);
+            }
             if (MOVED_TO_GLOBAL.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                         + " to android.provider.Settings.Global");
@@ -9152,6 +9187,57 @@ public final class Settings {
         public static final String SCREENSAVER_ENABLED_COMPLICATIONS =
                 "screensaver_enabled_complications";
 
+
+        /**
+         * Default, indicates that the user has not yet started the dock setup flow.
+         *
+         * @hide
+         */
+        public static final int DOCK_SETUP_NOT_STARTED = 0;
+
+        /**
+         * Indicates that the user has started but not yet completed dock setup.
+         * One of the possible states for {@link #DOCK_SETUP_STATE}.
+         *
+         * @hide
+         */
+        public static final int DOCK_SETUP_STARTED = 1;
+
+        /**
+         * Indicates that the user has snoozed dock setup and will complete it later.
+         * One of the possible states for {@link #DOCK_SETUP_STATE}.
+         *
+         * @hide
+         */
+        public static final int DOCK_SETUP_PAUSED = 2;
+
+        /**
+         * Indicates that the user has completed dock setup.
+         * One of the possible states for {@link #DOCK_SETUP_STATE}.
+         *
+         * @hide
+         */
+        public static final int DOCK_SETUP_COMPLETED = 10;
+
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef({
+                DOCK_SETUP_NOT_STARTED,
+                DOCK_SETUP_STARTED,
+                DOCK_SETUP_PAUSED,
+                DOCK_SETUP_COMPLETED
+        })
+        public @interface DockSetupState {
+        }
+
+        /**
+         * Defines the user's current state of dock setup.
+         * The possible states are defined in {@link DockSetupState}.
+         *
+         * @hide
+         */
+        public static final String DOCK_SETUP_STATE = "dock_setup_state";
+
         /**
          * The default NFC payment component
          * @hide
@@ -9670,6 +9756,13 @@ public final class Settings {
         @Readable
         public static final String BIOMETRIC_DEBUG_ENABLED =
                 "biometric_debug_enabled";
+
+        /**
+         * Whether or not virtual sensors are enabled.
+         * @hide
+         */
+        @Readable
+        public static final String BIOMETRIC_VIRTUAL_ENABLED = "biometric_virtual_enabled";
 
         /**
          * Whether or not biometric is allowed on Keyguard.
@@ -10659,6 +10752,16 @@ public final class Settings {
         public static final String ADAPTIVE_CONNECTIVITY_ENABLED = "adaptive_connectivity_enabled";
 
         /**
+         * Controls the 'Sunlight boost' toggle in wearable devices (high brightness mode).
+         *
+         * Valid values for this key are: '0' (disabled) or '1' (enabled).
+         *
+         * @hide
+         */
+        public static final String HBM_SETTING_KEY =
+                "com.android.server.display.HBM_SETTING_KEY";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
@@ -10929,6 +11032,14 @@ public final class Settings {
          */
         @Readable
         public static final String ADD_USERS_WHEN_LOCKED = "add_users_when_locked";
+
+        /**
+         * Whether guest user should be removed on exit from guest mode.
+         * <p>
+         * Type: int
+         * @hide
+         */
+        public static final String REMOVE_GUEST_ON_EXIT = "remove_guest_on_exit";
 
         /**
          * Whether applying ramping ringer on incoming phone call ringtone.
@@ -15056,14 +15167,6 @@ public final class Settings {
          */
         public static final String DEVICE_CONFIG_SYNC_DISABLED = "device_config_sync_disabled";
 
-
-        /**
-         * Whether back preview animations are played when user does a back gesture or presses
-         * the back button.
-         * @hide
-         */
-        public static final String ENABLE_BACK_ANIMATION = "enable_back_animation";
-
         /** @hide */ public static String zenModeToString(int mode) {
             if (mode == ZEN_MODE_IMPORTANT_INTERRUPTIONS) return "ZEN_MODE_IMPORTANT_INTERRUPTIONS";
             if (mode == ZEN_MODE_ALARMS) return "ZEN_MODE_ALARMS";
@@ -16003,8 +16106,8 @@ public final class Settings {
                 @NonNull String name, @Nullable String value, @Nullable String tag,
                 boolean makeDefault, @UserIdInt int userHandle, boolean overrideableByRestore) {
             if (LOCAL_LOGV) {
-                Log.v(TAG, "Global.putString(name=" + name + ", value=" + value
-                        + " for " + userHandle);
+                Log.v(TAG, "Global.putString(name=" + name + ", value=" + value + ") for "
+                        + userHandle);
             }
             // Global and Secure have the same access policy so we can forward writes
             if (MOVED_TO_SECURE.contains(name)) {
@@ -16908,22 +17011,6 @@ public final class Settings {
         public static final String SHOW_NEW_NOTIF_DISMISS = "show_new_notif_dismiss";
 
         /**
-         * Block untrusted touches mode.
-         *
-         * Can be one of:
-         * <ul>
-         *      <li>0 = {@link BlockUntrustedTouchesMode#DISABLED}: Feature is off.
-         *      <li>1 = {@link BlockUntrustedTouchesMode#PERMISSIVE}: Untrusted touches are flagged
-         *          but not blocked
-         *      <li>2 = {@link BlockUntrustedTouchesMode#BLOCK}: Untrusted touches are blocked
-         * </ul>
-         *
-         * @hide
-         */
-        @Readable
-        public static final String BLOCK_UNTRUSTED_TOUCHES_MODE = "block_untrusted_touches";
-
-        /**
          * The maximum allowed obscuring opacity by UID to propagate touches.
          *
          * For certain window types (eg. SAWs), the decision of honoring {@link LayoutParams
@@ -17239,12 +17326,6 @@ public final class Settings {
             public static final String WEAR_OS_VERSION_STRING = "wear_os_version_string";
 
             /**
-             * How round the corners of square screens are.
-             * @hide
-             */
-            public static final String CORNER_ROUNDNESS = "corner_roundness";
-
-            /**
              * Whether the physical button has been set.
              * @hide
              */
@@ -17316,6 +17397,12 @@ public final class Settings {
              * @hide
              */
             public static final String AMBIENT_TILT_TO_BRIGHT = "ambient_tilt_to_bright";
+
+            /**
+             * Whether touch and hold to edit WF is enabled
+             * @hide
+             */
+            public static final String TOUCH_AND_HOLD_WATCH_FACE = "touch_and_hold_watchface";
 
             /**
              * Whether the current watchface is decomposable.
@@ -17535,6 +17622,18 @@ public final class Settings {
              * @hide
              */
             public static final String WET_MODE_ON = "wet_mode_on";
+
+            /*
+             * Whether the screen-unlock (keyguard) sound is enabled.
+             * @hide
+             */
+            public static final String SCREEN_UNLOCK_SOUND_ENABLED = "screen_unlock_sound_enabled";
+
+            /*
+             * Whether charging sounds are enabled.
+             * @hide
+             */
+            public static final String CHARGING_SOUNDS_ENABLED = "wear_charging_sounds_enabled";
         }
     }
 

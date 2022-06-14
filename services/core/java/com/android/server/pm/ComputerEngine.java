@@ -397,6 +397,7 @@ public class ComputerEngine implements Computer {
     private final UserManagerService mUserManager;
     private final PermissionManagerServiceInternal mPermissionManager;
     private final ApexManager mApexManager;
+    private final ApexPackageInfo mApexPackageInfo;
     private final PackageManagerServiceInjector mInjector;
     private final ComponentResolverApi mComponentResolver;
     private final InstantAppResolverConnection mInstantAppResolverConnection;
@@ -450,6 +451,7 @@ public class ComputerEngine implements Computer {
         mContext = args.service.mContext;
         mInjector = args.service.mInjector;
         mApexManager = args.service.mApexManager;
+        mApexPackageInfo = args.service.mApexPackageInfo;
         mInstantAppResolverConnection = args.service.mInstantAppResolverConnection;
         mDefaultAppProvider = args.service.getDefaultAppProvider();
         mDomainVerificationManager = args.service.mDomainVerificationManager;
@@ -540,8 +542,13 @@ public class ComputerEngine implements Computer {
                                 && ((!matchInstantApp && !isCallerInstantApp && isTargetInstantApp)
                                 || (matchVisibleToInstantAppOnly && isCallerInstantApp
                                 && isTargetHiddenFromInstantApp));
+                final boolean resolveForStartNonExported = resolveForStart
+                                && !ai.exported
+                                && !isCallerSameApp(pkgName, filterCallingUid);
                 final boolean blockNormalResolution =
-                        !resolveForStart && !isTargetInstantApp && !isCallerInstantApp
+                        (!resolveForStart || resolveForStartNonExported)
+                                && !isTargetInstantApp
+                                && !isCallerInstantApp
                                 && shouldFilterApplication(
                                 getPackageStateInternal(ai.applicationInfo.packageName,
                                         Process.SYSTEM_UID), filterCallingUid, userId);
@@ -994,7 +1001,7 @@ public class ComputerEngine implements Computer {
             if ((flags & PackageManager.MATCH_SYSTEM_ONLY) != 0) {
                 apexFlags = ApexManager.MATCH_FACTORY_PACKAGE;
             }
-            final PackageInfo pi = mApexManager.getPackageInfo(packageName, apexFlags);
+            final PackageInfo pi = mApexPackageInfo.getPackageInfo(packageName, apexFlags);
             if (pi == null) {
                 return null;
             }
@@ -1691,7 +1698,7 @@ public class ComputerEngine implements Computer {
         if (matchFactoryOnly) {
             // Instant app filtering for APEX modules is ignored
             if ((flags & MATCH_APEX) != 0) {
-                return mApexManager.getPackageInfo(packageName,
+                return mApexPackageInfo.getPackageInfo(packageName,
                         ApexManager.MATCH_FACTORY_PACKAGE);
             }
             final PackageStateInternal ps = mSettings.getDisabledSystemPkg(packageName);
@@ -1736,7 +1743,7 @@ public class ComputerEngine implements Computer {
             return generatePackageInfo(ps, flags, userId);
         }
         if ((flags & MATCH_APEX) != 0) {
-            return mApexManager.getPackageInfo(packageName, ApexManager.MATCH_ACTIVE_PACKAGE);
+            return mApexPackageInfo.getPackageInfo(packageName, ApexManager.MATCH_ACTIVE_PACKAGE);
         }
         return null;
     }
@@ -1832,12 +1839,9 @@ public class ComputerEngine implements Computer {
         }
         if (listApex) {
             if (listFactory) {
-                list.addAll(mApexManager.getFactoryPackages());
+                list.addAll(mApexPackageInfo.getFactoryPackages());
             } else {
-                list.addAll(mApexManager.getActivePackages());
-                if (listUninstalled) {
-                    list.addAll(mApexManager.getInactivePackages());
-                }
+                list.addAll(mApexPackageInfo.getActivePackages());
             }
         }
         return new ParceledListSlice<>(list);
@@ -2673,7 +2677,7 @@ public class ComputerEngine implements Computer {
      */
     public final boolean shouldFilterApplication(@Nullable PackageStateInternal ps,
             int callingUid, @Nullable ComponentName component,
-            @PackageManager.ComponentType int componentType, int userId) {
+            @PackageManager.ComponentType int componentType, int userId, boolean filterUninstall) {
         if (Process.isSdkSandboxUid(callingUid)) {
             int clientAppUid = Process.getAppUidForSdkSandboxUid(callingUid);
             // SDK sandbox should be able to see it's client app
@@ -2687,9 +2691,13 @@ public class ComputerEngine implements Computer {
         }
         final String instantAppPkgName = getInstantAppPackageName(callingUid);
         final boolean callerIsInstantApp = instantAppPkgName != null;
-        if (ps == null) {
-            // pretend the application exists, but, needs to be filtered
-            return callerIsInstantApp;
+        // Don't treat hiddenUntilInstalled as an uninstalled state, phone app needs to access
+        // these hidden application details to customize carrier apps.
+        if (ps == null || (filterUninstall && !ps.isHiddenUntilInstalled()
+                && !ps.getUserStateOrDefault(userId).isInstalled())) {
+            // If caller is instant app and ps is null, pretend the application exists,
+            // but, needs to be filtered
+            return (callerIsInstantApp || filterUninstall);
         }
         // if the target and caller are the same application, don't filter
         if (isCallerSameApp(ps.getPackageName(), callingUid)) {
@@ -2734,15 +2742,26 @@ public class ComputerEngine implements Computer {
     }
 
     /**
-     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int)
+     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int, boolean)
      */
-    public final boolean shouldFilterApplication(
-            @Nullable PackageStateInternal ps, int callingUid, int userId) {
-        return shouldFilterApplication(ps, callingUid, null, TYPE_UNKNOWN, userId);
+    public final boolean shouldFilterApplication(@Nullable PackageStateInternal ps,
+            int callingUid, @Nullable ComponentName component,
+            @PackageManager.ComponentType int componentType, int userId) {
+        return shouldFilterApplication(
+                ps, callingUid, component, componentType, userId, false /* filterUninstall */);
     }
 
     /**
-     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int)
+     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int, boolean)
+     */
+    public final boolean shouldFilterApplication(
+            @Nullable PackageStateInternal ps, int callingUid, int userId) {
+        return shouldFilterApplication(
+                ps, callingUid, null, TYPE_UNKNOWN, userId, false /* filterUninstall */);
+    }
+
+    /**
+     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int, boolean)
      */
     public final boolean shouldFilterApplication(@NonNull SharedUserSetting sus,
             int callingUid, int userId) {
@@ -2750,10 +2769,19 @@ public class ComputerEngine implements Computer {
         final ArraySet<PackageStateInternal> packageStates =
                 (ArraySet<PackageStateInternal>) sus.getPackageStates();
         for (int index = packageStates.size() - 1; index >= 0 && filterApp; index--) {
-            filterApp &= shouldFilterApplication(packageStates.valueAt(index),
-                    callingUid, /* component */ null, TYPE_UNKNOWN, userId);
+            filterApp &= shouldFilterApplication(packageStates.valueAt(index), callingUid,
+                    null /* component */, TYPE_UNKNOWN, userId, false /* filterUninstall */);
         }
         return filterApp;
+    }
+
+    /**
+     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int, boolean)
+     */
+    public final boolean shouldFilterApplicationIncludingUninstalled(
+            @Nullable PackageStateInternal ps, int callingUid, int userId) {
+        return shouldFilterApplication(
+                ps, callingUid, null, TYPE_UNKNOWN, userId, true /* filterUninstall */);
     }
 
     /**
@@ -3101,7 +3129,7 @@ public class ComputerEngine implements Computer {
         final boolean checkin = dumpState.isCheckIn();
 
         // Return if the package doesn't exist.
-        if (packageName != null && setting == null) {
+        if (packageName != null && setting == null && !isApexPackage(packageName)) {
             return;
         }
 
@@ -3275,6 +3303,15 @@ public class ComputerEngine implements Computer {
                     }
                 }
                 ipw.decreaseIndent();
+                break;
+            }
+
+            case DumpState.DUMP_APEX: {
+                if (packageName == null || isApexPackage(packageName)) {
+                    mApexManager.dump(pw);
+                    mApexPackageInfo.dump(pw, packageName);
+                }
+                break;
             }
         } // switch
     }
@@ -3654,6 +3691,11 @@ public class ComputerEngine implements Computer {
     }
 
     @Override
+    public boolean isApexPackage(String packageName) {
+        return mApexPackageInfo.isApexPackage(packageName);
+    }
+
+    @Override
     public String[] currentToCanonicalPackageNames(String[] names) {
         final int callingUid = Binder.getCallingUid();
         if (getInstantAppPackageName(callingUid) != null) {
@@ -3742,7 +3784,7 @@ public class ComputerEngine implements Computer {
         if (ps == null || ps.getPkg() == null) {
             return -1;
         }
-        if (shouldFilterApplication(ps, Binder.getCallingUid(),
+        if (shouldFilterApplicationIncludingUninstalled(ps, Binder.getCallingUid(),
                 UserHandle.getCallingUserId())) {
             return -1;
         }
@@ -4177,7 +4219,11 @@ public class ComputerEngine implements Computer {
     }
 
     @Override
-    public int checkSignatures(@NonNull String pkg1, @NonNull String pkg2) {
+    public int checkSignatures(@NonNull String pkg1, @NonNull String pkg2, int userId) {
+        final int callingUid = Binder.getCallingUid();
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "checkSignatures");
+
         final AndroidPackage p1 = mPackages.get(pkg1);
         final AndroidPackage p2 = mPackages.get(pkg2);
         final PackageStateInternal ps1 =
@@ -4187,10 +4233,8 @@ public class ComputerEngine implements Computer {
         if (p1 == null || ps1 == null || p2 == null || ps2 == null) {
             return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
         }
-        final int callingUid = Binder.getCallingUid();
-        final int callingUserId = UserHandle.getUserId(callingUid);
-        if (shouldFilterApplication(ps1, callingUid, callingUserId)
-                || shouldFilterApplication(ps2, callingUid, callingUserId)) {
+        if (shouldFilterApplicationIncludingUninstalled(ps1, callingUid, userId)
+                || shouldFilterApplicationIncludingUninstalled(ps2, callingUid, userId)) {
             return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
         }
         return checkSignaturesInternal(p1.getSigningDetails(), p2.getSigningDetails());
@@ -4345,11 +4389,8 @@ public class ComputerEngine implements Computer {
 
     @Override
     public List<String> getAllPackages() {
-        // Allow iorapd to call this method.
-        if (Binder.getCallingUid() != Process.IORAPD_UID) {
-            PackageManagerServiceUtils.enforceSystemOrRootOrShell(
-                    "getAllPackages is limited to privileged callers");
-        }
+        PackageManagerServiceUtils.enforceSystemOrRootOrShell(
+                "getAllPackages is limited to privileged callers");
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
         if (canViewInstantApps(callingUid, callingUserId)) {
@@ -4969,7 +5010,7 @@ public class ComputerEngine implements Computer {
         enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
                 false /* checkShell */, "isPackageSuspendedForUser for user " + userId);
         final PackageStateInternal ps = mSettings.getPackage(packageName);
-        if (ps == null || shouldFilterApplication(ps, callingUid, userId)) {
+        if (ps == null || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
             throw new IllegalArgumentException("Unknown target package: " + packageName);
         }
         return ps.getUserStateOrDefault(userId).isSuspended();
@@ -5001,7 +5042,7 @@ public class ComputerEngine implements Computer {
         if (pkg == null || ArrayUtils.isEmpty(pkg.getActivities())) {
             return ParceledListSlice.emptyList();
         }
-        if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+        if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
             return ParceledListSlice.emptyList();
         }
         final int count = ArrayUtils.size(pkg.getActivities());
@@ -5027,20 +5068,6 @@ public class ComputerEngine implements Computer {
 
     @Nullable
     @Override
-    public SparseArray<int[]> getBroadcastAllowList(@NonNull String packageName,
-            @UserIdInt int[] userIds, boolean isInstantApp) {
-        if (isInstantApp) {
-            return null;
-        }
-        PackageStateInternal setting = getPackageStateInternal(packageName, Process.SYSTEM_UID);
-        if (setting == null) {
-            return null;
-        }
-        return mAppsFilter.getVisibilityAllowList(this, setting, userIds, getPackageStates());
-    }
-
-    @Nullable
-    @Override
     public String getInstallerPackageName(@NonNull String packageName) {
         final int callingUid = Binder.getCallingUid();
         final InstallSource installSource = getInstallSource(packageName, callingUid);
@@ -5050,7 +5077,7 @@ public class ComputerEngine implements Computer {
         String installerPackageName = installSource.installerPackageName;
         if (installerPackageName != null) {
             final PackageStateInternal ps = mSettings.getPackage(installerPackageName);
-            if (ps == null || shouldFilterApplication(ps, callingUid,
+            if (ps == null || shouldFilterApplicationIncludingUninstalled(ps, callingUid,
                     UserHandle.getUserId(callingUid))) {
                 installerPackageName = null;
             }
@@ -5063,12 +5090,12 @@ public class ComputerEngine implements Computer {
         final PackageStateInternal ps = mSettings.getPackage(packageName);
 
         // Installer info for Apex is not stored in PackageManager
-        if (ps == null && mApexManager.isApexPackage(packageName)) {
+        if (ps == null && mApexPackageInfo.isApexPackage(packageName)) {
             return InstallSource.EMPTY;
         }
 
-        if (ps == null
-                || shouldFilterApplication(ps, callingUid, UserHandle.getUserId(callingUid))) {
+        if (ps == null || shouldFilterApplicationIncludingUninstalled(
+                ps, callingUid, UserHandle.getUserId(callingUid))) {
             return null;
         }
 
@@ -5093,7 +5120,8 @@ public class ComputerEngine implements Computer {
         installerPackageName = installSource.installerPackageName;
         if (installerPackageName != null) {
             final PackageStateInternal ps = mSettings.getPackage(installerPackageName);
-            if (ps == null || shouldFilterApplication(ps, callingUid, userId)) {
+            if (ps == null
+                    || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
                 installerPackageName = null;
             }
         }
@@ -5118,7 +5146,8 @@ public class ComputerEngine implements Computer {
             } else {
                 initiatingPackageName = installSource.initiatingPackageName;
                 final PackageStateInternal ps = mSettings.getPackage(initiatingPackageName);
-                if (ps == null || shouldFilterApplication(ps, callingUid, userId)) {
+                if (ps == null
+                        || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
                     initiatingPackageName = null;
                 }
             }
@@ -5127,7 +5156,8 @@ public class ComputerEngine implements Computer {
         originatingPackageName = installSource.originatingPackageName;
         if (originatingPackageName != null) {
             final PackageStateInternal ps = mSettings.getPackage(originatingPackageName);
-            if (ps == null || shouldFilterApplication(ps, callingUid, userId)) {
+            if (ps == null
+                    || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
                 originatingPackageName = null;
             }
         }
@@ -5163,7 +5193,7 @@ public class ComputerEngine implements Computer {
         enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
                 false /* checkShell */, "get enabled");
         try {
-            if (shouldFilterApplication(
+            if (shouldFilterApplicationIncludingUninstalled(
                     mSettings.getPackage(packageName), callingUid, userId)) {
                 throw new PackageManager.NameNotFoundException(packageName);
             }
@@ -5192,7 +5222,7 @@ public class ComputerEngine implements Computer {
         try {
             if (shouldFilterApplication(
                     mSettings.getPackage(component.getPackageName()), callingUid,
-                    component, TYPE_UNKNOWN, userId)) {
+                    component, TYPE_UNKNOWN, userId, true /* filterUninstall */)) {
                 throw new PackageManager.NameNotFoundException(component.getPackageName());
             }
             return mSettings.getComponentEnabledSetting(component, userId);
@@ -5232,10 +5262,11 @@ public class ComputerEngine implements Computer {
         if (packageName == null || alias == null) {
             return null;
         }
+        final int callingUid = Binder.getCallingUid();
+        final int callingUserId = UserHandle.getUserId(callingUid);
         final AndroidPackage pkg = mPackages.get(packageName);
-        if (pkg == null
-                || shouldFilterApplication(getPackageStateInternal(pkg.getPackageName()),
-                Binder.getCallingUid(), UserHandle.getCallingUserId())) {
+        if (pkg == null || shouldFilterApplicationIncludingUninstalled(
+                getPackageStateInternal(pkg.getPackageName()), callingUid, callingUserId)) {
             Slog.w(TAG, "KeySet requested for unknown package: " + packageName);
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
@@ -5252,9 +5283,8 @@ public class ComputerEngine implements Computer {
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
         final AndroidPackage pkg = mPackages.get(packageName);
-        if (pkg == null
-                || shouldFilterApplication(getPackageStateInternal(pkg.getPackageName()),
-                callingUid, callingUserId)) {
+        if (pkg == null || shouldFilterApplicationIncludingUninstalled(
+                getPackageStateInternal(pkg.getPackageName()), callingUid, callingUserId)) {
             Slog.w(TAG, "KeySet requested for unknown package: " + packageName
                     + ", uid:" + callingUid);
             throw new IllegalArgumentException("Unknown package: " + packageName);
@@ -5277,9 +5307,10 @@ public class ComputerEngine implements Computer {
             return false;
         }
         final AndroidPackage pkg = mPackages.get(packageName);
+        final int callingUserId = UserHandle.getUserId(callingUid);
         if (pkg == null
-                || shouldFilterApplication(getPackageStateInternal(pkg.getPackageName()),
-                callingUid, UserHandle.getUserId(callingUid))) {
+                || shouldFilterApplicationIncludingUninstalled(
+                        getPackageStateInternal(pkg.getPackageName()), callingUid, callingUserId)) {
             Slog.w(TAG, "KeySet requested for unknown package: " + packageName);
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
@@ -5301,9 +5332,10 @@ public class ComputerEngine implements Computer {
             return false;
         }
         final AndroidPackage pkg = mPackages.get(packageName);
+        final int callingUserId = UserHandle.getUserId(callingUid);
         if (pkg == null
-                || shouldFilterApplication(getPackageStateInternal(pkg.getPackageName()),
-                callingUid, UserHandle.getUserId(callingUid))) {
+                || shouldFilterApplicationIncludingUninstalled(
+                        getPackageStateInternal(pkg.getPackageName()), callingUid, callingUserId)) {
             Slog.w(TAG, "KeySet requested for unknown package: " + packageName);
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
@@ -5317,14 +5349,21 @@ public class ComputerEngine implements Computer {
 
     @Nullable
     @Override
-    public int[] getVisibilityAllowList(@NonNull String packageName, @UserIdInt int userId) {
+    public SparseArray<int[]> getVisibilityAllowLists(@NonNull String packageName,
+            @UserIdInt int[] userIds) {
         final PackageStateInternal ps =
                 getPackageStateInternal(packageName, Process.SYSTEM_UID);
         if (ps == null) {
             return null;
         }
-        final SparseArray<int[]> visibilityAllowList = mAppsFilter.getVisibilityAllowList(this, ps,
-                new int[]{userId}, getPackageStates());
+        return mAppsFilter.getVisibilityAllowList(this, ps, userIds, getPackageStates());
+    }
+
+    @Nullable
+    @Override
+    public int[] getVisibilityAllowList(@NonNull String packageName, @UserIdInt int userId) {
+        final SparseArray<int[]> visibilityAllowList = getVisibilityAllowLists(packageName,
+                new int[]{userId});
         return visibilityAllowList != null ? visibilityAllowList.get(userId) : null;
     }
 

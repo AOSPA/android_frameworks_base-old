@@ -5622,7 +5622,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 wasStopped, this);
         mAppStopped = false;
         // Allow the window to turn the screen on once the app is resumed again.
-        setCurrentLaunchCanTurnScreenOn(true);
+        if (mAtmService.getActivityStartController().isInExecution()) {
+            setCurrentLaunchCanTurnScreenOn(true);
+        }
+
         if (!wasStopped) {
             destroySurfaces(true /*cleanupOnResume*/);
         }
@@ -9798,6 +9801,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     @Override
     boolean isSyncFinished() {
         if (!super.isSyncFinished()) return false;
+        if (mDisplayContent != null && mDisplayContent.mUnknownAppVisibilityController
+                .isVisibilityUnknown(this)) {
+            return false;
+        }
         if (!isVisibleRequested()) return true;
         // Wait for attach. That is the earliest time where we know if there will be an associated
         // display rotation. If we don't wait, the starting-window can finishDrawing first and

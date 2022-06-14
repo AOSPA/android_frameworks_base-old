@@ -78,8 +78,6 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Spróbuj jeszcze raz wykonać zrzut ekranu"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Nie można zapisać zrzutu ekranu."</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Nie możesz wykonać zrzutu ekranu, bo nie zezwala na to aplikacja lub Twoja organizacja."</string>
-    <!-- no translation found for screenshot_blocked_by_admin (5486757604822795797) -->
-    <skip />
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Edytuj"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Edytuj zrzut ekranu"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"Udostępnij zrzut ekranu"</string>
@@ -138,6 +136,9 @@
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Potwierdzono"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"Aby zakończyć, kliknij Potwierdź"</string>
     <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Odblokowano skanem twarzy. Aby kontynuować, kliknij ikonę odblokowywania."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"Odblokowano rozpoznawaniem twarzy. Kliknij, aby kontynuować."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"Twarz rozpoznana. Kliknij, aby kontynuować."</string>
+    <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"Twarz rozpoznana. Aby kontynuować, kliknij ikonę odblokowywania."</string>
     <string name="biometric_dialog_authenticated" msgid="7337147327545272484">"Uwierzytelniono"</string>
     <string name="biometric_dialog_use_pin" msgid="8385294115283000709">"Użyj kodu PIN"</string>
     <string name="biometric_dialog_use_pattern" msgid="2315593393167211194">"Użyj wzoru"</string>
@@ -318,6 +319,9 @@
     <string name="keyguard_unlock" msgid="8031975796351361601">"Przesuń w górę, by otworzyć"</string>
     <string name="keyguard_unlock_press" msgid="9140109453735019209">"Aby otworzyć, kliknij ikonę odblokowywania"</string>
     <string name="keyguard_face_successful_unlock_press" msgid="25520941264602588">"Odblokowano skanem twarzy. Aby otworzyć, kliknij ikonę odblokowywania."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"Odblokowano rozpoznawaniem twarzy. Naciśnij, by otworzyć."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"Twarz rozpoznana. Naciśnij, by otworzyć."</string>
+    <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"Twarz rozpoznana. Aby otworzyć, kliknij ikonę odblokowywania."</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Przesuń w górę, by spróbować ponownie"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Odblokuj, by użyć komunikacji NFC"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"To urządzenie należy do Twojej organizacji"</string>
@@ -344,6 +348,9 @@
     <string name="guest_wipe_session_message" msgid="3393823610257065457">"Chcesz kontynuować sesję?"</string>
     <string name="guest_wipe_session_wipe" msgid="8056836584445473309">"Rozpocznij nową"</string>
     <string name="guest_wipe_session_dontwipe" msgid="3211052048269304205">"Tak, kontynuuj"</string>
+    <string name="guest_notification_app_name" msgid="2110425506754205509">"Tryb gościa"</string>
+    <string name="guest_notification_session_active" msgid="5567273684713471450">"Jesteś w trybie gościa"</string>
+    <string name="user_add_user_message_guest_remove" msgid="5589286604543355007">\n\n"Dodanie nowego użytkownika spowoduje zamknięcie trybu gościa. Wszystkie aplikacje i dane z obecnej sesji gościa zostaną usunięte."</string>
     <string name="user_limit_reached_title" msgid="2429229448830346057">"Osiągnięto limit użytkowników"</string>
     <plurals name="user_limit_reached_message" formatted="false" msgid="2573535787802908398">
       <item quantity="few">Możesz dodać maksymalnie <xliff:g id="COUNT">%d</xliff:g> użytkowników.</item>
@@ -730,8 +737,6 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"Oszczędzanie baterii włącza się, jeśli bateria jest prawie wyczerpana"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"Nie, dziękuję"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Zrzut stosu SysUI"</string>
-    <!-- no translation found for ongoing_privacy_dialog_a11y_title (2205794093673327974) -->
-    <skip />
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Aplikacje używają: <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" i "</string>
@@ -851,7 +856,6 @@
     <string name="media_output_dialog_pairing_new" msgid="9099497976087485862">"Sparuj nowe urządzenie"</string>
     <string name="media_output_dialog_launch_app_text" msgid="1527413319632586259">"Aby przesłać tę sesję, otwórz aplikację."</string>
     <string name="media_output_dialog_unknown_launch_app_name" msgid="1084899329829371336">"Nieznana aplikacja"</string>
-    <string name="media_output_dialog_button_stop_casting" msgid="6581379537930199189">"Zatrzymaj przesyłanie"</string>
     <string name="media_output_first_broadcast_title" msgid="6292237789860753022">"Jak działa transmitowanie"</string>
     <string name="media_output_broadcast" msgid="3555580945878071543">"Transmisja"</string>
     <string name="media_output_first_notify_broadcast_message" msgid="6353857724136398494">"Osoby w pobliżu ze zgodnymi urządzeniami Bluetooth mogą słuchać transmitowanych przez Ciebie multimediów"</string>
@@ -861,10 +865,6 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"Zapisz"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"Uruchamiam…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"Nie można przesyłać"</string>
-    <!-- no translation found for media_output_broadcast_update_error (1420868236079122521) -->
-    <skip />
-    <!-- no translation found for media_output_broadcast_last_update_error (5484328807296895491) -->
-    <skip />
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Numer kompilacji"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Numer kompilacji został skopiowany do schowka."</string>
     <string name="basic_status" msgid="2315371112182658176">"Otwarta rozmowa"</string>

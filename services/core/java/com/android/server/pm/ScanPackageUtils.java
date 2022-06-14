@@ -24,6 +24,7 @@ import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static com.android.server.pm.PackageManagerService.DEBUG_ABI_SELECTION;
 import static com.android.server.pm.PackageManagerService.DEBUG_PACKAGE_SCANNING;
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
+import static com.android.server.pm.PackageManagerService.SCAN_AS_APEX;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_FULL_APP;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_INSTANT_APP;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_ODM;
@@ -690,14 +691,16 @@ final class ScanPackageUtils {
 
     public static void assertMinSignatureSchemeIsValid(AndroidPackage pkg,
             @ParsingPackageUtils.ParseFlags int parseFlags) throws PackageManagerException {
-        int minSignatureSchemeVersion =
-                ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
-                        pkg.getTargetSdkVersion());
-        if (pkg.getSigningDetails().getSignatureSchemeVersion()
-                < minSignatureSchemeVersion) {
-            throw new PackageManagerException(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
-                    "No signature found in package of version " + minSignatureSchemeVersion
-                            + " or newer for package " + pkg.getPackageName());
+        if ((parseFlags & ParsingPackageUtils.PARSE_IS_SYSTEM_DIR) == 0) {
+            int minSignatureSchemeVersion =
+                    ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
+                            pkg.getTargetSdkVersion());
+            if (pkg.getSigningDetails().getSignatureSchemeVersion()
+                    < minSignatureSchemeVersion) {
+                throw new PackageManagerException(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
+                        "No signature found in package of version " + minSignatureSchemeVersion
+                                + " or newer for package " + pkg.getPackageName());
+            }
         }
     }
 
@@ -852,6 +855,8 @@ final class ScanPackageUtils {
             parsedPackage
                     .markNotActivitiesAsNotExportedIfSingleUser();
         }
+
+        parsedPackage.setApex((scanFlags & SCAN_AS_APEX) != 0);
 
         parsedPackage.setPrivileged((scanFlags & SCAN_AS_PRIVILEGED) != 0)
                 .setOem((scanFlags & SCAN_AS_OEM) != 0)

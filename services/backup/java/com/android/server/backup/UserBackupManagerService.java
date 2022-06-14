@@ -85,7 +85,6 @@ import android.os.PowerSaveState;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SELinux;
-import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.WorkSource;
@@ -3986,7 +3985,7 @@ public class UserBackupManagerService {
             String callerLogString = "BMS.filterAppsEligibleForBackup";
             TransportConnection transportConnection =
                     mTransportManager.getCurrentTransportClient(callerLogString);
-            List<String> eligibleApps = new LinkedList<>();
+            List<String> eligibleApps = new ArrayList<>();
             for (String packageName : packages) {
                 if (mScheduledBackupEligibility.appIsRunningAndEligibleForBackupWithTransport(
                         transportConnection, packageName)) {
@@ -3996,7 +3995,7 @@ public class UserBackupManagerService {
             if (transportConnection != null) {
                 mTransportManager.disposeOfTransportClient(transportConnection, callerLogString);
             }
-            return eligibleApps.toArray(new String[eligibleApps.size()]);
+            return eligibleApps.toArray(new String[0]);
         } finally {
             Binder.restoreCallingIdentity(oldToken);
         }
@@ -4144,6 +4143,24 @@ public class UserBackupManagerService {
                 pw.print(" : ");
                 pw.println(entry.packageName);
             }
+            pw.println(userPrefix + "Agent timeouts:");
+            pw.println("    KvBackupAgentTimeoutMillis: "
+                    + mAgentTimeoutParameters.getKvBackupAgentTimeoutMillis());
+            pw.println("    FullBackupAgentTimeoutMillis: "
+                    + mAgentTimeoutParameters.getFullBackupAgentTimeoutMillis());
+            pw.println("    SharedBackupAgentTimeoutMillis: "
+                    + mAgentTimeoutParameters.getSharedBackupAgentTimeoutMillis());
+            pw.println("    RestoreAgentTimeoutMillis (system): "
+                    + mAgentTimeoutParameters.getRestoreAgentTimeoutMillis(
+                    Process.FIRST_APPLICATION_UID - 1));
+            pw.println("    RestoreAgentTimeoutMillis: "
+                    + mAgentTimeoutParameters.getRestoreAgentTimeoutMillis(
+                    Process.FIRST_APPLICATION_UID));
+            pw.println("    RestoreAgentFinishedTimeoutMillis: "
+                    + mAgentTimeoutParameters.getRestoreAgentFinishedTimeoutMillis());
+            pw.println("    QuotaExceededTimeoutMillis: "
+                    + mAgentTimeoutParameters.getQuotaExceededTimeoutMillis());
+
         }
     }
 

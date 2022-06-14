@@ -30,9 +30,9 @@ import androidx.annotation.GuardedBy
 import androidx.annotation.WorkerThread
 import com.android.systemui.Dumpable
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.people.widget.PeopleSpaceWidgetProvider.EXTRA_USER_HANDLE
 import com.android.systemui.util.Assert
 import java.io.PrintWriter
-import java.lang.IllegalStateException
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executor
 import kotlin.properties.ReadWriteProperty

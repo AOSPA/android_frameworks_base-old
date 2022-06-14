@@ -943,27 +943,6 @@ public class PowerManagerServiceTest {
     }
 
     @Test
-    public void testInattentiveSleep_dreamEnds_goesToSleepAfterTimeout() {
-        setMinimumScreenOffTimeoutConfig(5);
-        setAttentiveTimeout(30000);
-        createService();
-        startSystem();
-
-        advanceTime(10000);
-        forceDream();
-        advanceTime(10000);
-        final String pkg = mContextSpy.getOpPackageName();
-        mService.getBinderServiceInstance().wakeUp(mClock.now(),
-                PowerManager.WAKE_REASON_DREAM_FINISHED, "PowerManagerServiceTest:DREAM_FINISHED",
-                pkg);
-        advanceTime(10001);
-
-        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
-        assertThat(mService.getBinderServiceInstance().getLastSleepReason()).isEqualTo(
-                PowerManager.GO_TO_SLEEP_REASON_INATTENTIVE);
-    }
-
-    @Test
     public void testInattentiveSleep_goesToSleepWithWakeLock() {
         final String pkg = mContextSpy.getOpPackageName();
         final Binder token = new Binder();
@@ -980,6 +959,27 @@ public class PowerManagerServiceTest {
 
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
         advanceTime(60);
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+        assertThat(mService.getBinderServiceInstance().getLastSleepReason()).isEqualTo(
+                PowerManager.GO_TO_SLEEP_REASON_INATTENTIVE);
+    }
+
+    @Test
+    public void testInattentiveSleep_dreamEnds_goesToSleepAfterTimeout() {
+        setMinimumScreenOffTimeoutConfig(5);
+        setAttentiveTimeout(30000);
+        createService();
+        startSystem();
+
+        advanceTime(10000);
+        forceDream();
+        advanceTime(10000);
+        final String pkg = mContextSpy.getOpPackageName();
+        mService.getBinderServiceInstance().wakeUp(mClock.now(),
+                PowerManager.WAKE_REASON_DREAM_FINISHED, "PowerManagerServiceTest:DREAM_FINISHED",
+                pkg);
+        advanceTime(10001);
+
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
         assertThat(mService.getBinderServiceInstance().getLastSleepReason()).isEqualTo(
                 PowerManager.GO_TO_SLEEP_REASON_INATTENTIVE);

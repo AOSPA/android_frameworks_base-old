@@ -51,7 +51,6 @@ import java.io.PrintWriter;
  */
 final class DumpHelper {
     private final PermissionManagerServiceInternal mPermissionManager;
-    private final ApexManager mApexManager;
     private final StorageEventHelper mStorageEventHelper;
     private final DomainVerificationManagerInternal mDomainVerificationManager;
     private final PackageInstallerService mInstallerService;
@@ -63,7 +62,7 @@ final class DumpHelper {
     private final PerUidReadTimeouts[] mPerUidReadTimeouts;
 
     DumpHelper(
-            PermissionManagerServiceInternal permissionManager, ApexManager apexManager,
+            PermissionManagerServiceInternal permissionManager,
             StorageEventHelper storageEventHelper,
             DomainVerificationManagerInternal domainVerificationManager,
             PackageInstallerService installerService, String requiredVerifierPackage,
@@ -73,7 +72,6 @@ final class DumpHelper {
             ArraySet<String> protectedBroadcasts,
             PerUidReadTimeouts[] perUidReadTimeouts) {
         mPermissionManager = permissionManager;
-        mApexManager = apexManager;
         mStorageEventHelper = storageEventHelper;
         mDomainVerificationManager = domainVerificationManager;
         mInstallerService = installerService;
@@ -271,7 +269,7 @@ final class DumpHelper {
         // Return if the package doesn't exist.
         if (packageName != null
                 && snapshot.getPackageStateInternal(packageName) == null
-                && !mApexManager.isApexPackage(packageName)) {
+                && !snapshot.isApexPackage(packageName)) {
             pw.println("Unable to find package: " + packageName);
             return;
         }
@@ -553,10 +551,8 @@ final class DumpHelper {
             mInstallerService.dump(new IndentingPrintWriter(pw, "  ", 120));
         }
 
-        if (!checkin
-                && dumpState.isDumping(DumpState.DUMP_APEX)
-                && (packageName == null || mApexManager.isApexPackage(packageName))) {
-            mApexManager.dump(pw, packageName);
+        if (!checkin && dumpState.isDumping(DumpState.DUMP_APEX)) {
+            snapshot.dump(DumpState.DUMP_APEX, fd, pw, dumpState);
         }
 
         if (!checkin

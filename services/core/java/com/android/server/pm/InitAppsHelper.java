@@ -21,6 +21,7 @@ import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static com.android.internal.util.FrameworkStatsLog.BOOT_TIME_EVENT_DURATION__EVENT__OTA_PACKAGE_MANAGER_DATA_APP_AVG_SCAN_TIME;
 import static com.android.internal.util.FrameworkStatsLog.BOOT_TIME_EVENT_DURATION__EVENT__OTA_PACKAGE_MANAGER_SYSTEM_APP_AVG_SCAN_TIME;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_APK_IN_APEX;
+import static com.android.server.pm.PackageManagerService.SCAN_AS_FACTORY;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_PRIVILEGED;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_SYSTEM;
 import static com.android.server.pm.PackageManagerService.SCAN_BOOTING;
@@ -31,6 +32,7 @@ import static com.android.server.pm.PackageManagerService.SCAN_REQUIRE_KNOWN;
 import static com.android.server.pm.PackageManagerService.SYSTEM_PARTITIONS;
 import static com.android.server.pm.PackageManagerService.TAG;
 import static com.android.server.pm.pkg.parsing.ParsingPackageUtils.PARSE_APK_IN_APEX;
+import static com.android.server.pm.pkg.parsing.ParsingPackageUtils.PARSE_FRAMEWORK_RES_SPLITS;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -70,6 +72,7 @@ final class InitAppsHelper {
     private final int mSystemScanFlags;
     private final InstallPackageHelper mInstallPackageHelper;
     private final ApexManager mApexManager;
+    private final ApexPackageInfo mApexPackageInfo;
     private final ExecutorService mExecutorService;
     /* Tracks how long system scan took */
     private long mSystemScanTime;
@@ -78,7 +81,6 @@ final class InitAppsHelper {
     /* Track of the number of system apps */
     private int mSystemPackagesCount;
     private final boolean mIsDeviceUpgrading;
-    private final boolean mIsOnlyCoreApps;
     private final List<ScanPartition> mSystemPartitions;
 
     /**
@@ -94,16 +96,17 @@ final class InitAppsHelper {
     private final List<String> mStubSystemApps = new ArrayList<>();
 
     // TODO(b/198166813): remove PMS dependency
-    InitAppsHelper(PackageManagerService pm, ApexManager apexManager,
+    InitAppsHelper(PackageManagerService pm,
+            ApexManager apexManager, ApexPackageInfo apexPackageInfo,
             InstallPackageHelper installPackageHelper,
             List<ScanPartition> systemPartitions) {
         mPm = pm;
         mApexManager = apexManager;
+        mApexPackageInfo = apexPackageInfo;
         mInstallPackageHelper = installPackageHelper;
         mSystemPartitions = systemPartitions;
         mDirsToScanAsSystem = getSystemScanPartitions();
         mIsDeviceUpgrading = mPm.isDeviceUpgrading();
-        mIsOnlyCoreApps = mPm.isOnlyCoreApps();
         // Set flag to monitor and not change apk file paths when scanning install directories.
         int scanFlags = SCAN_BOOTING | SCAN_INITIAL;
         if (mIsDeviceUpgrading || mPm.isFirstBoot()) {
@@ -167,10 +170,35 @@ final class InitAppsHelper {
                     sp.getFolder().getAbsolutePath())
                     || apexInfo.preInstalledApexPath.getAbsolutePath().startsWith(
                     sp.getFolder().getAbsolutePath() + File.separator)) {
-                return new ScanPartition(apexInfo.apexDirectory, sp, SCAN_AS_APK_IN_APEX);
+                int additionalScanFlag = SCAN_AS_APK_IN_APEX;
+                if (apexInfo.isFactory) {
+                    additionalScanFlag |= SCAN_AS_FACTORY;
+                }
+                return new ScanPartition(apexInfo.apexDirectory, sp, additionalScanFlag);
             }
         }
         return null;
+    }
+
+    @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
+    private List<ApexManager.ScanResult> scanApexPackagesTraced(PackageParser2 packageParser) {
+        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "scanApexPackages");
+
+        try {
+            final List<ApexManager.ScanResult> apexScanResults;
+            if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                apexScanResults = mInstallPackageHelper.scanApexPackages(
+                        mApexManager.getAllApexInfos(), mSystemParseFlags, mSystemScanFlags,
+                        packageParser, mExecutorService);
+                mApexPackageInfo.notifyScanResult(apexScanResults);
+            } else {
+                apexScanResults = mApexPackageInfo.scanApexPackages(
+                        mApexManager.getAllApexInfos(), packageParser, mExecutorService);
+            }
+            return apexScanResults;
+        } finally {
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+        }
     }
 
     /**
@@ -182,7 +210,8 @@ final class InitAppsHelper {
             int[] userIds, long startTime) {
         // Prepare apex package info before scanning APKs, this information is needed when
         // scanning apk in apex.
-        mApexManager.scanApexPackagesTraced(packageParser, mExecutorService);
+        final List<ApexManager.ScanResult> apexScanResults = scanApexPackagesTraced(packageParser);
+        mApexManager.notifyScanResult(apexScanResults);
 
         scanSystemDirs(packageParser, mExecutorService);
         // Parse overlay configuration files to set default enable state, mutability, and
@@ -198,12 +227,10 @@ final class InitAppsHelper {
                         pkg -> consumer.accept(pkg, pkg.isSystem(),
                                 apkInApexPreInstalledPaths.get(pkg.getPackageName()))));
 
-        if (!mIsOnlyCoreApps) {
-            // do this first before mucking with mPackages for the "expecting better" case
-            updateStubSystemAppsList(mStubSystemApps);
-            mInstallPackageHelper.prepareSystemPackageCleanUp(packageSettings,
-                    mPossiblyDeletedUpdatedSystemApps, mExpectingBetter, userIds);
-        }
+        // do this first before mucking with mPackages for the "expecting better" case
+        updateStubSystemAppsList(mStubSystemApps);
+        mInstallPackageHelper.prepareSystemPackageCleanUp(packageSettings,
+                mPossiblyDeletedUpdatedSystemApps, mExpectingBetter, userIds);
 
         logSystemAppsScanningTime(startTime);
         return overlayConfig;
@@ -237,23 +264,18 @@ final class InitAppsHelper {
     @GuardedBy({"mPm.mInstallLock", "mPm.mLock"})
     public void initNonSystemApps(PackageParser2 packageParser, @NonNull int[] userIds,
             long startTime) {
-        if (!mIsOnlyCoreApps) {
-            EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_DATA_SCAN_START,
-                    SystemClock.uptimeMillis());
-            scanDirTracedLI(mPm.getAppInstallDir(), /* frameworkSplits= */ null, 0,
-                    mScanFlags | SCAN_REQUIRE_KNOWN,
-                    packageParser, mExecutorService);
-        }
+        EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_DATA_SCAN_START,
+                SystemClock.uptimeMillis());
+        scanDirTracedLI(mPm.getAppInstallDir(), /* frameworkSplits= */ null, 0,
+                mScanFlags | SCAN_REQUIRE_KNOWN, packageParser, mExecutorService);
 
         List<Runnable> unfinishedTasks = mExecutorService.shutdownNow();
         if (!unfinishedTasks.isEmpty()) {
             throw new IllegalStateException("Not all tasks finished before calling close: "
                     + unfinishedTasks);
         }
-        if (!mIsOnlyCoreApps) {
-            fixSystemPackages(userIds);
-            logNonSystemAppScanningTime(startTime);
-        }
+        fixSystemPackages(userIds);
+        logNonSystemAppScanningTime(startTime);
         mExpectingBetter.clear();
         mPm.mSettings.pruneRenamedPackagesLPw();
     }
@@ -317,8 +339,9 @@ final class InitAppsHelper {
                     packageParser, executorService);
         }
 
-        scanDirTracedLI(frameworkDir, null,
-                mSystemParseFlags,
+        List<File> frameworkSplits = getFrameworkResApkSplitFiles();
+        scanDirTracedLI(frameworkDir, frameworkSplits,
+                mSystemParseFlags | PARSE_FRAMEWORK_RES_SPLITS,
                 mSystemScanFlags | SCAN_NO_DEX | SCAN_AS_PRIVILEGED,
                 packageParser, executorService);
         if (!mPm.mPackages.containsKey("android")) {

@@ -598,6 +598,21 @@
     <string name="guest_reset_guest_confirm_button" msgid="2989915693215617237">"রিসেট করুন"</string>
     <string name="guest_remove_guest_confirm_button" msgid="7858123434954143879">"সরান"</string>
     <string name="guest_resetting" msgid="7822120170191509566">"গেস্ট সেশন রিসেট করা হচ্ছে..."</string>
+    <string name="guest_reset_and_restart_dialog_title" msgid="3396657008451616041">"অতিথি সেশন রিসেট করতে চান?"</string>
+    <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"এটি নতুন অতিথি সেশন চালু করবে এবং বর্তমান সেশন থেকে সব অ্যাপ ও ডেটা মুছে দেবে"</string>
+    <string name="guest_exit_dialog_title" msgid="1846494656849381804">"\'অতিথি মোড\' ছেড়ে বেরিয়ে আসবেন?"</string>
+    <string name="guest_exit_dialog_message" msgid="1743218864242719783">"এটি বর্তমান অতিথি সেশন থেকে অ্যাপ ও ডেটা মুছে দেবে"</string>
+    <string name="guest_exit_dialog_button" msgid="1736401897067442044">"বেরিয়ে আসুন"</string>
+    <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"অতিথি অ্যাক্টিভিটি সেভ করবেন?"</string>
+    <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"আপনি বর্তমান সেশন থেকে অ্যাক্টিভিটি সেভ করতে বা সব অ্যাপ ও ডেটা মুছতে পারবেন"</string>
+    <string name="guest_exit_clear_data_button" msgid="3425812652180679014">"মুছুন"</string>
+    <string name="guest_exit_save_data_button" msgid="3690974510644963547">"সেভ করুন"</string>
+    <string name="guest_exit_button" msgid="5774985819191803960">"\'অতিথি মোড\' ছেড়ে বেরিয়ে আসুন"</string>
+    <string name="guest_reset_button" msgid="2515069346223503479">"অতিথি সেশন রিসেট করুন"</string>
+    <string name="guest_exit_quick_settings_button" msgid="1912362095913765471">"\'অতিথি মোড\' ছেড়ে বেরিয়ে আসুন"</string>
+    <string name="guest_notification_ephemeral" msgid="7263252466950923871">"ছেড়ে বেরিয়ে যাওয়ার সময় সব অ্যাক্টিভিটি মুছে দেওয়া হবে"</string>
+    <string name="guest_notification_non_ephemeral" msgid="6843799963012259330">"ছেড়ে বেরিয়ে যাওয়ার সময় আপনি অ্যাক্টিভিটি সেভ করতে পারবেন বা মুছতে পারবেন"</string>
+    <string name="guest_notification_non_ephemeral_non_first_login" msgid="8009307983766934876">"সেশন অ্যাক্টিভিটি মুছে দিতে এখন রিসেট করুন বা ছেড়ে বেরিয়ে আসার সময় আপনি অ্যাক্টিভিটি সেভ করতে বা মুছতে পারবেন"</string>
     <string name="user_image_take_photo" msgid="467512954561638530">"ফটো তুলুন"</string>
     <string name="user_image_choose_photo" msgid="1363820919146782908">"একটি ইমেজ বেছে নিন"</string>
     <string name="user_image_photo_selector" msgid="433658323306627093">"ফটো বেছে নিন"</string>

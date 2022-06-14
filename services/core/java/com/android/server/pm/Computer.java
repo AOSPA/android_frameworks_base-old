@@ -219,11 +219,16 @@ public interface Computer extends PackageDataSnapshot {
     boolean isSameProfileGroup(@UserIdInt int callerUserId, @UserIdInt int userId);
     boolean shouldFilterApplication(@Nullable PackageStateInternal ps, int callingUid,
             @Nullable ComponentName component, @PackageManager.ComponentType int componentType,
+            int userId, boolean filterUninstall);
+    boolean shouldFilterApplication(@Nullable PackageStateInternal ps, int callingUid,
+            @Nullable ComponentName component, @PackageManager.ComponentType int componentType,
             int userId);
     boolean shouldFilterApplication(@Nullable PackageStateInternal ps, int callingUid,
             int userId);
     boolean shouldFilterApplication(@NonNull SharedUserSetting sus, int callingUid,
             int userId);
+    boolean shouldFilterApplicationIncludingUninstalled(@Nullable PackageStateInternal ps,
+            int callingUid, int userId);
     int checkUidPermission(String permName, int uid);
     int getPackageUidInternal(String packageName, long flags, int userId, int callingUid);
     long updateFlagsForApplication(long flags, int userId);
@@ -309,6 +314,8 @@ public interface Computer extends PackageDataSnapshot {
 
     boolean isPackageAvailable(String packageName, @UserIdInt int userId);
 
+    boolean isApexPackage(String packageName);
+
     @NonNull
     String[] currentToCanonicalPackageNames(@NonNull String[] names);
 
@@ -366,7 +373,7 @@ public interface Computer extends PackageDataSnapshot {
     PackageStateInternal getPackageStateFiltered(@NonNull String packageName, int callingUid,
             @UserIdInt int userId);
 
-    int checkSignatures(@NonNull String pkg1, @NonNull String pkg2);
+    int checkSignatures(@NonNull String pkg1, @NonNull String pkg2, int userId);
 
     int checkUidSignatures(int uid1, int uid2);
 
@@ -443,10 +450,6 @@ public interface Computer extends PackageDataSnapshot {
     boolean getBlockUninstallForUser(@NonNull String packageName, @UserIdInt int userId);
 
     @Nullable
-    SparseArray<int[]> getBroadcastAllowList(@NonNull String packageName, @UserIdInt int[] userIds,
-            boolean isInstantApp);
-
-    @Nullable
     String getInstallerPackageName(@NonNull String packageName);
 
     @Nullable
@@ -482,6 +485,16 @@ public interface Computer extends PackageDataSnapshot {
 
     boolean isPackageSignedByKeySetExactly(@NonNull String packageName, @NonNull KeySet ks);
 
+    /**
+     * See {@link AppsFilterSnapshot#getVisibilityAllowList(PackageStateInternal, int[], ArrayMap)}
+     */
+    @Nullable
+    SparseArray<int[]> getVisibilityAllowLists(@NonNull String packageName,
+            @UserIdInt int[] userIds);
+
+    /**
+     * See {@link AppsFilterSnapshot#getVisibilityAllowList(PackageStateInternal, int[], ArrayMap)}
+     */
     @Nullable
     int[] getVisibilityAllowList(@NonNull String packageName, @UserIdInt int userId);
 

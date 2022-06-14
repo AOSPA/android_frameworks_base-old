@@ -67,6 +67,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.StrictMode;
 import android.os.SystemProperties;
+import android.service.wallpaper.WallpaperService;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -558,26 +559,23 @@ public class WallpaperManager {
                 }
                 mCachedWallpaper = null;
                 mCachedWallpaperUserId = 0;
-            }
-            try {
-                Bitmap currentWallpaper = getCurrentWallpaperLocked(
-                        context, userId, hardware, cmProxy);
-                if (currentWallpaper != null) {
-                    synchronized (this) {
-                        mCachedWallpaper = currentWallpaper;
-                        mCachedWallpaperUserId = userId;
-                        return mCachedWallpaper;
+                try {
+                    mCachedWallpaper = getCurrentWallpaperLocked(
+                            context, userId, hardware, cmProxy);
+                    mCachedWallpaperUserId = userId;
+                } catch (OutOfMemoryError e) {
+                    Log.w(TAG, "Out of memory loading the current wallpaper: " + e);
+                } catch (SecurityException e) {
+                    if (context.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.O_MR1) {
+                        Log.w(TAG, "No permission to access wallpaper, suppressing"
+                                + " exception to avoid crashing legacy app.");
+                    } else {
+                        // Post-O apps really most sincerely need the permission.
+                        throw e;
                     }
                 }
-            } catch (OutOfMemoryError e) {
-                Log.w(TAG, "Out of memory loading the current wallpaper: " + e);
-            } catch (SecurityException e) {
-                if (context.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.O_MR1) {
-                    Log.w(TAG, "No permission to access wallpaper, suppressing"
-                            + " exception to avoid crashing legacy app.");
-                } else {
-                    // Post-O apps really most sincerely need the permission.
-                    throw e;
+                if (mCachedWallpaper != null) {
+                    return mCachedWallpaper;
                 }
             }
             if (returnDefault) {
@@ -2025,7 +2023,7 @@ public class WallpaperManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_DIM_AMOUNT)
-    public float getWallpaperDimAmount() {
+    public @FloatRange (from = 0f, to = 1f) float getWallpaperDimAmount() {
         if (sGlobals.mService == null) {
             Log.w(TAG, "WallpaperService not running");
             throw new RuntimeException(new DeadSystemException());
@@ -2474,7 +2472,7 @@ public class WallpaperManager {
          *
          * @param colors Wallpaper color info, {@code null} when not available.
          * @param which A combination of {@link #FLAG_LOCK} and {@link #FLAG_SYSTEM}
-         * @see android.service.wallpaper.WallpaperService.Engine#onComputeColors()
+         * @see WallpaperService.Engine#onComputeColors()
          */
         void onColorsChanged(@Nullable WallpaperColors colors, int which);
 
@@ -2486,7 +2484,7 @@ public class WallpaperManager {
          * @param colors Wallpaper color info, {@code null} when not available.
          * @param which A combination of {@link #FLAG_LOCK} and {@link #FLAG_SYSTEM}
          * @param userId Owner of the wallpaper
-         * @see android.service.wallpaper.WallpaperService.Engine#onComputeColors()
+         * @see WallpaperService.Engine#onComputeColors()
          * @hide
          */
         default void onColorsChanged(@Nullable WallpaperColors colors, int which, int userId) {

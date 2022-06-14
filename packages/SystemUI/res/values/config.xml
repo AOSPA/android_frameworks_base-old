@@ -87,7 +87,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,color_correction
+        internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,color_correction,dream
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -442,6 +442,9 @@
          they were added. -->
     <integer name="config_smart_replies_in_notifications_onclick_init_delay">200</integer>
 
+    <!-- Smartspace trampoline activity that is used when the user taps smartspace. -->
+    <string name="config_smartspaceTrampolineActivityComponent" translatable="false">com.google.android.apps.gsa.staticplugins.opa.smartspace.ExportedSmartspaceTrampolineActivity</string>
+
     <!-- Screenshot editing default activity.  Must handle ACTION_EDIT image/png intents.
          Blank sends the user to the Chooser first.
          This name is in the ComponentName flattened format (package/class)  -->
@@ -623,11 +626,11 @@
 
     <!-- This value is used when calculating whether the device is in ambient light mode. It is
         light mode when the light sensor sample value exceeds above this value. -->
-    <integer name="config_ambientLightModeThreshold">5</integer>
+    <integer name="config_ambientLightModeThreshold">10</integer>
 
     <!-- This value is used when calculating whether the device is in ambient dark mode. It is
         dark mode when the light sensor sample value drops below this value. -->
-    <integer name="config_ambientDarkModeThreshold">2</integer>
+    <integer name="config_ambientDarkModeThreshold">5</integer>
 
     <!-- This value is used when calculating whether the device is in ambient light mode. Each
         sample contains light sensor events from this span of time duration. -->
