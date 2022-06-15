@@ -784,6 +784,10 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
             Log.d(TAG, "getBroadcastMetadata: LE Audio Broadcast is null");
             return "";
         }
+        if (broadcast.getLatestBluetoothLeBroadcastMetadata() == null) {
+            Log.d(TAG, "getBroadcastMetadata: LE Broadcast Metadata is null");
+            return "";
+        }
         return broadcast.getLocalBluetoothLeBroadcastMetaData().convertToQrCodeString();
     }
 
