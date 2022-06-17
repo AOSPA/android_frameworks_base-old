@@ -16,6 +16,24 @@
       "message": "we can use hardware/google/interfaces",
       "revId": "9822f44f95d588e6ca5d2355570c2f7a035598e7",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "dd30b22e_56afe0e1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2022-06-17T02:28:22Z",
+      "side": 1,
+      "message": "Then we would have to sync that globally to use it\u0027s dependency without breaking build for non-google devices",
+      "parentUuid": "3106abb8_bb0774bf",
+      "revId": "9822f44f95d588e6ca5d2355570c2f7a035598e7",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
