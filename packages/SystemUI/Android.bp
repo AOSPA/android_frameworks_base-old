@@ -130,6 +130,7 @@ android_library {
         "smartspace-google",
         "tensorflowlite_java",
         "vendor-pixelatoms-java",
+        "com.google.hardware.pixel.display",
     ],
     manifest: "AndroidManifest.xml",
     defaults: [
