@@ -328,6 +328,20 @@ public class ScreenshotController {
         }
     }
 
+    class NotificationCreator {
+        private SavedImageData imageData;
+
+        NotificationCreator(SavedImageData data) {
+            imageData = data;
+        }
+
+        void createNotification() {
+            mNotificationsController.showScreenshotActionsNotification(imageData);
+        }
+    }
+
+    private NotificationCreator mNotificationCreator;
+
     @Inject
     ScreenshotController(
             Context context,
@@ -483,6 +497,8 @@ public class ScreenshotController {
         } else {
             mScreenshotView.animateDismissal();
         }
+
+        mNotificationCreator.createNotification();
 
         if (mLastScrollCaptureResponse != null) {
             mLastScrollCaptureResponse.close();
@@ -974,6 +990,7 @@ public class ScreenshotController {
                 } else {
                     mScreenshotView.setChipIntents(imageData);
                 }
+                mNotificationCreator = new NotificationCreator(imageData);
             });
         }
     }
