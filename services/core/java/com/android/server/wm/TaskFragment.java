@@ -98,6 +98,7 @@ import com.android.internal.app.ActivityTrigger;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
+import com.android.server.am.HostingRecord;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.io.FileDescriptor;
@@ -105,7 +106,6 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -568,13 +568,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * @param uid   uid of the TaskFragment organizer.
      */
     boolean isAllowedToEmbedActivityInTrustedMode(@NonNull ActivityRecord a, int uid) {
-        if (UserHandle.getAppId(uid) == SYSTEM_UID) {
-            // The system is trusted to embed other apps securely and for all users.
-            return true;
-        }
-
-        if (uid == a.getUid()) {
-            // Activities from the same UID can be embedded freely by the host.
+        if (isFullyTrustedEmbedding(a, uid)) {
             return true;
         }
 
@@ -593,13 +587,34 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     /**
+     * It is fully trusted for embedding in the system app or embedding in the same app. This is
+     * different from {@link #isAllowedToBeEmbeddedInTrustedMode()} since there may be a small
+     * chance for a previous trusted app to start doing something bad.
+     */
+    private static boolean isFullyTrustedEmbedding(@NonNull ActivityRecord a, int uid) {
+        // The system is trusted to embed other apps securely and for all users.
+        return UserHandle.getAppId(uid) == SYSTEM_UID
+                // Activities from the same UID can be embedded freely by the host.
+                || uid == a.getUid();
+    }
+
+    /**
+     * Checks if all activities in the task fragment are embedded as fully trusted.
+     * @see #isFullyTrustedEmbedding(ActivityRecord, int)
+     * @param uid   uid of the TaskFragment organizer.
+     */
+    boolean isFullyTrustedEmbedding(int uid) {
+        // Traverse all activities to see if any of them are not fully trusted embedding.
+        return !forAllActivities(r -> !isFullyTrustedEmbedding(r, uid));
+    }
+
+    /**
      * Checks if all activities in the task fragment are allowed to be embedded in trusted mode.
      * @see #isAllowedToEmbedActivityInTrustedMode(ActivityRecord)
      */
     boolean isAllowedToBeEmbeddedInTrustedMode() {
         // Traverse all activities to see if any of them are not in the trusted mode.
-        final Predicate<ActivityRecord> callback = r -> !isAllowedToEmbedActivityInTrustedMode(r);
-        return !forAllActivities(callback);
+        return !forAllActivities(r -> !isAllowedToEmbedActivityInTrustedMode(r));
     }
 
     /**
@@ -1146,7 +1161,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 // for the current activity to be paused.
                 final boolean isTop = this == taskDisplayArea.getFocusedRootTask();
                 mAtmService.startProcessAsync(next, false /* knownToBeDead */, isTop,
-                        isTop ? "pre-top-activity" : "pre-activity");
+                        isTop ? HostingRecord.HOSTING_TYPE_NEXT_TOP_ACTIVITY
+                                : HostingRecord.HOSTING_TYPE_NEXT_ACTIVITY);
             }
             if (lastResumed != null) {
                 lastResumed.setWillCloseOrEnterPip(true);
@@ -1775,7 +1791,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         final Task task = isAddingActivity ? getTask() : null;
 
         // If this task had any activity before we added this one.
-        boolean taskHadActivity = task != null && task.getActivity(Objects::nonNull) != null;
+        boolean taskHadActivity = task != null && task.getTopMostActivity() != null;
         // getActivityType() looks at the top child, so we need to read the type before adding
         // a new child in case the new child is on top and UNDEFINED.
         final int activityType = task != null ? task.getActivityType() : ACTIVITY_TYPE_UNDEFINED;
@@ -2188,7 +2204,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (applicationType != ACTIVITY_TYPE_UNDEFINED || !hasChild()) {
             return applicationType;
         }
-        final ActivityRecord activity = getTopNonFinishingActivity();
+        final ActivityRecord activity = getTopMostActivity();
         return activity != null ? activity.getActivityType() : getTopChild().getActivityType();
     }
 

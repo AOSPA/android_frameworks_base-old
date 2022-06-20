@@ -108,6 +108,17 @@ public final class DisplayManager {
     public static final String DISPLAY_CATEGORY_PRESENTATION =
             "android.hardware.display.category.PRESENTATION";
 
+    /**
+     * Display category: All displays, including disabled displays.
+     * <p>
+     * This returns all displays, including currently disabled and inaccessible displays.
+     *
+     * @see #getDisplays(String)
+     * @hide
+     */
+    public static final String DISPLAY_CATEGORY_ALL_INCLUDING_DISABLED =
+            "android.hardware.display.category.ALL_INCLUDING_DISABLED";
+
     /** @hide **/
     @IntDef(prefix = "VIRTUAL_DISPLAY_FLAG_", flag = true, value = {
             VIRTUAL_DISPLAY_FLAG_PUBLIC,
@@ -122,7 +133,8 @@ public final class DisplayManager {
             VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS,
             VIRTUAL_DISPLAY_FLAG_TRUSTED,
             VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP,
-            VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED
+            VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED,
+            VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface VirtualDisplayFlag {}
@@ -379,6 +391,15 @@ public final class DisplayManager {
      */
     public static final int VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED = 1 << 12;
 
+    /**
+     * Virtual display flags: Indicates that the display should not play sound effects or perform
+     * haptic feedback when the user touches the screen.
+     *
+     * @see #createVirtualDisplay
+     * @hide
+     */
+    public static final int VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED = 1 << 13;
+
     /** @hide */
     @IntDef(prefix = {"MATCH_CONTENT_FRAMERATE_"}, value = {
             MATCH_CONTENT_FRAMERATE_UNKNOWN,
@@ -542,7 +563,8 @@ public final class DisplayManager {
         final int[] displayIds = mGlobal.getDisplayIds();
         synchronized (mLock) {
             try {
-                if (category == null) {
+                if (category == null
+                        || DISPLAY_CATEGORY_ALL_INCLUDING_DISABLED.equals(category)) {
                     addAllDisplaysLocked(mTempDisplays, displayIds);
                 } else if (category.equals(DISPLAY_CATEGORY_PRESENTATION)) {
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_WIFI);

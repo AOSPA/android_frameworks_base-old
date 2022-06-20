@@ -22,6 +22,7 @@ import android.animation.AnimatorSet
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Rect
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -47,6 +48,7 @@ class SystemEventChipAnimationController @Inject constructor(
 ) : SystemStatusAnimationCallback {
 
     private lateinit var animationWindowView: FrameLayout
+    private lateinit var themedContext: ContextThemeWrapper
 
     private var currentAnimatedView: BackgroundAnimatableView? = null
 
@@ -77,7 +79,7 @@ class SystemEventChipAnimationController @Inject constructor(
 
         // Initialize the animated view
         val insets = contentInsetsProvider.getStatusBarContentInsetsForCurrentRotation()
-        currentAnimatedView = viewCreator(context).also {
+        currentAnimatedView = viewCreator(themedContext).also {
             animationWindowView.addView(
                     it.view,
                     layoutParamsDefault(
@@ -222,7 +224,8 @@ class SystemEventChipAnimationController @Inject constructor(
 
     private fun init() {
         initialized = true
-        animationWindowView = LayoutInflater.from(context)
+        themedContext = ContextThemeWrapper(context, R.style.Theme_SystemUI_QuickSettings)
+        animationWindowView = LayoutInflater.from(themedContext)
                 .inflate(R.layout.system_event_animation_window, null) as FrameLayout
         val lp = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
         lp.gravity = Gravity.END or Gravity.CENTER_VERTICAL

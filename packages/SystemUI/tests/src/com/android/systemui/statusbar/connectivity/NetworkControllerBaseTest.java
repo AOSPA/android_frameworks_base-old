@@ -243,7 +243,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 mCarrierConfigTracker,
                 mWifiStatusTrackerFactory,
                 mMainHandler,
-                mFeatureFlags
+                mFeatureFlags,
+                mock(DumpManager.class)
         );
         setupNetworkController();
 

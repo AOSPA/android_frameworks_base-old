@@ -167,9 +167,10 @@ final class DeletePackageHelper {
 
             if (PackageManagerServiceUtils.isSystemApp(uninstalledPs)) {
                 UserInfo userInfo = mUserManagerInternal.getUserInfo(userId);
-                if (userInfo == null || !userInfo.isAdmin()) {
+                if (userInfo == null || (!userInfo.isAdmin() && !mUserManagerInternal.getUserInfo(
+                        mUserManagerInternal.getProfileParentId(userId)).isAdmin())) {
                     Slog.w(TAG, "Not removing package " + packageName
-                            + " as only admin user may downgrade system apps");
+                            + " as only admin user (or their profile) may downgrade system apps");
                     EventLog.writeEvent(0x534e4554, "170646036", -1, packageName);
                     return PackageManager.DELETE_FAILED_USER_RESTRICTED;
                 }
@@ -336,16 +337,17 @@ final class DeletePackageHelper {
         }
 
         if (res && packageName != null) {
-            acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_UNINSTALL, packageName, userId);
+            BoostFramework ux_perf = new BoostFramework();
+            if (ux_perf != null) {
+                if (ux_perf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    ux_perf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_PKG_UNINSTALL, 0, packageName, userId);
+                } else {
+                    ux_perf.perfEvent(BoostFramework.VENDOR_HINT_PKG_UNINSTALL, packageName, 2, userId, 0);
+                }
+            }
         }
         return res ? PackageManager.DELETE_SUCCEEDED : PackageManager.DELETE_FAILED_INTERNAL_ERROR;
-    }
-
-    private void acquireUxPerfLock(int opcode, String pkgName, int dat) {
-        BoostFramework ux_perf = new BoostFramework();
-        if (ux_perf != null) {
-            ux_perf.perfUXEngine_events(opcode, 0, pkgName, dat);
-        }
     }
 
     /*

@@ -16,6 +16,8 @@
 
 package com.android.internal.app;
 
+import static com.android.internal.util.LatencyTracker.ACTION_LOAD_SHARE_SHEET;
+
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.animation.Animator;
@@ -190,6 +192,7 @@ public class ChooserActivity extends ResolverActivity implements
     private static final String SHORTCUT_TARGET = "shortcut_target";
     private static final int APP_PREDICTION_SHARE_TARGET_QUERY_PACKAGE_LIMIT = 20;
     public static final String APP_PREDICTION_INTENT_FILTER_KEY = "intent_filter";
+    private static final String SHARED_TEXT_KEY = "shared_text";
 
     private static final String PLURALS_COUNT = "count";
     private static final String PLURALS_FILE_NAME = "file_name";
@@ -508,6 +511,8 @@ public class ChooserActivity extends ResolverActivity implements
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         final long intentReceivedTime = System.currentTimeMillis();
+        mLatencyTracker.onActionStart(ACTION_LOAD_SHARE_SHEET);
+
         getChooserActivityLogger().logSharesheetTriggered();
         // This is the only place this value is being set. Effectively final.
         mIsAppPredictorComponentAvailable = isAppPredictionServiceAvailable();
@@ -997,6 +1002,7 @@ public class ChooserActivity extends ResolverActivity implements
         mMaxTargetsPerRow = getResources().getInteger(R.integer.config_chooser_max_targets_per_row);
         adjustPreviewWidth(newConfig.orientation, null);
         updateStickyContentPreview();
+        updateTabPadding();
     }
 
     private boolean shouldDisplayLandscape(int orientation) {
@@ -1017,6 +1023,20 @@ public class ChooserActivity extends ResolverActivity implements
         updateLayoutWidth(R.id.content_preview_text_layout, width, parent);
         updateLayoutWidth(R.id.content_preview_title_layout, width, parent);
         updateLayoutWidth(R.id.content_preview_file_layout, width, parent);
+    }
+
+    private void updateTabPadding() {
+        if (shouldShowTabs()) {
+            View tabs = findViewById(R.id.tabs);
+            float iconSize = getResources().getDimension(R.dimen.chooser_icon_size);
+            // The entire width consists of icons or padding. Divide the item padding in half to get
+            // paddingHorizontal.
+            float padding = (tabs.getWidth() - mMaxTargetsPerRow * iconSize)
+                    / mMaxTargetsPerRow / 2;
+            // Subtract the margin the buttons already have.
+            padding -= getResources().getDimension(R.dimen.resolver_profile_tab_margin);
+            tabs.setPadding((int) padding, 0, (int) padding, 0);
+        }
     }
 
     private void updateLayoutWidth(int layoutResourceId, int width, View parent) {
@@ -1536,6 +1556,10 @@ public class ChooserActivity extends ResolverActivity implements
     @Override
     protected void onDestroy() {
         super.onDestroy();
+
+        if (isFinishing()) {
+            mLatencyTracker.onActionCancel(ACTION_LOAD_SHARE_SHEET);
+        }
 
         if (mRefinementResultReceiver != null) {
             mRefinementResultReceiver.destroy();
@@ -2201,6 +2225,7 @@ public class ChooserActivity extends ResolverActivity implements
         final IntentFilter filter = getTargetIntentFilter();
         Bundle extras = new Bundle();
         extras.putParcelable(APP_PREDICTION_INTENT_FILTER_KEY, filter);
+        populateTextContent(extras);
         AppPredictionContext appPredictionContext = new AppPredictionContext.Builder(contextAsUser)
             .setUiSurface(APP_PREDICTION_SHARE_UI_SURFACE)
             .setPredictedTargetCount(APP_PREDICTION_SHARE_TARGET_QUERY_PACKAGE_LIMIT)
@@ -2217,6 +2242,12 @@ public class ChooserActivity extends ResolverActivity implements
             mWorkAppPredictor = appPredictionSession;
         }
         return appPredictionSession;
+    }
+
+    private void populateTextContent(Bundle extras) {
+        final Intent intent = getTargetIntent();
+        String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
+        extras.putString(SHARED_TEXT_KEY, sharedText);
     }
 
     /**
@@ -2464,6 +2495,8 @@ public class ChooserActivity extends ResolverActivity implements
                 recyclerView.setAdapter(gridAdapter);
                 ((GridLayoutManager) recyclerView.getLayoutManager()).setSpanCount(
                         mMaxTargetsPerRow);
+
+                updateTabPadding();
             }
 
             UserHandle currentUserHandle = mChooserMultiProfilePagerAdapter.getCurrentUserHandle();
@@ -2657,6 +2690,7 @@ public class ChooserActivity extends ResolverActivity implements
         if (rebuildComplete) {
             getChooserActivityLogger().logSharesheetAppLoadComplete();
             maybeQueryAdditionalPostProcessingTargets(chooserListAdapter);
+            mLatencyTracker.onActionEnd(ACTION_LOAD_SHARE_SHEET);
         }
     }
 

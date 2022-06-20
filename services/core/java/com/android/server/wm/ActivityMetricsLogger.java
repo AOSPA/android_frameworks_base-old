@@ -198,11 +198,10 @@ class ActivityMetricsLogger {
         /** The sequence id for trace. It is used to map the traces before resolving intent. */
         private static int sTraceSeqId;
         /** The trace format is "launchingActivity#$seqId:$state(:$packageName)". */
-        final String mTraceName;
+        String mTraceName;
 
         LaunchingState() {
             if (!Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
-                mTraceName = null;
                 return;
             }
             // Use an id because the launching app is not yet known before resolving intent.
@@ -211,18 +210,26 @@ class ActivityMetricsLogger {
             Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, mTraceName, 0);
         }
 
-        void stopTrace(boolean abort) {
+        void stopTrace(boolean abort, TransitionInfo endInfo) {
             if (mTraceName == null) return;
+            if (!abort && endInfo != mAssociatedTransitionInfo) {
+                // Multiple TransitionInfo can be associated with the same LaunchingState (e.g. a
+                // launching activity launches another activity in a different windowing mode or
+                // display). Only the original associated info can emit a "completed" trace.
+                return;
+            }
             Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER, mTraceName, 0);
             final String launchResult;
             if (mAssociatedTransitionInfo == null) {
                 launchResult = ":failed";
             } else {
-                launchResult = (abort ? ":canceled:" : ":completed:")
+                launchResult = (abort ? ":canceled:" : mAssociatedTransitionInfo.mProcessSwitch
+                        ? ":completed:" : ":completed-same-process:")
                         + mAssociatedTransitionInfo.mLastLaunchedActivity.packageName;
             }
             // Put a supplement trace as the description of the async trace with the same id.
             Trace.instant(Trace.TRACE_TAG_ACTIVITY_MANAGER, mTraceName + launchResult);
+            mTraceName = null;
         }
 
         @VisibleForTesting
@@ -326,7 +333,11 @@ class ActivityMetricsLogger {
             mProcessSwitch = processSwitch;
             mTransitionDeviceUptimeMs = launchingState.mCurrentUpTimeMs;
             setLatestLaunchedActivity(r);
-            launchingState.mAssociatedTransitionInfo = this;
+            // The launching state can be reused by consecutive launch. Its original association
+            // shouldn't be changed by a separated transition.
+            if (launchingState.mAssociatedTransitionInfo == null) {
+                launchingState.mAssociatedTransitionInfo = this;
+            }
             if (options != null) {
                 final SourceInfo sourceInfo = options.getSourceInfo();
                 if (sourceInfo != null) {
@@ -913,7 +924,7 @@ class ActivityMetricsLogger {
             return;
         }
         if (DEBUG_METRICS) Slog.i(TAG, "abort launch cause=" + cause);
-        state.stopTrace(true /* abort */);
+        state.stopTrace(true /* abort */, null /* endInfo */);
         launchObserverNotifyIntentFailed(state.mCurrentTransitionStartTimeNs);
     }
 
@@ -929,7 +940,7 @@ class ActivityMetricsLogger {
             Slog.i(TAG, "done abort=" + abort + " cause=" + cause + " timestamp=" + timestampNs
                     + " info=" + info);
         }
-        info.mLaunchingState.stopTrace(abort);
+        info.mLaunchingState.stopTrace(abort, info);
         stopLaunchTrace(info);
         final Boolean isHibernating =
                 mLastHibernationStates.remove(info.mLastLaunchedActivity.packageName);
@@ -1100,12 +1111,15 @@ class ActivityMetricsLogger {
         if (mPerfBoost != null) {
             if (info.processRecord != null) {
                 mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName,
-                    info.processRecord.getPid(), BoostFramework.Draw.EVENT_TYPE_V1);
+                    info.processRecord.getPid(), info.windowsDrawnDelayMs);
             }
         }
 
         if (mUxPerf != null) {
-            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
+            if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
+            }
         }
 
         Log.i(TAG, sb.toString());
@@ -1124,7 +1138,10 @@ class ActivityMetricsLogger {
                     isGame = 1;
                 }
             }
-            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
+            if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
+            }
         }
 
         if (mLaunchedActivity.mPerf != null && mLaunchedActivity.perfActivityBoostHandler > 0) {

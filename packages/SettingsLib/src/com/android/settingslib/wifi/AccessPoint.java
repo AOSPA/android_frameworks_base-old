@@ -271,8 +271,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     private int mDeviceWifiStandard;
     private int mWifiStandard = ScanResult.WIFI_STANDARD_LEGACY;
-    private boolean mHe8ssCapableAp;
-    private boolean mVhtMax8SpatialStreamsSupport;
 
     private WifiInfo mInfo;
     private NetworkInfo mNetworkInfo;
@@ -1571,9 +1569,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 // are still seen, we will investigate further.
                 update(config); // Notifies the AccessPointListener of the change
             }
-            if (getWifiStandard() != info.getWifiStandard() ||
-                isHe8ssCapableAp() != info.isHe8ssCapableAp() ||
-                isVhtMax8SpatialStreamsSupported() != info.isVhtMax8SpatialStreamsSupported()) {
+            if (getWifiStandard() != info.getWifiStandard()) {
                 updated = true;
             }
             if (mRssi != info.getRssi() && info.getRssi() != WifiInfo.INVALID_RSSI) {
@@ -2132,12 +2128,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
             mDeviceWifiStandard = ScanResult.WIFI_STANDARD_11N;
         else
             mDeviceWifiStandard = ScanResult.WIFI_STANDARD_LEGACY;
-
-        mVhtMax8SpatialStreamsSupport = wifiManager.isVht8ssCapableDevice();
     }
 
     /**
-     * Updates {@link #mWifiStandard, mHe8ssCapableAp}.
+     * Updates {@link #mWifiStandard}.
      *
      * <p>If the given connection is active, the existing values are valid.
      * If the given AccessPoint is not connected, a value will be calculated from previous scan
@@ -2147,14 +2141,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
         int currResultWifiStandard;
         int minConnectionCapability = mDeviceWifiStandard;
 
-        // Capture minimum possible connection capability
-        mHe8ssCapableAp = true;
         for (ScanResult result : mScanResults) {
             currResultWifiStandard = result.getWifiStandard();
-
-            // Check if atleast one bssid present without HE and 8SS support
-            if (!result.capabilities.contains("WFA-HE-READY") && mHe8ssCapableAp)
-                mHe8ssCapableAp = false;
 
             if (currResultWifiStandard < minConnectionCapability) {
                 minConnectionCapability = currResultWifiStandard;
@@ -2169,19 +2157,5 @@ public class AccessPoint implements Comparable<AccessPoint> {
             return mInfo.getWifiStandard();
 
         return mWifiStandard;
-    }
-
-    public boolean isHe8ssCapableAp() {
-        if (this.isActive() && mInfo != null)
-            return mInfo.isHe8ssCapableAp();
-
-        return mHe8ssCapableAp;
-    }
-
-    public boolean isVhtMax8SpatialStreamsSupported() {
-        if (this.isActive() && mInfo != null)
-            return mInfo.isVhtMax8SpatialStreamsSupported();
-
-        return mVhtMax8SpatialStreamsSupport;
     }
 }

@@ -88,6 +88,7 @@ class ProcessRecord implements WindowProcessListener {
     final String processName;   // name of the process
     final String sdkSandboxClientAppPackage; // if this is an sdk sandbox process, name of the
                                              // app package for which it is running
+    final String sdkSandboxClientAppVolumeUuid; // uuid of the app for which the sandbox is running
 
     /**
      * Overall state of process's uid.
@@ -536,6 +537,11 @@ class ProcessRecord implements WindowProcessListener {
         userId = UserHandle.getUserId(_uid);
         processName = _processName;
         sdkSandboxClientAppPackage = _sdkSandboxClientAppPackage;
+        if (isSdkSandbox) {
+            sdkSandboxClientAppVolumeUuid = getClientInfoForSdkSandbox().volumeUuid;
+        } else {
+            sdkSandboxClientAppVolumeUuid = null;
+        }
         mPersistent = false;
         mRemoved = false;
         mProfile = new ProcessProfileRecord(this);
@@ -1096,6 +1102,10 @@ class ProcessRecord implements WindowProcessListener {
             @SubReason int subReason, boolean noisy) {
         if (!mKilledByAm) {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "kill");
+            if (reasonCode == ApplicationExitInfo.REASON_ANR
+                    && mErrorState.getAnrAnnotation() != null) {
+                description = description + ": " + mErrorState.getAnrAnnotation();
+            }
             BoostFramework ux_perf = new BoostFramework();
             if (mService != null && (noisy || info.uid == mService.mCurOomAdjUid)) {
                 mService.reportUidInfoMessageLocked(TAG,
@@ -1120,7 +1130,10 @@ class ProcessRecord implements WindowProcessListener {
             }
             if (ux_perf != null && !mService.mForceStopKill && !mErrorState.isNotResponding()
                 && !mErrorState.isCrashing()) {
-                ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+                if (ux_perf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    ux_perf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+                }
                 ux_perf.perfEvent(BoostFramework.VENDOR_HINT_KILL,this.processName, 2, 0,getPid());
             } else {
                 mService.mForceStopKill = false;

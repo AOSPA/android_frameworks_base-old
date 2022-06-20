@@ -1552,6 +1552,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     // Encapsulates the global setting "hidden_api_blacklist_exemptions"
     final HiddenApiSettings mHiddenApiBlacklist;
 
+    final SdkSandboxSettings mSdkSandboxSettings;
+
     private final PlatformCompat mPlatformCompat;
 
     PackageManagerInternal mPackageManagerInt;
@@ -1892,7 +1894,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         false,
                         0,
                         null,
-                        new HostingRecord("system"));
+                        new HostingRecord(HostingRecord.HOSTING_TYPE_SYSTEM));
                 app.setPersistent(true);
                 app.setPid(MY_PID);
                 app.mState.setMaxAdj(ProcessList.SYSTEM_ADJ);
@@ -2257,6 +2259,53 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    /**
+     * Handles settings related to the enforcement of SDK sandbox restrictions.
+     */
+    static class SdkSandboxSettings implements DeviceConfig.OnPropertiesChangedListener {
+
+        private final Context mContext;
+        private final Object mLock = new Object();
+
+        @GuardedBy("mLock")
+        private boolean mEnforceBroadcastReceiverRestrictions;
+
+        /**
+         * Property to enforce broadcast receiver restrictions for SDK sandbox processes. If the
+         * value of this property is {@code true}, the restrictions will be enforced.
+         */
+        public static final String ENFORCE_BROADCAST_RECEIVER_RESTRICTIONS =
+                "enforce_broadcast_receiver_restrictions";
+
+        SdkSandboxSettings(Context context) {
+            mContext = context;
+        }
+
+        void registerObserver() {
+            synchronized (mLock) {
+                mEnforceBroadcastReceiverRestrictions = DeviceConfig.getBoolean(
+                        DeviceConfig.NAMESPACE_SDK_SANDBOX,
+                        ENFORCE_BROADCAST_RECEIVER_RESTRICTIONS, false);
+                DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SDK_SANDBOX,
+                        mContext.getMainExecutor(), this);
+            }
+        }
+
+        @Override
+        public void onPropertiesChanged(DeviceConfig.Properties properties) {
+            synchronized (mLock) {
+                mEnforceBroadcastReceiverRestrictions = properties.getBoolean(
+                        ENFORCE_BROADCAST_RECEIVER_RESTRICTIONS, false);
+            }
+        }
+
+        boolean isBroadcastReceiverRestrictionsEnforced() {
+            synchronized (mLock) {
+                return mEnforceBroadcastReceiverRestrictions;
+            }
+        }
+    }
+
     AppOpsManager getAppOpsManager() {
         if (mAppOpsManager == null) {
             mAppOpsManager = mContext.getSystemService(AppOpsManager.class);
@@ -2309,6 +2358,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mProcStartHandlerThread = null;
         mProcStartHandler = null;
         mHiddenApiBlacklist = null;
+        mSdkSandboxSettings = null;
         mFactoryTest = FACTORY_TEST_OFF;
         mUgmInternal = LocalServices.getService(UriGrantsManagerInternal.class);
         mInternal = new LocalService();
@@ -2429,6 +2479,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mTaskSupervisor = mActivityTaskManager.mTaskSupervisor;
 
         mHiddenApiBlacklist = new HiddenApiSettings(mHandler, mContext);
+        mSdkSandboxSettings = new SdkSandboxSettings(mContext);
 
         Watchdog.getInstance().addMonitor(this);
         Watchdog.getInstance().addThread(mHandler);
@@ -3346,7 +3397,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             if (mUxPerf != null && !mForceStopKill && !app.mErrorState.isNotResponding() && !app.mErrorState.isCrashing()) {
-                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
+                if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
+                }
                 mUxPerf.perfEvent(BoostFramework.VENDOR_HINT_KILL, app.processName, 2, 0, pid);
             }
 
@@ -4427,6 +4481,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                     + " but does not exist in that user");
             return;
         }
+
+        // Policy: certain classes of app are not subject to user-invoked stop
+        if (getPackageManagerInternal().isPackageStateProtected(packageName, userId)) {
+            Slog.w(TAG, "Asked to stop " + packageName + "/u" + userId
+                    + " but it is protected");
+            return;
+        }
+
         Slog.i(TAG, "Stopping app for user: " + packageName + "/" + userId);
 
         // A specific subset of the work done in forceStopPackageLocked(), because we are
@@ -4732,7 +4794,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         } catch (RemoteException e) {
             app.resetPackageList(mProcessStats);
             mProcessList.startProcessLocked(app,
-                    new HostingRecord("link fail", processName),
+                    new HostingRecord(HostingRecord.HOSTING_TYPE_LINK_FAIL, processName),
                     ZYGOTE_POLICY_FLAG_EMPTY);
             return false;
         }
@@ -4883,7 +4945,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 thread.runIsolatedEntryPoint(
                         app.getIsolatedEntryPoint(), app.getIsolatedEntryPointArgs());
             } else if (instr2 != null) {
-                thread.bindApplication(processName, appInfo, app.sdkSandboxClientAppPackage,
+                thread.bindApplication(processName, appInfo,
+                        app.sdkSandboxClientAppVolumeUuid, app.sdkSandboxClientAppPackage,
                         providerList,
                         instr2.mClass,
                         profilerInfo, instr2.mArguments,
@@ -4898,7 +4961,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                         app.getDisabledCompatChanges(), serializedSystemFontMap,
                         app.getStartElapsedTime(), app.getStartUptime());
             } else {
-                thread.bindApplication(processName, appInfo, app.sdkSandboxClientAppPackage,
+                thread.bindApplication(processName, appInfo,
+                        app.sdkSandboxClientAppVolumeUuid, app.sdkSandboxClientAppPackage,
                         providerList, null, profilerInfo, null, null, null, testMode,
                         mBinderTransactionTrackingEnabled, enableTrackAllocation,
                         isRestrictedBackupMode || !normalMode, app.isPersistent(),
@@ -5012,6 +5076,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             checkTime(startTime, "attachApplicationLocked: after updateOomAdjLocked");
         }
 
+
+        final HostingRecord hostingRecord = app.getHostingRecord();
+        final String action = hostingRecord.getAction();
+        String shortAction = action;
+        if (action != null) {
+            // only log the last part of the action string to save stats data.
+            int index = action.lastIndexOf(".");
+            if (index != -1 && index != action.length() - 1) {
+                shortAction = action.substring(index + 1);
+            }
+        }
         FrameworkStatsLog.write(
                 FrameworkStatsLog.PROCESS_START_TIME,
                 app.info.uid,
@@ -5021,8 +5096,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 app.getStartElapsedTime(),
                 (int) (bindApplicationTimeMillis - app.getStartUptime()),
                 (int) (SystemClock.uptimeMillis() - app.getStartUptime()),
-                app.getHostingRecord().getType(),
-                (app.getHostingRecord().getName() != null ? app.getHostingRecord().getName() : ""));
+                hostingRecord.getType(),
+                hostingRecord.getName(),
+                shortAction,
+                HostingRecord.getHostingTypeIdStatsd(hostingRecord.getType()));
         return true;
     }
 
@@ -5121,7 +5198,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         Slog.v(TAG_PROCESSES, "Starting process on hold: " + procs.get(ip));
                     }
                     mProcessList.startProcessLocked(procs.get(ip),
-                            new HostingRecord("on-hold"),
+                            new HostingRecord(HostingRecord.HOSTING_TYPE_ON_HOLD),
                             ZYGOTE_POLICY_FLAG_BATCH_LAUNCH);
                 }
             }
@@ -6708,7 +6785,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     isSdkSandbox,
                     sdkSandboxUid,
                     sdkSandboxClientAppPackage,
-                    new HostingRecord("added application",
+                    new HostingRecord(HostingRecord.HOSTING_TYPE_ADDED_APPLICATION,
                             customProcess != null ? customProcess : info.processName));
             updateLruProcessLocked(app, false, null);
             updateOomAdjLocked(app, OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
@@ -6737,7 +6814,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (app.getThread() == null && mPersistentStartingProcesses.indexOf(app) < 0) {
             mPersistentStartingProcesses.add(app);
-            mProcessList.startProcessLocked(app, new HostingRecord("added application",
+            mProcessList.startProcessLocked(app, new HostingRecord(
+                    HostingRecord.HOSTING_TYPE_ADDED_APPLICATION,
                     customProcess != null ? customProcess : app.processName),
                     zygotePolicyFlags, disableHiddenApiChecks, disableTestApiChecks,
                     abiOverride);
@@ -7995,6 +8073,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final boolean alwaysFinishActivities =
                 Settings.Global.getInt(resolver, ALWAYS_FINISH_ACTIVITIES, 0) != 0;
         mHiddenApiBlacklist.registerObserver();
+        mSdkSandboxSettings.registerObserver();
         mPlatformCompat.registerContentObserver();
 
         mAppProfiler.retrieveSettings();
@@ -8841,8 +8920,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         millisSinceOldestPendingRead).append("\n");
             }
         }
-        sb.append("Dropped-Count: ").append(
-                rateLimitResult.droppedCountSinceRateLimitActivated()).append("\n");
+        sb.append(rateLimitResult.createHeader());
         sb.append("\n");
 
         // Do the rest in a worker thread to avoid blocking the caller on I/O
@@ -12388,7 +12466,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             mProcessList.addProcessNameLocked(app);
             app.setPendingStart(false);
-            mProcessList.startProcessLocked(app, new HostingRecord("restart", app.processName),
+            mProcessList.startProcessLocked(app, new HostingRecord(
+                    HostingRecord.HOSTING_TYPE_RESTART, app.processName),
                     ZYGOTE_POLICY_FLAG_EMPTY);
             return true;
         } else if (pid > 0 && pid != MY_PID) {
@@ -12795,7 +12874,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             // startProcessLocked() returns existing proc's record if it's already running
             ProcessRecord proc = startProcessLocked(app.processName, app,
                     false, 0,
-                    new HostingRecord("backup", hostingName),
+                    new HostingRecord(HostingRecord.HOSTING_TYPE_BACKUP, hostingName),
                     ZYGOTE_POLICY_FLAG_SYSTEM_PROCESS, false, false);
             if (proc == null) {
                 Slog.e(TAG, "Unable to start backup agent process " + r);
@@ -13046,7 +13125,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Allow Sandbox process to register only unexported receivers.
         if ((flags & Context.RECEIVER_NOT_EXPORTED) != 0) {
             enforceNotIsolatedCaller("registerReceiver");
-        } else {
+        } else if (mSdkSandboxSettings.isBroadcastReceiverRestrictionsEnforced()) {
             enforceNotIsolatedOrSdkSandboxCaller("registerReceiver");
         }
         ArrayList<Intent> stickyIntents = null;
@@ -13652,13 +13731,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             if (brOptions.getIdForResponseEvent() > 0) {
-                // STOPSHIP (206518114): Temporarily check for PACKAGE_USAGE_STATS permission as
-                // well until the clients switch to using the new permission.
-                if (checkPermission(android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS,
-                        callingPid, callingUid) != PERMISSION_GRANTED) {
-                    enforceUsageStatsPermission(callerPackage, callingUid, callingPid,
-                            "recordResponseEventWhileInBackground()");
-                }
+                enforcePermission(android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS,
+                        callingPid, callingUid, "recordResponseEventWhileInBackground");
             }
         }
 

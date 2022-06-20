@@ -72,6 +72,7 @@ import static com.android.server.pm.PackageManagerService.SCAN_AS_VENDOR;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_VIRTUAL_PRELOAD;
 import static com.android.server.pm.PackageManagerService.SCAN_BOOTING;
 import static com.android.server.pm.PackageManagerService.SCAN_DONT_KILL_APP;
+import static com.android.server.pm.PackageManagerService.SCAN_DROP_CACHE;
 import static com.android.server.pm.PackageManagerService.SCAN_FIRST_BOOT_OR_UPGRADE;
 import static com.android.server.pm.PackageManagerService.SCAN_IGNORE_FROZEN;
 import static com.android.server.pm.PackageManagerService.SCAN_INITIAL;
@@ -139,6 +140,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.BoostFramework;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.content.F2fsUtils;
@@ -152,6 +154,7 @@ import com.android.server.pm.dex.ArtManagerService;
 import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.DexoptOptions;
 import com.android.server.pm.dex.ViewCompiler;
+import com.android.server.pm.parsing.PackageCacher;
 import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
@@ -333,7 +336,10 @@ final class InstallPackageHelper {
             mPm.mTransferredPackages.add(pkg.getPackageName());
         }
 
-        if (reconciledPkg.mCollectedSharedLibraryInfos != null) {
+        if (reconciledPkg.mCollectedSharedLibraryInfos != null
+                || (oldPkgSetting != null && oldPkgSetting.getUsesLibraryInfos() != null)) {
+            // Reconcile if the new package or the old package uses shared libraries.
+            // It is possible that the old package uses shared libraries but the new one doesn't.
             mSharedLibraries.executeSharedLibrariesUpdateLPw(pkg, pkgSetting, null, null,
                     reconciledPkg.mCollectedSharedLibraryInfos, allUsers);
         }
@@ -1200,6 +1206,16 @@ final class InstallPackageHelper {
                     // on the device; we should replace it.
                     replace = true;
                     if (DEBUG_INSTALL) Slog.d(TAG, "Replace existing package: " + pkgName);
+                    if (pkgName != null) {
+                        BoostFramework mPerf = new BoostFramework();
+                        if (mPerf != null) {
+                            if (mPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                                mPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                                mPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_PKG_INSTALL, 0, pkgName, 1);
+                            }
+                            mPerf.perfEvent(BoostFramework.VENDOR_HINT_APP_UPDATE, pkgName, 2, 0, -1);
+                        }
+                    }
                 }
 
                 if (replace) {
@@ -2019,6 +2035,17 @@ final class InstallPackageHelper {
         final String installerPackageName = installSource.installerPackageName;
 
         if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.getPath());
+        if (pkgName != null) {
+            BoostFramework mPerf = new BoostFramework();
+            if (mPerf != null) {
+                if (mPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    mPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_PKG_INSTALL, 0, pkgName, 0);
+                } else {
+                    mPerf.perfEvent(BoostFramework.VENDOR_HINT_PKG_INSTALL, pkgName, 2, 0, 0);
+                }
+            }
+        }
         synchronized (mPm.mLock) {
             // For system-bundled packages, we assume that installing an upgraded version
             // of the package implies that the user actually wants to run that new code,
@@ -3417,6 +3444,11 @@ final class InstallPackageHelper {
             if (!isPackage) {
                 // Ignore entries which are not packages
                 continue;
+            }
+            if ((scanFlags & SCAN_DROP_CACHE) != 0) {
+                final PackageCacher cacher = new PackageCacher(mPm.getCacheDir());
+                Log.w(TAG, "Dropping cache of " + file.getAbsolutePath());
+                cacher.cleanCachedResult(file);
             }
             parallelPackageParser.submit(file, parseFlags);
             fileCount++;

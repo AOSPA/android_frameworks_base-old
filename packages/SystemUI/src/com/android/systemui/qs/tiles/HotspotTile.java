@@ -163,15 +163,6 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
         if (state.isTransient) {
             state.icon = ResourceIcon.get(
                     com.android.internal.R.drawable.ic_hotspot_transient_animation);
-        } else if (state.value) {
-            int standard = mWifiManager.getSoftApWifiStandard();
-            if (standard == ScanResult.WIFI_STANDARD_11AX) {
-                state.icon = mWifi6EnabledStatic;
-            } else if (standard == ScanResult.WIFI_STANDARD_11AC) {
-                state.icon = mWifi5EnabledStatic;
-            } else if (standard == ScanResult.WIFI_STANDARD_11N) {
-                state.icon = mWifi4EnabledStatic;
-            }
         }
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.contentDescription = state.label;

@@ -479,7 +479,7 @@
   <java-symbol type="bool" name="config_useAssistantVolume" />
   <java-symbol type="integer" name="config_smartSelectionInitializedTimeoutMillis" />
   <java-symbol type="integer" name="config_smartSelectionInitializingTimeoutMillis" />
-  <java-symbol type="integer" name="config_preferKeepClearForFocusDelayMillis" />
+  <java-symbol type="bool" name="config_preferKeepClearForFocus" />
   <java-symbol type="bool" name="config_hibernationDeletesOatArtifactsEnabled"/>
   <java-symbol type="integer" name="config_defaultAnalogClockSecondsHandFps"/>
 
@@ -2271,7 +2271,6 @@
   <java-symbol type="bool" name="config_supportTelephonyTimeZoneFallback" />
   <java-symbol type="bool" name="config_autoResetAirplaneMode" />
   <java-symbol type="string" name="config_notificationAccessConfirmationActivity" />
-  <java-symbol type="bool" name="config_killableInputMethods" />
   <java-symbol type="bool" name="config_preventImeStartupUnlessTextEditor" />
   <java-symbol type="array" name="config_nonPreemptibleInputMethods" />
   <java-symbol type="bool" name="config_enhancedConfirmationModeEnabled" />
@@ -2285,6 +2284,7 @@
   <java-symbol type="integer" name="config_screenshotChordKeyTimeout" />
   <java-symbol type="integer" name="config_maxResolverActivityColumns" />
   <java-symbol type="array" name="config_notificationSignalExtractors" />
+  <java-symbol type="bool" name="config_notificationReviewPermissions" />
 
   <java-symbol type="layout" name="notification_material_action" />
   <java-symbol type="layout" name="notification_material_action_list" />
@@ -4181,7 +4181,7 @@
   <java-symbol type="bool" name="config_disable_all_cb_messages" />
   <java-symbol type="drawable" name="ic_close" />
 
-  <java-symbol type="bool" name="config_automotiveHideNavBarForKeyboard" />
+  <java-symbol type="bool" name="config_hideNavBarForKeyboard" />
 
   <java-symbol type="bool" name="config_showBuiltinWirelessChargingAnim" />
 
@@ -4343,6 +4343,7 @@
   <java-symbol type="dimen" name="resolver_title_padding_bottom" />
   <java-symbol type="dimen" name="resolver_empty_state_container_padding_top" />
   <java-symbol type="dimen" name="resolver_empty_state_container_padding_bottom" />
+  <java-symbol type="dimen" name="resolver_profile_tab_margin" />
 
   <java-symbol type="string" name="config_deviceSpecificDisplayAreaPolicyProvider" />
 
@@ -4801,6 +4802,7 @@
   <java-symbol type="array" name="config_bg_current_drain_high_threshold_to_bg_restricted" />
   <java-symbol type="integer" name="config_bg_current_drain_media_playback_min_duration" />
   <java-symbol type="integer" name="config_bg_current_drain_location_min_duration" />
+  <java-symbol type="bool" name="config_bg_current_drain_auto_restrict_abusive_apps" />
   <java-symbol type="bool" name="config_bg_prompt_fgs_with_noti_to_bg_restricted" />
   <java-symbol type="bool" name="config_bg_prompt_abusive_apps_to_bg_restricted" />
   <java-symbol type="integer" name="config_bg_current_drain_exempted_types" />
@@ -4816,6 +4818,7 @@
   <java-symbol type="layout" name="app_language_picker_current_locale_item" />
   <java-symbol type="id" name="system_locale_subtitle" />
   <java-symbol type="id" name="language_picker_item" />
+  <java-symbol type="id" name="language_picker_header" />
 
   <java-symbol type="dimen" name="status_bar_height_default" />
   <java-symbol type="integer" name="config_maximumDelayTimeToDeactivateDataCall" />

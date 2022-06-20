@@ -65,8 +65,6 @@ public class WifiEntryPreference extends Preference implements WifiEntry.WifiEnt
     private WifiEntry mWifiEntry;
     private int mLevel = -1;
     private int mWifiStandard;
-    private boolean mVhtMax8SpatialStreamsSupport;
-    private boolean mHe8ssCapableAp;
     private boolean mShowX; // Shows the Wi-Fi signl icon of Pie+x when it's true.
     private CharSequence mContentDescription;
     private OnButtonClickListener mOnButtonClickListener;
@@ -141,19 +139,13 @@ public class WifiEntryPreference extends Preference implements WifiEntry.WifiEnt
         setTitle(mWifiEntry.getTitle());
         final int level = mWifiEntry.getLevel();
         final int standard = mWifiEntry.getWifiStandard();
-        final boolean vhtMax8SpatialStreamsSupport = mWifiEntry.isVhtMax8SpatialStreamsSupported();
-        final boolean he8ssCapableAp = mWifiEntry.isHe8ssCapableAp();
         final boolean showX = mWifiEntry.shouldShowXLevelIcon();
 
-        if (level != mLevel || showX != mShowX || standard != mWifiStandard ||
-                he8ssCapableAp != mHe8ssCapableAp ||
-                vhtMax8SpatialStreamsSupport != mVhtMax8SpatialStreamsSupport) {
+        if (level != mLevel || showX != mShowX || standard != mWifiStandard) {
             mLevel = level;
             mWifiStandard = standard;
-            mHe8ssCapableAp = he8ssCapableAp;
-            mVhtMax8SpatialStreamsSupport = vhtMax8SpatialStreamsSupport;
             mShowX = showX;
-            updateIcon(mShowX, mLevel, mWifiStandard, mHe8ssCapableAp && mVhtMax8SpatialStreamsSupport);
+            updateIcon(mShowX, mLevel, mWifiStandard);
             notifyChanged();
         }
 
@@ -217,13 +209,13 @@ public class WifiEntryPreference extends Preference implements WifiEntry.WifiEnt
         return accent ? android.R.attr.colorAccent : android.R.attr.colorControlNormal;
     }
 
-    private void updateIcon(boolean showX, int level, int standard, boolean isReady) {
+    private void updateIcon(boolean showX, int level, int standard) {
         if (level == -1) {
             setIcon(null);
             return;
         }
 
-        final Drawable drawable = mIconInjector.getIcon(showX, level, standard, isReady);
+        final Drawable drawable = mIconInjector.getIcon(showX, level, standard);
         if (drawable != null) {
             drawable.setTint(Utils.getColorAttrDefaultColor(getContext(), getIconColorAttr()));
             setIcon(drawable);
@@ -292,8 +284,8 @@ public class WifiEntryPreference extends Preference implements WifiEntry.WifiEnt
             mContext = context;
         }
 
-        public Drawable getIcon(boolean showX, int level, int standard, boolean isReady) {
-            return mContext.getDrawable(WifiUtils.getInternetIconResource(level, showX, standard, isReady));
+        public Drawable getIcon(boolean showX, int level, int standard) {
+            return mContext.getDrawable(WifiUtils.getInternetIconResource(level, showX, standard));
         }
     }
 

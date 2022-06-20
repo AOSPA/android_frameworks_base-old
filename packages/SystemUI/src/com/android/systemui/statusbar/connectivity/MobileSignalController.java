@@ -367,7 +367,11 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     public void unregisterListener() {
         mMobileStatusTracker.setListening(false);
         mContext.getContentResolver().unregisterContentObserver(mObserver);
-        mImsMmTelManager.unregisterImsRegistrationCallback(mRegistrationCallback);
+        try {
+            mImsMmTelManager.unregisterImsRegistrationCallback(mRegistrationCallback);
+        }catch (Exception e){
+            Log.e(mTag, "unregisterListener: fail to call unregisterImsRegistrationCallback", e);
+        }
         mContext.unregisterReceiver(mVolteSwitchObserver);
         if (mConfig.showVolteIcon || mConfig.showVowifiIcon) {
             mImsMmTelManager.unregisterImsStateCallback(mImsStateCallback);
@@ -461,9 +465,14 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     }
 
     private void removeListeners() {
-        Log.d(mTag, "removeListeners: unregister CapabilitiesCallback and RegistrationCallback");
-        mImsMmTelManager.unregisterMmTelCapabilityCallback(mCapabilityCallback);
-        mImsMmTelManager.unregisterImsRegistrationCallback(mRegistrationCallback);
+        try {
+            Log.d(mTag,
+                    "removeListeners: unregister CapabilitiesCallback and RegistrationCallback");
+            mImsMmTelManager.unregisterMmTelCapabilityCallback(mCapabilityCallback);
+            mImsMmTelManager.unregisterImsRegistrationCallback(mRegistrationCallback);
+        }catch (Exception e) {
+            Log.e(mTag, "removeListeners", e);
+        }
     }
 
     @Override

@@ -1214,7 +1214,12 @@ class RecentTasks {
 
             final String taskPkgName = componentName.getPackageName();
             if (mUxPerf != null) {
-                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, taskPkgName, 0);
+                if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, taskPkgName, 0);
+                } else {
+                    mUxPerf.perfEvent(BoostFramework.VENDOR_HINT_KILL, taskPkgName, 2, 0, 0);
+                }
             }
         }
     }

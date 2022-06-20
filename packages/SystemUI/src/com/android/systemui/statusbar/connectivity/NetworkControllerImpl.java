@@ -135,6 +135,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private Config mConfig;
     private final CarrierConfigTracker mCarrierConfigTracker;
     private final FeatureFlags mFeatureFlags;
+    private final DumpManager mDumpManager;
 
     private TelephonyCallback.ActiveDataSubscriptionIdListener mPhoneStateListener;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -235,7 +236,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
             WifiStatusTrackerFactory trackerFactory,
             @Main Handler handler,
             InternetDialogFactory internetDialogFactory,
-            FeatureFlags featureFlags) {
+            FeatureFlags featureFlags,
+            DumpManager dumpManager) {
         this(context, connectivityManager,
                 telephonyManager,
                 telephonyListenerManager,
@@ -254,7 +256,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 carrierConfigTracker,
                 trackerFactory,
                 handler,
-                featureFlags);
+                featureFlags,
+                dumpManager);
         mReceiverHandler.post(mRegisterListeners);
         mInternetDialogFactory = internetDialogFactory;
     }
@@ -278,7 +281,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
             CarrierConfigTracker carrierConfigTracker,
             WifiStatusTrackerFactory trackerFactory,
             @Main Handler handler,
-            FeatureFlags featureFlags
+            FeatureFlags featureFlags,
+            DumpManager dumpManager
     ) {
         mContext = context;
         mTelephonyListenerManager = telephonyListenerManager;
@@ -298,6 +302,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mDemoModeController = demoModeController;
         mCarrierConfigTracker = carrierConfigTracker;
         mFeatureFlags = featureFlags;
+        mDumpManager = dumpManager;
 
         // telephony
         mPhone = telephonyManager;
@@ -450,6 +455,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
         mDemoModeController.addCallback(this);
         mProviderModelBehavior = mFeatureFlags.isEnabled(Flags.COMBINED_STATUS_BAR_SIGNAL_ICONS);
+
+        mDumpManager.registerDumpable(TAG, this);
     }
 
     private final Runnable mClearForceValidated = () -> {

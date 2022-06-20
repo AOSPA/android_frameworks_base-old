@@ -19,7 +19,6 @@ package android.window;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.os.Debug;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.SystemProperties;
@@ -157,15 +156,16 @@ public class WindowOnBackInvokedDispatcher implements OnBackInvokedDispatcher {
 
     /** Clears all registered callbacks on the instance. */
     public void clear() {
+        if (mImeDispatcher != null) {
+            mImeDispatcher.clear();
+            mImeDispatcher = null;
+        }
         if (!mAllCallbacks.isEmpty()) {
             // Clear binder references in WM.
             setTopOnBackInvokedCallback(null);
         }
         mAllCallbacks.clear();
         mOnBackInvokedCallbacks.clear();
-        if (mImeDispatcher != null) {
-            mImeDispatcher = null;
-        }
     }
 
     private void setTopOnBackInvokedCallback(@Nullable OnBackInvokedCallback callback) {
@@ -185,10 +185,6 @@ public class WindowOnBackInvokedDispatcher implements OnBackInvokedDispatcher {
                 callbackInfo = new OnBackInvokedCallbackInfo(iCallback, priority);
             }
             mWindowSession.setOnBackInvokedCallbackInfo(mWindow, callbackInfo);
-            if (DEBUG && callback == null) {
-                Log.d(TAG, TextUtils.formatSimple("setTopOnBackInvokedCallback(null) Callers:%s",
-                        Debug.getCallers(5, "  ")));
-            }
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to set OnBackInvokedCallback to WM. Error: " + e);
         }

@@ -227,9 +227,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         lp.setFitInsetsIgnoringVisibility(true);
         window.setAttributes(lp);
         window.setContentView(mDialogView);
-        // Sets window to a blank string to avoid talkback announce app label first when pop up,
-        // which doesn't make sense.
-        window.setTitle(EMPTY_TITLE);
+        window.setTitle(mContext.getString(R.string.media_output_dialog_accessibility_title));
 
         mHeaderTitle = mDialogView.requireViewById(R.id.header_title);
         mHeaderSubtitle = mDialogView.requireViewById(R.id.header_subtitle);
@@ -316,19 +314,19 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
             mHeaderIcon.setImageResource(iconRes);
         } else if (iconCompat != null) {
             Icon icon = iconCompat.toIcon(mContext);
-            Configuration config = mContext.getResources().getConfiguration();
-            int currentNightMode = config.uiMode & Configuration.UI_MODE_NIGHT_MASK;
-            boolean isDarkThemeOn = currentNightMode == Configuration.UI_MODE_NIGHT_YES;
-            WallpaperColors wallpaperColors = WallpaperColors.fromBitmap(icon.getBitmap());
-            colorSetUpdated = !wallpaperColors.equals(mWallpaperColors);
-            if (colorSetUpdated) {
-                mAdapter.updateColorScheme(wallpaperColors, isDarkThemeOn);
-                ColorFilter buttonColorFilter = new PorterDuffColorFilter(
-                        mAdapter.getController().getColorButtonBackground(),
-                        PorterDuff.Mode.SRC_IN);
-                mDoneButton.getBackground().setColorFilter(buttonColorFilter);
-                mStopButton.getBackground().setColorFilter(buttonColorFilter);
-                mDoneButton.setTextColor(mAdapter.getController().getColorPositiveButtonText());
+            if (icon.getType() != Icon.TYPE_BITMAP && icon.getType() != Icon.TYPE_ADAPTIVE_BITMAP) {
+                // icon doesn't support getBitmap, use default value for color scheme
+                updateButtonBackgroundColorFilter();
+            } else {
+                Configuration config = mContext.getResources().getConfiguration();
+                int currentNightMode = config.uiMode & Configuration.UI_MODE_NIGHT_MASK;
+                boolean isDarkThemeOn = currentNightMode == Configuration.UI_MODE_NIGHT_YES;
+                WallpaperColors wallpaperColors = WallpaperColors.fromBitmap(icon.getBitmap());
+                colorSetUpdated = !wallpaperColors.equals(mWallpaperColors);
+                if (colorSetUpdated) {
+                    mAdapter.updateColorScheme(wallpaperColors, isDarkThemeOn);
+                    updateButtonBackgroundColorFilter();
+                }
             }
             mHeaderIcon.setVisibility(View.VISIBLE);
             mHeaderIcon.setImageIcon(icon);
@@ -368,6 +366,15 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         mStopButton.setEnabled(true);
         mStopButton.setText(getStopButtonText());
         mStopButton.setOnClickListener(v -> onStopButtonClick());
+    }
+
+    private void updateButtonBackgroundColorFilter() {
+        ColorFilter buttonColorFilter = new PorterDuffColorFilter(
+                mAdapter.getController().getColorButtonBackground(),
+                PorterDuff.Mode.SRC_IN);
+        mDoneButton.getBackground().setColorFilter(buttonColorFilter);
+        mStopButton.getBackground().setColorFilter(buttonColorFilter);
+        mDoneButton.setTextColor(mAdapter.getController().getColorPositiveButtonText());
     }
 
     private Drawable resizeDrawable(Drawable drawable, int size) {

@@ -236,7 +236,7 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
 	if (mCurrentState.wifiStandard == 4) {
             mCurrentState.iconGroup = mWifi4IconGroup;
         } else if (mCurrentState.wifiStandard == 5) {
-            mCurrentState.iconGroup = mCurrentState.isReady ? mWifi6IconGroup : mWifi5IconGroup;
+            mCurrentState.iconGroup = mWifi5IconGroup;
         } else if (mCurrentState.wifiStandard == 6) {
             mCurrentState.iconGroup = mWifi6IconGroup;
         } else {
@@ -298,8 +298,6 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
         mCurrentState.isCarrierMerged = mWifiTracker.isCarrierMerged;
         mCurrentState.subId = mWifiTracker.subId;
         mCurrentState.wifiStandard = mWifiTracker.wifiStandard;
-        mCurrentState.isReady = (mWifiTracker.vhtMax8SpatialStreamsSupport
-                                    && mWifiTracker.he8ssCapableAp);
         updateIconGroup();
 
         if (levelChanged) {
