@@ -8245,7 +8245,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         .setContainerLayer()
                         .setName("IME Handwriting Surface")
                         .setCallsite("getHandwritingSurfaceForDisplay")
-                        .setParent(dc.getSurfaceControl())
+                        .setParent(dc.getOverlayLayer())
                         .build();
             }
         }
