@@ -9249,7 +9249,7 @@ public class AudioService extends IAudioService.Stub
             throw new IllegalArgumentException("Invalid timeOutMs/usagesToMute");
         }
         Log.i(TAG, "muteAwaitConnection dev:" + device + " timeOutMs:" + timeOutMs
-                + " usages:" + usages);
+                + " usages:" + Arrays.toString(usages));
 
         if (mDeviceBroker.isDeviceConnected(device)) {
             // not throwing an exception as there could be a race between a connection (server-side,
@@ -9301,7 +9301,7 @@ public class AudioService extends IAudioService.Stub
             mutedUsages = mMutedUsagesAwaitingConnection;
             mMutingExpectedDevice = null;
             mMutedUsagesAwaitingConnection = null;
-            mPlaybackMonitor.cancelMuteAwaitConnection();
+            mPlaybackMonitor.cancelMuteAwaitConnection("cancelMuteAwaitConnection dev:" + device);
         }
         dispatchMuteAwaitConnection(cb -> { try { cb.dispatchOnUnmutedEvent(
                     AudioManager.MuteAwaitConnectionCallback.EVENT_CANCEL, device, mutedUsages);
@@ -9337,8 +9337,8 @@ public class AudioService extends IAudioService.Stub
             }
             mMutingExpectedDevice = null;
             mMutedUsagesAwaitingConnection = null;
-            Log.i(TAG, "muteAwaitConnection device " + device + " connected, unmuting");
-            mPlaybackMonitor.cancelMuteAwaitConnection();
+            mPlaybackMonitor.cancelMuteAwaitConnection(
+                    "checkMuteAwaitConnection device " + device + " connected, unmuting");
         }
         dispatchMuteAwaitConnection(cb -> { try { cb.dispatchOnUnmutedEvent(
                 AudioManager.MuteAwaitConnectionCallback.EVENT_CONNECTION, device, mutedUsages);
