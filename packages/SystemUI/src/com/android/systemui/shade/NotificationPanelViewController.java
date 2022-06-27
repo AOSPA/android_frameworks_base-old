@@ -747,8 +747,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             KeyguardLongPressViewModel keyguardLongPressViewModel,
             KeyguardInteractor keyguardInteractor,
             ActivityStarter activityStarter,
-            EmergencyButtonController.Factory emergencyButtonControllerFactory,
-            KeyguardFaceAuthInteractor keyguardFaceAuthInteractor) {
+            EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         mInteractionJankMonitor = interactionJankMonitor;
         keyguardStateController.addCallback(new KeyguardStateController.Callback() {
             @Override
