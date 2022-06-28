@@ -41,6 +41,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.InstanceId;
 import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
+import com.android.systemui.R;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dock.DockManager;
@@ -103,6 +104,7 @@ public class DozeTriggers implements DozeMachine.Part {
     private final KeyguardStateController mKeyguardStateController;
     private final UiEventLogger mUiEventLogger;
 
+    private float mPickupSensorLiftValue;
     private long mNotificationPulseTime;
     private boolean mPulsePending;
     private Runnable mAodInterruptRunnable;
@@ -211,6 +213,8 @@ public class DozeTriggers implements DozeMachine.Part {
         mAuthController = authController;
         mUiEventLogger = uiEventLogger;
         mKeyguardStateController = keyguardStateController;
+        mPickupSensorLiftValue = context.getResources().getFloat(
+                R.dimen.config_pickupSensorLiftValue);
     }
 
     @Override
@@ -316,7 +320,7 @@ public class DozeTriggers implements DozeMachine.Part {
                         mDozeHost.onSlpiTap(screenX, screenY);
                     }
                     gentleWakeUp(pulseReason);
-                } else if (isPickup) {
+                } else if (isPickup && rawValues[0] == mPickupSensorLiftValue) {
                     if (shouldDropPickupEvent())  {
                         mDozeLog.traceSensorEventDropped(pulseReason, "keyguard occluded");
                         return;

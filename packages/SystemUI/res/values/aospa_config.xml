@@ -30,4 +30,7 @@
     <!-- StatusBar burn-in protection -->
     <bool name="config_disableStatusBarBurnInProtection">false</bool>
 
+    <!-- Value reported by the pickup sensor when the device is lifted -->
+    <item name="config_pickupSensorLiftValue" format="float" type="dimen">1.0</item>
+
 </resources>
