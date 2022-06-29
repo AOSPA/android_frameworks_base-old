@@ -439,6 +439,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private static final int DESTROY_TIMEOUT = 10 * 1000;
 
     final ActivityTaskManagerService mAtmService;
+    @NonNull
     final ActivityInfo info; // activity info provided by developer in AndroidManifest
     // Which user is this running for?
     final int mUserId;
@@ -2484,8 +2485,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (!newTask && taskSwitch && processRunning && !activityCreated && task.intent != null
                 && mActivityComponent.equals(task.intent.getComponent())) {
             final ActivityRecord topAttached = task.getActivity(ActivityRecord::attachedToProcess);
-            if (topAttached != null && topAttached.isSnapshotCompatible(snapshot)) {
-                return STARTING_WINDOW_TYPE_SNAPSHOT;
+            if (topAttached != null) {
+                if (topAttached.isSnapshotCompatible(snapshot)
+                        // This trampoline must be the same rotation.
+                        && mDisplayContent.getDisplayRotation().rotationForOrientation(mOrientation,
+                                mDisplayContent.getRotation()) == snapshot.getRotation()) {
+                    return STARTING_WINDOW_TYPE_SNAPSHOT;
+                }
+                // No usable snapshot. And a splash screen may also be weird because an existing
+                // activity may be shown right after the trampoline is finished.
+                return STARTING_WINDOW_TYPE_NONE;
             }
         }
         final boolean isActivityHome = isActivityTypeHome();
@@ -4331,9 +4340,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mTransitionController.collect(tStartingWindow);
                 tStartingWindow.reparent(this, POSITION_TOP);
 
-                // Propagate other interesting state between the tokens. If the old token is displayed,
-                // we should immediately force the new one to be displayed. If it is animating, we need
-                // to move that animation to the new one.
+                // Clear the frozen insets state when transferring the existing starting window to
+                // the next target activity.  In case the frozen state from a trampoline activity
+                // affecting the starting window frame computation to see the window being
+                // clipped if the rotation change during the transition animation.
+                tStartingWindow.clearFrozenInsetsState();
+
+                // Propagate other interesting state between the tokens. If the old token is
+                // displayed, we should immediately force the new one to be displayed. If it is
+                // animating, we need to move that animation to the new one.
                 if (fromActivity.allDrawn) {
                     allDrawn = true;
                 }
@@ -9844,6 +9859,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     @Override
     boolean canBeAnimationTarget() {
         return true;
+    }
+
+    @Nullable
+    Point getMinDimensions() {
+        final ActivityInfo.WindowLayout windowLayout = info.windowLayout;
+        if (windowLayout == null) {
+            return null;
+        }
+        return new Point(windowLayout.minWidth, windowLayout.minHeight);
     }
 
     static class Builder {
