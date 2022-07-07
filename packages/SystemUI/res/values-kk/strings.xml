@@ -118,7 +118,7 @@
     <string name="accessibility_camera_button" msgid="2938898391716647247">"Камера"</string>
     <string name="accessibility_phone_button" msgid="4256353121703100427">"Телефон"</string>
     <string name="accessibility_voice_assist_button" msgid="6497706615649754510">"Дауыс көмекшісі"</string>
-    <string name="accessibility_wallet_button" msgid="1458258783460555507">"Әмиян"</string>
+    <string name="accessibility_wallet_button" msgid="1458258783460555507">"Wallet"</string>
     <string name="accessibility_qr_code_scanner_button" msgid="7521277927692910795">"QR кодын сканерлеу қолданбасы"</string>
     <string name="accessibility_unlock_button" msgid="122785427241471085">"Бекітпесін ашу"</string>
     <string name="accessibility_lock_icon" msgid="661492842417875775">"Құрылғы құлыпталды."</string>
@@ -385,7 +385,7 @@
     <string name="quick_settings_disclosure_vpns" msgid="3586175303518266301">"Бұл құрылғы интернетке VPN желілері арқылы қосылған."</string>
     <string name="quick_settings_disclosure_managed_profile_named_vpn" msgid="153393105176944100">"Жұмыс қолданбаларыңыз интернетке <xliff:g id="VPN_APP">%1$s</xliff:g> арқылы қосылған."</string>
     <string name="quick_settings_disclosure_personal_profile_named_vpn" msgid="451254750289172191">"Жеке қолданбаларыңыз интернетке <xliff:g id="VPN_APP">%1$s</xliff:g> арқылы қосылған."</string>
-    <string name="quick_settings_disclosure_named_vpn" msgid="6191822916936028208">"Бұл желі интернетке <xliff:g id="VPN_APP">%1$s</xliff:g> арқылы қосылған."</string>
+    <string name="quick_settings_disclosure_named_vpn" msgid="6191822916936028208">"Бұл құрылғы интернетке <xliff:g id="VPN_APP">%1$s</xliff:g> арқылы қосылған."</string>
     <string name="monitoring_title_financed_device" msgid="3659962357973919387">"Бұл құрылғыны <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> ұсынады"</string>
     <string name="monitoring_title_device_owned" msgid="7029691083837606324">"Құрылғыны басқару"</string>
     <string name="monitoring_subtitle_vpn" msgid="800485258004629079">"VPN"</string>
@@ -406,7 +406,7 @@
     <string name="monitoring_description_managed_profile_named_vpn" msgid="7254359257263069766">"Жұмыс қолданбаларыңыз интернетке <xliff:g id="VPN_APP">%1$s</xliff:g> арқылы қосылған. Жұмыс қолданбаларында жасаған желідегі әрекетіңіз, соның ішінде электрондық пошталар мен браузерді пайдалану деректеріңіз әкімшіге және VPN провайдеріне көрінеді."</string>
     <string name="monitoring_description_personal_profile_named_vpn" msgid="5083909710727365452">"Жеке қолданбаларыңыз интернетке <xliff:g id="VPN_APP">%1$s</xliff:g> арқылы қосылған. Желідегі әрекетіңіз, соның ішінде электрондық пошталар мен браузерді пайдалану деректеріңіз VPN провайдеріне көрінеді."</string>
     <string name="monitoring_description_vpn_settings_separator" msgid="8292589617720435430">" "</string>
-    <string name="monitoring_description_vpn_settings" msgid="5264167033247632071">"VPN параметрлерін ашу"</string>
+    <string name="monitoring_description_vpn_settings" msgid="5264167033247632071">"VPN параметрлерін ашыңыз."</string>
     <string name="monitoring_description_parental_controls" msgid="8184693528917051626">"Бұл құрылғыны ата-анаңыз басқарады. Ата-анаңыз сіз пайдаланатын қолданбалар, геодерегіңіз және пайдалану уақытыңыз сияқты ақпаратты көре және басқара алады."</string>
     <string name="legacy_vpn_name" msgid="4174223520162559145">"VPN"</string>
     <string name="keyguard_indication_trust_unlocked" msgid="7395154975733744547">"TrustAgent арқылы құлпы ашылды."</string>
@@ -462,7 +462,7 @@
     <string name="show_demo_mode" msgid="3677956462273059726">"Демо режимін көрсету"</string>
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"Оятқыш"</string>
-    <string name="wallet_title" msgid="5369767670735827105">"Әмиян"</string>
+    <string name="wallet_title" msgid="5369767670735827105">"Wallet"</string>
     <string name="wallet_empty_state_label" msgid="7776761245237530394">"Телефоныңызбен бұрынғыдан да жылдам әрі қауіпсіз сатып алу үшін параметрлерді орнатыңыз."</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Барлығын көрсету"</string>
     <string name="wallet_secondary_label_no_card" msgid="8488069304491125713">"Ашу үшін түртіңіз"</string>
@@ -945,14 +945,10 @@
     <string name="clipboard_text_copied" msgid="5100836834278976679">"Мәтін көшірілді."</string>
     <string name="clipboard_image_copied" msgid="3793365360174328722">"Сурет көшірілді."</string>
     <string name="clipboard_content_copied" msgid="144452398567828145">"Мазмұн көшірілді."</string>
-    <!-- no translation found for clipboard_editor (2971197550401892843) -->
-    <skip />
-    <!-- no translation found for clipboard_overlay_window_name (6450043652167357664) -->
-    <skip />
-    <!-- no translation found for clipboard_image_preview (2156475174343538128) -->
-    <skip />
-    <!-- no translation found for clipboard_edit (4500155216174011640) -->
-    <skip />
+    <string name="clipboard_editor" msgid="2971197550401892843">"Буфер редакторы"</string>
+    <string name="clipboard_overlay_window_name" msgid="6450043652167357664">"Буфер"</string>
+    <string name="clipboard_image_preview" msgid="2156475174343538128">"Суретті алдын ала көру"</string>
+    <string name="clipboard_edit" msgid="4500155216174011640">"өзгерту"</string>
     <string name="add" msgid="81036585205287996">"Қосу"</string>
     <string name="manage_users" msgid="1823875311934643849">"Пайдаланушыларды басқару"</string>
     <string name="drag_split_not_supported" msgid="4326847447699729722">"Бұл хабарландыруды бөлінген экранға сүйреп апару мүмкін емес."</string>

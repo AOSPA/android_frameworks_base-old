@@ -63,6 +63,12 @@ import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.ZYGOTE_POLICY_FLAG_EMPTY;
 
 import static com.android.internal.messages.nano.SystemMessageProto.SystemMessage.NOTE_FOREGROUND_SERVICE_BG_LAUNCH;
+import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED;
+import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD;
+import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_HOT;
+import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM;
+import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED__REQUEST_TYPE__BIND;
+import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED__REQUEST_TYPE__START;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_BACKGROUND_CHECK;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FOREGROUND_SERVICE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_MU;
@@ -331,6 +337,9 @@ public final class ActiveServices {
 
     private IServicetracker mServicetracker;
 
+    private final boolean isLowRamDevice =
+            SystemProperties.getBoolean("ro.config.low_ram", false);
+
     String mLastAnrDump;
 
     AppWidgetManagerInternal mAppWidgetManagerInternal;
@@ -536,8 +545,9 @@ public final class ActiveServices {
                             + " delayedStop=" + r.delayedStop);
                 } else {
                     try {
-                        startServiceInnerLocked(this, r.pendingStarts.get(0).intent, r, false,
-                                true);
+                        final ServiceRecord.StartItem si = r.pendingStarts.get(0);
+                        startServiceInnerLocked(this, si.intent, r, false, true, si.callingId,
+                                r.startRequested);
                     } catch (TransactionTooLargeException e) {
                         // Ignore, nobody upstack cares.
                     }
@@ -900,6 +910,7 @@ public final class ActiveServices {
         if (unscheduleServiceRestartLocked(r, callingUid, false)) {
             if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "START SERVICE WHILE RESTART PENDING: " + r);
         }
+        final boolean wasStartRequested = r.startRequested;
         r.lastActivity = SystemClock.uptimeMillis();
         r.startRequested = true;
         r.delayedStop = false;
@@ -989,7 +1000,8 @@ public final class ActiveServices {
         if (allowBackgroundActivityStarts) {
             r.allowBgActivityStartsOnServiceStart(backgroundActivityStartsToken);
         }
-        ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting);
+        ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting,
+                callingUid, wasStartRequested);
         return cmp;
     }
 
@@ -1185,7 +1197,8 @@ public final class ActiveServices {
     }
 
     ComponentName startServiceInnerLocked(ServiceMap smap, Intent service, ServiceRecord r,
-            boolean callerFg, boolean addToStarting) throws TransactionTooLargeException {
+            boolean callerFg, boolean addToStarting, int callingUid, boolean wasStartRequested)
+            throws TransactionTooLargeException {
         synchronized (mAm.mProcessStats.mLock) {
             final ServiceState stracker = r.getTracker();
             if (stracker != null) {
@@ -1211,6 +1224,15 @@ public final class ActiveServices {
         if (error != null) {
             return new ComponentName("!!", error);
         }
+
+        FrameworkStatsLog.write(SERVICE_REQUEST_EVENT_REPORTED, uid, callingUid,
+                ActivityManagerService.getShortAction(service.getAction()),
+                SERVICE_REQUEST_EVENT_REPORTED__REQUEST_TYPE__START, false,
+                r.app == null || r.app.getThread() == null
+                ? SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD
+                : (wasStartRequested || !r.getConnections().isEmpty()
+                ? SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_HOT
+                : SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM));
 
         if (r.startRequested && addToStarting) {
             boolean first = smap.mStartingBackground.size() == 0;
@@ -2911,6 +2933,8 @@ public final class ActiveServices {
                 mAm.requireAllowedAssociationsLocked(s.appInfo.packageName);
             }
 
+            final boolean wasStartRequested = s.startRequested;
+            final boolean hadConnections = !s.getConnections().isEmpty();
             mAm.startAssociationLocked(callerApp.uid, callerApp.processName,
                     callerApp.mState.getCurProcState(), s.appInfo.uid, s.appInfo.longVersionCode,
                     s.instanceName, s.processName);
@@ -2963,28 +2987,30 @@ public final class ActiveServices {
             }
             clist.add(c);
 
-            ServiceData sData = new ServiceData();
-            sData.packageName = s.packageName;
-            sData.processName = s.shortInstanceName;
-            sData.lastActivity = s.lastActivity;
-            if (s.app != null) {
-                sData.pid = s.app.getPid();
-                sData.serviceB = s.app.mState.isServiceB();
-            } else {
-                 sData.pid = -1;
-                 sData.serviceB = false;
-            }
-
-            ClientData cData = new ClientData();
-            cData.processName = callerApp.processName;
-            cData.pid = callerApp.getPid();
-            try {
-                if (getServicetrackerInstance()) {
-                   mServicetracker.bindService(sData, cData);
+            if (!isLowRamDevice) {
+                ServiceData sData = new ServiceData();
+                sData.packageName = s.packageName;
+                sData.processName = s.shortInstanceName;
+                sData.lastActivity = s.lastActivity;
+                if (s.app != null) {
+                    sData.pid = s.app.getPid();
+                    sData.serviceB = s.app.mState.isServiceB();
+                } else {
+                    sData.pid = -1;
+                    sData.serviceB = false;
                 }
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to send bind details to servicetracker HAL", e);
-                mServicetracker = null;
+
+                ClientData cData = new ClientData();
+                cData.processName = callerApp.processName;
+                cData.pid = callerApp.getPid();
+                try {
+                    if (getServicetrackerInstance()) {
+                        mServicetracker.bindService(sData, cData);
+                    }
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to send bind details to servicetracker HAL", e);
+                    mServicetracker = null;
+                }
             }
 
             boolean needOomAdj = false;
@@ -3020,6 +3046,15 @@ public final class ActiveServices {
             if (needOomAdj) {
                 mAm.updateOomAdjPendingTargetsLocked(OomAdjuster.OOM_ADJ_REASON_BIND_SERVICE);
             }
+
+            FrameworkStatsLog.write(SERVICE_REQUEST_EVENT_REPORTED, s.appInfo.uid, callingUid,
+                    ActivityManagerService.getShortAction(service.getAction()),
+                    SERVICE_REQUEST_EVENT_REPORTED__REQUEST_TYPE__BIND, false,
+                    s.app == null || s.app.getThread() == null
+                    ? SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD
+                    : (wasStartRequested || hadConnections
+                    ? SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_HOT
+                    : SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM));
 
             if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Bind " + s + " with " + b
                     + ": received=" + b.intent.received
@@ -3190,28 +3225,30 @@ public final class ActiveServices {
         try {
             while (clist.size() > 0) {
                 ConnectionRecord r = clist.get(0);
-                ServiceData sData = new ServiceData();
-                sData.packageName = r.binding.service.packageName;
-                sData.processName = r.binding.service.shortInstanceName;
-                sData.lastActivity = r.binding.service.lastActivity;
-                if(r.binding.service.app != null) {
-                    sData.pid = r.binding.service.app.getPid();
-                    sData.serviceB = r.binding.service.app.mState.isServiceB();
-                } else {
-                    sData.pid = -1;
-                    sData.serviceB = false;
-                }
-
-                ClientData cData = new ClientData();
-                cData.processName = r.binding.client.processName;
-                cData.pid = r.binding.client.getPid();
-                try {
-                    if (getServicetrackerInstance()) {
-                        mServicetracker.unbindService(sData, cData);
+                if (!isLowRamDevice) {
+                    ServiceData sData = new ServiceData();
+                    sData.packageName = r.binding.service.packageName;
+                    sData.processName = r.binding.service.shortInstanceName;
+                    sData.lastActivity = r.binding.service.lastActivity;
+                    if(r.binding.service.app != null) {
+                        sData.pid = r.binding.service.app.getPid();
+                        sData.serviceB = r.binding.service.app.mState.isServiceB();
+                    } else {
+                        sData.pid = -1;
+                        sData.serviceB = false;
                     }
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Failed to send unbind details to servicetracker HAL", e);
-                    mServicetracker = null;
+
+                    ClientData cData = new ClientData();
+                    cData.processName = r.binding.client.processName;
+                    cData.pid = r.binding.client.getPid();
+                    try {
+                        if (getServicetrackerInstance()) {
+                            mServicetracker.unbindService(sData, cData);
+                        }
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Failed to send unbind details to servicetracker HAL", e);
+                        mServicetracker = null;
+                    }
                 }
                 removeConnectionLocked(r, null, null, true);
                 if (clist.size() > 0 && clist.get(0) == r) {
@@ -4483,20 +4520,22 @@ public final class ActiveServices {
             r.postNotification();
             created = true;
 
-            ServiceData sData = new ServiceData();
-            sData.packageName = r.packageName;
-            sData.processName = r.shortInstanceName;
-            sData.pid = r.app.getPid();
-            sData.lastActivity = r.lastActivity;
-            sData.serviceB = r.app.mState.isServiceB();
+            if (!isLowRamDevice) {
+                ServiceData sData = new ServiceData();
+                sData.packageName = r.packageName;
+                sData.processName = r.shortInstanceName;
+                sData.pid = r.app.getPid();
+                sData.lastActivity = r.lastActivity;
+                sData.serviceB = r.app.mState.isServiceB();
 
-            try {
-                if (getServicetrackerInstance()) {
-                    mServicetracker.startService(sData);
+                try {
+                    if (getServicetrackerInstance()) {
+                        mServicetracker.startService(sData);
+                    }
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to send start details to servicetracker HAL", e);
+                    mServicetracker = null;
                 }
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to send start details to servicetracker HAL", e);
-                mServicetracker = null;
             }
         } catch (DeadObjectException e) {
             Slog.w(TAG, "Application dead when creating service " + r);
@@ -4697,24 +4736,26 @@ public final class ActiveServices {
     private void bringDownServiceLocked(ServiceRecord r, boolean enqueueOomAdj) {
         //Slog.i(TAG, "Bring down service:");
         //r.dump("  ");
-        ServiceData sData = new ServiceData();
-        sData.packageName = r.packageName;
-        sData.processName = r.shortInstanceName;
-        sData.lastActivity = r.lastActivity;
-        if (r.app != null) {
-            sData.pid = r.app.getPid();
-        } else {
-            sData.pid = -1;
-            sData.serviceB = false;
-        }
-
-        try {
-            if (getServicetrackerInstance()) {
-                mServicetracker.destroyService(sData);
+        if (!isLowRamDevice) {
+            ServiceData sData = new ServiceData();
+            sData.packageName = r.packageName;
+            sData.processName = r.shortInstanceName;
+            sData.lastActivity = r.lastActivity;
+            if (r.app != null) {
+                sData.pid = r.app.getPid();
+            } else {
+                sData.pid = -1;
+                sData.serviceB = false;
             }
-        } catch (RemoteException e) {
-            Slog.e(TAG, "Failed to send destroy details to servicetracker HAL", e);
-            mServicetracker = null;
+
+            try {
+                if (getServicetrackerInstance()) {
+                    mServicetracker.destroyService(sData);
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to send destroy details to servicetracker HAL", e);
+                mServicetracker = null;
+            }
         }
         // Report to all of the connections that the service is no longer
         // available.
@@ -5558,7 +5599,7 @@ public final class ActiveServices {
         }
 
         try {
-            if (getServicetrackerInstance()) {
+            if (!isLowRamDevice && getServicetrackerInstance()) {
                 mServicetracker.killProcess(app.getPid());
             }
         } catch (RemoteException e) {
@@ -7102,7 +7143,8 @@ public final class ActiveServices {
                 durationMs,
                 r.mStartForegroundCount,
                 ActivityManagerUtils.hashComponentNameForAtom(r.shortInstanceName),
-                r.mFgsHasNotificationPermission);
+                r.mFgsHasNotificationPermission,
+                r.foregroundServiceType);
 
         int event = 0;
         if (state == FrameworkStatsLog.FOREGROUND_SERVICE_STATE_CHANGED__STATE__ENTER) {

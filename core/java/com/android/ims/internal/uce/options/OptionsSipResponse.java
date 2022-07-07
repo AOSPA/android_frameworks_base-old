@@ -129,7 +129,6 @@ public class OptionsSipResponse implements Parcelable {
      * Sets the SIP response code reason phrase.
      * @hide
      */
-    @UnsupportedAppUsage
     public void setReasonHeader(String reasonHeader) {
         this.mReasonHeader = reasonHeader;
     }

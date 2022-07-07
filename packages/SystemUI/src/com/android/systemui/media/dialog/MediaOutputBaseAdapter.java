@@ -69,11 +69,13 @@ public abstract class MediaOutputBaseAdapter extends
     View mHolderView;
     boolean mIsDragging;
     int mCurrentActivePosition;
+    private boolean mIsInitVolumeFirstTime;
 
     public MediaOutputBaseAdapter(MediaOutputController controller) {
         mController = controller;
         mIsDragging = false;
         mCurrentActivePosition = -1;
+        mIsInitVolumeFirstTime = true;
     }
 
     @Override
@@ -275,7 +277,7 @@ public abstract class MediaOutputBaseAdapter extends
             mSeekBar.setMaxVolume(device.getMaxVolume());
             final int currentVolume = device.getCurrentVolume();
             if (mSeekBar.getVolume() != currentVolume) {
-                if (isCurrentSeekbarInvisible) {
+                if (isCurrentSeekbarInvisible && !mIsInitVolumeFirstTime) {
                     animateCornerAndVolume(mSeekBar.getProgress(),
                             MediaOutputSeekbar.scaleVolumeToProgress(currentVolume));
                 } else {
@@ -283,6 +285,9 @@ public abstract class MediaOutputBaseAdapter extends
                         mSeekBar.setVolume(currentVolume);
                     }
                 }
+            }
+            if (mIsInitVolumeFirstTime) {
+                mIsInitVolumeFirstTime = false;
             }
             mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
@@ -307,6 +312,17 @@ public abstract class MediaOutputBaseAdapter extends
                     mIsDragging = false;
                 }
             });
+        }
+
+        void initMutingExpectedDevice() {
+            disableSeekBar();
+            final Drawable backgroundDrawable = mContext.getDrawable(
+                                    R.drawable.media_output_item_background_active)
+                            .mutate();
+            backgroundDrawable.setColorFilter(
+                    new PorterDuffColorFilter(mController.getColorConnectedItemBackground(),
+                            PorterDuff.Mode.SRC_IN));
+            mItemLayout.setBackground(backgroundDrawable);
         }
 
         void initSessionSeekbar() {

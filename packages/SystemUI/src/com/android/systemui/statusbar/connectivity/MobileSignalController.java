@@ -57,8 +57,6 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.telephony.PhoneConstants;
-import com.android.internal.telephony.PhoneConstants.DataState;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.AccessibilityContentDescriptions;
 import com.android.settingslib.SignalIcon.MobileIconGroup;
@@ -106,7 +104,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     final SubscriptionInfo mSubscriptionInfo;
     private Map<String, MobileIconGroup> mNetworkToIconLookup;
 
-    private DataState mMMSDataState = DataState.DISCONNECTED;
     private int mLastLevel;
     private MobileIconGroup mDefaultIcons;
     private Config mConfig;
@@ -633,16 +630,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         } else if (action.equals(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
             updateDataSim();
             notifyListenersIfNecessary();
-        }else if (action.equals(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED)) {
-            String apnType = intent.getStringExtra(PhoneConstants.DATA_APN_TYPE_KEY);
-            String state = intent.getStringExtra(PhoneConstants.STATE_KEY);
-            if ("mms".equals(apnType)) {
-                if (DEBUG) {
-                    Log.d(mTag, "handleBroadcast MMS connection state=" + state);
-                }
-                mMMSDataState = DataState.valueOf(state);
-                updateTelephony();
-            }
         }
     }
 
@@ -920,8 +907,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             mCurrentState.iconGroup = getNetworkTypeIconGroup();
         }
 
-        mCurrentState.dataConnected = (mCurrentState.isDataConnected()
-                    || mMMSDataState == DataState.CONNECTED);
+        mCurrentState.dataConnected = mCurrentState.isDataConnected();
 
         mCurrentState.roaming = isRoaming();
         if (isCarrierNetworkChangeActive()) {
