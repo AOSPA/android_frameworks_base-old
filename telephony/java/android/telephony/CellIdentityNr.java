@@ -174,7 +174,7 @@ public final class CellIdentityNr extends CellIdentity {
         return super.equals(o) && mPci == o.mPci && mTac == o.mTac && mNrArfcn == o.mNrArfcn
                 && Arrays.equals(mBands, o.mBands) && mNci == o.mNci
                 && mAdditionalPlmns.equals(o.mAdditionalPlmns)
-                && (mSnpnInfo == null) ? (o.mSnpnInfo == null) : mCagInfo.equals(o.mSnpnInfo)
+                && (mSnpnInfo == null) ? (o.mSnpnInfo == null) : mSnpnInfo.equals(o.mSnpnInfo)
                 && (mCagInfo == null) ? (o.mCagInfo == null) : mCagInfo.equals(o.mCagInfo);
     }
 
