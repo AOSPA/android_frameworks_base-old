@@ -90,6 +90,12 @@ public class MediaOutputBroadcastDialog extends MediaOutputBaseDialog {
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        refreshUi();
+    }
+
+    @Override
     int getHeaderIconRes() {
         return 0;
     }
@@ -288,6 +294,7 @@ public class MediaOutputBroadcastDialog extends MediaOutputBaseDialog {
 
     @Override
     public void handleLeBroadcastMetadataChanged() {
+        Log.d(TAG, "handleLeBroadcastMetadataChanged ");
         refreshUi();
     }
 
@@ -330,6 +337,12 @@ public class MediaOutputBroadcastDialog extends MediaOutputBaseDialog {
         mRetryCount++;
 
         handleUpdateFailedUi();
+    }
+
+    @Override
+    public boolean isBroadcastSupported() {
+        Log.d(TAG, "isBroadcastSupported: " + mMediaOutputController.isBroadcastSupported());
+        return mMediaOutputController.isBroadcastSupported();
     }
 
     private void handleUpdateFailedUi() {
