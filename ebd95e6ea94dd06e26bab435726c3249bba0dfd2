@@ -34,6 +34,23 @@
       "parentUuid": "92d3fe44_49b5cfd4",
       "revId": "ebd95e6ea94dd06e26bab435726c3249bba0dfd2",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "bf75d718_553d7c52",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-07-09T22:16:21Z",
+      "side": 1,
+      "message": "\"Dialer shows if it\u0027s a WiFi Call\" is a terrible argument.\n\nWhat about when you\u0027re expecting a call? Bad / low reception? Neither are uncommon.\n\nDo you want me to check settings (Settings -\u003e About Phone -\u003e SIM status -\u003e x network type) or call a random number to check? Both are terrible and compared to waking the screen incredibly time consuming\n\nSince combined icons have been reverted, there\u0027s no good way to quickly check, and T-Mobile does it too.",
+      "revId": "ebd95e6ea94dd06e26bab435726c3249bba0dfd2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ],
   "submitRequirementResults": []
