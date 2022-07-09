@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "92d3fe44_49b5cfd4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000447
+      },
+      "writtenOn": "2022-07-09T21:48:38Z",
+      "side": 1,
+      "message": "You can tell if you\u0027re in a WiFi call by the big WiFi icon during the call.",
+      "revId": "ebd95e6ea94dd06e26bab435726c3249bba0dfd2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
