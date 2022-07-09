@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c5d0c836_9987c302",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-07-09T16:45:00Z",
+      "side": 1,
+      "message": "2104765: Only update the compat system UI visibility if the source is valid | https://android-review.googlesource.com/c/platform/frameworks/base/+/2104765",
+      "revId": "90b6aaaac4d3d63fca581db3de6f636ad4979c97",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
