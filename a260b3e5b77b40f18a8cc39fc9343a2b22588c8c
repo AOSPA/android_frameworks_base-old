@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "477a000a_d6d39c86",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-07-09T19:55:06Z",
+      "side": 1,
+      "message": "since we dont do combined icons for a while anymore maybe this could be brought up again",
+      "revId": "a260b3e5b77b40f18a8cc39fc9343a2b22588c8c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
