@@ -16,6 +16,23 @@
       "message": "fixes OP5 gestures not working.",
       "revId": "42b930294e4e06245be342b6a438689fc1bb8b34",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5fa4aa3c_be36b0eb",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000706
+      },
+      "writtenOn": "2022-07-12T14:31:24Z",
+      "side": 1,
+      "message": "Tested, works.",
+      "revId": "42b930294e4e06245be342b6a438689fc1bb8b34",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
