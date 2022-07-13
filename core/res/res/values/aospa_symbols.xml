@@ -86,4 +86,9 @@
     <!-- Cycle through ringer modes -->
     <java-symbol type="string" name="volume_dialog_ringer_guidance_normal" />
 
+    <!-- Property imitation values, used to override device properties for specific apps -->
+    <java-symbol type="array" name="config_systemPropertiesImitationPlatform" />
+    <java-symbol type="array" name="config_systemPropertiesImitationValuesV1" />
+    <java-symbol type="array" name="config_systemPropertiesImitationValuesV2" />
+
 </resources>
