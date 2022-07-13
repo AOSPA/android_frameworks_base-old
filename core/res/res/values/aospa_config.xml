@@ -107,4 +107,33 @@
     <!-- KeaHandler to intercept inputs on screen off. -->
     <bool name="config_enableKeyHandler">false</bool>
 
+    <!-- Configuration that imitates properties based on platform.
+         This config requires values for the following properties.
+         ex. BRAND: google	
+             MANUFACTURER: Google -->
+    <string-array name="config_systemPropertiesImitationPlatform">
+    </string-array>
+
+    <!-- Configuration that imitates properties from the device of choice.
+	     Please refer to the V1 configuration in com/android/internal/util/PropImitationFactory.java
+		 to determine which device to use with this config.
+         This config requires values for the following properties.
+         ex. DEVICE: marlin	
+             PRODUCT: marlin
+             MODEL: Pixel XL
+             FINGERPRINT: google/marlin/marlin:10/QP1A.191005.007.A3/5972272:user/release-keys -->
+    <string-array name="config_systemPropertiesImitationValuesV1">
+    </string-array>
+
+	<!-- Configuration that imitates properties from the device of choice.
+	     Please refer to the V2 configuration in com/android/internal/util/PropImitationFactory.java
+		 to determine which device to use with this config.
+         This config requires values for the following properties.
+         ex. DEVICE: redfin	
+             PRODUCT: redfin
+             MODEL: Pixel 5
+             FINGERPRINT: google/redfin/redfin:12/SP2A.220505.002/8353555:user/release-keys -->
+    <string-array name="config_systemPropertiesImitationValuesV2">
+    </string-array>
+
 </resources>
