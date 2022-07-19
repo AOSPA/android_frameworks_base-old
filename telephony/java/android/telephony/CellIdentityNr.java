@@ -174,8 +174,19 @@ public final class CellIdentityNr extends CellIdentity {
         return super.equals(o) && mPci == o.mPci && mTac == o.mTac && mNrArfcn == o.mNrArfcn
                 && Arrays.equals(mBands, o.mBands) && mNci == o.mNci
                 && mAdditionalPlmns.equals(o.mAdditionalPlmns)
-                && (mSnpnInfo == null) ? (o.mSnpnInfo == null) : mSnpnInfo.equals(o.mSnpnInfo)
-                && (mCagInfo == null) ? (o.mCagInfo == null) : mCagInfo.equals(o.mCagInfo);
+                && equalsHandlesNulls(mSnpnInfo, o.mSnpnInfo)
+                && equalsHandlesNulls(mCagInfo, o.mCagInfo);
+    }
+
+    /**
+     * Test whether two objects hold the same data values or both are null.
+     *
+     * @param a first obj
+     * @param b second obj
+     * @return true if two objects equal or both are null
+     */
+    private static boolean equalsHandlesNulls (Object a, Object b) {
+        return (a == null) ? (b == null) : a.equals (b);
     }
 
     /**
