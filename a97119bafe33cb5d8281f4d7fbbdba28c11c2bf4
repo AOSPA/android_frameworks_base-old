@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ca135416_4f55bab4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-07-19T05:17:33Z",
+      "side": 1,
+      "message": "basic functions of smartspace works just fine (can\u0027t test flights and shit quite easily), wait for code review before merging",
+      "revId": "a97119bafe33cb5d8281f4d7fbbdba28c11c2bf4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
