@@ -57,6 +57,7 @@ public class AospaKeyguardSliceProvider extends KeyguardSliceProvider implements
     @Override
     public boolean onCreateSliceProvider() {
         if (!super.onCreateSliceProvider()) return false;
+        if (mSmartSpaceController == null) return false;
         mBlurRadius = getContext().getResources().getDimension(R.dimen.smartspace_icon_shadow);
         mPaint.setMaskFilter(new BlurMaskFilter(mBlurRadius, BlurMaskFilter.Blur.NORMAL));
         mExecutorService = Executors.newSingleThreadExecutor();
