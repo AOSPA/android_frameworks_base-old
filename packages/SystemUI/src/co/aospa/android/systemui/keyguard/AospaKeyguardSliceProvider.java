@@ -38,6 +38,10 @@ public class AospaKeyguardSliceProvider extends KeyguardSliceProvider implements
 
     @Override // com.android.systemui.keyguard.KeyguardSliceProvider, androidx.slice.SliceProvider
     public boolean onCreateSliceProvider() {
+        if (this.mSmartSpaceController == null) {
+            return false;
+        }
+
         boolean onCreateSliceProvider = super.onCreateSliceProvider();
         this.mSmartSpaceData = new SmartSpaceData();
         this.mSmartSpaceController.addListener(this);
