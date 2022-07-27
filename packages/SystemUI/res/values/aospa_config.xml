@@ -33,4 +33,7 @@
     <!-- Value reported by the pickup sensor when the device is lifted -->
     <item name="config_pickupSensorLiftValue" format="float" type="dimen">1.0</item>
 
+    <!-- Value reported by the pickup sensor when the device is lowered -->
+    <item name="config_pickupSensorLowerValue" format="float" type="dimen">2.0</item>
+
 </resources>
