@@ -704,6 +704,16 @@ public class BoostFramework {
 
         /** @hide */
         public static void setFrameInterval(long frameIntervalNanos) {
+            if (sQXIsLoaded) {
+                if (sScrollOptEnable && sSetFrameInterval != null) {
+                    try {
+                        sSetFrameInterval.invoke(null, frameIntervalNanos);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                return;
+            }
             Thread initThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
