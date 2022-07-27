@@ -28,12 +28,6 @@ import android.os.Build;
  */
 public interface TrustedTime {
     /**
-     * Force update with an external trusted time source, returning {@code true}
-     * when successful.
-     */
-    public boolean forceSync();
-
-    /**
      * Force update the cached time with an external trusted time source,
      * returning {@code true} when successful.
      *
