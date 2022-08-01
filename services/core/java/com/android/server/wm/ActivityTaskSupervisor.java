@@ -2812,7 +2812,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 }
                 if (res == null)
                     return null;
-                String[] p_apps = res.split("/");
+                String[] p_apps = res.trim().split("/");
                 if (p_apps.length != 0) {
                     ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
                     Bundle bParams = new Bundle();
