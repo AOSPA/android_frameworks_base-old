@@ -50,7 +50,7 @@ public class BoostFramework {
     private static final String UXPERFORMANCE_CLASS = "com.qualcomm.qti.UxPerformance";
     public  static final float PERF_HAL_V22 = 2.2f;
     public  static final float PERF_HAL_V23 = 2.3f;
-    public static final int VENDOR_T_API_LEVEL = 32;
+    public static final int VENDOR_T_API_LEVEL = 33;
     public final int board_first_api_lvl = SystemProperties.getInt("ro.board.first_api_level", 0);
     public final int board_api_lvl = SystemProperties.getInt("ro.board.api_level", 0);
 
@@ -704,6 +704,16 @@ public class BoostFramework {
 
         /** @hide */
         public static void setFrameInterval(long frameIntervalNanos) {
+            if (sQXIsLoaded) {
+                if (sScrollOptEnable && sSetFrameInterval != null) {
+                    try {
+                        sSetFrameInterval.invoke(null, frameIntervalNanos);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                return;
+            }
             Thread initThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
