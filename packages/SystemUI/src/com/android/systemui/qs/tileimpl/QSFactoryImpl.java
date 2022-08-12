@@ -40,6 +40,7 @@ import com.android.systemui.qs.tiles.DataSaverTile;
 import com.android.systemui.qs.tiles.DeviceControlsTile;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.FlashlightTile;
+import com.android.systemui.qs.tiles.HeadsUpTile;
 import com.android.systemui.qs.tiles.HotspotTile;
 import com.android.systemui.qs.tiles.InternetTile;
 import com.android.systemui.qs.tiles.LocationTile;
@@ -96,6 +97,7 @@ public class QSFactoryImpl implements QSFactory {
     private final Provider<QuickAccessWalletTile> mQuickAccessWalletTileProvider;
     private final Provider<QRCodeScannerTile> mQRCodeScannerTileProvider;
     private final Provider<OneHandedModeTile> mOneHandedModeTileProvider;
+    private final Provider<HeadsUpTile> mHeadsUpTileProvider;
 
     private final Lazy<QSHost> mQsHostLazy;
     private final Provider<CustomTile.Builder> mCustomTileBuilderProvider;
@@ -132,7 +134,8 @@ public class QSFactoryImpl implements QSFactory {
             Provider<QuickAccessWalletTile> quickAccessWalletTileProvider,
             Provider<QRCodeScannerTile> qrCodeScannerTileProvider,
             Provider<OneHandedModeTile> oneHandedModeTileProvider,
-            Provider<ColorCorrectionTile> colorCorrectionTileProvider) {
+            Provider<ColorCorrectionTile> colorCorrectionTileProvider,
+            Provider<HeadsUpTile> headsUpTileProvider) {
         mQsHostLazy = qsHostLazy;
         mCustomTileBuilderProvider = customTileBuilderProvider;
 
@@ -165,6 +168,7 @@ public class QSFactoryImpl implements QSFactory {
         mQRCodeScannerTileProvider = qrCodeScannerTileProvider;
         mOneHandedModeTileProvider = oneHandedModeTileProvider;
         mColorCorrectionTileProvider = colorCorrectionTileProvider;
+        mHeadsUpTileProvider = headsUpTileProvider;
     }
 
     /** Creates a tile with a type based on {@code tileSpec} */
@@ -238,6 +242,9 @@ public class QSFactoryImpl implements QSFactory {
                 return mOneHandedModeTileProvider.get();
             case "color_correction":
                 return mColorCorrectionTileProvider.get();
+            // Additional tiles.
+            case "heads_up":
+                return mHeadsUpTileProvider.get();
         }
 
         // Custom tiles
