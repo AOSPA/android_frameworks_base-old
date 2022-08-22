@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "94954174_8757b590",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-08-22T20:32:31Z",
+      "side": 1,
+      "message": "this has a close to 0% chance of being merged - there\u0027s already a commit for adding google\u0027s game dashboard (which is objectively better), which people decided against internally",
+      "revId": "e4bfb9b5f0e5ebb94498aedebe08d8ac2430c366",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
