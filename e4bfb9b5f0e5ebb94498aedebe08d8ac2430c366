@@ -33,6 +33,23 @@
       "message": "Hi Abhay,\n\nThanks for pushing!  Can you talk about what this brings to the table?  I know there\u0027s lots of gaming features out there but many don\u0027t seem to add much to the UX.",
       "revId": "e4bfb9b5f0e5ebb94498aedebe08d8ac2430c366",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a348c83f_bf97fa0a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2022-08-22T20:54:43Z",
+      "side": 1,
+      "message": "The team has decided internally to limit the amount of features being used from other sources starting with Topaz, particularly reversed Google/Pixel features. Sapphire\u0027s cycle is finished anyway, especially feature-wise. For future purpose, any feature has to serve a strong purpose to PA, as well as the average end-user. This is not one of them.",
+      "revId": "e4bfb9b5f0e5ebb94498aedebe08d8ac2430c366",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
