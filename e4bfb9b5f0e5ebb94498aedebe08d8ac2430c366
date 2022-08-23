@@ -50,6 +50,42 @@
       "message": "The team has decided internally to limit the amount of features being used from other sources starting with Topaz, particularly reversed Google/Pixel features. Sapphire\u0027s cycle is finished anyway, especially feature-wise. For future purpose, any feature has to serve a strong purpose to PA, as well as the average end-user. This is not one of them.",
       "revId": "e4bfb9b5f0e5ebb94498aedebe08d8ac2430c366",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "65903fc2_1ef67a80",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000438
+      },
+      "writtenOn": "2022-08-23T06:16:12Z",
+      "side": 1,
+      "message": "Hi Jake, this brings an implementation of the GameMode API https://developer.android.com/games/gamemode/gamemode-api. Well described in the source repository. https://github.com/chaldeaprjkt/packages_apps_GameSpace\n\nPlease note that the above repository also needs to be added for this feature to work.",
+      "parentUuid": "417b84f3_daf0b2ca",
+      "revId": "e4bfb9b5f0e5ebb94498aedebe08d8ac2430c366",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "200d48b2_3f54097a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000438
+      },
+      "writtenOn": "2022-08-23T06:16:12Z",
+      "side": 1,
+      "message": "Hi Chris, I understand your concerns. The implementation doesn\u0027t seem like \u0027reversed engineered\u0027 code to me, I might be wrong. It\u0027s more like an imitation. It\u0027s using the GameMode API that comes with Android 12. I used it in another AOSP fork and felt that the performance mode is providing a significant change in how the games run. It doesn\u0027t affect games by default, the user needs to add them.\nI am also open to trimming it down to just using the modes.",
+      "parentUuid": "a348c83f_bf97fa0a",
+      "revId": "e4bfb9b5f0e5ebb94498aedebe08d8ac2430c366",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
