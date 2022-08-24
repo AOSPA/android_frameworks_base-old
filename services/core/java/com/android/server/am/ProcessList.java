@@ -2034,8 +2034,10 @@ public final class ProcessList {
                     mService.mProcessList.handlePredecessorProcDied((ProcessRecord) msg.obj);
                     break;
                 case MSG_PROCESS_KILL_TIMEOUT:
-                    mService.handleProcessStartOrKillTimeoutLocked((ProcessRecord) msg.obj,
-                            /* isKillTimeout */ true);
+                    synchronized (mService) {
+                        mService.handleProcessStartOrKillTimeoutLocked((ProcessRecord) msg.obj,
+                                /* isKillTimeout */ true);
+                    }
                     break;
             }
         }

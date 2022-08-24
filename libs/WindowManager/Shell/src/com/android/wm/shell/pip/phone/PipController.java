@@ -129,6 +129,8 @@ public class PipController implements PipTransitionController.PipTransitionCallb
     protected PinnedStackListenerForwarder.PinnedTaskListener mPinnedTaskListener =
             new PipControllerPinnedTaskListener();
 
+    private boolean mIsKeyguardShowingOrAnimating;
+
     private interface PipAnimationListener {
         /**
          * Notifies the listener that the Pip animation is started.
@@ -154,7 +156,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
      * Handler for display rotation changes.
      */
     private final DisplayChangeController.OnDisplayChangingListener mRotationController = (
-            int displayId, int fromRotation, int toRotation, WindowContainerTransaction t) -> {
+            displayId, fromRotation, toRotation, newDisplayAreaInfo, t) -> {
         if (mPipTransitionController.handleRotateDisplay(fromRotation, toRotation, t)) {
             return;
         }
@@ -613,6 +615,33 @@ public class PipController implements PipTransitionController.PipTransitionCallb
     }
 
     /**
+     * If {@param keyguardShowing} is {@code false} and {@param animating} is {@code true},
+     * we would wait till the dismissing animation of keyguard and surfaces behind to be
+     * finished first to reset the visibility of PiP window.
+     * See also {@link #onKeyguardDismissAnimationFinished()}
+     */
+    private void onKeyguardVisibilityChanged(boolean keyguardShowing, boolean animating) {
+        if (!mPipTaskOrganizer.isInPip()) {
+            return;
+        }
+        if (keyguardShowing) {
+            mIsKeyguardShowingOrAnimating = true;
+            hidePipMenu(null /* onStartCallback */, null /* onEndCallback */);
+            mPipTaskOrganizer.setPipVisibility(false);
+        } else if (!animating) {
+            mIsKeyguardShowingOrAnimating = false;
+            mPipTaskOrganizer.setPipVisibility(true);
+        }
+    }
+
+    private void onKeyguardDismissAnimationFinished() {
+        if (mPipTaskOrganizer.isInPip()) {
+            mIsKeyguardShowingOrAnimating = false;
+            mPipTaskOrganizer.setPipVisibility(true);
+        }
+    }
+
+    /**
      * Sets a customized touch gesture that replaces the default one.
      */
     public void setTouchGesture(PipTouchGesture gesture) {
@@ -623,7 +652,9 @@ public class PipController implements PipTransitionController.PipTransitionCallb
      * Sets both shelf visibility and its height.
      */
     private void setShelfHeight(boolean visible, int height) {
-        setShelfHeightLocked(visible, height);
+        if (!mIsKeyguardShowingOrAnimating) {
+            setShelfHeightLocked(visible, height);
+        }
     }
 
     private void setShelfHeightLocked(boolean visible, int height) {
@@ -854,13 +885,6 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         }
 
         @Override
-        public void hidePipMenu(Runnable onStartCallback, Runnable onEndCallback) {
-            mMainExecutor.execute(() -> {
-                PipController.this.hidePipMenu(onStartCallback, onEndCallback);
-            });
-        }
-
-        @Override
         public void expandPip() {
             mMainExecutor.execute(() -> {
                 PipController.this.expandPip();
@@ -935,6 +959,18 @@ public class PipController implements PipTransitionController.PipTransitionCallb
             mMainExecutor.execute(() -> {
                 PipController.this.showPictureInPictureMenu();
             });
+        }
+
+        @Override
+        public void onKeyguardVisibilityChanged(boolean showing, boolean animating) {
+            mMainExecutor.execute(() -> {
+                PipController.this.onKeyguardVisibilityChanged(showing, animating);
+            });
+        }
+
+        @Override
+        public void onKeyguardDismissAnimationFinished() {
+            mMainExecutor.execute(PipController.this::onKeyguardDismissAnimationFinished);
         }
 
         @Override

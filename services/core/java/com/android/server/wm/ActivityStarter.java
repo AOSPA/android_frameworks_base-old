@@ -961,8 +961,8 @@ class ActivityStarter {
                     && sourceRecord.info.applicationInfo.uid != aInfo.applicationInfo.uid) {
                 try {
                     intent.addCategory(Intent.CATEGORY_VOICE);
-                    if (!mService.getPackageManager().activitySupportsIntent(
-                            intent.getComponent(), intent, resolvedType)) {
+                    if (!mService.getPackageManager().activitySupportsIntentAsUser(
+                            intent.getComponent(), intent, resolvedType, userId)) {
                         Slog.w(TAG, "Activity being started in current voice task does not support "
                                 + "voice: " + intent);
                         err = ActivityManager.START_NOT_VOICE_COMPATIBLE;
@@ -978,8 +978,8 @@ class ActivityStarter {
             // If the caller is starting a new voice session, just make sure the target
             // is actually allowing it to run this way.
             try {
-                if (!mService.getPackageManager().activitySupportsIntent(intent.getComponent(),
-                        intent, resolvedType)) {
+                if (!mService.getPackageManager().activitySupportsIntentAsUser(
+                        intent.getComponent(), intent, resolvedType, userId)) {
                     Slog.w(TAG,
                             "Activity being started in new voice task does not support: " + intent);
                     err = ActivityManager.START_NOT_VOICE_COMPATIBLE;
@@ -1678,6 +1678,7 @@ class ActivityStarter {
     private @Nullable Task handleStartResult(@NonNull ActivityRecord started,
             ActivityOptions options, int result, Transition newTransition,
             RemoteTransition remoteTransition) {
+        final boolean userLeaving = mSupervisor.mUserLeaving;
         mSupervisor.mUserLeaving = false;
         final Task currentRootTask = started.getRootTask();
         final Task startedActivityRootTask =
@@ -1751,7 +1752,7 @@ class ActivityStarter {
             // until after we launched to identify the relevant activity.
             transitionController.setTransientLaunch(mLastStartActivityRecord, mPriorAboveTask);
         }
-        if (!mSupervisor.mUserLeaving) {
+        if (!userLeaving) {
             // no-user-leaving implies not entering PiP.
             transitionController.setCanPipOnFinish(false /* canPipOnFinish */);
         }
@@ -1800,7 +1801,8 @@ class ActivityStarter {
         }
 
         // Get top task at beginning because the order may be changed when reusing existing task.
-        final Task prevTopTask = mPreferredTaskDisplayArea.getFocusedRootTask();
+        final Task prevTopRootTask = mPreferredTaskDisplayArea.getFocusedRootTask();
+        final Task prevTopTask = prevTopRootTask != null ? prevTopRootTask.getTopLeafTask() : null;
         final Task reusedTask = getReusableTask();
 
         // If requested, freeze the task list
@@ -2453,6 +2455,11 @@ class ActivityStarter {
             }
         }
 
+        if ((mLaunchFlags & FLAG_ACTIVITY_LAUNCH_ADJACENT) != 0 && mSourceRecord == null) {
+            // ignore the flag if there is no the sourceRecord
+            mLaunchFlags &= ~FLAG_ACTIVITY_LAUNCH_ADJACENT;
+        }
+
         // We'll invoke onUserLeaving before onPause only if the launching
         // activity did not explicitly state that this is an automated launch.
         mSupervisor.mUserLeaving = (mLaunchFlags & FLAG_ACTIVITY_NO_USER_ACTION) == 0;
@@ -2756,17 +2763,15 @@ class ActivityStarter {
                 mTargetRootTask = getOrCreateRootTask(mStartActivity, mLaunchFlags, intentTask,
                         mOptions);
             }
-        } else {
-            // If a launch target indicated, and the matching task is already in the adjacent task
-            // of the launch target. Adjust to use the adjacent task as its launch target. So the
-            // existing task will be launched into the closer one and won't be reparent redundantly.
-            // TODO(b/231541706): Migrate the logic to wm-shell after having proper APIs to help
-            //  resolve target task without actually starting the activity.
-            final Task adjacentTargetTask = mTargetRootTask.getAdjacentTaskFragment() != null
-                    ? mTargetRootTask.getAdjacentTaskFragment().asTask() : null;
-            if (adjacentTargetTask != null && intentActivity.isDescendantOf(adjacentTargetTask)) {
-                mTargetRootTask = adjacentTargetTask;
-            }
+        }
+
+        // If the matching task is already in the adjacent task of the launch target. Adjust to use
+        // the adjacent task as its launch target. So the existing task will be launched into the
+        // closer one and won't be reparent redundantly.
+        final Task adjacentTargetTask = mTargetRootTask.getAdjacentTaskFragment() != null
+                ? mTargetRootTask.getAdjacentTaskFragment().asTask() : null;
+        if (adjacentTargetTask != null && intentActivity.isDescendantOf(adjacentTargetTask)) {
+            mTargetRootTask = adjacentTargetTask;
         }
 
         // If the target task is not in the front, then we need to bring it to the front...

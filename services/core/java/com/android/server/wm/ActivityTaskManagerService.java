@@ -64,7 +64,8 @@ import static android.provider.Settings.Global.HIDE_ERROR_DIALOGS;
 import static android.provider.Settings.System.FONT_SCALE;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_LAUNCHER_CLEAR_SNAPSHOT;
+import static android.view.WindowManager.TRANSIT_PIP;
+import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_LAUNCHER_CLEAR_SNAPSHOT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS;
@@ -94,6 +95,7 @@ import static com.android.server.am.EventLogTags.writeBootProgressEnableScreen;
 import static com.android.server.am.EventLogTags.writeConfigurationChanged;
 import static com.android.server.wm.ActivityInterceptorCallback.FIRST_ORDERED_ID;
 import static com.android.server.wm.ActivityInterceptorCallback.LAST_ORDERED_ID;
+import static com.android.server.wm.ActivityRecord.State.PAUSING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_ROOT_TASK;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_SWITCH;
@@ -237,6 +239,7 @@ import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.policy.AttributeCache;
 import com.android.internal.policy.KeyguardDismissCallback;
+import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
@@ -398,6 +401,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     volatile WindowProcessController mPreviousProcess;
     /** The time at which the previous process was last visible. */
     private long mPreviousProcessVisibleTime;
+
+    /**
+     * It can be true from keyguard-going-away to set-keyguard-shown. And getTopProcessState() will
+     * return {@link ActivityManager#PROCESS_STATE_IMPORTANT_FOREGROUND} to avoid top app from
+     * preempting CPU while keyguard is animating.
+     */
+    private volatile boolean mDemoteTopAppDuringUnlocking;
 
     /** List of intents that were used to start the most recent tasks. */
     private RecentTasks mRecentTasks;
@@ -2829,12 +2839,24 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         keyguardShowing);
                 mH.sendMessage(msg);
             }
+            // Always reset the state regardless of keyguard-showing change, because that means the
+            // unlock is either completed or canceled.
+            if (mDemoteTopAppDuringUnlocking) {
+                mDemoteTopAppDuringUnlocking = false;
+                // The scheduling group of top process was demoted by unlocking, so recompute
+                // to restore its real top priority if possible.
+                if (mTopApp != null) {
+                    mTopApp.scheduleUpdateOomAdj();
+                }
+            }
             try {
+                Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "setLockScreenShown");
                 mRootWindowContainer.forAllDisplays(displayContent -> {
                     mKeyguardController.setKeyguardShown(displayContent.getDisplayId(),
                             keyguardShowing, aodShowing);
                 });
             } finally {
+                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
                 Binder.restoreCallingIdentity(ident);
             }
         }
@@ -2861,6 +2883,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // animation of system UI. Even if AOD is not enabled, it should be no harm.
         final WindowProcessController proc;
         synchronized (mGlobalLockWithoutBoost) {
+            mDemoteTopAppDuringUnlocking = false;
             final WindowState notificationShade = mRootWindowContainer.getDefaultDisplay()
                     .getDisplayPolicy().getNotificationShade();
             proc = notificationShade != null
@@ -3398,8 +3421,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         try {
             synchronized (mGlobalLock) {
                 // Keyguard asked us to clear the home task snapshot before going away, so do that.
-                if ((flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_LAUNCHER_CLEAR_SNAPSHOT) != 0) {
+                if ((flags & KEYGUARD_GOING_AWAY_FLAG_TO_LAUNCHER_CLEAR_SNAPSHOT) != 0) {
                     mActivityClientController.invalidateHomeTaskSnapshot(null /* token */);
+                } else if (mKeyguardShown) {
+                    // Only set if it is not unlocking to launcher which may also animate.
+                    mDemoteTopAppDuringUnlocking = true;
                 }
 
                 mRootWindowContainer.forAllDisplays(displayContent -> {
@@ -3447,10 +3473,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /**
      * Puts the given activity in picture in picture mode if possible.
      *
+     * @param fromClient true if this comes from a client call (eg. Activity.enterPip).
      * @return true if the activity is now in picture-in-picture mode, or false if it could not
      * enter picture-in-picture mode.
      */
-    boolean enterPictureInPictureMode(@NonNull ActivityRecord r, PictureInPictureParams params) {
+    boolean enterPictureInPictureMode(@NonNull ActivityRecord r,
+            @NonNull PictureInPictureParams params, boolean fromClient) {
         // If the activity is already in picture in picture mode, then just return early
         if (r.inPinnedWindowingMode()) {
             return true;
@@ -3463,6 +3491,21 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             return false;
         }
 
+        // If the app is using legacy-entry (not auto-enter), then we will get a client-request
+        // that was actually a server-request (via pause(userLeaving=true)). This happens when
+        // the app is PAUSING, so detect that case here.
+        boolean originallyFromClient = fromClient
+                && (!r.isState(PAUSING) || params.isAutoEnterEnabled());
+
+        // Create a transition only for this pip entry if it is coming from the app without the
+        // system requesting that the app enter-pip. If the system requested it, that means it
+        // should be part of that transition if possible.
+        final Transition transition =
+                (getTransitionController().isShellTransitionsEnabled() && originallyFromClient)
+                ? new Transition(TRANSIT_PIP, 0 /* flags */,
+                        getTransitionController(), mWindowManager.mSyncEngine)
+                : null;
+
         final Runnable enterPipRunnable = () -> {
             synchronized (mGlobalLock) {
                 if (r.getParent() == null) {
@@ -3471,7 +3514,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
                 r.setPictureInPictureParams(params);
                 mRootWindowContainer.moveActivityToPinnedRootTask(r,
-                        null /* launchIntoPipHostActivity */, "enterPictureInPictureMode");
+                        null /* launchIntoPipHostActivity */, "enterPictureInPictureMode",
+                        transition);
                 final Task task = r.getTask();
                 // Continue the pausing process after entering pip.
                 if (task.getPausingActivity() == r) {
@@ -3488,12 +3532,36 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mActivityClientController.dismissKeyguard(r.token, new KeyguardDismissCallback() {
                 @Override
                 public void onDismissSucceeded() {
-                    mH.post(enterPipRunnable);
+                    if (transition != null && mWindowManager.mSyncEngine.hasActiveSync()) {
+                        ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
+                                "Creating Pending Pip-Enter: %s", transition);
+                        mWindowManager.mSyncEngine.queueSyncSet(
+                                () -> getTransitionController().moveToCollecting(transition),
+                                enterPipRunnable);
+                    } else {
+                        // Move to collecting immediately to "claim" the sync-engine for this
+                        // transition.
+                        if (transition != null) {
+                            getTransitionController().moveToCollecting(transition);
+                        }
+                        mH.post(enterPipRunnable);
+                    }
                 }
             }, null /* message */);
         } else {
             // Enter picture in picture immediately otherwise
-            enterPipRunnable.run();
+            if (transition != null && mWindowManager.mSyncEngine.hasActiveSync()) {
+                ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
+                        "Creating Pending Pip-Enter: %s", transition);
+                mWindowManager.mSyncEngine.queueSyncSet(
+                        () -> getTransitionController().moveToCollecting(transition),
+                        enterPipRunnable);
+            } else {
+                if (transition != null) {
+                    getTransitionController().moveToCollecting(transition);
+                }
+                enterPipRunnable.run();
+            }
         }
         return true;
     }
@@ -5594,12 +5662,17 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public int getTopProcessState() {
+            final int topState = mTopProcessState;
+            if (mDemoteTopAppDuringUnlocking && topState == ActivityManager.PROCESS_STATE_TOP) {
+                // The unlocking UI is more important, so defer the top state of app.
+                return ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
+            }
             if (mRetainPowerModeAndTopProcessState) {
                 // There is a launching app while device may be sleeping, force the top state so
                 // the launching process can have top-app scheduling group.
                 return ActivityManager.PROCESS_STATE_TOP;
             }
-            return mTopProcessState;
+            return topState;
         }
 
         @HotPath(caller = HotPath.PROCESS_CHANGE)

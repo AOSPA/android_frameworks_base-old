@@ -104,22 +104,17 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
                         Slog.e(getTag(), "Task stack changed for client: " + client);
                         continue;
                     }
-                    if (Utils.isKeyguard(mContext, client.getOwnerString())) {
+                    if (Utils.isKeyguard(mContext, client.getOwnerString())
+                            || Utils.isSystem(mContext, client.getOwnerString())) {
                         continue; // Keyguard is always allowed
                     }
 
-                    final List<ActivityManager.RunningTaskInfo> runningTasks =
-                            mActivityTaskManager.getTasks(1);
-                    if (!runningTasks.isEmpty()) {
-                        final String topPackage =
-                                runningTasks.get(0).topActivity.getPackageName();
-                        if (!topPackage.contentEquals(client.getOwnerString())
-                                && !client.isAlreadyDone()) {
-                            Slog.e(getTag(), "Stopping background authentication, top: "
-                                    + topPackage + " currentClient: " + client);
-                            mSensors.valueAt(i).getScheduler().cancelAuthenticationOrDetection(
-                                    client.getToken(), client.getRequestId());
-                        }
+                    if (Utils.isBackground(client.getOwnerString())
+                            && !client.isAlreadyDone()) {
+                        Slog.e(getTag(), "Stopping background authentication,"
+                                + " currentClient: " + client);
+                        mSensors.valueAt(i).getScheduler().cancelAuthenticationOrDetection(
+                                client.getToken(), client.getRequestId());
                     }
                 }
             });
@@ -545,6 +540,12 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
     @Override
     public void scheduleInternalCleanup(int sensorId, int userId,
             @Nullable ClientMonitorCallback callback) {
+        scheduleInternalCleanup(sensorId, userId, callback, false /* favorHalEnrollments */);
+    }
+
+    @Override
+    public void scheduleInternalCleanup(int sensorId, int userId,
+            @Nullable ClientMonitorCallback callback, boolean favorHalEnrollments) {
         mHandler.post(() -> {
             final List<Face> enrolledList = getEnrolledFaces(sensorId, userId);
             final FaceInternalCleanupClient client =
@@ -556,6 +557,9 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
                             mBiometricContext, enrolledList,
                             FaceUtils.getInstance(sensorId),
                             mSensors.get(sensorId).getAuthenticatorIds());
+            if (favorHalEnrollments) {
+                client.setFavorHalEnrollments();
+            }
             scheduleForSensor(sensorId, client, callback);
         });
     }

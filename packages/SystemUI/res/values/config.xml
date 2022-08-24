@@ -77,9 +77,9 @@
         internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,custom(com.android.permissioncontroller/.permission.service.SafetyCenterQsTileService)
     </string>
 
-    <!-- The component name of the Safety Quick Settings Tile -->
-    <string name="safety_quick_settings_tile" translatable="false">
-        custom(com.android.permissioncontroller/.permission.service.SafetyCenterQsTileService)
+    <!-- The class path of the Safety Quick Settings Tile -->
+    <string name="safety_quick_settings_tile_class" translatable="false">
+        com.android.permissioncontroller.permission.service.v33.SafetyCenterQsTileService
     </string>
 
     <!-- The minimum number of tiles to display in QuickSettings -->
@@ -618,6 +618,12 @@
          2 - Override the setting to never bypass keyguard -->
     <integer name="config_face_unlock_bypass_override">0</integer>
 
+    <!-- Which face help messages to surface when fingerprint is also enrolled.
+         Message ids correspond with the acquired ids in BiometricFaceConstants -->
+    <integer-array name="config_face_help_msgs_when_fingerprint_enrolled">
+        <!-- for example: <item>26</item> for FACE_ACQUIRED_MOUTH_COVERING_DETECTED -->
+    </integer-array>
+
     <!-- Whether the communal service should be enabled -->
     <bool name="config_communalServiceEnabled">false</bool>
 
@@ -694,7 +700,7 @@
     <string name="config_communalSourceConnector" translatable="false"></string>
 
     <!-- How often in milliseconds to jitter the dream overlay in order to avoid burn-in. -->
-    <integer name="config_dreamOverlayBurnInProtectionUpdateIntervalMillis">500</integer>
+    <integer name="config_dreamOverlayBurnInProtectionUpdateIntervalMillis">1000</integer>
 
     <!-- How long in milliseconds before full burn-in protection is achieved. -->
     <integer name="config_dreamOverlayMillisUntilFullJitter">240000</integer>

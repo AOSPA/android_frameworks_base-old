@@ -614,13 +614,13 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         when(mLockIconViewController.getTop()).thenReturn(80f);
         when(mResources.getDimensionPixelSize(R.dimen.shelf_and_lock_icon_overlap)).thenReturn(5);
 
-        // Available space (100 - 10 - 15 = 75)
+        // Available space (100 - 0 - 15 = 85)
         when(mNotificationStackScrollLayoutController.getHeight()).thenReturn(100);
-        when(mNotificationStackScrollLayoutController.getTopPadding()).thenReturn(10);
+        when(mNotificationStackScrollLayoutController.getTop()).thenReturn(0);
         mNotificationPanelViewController.updateResources();
 
         assertThat(mNotificationPanelViewController.getSpaceForLockscreenNotifications())
-                .isEqualTo(75);
+                .isEqualTo(85);
     }
 
     @Test
@@ -1013,6 +1013,17 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void testExpandWithQsMethodIsUsingLockscreenTransitionController() {
+        enableSplitShade(/* enabled= */ true);
+        mStatusBarStateController.setState(KEYGUARD);
+
+        mNotificationPanelViewController.expandWithQs();
+
+        verify(mLockscreenShadeTransitionController).goToLockedShade(
+                /* expandedView= */null, /* needsQSAnimation= */false);
+    }
+
+    @Test
     public void testUnlockAnimationDoesNotAffectScrim() {
         mNotificationPanelViewController.onUnlockHintStarted();
         verify(mScrimController).setExpansionAffectsAlpha(false);
@@ -1083,6 +1094,21 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void testQsExpansionChangedToDefaultWhenRotatingFromOrToSplitShade() {
+        // to make sure shade is in expanded state
+        mNotificationPanelViewController.startWaitingForOpenPanelGesture();
+        assertThat(mNotificationPanelViewController.isQsExpanded()).isFalse();
+
+        // switch to split shade from portrait (default state)
+        enableSplitShade(/* enabled= */ true);
+        assertThat(mNotificationPanelViewController.isQsExpanded()).isTrue();
+
+        // switch to portrait from split shade
+        enableSplitShade(/* enabled= */ false);
+        assertThat(mNotificationPanelViewController.isQsExpanded()).isFalse();
+    }
+
+    @Test
     public void interceptTouchEvent_withinQs_shadeExpanded_startsQsTracking() {
         mNotificationPanelViewController.mQs = mQs;
         when(mQsFrame.getX()).thenReturn(0f);
@@ -1119,6 +1145,19 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 createMotionEvent(/* x= */ 0, /* y= */ 500, MotionEvent.ACTION_MOVE));
 
         assertThat(mNotificationPanelViewController.isQsTracking()).isFalse();
+    }
+
+    @Test
+    public void testOnAttachRefreshStatusBarState() {
+        mStatusBarStateController.setState(KEYGUARD);
+        when(mKeyguardStateController.isKeyguardFadingAway()).thenReturn(false);
+        for (View.OnAttachStateChangeListener listener : mOnAttachStateChangeListeners) {
+            listener.onViewAttachedToWindow(mView);
+        }
+        verify(mKeyguardStatusViewController).setKeyguardStatusViewVisibility(
+                KEYGUARD/*statusBarState*/,
+                false/*keyguardFadingAway*/,
+                false/*goingToFullShade*/, SHADE/*oldStatusBarState*/);
     }
 
     private static MotionEvent createMotionEvent(int x, int y, int action) {

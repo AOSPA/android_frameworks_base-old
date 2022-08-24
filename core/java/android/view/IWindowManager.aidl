@@ -32,7 +32,6 @@ import android.graphics.Region;
 import android.os.Bundle;
 import android.os.IRemoteCallback;
 import android.os.ParcelFileDescriptor;
-import android.view.ContentRecordingSession;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.IAppTransitionAnimationSpecsFuture;
@@ -40,7 +39,7 @@ import android.view.ICrossWindowBlurEnabledListener;
 import android.view.IDisplayWindowInsetsController;
 import android.view.IDisplayWindowListener;
 import android.view.IDisplayFoldListener;
-import android.view.IDisplayWindowRotationController;
+import android.view.IDisplayChangeWindowController;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedTaskListener;
 import android.view.IScrollCaptureResponseListener;
@@ -146,7 +145,7 @@ interface IWindowManager
      * controller is called after the display has "frozen" for a rotation and display rotation will
      * only continue once the controller has finished calculating associated configurations.
      */
-    void setDisplayWindowRotationController(IDisplayWindowRotationController controller);
+    void setDisplayChangeWindowController(IDisplayChangeWindowController controller);
 
     /**
      * Adds a root container that a client shell can populate with its own windows (usually via
@@ -855,17 +854,6 @@ interface IWindowManager
      * @param clientToken the window context's token
      */
     void detachWindowContextFromWindowContainer(IBinder clientToken);
-
-    /**
-     * Updates the content recording session. If a different session is already in progress, then
-     * the pre-existing session is stopped, and the new incoming session takes over.
-     *
-     * The DisplayContent for the new session will begin recording when
-     * {@link RootWindowContainer#onDisplayChanged} is invoked for the new {@link VirtualDisplay}.
-     *
-     * @param incomingSession the nullable incoming content recording session
-     */
-    void setContentRecordingSession(in ContentRecordingSession incomingSession);
 
     /**
      * Registers a listener, which is to be called whenever cross-window blur is enabled/disabled.

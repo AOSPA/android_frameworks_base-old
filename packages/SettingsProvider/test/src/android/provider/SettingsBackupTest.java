@@ -511,6 +511,8 @@ public class SettingsBackupTest {
                     Settings.Global.ANGLE_GL_DRIVER_SELECTION_PKGS,
                     Settings.Global.ANGLE_GL_DRIVER_SELECTION_VALUES,
                     Settings.Global.ANGLE_EGL_FEATURES,
+                    Settings.Global.ANGLE_DEFERLIST,
+                    Settings.Global.ANGLE_DEFERLIST_MODE,
                     Settings.Global.UPDATABLE_DRIVER_ALL_APPS,
                     Settings.Global.UPDATABLE_DRIVER_PRODUCTION_OPT_IN_APPS,
                     Settings.Global.UPDATABLE_DRIVER_PRERELEASE_OPT_IN_APPS,
@@ -603,7 +605,6 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.HOTWORD_DETECTION_ENABLED,
                     Settings.Global.Wearable.DEFAULT_VIBRATION,
                     Settings.Global.Wearable.OBTAIN_PAIRED_DEVICE_LOCATION,
-                    Settings.Global.Wearable.RETAIL_MODE,
                     Settings.Global.Wearable.PHONE_PLAY_STORE_AVAILABILITY,
                     Settings.Global.Wearable.BUG_REPORT,
                     Settings.Global.Wearable.SMART_ILLUMINATE_ENABLED,
@@ -650,11 +651,12 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_PACKAGE,
                     Settings.Global.Wearable.CLOCKWORK_SYSUI_MAIN_ACTIVITY,
                     Settings.Global.Wearable.CLOCKWORK_LONG_PRESS_TO_ASSISTANT_ENABLED,
-                    Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER,
                     Settings.Global.Wearable.WET_MODE_ON,
                     Settings.Global.Wearable.COOLDOWN_MODE_ON,
                     Settings.Global.Wearable.CHARGING_SOUNDS_ENABLED,
-                    Settings.Global.Wearable.SCREEN_UNLOCK_SOUND_ENABLED);
+                    Settings.Global.Wearable.SCREEN_UNLOCK_SOUND_ENABLED,
+                    Settings.Global.Wearable.BEDTIME_MODE,
+                    Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MAX_RESET_COUNT);
 
     private static final Set<String> BACKUP_DENY_LIST_SECURE_SETTINGS =
              newHashSet(

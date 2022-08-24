@@ -613,7 +613,7 @@
     <string name="guest_exit_quick_settings_button" msgid="1912362095913765471">"ဧည့်သည့်မှ ထွက်ရန်"</string>
     <string name="guest_notification_ephemeral" msgid="7263252466950923871">"ထွက်သည့်အခါ လုပ်ဆောင်ချက်အားလုံးကို ဖျက်လိုက်မည်"</string>
     <string name="guest_notification_non_ephemeral" msgid="6843799963012259330">"ထွက်သည့်အခါ လုပ်ဆောင်ချက်ကို သိမ်းနိုင် (သို့) ဖျက်နိုင်သည်"</string>
-    <string name="guest_notification_non_ephemeral_non_first_login" msgid="8009307983766934876">"စက်ရှင်လုပ်ဆောင်ချက်ကို ယခုဖျက်ရန် ပြင်ဆင်သတ်မှတ်နိုင်သည် (သို့) ထွက်သည့်အခါ လုပ်ဆောင်ချက်ကို သိမ်းနိုင် (သို့) ဖျက်နိုင်သည်"</string>
+    <string name="guest_notification_non_ephemeral_non_first_login" msgid="8009307983766934876">"စက်ရှင်လုပ်ဆောင်ချက်ကို ယခုဖျက်ရန် ပြင်ဆင်သတ်မှတ်နိုင်သည် (သို့) ထွက်သည့်အခါ သိမ်းနိုင်၊ ဖျက်နိုင်သည်"</string>
     <string name="user_image_take_photo" msgid="467512954561638530">"ဓာတ်ပုံရိုက်ရန်"</string>
     <string name="user_image_choose_photo" msgid="1363820919146782908">"ပုံရွေးရန်"</string>
     <string name="user_image_photo_selector" msgid="433658323306627093">"ဓာတ်ပုံရွေးရန်"</string>
@@ -668,9 +668,6 @@
     <string name="turn_screen_on_title" msgid="3266937298097573424">"ဖန်သားပြင် ဖွင့်ခြင်း"</string>
     <string name="allow_turn_screen_on" msgid="6194845766392742639">"ဖန်သားပြင် ဖွင့်ခွင့်ပြုရန်"</string>
     <string name="allow_turn_screen_on_description" msgid="43834403291575164">"အက်ပ်ကို ဖန်သားပြင် ဖွင့်ခွင့်ပြုနိုင်သည်။ ခွင့်ပြုထားပါက အက်ပ်သည် သင့်ထံမှ တိကျသောရည်ရွယ်ချက်မလိုဘဲ ဖန်သားပြင်ကို အချိန်မရွေး ဖွင့်နိုင်မည်။"</string>
-    <string name="bt_le_audio_scan_qr_code" msgid="3521809854780392679">"QR ကုဒ်ကို စကင်ဖတ်ရန်"</string>
-    <string name="bt_le_audio_scan_qr_code_scanner" msgid="4679500020630341107">"စတင်နားဆင်ရန် အောက်ရှိ QR ကုဒ်ကို အလယ်တွင်ထားပါ"</string>
-    <string name="bt_le_audio_qr_code_is_not_valid_format" msgid="6092191081849434734">"QR ကုဒ်သည် မှန်ကန်သောဖော်မက် မဟုတ်ပါ"</string>
     <string name="bt_le_audio_broadcast_dialog_title" msgid="5392738488989777074">"<xliff:g id="APP_NAME">%1$s</xliff:g> ထုတ်လွှင့်ခြင်းကို ရပ်မလား။"</string>
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"<xliff:g id="SWITCHAPP">%1$s</xliff:g> ကို ထုတ်လွှင့်သောအခါ (သို့) အထွက်ကို ပြောင်းသောအခါ သင့်လက်ရှိထုတ်လွှင့်ခြင်း ရပ်သွားမည်"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"<xliff:g id="SWITCHAPP">%1$s</xliff:g> ထုတ်လွှင့်ခြင်း"</string>

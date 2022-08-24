@@ -819,6 +819,14 @@
     <string name="keyguard_face_successful_unlock_press_alt_3">Face recognized. Press the unlock icon to open.</string>
 
 
+    <!-- Messages shown when users press outside of udfps region during -->
+    <string-array name="udfps_accessibility_touch_hints">
+        <item>Move left</item>
+        <item>Move down</item>
+        <item>Move right</item>
+        <item>Move up</item>
+    </string-array>
+
     <!-- Message shown when face authentication fails and the pin pad is visible. [CHAR LIMIT=60] -->
     <string name="keyguard_retry">Swipe up to try again</string>
 
@@ -1901,8 +1909,10 @@
     <string name="notification_channel_battery">Battery</string>
     <!-- Title for the notification channel dedicated to screenshot progress. [CHAR LIMIT=NONE] -->
     <string name="notification_channel_screenshot">Screenshots</string>
-    <!-- Title for the notification channel for miscellaneous notices. [CHAR LIMIT=NONE] -->
-    <string name="notification_channel_general">General Messages</string>
+    <!-- Title for the notification channel for instant app notices. [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_instant">Instant Apps</string>
+    <!-- Title for the notification channel for setup notices. [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_setup">Setup</string>
     <!-- Title for the notification channel for problems with storage (i.e. low disk). [CHAR LIMIT=NONE] -->
     <string name="notification_channel_storage">Storage</string>
     <!-- Title for the notification channel for hints and suggestions. [CHAR LIMIT=NONE] -->
@@ -2066,6 +2076,9 @@
 
     <!-- Text for microphone app op [CHAR LIMIT=20]-->
     <string name="privacy_type_microphone">microphone</string>
+
+    <!-- Text for media projection privacy type [CHAR LIMIT=20]-->
+    <string name="privacy_type_media_projection">screen recording</string>
 
     <!-- What to show on the ambient display player when song doesn't have a title. [CHAR LIMIT=20] -->
     <string name="music_controls_no_title">No title</string>
@@ -2298,6 +2311,10 @@
     <string name="media_output_dialog_launch_app_text">To cast this session, please open the app.</string>
     <!-- App name when can't get app name [CHAR LIMIT=60] -->
     <string name="media_output_dialog_unknown_launch_app_name">Unknown app</string>
+    <!-- Button text for stopping casting [CHAR LIMIT=60] -->
+    <string name="media_output_dialog_button_stop_casting">Stop casting</string>
+    <!-- Accessibility text describing purpose of media output dialog. [CHAR LIMIT=NONE] -->
+    <string name="media_output_dialog_accessibility_title">Available devices for audio output.</string>
 
     <!-- Media Output Broadcast Dialog -->
     <!-- Title for Broadcast First Notify Dialog [CHAR LIMIT=60] -->
@@ -2502,7 +2519,7 @@
     <!-- Text informing user where text being edited was copied from [CHAR LIMIT=NONE] -->
     <string name="clipboard_edit_source">From <xliff:g id="appName" example="Gmail">%1$s</xliff:g></string>
     <!-- Label for button to dismiss clipboard overlay [CHAR LIMIT=NONE] -->
-    <string name="clipboard_dismiss_description">Dismiss copy UI</string>
+    <string name="clipboard_dismiss_description">Dismiss copied text</string>
     <!-- Label for button to edit text that was copied to the clipboard [CHAR LIMIT=NONE] -->
     <string name="clipboard_edit_text_description">Edit copied text</string>
     <!-- Label for button to edit an image that was copied to the clipboard [CHAR LIMIT=NONE] -->
@@ -2511,6 +2528,14 @@
     <string name="clipboard_send_nearby_description">Send to nearby device</string>
     <!-- Text informing user that copied content is hidden [CHAR LIMIT=NONE] -->
     <string name="clipboard_text_hidden">Tap to view</string>
+    <!-- Asterisks replacing sensitive text content -->
+    <string name="clipboard_asterisks" translatable="false">••••••</string>
+    <!-- Accessibility announcement informing user that text has been copied [CHAR LIMIT=NONE] -->
+    <string name="clipboard_text_copied">Text copied</string>
+    <!-- Accessibility announcement informing user that text has been copied [CHAR LIMIT=NONE] -->
+    <string name="clipboard_image_copied">Image copied</string>
+    <!-- Accessibility announcement informing user that something has been copied [CHAR LIMIT=NONE] -->
+    <string name="clipboard_content_copied">Content copied</string>
 
     <!-- Generic "add" string [CHAR LIMIT=NONE] -->
     <string name="add">Add</string>
@@ -2535,4 +2560,18 @@
     =1 {# notification}
     other {# notifications}
     }</string>
+
+    <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, media app is broadcasting -->
+    <string name="broadcasting_description_is_broadcasting">Broadcasting</string>
+    <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, title -->
+    <string name="bt_le_audio_broadcast_dialog_title">Stop broadcasting <xliff:g id="app_name" example="App Name 1">%1$s</xliff:g>?</string>
+    <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, sub-title -->
+    <string name="bt_le_audio_broadcast_dialog_sub_title">If you broadcast <xliff:g id="switchApp" example="App Name 2">%1$s</xliff:g> or change the output, your current broadcast will stop</string>
+    <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, switch to others app. -->
+    <string name="bt_le_audio_broadcast_dialog_switch_app">Broadcast <xliff:g id="switchApp" example="App Name 2">%1$s</xliff:g></string>
+    <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, different output. -->
+    <string name="bt_le_audio_broadcast_dialog_different_output">Change output</string>
+    <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, media app is unknown -->
+    <string name="bt_le_audio_broadcast_dialog_unknown_name">Unknown</string>
+
 </resources>

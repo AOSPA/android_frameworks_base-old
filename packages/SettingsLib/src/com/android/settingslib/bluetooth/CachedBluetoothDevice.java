@@ -82,6 +82,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private final LocalBluetoothProfileManager mProfileManager;
     private final Object mProfileLock = new Object();
     BluetoothDevice mDevice;
+    private int mDeviceSide;
+    private int mDeviceMode;
     private long mHiSyncId;
     // Need this since there is no method for getting RSSI
     short mRssi;
@@ -389,6 +391,22 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mConnectAttempted = SystemClock.elapsedRealtime();
         Log.d(TAG, "connect: mConnectAttempted = " + mConnectAttempted);
         connectDevice();
+    }
+
+    public int getDeviceSide() {
+        return mDeviceSide;
+    }
+
+    public void setDeviceSide(int side) {
+        mDeviceSide = side;
+    }
+
+    public int getDeviceMode() {
+        return mDeviceMode;
+    }
+
+    public void setDeviceMode(int mode) {
+        mDeviceMode = mode;
     }
 
     public long getHiSyncId() {
@@ -1128,7 +1146,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                         == BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET)) {
                     EventLog.writeEvent(0x534e4554, "138529441", -1, "");
                 }
-                mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_REJECTED);
             }
         }
     }
@@ -1256,7 +1273,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 stringRes = R.string.bluetooth_battery_level;
             }
 
-            // Set active string in following device connected situation.
+            // Set active string in following device connected situation, also show battery
+            // information if they have.
             //    1. Hearing Aid device active.
             //    2. Headset device active with in-calling state.
             //    3. A2DP device active without in-calling state.
@@ -1273,6 +1291,24 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                         stringRes = R.string.bluetooth_active_battery_level;
                     } else {
                         stringRes = R.string.bluetooth_active_no_battery_level;
+                    }
+                }
+
+                // Try to show left/right information if can not get it from battery for hearing
+                // aids specifically.
+                if (mIsActiveDeviceHearingAid
+                        && stringRes == R.string.bluetooth_active_no_battery_level) {
+                    final CachedBluetoothDevice subDevice = getSubDevice();
+                    if (subDevice != null && subDevice.isConnected()) {
+                        stringRes = R.string.bluetooth_hearing_aid_left_and_right_active;
+                    } else {
+                        if (mDeviceSide == HearingAidProfile.DeviceSide.SIDE_LEFT) {
+                            stringRes = R.string.bluetooth_hearing_aid_left_active;
+                        } else if (mDeviceSide == HearingAidProfile.DeviceSide.SIDE_RIGHT) {
+                            stringRes = R.string.bluetooth_hearing_aid_right_active;
+                        } else {
+                            stringRes = R.string.bluetooth_active_no_battery_level;
+                        }
                     }
                 }
             }

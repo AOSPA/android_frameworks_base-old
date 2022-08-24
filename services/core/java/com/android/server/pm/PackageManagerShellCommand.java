@@ -352,12 +352,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 case "set-silent-updates-policy":
                     return runSetSilentUpdatesPolicy();
                 case "art":
-                    // Remove the first arg "art" and forward to ART module.
-                    String[] args = getAllArgs();
-                    args = Arrays.copyOfRange(args, 1, args.length);
-                    return LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class)
-                            .handleShellCommand(getTarget(), getInFileDescriptor(),
-                                    getOutFileDescriptor(), getErrFileDescriptor(), args);
+                    return runArtSubCommand();
                 default: {
                     Boolean domainVerificationResult =
                             mDomainVerificationShell.runCommand(this, cmd);
@@ -2285,10 +2280,23 @@ class PackageManagerShellCommand extends ShellCommand {
     }
 
     private int runClear() throws RemoteException {
+        final PrintWriter pw = getOutPrintWriter();
         int userId = UserHandle.USER_SYSTEM;
-        String option = getNextOption();
-        if (option != null && option.equals("--user")) {
-            userId = UserHandle.parseUserArg(getNextArgRequired());
+        boolean cacheOnly = false;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "--user":
+                    userId = UserHandle.parseUserArg(getNextArgRequired());
+                    break;
+                case "--cache-only":
+                    cacheOnly = true;
+                    break;
+                default:
+                    pw.println("Error: Unknown option: " + opt);
+                    return 1;
+            }
         }
 
         String pkg = getNextArg();
@@ -2300,7 +2308,12 @@ class PackageManagerShellCommand extends ShellCommand {
         final int translatedUserId =
                 translateUserId(userId, UserHandle.USER_NULL, "runClear");
         final ClearDataObserver obs = new ClearDataObserver();
-        ActivityManager.getService().clearApplicationUserData(pkg, false, obs, translatedUserId);
+        if (!cacheOnly) {
+            ActivityManager.getService()
+                    .clearApplicationUserData(pkg, false, obs, translatedUserId);
+        } else {
+            mInterface.deleteApplicationCacheFilesAsUser(pkg, translatedUserId, obs);
+        }
         synchronized (obs) {
             while (!obs.finished) {
                 try {
@@ -3395,6 +3408,15 @@ class PackageManagerShellCommand extends ShellCommand {
         return 1;
     }
 
+    private int runArtSubCommand() throws ManagerNotFoundException {
+        // Remove the first arg "art" and forward to ART module.
+        String[] args = getAllArgs();
+        args = Arrays.copyOfRange(args, 1, args.length);
+        return LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class)
+                .handleShellCommand(getTarget(), getInFileDescriptor(), getOutFileDescriptor(),
+                        getErrFileDescriptor(), args);
+    }
+
     private static String checkAbiArgument(String abi) {
         if (TextUtils.isEmpty(abi)) {
             throw new IllegalArgumentException("Missing ABI argument");
@@ -4060,8 +4082,10 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      --user: remove the app from the given user.");
         pw.println("      --versionCode: only uninstall if the app has the given version code.");
         pw.println("");
-        pw.println("  clear [--user USER_ID] PACKAGE");
-        pw.println("    Deletes all data associated with a package.");
+        pw.println("  clear [--user USER_ID] [--cache-only] PACKAGE");
+        pw.println("    Deletes data associated with a package. Options are:");
+        pw.println("    --user: specifies the user for which we need to clear data");
+        pw.println("    --cache-only: a flag which tells if we only need to clear cache data");
         pw.println("");
         pw.println("  enable [--user USER_ID] PACKAGE_OR_COMPONENT");
         pw.println("  disable [--user USER_ID] PACKAGE_OR_COMPONENT");

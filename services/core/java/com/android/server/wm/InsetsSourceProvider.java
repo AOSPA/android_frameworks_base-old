@@ -82,6 +82,7 @@ abstract class InsetsSourceProvider {
     private boolean mIsLeashReadyForDispatching;
     private final Rect mSourceFrame = new Rect();
     private final Rect mLastSourceFrame = new Rect();
+    private @NonNull Insets mInsetsHint = Insets.NONE;
 
     private final Consumer<Transaction> mSetLeashPositionConsumer = t -> {
         if (mControl != null) {
@@ -289,7 +290,22 @@ abstract class InsetsSourceProvider {
                         && windowState.mWinAnimator.getShown() && mWindowContainer.okToDisplay()) {
                     windowState.applyWithNextDraw(mSetLeashPositionConsumer);
                 } else {
-                    mSetLeashPositionConsumer.accept(mWindowContainer.getSyncTransaction());
+                    Transaction t = mWindowContainer.getSyncTransaction();
+                    if (windowState != null) {
+                        // Make the buffer, token transformation, and leash position to be updated
+                        // together when the window is drawn for new rotation. Otherwise the window
+                        // may be outside the screen by the inconsistent orientations.
+                        final AsyncRotationController rotationController =
+                                mDisplayContent.getAsyncRotationController();
+                        if (rotationController != null) {
+                            final Transaction drawT =
+                                    rotationController.getDrawTransaction(windowState.mToken);
+                            if (drawT != null) {
+                                t = drawT;
+                            }
+                        }
+                    }
+                    mSetLeashPositionConsumer.accept(t);
                 }
             }
             if (mServerVisible && !mLastSourceFrame.equals(mSource.getFrame())) {
@@ -298,6 +314,7 @@ abstract class InsetsSourceProvider {
                 if (!insetsHint.equals(mControl.getInsetsHint())) {
                     changed = true;
                     mControl.setInsetsHint(insetsHint);
+                    mInsetsHint = insetsHint;
                 }
                 mLastSourceFrame.set(mSource.getFrame());
             }
@@ -308,17 +325,15 @@ abstract class InsetsSourceProvider {
     }
 
     private Point getWindowFrameSurfacePosition() {
-        WindowState win = mWindowContainer.asWindowState();
-        if (mControl != null) {
-            final AsyncRotationController controller =
-                    win.mDisplayContent.getAsyncRotationController();
+        final WindowState win = mWindowContainer.asWindowState();
+        if (win != null && mControl != null) {
+            final AsyncRotationController controller = mDisplayContent.getAsyncRotationController();
             if (controller != null && controller.shouldFreezeInsetsPosition(win)) {
-                // Use previous position because the fade-out animation runs in old rotation.
+                // Use previous position because the window still shows with old rotation.
                 return mControl.getSurfacePosition();
             }
         }
-        final Rect frame = mWindowContainer.asWindowState() != null
-                ? mWindowContainer.asWindowState().getFrame() : mWindowContainer.getBounds();
+        final Rect frame = win != null ? win.getFrame() : mWindowContainer.getBounds();
         final Point position = new Point();
         mWindowContainer.transformFrameToSurfacePosition(frame.left, frame.top, position);
         return position;
@@ -433,8 +448,8 @@ abstract class InsetsSourceProvider {
         final SurfaceControl leash = mAdapter.mCapturedLeash;
         mControlTarget = target;
         updateVisibility();
-        mControl = new InsetsSourceControl(mSource.getType(), leash, surfacePosition,
-                mSource.calculateInsets(mWindowContainer.getBounds(), true /* ignoreVisibility */));
+        mControl = new InsetsSourceControl(mSource.getType(), leash, surfacePosition, mInsetsHint);
+
         ProtoLog.d(WM_DEBUG_WINDOW_INSETS,
                 "InsetsSource Control %s for target %s", mControl, mControlTarget);
     }

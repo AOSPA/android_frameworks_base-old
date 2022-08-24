@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.app.ActivityManager.isStartResultSuccessful;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_ADD_RECT_INSETS_PROVIDER;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT;
@@ -42,6 +43,7 @@ import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANIZER;
 import static com.android.server.wm.ActivityTaskManagerService.LAYOUT_REASON_CONFIG_CHANGED;
 import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
+import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_PINNED_TASK;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_TASK_ORG;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
@@ -395,6 +397,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     effects |= TRANSACT_EFFECTS_LIFECYCLE;
                 }
             }
+            final List<WindowContainerTransaction.HierarchyOp> hops = t.getHierarchyOps();
+            final int hopSize = hops.size();
             ArraySet<WindowContainer> haveConfigChanges = new ArraySet<>();
             Iterator<Map.Entry<IBinder, WindowContainerTransaction.Change>> entries =
                     t.getChanges().entrySet().iterator();
@@ -422,9 +426,32 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         transition.setCanPipOnFinish(false /* canPipOnFinish */);
                     }
                 }
+                // A bit hacky, but we need to detect "remove PiP" so that we can "wrap" the
+                // setWindowingMode call in force-hidden.
+                boolean forceHiddenForPip = false;
+                if (wc.asTask() != null && wc.inPinnedWindowingMode()
+                        && entry.getValue().getWindowingMode() == WINDOWING_MODE_UNDEFINED) {
+                    // We are in pip and going to undefined. Now search hierarchy ops to determine
+                    // whether we are removing pip or expanding pip.
+                    for (int i = 0; i < hopSize; ++i) {
+                        final WindowContainerTransaction.HierarchyOp hop = hops.get(i);
+                        if (hop.getType() != HIERARCHY_OP_TYPE_REORDER) continue;
+                        final WindowContainer hopWc = WindowContainer.fromBinder(
+                                hop.getContainer());
+                        if (!wc.equals(hopWc)) continue;
+                        forceHiddenForPip = !hop.getToTop();
+                    }
+                }
+                if (forceHiddenForPip) {
+                    wc.asTask().setForceHidden(FLAG_FORCE_HIDDEN_FOR_PINNED_TASK, true /* set */);
+                }
 
                 int containerEffect = applyWindowContainerChange(wc, entry.getValue());
                 effects |= containerEffect;
+
+                if (forceHiddenForPip) {
+                    wc.asTask().setForceHidden(FLAG_FORCE_HIDDEN_FOR_PINNED_TASK, false /* set */);
+                }
 
                 // Lifecycle changes will trigger ensureConfig for everything.
                 if ((effects & TRANSACT_EFFECTS_LIFECYCLE) == 0
@@ -433,8 +460,6 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 }
             }
             // Hierarchy changes
-            final List<WindowContainerTransaction.HierarchyOp> hops = t.getHierarchyOps();
-            final int hopSize = hops.size();
             if (hopSize > 0) {
                 final boolean isInLockTaskMode = mService.isInLockTaskMode();
                 for (int i = 0; i < hopSize; ++i) {
@@ -546,6 +571,13 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         + " windowing mode during locked task mode.");
             }
 
+            if (windowingMode == WindowConfiguration.WINDOWING_MODE_PINNED) {
+                // Do not directly put the container into PINNED mode as it may not support it or
+                // the app may not want to enter it. Instead, send a signal to request PIP
+                // mode to the app if they wish to support it below in #applyTaskChanges.
+                return effects;
+            }
+
             final int prevMode = container.getWindowingMode();
             container.setWindowingMode(windowingMode);
             if (prevMode != container.getWindowingMode()) {
@@ -580,6 +612,28 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         Rect enterPipBounds = c.getEnterPipBounds();
         if (enterPipBounds != null) {
             tr.mDisplayContent.mPinnedTaskController.setEnterPipBounds(enterPipBounds);
+        }
+
+        if (c.getWindowingMode() == WindowConfiguration.WINDOWING_MODE_PINNED
+                && !tr.inPinnedWindowingMode()) {
+            final ActivityRecord activity = tr.getTopNonFinishingActivity();
+            if (activity != null) {
+                final boolean lastSupportsEnterPipOnTaskSwitch =
+                        activity.supportsEnterPipOnTaskSwitch;
+                // Temporarily force enable enter PIP on task switch so that PIP is requested
+                // regardless of whether the activity is resumed or paused.
+                activity.supportsEnterPipOnTaskSwitch = true;
+                boolean canEnterPip = activity.checkEnterPictureInPictureState(
+                        "applyTaskChanges", true /* beforeStopping */);
+                if (canEnterPip) {
+                    canEnterPip = mService.mActivityClientController
+                            .requestPictureInPictureMode(activity);
+                }
+                if (!canEnterPip) {
+                    // Restore the flag to its previous state when the activity cannot enter PIP.
+                    activity.supportsEnterPipOnTaskSwitch = lastSupportsEnterPipOnTaskSwitch;
+                }
+            }
         }
 
         return effects;
@@ -733,6 +787,12 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 if (!parent.isAllowedToEmbedActivity(activity)) {
                     final Throwable exception = new SecurityException(
                             "The task fragment is not trusted to embed the given activity.");
+                    sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
+                    break;
+                }
+                if (parent.getTask() != activity.getTask()) {
+                    final Throwable exception = new SecurityException("The reparented activity is"
+                            + " not in the same Task as the target TaskFragment.");
                     sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
                     break;
                 }
@@ -1541,6 +1601,12 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         if (newParentTF.isEmbeddedTaskFragmentInPip() || oldParent.isEmbeddedTaskFragmentInPip()) {
             final Throwable exception = new SecurityException(
                     "Not allow to reparent in TaskFragment in PIP Task.");
+            sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
+            return;
+        }
+        if (newParentTF.getTask() != oldParent.getTask()) {
+            final Throwable exception = new SecurityException(
+                    "The new parent is not in the same Task as the old parent.");
             sendTaskFragmentOperationFailure(organizer, errorCallbackToken, exception);
             return;
         }

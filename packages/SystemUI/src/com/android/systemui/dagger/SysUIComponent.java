@@ -39,14 +39,12 @@ import com.android.systemui.unfold.UnfoldLatencyTracker;
 import com.android.systemui.unfold.util.NaturalRotationUnfoldProgressProvider;
 import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.TaskViewFactory;
-import com.android.wm.shell.apppairs.AppPairs;
 import com.android.wm.shell.back.BackAnimation;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.compatui.CompatUI;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelper;
 import com.android.wm.shell.draganddrop.DragAndDrop;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.recents.RecentTasks;
@@ -86,13 +84,7 @@ public interface SysUIComponent {
         Builder setPip(Optional<Pip> p);
 
         @BindsInstance
-        Builder setLegacySplitScreen(Optional<LegacySplitScreen> s);
-
-        @BindsInstance
         Builder setSplitScreen(Optional<SplitScreen> s);
-
-        @BindsInstance
-        Builder setAppPairs(Optional<AppPairs> s);
 
         @BindsInstance
         Builder setOneHanded(Optional<OneHanded> o);

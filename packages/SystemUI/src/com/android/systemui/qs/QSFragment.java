@@ -72,6 +72,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private static final boolean DEBUG = false;
     private static final String EXTRA_EXPANDED = "expanded";
     private static final String EXTRA_LISTENING = "listening";
+    private static final String EXTRA_VISIBLE = "visible";
 
     private final Rect mQsBounds = new Rect();
     private final StatusBarStateController mStatusBarStateController;
@@ -96,7 +97,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private float mLastPanelFraction;
     private float mSquishinessFraction = 1;
     private boolean mQsDisabled;
-    private int[] mTemp = new int[2];
+    private int[] mLocationTemp = new int[2];
 
     private final RemoteInputQuickSettingsDisabler mRemoteInputQuickSettingsDisabler;
     private final MediaHost mQsMediaHost;
@@ -147,6 +148,10 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private float mFullShadeProgress;
 
     private boolean mOverScrolling;
+
+    // Whether QQS or QS is visible. When in lockscreen, this is true if and only if QQS or QS is
+    // visible;
+    private boolean mQsVisible;
 
     @Inject
     public QSFragment(RemoteInputQuickSettingsDisabler remoteInputQsDisabler,
@@ -224,6 +229,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mQSCustomizerController.init();
         mQSCustomizerController.setQs(this);
         if (savedInstanceState != null) {
+            setQsVisible(savedInstanceState.getBoolean(EXTRA_VISIBLE));
             setExpanded(savedInstanceState.getBoolean(EXTRA_EXPANDED));
             setListening(savedInstanceState.getBoolean(EXTRA_LISTENING));
             setEditLocation(view);
@@ -285,6 +291,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         super.onSaveInstanceState(outState);
         outState.putBoolean(EXTRA_EXPANDED, mQsExpanded);
         outState.putBoolean(EXTRA_LISTENING, mListening);
+        outState.putBoolean(EXTRA_VISIBLE, mQsVisible);
         if (mQSCustomizerController != null) {
             mQSCustomizerController.saveInstanceState(outState);
         }
@@ -301,6 +308,11 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     @VisibleForTesting
     boolean isExpanded() {
         return mQsExpanded;
+    }
+
+    @VisibleForTesting
+    boolean isQsVisible() {
+        return mQsVisible;
     }
 
     @Override
@@ -458,7 +470,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void setExpanded(boolean expanded) {
         if (DEBUG) Log.d(TAG, "setExpanded " + expanded);
         mQsExpanded = expanded;
-        mQSPanelController.setListening(mListening, mQsExpanded);
+        updateQsPanelControllerListening();
         updateQsState();
     }
 
@@ -486,9 +498,20 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void setListening(boolean listening) {
         if (DEBUG) Log.d(TAG, "setListening " + listening);
         mListening = listening;
-        mQSContainerImplController.setListening(listening);
-        mQSFooterActionController.setListening(listening);
-        mQSPanelController.setListening(mListening, mQsExpanded);
+        mQSContainerImplController.setListening(listening && mQsVisible);
+        mQSFooterActionController.setListening(listening && mQsVisible);
+        updateQsPanelControllerListening();
+    }
+
+    private void updateQsPanelControllerListening() {
+        mQSPanelController.setListening(mListening && mQsVisible, mQsExpanded);
+    }
+
+    @Override
+    public void setQsVisible(boolean visible) {
+        if (DEBUG) Log.d(TAG, "setQsVisible " + visible);
+        mQsVisible = visible;
+        setListening(mListening);
     }
 
     @Override
@@ -622,17 +645,19 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         if (mLastQSExpansion == 1.0f) {
             // Fully expanded, let's set the layout bounds as clip bounds. This is necessary because
             // it's a scrollview and otherwise wouldn't be clipped. However, we set the horizontal
-            // bounds so the pages go to the ends of QSContainerImpl
-            ViewGroup.MarginLayoutParams lp =
-                    (ViewGroup.MarginLayoutParams) mQSPanelScrollView.getLayoutParams();
-            mQsBounds.set(-lp.leftMargin, 0, mQSPanelScrollView.getWidth() + lp.rightMargin,
+            // bounds so the pages go to the ends of QSContainerImpl (most cases) or its parent
+            // (large screen portrait)
+            int sideMargin = getResources().getDimensionPixelSize(
+                    R.dimen.qs_tiles_page_horizontal_margin) * 2;
+            mQsBounds.set(-sideMargin, 0, mQSPanelScrollView.getWidth() + sideMargin,
                     mQSPanelScrollView.getHeight());
         }
         mQSPanelScrollView.setClipBounds(mQsBounds);
 
-        mQSPanelScrollView.getLocationOnScreen(mTemp);
-        int top = mTemp[1];
-        mQsMediaHost.getCurrentClipping().set(0, top, getView().getMeasuredWidth(),
+        mQSPanelScrollView.getLocationOnScreen(mLocationTemp);
+        int left = mLocationTemp[0];
+        int top = mLocationTemp[1];
+        mQsMediaHost.getCurrentClipping().set(left, top, left + getView().getMeasuredWidth(),
                 top + mQSPanelScrollView.getMeasuredHeight()
                         - mQSPanelScrollView.getPaddingBottom());
     }
@@ -777,8 +802,8 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
      * the QS container.
      */
     private int getQsMinExpansionHeightForSplitShade() {
-        getView().getLocationOnScreen(mTemp);
-        int top = mTemp[1];
+        getView().getLocationOnScreen(mLocationTemp);
+        int top = mLocationTemp[1];
         // We want to get the original top position, so we subtract any translation currently set.
         int originalTop = (int) (top - getView().getTranslationY());
         // On split shade the QS view doesn't start at the top of the screen, so we need to add the
@@ -836,12 +861,13 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         indentingPw.println("mHeaderAnimating: " + mHeaderAnimating);
         indentingPw.println("mStackScrollerOverscrolling: " + mStackScrollerOverscrolling);
         indentingPw.println("mListening: " + mListening);
+        indentingPw.println("mQsVisible: " + mQsVisible);
         indentingPw.println("mLayoutDirection: " + mLayoutDirection);
         indentingPw.println("mLastQSExpansion: " + mLastQSExpansion);
         indentingPw.println("mLastPanelFraction: " + mLastPanelFraction);
         indentingPw.println("mSquishinessFraction: " + mSquishinessFraction);
         indentingPw.println("mQsDisabled: " + mQsDisabled);
-        indentingPw.println("mTemp: " + Arrays.toString(mTemp));
+        indentingPw.println("mTemp: " + Arrays.toString(mLocationTemp));
         indentingPw.println("mShowCollapsedOnKeyguard: " + mShowCollapsedOnKeyguard);
         indentingPw.println("mLastKeyguardAndExpanded: " + mLastKeyguardAndExpanded);
         indentingPw.println("mState: " + StatusBarState.toString(mState));

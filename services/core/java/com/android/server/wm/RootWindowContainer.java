@@ -1985,16 +1985,21 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     void moveActivityToPinnedRootTask(@NonNull ActivityRecord r,
             @Nullable ActivityRecord launchIntoPipHostActivity, String reason) {
+        moveActivityToPinnedRootTask(r, launchIntoPipHostActivity, reason, null /* transition */);
+    }
 
+    void moveActivityToPinnedRootTask(@NonNull ActivityRecord r,
+            @Nullable ActivityRecord launchIntoPipHostActivity, String reason,
+            @Nullable Transition transition) {
         final TaskDisplayArea taskDisplayArea = r.getDisplayArea();
         final Task task = r.getTask();
         final Task rootTask;
 
-        Transition newTransition = null;
-        // Create a transition now to collect the current pinned Task dismiss. Only do the
-        // create here as the Task (trigger) to enter PIP is not ready yet.
+        Transition newTransition = transition;
+        // Create a transition now (if not provided) to collect the current pinned Task dismiss.
+        // Only do the create here as the Task (trigger) to enter PIP is not ready yet.
         final TransitionController transitionController = task.mTransitionController;
-        if (!transitionController.isCollecting()
+        if (newTransition == null && !transitionController.isCollecting()
                 && transitionController.getTransitionPlayer() != null) {
             newTransition = transitionController.createTransition(TRANSIT_PIP);
         }
@@ -2007,7 +2012,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             final Task rootPinnedTask = taskDisplayArea.getRootPinnedTask();
             if (rootPinnedTask != null) {
                 transitionController.collect(rootPinnedTask);
-                rootPinnedTask.dismissPip();
+                // The new ActivityRecord should replace the existing PiP, so it's more desirable
+                // that the old PiP disappears instead of turning to full-screen at the same time,
+                // as the Task#dismissPip is trying to do.
+                removeRootTasksInWindowingModes(WINDOWING_MODE_PINNED);
             }
 
             // Set a transition to ensure that we don't immediately try and update the visibility
@@ -3345,7 +3353,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             if (task.getActivity(activity -> !activity.finishing && activity.mUserId == userId)
                     != null) {
                 mService.getTaskChangeNotificationController().notifyTaskProfileLocked(
-                        task.mTaskId, userId);
+                        task.getTaskInfo());
             }
         }, true /* traverseTopToBottom */);
     }

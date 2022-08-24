@@ -3729,7 +3729,8 @@ class StorageManagerService extends IStorageManager.Stub
 
         try {
             final PackageManager.Property noAppStorageProp = mContext.getPackageManager()
-                    .getProperty(PackageManager.PROPERTY_NO_APP_DATA_STORAGE, callingPkg);
+                    .getPropertyAsUser(PackageManager.PROPERTY_NO_APP_DATA_STORAGE, callingPkg,
+                            null /* className */, userId);
             if (noAppStorageProp != null && noAppStorageProp.getBoolean()) {
                 throw new SecurityException(callingPkg + " should not have " + appPath);
             }
@@ -3877,9 +3878,12 @@ class StorageManagerService extends IStorageManager.Stub
                     match = vol.isVisibleForWrite(userId)
                             || (includeSharedProfile && vol.isVisibleForWrite(userIdSharingMedia));
                 } else {
+                    // Return both read only and write only volumes. When includeSharedProfile is
+                    // true, all the volumes of userIdSharingMedia should be returned when queried
+                    // from the user it shares media with
                     match = vol.isVisibleForUser(userId)
                             || (!vol.isVisible() && includeInvisible && vol.getPath() != null)
-                            || (includeSharedProfile && vol.isVisibleForRead(userIdSharingMedia));
+                            || (includeSharedProfile && vol.isVisibleForUser(userIdSharingMedia));
                 }
                 if (!match) continue;
 

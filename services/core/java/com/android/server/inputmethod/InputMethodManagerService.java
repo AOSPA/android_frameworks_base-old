@@ -313,6 +313,15 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     @Nullable
     private CreateInlineSuggestionsRequest mPendingInlineSuggestionsRequest;
 
+    /**
+     * A callback into the autofill service obtained from the latest call to
+     * {@link #onCreateInlineSuggestionsRequestLocked}, which can be used to invalidate an
+     * autofill session in case the IME process dies.
+     */
+    @GuardedBy("ImfLock.class")
+    @Nullable
+    private IInlineSuggestionsRequestCallback mInlineSuggestionsRequestCallback;
+
     @UserIdInt
     private int mLastSwitchUserId;
 
@@ -2183,6 +2192,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             InlineSuggestionsRequestInfo requestInfo, IInlineSuggestionsRequestCallback callback,
             boolean touchExplorationEnabled) {
         clearPendingInlineSuggestionsRequestLocked();
+        mInlineSuggestionsRequestCallback = callback;
         final InputMethodInfo imi = mMethodMap.get(getSelectedMethodIdLocked());
         try {
             if (userId == mSettings.getCurrentUserId()
@@ -2804,6 +2814,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             if (DEBUG) {
                 Slog.d(TAG, "Avoiding IME startup and unbinding current input method.");
             }
+            invalidateAutofillSessionLocked();
             mBindingController.unbindCurrentMethod();
             return InputBindResult.NO_EDITOR;
         }
@@ -2839,6 +2850,17 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         mBindingController.unbindCurrentMethod();
 
         return mBindingController.bindCurrentMethod();
+    }
+
+    @GuardedBy("ImfLock.class")
+    void invalidateAutofillSessionLocked() {
+        if (mInlineSuggestionsRequestCallback != null) {
+            try {
+                mInlineSuggestionsRequestCallback.onInlineSuggestionsSessionInvalidated();
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Cannot invalidate autofill session.", e);
+            }
+        }
     }
 
     @GuardedBy("ImfLock.class")
@@ -3173,6 +3195,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         }
         hideStatusBarIconLocked();
         mInFullscreenMode = false;
+        mWindowManagerInternal.setDismissImeOnBackKeyPressed(false);
     }
 
     @BinderThread
@@ -5123,9 +5146,8 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             case MSG_RESET_HANDWRITING: {
                 synchronized (ImfLock.class) {
                     if (mBindingController.supportsStylusHandwriting()
-                            && getCurMethodLocked() != null && mCurFocusedWindow != null) {
-                        mHwController.initializeHandwritingSpy(
-                                mCurTokenDisplayId, mCurFocusedWindow);
+                            && getCurMethodLocked() != null) {
+                        mHwController.initializeHandwritingSpy(mCurTokenDisplayId);
                     } else {
                         mHwController.reset();
                     }
@@ -5135,14 +5157,15 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             case MSG_START_HANDWRITING:
                 synchronized (ImfLock.class) {
                     IInputMethodInvoker curMethod = getCurMethodLocked();
-                    if (curMethod == null) {
+                    if (curMethod == null || mCurFocusedWindow == null) {
                         return true;
                     }
                     final HandwritingModeController.HandwritingSession session =
                             mHwController.startHandwritingSession(
                                     msg.arg1 /*requestId*/,
                                     msg.arg2 /*pid*/,
-                                    mBindingController.getCurMethodUid());
+                                    mBindingController.getCurMethodUid(),
+                                    mCurFocusedWindow);
                     if (session == null) {
                         Slog.e(TAG,
                                 "Failed to start handwriting session for requestId: " + msg.arg1);
