@@ -162,7 +162,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private SecureSetting mColorInversionSetting;
     private DelayableExecutor mExecutor;
     private Handler mHandler;
-    private boolean mDeviceHasUdc;
+    private boolean mBypassMainCutout;
     private boolean mPendingRotationChange;
     private boolean mIsRoundedCornerMultipleRadius;
     private boolean mIsPrivacyDotEnabled;
@@ -260,8 +260,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         mIsPrivacyDotEnabled = mContext.getResources().getBoolean(R.bool.config_enablePrivacyDot);
         mWindowManager = mContext.getSystemService(WindowManager.class);
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
-        mDeviceHasUdc = mContext.getResources().getBoolean(
-                R.bool.config_deviceHasUnderDisplayCamera);
+        mBypassMainCutout = mContext.getResources().getBoolean(
+                R.bool.config_bypassCameraMainCutout);
         updateRoundedCornerDrawable();
         updateRoundedCornerRadii();
         setupDecorations();
@@ -323,7 +323,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             final DisplayCutout cutout = getCutout();
             for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
                 if (shouldShowCutout(i, cutout) || shouldShowRoundedCorner(i, cutout)
-                        || shouldShowPrivacyDot(i, cutout) || mDeviceHasUdc) {
+                        || shouldShowPrivacyDot(i, cutout) || mBypassMainCutout) {
                     createOverlay(i, cutout);
                 } else {
                     removeOverlay(i);
@@ -1104,7 +1104,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                 getViewTreeObserver().addOnDrawListener(() -> Log.i(TAG,
                         getWindowTitleByPos(pos) + " drawn in rot " + mRotation));
             }
-            mHiddenCameraProtectionScale = mDecorations.mDeviceHasUdc ? 0.0f : 0.5f;
+            mHiddenCameraProtectionScale = mDecorations.mBypassMainCutout ? 0.0f : 0.5f;
             mCameraProtectionProgress = mHiddenCameraProtectionScale;
         }
 
@@ -1243,14 +1243,14 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             mPosition = getBoundPositionFromRotation(mInitialPosition, mRotation);
             requestLayout();
             getDisplay().getDisplayInfo(mInfo);
-            if (!mDecorations.mDeviceHasUdc) {
+            if (!mDecorations.mBypassMainCutout) {
                 mBounds.clear();
                 mBoundingRect.setEmpty();
                 mBoundingPath.reset();
             }
             int newVisible;
             if (shouldDrawCutout(getContext()) && hasCutout()) {
-                if (!mDecorations.mDeviceHasUdc) {
+                if (!mDecorations.mBypassMainCutout) {
                     mBounds.addAll(mInfo.displayCutout.getBoundingRects());
                     localBounds(mBoundingRect);
                 }
@@ -1275,7 +1275,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             int dw = flipped ? lh : lw;
             int dh = flipped ? lw : lh;
 
-            if (!mDecorations.mDeviceHasUdc) {
+            if (!mDecorations.mBypassMainCutout) {
                 Path path = DisplayCutout.pathFromResources(
                         getResources(), getDisplay().getUniqueId(), dw, dh);
                 if (path != null) {
@@ -1324,7 +1324,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             LayoutParams lp = getLayoutParams();
             if (lp instanceof FrameLayout.LayoutParams) {
                 FrameLayout.LayoutParams flp = (FrameLayout.LayoutParams) lp;
-                int newGravity = !mDecorations.mDeviceHasUdc ? getGravity(mInfo.displayCutout)
+                int newGravity = !mDecorations.mBypassMainCutout ? getGravity(mInfo.displayCutout)
                         : getUdcGravity();
                 if (flp.gravity != newGravity) {
                     flp.gravity = newGravity;
@@ -1334,7 +1334,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         }
 
         private boolean hasCutout() {
-            if (mDecorations.mDeviceHasUdc) {
+            if (mDecorations.mBypassMainCutout) {
                 return true;
             }
 
@@ -1438,7 +1438,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
         @Override
         public boolean shouldInterceptTouch() {
-            return (mDecorations.mDeviceHasUdc || mInfo.displayCutout != null)
+            return (mDecorations.mBypassMainCutout || mInfo.displayCutout != null)
                     && getVisibility() == VISIBLE;
         }
 
