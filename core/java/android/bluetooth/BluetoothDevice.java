@@ -317,6 +317,17 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             "android.bluetooth.device.action.TWS_PLUS_DEVICE_PAIR";
 
     /**
+     * Broadcast Action: Indicates the LE high priority mode status.
+     * <p>Always contains the extra fields {@link #EXTRA_STATUS},
+     * {@link #EXTRA_MODE}.
+     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} to receive.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_LE_HIGH_PRIORITY_MODE_STATUS =
+            "android.bluetooth.device.action.LE_HIGH_PRIORITY_MODE_STATUS";
+
+    /**
      * Used as a Parcelable {@link BluetoothDevice} extra field in every intent
      * broadcast by this class. It contains the {@link BluetoothDevice} that
      * the intent applies to.
@@ -535,6 +546,58 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      */
     public static final int DEVICE_TYPE_DUAL = 3;
 
+    /**
+     * Used as a String extra field in {@link #ACTION_LE_HIGH_PRIORITY_MODE_STATUS}
+     * intents. It contains the status of mode request.
+     * @hide
+     */
+    public static final String EXTRA_STATUS =
+            "android.bluetooth.device.extra.EXTRA_STATUS";
+
+    /**
+     * Used as a String extra field in {@link #ACTION_LE_HIGH_PRIORITY_MODE_STATUS}
+     * intents. It contains the le high priority mode.
+     * @hide
+     */
+    public static final String EXTRA_MODE =
+            "android.bluetooth.device.extra.EXTRA_MODE";
+
+    /**
+     * BLE high priority mode request processed
+     * @hide
+     */
+    public static final int LE_HIGH_PRIOTY_MODE_SUCCESS = 10;
+
+    /**
+     * BLE high priority mode request failed
+     * @hide
+     */
+    public static final int LE_HIGH_PRIOTY_MODE_FAIL = 11;
+
+    /**
+     * BLE high priority mode request pending and wait for previous
+     * request status via intent.
+     * @hide
+     */
+    public static final int LE_HIGH_PRIOTY_MODE_PENDING = 12;
+
+    /**
+     * BLE high priority mode request is not allowed
+     * @hide
+     */
+    public static final int LE_HIGH_PRIOTY_MODE_NOT_ALLOWED = 13;
+
+    /**
+     * BLE high priority mode is already set
+     * @hide
+     */
+    public static final int LE_HIGH_PRIOTY_MODE_ALREADY_SET = 14;
+
+    /**
+     * BLE high priority mode request failed due to remote is down
+     * @hide
+     */
+    public static final int LE_HIGH_PRIOTY_MODE_REMOTE_DEV_DOWN = 15;
 
     /** @hide */
     @RequiresBluetoothConnectPermission
@@ -2062,6 +2125,46 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             return sService.getTwsPlusPeerAddress(this, mAttributionSource);
         } catch (RemoteException e) {Log.e(TAG, "", e);}
         return null;
+    }
+
+    /**
+     * sets the BLE high priority mode for the remote device.
+     *
+     * @return status of BLE high priority mode request for the remote device.
+     * @hide
+     */
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    public int setLeHighPriorityMode(boolean enable) {
+        if (sService == null) {
+            Log.e(TAG, "BT not enabled. Cannot set LE high priority mode");
+            return LE_HIGH_PRIOTY_MODE_FAIL;
+        }
+        try {
+            return sService.setLeHighPriorityMode(this, enable, mAttributionSource);
+        } catch (RemoteException e) {Log.e(TAG, "", e);}
+        return LE_HIGH_PRIOTY_MODE_FAIL;
+    }
+
+    /**
+     * Checks BLE high priority mode is set for the remote device.
+     *
+     * @return true or false based on BLE high priority mode for the remote device.
+     * @hide
+     */
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    public boolean isLeHighPriorityModeSet() {
+        if (sService == null) {
+            Log.e(TAG, "BT not enabled. Cannot check LE high priority mode");
+            return false;
+        }
+        try {
+            return sService.isLeHighPriorityModeSet(this, mAttributionSource);
+        } catch (RemoteException e) {Log.e(TAG, "", e);}
+        return false;
     }
 
     /**
