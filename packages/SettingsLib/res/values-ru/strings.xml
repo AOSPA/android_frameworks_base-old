@@ -612,7 +612,7 @@
     <string name="guest_exit_quick_settings_button" msgid="1912362095913765471">"Выйти из гостевого режима"</string>
     <string name="guest_notification_ephemeral" msgid="7263252466950923871">"История будет удалена сразу после выхода."</string>
     <string name="guest_notification_non_ephemeral" msgid="6843799963012259330">"При выходе вы можете сохранить или удалить историю."</string>
-    <string name="guest_notification_non_ephemeral_non_first_login" msgid="8009307983766934876">"Сбросьте историю сеанса прямо сейчас и удалите или сохраните ее при выходе."</string>
+    <string name="guest_notification_non_ephemeral_non_first_login" msgid="8009307983766934876">"Можно сбросить историю сеанса прямо сейчас, либо удалить или сохранить ее при выходе."</string>
     <string name="user_image_take_photo" msgid="467512954561638530">"Сделать снимок"</string>
     <string name="user_image_choose_photo" msgid="1363820919146782908">"Выбрать фото"</string>
     <string name="user_image_photo_selector" msgid="433658323306627093">"Выбрать фотографию"</string>
@@ -667,9 +667,6 @@
     <string name="turn_screen_on_title" msgid="3266937298097573424">"Включение экрана"</string>
     <string name="allow_turn_screen_on" msgid="6194845766392742639">"Разрешить приложению включать экран"</string>
     <string name="allow_turn_screen_on_description" msgid="43834403291575164">"Приложение сможет в любое время включать экран без явного согласия с вашей стороны"</string>
-    <string name="bt_le_audio_scan_qr_code" msgid="3521809854780392679">"Сканирование QR-кода"</string>
-    <string name="bt_le_audio_scan_qr_code_scanner" msgid="4679500020630341107">"Чтобы прослушать, поместите QR-код в центр"</string>
-    <string name="bt_le_audio_qr_code_is_not_valid_format" msgid="6092191081849434734">"Недопустимый формат QR-кода"</string>
     <string name="bt_le_audio_broadcast_dialog_title" msgid="5392738488989777074">"Остановить трансляцию \"<xliff:g id="APP_NAME">%1$s</xliff:g>\"?"</string>
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"Если вы начнете транслировать \"<xliff:g id="SWITCHAPP">%1$s</xliff:g>\" или смените целевое устройство, текущая трансляция прервется."</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"Транслировать \"<xliff:g id="SWITCHAPP">%1$s</xliff:g>\""</string>

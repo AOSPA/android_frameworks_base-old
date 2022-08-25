@@ -755,7 +755,7 @@ import java.util.concurrent.locks.ReentrantLock;
  <h4 id=KeyFrames><a name="KeyFrames"></a>Stream Boundary and Key Frames</h4>
  <p>
  It is important that the input data after {@link #start} or {@link #flush} starts at a suitable
- stream boundary: the first frame must a key frame. A <em>key frame</em> can be decoded
+ stream boundary: the first frame must be a key frame. A <em>key frame</em> can be decoded
  completely on its own (for most codecs this means an I-frame), and no frames that are to be
  displayed after a key frame refer to frames before the key frame.
  <p>
@@ -2317,10 +2317,6 @@ final public class MediaCodec {
      */
     public final void start() {
         native_start();
-        synchronized(mBufferLock) {
-            cacheBuffers(true /* input */);
-            cacheBuffers(false /* input */);
-        }
     }
     private native final void native_start();
 
@@ -3952,6 +3948,9 @@ final public class MediaCodec {
                         + "objects and attach to QueueRequest objects.");
             }
             if (mCachedInputBuffers == null) {
+                cacheBuffers(true /* input */);
+            }
+            if (mCachedInputBuffers == null) {
                 throw new IllegalStateException();
             }
             // FIXME: check codec status
@@ -3988,6 +3987,9 @@ final public class MediaCodec {
                 throw new IncompatibleWithBlockModelException("getOutputBuffers() "
                         + "is not compatible with CONFIGURE_FLAG_USE_BLOCK_MODEL. "
                         + "Please use getOutputFrame to get output frames.");
+            }
+            if (mCachedOutputBuffers == null) {
+                cacheBuffers(false /* input */);
             }
             if (mCachedOutputBuffers == null) {
                 throw new IllegalStateException();

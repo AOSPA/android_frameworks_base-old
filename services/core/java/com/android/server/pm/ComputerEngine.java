@@ -367,6 +367,8 @@ public class ComputerEngine implements Computer {
         return (v1 > v2) ? -1 : ((v1 < v2) ? 1 : 0);
     };
 
+    private final int mVersion;
+
     // The administrative use counter.
     private int mUsed = 0;
 
@@ -425,7 +427,8 @@ public class ComputerEngine implements Computer {
         return mLocalAndroidApplication;
     }
 
-    ComputerEngine(PackageManagerService.Snapshot args) {
+    ComputerEngine(PackageManagerService.Snapshot args, int version) {
+        mVersion = version;
         mSettings = new Settings(args.settings);
         mIsolatedOwners = args.isolatedOwners;
         mPackages = args.packages;
@@ -466,11 +469,17 @@ public class ComputerEngine implements Computer {
         mService = args.service;
     }
 
+    @Override
+    public int getVersion() {
+        return mVersion;
+    }
+
     /**
      * Record that the snapshot was used.
      */
-    public final void use() {
+    public final Computer use() {
         mUsed++;
+        return this;
     }
 
     /**
@@ -2785,6 +2794,26 @@ public class ComputerEngine implements Computer {
     }
 
     /**
+     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int, boolean)
+     */
+    public final boolean shouldFilterApplicationIncludingUninstalled(
+            @NonNull SharedUserSetting sus, int callingUid, int userId) {
+        if (shouldFilterApplication(sus, callingUid, userId)) {
+            return true;
+        }
+        final ArraySet<PackageStateInternal> packageStates =
+                (ArraySet<PackageStateInternal>) sus.getPackageStates();
+        for (int index = 0; index < packageStates.size(); index++) {
+            final PackageStateInternal ps = packageStates.valueAt(index);
+            if (ps.getUserStateOrDefault(userId).isInstalled() || ps.isHiddenUntilInstalled()) {
+                return false;
+            }
+        }
+        // Filter it, all packages with the same shared uid are uninstalled.
+        return true;
+    }
+
+    /**
      * Verification statuses are ordered from the worse to the best, except for
      * INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_NEVER, which is the worse.
      */
@@ -3792,14 +3821,16 @@ public class ComputerEngine implements Computer {
     }
 
     @Override
-    public boolean activitySupportsIntent(@NonNull ComponentName resolveComponentName,
-            @NonNull ComponentName component, @NonNull Intent intent, String resolvedType) {
+    public boolean activitySupportsIntentAsUser(@NonNull ComponentName resolveComponentName,
+            @NonNull ComponentName component, @NonNull Intent intent, String resolvedType,
+            int userId) {
+        final int callingUid = Binder.getCallingUid();
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "activitySupportsIntentAsUser");
         if (component.equals(resolveComponentName)) {
             // The resolver supports EVERYTHING!
             return true;
         }
-        final int callingUid = Binder.getCallingUid();
-        final int callingUserId = UserHandle.getUserId(callingUid);
         ParsedActivity a = mComponentResolver.getActivity(component);
         if (a == null) {
             return false;
@@ -3809,7 +3840,7 @@ public class ComputerEngine implements Computer {
             return false;
         }
         if (shouldFilterApplication(
-                ps, callingUid, component, TYPE_ACTIVITY, callingUserId)) {
+                ps, callingUid, component, TYPE_ACTIVITY, userId, true /* filterUninstall */)) {
             return false;
         }
         for (int i=0; i< a.getIntents().size(); i++) {
@@ -4209,10 +4240,11 @@ public class ComputerEngine implements Computer {
     }
 
     @Override
-    public PackageStateInternal getPackageStateFiltered(@NonNull String packageName, int callingUid,
-            @UserIdInt int userId) {
+    public PackageStateInternal getPackageStateForInstalledAndFiltered(@NonNull String packageName,
+            int callingUid, @UserIdInt int userId) {
         final PackageStateInternal packageState = getPackageStateInternal(packageName);
-        if (packageState == null || shouldFilterApplication(packageState, callingUid, userId)) {
+        if (packageState == null
+                || shouldFilterApplicationIncludingUninstalled(packageState, callingUid, userId)) {
             return null;
         }
         return packageState;
@@ -4244,52 +4276,56 @@ public class ComputerEngine implements Computer {
     public int checkUidSignatures(int uid1, int uid2) {
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        // Map to base uids.
-        final int appId1 = UserHandle.getAppId(uid1);
-        final int appId2 = UserHandle.getAppId(uid2);
-        SigningDetails p1SigningDetails;
-        SigningDetails p2SigningDetails;
-        Object obj = mSettings.getSettingBase(appId1);
-        if (obj != null) {
-            if (obj instanceof SharedUserSetting) {
-                final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p1SigningDetails = sus.signatures.mSigningDetails;
-            } else if (obj instanceof PackageSetting) {
-                final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p1SigningDetails = ps.getSigningDetails();
-            } else {
-                return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-            }
-        } else {
-            return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-        }
-        obj = mSettings.getSettingBase(appId2);
-        if (obj != null) {
-            if (obj instanceof SharedUserSetting) {
-                final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p2SigningDetails = sus.signatures.mSigningDetails;
-            } else if (obj instanceof PackageSetting) {
-                final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p2SigningDetails = ps.getSigningDetails();
-            } else {
-                return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-            }
-        } else {
+        final SigningDetails p1SigningDetails =
+                getSigningDetailsAndFilterAccess(uid1, callingUid, callingUserId);
+        final SigningDetails p2SigningDetails =
+                getSigningDetailsAndFilterAccess(uid2, callingUid, callingUserId);
+        if (p1SigningDetails == null || p2SigningDetails == null) {
             return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
         }
         return checkSignaturesInternal(p1SigningDetails, p2SigningDetails);
+    }
+
+    @Override
+    public int checkUidSignaturesForAllUsers(int uid1, int uid2) {
+        final int callingUid = Binder.getCallingUid();
+        final int userId1 = UserHandle.getUserId(uid1);
+        final int userId2 = UserHandle.getUserId(uid2);
+        enforceCrossUserPermission(callingUid, userId1, false /* requireFullPermission */,
+                false /* checkShell */, "checkUidSignaturesForAllUsers");
+        enforceCrossUserPermission(callingUid, userId2, false /* requireFullPermission */,
+                false /* checkShell */, "checkUidSignaturesForAllUsers");
+        final SigningDetails p1SigningDetails =
+                getSigningDetailsAndFilterAccess(uid1, callingUid, userId1);
+        final SigningDetails p2SigningDetails =
+                getSigningDetailsAndFilterAccess(uid2, callingUid, userId2);
+        if (p1SigningDetails == null || p2SigningDetails == null) {
+            return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
+        }
+        return checkSignaturesInternal(p1SigningDetails, p2SigningDetails);
+    }
+
+    private SigningDetails getSigningDetailsAndFilterAccess(int uid, int callingUid, int userId) {
+        // Map to base uids.
+        final int appId = UserHandle.getAppId(uid);
+        final Object obj = mSettings.getSettingBase(appId);
+        if (obj == null) {
+            return null;
+        }
+        if (obj instanceof SharedUserSetting) {
+            final SharedUserSetting sus = (SharedUserSetting) obj;
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, userId)) {
+                return null;
+            }
+            return sus.signatures.mSigningDetails;
+        } else if (obj instanceof PackageSetting) {
+            final PackageSetting ps = (PackageSetting) obj;
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
+                return null;
+            }
+            return ps.getSigningDetails();
+        }
+        return null;
     }
 
     private int checkSignaturesInternal(SigningDetails p1SigningDetails,
@@ -4354,27 +4390,9 @@ public class ComputerEngine implements Computer {
             @PackageManager.CertificateInputType int type) {
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        // Map to base uids.
-        final int appId = UserHandle.getAppId(uid);
-        final SigningDetails signingDetails;
-        final Object obj = mSettings.getSettingBase(appId);
-        if (obj != null) {
-            if (obj instanceof SharedUserSetting) {
-                final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
-                    return false;
-                }
-                signingDetails = sus.signatures.mSigningDetails;
-            } else if (obj instanceof PackageSetting) {
-                final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
-                    return false;
-                }
-                signingDetails = ps.getSigningDetails();
-            } else {
-                return false;
-            }
-        } else {
+        final SigningDetails signingDetails =
+                getSigningDetailsAndFilterAccess(uid, callingUid, callingUserId);
+        if (signingDetails == null) {
             return false;
         }
         switch (type) {
@@ -4437,13 +4455,13 @@ public class ComputerEngine implements Computer {
         final Object obj = mSettings.getSettingBase(appId);
         if (obj instanceof SharedUserSetting) {
             final SharedUserSetting sus = (SharedUserSetting) obj;
-            if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                 return null;
             }
             return sus.name + ":" + sus.mAppId;
         } else if (obj instanceof PackageSetting) {
             final PackageSetting ps = (PackageSetting) obj;
-            if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                 return null;
             }
             return ps.getPackageName();
@@ -4472,14 +4490,14 @@ public class ComputerEngine implements Computer {
             final Object obj = mSettings.getSettingBase(appId);
             if (obj instanceof SharedUserSetting) {
                 final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+                if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                     names[i] = null;
                 } else {
                     names[i] = "shared:" + sus.name;
                 }
             } else if (obj instanceof PackageSetting) {
                 final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+                if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                     names[i] = null;
                 } else {
                     names[i] = ps.getPackageName();
@@ -4501,7 +4519,7 @@ public class ComputerEngine implements Computer {
             return Process.INVALID_UID;
         }
         final SharedUserSetting suid = mSettings.getSharedUserFromId(sharedUserName);
-        if (suid != null && !shouldFilterApplication(suid, callingUid,
+        if (suid != null && !shouldFilterApplicationIncludingUninstalled(suid, callingUid,
                 UserHandle.getUserId(callingUid))) {
             return suid.mAppId;
         }
@@ -4522,13 +4540,13 @@ public class ComputerEngine implements Computer {
         final Object obj = mSettings.getSettingBase(appId);
         if (obj instanceof SharedUserSetting) {
             final SharedUserSetting sus = (SharedUserSetting) obj;
-            if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                 return 0;
             }
             return sus.getFlags();
         } else if (obj instanceof PackageSetting) {
             final PackageSetting ps = (PackageSetting) obj;
-            if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                 return 0;
             }
             return ps.getFlags();
@@ -4550,13 +4568,13 @@ public class ComputerEngine implements Computer {
         final Object obj = mSettings.getSettingBase(appId);
         if (obj instanceof SharedUserSetting) {
             final SharedUserSetting sus = (SharedUserSetting) obj;
-            if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                 return 0;
             }
             return sus.getPrivateFlags();
         } else if (obj instanceof PackageSetting) {
             final PackageSetting ps = (PackageSetting) obj;
-            if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                 return 0;
             }
             return ps.getPrivateFlags();
@@ -4995,7 +5013,7 @@ public class ComputerEngine implements Computer {
             if (ps == null) {
                 return true;
             }
-            if (shouldFilterApplication(ps, callingUid, userId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
                 return true;
             }
             return ps.getUserStateOrDefault(userId).isHidden();
@@ -5059,11 +5077,12 @@ public class ComputerEngine implements Computer {
 
     @Override
     public boolean getBlockUninstallForUser(@NonNull String packageName, @UserIdInt int userId) {
-            final PackageStateInternal ps = mSettings.getPackage(packageName);
-            if (ps == null || shouldFilterApplication(ps, Binder.getCallingUid(), userId)) {
-                return false;
-            }
-            return mSettings.getBlockUninstall(userId, packageName);
+        final PackageStateInternal ps = mSettings.getPackage(packageName);
+        final int callingUid = Binder.getCallingUid();
+        if (ps == null || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
+            return false;
+        }
+        return mSettings.getBlockUninstall(userId, packageName);
     }
 
     @Nullable
@@ -5455,13 +5474,10 @@ public class ComputerEngine implements Computer {
         enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
                 false /* checkShell */, "get install reason");
         final PackageStateInternal ps = mSettings.getPackage(packageName);
-        if (shouldFilterApplication(ps, callingUid, userId)) {
+        if (ps == null || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
             return PackageManager.INSTALL_REASON_UNKNOWN;
         }
-        if (ps != null) {
-            return ps.getUserStateOrDefault(userId).getInstallReason();
-        }
-        return PackageManager.INSTALL_REASON_UNKNOWN;
+        return ps.getUserStateOrDefault(userId).getInstallReason();
     }
 
     @Override
@@ -5473,22 +5489,18 @@ public class ComputerEngine implements Computer {
                 false /*checkShell*/, "may package query");
         final PackageStateInternal sourceSetting = getPackageStateInternal(sourcePackageName);
         final PackageStateInternal targetSetting = getPackageStateInternal(targetPackageName);
-        if (sourceSetting == null || targetSetting == null) {
-            throw new ParcelableException(new PackageManager.NameNotFoundException("Package(s) "
-                    + (sourceSetting == null ? sourcePackageName + " " : "")
-                    + (targetSetting == null ? targetPackageName + " " : "")
-                    + "not found."));
+        boolean throwException = sourceSetting == null || targetSetting == null;
+        if (!throwException) {
+            final boolean filterSource =
+                    shouldFilterApplication(sourceSetting, callingUid, userId);
+            final boolean filterTarget =
+                    shouldFilterApplication(targetSetting, callingUid, userId);
+            // The caller must have visibility of the both packages
+            throwException = filterSource || filterTarget;
         }
-        final boolean filterSource =
-                shouldFilterApplication(sourceSetting, callingUid, userId);
-        final boolean filterTarget =
-                shouldFilterApplication(targetSetting, callingUid, userId);
-        // The caller must have visibility of the both packages
-        if (filterSource || filterTarget) {
+        if (throwException) {
             throw new ParcelableException(new PackageManager.NameNotFoundException("Package(s) "
-                    + (filterSource ? sourcePackageName + " " : "")
-                    + (filterTarget ? targetPackageName + " " : "")
-                    + "not found."));
+                    + sourcePackageName + " and/or " + targetPackageName + " not found."));
         }
         final int sourcePackageUid = UserHandle.getUid(userId, sourceSetting.getAppId());
         return !shouldFilterApplication(targetSetting, sourcePackageUid, userId);

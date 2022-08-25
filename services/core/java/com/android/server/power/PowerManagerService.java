@@ -72,8 +72,8 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelDuration;
 import android.os.PowerManager;
+import android.os.PowerManager.GoToSleepReason;
 import android.os.PowerManager.ServiceType;
-import android.os.PowerManager.WakeData;
 import android.os.PowerManager.WakeReason;
 import android.os.PowerManagerInternal;
 import android.os.PowerSaveState;
@@ -110,6 +110,7 @@ import com.android.internal.app.IBatteryStats;
 import com.android.internal.display.BrightnessSynchronizer;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.util.Preconditions;
 import com.android.server.EventLogTags;
@@ -352,7 +353,7 @@ public final class PowerManagerService extends SystemService
 
     // Last reason the device went to sleep.
     private @WakeReason int mLastGlobalWakeReason;
-    private int mLastGlobalSleepReason;
+    private @GoToSleepReason int mLastGlobalSleepReason;
 
     // Timestamp of last time power boost interaction was sent.
     private long mLastInteractivePowerHintTime;
@@ -4951,6 +4952,7 @@ public final class PowerManagerService extends SystemService
                 int dockState = intent.getIntExtra(Intent.EXTRA_DOCK_STATE,
                         Intent.EXTRA_DOCK_STATE_UNDOCKED);
                 if (mDockState != dockState) {
+                    FrameworkStatsLog.write(FrameworkStatsLog.DOCK_STATE_CHANGED, dockState);
                     mDockState = dockState;
                     mDirty |= DIRTY_DOCK_STATE;
                     updatePowerStateLocked();
@@ -6350,17 +6352,23 @@ public final class PowerManagerService extends SystemService
         }
     }
 
+    @GoToSleepReason
     private int getLastSleepReasonInternal() {
         synchronized (mLock) {
             return mLastGlobalSleepReason;
         }
     }
 
-    @VisibleForTesting
     private PowerManager.WakeData getLastWakeupInternal() {
         synchronized (mLock) {
-            return new WakeData(mLastGlobalWakeTime, mLastGlobalWakeReason,
+            return new PowerManager.WakeData(mLastGlobalWakeTime, mLastGlobalWakeReason,
                     mLastGlobalWakeTime - mLastGlobalSleepTime);
+        }
+    }
+
+    private PowerManager.SleepData getLastGoToSleepInternal() {
+        synchronized (mLock) {
+            return new PowerManager.SleepData(mLastGlobalSleepTime, mLastGlobalSleepReason);
         }
     }
 
@@ -6528,8 +6536,13 @@ public final class PowerManagerService extends SystemService
         }
 
         @Override
-        public WakeData getLastWakeup() {
+        public PowerManager.WakeData getLastWakeup() {
             return getLastWakeupInternal();
+        }
+
+        @Override
+        public PowerManager.SleepData getLastGoToSleep() {
+            return getLastGoToSleepInternal();
         }
 
         @Override

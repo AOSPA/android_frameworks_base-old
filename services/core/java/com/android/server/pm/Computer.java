@@ -94,12 +94,13 @@ import java.util.Set;
 @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
 public interface Computer extends PackageDataSnapshot {
 
+    int getVersion();
+
     /**
      * Administrative statistics: record that the snapshot has been used.  Every call
      * to use() increments the usage counter.
      */
-    default void use() {
-    }
+    Computer use();
     /**
      * Fetch the snapshot usage counter.
      * @return The number of times this snapshot was used.
@@ -227,7 +228,27 @@ public interface Computer extends PackageDataSnapshot {
             int userId);
     boolean shouldFilterApplication(@NonNull SharedUserSetting sus, int callingUid,
             int userId);
+    /**
+     * Different form {@link #shouldFilterApplication(PackageStateInternal, int, int)}, the function
+     * returns {@code true} if the target package is not found in the device or uninstalled in the
+     * current user. Unless the caller's function needs to handle the package's uninstalled state
+     * by itself, using this function to keep the consistent behavior between conditions of package
+     * uninstalled and visibility not allowed to avoid the side channel leakage of package
+     * existence.
+     * <p>
+     * Package with {@link PackageManager#SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN} is not
+     * treated as an uninstalled package for the carrier apps customization.
+     */
     boolean shouldFilterApplicationIncludingUninstalled(@Nullable PackageStateInternal ps,
+            int callingUid, int userId);
+    /**
+     * Different from {@link #shouldFilterApplication(SharedUserSetting, int, int)}, the function
+     * returns {@code true} if packages with the same shared user are all uninstalled in the current
+     * user.
+     *
+     * @see #shouldFilterApplicationIncludingUninstalled(PackageStateInternal, int, int)
+     */
+    boolean shouldFilterApplicationIncludingUninstalled(@NonNull SharedUserSetting sus,
             int callingUid, int userId);
     int checkUidPermission(String permName, int uid);
     int getPackageUidInternal(String packageName, long flags, int userId, int callingUid);
@@ -328,8 +349,9 @@ public interface Computer extends PackageDataSnapshot {
 
     int getTargetSdkVersion(@NonNull String packageName);
 
-    boolean activitySupportsIntent(@NonNull ComponentName resolveComponentName,
-            @NonNull ComponentName component, @NonNull Intent intent, String resolvedType);
+    boolean activitySupportsIntentAsUser(@NonNull ComponentName resolveComponentName,
+            @NonNull ComponentName component, @NonNull Intent intent, String resolvedType,
+            int userId);
 
     @Nullable
     ActivityInfo getReceiverInfo(@NonNull ComponentName component,
@@ -366,16 +388,18 @@ public interface Computer extends PackageDataSnapshot {
     String[] getSystemSharedLibraryNames();
 
     /**
-     * @return the state if the given package has a state and isn't filtered by visibility.
+     * @return the state if the given package is installed and isn't filtered by visibility.
      * Provides no guarantee that the package is in any usable state.
      */
     @Nullable
-    PackageStateInternal getPackageStateFiltered(@NonNull String packageName, int callingUid,
-            @UserIdInt int userId);
+    PackageStateInternal getPackageStateForInstalledAndFiltered(@NonNull String packageName,
+            int callingUid, @UserIdInt int userId);
 
     int checkSignatures(@NonNull String pkg1, @NonNull String pkg2, int userId);
 
     int checkUidSignatures(int uid1, int uid2);
+
+    int checkUidSignaturesForAllUsers(int uid1, int uid2);
 
     boolean hasSigningCertificate(@NonNull String packageName, @NonNull byte[] certificate,
             @PackageManager.CertificateInputType int type);

@@ -28,6 +28,7 @@ import android.app.AnrController;
 import android.app.ApplicationErrorReport;
 import android.app.ApplicationExitInfo;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IncrementalStatesInfo;
@@ -131,6 +132,12 @@ class ProcessErrorStateRecord {
     private AppNotRespondingDialog.Data mAnrData;
 
     /**
+     * Annotation from process killed due to an ANR.
+     */
+    @GuardedBy("mService")
+    private String mAnrAnnotation;
+
+    /**
      * Optional local handler to be invoked in the process crash.
      */
     @CompositeRWLock({"mService", "mProcLock"})
@@ -208,6 +215,16 @@ class ProcessErrorStateRecord {
         mCrashingReport = crashingReport;
     }
 
+    @GuardedBy("mService")
+    String getAnrAnnotation() {
+        return mAnrAnnotation;
+    }
+
+    @GuardedBy("mService")
+    void setAnrAnnotation(String anrAnnotation) {
+        mAnrAnnotation = anrAnnotation;
+    }
+
     @GuardedBy(anyOf = {"mService", "mProcLock"})
     ActivityManager.ProcessErrorStateInfo getNotRespondingReport() {
         return mNotRespondingReport;
@@ -258,6 +275,8 @@ class ProcessErrorStateRecord {
 
         mApp.getWindowProcessController().appEarlyNotResponding(annotation, () -> {
             synchronized (mService) {
+                // Store annotation here as instance below races with this killLocked.
+                setAnrAnnotation(annotation);
                 mApp.killLocked("anr", ApplicationExitInfo.REASON_ANR, true);
             }
         });
@@ -271,6 +290,9 @@ class ProcessErrorStateRecord {
         final int pid = mApp.getPid();
         final UUID errorId;
         synchronized (mService) {
+            // Store annotation here as instance above will not be hit on all paths.
+            setAnrAnnotation(annotation);
+
             // PowerManager.reboot() can block for a long time, so ignore ANRs while shutting down.
             if (mService.mAtmInternal.isShuttingDown()) {
                 Slog.i(TAG, "During shutdown skipping ANR: " + this + " " + annotation);
@@ -681,8 +703,11 @@ class ProcessErrorStateRecord {
     }
 
     private boolean getShowBackground() {
-        return Settings.Secure.getInt(mService.mContext.getContentResolver(),
-                Settings.Secure.ANR_SHOW_BACKGROUND, 0) != 0;
+        final ContentResolver resolver = mService.mContext.getContentResolver();
+        return Settings.Secure.getIntForUser(resolver,
+            Settings.Secure.ANR_SHOW_BACKGROUND,
+            0,
+            resolver.getUserId()) != 0;
     }
 
     /**

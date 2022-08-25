@@ -151,7 +151,7 @@ public class Flags {
     /***************************************/
     // 900 - media
     public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, true);
-    public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, true);
+    public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, false);
     public static final BooleanFlag MEDIA_NEARBY_DEVICES = new BooleanFlag(903, true);
     public static final BooleanFlag MEDIA_MUTE_AWAIT = new BooleanFlag(904, true);
 
@@ -165,6 +165,13 @@ public class Flags {
     @Keep
     public static final SysPropBooleanFlag WM_ENABLE_SHELL_TRANSITIONS =
             new SysPropBooleanFlag(1100, "persist.wm.debug.shell_transit", false);
+
+    /**
+     * b/170163464: animate bubbles expanded view collapse with home gesture
+     */
+    @Keep
+    public static final SysPropBooleanFlag BUBBLES_HOME_GESTURE =
+            new SysPropBooleanFlag(1101, "persist.wm.debug.bubbles_home_gesture", false);
 
     // 1200 - predictive back
     @Keep

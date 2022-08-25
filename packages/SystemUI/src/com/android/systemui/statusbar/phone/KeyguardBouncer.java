@@ -188,6 +188,10 @@ public class KeyguardBouncer {
             }
 
             if (mContainer.getVisibility() == View.VISIBLE || mShowingSoon) {
+                // Calls to reset must resume the ViewControllers when in fullscreen mode
+                if (needsFullscreenBouncer()) {
+                    mKeyguardViewController.onResume();
+                }
                 return;
             }
 
@@ -212,9 +216,12 @@ public class KeyguardBouncer {
 
             // Split up the work over multiple frames.
             DejankUtils.removeCallbacks(mResetRunnable);
-            if (mKeyguardStateController.isFaceAuthEnabled() && !needsFullscreenBouncer()
-                && !mKeyguardUpdateMonitor.userNeedsStrongAuth()
-                && !mKeyguardBypassController.getBypassEnabled()) {
+            if (mKeyguardStateController.isFaceAuthEnabled()
+                    && !mKeyguardUpdateMonitor.getCachedIsUnlockWithFingerprintPossible(
+                            KeyguardUpdateMonitor.getCurrentUser())
+                    && !needsFullscreenBouncer()
+                    && !mKeyguardUpdateMonitor.userNeedsStrongAuth()
+                    && !mKeyguardBypassController.getBypassEnabled()) {
                 mHandler.postDelayed(mShowRunnable, BOUNCER_FACE_DELAY);
             } else {
                 DejankUtils.postAfterTraversal(mShowRunnable);
@@ -239,7 +246,7 @@ public class KeyguardBouncer {
     private void onFullyShown() {
         mFalsingCollector.onBouncerShown();
         if (mKeyguardViewController == null) {
-            Log.wtf(TAG, "onFullyShown when view was null");
+            Log.e(TAG, "onFullyShown when view was null");
         } else {
             mKeyguardViewController.onResume();
             mContainer.announceForAccessibility(

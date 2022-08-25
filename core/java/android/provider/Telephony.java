@@ -965,12 +965,11 @@ public final class Telephony {
             /**
              * Set as a "result" extra in the {@link #SMS_REJECTED_ACTION} intent to indicate an sms
              * was received while the phone was in encrypted state.
-             *
-             * @deprecated This result is never used on devices that launched with Android 10 (API
-             * level 29) or higher, since Android's storage encryption implementation has changed
-             * and it no longer can cause the rejection of incoming SMS messages.
+             * <p>
+             * This result is never used on devices that launched with Android 10 (API level 29) or
+             * higher, since Android's storage encryption implementation has changed and it no
+             * longer can cause the rejection of incoming SMS messages.
              */
-            @Deprecated
             public static final int RESULT_SMS_RECEIVED_WHILE_ENCRYPTED = 9;
 
             /**
@@ -4857,6 +4856,13 @@ public final class Telephony {
          */
         public static final String COLUMN_PHONE_NUMBER_SOURCE_IMS =
                 "phone_number_source_ims";
+
+        /**
+         * TelephonyProvider column name for last used TP - message Reference
+         *
+         * @hide
+         */
+        public static final String COLUMN_TP_MESSAGE_REF = "tp_message_ref";
 
         /**
          * TelephonyProvider column name for the device's preferred usage setting.

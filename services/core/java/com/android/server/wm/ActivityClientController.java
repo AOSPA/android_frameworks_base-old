@@ -246,6 +246,18 @@ class ActivityClientController extends IActivityClientController.Stub {
     }
 
     @Override
+    public void activityLocalRelaunch(IBinder token) {
+        final long origId = Binder.clearCallingIdentity();
+        synchronized (mGlobalLock) {
+            final ActivityRecord r = ActivityRecord.forTokenLocked(token);
+            if (r != null) {
+                r.startRelaunching();
+            }
+        }
+        Binder.restoreCallingIdentity(origId);
+    }
+
+    @Override
     public void activityRelaunched(IBinder token) {
         final long origId = Binder.clearCallingIdentity();
         synchronized (mGlobalLock) {
@@ -725,7 +737,7 @@ class ActivityClientController extends IActivityClientController.Stub {
             synchronized (mGlobalLock) {
                 final ActivityRecord r = ensureValidPictureInPictureActivityParams(
                         "enterPictureInPictureMode", token, params);
-                return mService.enterPictureInPictureMode(r, params);
+                return mService.enterPictureInPictureMode(r, params, true /* fromClient */);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -841,22 +853,23 @@ class ActivityClientController extends IActivityClientController.Stub {
     /**
      * Requests that an activity should enter picture-in-picture mode if possible. This method may
      * be used by the implementation of non-phone form factors.
+     *
+     * @return false if the activity cannot enter PIP mode.
      */
-    void requestPictureInPictureMode(@NonNull ActivityRecord r) {
+    boolean requestPictureInPictureMode(@NonNull ActivityRecord r) {
         if (r.inPinnedWindowingMode()) {
-            throw new IllegalStateException("Activity is already in PIP mode");
+            return false;
         }
 
         final boolean canEnterPictureInPicture = r.checkEnterPictureInPictureState(
                 "requestPictureInPictureMode", /* beforeStopping */ false);
         if (!canEnterPictureInPicture) {
-            throw new IllegalStateException(
-                    "Requested PIP on an activity that doesn't support it");
+            return false;
         }
 
         if (r.pictureInPictureArgs.isAutoEnterEnabled()) {
-            mService.enterPictureInPictureMode(r, r.pictureInPictureArgs);
-            return;
+            return mService.enterPictureInPictureMode(r, r.pictureInPictureArgs,
+                    false /* fromClient */);
         }
 
         try {
@@ -864,9 +877,11 @@ class ActivityClientController extends IActivityClientController.Stub {
                     r.app.getThread(), r.token);
             transaction.addCallback(EnterPipRequestedItem.obtain());
             mService.getLifecycleManager().scheduleTransaction(transaction);
+            return true;
         } catch (Exception e) {
             Slog.w(TAG, "Failed to send enter pip requested item: "
                     + r.intent.getComponent(), e);
+            return false;
         }
     }
 

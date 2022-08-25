@@ -601,7 +601,7 @@
     <string name="guest_reset_and_restart_dialog_title" msgid="3396657008451616041">"Queres restablecer a sesión de convidado?"</string>
     <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"Iniciarase unha nova sesión de convidado e eliminaranse todas as aplicacións e datos desta sesión"</string>
     <string name="guest_exit_dialog_title" msgid="1846494656849381804">"Saír do modo de convidado?"</string>
-    <string name="guest_exit_dialog_message" msgid="1743218864242719783">"Eliminaranse as aplicacións e os datos da sesión de convidado"</string>
+    <string name="guest_exit_dialog_message" msgid="1743218864242719783">"Eliminaranse as aplicacións e os datos da sesión de convidado actual"</string>
     <string name="guest_exit_dialog_button" msgid="1736401897067442044">"Saír"</string>
     <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"Gardar actividade do convidado?"</string>
     <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"Podes gardar a actividade da sesión ou eliminar todas as aplicacións e datos"</string>
@@ -619,7 +619,7 @@
     <string name="failed_attempts_now_wiping_device" msgid="4016329172216428897">"Realizaches demasiados intentos incorrectos. Eliminaranse os datos deste dispositivo."</string>
     <string name="failed_attempts_now_wiping_user" msgid="469060411789668050">"Realizaches demasiados intentos incorrectos. Eliminarase este usuario."</string>
     <string name="failed_attempts_now_wiping_profile" msgid="7626589520888963129">"Realizaches demasiados intentos incorrectos. Eliminaranse este perfil de traballo e os datos asociados."</string>
-    <string name="failed_attempts_now_wiping_dialog_dismiss" msgid="2749889771223578925">"Ignorar"</string>
+    <string name="failed_attempts_now_wiping_dialog_dismiss" msgid="2749889771223578925">"Pechar"</string>
     <string name="cached_apps_freezer_device_default" msgid="2616594131750144342">"Funcionamento predeterminado"</string>
     <string name="cached_apps_freezer_disabled" msgid="4816382260660472042">"Desactivado"</string>
     <string name="cached_apps_freezer_enabled" msgid="8866703500183051546">"Activado"</string>
@@ -667,9 +667,6 @@
     <string name="turn_screen_on_title" msgid="3266937298097573424">"Activar a pantalla"</string>
     <string name="allow_turn_screen_on" msgid="6194845766392742639">"Permitir activación da pantalla"</string>
     <string name="allow_turn_screen_on_description" msgid="43834403291575164">"Permite que unha aplicación active a pantalla. Se lle dás permiso, a aplicación poderá activar a pantalla en calquera momento sen que llo pidas."</string>
-    <string name="bt_le_audio_scan_qr_code" msgid="3521809854780392679">"Escanear código QR"</string>
-    <string name="bt_le_audio_scan_qr_code_scanner" msgid="4679500020630341107">"Para comezar a escoitar audio, encadra o seguinte código QR"</string>
-    <string name="bt_le_audio_qr_code_is_not_valid_format" msgid="6092191081849434734">"O formato do código QR non é válido"</string>
     <string name="bt_le_audio_broadcast_dialog_title" msgid="5392738488989777074">"Queres deixar de emitir contido a través de <xliff:g id="APP_NAME">%1$s</xliff:g>?"</string>
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"Se emites contido a través de <xliff:g id="SWITCHAPP">%1$s</xliff:g> ou cambias de saída, a emisión en curso deterase"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"Emitir contido a través de <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>

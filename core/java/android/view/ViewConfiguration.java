@@ -179,6 +179,9 @@ public class ViewConfiguration {
      */
     private static final int TOUCH_SLOP = 8;
 
+    /** Distance a stylus touch can wander before we think the user is handwriting in dips. */
+    private static final int HANDWRITING_SLOP = 4;
+
     /**
      * Defines the minimum size of the touch target for a scrollbar in dips
      */
@@ -328,6 +331,7 @@ public class ViewConfiguration {
     private final int mMaximumFlingVelocity;
     private final int mScrollbarSize;
     private final int mTouchSlop;
+    private final int mHandwritingSlop;
     private final int mMinScalingSpan;
     private final int mHoverSlop;
     private final int mMinScrollbarTouchTarget;
@@ -348,7 +352,7 @@ public class ViewConfiguration {
     private final long mScreenshotChordKeyTimeout;
     private final int mSmartSelectionInitializedTimeout;
     private final int mSmartSelectionInitializingTimeout;
-    private final int mPreferKeepClearForFocusDelay;
+    private final boolean mPreferKeepClearForFocusEnabled;
     private final String mVelocityTrackerStrategy;
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123768915)
@@ -372,6 +376,7 @@ public class ViewConfiguration {
         mMaximumFlingVelocity = MAXIMUM_FLING_VELOCITY;
         mScrollbarSize = SCROLL_BAR_SIZE;
         mTouchSlop = TOUCH_SLOP;
+        mHandwritingSlop = HANDWRITING_SLOP;
         mHoverSlop = TOUCH_SLOP / 2;
         mMinScrollbarTouchTarget = MIN_SCROLLBAR_TOUCH_TARGET;
         mDoubleTapTouchSlop = DOUBLE_TAP_TOUCH_SLOP;
@@ -395,7 +400,7 @@ public class ViewConfiguration {
         mMinScalingSpan = 0;
         mSmartSelectionInitializedTimeout = SMART_SELECTION_INITIALIZED_TIMEOUT_IN_MILLISECOND;
         mSmartSelectionInitializingTimeout = SMART_SELECTION_INITIALIZING_TIMEOUT_IN_MILLISECOND;
-        mPreferKeepClearForFocusDelay = -1;
+        mPreferKeepClearForFocusEnabled = false;
         mVelocityTrackerStrategy = InputManager.getInstance().getVelocityTrackerStrategy();
     }
 
@@ -478,6 +483,8 @@ public class ViewConfiguration {
                 com.android.internal.R.bool.config_ui_enableFadingMarquee);
         mTouchSlop = res.getDimensionPixelSize(
                 com.android.internal.R.dimen.config_viewConfigurationTouchSlop);
+        mHandwritingSlop = res.getDimensionPixelSize(
+                com.android.internal.R.dimen.config_viewConfigurationHandwritingSlop);
         mHoverSlop = res.getDimensionPixelSize(
                 com.android.internal.R.dimen.config_viewConfigurationHoverSlop);
         mMinScrollbarTouchTarget = res.getDimensionPixelSize(
@@ -511,8 +518,8 @@ public class ViewConfiguration {
                 com.android.internal.R.integer.config_smartSelectionInitializedTimeoutMillis);
         mSmartSelectionInitializingTimeout = res.getInteger(
                 com.android.internal.R.integer.config_smartSelectionInitializingTimeoutMillis);
-        mPreferKeepClearForFocusDelay = res.getInteger(
-                com.android.internal.R.integer.config_preferKeepClearForFocusDelayMillis);
+        mPreferKeepClearForFocusEnabled = res.getBoolean(
+                com.android.internal.R.bool.config_preferKeepClearForFocus);
 
         mVelocityTrackerStrategy = InputManager.getInstance().getVelocityTrackerStrategy();
     }
@@ -744,6 +751,14 @@ public class ViewConfiguration {
      */
     public int getScaledTouchSlop() {
         return mTouchSlop;
+    }
+
+    /**
+     * @return Distance in pixels a stylus touch can wander before we think the user is
+     * handwriting.
+     */
+    public int getScaledHandwritingSlop() {
+        return mHandwritingSlop;
     }
 
     /**
@@ -1113,13 +1128,13 @@ public class ViewConfiguration {
     }
 
     /**
-     * @return The delay in milliseconds before focused Views set themselves as preferred to keep
-     *         clear, or -1 if Views should not set themselves as preferred to keep clear.
+     * @return {@code true} if Views should set themselves as preferred to keep clear when focused,
+     * {@code false} otherwise.
      * @hide
      */
     @TestApi
-    public int getPreferKeepClearForFocusDelay() {
-        return mPreferKeepClearForFocusDelay;
+    public boolean isPreferKeepClearForFocusEnabled() {
+        return mPreferKeepClearForFocusEnabled;
     }
 
     /**

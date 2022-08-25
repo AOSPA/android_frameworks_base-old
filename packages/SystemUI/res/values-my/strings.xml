@@ -78,6 +78,7 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"မျက်နှာပြင်ပုံကို ထပ်ရိုက်ကြည့်ပါ"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"ဖန်သားပြင်ဓာတ်ပုံကို သိမ်း၍မရပါ"</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"ဖန်သားပြင်ဓာတ်ပုံရိုက်ကူးခြင်းကို ဤအက်ပ် သို့မဟုတ် သင်၏အဖွဲ့အစည်းက ခွင့်မပြုပါ"</string>
+    <string name="screenshot_blocked_by_admin" msgid="5486757604822795797">"ဖန်သားပြင်ဓာတ်ပုံရိုက်ခြင်းကို သင့် IT စီမံခန့်ခွဲသူက ပိတ်ထားသည်"</string>
     <string name="screenshot_edit_label" msgid="8754981973544133050">"တည်းဖြတ်ရန်"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"ဖန်သားပြင်ဓာတ်ပုံကို တည်းဖြတ်သည်"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"ဖန်သားပြင်ဓာတ်ပုံကို မျှဝေနိုင်သည်"</string>
@@ -225,6 +226,7 @@
     <string name="quick_settings_rotation_unlocked_label" msgid="2359922767950346112">"အော်တို-လည်"</string>
     <string name="accessibility_quick_settings_rotation" msgid="4800050198392260738">"မျက်နှာပြင်အား အလိုအလျောက်လှည့်ခြင်း"</string>
     <string name="quick_settings_location_label" msgid="2621868789013389163">"တည်နေရာ"</string>
+    <string name="quick_settings_screensaver_label" msgid="1495003469366524120">"စကရင်ချွေတာစနစ်"</string>
     <string name="quick_settings_camera_label" msgid="5612076679385269339">"ကင်မရာသုံးခွင့်"</string>
     <string name="quick_settings_mic_label" msgid="8392773746295266375">"မိုက်သုံးခွင့်"</string>
     <string name="quick_settings_camera_mic_available" msgid="1453719768420394314">"ရနိုင်သည်"</string>
@@ -318,6 +320,12 @@
     <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"မျက်နှာဖြင့် ဖွင့်ထားသည်။ ဖွင့်ရန် နှိပ်ပါ။"</string>
     <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"မျက်နှာ မှတ်မိသည်။ ဖွင့်ရန် နှိပ်ပါ။"</string>
     <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"မျက်နှာ မှတ်မိသည်။ ဖွင့်ရန် လော့ခ်ဖွင့်သင်္ကေတကို နှိပ်ပါ။"</string>
+  <string-array name="udfps_accessibility_touch_hints">
+    <item msgid="1901953991150295169">"ဘယ်ဘက်သို့ရွှေ့ရန်"</item>
+    <item msgid="5558598599408514296">"အောက်သို့ရွှေ့ရန်"</item>
+    <item msgid="4844142668312841831">"ညာဘက်သို့ရွှေ့ရန်"</item>
+    <item msgid="5640521437931460125">"အပေါ်သို့ရွှေ့ရန်"</item>
+  </string-array>
     <string name="keyguard_retry" msgid="886802522584053523">"ထပ်စမ်းကြည့်ရန် အပေါ်သို့ပွတ်ဆွဲပါ"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"NFC ကို အသုံးပြုရန် လော့ခ်ဖွင့်ပါ"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"ဤစက်ကို သင့်အဖွဲ့အစည်းက ပိုင်ဆိုင်သည်"</string>
@@ -467,7 +475,7 @@
     <string name="wallet_title" msgid="5369767670735827105">"Wallet"</string>
     <string name="wallet_empty_state_label" msgid="7776761245237530394">"သင့်ဖုန်းဖြင့် ပိုမိုမြန်ဆန်၊ ပိုမိုစိတ်ချရသော ဝယ်ယူမှုများ ပြုလုပ်ရန် စတင်သတ်မှတ်ပါ"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"အားလုံးပြရန်"</string>
-    <string name="wallet_secondary_label_no_card" msgid="530725155985223497">"ကတ်ထည့်ရန်"</string>
+    <string name="wallet_secondary_label_no_card" msgid="8488069304491125713">"တို့၍ ဖွင့်ရန်"</string>
     <string name="wallet_secondary_label_updating" msgid="5726130686114928551">"အပ်ဒိတ်လုပ်နေပါသည်"</string>
     <string name="wallet_secondary_label_device_locked" msgid="5175862019125370506">"သုံးရန် လော့ခ်ဖွင့်ပါ"</string>
     <string name="wallet_error_generic" msgid="257704570182963611">"သင်၏ကတ်များ ရယူရာတွင် ပြဿနာရှိနေသည်၊ နောက်မှ ထပ်စမ်းကြည့်ပါ"</string>
@@ -693,7 +701,8 @@
     <string name="notification_channel_alerts" msgid="3385787053375150046">"သတိပေးချက်များ"</string>
     <string name="notification_channel_battery" msgid="9219995638046695106">"ဘက်ထရီ"</string>
     <string name="notification_channel_screenshot" msgid="7665814998932211997">"မျက်နှာပြင်ဓာတ်ပုံများ"</string>
-    <string name="notification_channel_general" msgid="4384774889645929705">"အထွေထွေ မက်ဆေ့ဂျ်များ"</string>
+    <string name="notification_channel_instant" msgid="7556135423486752680">"Instant Apps"</string>
+    <string name="notification_channel_setup" msgid="7660580986090760350">"စနစ်ထည့်ရန်"</string>
     <string name="notification_channel_storage" msgid="2720725707628094977">"သိုလှောင်ခန်း"</string>
     <string name="notification_channel_hints" msgid="7703783206000346876">"အရိပ်အမြွက်များ"</string>
     <string name="instant_apps" msgid="8337185853050247304">"Instant Apps"</string>
@@ -727,6 +736,7 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"ဘက်ထရီကုန်ခါနီးတွင် ဖွင့်ပါ"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"မလိုပါ"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
+    <string name="ongoing_privacy_dialog_a11y_title" msgid="2205794093673327974">"အသုံးပြုနေသည်"</string>
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"အပလီကေးရှင်းများက သင်၏ <xliff:g id="TYPES_LIST">%s</xliff:g> ကို အသုံးပြုနေသည်။"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">"၊ "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" နှင့် "</string>
@@ -804,7 +814,7 @@
     <string name="controls_structure_tooltip" msgid="4355922222944447867">"ပိုကြည့်ရန် ပွတ်ဆွဲပါ"</string>
     <string name="controls_seeding_in_progress" msgid="3033855341410264148">"အကြံပြုချက်များ ဖွင့်နေသည်"</string>
     <string name="controls_media_title" msgid="1746947284862928133">"မီဒီယာ"</string>
-    <string name="controls_media_close_session" msgid="4780485355795635052">"<xliff:g id="APP_NAME">%1$s</xliff:g> ၏ ဤမီဒီယာ ထိန်းချုပ်ကိရိယာကို ဖျောက်ထားမလား။"</string>
+    <string name="controls_media_close_session" msgid="4780485355795635052">"<xliff:g id="APP_NAME">%1$s</xliff:g> အတွက် ဤမီဒီယာထိန်းချုပ်မှု ဖျောက်ထားမလား။"</string>
     <string name="controls_media_active_session" msgid="3146882316024153337">"လက်ရှိ မီဒီယာစက်ရှင်ကို ဝှက်၍မရပါ။"</string>
     <string name="controls_media_dismiss_button" msgid="4485675693008031646">"ဖျောက်ထားမည်"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"ဆက်လုပ်ရန်"</string>
@@ -824,7 +834,6 @@
     <string name="media_move_closer_to_start_cast" msgid="2673104707465013176">"<xliff:g id="DEVICENAME">%1$s</xliff:g> တွင်ဖွင့်ရန် အနီးသို့ရွှေ့ပါ"</string>
     <string name="media_move_closer_to_end_cast" msgid="6495907340926563656">"ဤနေရာတွင်ဖွင့်ရန် <xliff:g id="DEVICENAME">%1$s</xliff:g> အနီးသို့တိုးပါ"</string>
     <string name="media_transfer_playing_different_device" msgid="7186806382609785610">"<xliff:g id="DEVICENAME">%1$s</xliff:g> တွင် ဖွင့်နေသည်"</string>
-    <string name="media_transfer_playing_this_device" msgid="1856890686844499172">"ဤဖုန်းတွင် ဖွင့်နေသည်"</string>
     <string name="media_transfer_failed" msgid="7955354964610603723">"တစ်ခုခုမှားသွားသည်။ ထပ်စမ်းကြည့်ပါ။"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"ရပ်နေသည်၊ အက်ပ်ကို စစ်ဆေးပါ"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"မတွေ့ပါ"</string>
@@ -853,6 +862,8 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"သိမ်းရန်"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"စတင်နေသည်…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"ထုတ်လွှင့်၍ မရပါ"</string>
+    <string name="media_output_broadcast_update_error" msgid="1420868236079122521">"သိမ်း၍မရပါ။ ထပ်စမ်းကြည့်ပါ။"</string>
+    <string name="media_output_broadcast_last_update_error" msgid="5484328807296895491">"သိမ်း၍မရပါ။"</string>
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"တည်ဆောက်မှုနံပါတ်"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"တည်ဆောက်မှုနံပါတ်ကို ကလစ်ဘုတ်သို့ မိတ္တူကူးပြီးပါပြီ။"</string>
     <string name="basic_status" msgid="2315371112182658176">"စကားဝိုင်းကို ဖွင့်ရန်"</string>
@@ -903,7 +914,7 @@
     <string name="mobile_data_settings_title" msgid="3955246641380064901">"မိုဘိုင်းဒေတာ"</string>
     <string name="preference_summary_default_combination" msgid="8453246369903749670">"<xliff:g id="STATE">%1$s</xliff:g> / <xliff:g id="NETWORKMODE">%2$s</xliff:g>"</string>
     <string name="mobile_data_connection_active" msgid="944490013299018227">"ချိတ်ဆက်ထားသည်"</string>
-    <string name="mobile_data_off_summary" msgid="3663995422004150567">"မိုဘိုင်းဒေတာက အလိုအလျောက် ချိတ်ဆက်မည်မဟုတ်ပါ"</string>
+    <string name="mobile_data_off_summary" msgid="3663995422004150567">"မိုဘိုင်းဒေတာ အော်တိုမချိတ်ပါ"</string>
     <string name="mobile_data_no_connection" msgid="1713872434869947377">"ချိတ်ဆက်မှုမရှိပါ"</string>
     <string name="non_carrier_network_unavailable" msgid="770049357024492372">"အခြားကွန်ရက်များ မရှိပါ"</string>
     <string name="all_network_unavailable" msgid="4112774339909373349">"ကွန်ရက်များ မရှိပါ"</string>
@@ -937,6 +948,10 @@
     <string name="clipboard_edit_text_description" msgid="805254383912962103">"ကူးထားသည့်စာသားကို တည်းဖြတ်ရန်"</string>
     <string name="clipboard_edit_image_description" msgid="8904857948976041306">"ကူးထားသည့်ပုံကို ပြင်ဆင်ရန်"</string>
     <string name="clipboard_send_nearby_description" msgid="4629769637846717650">"အနီးတစ်ဝိုက်ရှိ စက်များသို့ ပို့ရန်"</string>
+    <string name="clipboard_text_hidden" msgid="7926899867471812305">"ကြည့်ရှုရန် တို့ပါ"</string>
+    <string name="clipboard_text_copied" msgid="5100836834278976679">"စာသားကို မိတ္တူကူးပြီးပြီ"</string>
+    <string name="clipboard_image_copied" msgid="3793365360174328722">"ပုံ ကူးပြီးပြီ"</string>
+    <string name="clipboard_content_copied" msgid="144452398567828145">"အကြောင်းအရာများကို ကူးယူပြီးပါပြီ"</string>
     <string name="add" msgid="81036585205287996">"ထည့်ရန်"</string>
     <string name="manage_users" msgid="1823875311934643849">"အသုံးပြုသူများ စီမံရန်"</string>
     <string name="drag_split_not_supported" msgid="4326847447699729722">"ဤအကြောင်းကြားချက်သည် ‘မျက်နှာပြင်ခွဲ၍ပြသမှု’ သို့ ဖိဆွဲခြင်းကို မပံ့ပိုးပါ။"</string>
@@ -945,4 +960,10 @@
     <string name="dream_overlay_status_bar_alarm_set" msgid="566707328356590886">"နိုးစက် သတ်မှတ်ထားသည်"</string>
     <string name="dream_overlay_status_bar_camera_mic_off" msgid="3199425257833773569">"ကင်မရာနှင့် မိုက် ပိတ်ထားသည်"</string>
     <string name="dream_overlay_status_bar_notification_indicator" msgid="8091389255691081711">"{count,plural, =1{အကြောင်းကြားချက် # ခု}other{အကြောင်းကြားချက် # ခု}}"</string>
+    <string name="broadcasting_description_is_broadcasting" msgid="765627502786404290">"ထုတ်လွှင့်ခြင်း"</string>
+    <string name="bt_le_audio_broadcast_dialog_title" msgid="3605428497924077811">"<xliff:g id="APP_NAME">%1$s</xliff:g> ထုတ်လွှင့်ခြင်းကို ရပ်မလား။"</string>
+    <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="7889684551194225793">"<xliff:g id="SWITCHAPP">%1$s</xliff:g> ကို ထုတ်လွှင့်သောအခါ (သို့) အထွက်ကို ပြောင်းသောအခါ သင့်လက်ရှိထုတ်လွှင့်ခြင်း ရပ်သွားမည်"</string>
+    <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="6098768269397105733">"<xliff:g id="SWITCHAPP">%1$s</xliff:g> ထုတ်လွှင့်ခြင်း"</string>
+    <string name="bt_le_audio_broadcast_dialog_different_output" msgid="7885102097302562674">"အထွက်ကို ပြောင်းခြင်း"</string>
+    <string name="bt_le_audio_broadcast_dialog_unknown_name" msgid="3791472237793443044">"မသိ"</string>
 </resources>

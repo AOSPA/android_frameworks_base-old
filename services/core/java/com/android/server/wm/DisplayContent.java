@@ -190,6 +190,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
+import android.util.DisplayUtils;
 import android.util.IntArray;
 import android.util.RotationUtils;
 import android.util.Size;
@@ -359,7 +360,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     float mInitialPhysicalXDpi = 0.0f;
     float mInitialPhysicalYDpi = 0.0f;
 
-    private Point mStableDisplaySize;
+    private Point mPhysicalDisplaySize;
 
     DisplayCutout mInitialDisplayCutout;
     private final RotationCache<DisplayCutout, WmDisplayCutout> mDisplayCutoutCache
@@ -556,7 +557,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     final FixedRotationTransitionListener mFixedRotationTransitionListener =
             new FixedRotationTransitionListener();
 
-    private PhysicalDisplaySwitchTransitionLauncher mDisplaySwitchTransitionLauncher;
+    private final PhysicalDisplaySwitchTransitionLauncher mDisplaySwitchTransitionLauncher;
+    final RemoteDisplayChangeController mRemoteDisplayChangeController;
 
     /** Windows added since {@link #mCurrentFocus} was set to null. Used for ANR blaming. */
     final ArrayList<WindowState> mWinAddedSinceNullFocus = new ArrayList<>();
@@ -1052,6 +1054,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mUnknownAppVisibilityController = new UnknownAppVisibilityController(mWmService, this);
         mDisplaySwitchTransitionLauncher = new PhysicalDisplaySwitchTransitionLauncher(this,
                 mTransitionController);
+        mRemoteDisplayChangeController = new RemoteDisplayChangeController(mWmService, mDisplayId);
 
         final InputChannel inputChannel = mWmService.mInputManager.monitorInput(
                 "PointerEventDispatcher" + mDisplayId, mDisplayId);
@@ -1433,7 +1436,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (!isReady()) {
             return;
         }
-        if (mDisplayRotation.isWaitingForRemoteRotation()) {
+        if (mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange()) {
             return;
         }
 
@@ -1533,8 +1536,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             config = new Configuration();
             computeScreenConfiguration(config);
         } else if (!(mTransitionController.isCollecting(this)
-                // If waiting for a remote rotation, don't prematurely update configuration.
-                || mDisplayRotation.isWaitingForRemoteRotation())) {
+                // If waiting for a remote display change, don't prematurely update configuration.
+                || mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange())) {
             // No obvious action we need to take, but if our current state mismatches the
             // activity manager's, update it, disregarding font scale, which should remain set
             // to the value of the previous configuration.
@@ -1596,7 +1599,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     boolean isSyncFinished() {
         // Do not consider children because if they are requested to be synced, they should be
         // added to sync group explicitly.
-        return !mDisplayRotation.isWaitingForRemoteRotation();
+        return !mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange();
     }
 
     /**
@@ -1829,8 +1832,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             sendNewConfiguration();
             return;
         }
-        if (mDisplayRotation.isWaitingForRemoteRotation()) {
-            // There is pending rotation change to apply.
+        if (mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange()) {
+            // There is pending display change to apply.
             return;
         }
         // The orientation of display is not changed.
@@ -2210,9 +2213,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         final float density = mDisplayMetrics.density;
         outConfig.screenWidthDp = (int) (mDisplayPolicy.getConfigDisplayWidth(dw, dh, rotation,
-                uiMode, displayCutout) / density);
+                uiMode, displayCutout) / density + 0.5f);
         outConfig.screenHeightDp = (int) (mDisplayPolicy.getConfigDisplayHeight(dw, dh, rotation,
-                uiMode, displayCutout) / density);
+                uiMode, displayCutout) / density + 0.5f);
         outConfig.compatScreenWidthDp = (int) (outConfig.screenWidthDp / mCompatibleScreenScale);
         outConfig.compatScreenHeightDp = (int) (outConfig.screenHeightDp / mCompatibleScreenScale);
 
@@ -2395,7 +2398,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         sl = reduceConfigLayout(sl, Surface.ROTATION_90, density, unrotDh, unrotDw, uiMode);
         sl = reduceConfigLayout(sl, Surface.ROTATION_180, density, unrotDw, unrotDh, uiMode);
         sl = reduceConfigLayout(sl, Surface.ROTATION_270, density, unrotDh, unrotDw, uiMode);
-        outConfig.smallestScreenWidthDp = (int)(displayInfo.smallestNominalAppWidth / density);
+        outConfig.smallestScreenWidthDp =
+                (int) (displayInfo.smallestNominalAppWidth / density + 0.5f);
         outConfig.screenLayout = sl;
     }
 
@@ -2417,8 +2421,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             longSize = shortSize;
             shortSize = tmp;
         }
-        longSize = (int)(longSize/density);
-        shortSize = (int)(shortSize/density);
+        longSize = (int) (longSize / density + 0.5f);
+        shortSize = (int) (shortSize / density + 0.5f);
         return Configuration.reduceScreenLayout(curLayout, longSize, shortSize);
     }
 
@@ -2748,7 +2752,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mInitialRoundedCorners = mDisplayInfo.roundedCorners;
         mCurrentPrivacyIndicatorBounds = new PrivacyIndicatorBounds(new Rect[4],
                 mDisplayInfo.rotation);
-        mStableDisplaySize = mWmService.mDisplayManager.getStableDisplaySize();
+        final Display.Mode maxDisplayMode =
+                DisplayUtils.getMaximumResolutionDisplayMode(mDisplayInfo.supportedModes);
+        mPhysicalDisplaySize = new Point(
+                maxDisplayMode == null ? mInitialDisplayWidth : maxDisplayMode.getPhysicalWidth(),
+                maxDisplayMode == null ? mInitialDisplayHeight : maxDisplayMode.getPhysicalHeight()
+        );
     }
 
     /**
@@ -2758,6 +2767,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private void updateBaseDisplayMetricsIfNeeded() {
         // Get real display metrics without overrides from WM.
         mWmService.mDisplayManagerInternal.getNonOverrideDisplayInfo(mDisplayId, mDisplayInfo);
+        final int currentRotation = getRotation();
         final int orientation = mDisplayInfo.rotation;
         final boolean rotated = (orientation == ROTATION_90 || orientation == ROTATION_270);
         final int newWidth = rotated ? mDisplayInfo.logicalHeight : mDisplayInfo.logicalWidth;
@@ -2818,7 +2828,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             reconfigureDisplayLocked();
 
             if (physicalDisplayChanged) {
-                mDisplaySwitchTransitionLauncher.onDisplayUpdated();
+                mDisplaySwitchTransitionLauncher.onDisplayUpdated(currentRotation, getRotation(),
+                        getDisplayAreaInfo());
             }
         }
     }
@@ -2944,7 +2955,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         return DisplayCutout.fromResourcesRectApproximation(
                 mDisplayPolicy.getSystemUiContext().getResources(), mDisplayInfo.uniqueId,
-                mStableDisplaySize.x, mStableDisplaySize.y, displayWidth, displayHeight);
+                mPhysicalDisplaySize.x, mPhysicalDisplaySize.y, displayWidth, displayHeight);
     }
 
     RoundedCorners loadRoundedCorners(int displayWidth, int displayHeight) {
@@ -2953,7 +2964,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         return RoundedCorners.fromResources(
                 mDisplayPolicy.getSystemUiContext().getResources(),  mDisplayInfo.uniqueId,
-                mStableDisplaySize.x, mStableDisplaySize.y, displayWidth, displayHeight);
+                mPhysicalDisplaySize.x, mPhysicalDisplaySize.y, displayWidth, displayHeight);
     }
 
     @Override
@@ -5280,7 +5291,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void prepareAppTransition(@WindowManager.TransitionType int transit,
             @WindowManager.TransitionFlags int flags) {
         final boolean prepared = mAppTransition.prepareAppTransition(transit, flags);
-        if (prepared && okToAnimate()) {
+        if (prepared && okToAnimate() && transit != TRANSIT_NONE) {
             mSkipAppTransitionAnimation = false;
         }
     }
@@ -5450,13 +5461,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Region local = Region.obtain();
         final int[] remainingLeftRight =
                 {mSystemGestureExclusionLimit, mSystemGestureExclusionLimit};
+        final RecentsAnimationController recentsAnimationController =
+                mWmService.getRecentsAnimationController();
 
         // Traverse all windows top down to assemble the gesture exclusion rects.
         // For each window, we only take the rects that fall within its touchable region.
         forAllWindows(w -> {
+            final boolean ignoreRecentsAnimationTarget = recentsAnimationController != null
+                    && recentsAnimationController.shouldApplyInputConsumer(w.getActivityRecord());
             if (!w.canReceiveTouchInput() || !w.isVisible()
                     || (w.getAttrs().flags & FLAG_NOT_TOUCHABLE) != 0
-                    || unhandled.isEmpty()) {
+                    || unhandled.isEmpty()
+                    || ignoreRecentsAnimationTarget) {
                 return;
             }
 
@@ -6069,7 +6085,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 rootTask.ensureActivitiesVisible(starting, configChanges, preserveWindows,
                         notifyClients);
             });
-            if (mTransitionController.isCollecting()
+            if (mTransitionController.useShellTransitionsRotation()
+                    && mTransitionController.isCollecting()
                     && mWallpaperController.getWallpaperTarget() != null) {
                 // Also update wallpapers so that their requestedVisibility immediately reflects
                 // the changes to activity visibility.

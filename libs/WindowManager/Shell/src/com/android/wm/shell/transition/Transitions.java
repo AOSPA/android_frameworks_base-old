@@ -23,6 +23,7 @@ import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
+import static android.window.TransitionInfo.FLAG_IS_INPUT_METHOD;
 import static android.window.TransitionInfo.FLAG_IS_WALLPAPER;
 import static android.window.TransitionInfo.FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
 
@@ -287,12 +288,14 @@ public class Transitions implements RemoteCallable<Transitions> {
                     finishT.setAlpha(leash, 1.f);
                 }
             } else if (mode == TRANSIT_CLOSE || mode == TRANSIT_TO_BACK) {
-                // Wallpaper is a bit of an anomaly: it's visibility is tied to other WindowStates.
-                // As a result, we actually can't hide it's WindowToken because there may not be a
-                // transition associated with it becoming visible again. Fortunately, since it is
-                // always z-ordered to the back, we don't have to worry about it flickering to the
-                // front during reparenting, so the hide here isn't necessary for it.
-                if ((change.getFlags() & FLAG_IS_WALLPAPER) == 0) {
+                // Wallpaper/IME are anomalies: their visibility is tied to other WindowStates.
+                // As a result, we actually can't hide their WindowTokens because there may not be a
+                // transition associated with them becoming visible again. Fortunately, since
+                // wallpapers are always z-ordered to the back, we don't have to worry about it
+                // flickering to the front during reparenting. Similarly, the IME is reparented to
+                // the associated app, so its visibility is coupled. So, an explicit hide is not
+                // needed visually anyways.
+                if ((change.getFlags() & (FLAG_IS_WALLPAPER | FLAG_IS_INPUT_METHOD)) == 0) {
                     finishT.hide(leash);
                 }
             }
@@ -309,13 +312,14 @@ public class Transitions implements RemoteCallable<Transitions> {
         if (info.getRootLeash().isValid()) {
             t.show(info.getRootLeash());
         }
+        final int numChanges = info.getChanges().size();
         // Put animating stuff above this line and put static stuff below it.
-        int zSplitLine = info.getChanges().size();
+        final int zSplitLine = numChanges + 1;
         // changes should be ordered top-to-bottom in z
-        for (int i = info.getChanges().size() - 1; i >= 0; --i) {
+        for (int i = numChanges - 1; i >= 0; --i) {
             final TransitionInfo.Change change = info.getChanges().get(i);
             final SurfaceControl leash = change.getLeash();
-            final int mode = info.getChanges().get(i).getMode();
+            final int mode = change.getMode();
 
             // Don't reparent anything that isn't independent within its parents
             if (!TransitionInfo.isIndependent(change, info)) {
@@ -329,26 +333,31 @@ public class Transitions implements RemoteCallable<Transitions> {
                 t.setPosition(leash, change.getStartAbsBounds().left - info.getRootOffset().x,
                         change.getStartAbsBounds().top - info.getRootOffset().y);
             }
+            final int layer;
             // Put all the OPEN/SHOW on top
-            if (mode == TRANSIT_OPEN || mode == TRANSIT_TO_FRONT) {
+            if ((change.getFlags() & FLAG_IS_WALLPAPER) != 0) {
+                // Wallpaper is always at the bottom.
+                layer = 0;
+            } else if (mode == TRANSIT_OPEN || mode == TRANSIT_TO_FRONT) {
                 if (isOpening) {
                     // put on top
-                    t.setLayer(leash, zSplitLine + info.getChanges().size() - i);
+                    layer = zSplitLine + numChanges - i;
                 } else {
                     // put on bottom
-                    t.setLayer(leash, zSplitLine - i);
+                    layer = zSplitLine - i;
                 }
             } else if (mode == TRANSIT_CLOSE || mode == TRANSIT_TO_BACK) {
                 if (isOpening) {
                     // put on bottom and leave visible
-                    t.setLayer(leash, zSplitLine - i);
+                    layer = zSplitLine - i;
                 } else {
                     // put on top
-                    t.setLayer(leash, zSplitLine + info.getChanges().size() - i);
+                    layer = zSplitLine + numChanges - i;
                 }
             } else { // CHANGE or other
-                t.setLayer(leash, zSplitLine + info.getChanges().size() - i);
+                layer = zSplitLine + numChanges - i;
             }
+            t.setLayer(leash, layer);
         }
     }
 
@@ -377,6 +386,7 @@ public class Transitions implements RemoteCallable<Transitions> {
             ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "Invalid root leash (%s): %s",
                     transitionToken, info);
             t.apply();
+            finishT.apply();
             onAbort(transitionToken);
             return;
         }
@@ -400,6 +410,7 @@ public class Transitions implements RemoteCallable<Transitions> {
             }
             if (nonTaskChange && transferStartingWindow) {
                 t.apply();
+                finishT.apply();
                 // Treat this as an abort since we are bypassing any merge logic and effectively
                 // finishing immediately.
                 onAbort(transitionToken);
@@ -624,8 +635,9 @@ public class Transitions implements RemoteCallable<Transitions> {
                 if (wct == null) {
                     wct = new WindowContainerTransaction();
                 }
-                mDisplayController.getChangeController().dispatchOnRotateDisplay(wct,
-                        change.getDisplayId(), change.getStartRotation(), change.getEndRotation());
+                mDisplayController.getChangeController().dispatchOnDisplayChange(wct,
+                        change.getDisplayId(), change.getStartRotation(), change.getEndRotation(),
+                        null /* newDisplayAreaInfo */);
             }
         }
         active.mToken = mOrganizer.startTransition(

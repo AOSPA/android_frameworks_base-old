@@ -38,8 +38,6 @@ import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.TaskViewFactoryController;
 import com.android.wm.shell.TaskViewTransitions;
 import com.android.wm.shell.WindowManagerShellWrapper;
-import com.android.wm.shell.apppairs.AppPairs;
-import com.android.wm.shell.apppairs.AppPairsController;
 import com.android.wm.shell.back.BackAnimation;
 import com.android.wm.shell.back.BackAnimationController;
 import com.android.wm.shell.bubbles.BubbleController;
@@ -69,8 +67,6 @@ import com.android.wm.shell.fullscreen.FullscreenUnfoldController;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
 import com.android.wm.shell.kidsmode.KidsModeTaskOrganizer;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreenController;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
@@ -561,29 +557,6 @@ public abstract class WMShellBaseModule {
         return Optional.empty();
     }
 
-    // Legacy split (optional feature)
-
-    @WMSingleton
-    @Provides
-    static Optional<LegacySplitScreen> provideLegacySplitScreen(
-            Optional<LegacySplitScreenController> splitScreenController) {
-        return splitScreenController.map((controller) -> controller.asLegacySplitScreen());
-    }
-
-    @BindsOptionalOf
-    abstract LegacySplitScreenController optionalLegacySplitScreenController();
-
-    // App Pairs (optional feature)
-
-    @WMSingleton
-    @Provides
-    static Optional<AppPairs> provideAppPairs(Optional<AppPairsController> appPairsController) {
-        return appPairsController.map((controller) -> controller.asAppPairs());
-    }
-
-    @BindsOptionalOf
-    abstract AppPairsController optionalAppPairs();
-
     //
     // Starting window
     //
@@ -664,7 +637,6 @@ public abstract class WMShellBaseModule {
             KidsModeTaskOrganizer kidsModeTaskOrganizer,
             Optional<BubbleController> bubblesOptional,
             Optional<SplitScreenController> splitScreenOptional,
-            Optional<AppPairsController> appPairsOptional,
             Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
             Optional<FullscreenUnfoldController> appUnfoldTransitionController,
@@ -682,7 +654,6 @@ public abstract class WMShellBaseModule {
                 kidsModeTaskOrganizer,
                 bubblesOptional,
                 splitScreenOptional,
-                appPairsOptional,
                 pipTouchHandlerOptional,
                 fullscreenTaskListener,
                 appUnfoldTransitionController,
@@ -709,17 +680,15 @@ public abstract class WMShellBaseModule {
     static ShellCommandHandlerImpl provideShellCommandHandlerImpl(
             ShellTaskOrganizer shellTaskOrganizer,
             KidsModeTaskOrganizer kidsModeTaskOrganizer,
-            Optional<LegacySplitScreenController> legacySplitScreenOptional,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<Pip> pipOptional,
             Optional<OneHandedController> oneHandedOptional,
             Optional<HideDisplayCutoutController> hideDisplayCutout,
-            Optional<AppPairsController> appPairsOptional,
             Optional<RecentTasksController> recentTasksOptional,
             @ShellMainThread ShellExecutor mainExecutor) {
         return new ShellCommandHandlerImpl(shellTaskOrganizer, kidsModeTaskOrganizer,
-                legacySplitScreenOptional, splitScreenOptional, pipOptional, oneHandedOptional,
-                hideDisplayCutout, appPairsOptional, recentTasksOptional, mainExecutor);
+                splitScreenOptional, pipOptional, oneHandedOptional, hideDisplayCutout,
+                recentTasksOptional, mainExecutor);
     }
 
     @WMSingleton

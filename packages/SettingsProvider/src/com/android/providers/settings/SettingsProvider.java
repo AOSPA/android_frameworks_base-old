@@ -5246,8 +5246,6 @@ public class SettingsProvider extends ContentProvider {
                                     && !Integer.toString(Secure.LOCATION_MODE_OFF)
                                             .equals(locationMode.getValue()));
                     initGlobalSettingsDefaultValForWearLocked(
-                            Global.Wearable.RETAIL_MODE, Global.Wearable.RETAIL_MODE_CONSUMER);
-                    initGlobalSettingsDefaultValForWearLocked(
                             Global.Wearable.PHONE_PLAY_STORE_AVAILABILITY,
                             Global.Wearable.PHONE_PLAY_STORE_AVAILABILITY_UNKNOWN);
                     initGlobalSettingsDefaultValForWearLocked(
@@ -5513,16 +5511,7 @@ public class SettingsProvider extends ContentProvider {
                     currentVersion = 209;
                 }
                 if (currentVersion == 209) {
-                    // Version 209: Enable enforcement of
-                    // android.Manifest.permission#POST_NOTIFICATIONS in order for applications
-                    // to post notifications.
-                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
-                    secureSettings.insertSettingLocked(
-                            Secure.NOTIFICATION_PERMISSION_ENABLED,
-                            /* enabled= */ "1",
-                            /* tag= */ null,
-                            /* makeDefault= */ false,
-                            SettingsState.SYSTEM_PACKAGE_NAME);
+                    // removed now that feature is enabled for everyone
                     currentVersion = 210;
                 }
 

@@ -93,9 +93,9 @@ public final class DistractingPackageHelper {
         for (int i = 0; i < packageNames.length; i++) {
             final String packageName = packageNames[i];
             final PackageStateInternal packageState =
-                    snapshot.getPackageStateInternal(packageName);
-            if (packageState == null
-                    || snapshot.shouldFilterApplication(packageState, callingUid, userId)) {
+                    snapshot.getPackageStateForInstalledAndFiltered(
+                            packageName, callingUid, userId);
+            if (packageState == null) {
                 Slog.w(PackageManagerService.TAG,
                         "Could not find package setting for package: " + packageName
                                 + ". Skipping...");
@@ -190,9 +190,8 @@ public final class DistractingPackageHelper {
         for (int i = 0; i < lists.size(); i++) {
             final Bundle extras = new Bundle(3);
             final BroadcastParams list = lists.get(i);
-            extras.putStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST,
-                    list.getPackageNames().toArray(new String[0]));
-            extras.putIntArray(Intent.EXTRA_CHANGED_UID_LIST, list.getUids().toArray());
+            extras.putStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST, list.getPackageNames());
+            extras.putIntArray(Intent.EXTRA_CHANGED_UID_LIST, list.getUids());
             extras.putInt(Intent.EXTRA_DISTRACTION_RESTRICTIONS, distractionFlags);
             final SparseArray<int[]> allowList = list.getAllowList().size() == 0
                     ? null : list.getAllowList();

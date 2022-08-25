@@ -127,9 +127,9 @@ public final class SuspendPackageHelper {
                 continue;
             }
             final PackageStateInternal packageState =
-                    snapshot.getPackageStateInternal(packageName);
-            if (packageState == null
-                    || snapshot.shouldFilterApplication(packageState, callingUid, userId)) {
+                    snapshot.getPackageStateForInstalledAndFiltered(
+                            packageName, callingUid, userId);
+            if (packageState == null) {
                 Slog.w(TAG, "Could not find package setting for package: " + packageName
                         + ". Skipping suspending/un-suspending.");
                 unmodifiablePackages.add(packageName);
@@ -228,7 +228,8 @@ public final class SuspendPackageHelper {
                 continue;
             }
             final PackageStateInternal packageState =
-                    snapshot.getPackageStateFiltered(packageNames[i], callingUid, userId);
+                    snapshot.getPackageStateForInstalledAndFiltered(
+                            packageNames[i], callingUid, userId);
             if (packageState == null) {
                 Slog.w(TAG, "Could not find package setting for package: " + packageNames[i]);
                 unactionablePackages.add(packageNames[i]);
@@ -593,9 +594,8 @@ public final class SuspendPackageHelper {
         for (int i = 0; i < lists.size(); i++) {
             final Bundle extras = new Bundle(3);
             final BroadcastParams list = lists.get(i);
-            extras.putStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST,
-                    list.getPackageNames().toArray(new String[0]));
-            extras.putIntArray(Intent.EXTRA_CHANGED_UID_LIST, list.getUids().toArray());
+            extras.putStringArray(Intent.EXTRA_CHANGED_PACKAGE_LIST, list.getPackageNames());
+            extras.putIntArray(Intent.EXTRA_CHANGED_UID_LIST, list.getUids());
             final SparseArray<int[]> allowList = list.getAllowList().size() == 0
                     ? null : list.getAllowList();
             handler.post(() -> mBroadcastHelper.sendPackageBroadcast(intent, null /* pkg */,
@@ -651,9 +651,9 @@ public final class SuspendPackageHelper {
                 } else {
                     intentExtras = null;
                 }
-                handler.post(() -> mBroadcastHelper.doSendBroadcast(action, null, intentExtras,
+                mBroadcastHelper.doSendBroadcast(action, null, intentExtras,
                         Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND, packageName, null,
-                        targetUserIds, false, null, null));
+                        targetUserIds, false, null, null);
             }
         });
     }

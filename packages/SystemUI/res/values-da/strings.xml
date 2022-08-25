@@ -78,6 +78,7 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="1506621600548684129">"Prøv at tage et screenshot igen"</string>
     <string name="screenshot_failed_to_save_text" msgid="7232739948999195960">"Dit screenshot kunne ikke gemmes."</string>
     <string name="screenshot_failed_to_capture_text" msgid="7818288545874407451">"Appen eller din organisation tillader ikke, at du tager screenshots"</string>
+    <string name="screenshot_blocked_by_admin" msgid="5486757604822795797">"Din it-administrator har blokeret screenshot-funktionen"</string>
     <string name="screenshot_edit_label" msgid="8754981973544133050">"Rediger"</string>
     <string name="screenshot_edit_description" msgid="3333092254706788906">"Rediger screenshot"</string>
     <string name="screenshot_share_description" msgid="2861628935812656612">"Del screenshottet"</string>
@@ -225,6 +226,7 @@
     <string name="quick_settings_rotation_unlocked_label" msgid="2359922767950346112">"Roter automatisk"</string>
     <string name="accessibility_quick_settings_rotation" msgid="4800050198392260738">"Roter skærmen automatisk"</string>
     <string name="quick_settings_location_label" msgid="2621868789013389163">"Lokation"</string>
+    <string name="quick_settings_screensaver_label" msgid="1495003469366524120">"Pauseskærm"</string>
     <string name="quick_settings_camera_label" msgid="5612076679385269339">"Kameraadgang"</string>
     <string name="quick_settings_mic_label" msgid="8392773746295266375">"Mikrofonadgang"</string>
     <string name="quick_settings_camera_mic_available" msgid="1453719768420394314">"Tilgængelig"</string>
@@ -318,6 +320,12 @@
     <string name="keyguard_face_successful_unlock_press_alt_1" msgid="5715461103913071474">"Låst op ved hjælp af ansigt. Tryk for at åbne."</string>
     <string name="keyguard_face_successful_unlock_press_alt_2" msgid="8310787946357120406">"Ansigt genkendt. Tryk for at åbne."</string>
     <string name="keyguard_face_successful_unlock_press_alt_3" msgid="7219030481255573962">"Ansigt genkendt. Tryk på oplåsningsikonet for at åbne."</string>
+  <string-array name="udfps_accessibility_touch_hints">
+    <item msgid="1901953991150295169">"Flyt til venstre"</item>
+    <item msgid="5558598599408514296">"Flyt ned"</item>
+    <item msgid="4844142668312841831">"Flyt til højre"</item>
+    <item msgid="5640521437931460125">"Flyt op"</item>
+  </string-array>
     <string name="keyguard_retry" msgid="886802522584053523">"Stryg opad for at prøve igen"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Lås op for at bruge NFC"</string>
     <string name="do_disclosure_generic" msgid="4896482821974707167">"Denne enhed tilhører din organisation"</string>
@@ -467,7 +475,7 @@
     <string name="wallet_title" msgid="5369767670735827105">"Wallet"</string>
     <string name="wallet_empty_state_label" msgid="7776761245237530394">"Bliv klar til at foretage hurtigere og mere sikre køb med din telefon"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Vis alle"</string>
-    <string name="wallet_secondary_label_no_card" msgid="530725155985223497">"Tilføj et kort"</string>
+    <string name="wallet_secondary_label_no_card" msgid="8488069304491125713">"Tryk for at åbne"</string>
     <string name="wallet_secondary_label_updating" msgid="5726130686114928551">"Opdaterer"</string>
     <string name="wallet_secondary_label_device_locked" msgid="5175862019125370506">"Lås op for at bruge"</string>
     <string name="wallet_error_generic" msgid="257704570182963611">"Dine kort kunne ikke hentes. Prøv igen senere."</string>
@@ -693,7 +701,8 @@
     <string name="notification_channel_alerts" msgid="3385787053375150046">"Underretninger"</string>
     <string name="notification_channel_battery" msgid="9219995638046695106">"Batteri"</string>
     <string name="notification_channel_screenshot" msgid="7665814998932211997">"Screenshots"</string>
-    <string name="notification_channel_general" msgid="4384774889645929705">"Generelle meddelelser"</string>
+    <string name="notification_channel_instant" msgid="7556135423486752680">"Instant Apps"</string>
+    <string name="notification_channel_setup" msgid="7660580986090760350">"Konfiguration"</string>
     <string name="notification_channel_storage" msgid="2720725707628094977">"Lagerplads"</string>
     <string name="notification_channel_hints" msgid="7703783206000346876">"Tips"</string>
     <string name="instant_apps" msgid="8337185853050247304">"Instant Apps"</string>
@@ -727,6 +736,7 @@
     <string name="auto_saver_text" msgid="3214960308353838764">"Aktivér, når det ser ud til, at batteriet løber tør"</string>
     <string name="no_auto_saver_action" msgid="7467924389609773835">"Nej tak"</string>
     <string name="heap_dump_tile_name" msgid="2464189856478823046">"Gem SysUI-heap"</string>
+    <string name="ongoing_privacy_dialog_a11y_title" msgid="2205794093673327974">"I brug"</string>
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Apps anvender enhedens <xliff:g id="TYPES_LIST">%s</xliff:g>"</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
     <string name="ongoing_privacy_dialog_last_separator" msgid="5615876114268009767">" og "</string>
@@ -824,7 +834,6 @@
     <string name="media_move_closer_to_start_cast" msgid="2673104707465013176">"Flyt enheden tættere på for at afspille på <xliff:g id="DEVICENAME">%1$s</xliff:g>"</string>
     <string name="media_move_closer_to_end_cast" msgid="6495907340926563656">"Ryk tættere på <xliff:g id="DEVICENAME">%1$s</xliff:g> for at afspille her"</string>
     <string name="media_transfer_playing_different_device" msgid="7186806382609785610">"Afspilles på <xliff:g id="DEVICENAME">%1$s</xliff:g>"</string>
-    <string name="media_transfer_playing_this_device" msgid="1856890686844499172">"Afspilles på denne telefon"</string>
     <string name="media_transfer_failed" msgid="7955354964610603723">"Noget gik galt. Prøv igen."</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Inaktiv. Tjek appen"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"Ikke fundet"</string>
@@ -853,6 +862,8 @@
     <string name="media_output_broadcast_dialog_save" msgid="7910865591430010198">"Gem"</string>
     <string name="media_output_broadcast_starting" msgid="8130153654166235557">"Starter…"</string>
     <string name="media_output_broadcast_start_failed" msgid="3670835946856129775">"Der kan ikke udsendes en fællesbesked"</string>
+    <string name="media_output_broadcast_update_error" msgid="1420868236079122521">"Der kan ikke gemmes. Prøv igen."</string>
+    <string name="media_output_broadcast_last_update_error" msgid="5484328807296895491">"Der kan ikke gemmes."</string>
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Buildnummer"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Buildnummeret blev kopieret til udklipsholderen."</string>
     <string name="basic_status" msgid="2315371112182658176">"Åben samtale"</string>
@@ -903,7 +914,7 @@
     <string name="mobile_data_settings_title" msgid="3955246641380064901">"Mobildata"</string>
     <string name="preference_summary_default_combination" msgid="8453246369903749670">"<xliff:g id="STATE">%1$s</xliff:g>/<xliff:g id="NETWORKMODE">%2$s</xliff:g>"</string>
     <string name="mobile_data_connection_active" msgid="944490013299018227">"Forbundet"</string>
-    <string name="mobile_data_off_summary" msgid="3663995422004150567">"Der oprettes ikke automatisk mobildataforbindelse"</string>
+    <string name="mobile_data_off_summary" msgid="3663995422004150567">"Ingen automatisk mobildataforbindelse"</string>
     <string name="mobile_data_no_connection" msgid="1713872434869947377">"Der er ingen forbindelse"</string>
     <string name="non_carrier_network_unavailable" msgid="770049357024492372">"Der er ingen andre tilgængelige netværk"</string>
     <string name="all_network_unavailable" msgid="4112774339909373349">"Der er ingen tilgængelige netværk"</string>
@@ -937,6 +948,10 @@
     <string name="clipboard_edit_text_description" msgid="805254383912962103">"Rediger kopieret tekst"</string>
     <string name="clipboard_edit_image_description" msgid="8904857948976041306">"Rediger kopieret billede"</string>
     <string name="clipboard_send_nearby_description" msgid="4629769637846717650">"Send til enhed i nærheden"</string>
+    <string name="clipboard_text_hidden" msgid="7926899867471812305">"Tryk for at se"</string>
+    <string name="clipboard_text_copied" msgid="5100836834278976679">"Teksten blev kopieret"</string>
+    <string name="clipboard_image_copied" msgid="3793365360174328722">"Billedet blev kopieret"</string>
+    <string name="clipboard_content_copied" msgid="144452398567828145">"Indholdet blev kopieret"</string>
     <string name="add" msgid="81036585205287996">"Tilføj"</string>
     <string name="manage_users" msgid="1823875311934643849">"Administrer brugere"</string>
     <string name="drag_split_not_supported" msgid="4326847447699729722">"Denne notifikation kan ikke trækkes til en opdelt skærm."</string>
@@ -945,4 +960,10 @@
     <string name="dream_overlay_status_bar_alarm_set" msgid="566707328356590886">"Alarmen er indstillet"</string>
     <string name="dream_overlay_status_bar_camera_mic_off" msgid="3199425257833773569">"Kamera og mikrofon er slået fra"</string>
     <string name="dream_overlay_status_bar_notification_indicator" msgid="8091389255691081711">"{count,plural, =1{# notifikation}one{# notifikation}other{# notifikationer}}"</string>
+    <string name="broadcasting_description_is_broadcasting" msgid="765627502786404290">"Udsender"</string>
+    <string name="bt_le_audio_broadcast_dialog_title" msgid="3605428497924077811">"Stop udsendelsen <xliff:g id="APP_NAME">%1$s</xliff:g>?"</string>
+    <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="7889684551194225793">"Hvis du udsender <xliff:g id="SWITCHAPP">%1$s</xliff:g> eller skifter output, stopper din aktuelle udsendelse"</string>
+    <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="6098768269397105733">"Udsend <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>
+    <string name="bt_le_audio_broadcast_dialog_different_output" msgid="7885102097302562674">"Skift output"</string>
+    <string name="bt_le_audio_broadcast_dialog_unknown_name" msgid="3791472237793443044">"Ukendt"</string>
 </resources>

@@ -7673,11 +7673,11 @@ package android.app.admin {
     field public static final String DELEGATION_PACKAGE_ACCESS = "delegation-package-access";
     field public static final String DELEGATION_PERMISSION_GRANT = "delegation-permission-grant";
     field public static final String DELEGATION_SECURITY_LOGGING = "delegation-security-logging";
-    field @Deprecated public static final int ENCRYPTION_STATUS_ACTIVATING = 2; // 0x2
-    field @Deprecated public static final int ENCRYPTION_STATUS_ACTIVE = 3; // 0x3
-    field @Deprecated public static final int ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY = 4; // 0x4
+    field public static final int ENCRYPTION_STATUS_ACTIVATING = 2; // 0x2
+    field public static final int ENCRYPTION_STATUS_ACTIVE = 3; // 0x3
+    field public static final int ENCRYPTION_STATUS_ACTIVE_DEFAULT_KEY = 4; // 0x4
     field public static final int ENCRYPTION_STATUS_ACTIVE_PER_USER = 5; // 0x5
-    field @Deprecated public static final int ENCRYPTION_STATUS_INACTIVE = 1; // 0x1
+    field public static final int ENCRYPTION_STATUS_INACTIVE = 1; // 0x1
     field public static final int ENCRYPTION_STATUS_UNSUPPORTED = 0; // 0x0
     field public static final String EXTRA_ADD_EXPLANATION = "android.app.extra.ADD_EXPLANATION";
     field public static final String EXTRA_DELEGATION_SCOPES = "android.app.extra.DELEGATION_SCOPES";
@@ -19533,6 +19533,8 @@ package android.location {
     method @Nullable public android.os.Bundle getExtras();
     method @FloatRange(from=-90.0, to=90.0) public double getLatitude();
     method @FloatRange(from=-180.0, to=180.0) public double getLongitude();
+    method @FloatRange(from=0.0) public float getMslAltitudeAccuracyMeters();
+    method @FloatRange public double getMslAltitudeMeters();
     method @Nullable public String getProvider();
     method @FloatRange(from=0.0) public float getSpeed();
     method @FloatRange(from=0.0) public float getSpeedAccuracyMetersPerSecond();
@@ -19543,6 +19545,8 @@ package android.location {
     method public boolean hasBearing();
     method public boolean hasBearingAccuracy();
     method public boolean hasElapsedRealtimeUncertaintyNanos();
+    method public boolean hasMslAltitude();
+    method public boolean hasMslAltitudeAccuracy();
     method public boolean hasSpeed();
     method public boolean hasSpeedAccuracy();
     method public boolean hasVerticalAccuracy();
@@ -19554,6 +19558,8 @@ package android.location {
     method public void removeBearing();
     method public void removeBearingAccuracy();
     method public void removeElapsedRealtimeUncertaintyNanos();
+    method public void removeMslAltitude();
+    method public void removeMslAltitudeAccuracy();
     method public void removeSpeed();
     method public void removeSpeedAccuracy();
     method public void removeVerticalAccuracy();
@@ -19569,6 +19575,8 @@ package android.location {
     method public void setLatitude(@FloatRange(from=-90.0, to=90.0) double);
     method public void setLongitude(@FloatRange(from=-180.0, to=180.0) double);
     method public void setMock(boolean);
+    method public void setMslAltitudeAccuracyMeters(@FloatRange(from=0.0) float);
+    method public void setMslAltitudeMeters(@FloatRange double);
     method public void setProvider(@Nullable String);
     method public void setSpeed(@FloatRange(from=0.0) float);
     method public void setSpeedAccuracyMetersPerSecond(@FloatRange(from=0.0) float);
@@ -22305,6 +22313,7 @@ package android.media {
     field public static final String KEY_VIDEO_QP_P_MAX = "video-qp-p-max";
     field public static final String KEY_VIDEO_QP_P_MIN = "video-qp-p-min";
     field public static final String KEY_WIDTH = "width";
+    field public static final String LOG_SESSION_ID = "log-session-id";
     field public static final String MIMETYPE_AUDIO_AAC = "audio/mp4a-latm";
     field public static final String MIMETYPE_AUDIO_AAC_ELD = "audio/mp4a.40.39";
     field public static final String MIMETYPE_AUDIO_AAC_HE_V1 = "audio/mp4a.40.05";
@@ -31441,6 +31450,7 @@ package android.os {
 
   public static interface IBinder.DeathRecipient {
     method public void binderDied();
+    method public default void binderDied(@NonNull android.os.IBinder);
   }
 
   public interface IInterface {
@@ -36138,7 +36148,7 @@ package android.provider {
     field public static final int RESULT_SMS_NULL_MESSAGE = 8; // 0x8
     field public static final int RESULT_SMS_NULL_PDU = 7; // 0x7
     field public static final int RESULT_SMS_OUT_OF_MEMORY = 3; // 0x3
-    field @Deprecated public static final int RESULT_SMS_RECEIVED_WHILE_ENCRYPTED = 9; // 0x9
+    field public static final int RESULT_SMS_RECEIVED_WHILE_ENCRYPTED = 9; // 0x9
     field public static final int RESULT_SMS_UNSUPPORTED = 4; // 0x4
     field @Deprecated public static final String SECRET_CODE_ACTION = "android.provider.Telephony.SECRET_CODE";
     field public static final String SIM_FULL_ACTION = "android.provider.Telephony.SIM_FULL";
@@ -50529,6 +50539,7 @@ package android.view {
     method public int getScaledDoubleTapSlop();
     method public int getScaledEdgeSlop();
     method public int getScaledFadingEdgeLength();
+    method public int getScaledHandwritingSlop();
     method public float getScaledHorizontalScrollFactor();
     method public int getScaledHoverSlop();
     method public int getScaledMaximumDrawingCacheSize();

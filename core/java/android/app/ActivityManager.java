@@ -2210,7 +2210,6 @@ public class ActivityManager {
             pw.print(((baseIntent.getFlags() & FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0));
             pw.print(" activityType="); pw.print(activityTypeToString(getActivityType()));
             pw.print(" windowingMode="); pw.print(windowingModeToString(getWindowingMode()));
-            pw.print(" supportsSplitScreenMultiWindow="); pw.print(supportsSplitScreenMultiWindow);
             pw.print(" supportsMultiWindow=");
             pw.println(supportsMultiWindow);
             if (taskDescription != null) {
@@ -4617,8 +4616,8 @@ public class ActivityManager {
         try {
             getService().broadcastIntentWithFeature(
                     null, null, intent, null, null, Activity.RESULT_OK, null, null,
-                    null /*requiredPermissions*/, null /*excludedPermissions*/, appOp, null, false,
-                    true, userId);
+                    null /*requiredPermissions*/, null /*excludedPermissions*/,
+                    null /*excludedPackages*/, appOp, null, false, true, userId);
         } catch (RemoteException ex) {
         }
     }

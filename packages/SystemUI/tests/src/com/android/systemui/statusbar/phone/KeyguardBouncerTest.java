@@ -399,11 +399,20 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         mBouncer.hide(false /* destroyView */);
         verify(mHandler).removeCallbacks(eq(showRunnable.getValue()));
     }
-
     @Test
-    public void testShow_delaysIfFaceAuthIsRunning_unlessBypass() {
+    public void testShow_delaysIfFaceAuthIsRunning_unlessBypassEnabled() {
         when(mKeyguardStateController.isFaceAuthEnabled()).thenReturn(true);
         when(mKeyguardBypassController.getBypassEnabled()).thenReturn(true);
+        mBouncer.show(true /* reset */);
+
+        verify(mHandler, never()).postDelayed(any(), anyLong());
+    }
+
+    @Test
+    public void testShow_delaysIfFaceAuthIsRunning_unlessFingerprintEnrolled() {
+        when(mKeyguardStateController.isFaceAuthEnabled()).thenReturn(true);
+        when(mKeyguardUpdateMonitor.getCachedIsUnlockWithFingerprintPossible(0))
+                .thenReturn(true);
         mBouncer.show(true /* reset */);
 
         verify(mHandler, never()).postDelayed(any(), anyLong());
@@ -474,5 +483,20 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         bouncerHideAmount = 0.5f;
         mBouncer.setExpansion(bouncerHideAmount);
         verify(callback, never()).onExpansionChanged(bouncerHideAmount);
+    }
+
+    @Test
+    public void testOnResumeCalledForFullscreenBouncerOnSecondShow() {
+        // GIVEN a security mode which requires fullscreen bouncer
+        when(mKeyguardSecurityModel.getSecurityMode(anyInt()))
+                .thenReturn(KeyguardSecurityModel.SecurityMode.SimPin);
+        mBouncer.show(true);
+
+        // WHEN a second call to show occurs, the bouncer will already by visible
+        reset(mKeyguardHostViewController);
+        mBouncer.show(true);
+
+        // THEN ensure the ViewController is told to resume
+        verify(mKeyguardHostViewController).onResume();
     }
 }

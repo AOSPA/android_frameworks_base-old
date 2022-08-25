@@ -611,10 +611,9 @@ public class ActivityRecordTests extends WindowTestsBase {
         activity.setRequestedOrientation(activityCurOrientation == ORIENTATION_LANDSCAPE
                 ? SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE);
 
-        // Asserts fixed orientation request is ignored, and the orientation is not changed
-        // (fill Task).
-        assertEquals(activityCurOrientation, activity.getConfiguration().orientation);
-        assertFalse(activity.isLetterboxedForFixedOrientationAndAspectRatio());
+        // Asserts fixed orientation request is not ignored, and the orientation is changed.
+        assertNotEquals(activityCurOrientation, activity.getConfiguration().orientation);
+        assertTrue(activity.isLetterboxedForFixedOrientationAndAspectRatio());
     }
 
     @Test
@@ -1787,13 +1786,16 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testActivityOnCancelFixedRotationTransform() {
         final ActivityRecord activity = createActivityWithTask();
         final DisplayRotation displayRotation = activity.mDisplayContent.getDisplayRotation();
+        final RemoteDisplayChangeController remoteDisplayChangeController = activity
+                .mDisplayContent.mRemoteDisplayChangeController;
         spyOn(displayRotation);
+        spyOn(remoteDisplayChangeController);
 
         final DisplayContent display = activity.mDisplayContent;
         final int originalRotation = display.getRotation();
 
         // Make {@link DisplayContent#sendNewConfiguration} not apply rotation immediately.
-        doReturn(true).when(displayRotation).isWaitingForRemoteRotation();
+        doReturn(true).when(remoteDisplayChangeController).isWaitingForRemoteDisplayChange();
         doReturn((originalRotation + 1) % 4).when(displayRotation).rotationForOrientation(
                 anyInt() /* orientation */, anyInt() /* lastRotation */);
         // Set to visible so the activity can freeze the screen.
@@ -1831,7 +1833,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         // Simulate the remote rotation has completed and the configuration doesn't change, then
         // the rotated activity should also be restored by clearing the transform.
         displayRotation.updateRotationUnchecked(true /* forceUpdate */);
-        doReturn(false).when(displayRotation).isWaitingForRemoteRotation();
+        doReturn(false).when(remoteDisplayChangeController).isWaitingForRemoteDisplayChange();
         clearInvocations(activity);
         display.setFixedRotationLaunchingAppUnchecked(activity);
         display.sendNewConfiguration();
@@ -2163,39 +2165,6 @@ public class ActivityRecordTests extends WindowTestsBase {
                 true /* shouldUpdate */, false /* activityChange */);
         verifyProcessInfoUpdate(activity, DESTROYED,
                 true /* shouldUpdate */, false /* activityChange */);
-    }
-
-    @Test
-    public void testSupportsSplitScreenWindowingMode() {
-        final ActivityRecord activity = new ActivityBuilder(mAtm)
-                .setCreateTask(true)
-                .setResizeMode(ActivityInfo.RESIZE_MODE_UNRESIZEABLE)
-                .setScreenOrientation(SCREEN_ORIENTATION_LANDSCAPE)
-                .build();
-
-        // Not allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
-        assertFalse(activity.supportsSplitScreenWindowingMode());
-
-        // Force resizable
-        mAtm.mForceResizableActivities = true;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
-        assertTrue(activity.supportsSplitScreenWindowingMode());
-
-        // Use development option to allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
-        mAtm.mDevEnableNonResizableMultiWindow = true;
-        assertTrue(activity.supportsSplitScreenWindowingMode());
-
-        // Always allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = 1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
-        assertTrue(activity.supportsSplitScreenWindowingMode());
     }
 
     @Test
@@ -2631,7 +2600,11 @@ public class ActivityRecordTests extends WindowTestsBase {
             DeviceConfig.setProperty(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
                     "splash_screen_exception_list", DEFAULT_COMPONENT_PACKAGE_NAME, false);
             testLegacySplashScreen(Build.VERSION_CODES.R, TYPE_PARAMETER_LEGACY_SPLASH_SCREEN);
-            testLegacySplashScreen(Build.VERSION_CODES.S, 0);
+            testLegacySplashScreen(Build.VERSION_CODES.S, TYPE_PARAMETER_LEGACY_SPLASH_SCREEN);
+            testLegacySplashScreen(Build.VERSION_CODES.TIRAMISU,
+                    TYPE_PARAMETER_LEGACY_SPLASH_SCREEN);
+            // Above T
+            testLegacySplashScreen(Build.VERSION_CODES.TIRAMISU + 1, 0);
         } finally {
             try {
                 DeviceConfig.setProperties(properties);
@@ -2853,6 +2826,11 @@ public class ActivityRecordTests extends WindowTestsBase {
         taskFragment2.addChild(activity2);
         assertTrue(activity2.isResizeable());
         activity1.reparent(taskFragment1, POSITION_TOP);
+
+        // Adds an Activity which doesn't have shared starting data, and verify if it blocks
+        // starting window removal.
+        final ActivityRecord activity3 = new ActivityBuilder(mAtm).build();
+        taskFragment2.addChild(activity3, POSITION_TOP);
 
         verify(activity1.getSyncTransaction()).reparent(eq(startingWindow.mSurfaceControl),
                 eq(task.mSurfaceControl));

@@ -2038,15 +2038,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 }
             }
         }
-        final AutofillId[] fieldClassificationIds = lastResponse.getFieldClassificationIds();
-
-        if (!hasAtLeastOneDataset && fieldClassificationIds == null) {
-            if (sVerbose) {
-                Slog.v(TAG, "logContextCommittedLocked(): skipped (no datasets nor fields "
-                        + "classification ids)");
-            }
-            return;
-        }
 
         for (int i = 0; i < mViewStates.size(); i++) {
             final ViewState viewState = mViewStates.valueAt(i);
@@ -2095,6 +2086,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         }
                         continue;
                     }
+
                     // Check if value match a dataset.
                     if (hasAtLeastOneDataset) {
                         for (int j = 0; j < responseCount; j++) {
@@ -2151,7 +2143,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                             } // else
                         } // for j
                     }
-
                 } // else
             } // else
         }
@@ -3307,10 +3298,15 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     currentView.setState(ViewState.STATE_FILL_DIALOG_SHOWN);
                     mService.logDatasetShown(id, mClientState, UI_TYPE_DIALOG);
                 }
+                // Just show fill dialog once, so disabled after shown.
+                // Note: Cannot disable before requestShowFillDialog() because the method
+                //       need to check whether fill dialog enabled.
+                setFillDialogDisabled();
                 return;
             } else {
                 setFillDialogDisabled();
             }
+
         }
 
         if (response.supportsInlineSuggestions()) {

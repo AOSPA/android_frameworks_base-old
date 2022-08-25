@@ -163,6 +163,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1941440781": {
+      "message": "Creating Pending Move-to-back: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Task.java"
+    },
     "-1939861963": {
       "message": "Create root task displayId=%d winMode=%d",
       "level": "VERBOSE",
@@ -469,6 +475,12 @@
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/ResetTargetTaskHelper.java"
     },
+    "-1635750891": {
+      "message": "Received remote change for Display[%d], applied: [%dx%d, rot = %d]",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONFIGURATION",
+      "at": "com\/android\/server\/wm\/RemoteDisplayChangeController.java"
+    },
     "-1633115609": {
       "message": "Key dispatch not paused for screen off",
       "level": "VERBOSE",
@@ -756,6 +768,12 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "-1383884640": {
+      "message": " allReady query: used=%b override=%b defer=%d states=[%s]",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
     },
     "-1376035390": {
       "message": "No task found",
@@ -1657,6 +1675,12 @@
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/Task.java"
     },
+    "-451552570": {
+      "message": "Current focused window being animated by recents. Overriding back callback to recents controller callback.",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_BACK_PREVIEW",
+      "at": "com\/android\/server\/wm\/BackNavigationController.java"
+    },
     "-449118559": {
       "message": "Trying to update display configuration for invalid process, pid=%d",
       "level": "WARN",
@@ -2509,6 +2533,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "323235828": {
+      "message": "Delaying app transition for recents animation to finish",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/AppTransitionController.java"
+    },
     "327461496": {
       "message": "Complete pause: %s",
       "level": "VERBOSE",
@@ -2544,12 +2574,6 @@
       "level": "INFO",
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
-    "352982444": {
-      "message": " allReady query: used=%b override=%b states=[%s]",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/Transition.java"
     },
     "355720268": {
       "message": "stopFreezingDisplayLocked: Unfreezing now",
@@ -2929,12 +2953,6 @@
       "group": "WM_DEBUG_LOCKTASK",
       "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
     },
-    "716528224": {
-      "message": "Focused window found using wmService.getFocusedWindowLocked()",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_BACK_PREVIEW",
-      "at": "com\/android\/server\/wm\/BackNavigationController.java"
-    },
     "726205185": {
       "message": "Moving to DESTROYED: %s (destroy skipped)",
       "level": "VERBOSE",
@@ -3066,6 +3084,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
+    },
+    "898260097": {
+      "message": "Creating Pending Pip-Enter: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
     },
     "898863925": {
       "message": "Attempted to add QS dialog window with unknown token %s.  Aborting.",
@@ -3403,12 +3427,6 @@
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "1246035185": {
-      "message": "stopFreezingDisplayLocked: Returning waitingForConfig=%b, waitingForRemoteRotation=%b, mAppsFreezingScreen=%d, mWindowsFreezingScreen=%d, mClientFreezingScreen=%b, mOpeningApps.size()=%d",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_ORIENTATION",
-      "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
     "1252594551": {
       "message": "Window types in WindowContext and LayoutParams.type should match! Type from LayoutParams is %d, but type from WindowContext is %d",
       "level": "WARN",
@@ -3505,6 +3523,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ScreenRotationAnimation.java"
     },
+    "1360176455": {
+      "message": "stopFreezingDisplayLocked: Returning waitingForConfig=%b, waitingForRemoteDisplayChange=%b, mAppsFreezingScreen=%d, mWindowsFreezingScreen=%d, mClientFreezingScreen=%b, mOpeningApps.size()=%d",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "1364126018": {
       "message": "Resumed activity; dropping state of: %s",
       "level": "INFO",
@@ -3528,6 +3552,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
+    },
+    "1393721079": {
+      "message": "Starting remote display change: from [rot = %d], to [%dx%d, rot = %d]",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONFIGURATION",
+      "at": "com\/android\/server\/wm\/RemoteDisplayChangeController.java"
     },
     "1396893178": {
       "message": "createRootTask unknown displayId=%d",
@@ -3870,6 +3900,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
+    },
+    "1764619787": {
+      "message": "Remote change for Display[%d]: timeout reached",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONFIGURATION",
+      "at": "com\/android\/server\/wm\/RemoteDisplayChangeController.java"
     },
     "1774661765": {
       "message": "Devices still not ready after waiting %d milliseconds before attempting to detect safe mode.",

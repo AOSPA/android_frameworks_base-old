@@ -9799,6 +9799,40 @@ public final class Settings {
                 "active_unlock_on_biometric_fail";
 
         /**
+         * If active unlock triggers on biometric failures, include the following error codes
+         * as a biometric failure. See {@link android.hardware.biometrics.BiometricFaceConstants}.
+         * Error codes should be separated by a pipe. For example: "1|4|5". If active unlock
+         * should never trigger on any face errors, this should be set to an empty string.
+         * A null value will use the system default value (TIMEOUT).
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_ON_FACE_ERRORS =
+                "active_unlock_on_face_errors";
+
+        /**
+         * If active unlock triggers on biometric failures, include the following acquired info
+         * as a "biometric failure". See {@link android.hardware.biometrics.BiometricFaceConstants}.
+         * Acquired codes should be separated by a pipe. For example: "1|4|5". If active unlock
+         * should never on trigger on any acquired info messages, this should be
+         * set to an empty string. A null value will use the system default value (none).
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_ON_FACE_ACQUIRE_INFO =
+                "active_unlock_on_face_acquire_info";
+
+        /**
+         * If active unlock triggers on biometric failures, then also request active unlock on
+         * unlock intent when each setting (BiometricType) is the only biometric type enrolled.
+         * Biometric types should be separated by a pipe. For example: "0|3" or "0". If this
+         * setting should be disabled, then this should be set to an empty string. A null value
+         * will use the system default value (0 / None).
+         *   0 = None, 1 = Any face, 2 = Any fingerprint, 3 = Under display fingerprint
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_ON_UNLOCK_INTENT_WHEN_BIOMETRIC_ENROLLED =
+                "active_unlock_on_unlock_intent_when_biometric_enrolled";
+
+        /**
          * Whether the assist gesture should be enabled.
          *
          * @hide
@@ -10223,15 +10257,6 @@ public final class Settings {
          */
         @Readable
         public static final String NOTIFICATION_DISMISS_RTL = "notification_dismiss_rtl";
-
-        /**
-         * Whether the app-level notification setting is represented by a manifest permission.
-         *
-         * @hide
-         */
-        @Readable
-        public static final String NOTIFICATION_PERMISSION_ENABLED =
-                "notification_permission_enabled";
 
         /**
          * Comma separated list of QS tiles that have been auto-added already.
@@ -14519,6 +14544,18 @@ public final class Settings {
         public static final String ANGLE_EGL_FEATURES = "angle_egl_features";
 
         /**
+         * Comma-separated list of package names that ANGLE may have issues with
+         * @hide
+         */
+        public static final String ANGLE_DEFERLIST = "angle_deferlist";
+
+        /**
+         * Integer mode of the logic for applying `angle_deferlist`
+         * @hide
+         */
+        public static final String ANGLE_DEFERLIST_MODE = "angle_deferlist_mode";
+
+        /**
          * Show the "ANGLE In Use" dialog box to the user when ANGLE is the OpenGL driver.
          * The value is a boolean (1 or 0).
          * @hide
@@ -17148,18 +17185,6 @@ public final class Settings {
                     "obtain_paired_device_location";
 
             /**
-             * Whether the device is in retail mode.
-             * @hide
-             */
-            public static final String RETAIL_MODE = "retail_mode";
-
-            // Possible retail mode states
-            /** @hide */
-            public static final int RETAIL_MODE_CONSUMER = 0;
-            /** @hide */
-            public static final int RETAIL_MODE_RETAIL = 1;
-
-            /**
              * The play store availability on companion phone.
              * @hide
              */
@@ -17405,6 +17430,12 @@ public final class Settings {
             public static final String TOUCH_AND_HOLD_WATCH_FACE = "touch_and_hold_watchface";
 
             /**
+             * Whether bedtime mode is enabled.
+             * @hide
+             */
+            public static final String BEDTIME_MODE = "bedtime_mode";
+
+            /**
              * Whether the current watchface is decomposable.
              * @hide
              */
@@ -17566,6 +17597,14 @@ public final class Settings {
              */
             public static final String WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER =
                     "wear_activity_auto_resume_timeout_set_by_user";
+
+            /**
+             * The maximum times that we are allowed to reset the activity auto-resume timeout
+             * timer.
+             * @hide
+             */
+            public static final String WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MAX_RESET_COUNT =
+                    "wear_activity_auto_resume_timeout_max_reset_count";
 
             /**
              * If burn in protection is enabled.

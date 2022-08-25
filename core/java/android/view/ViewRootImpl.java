@@ -90,6 +90,7 @@ import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodCl
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.INSETS_CONTROLLER;
 
 import android.Manifest;
+import android.animation.AnimationHandler;
 import android.animation.LayoutTransition;
 import android.annotation.AnyThread;
 import android.annotation.NonNull;
@@ -223,7 +224,6 @@ import java.io.StringWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -802,8 +802,7 @@ public final class ViewRootImpl implements ViewParent,
             new ViewRootRectTracker(v -> v.collectPreferKeepClearRects());
     private final ViewRootRectTracker mUnrestrictedKeepClearRectsTracker =
             new ViewRootRectTracker(v -> v.collectUnrestrictedPreferKeepClearRects());
-    private List<Rect> mPendingKeepClearAreas;
-    private List<Rect> mPendingUnrestrictedKeepClearAreas;
+    private boolean mHasPendingKeepClearAreaChange;
 
     private IAccessibilityEmbeddedConnection mAccessibilityEmbeddedConnection;
 
@@ -1371,6 +1370,8 @@ public final class ViewRootImpl implements ViewParent,
                 mFirstInputStage = nativePreImeStage;
                 mFirstPostImeInputStage = earlyPostImeStage;
                 mPendingInputEventQueueLengthCounterName = "aq:pending:" + counterSuffix;
+
+                AnimationHandler.requestAnimatorsEnabled(mAppVisible, this);
             }
         }
     }
@@ -1716,6 +1717,7 @@ public final class ViewRootImpl implements ViewParent,
             if (!mAppVisible) {
                 WindowManagerGlobal.trimForeground();
             }
+            AnimationHandler.requestAnimatorsEnabled(mAppVisible, this);
         }
     }
 
@@ -1775,7 +1777,7 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
-        mForceNextWindowRelayout = forceNextWindowRelayout;
+        mForceNextWindowRelayout |= forceNextWindowRelayout;
         mPendingAlwaysConsumeSystemBars = args.argi2 != 0;
         mSyncSeqId = args.argi4 > mSyncSeqId ? args.argi4 : mSyncSeqId;
 
@@ -4826,45 +4828,31 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void keepClearRectsChanged() {
-        List<Rect> restrictedKeepClearRects = mKeepClearRectsTracker.computeChangedRects();
-        List<Rect> unrestrictedKeepClearRects =
-                mUnrestrictedKeepClearRectsTracker.computeChangedRects();
-        if ((restrictedKeepClearRects != null || unrestrictedKeepClearRects != null)
-                && mView != null) {
-            if (restrictedKeepClearRects == null) {
-                restrictedKeepClearRects = Collections.emptyList();
-            }
-            if (unrestrictedKeepClearRects == null) {
-                unrestrictedKeepClearRects = Collections.emptyList();
-            }
+        boolean restrictedKeepClearRectsChanged = mKeepClearRectsTracker.computeChanges();
+        boolean unrestrictedKeepClearRectsChanged =
+                mUnrestrictedKeepClearRectsTracker.computeChanges();
 
-            if (mHandler.hasMessages(MSG_REPORT_KEEP_CLEAR_RECTS)) {
-                // Keep clear areas have been reported recently, wait before reporting new set
-                // of keep clear areas
-                mPendingKeepClearAreas = restrictedKeepClearRects;
-                mPendingUnrestrictedKeepClearAreas = unrestrictedKeepClearRects;
-            } else {
+        if ((restrictedKeepClearRectsChanged || unrestrictedKeepClearRectsChanged)
+                && mView != null) {
+            mHasPendingKeepClearAreaChange = true;
+            // Only report keep clear areas immediately if they have not been reported recently
+            if (!mHandler.hasMessages(MSG_REPORT_KEEP_CLEAR_RECTS)) {
                 mHandler.sendEmptyMessageDelayed(MSG_REPORT_KEEP_CLEAR_RECTS,
                         KEEP_CLEAR_AREA_REPORT_RATE_MILLIS);
-                try {
-                    mWindowSession.reportKeepClearAreasChanged(mWindow, restrictedKeepClearRects,
-                            unrestrictedKeepClearRects);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
+                reportKeepClearAreasChanged();
             }
         }
     }
 
     void reportKeepClearAreasChanged() {
-        final List<Rect> restrictedKeepClearRects = mPendingKeepClearAreas;
-        final List<Rect> unrestrictedKeepClearRects = mPendingUnrestrictedKeepClearAreas;
-        if (restrictedKeepClearRects == null && unrestrictedKeepClearRects == null) {
+        if (!mHasPendingKeepClearAreaChange) {
             return;
         }
+        mHasPendingKeepClearAreaChange = false;
 
-        mPendingKeepClearAreas = null;
-        mPendingUnrestrictedKeepClearAreas = null;
+        final List<Rect> restrictedKeepClearRects = mKeepClearRectsTracker.getLastComputedRects();
+        final List<Rect> unrestrictedKeepClearRects =
+                mUnrestrictedKeepClearRectsTracker.getLastComputedRects();
 
         try {
             mWindowSession.reportKeepClearAreasChanged(mWindow, restrictedKeepClearRects,
@@ -5237,6 +5225,9 @@ public final class ViewRootImpl implements ViewParent,
             // the buffers may still have content in previous rotation. And the next draw may
             // not update all regions, that causes some afterimages to flicker.
             mUpdateSurfaceNeeded = true;
+            if (!mIsInTraversal) {
+                mForceNextWindowRelayout = true;
+            }
         }
 
         Configuration globalConfig = mergedConfiguration.getGlobalConfiguration();
@@ -8225,6 +8216,10 @@ public final class ViewRootImpl implements ViewParent,
      */
     @Override
     public void playSoundEffect(@SoundEffectConstants.SoundEffect int effectId) {
+        if ((mDisplay.getFlags() & Display.FLAG_TOUCH_FEEDBACK_DISABLED) != 0) {
+            return;
+        }
+
         checkThread();
 
         try {
@@ -8273,6 +8268,10 @@ public final class ViewRootImpl implements ViewParent,
      */
     @Override
     public boolean performHapticFeedback(int effectId, boolean always) {
+        if ((mDisplay.getFlags() & Display.FLAG_TOUCH_FEEDBACK_DISABLED) != 0) {
+            return false;
+        }
+
         try {
             return mWindowSession.performHapticFeedback(effectId, always);
         } catch (RemoteException e) {
@@ -8510,6 +8509,7 @@ public final class ViewRootImpl implements ViewParent,
             mInsetsController.onControlsChanged(null);
 
             mAdded = false;
+            AnimationHandler.removeRequestor(this);
         }
         WindowManagerGlobal.getInstance().doRemoveView(this);
     }

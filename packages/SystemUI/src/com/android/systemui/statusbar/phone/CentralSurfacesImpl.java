@@ -106,7 +106,6 @@ import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.DateTimeView;
-import android.window.SplashScreen;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.Lifecycle;
@@ -2496,6 +2495,12 @@ public class CentralSurfacesImpl extends CoreStartable implements
                     animate, intent.getPackage(), (adapter) -> {
                         ActivityOptions options = new ActivityOptions(
                                 CentralSurfaces.getActivityOptions(mDisplayId, adapter));
+
+                        // We know that the intent of the caller is to dismiss the keyguard and
+                        // this runnable is called right after the keyguard is solved, so we tell
+                        // WM that we should dismiss it to avoid flickers when opening an activity
+                        // that can also be shown over the keyguard.
+                        options.setDismissKeyguard();
                         options.setDisallowEnterPictureInPictureWhileLaunching(
                                 disallowEnterPictureInPictureWhileLaunching);
                         if (CameraIntents.isInsecureCameraIntent(intent)) {
@@ -3169,14 +3174,12 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
     /**
      * Notifies the status bar the Keyguard is fading away with the specified timings.
-     *  @param startTime the start time of the animations in uptime millis
+     * @param startTime the start time of the animations in uptime millis
      * @param delay the precalculated animation delay in milliseconds
      * @param fadeoutDuration the duration of the exit animation, in milliseconds
-     * @param isBypassFading is this a fading away animation while bypassing
      */
     @Override
-    public void setKeyguardFadingAway(long startTime, long delay, long fadeoutDuration,
-            boolean isBypassFading) {
+    public void setKeyguardFadingAway(long startTime, long delay, long fadeoutDuration) {
         mCommandQueue.appTransitionStarting(mDisplayId, startTime + fadeoutDuration
                         - LightBarTransitionsController.DEFAULT_TINT_ANIMATION_DURATION,
                 LightBarTransitionsController.DEFAULT_TINT_ANIMATION_DURATION, true);
@@ -3184,7 +3187,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
         mCommandQueue.appTransitionStarting(mDisplayId,
                     startTime - LightBarTransitionsController.DEFAULT_TINT_ANIMATION_DURATION,
                     LightBarTransitionsController.DEFAULT_TINT_ANIMATION_DURATION, true);
-        mKeyguardStateController.notifyKeyguardFadingAway(delay, fadeoutDuration, isBypassFading);
+        mKeyguardStateController.notifyKeyguardFadingAway(delay, fadeoutDuration);
     }
 
     /**
@@ -3497,11 +3500,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
     @Override
     public void onTrackingStopped(boolean expand) {
-        if (mState == StatusBarState.KEYGUARD || mState == StatusBarState.SHADE_LOCKED) {
-            if (!expand && !mKeyguardStateController.canDismissLockScreen()) {
-                mStatusBarKeyguardViewManager.showBouncer(false /* scrimmed */);
-            }
-        }
     }
 
     // TODO: Figure out way to remove these.
@@ -3911,7 +3909,8 @@ public class CentralSurfacesImpl extends CoreStartable implements
             mScrimController.transitionTo(ScrimState.AOD);
         } else if (mKeyguardStateController.isShowing() && !isOccluded() && !unlocking) {
             mScrimController.transitionTo(ScrimState.KEYGUARD);
-        } else if (mKeyguardStateController.isShowing() && mKeyguardUpdateMonitor.isDreaming()) {
+        } else if (mKeyguardStateController.isShowing() && mKeyguardUpdateMonitor.isDreaming()
+                && !unlocking) {
             mScrimController.transitionTo(ScrimState.DREAMING);
         } else {
             mScrimController.transitionTo(ScrimState.UNLOCKED, mUnlockScrimCallback);

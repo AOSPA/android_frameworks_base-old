@@ -124,8 +124,8 @@ import android.view.ContentRecordingSession;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.Gravity;
-import android.view.IDisplayWindowRotationCallback;
-import android.view.IDisplayWindowRotationController;
+import android.view.IDisplayChangeWindowCallback;
+import android.view.IDisplayChangeWindowController;
 import android.view.ISystemGestureExclusionListener;
 import android.view.IWindowManager;
 import android.view.InsetsState;
@@ -136,6 +136,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.View;
 import android.view.WindowManager;
+import android.window.DisplayAreaInfo;
 import android.window.IDisplayAreaOrganizer;
 import android.window.WindowContainerToken;
 
@@ -1801,15 +1802,16 @@ public class DisplayContentTests extends WindowTestsBase {
                     return true;
                 }).when(dc).updateDisplayOverrideConfigurationLocked();
         final boolean[] called = new boolean[1];
-        mWm.mDisplayRotationController =
-                new IDisplayWindowRotationController.Stub() {
+        mWm.mDisplayChangeController =
+                new IDisplayChangeWindowController.Stub() {
                     @Override
-                    public void onRotateDisplay(int displayId, int fromRotation, int toRotation,
-                            IDisplayWindowRotationCallback callback) {
+                    public void onDisplayChange(int displayId, int fromRotation, int toRotation,
+                            DisplayAreaInfo newDisplayAreaInfo,
+                            IDisplayChangeWindowCallback callback) throws RemoteException {
                         called[0] = true;
 
                         try {
-                            callback.continueRotateDisplay(toRotation, null);
+                            callback.continueDisplayChange(null);
                         } catch (RemoteException e) {
                             assertTrue(false);
                         }
@@ -1843,13 +1845,14 @@ public class DisplayContentTests extends WindowTestsBase {
         // Rotate 180 degree so the display doesn't have configuration change. This condition is
         // used for the later verification of stop-freezing (without setting mWaitingForConfig).
         doReturn((dr.getRotation() + 2) % 4).when(dr).rotationForOrientation(anyInt(), anyInt());
-        mWm.mDisplayRotationController =
-                new IDisplayWindowRotationController.Stub() {
+        mWm.mDisplayChangeController =
+                new IDisplayChangeWindowController.Stub() {
                     @Override
-                    public void onRotateDisplay(int displayId, int fromRotation, int toRotation,
-                            IDisplayWindowRotationCallback callback) {
+                    public void onDisplayChange(int displayId, int fromRotation, int toRotation,
+                            DisplayAreaInfo newDisplayAreaInfo,
+                            IDisplayChangeWindowCallback callback) throws RemoteException {
                         try {
-                            callback.continueRotateDisplay(toRotation, null);
+                            callback.continueDisplayChange(null);
                         } catch (RemoteException e) {
                             assertTrue(false);
                         }
@@ -2212,23 +2215,28 @@ public class DisplayContentTests extends WindowTestsBase {
      */
     @Test
     public void testCreateTestDisplayContentFromDimensions() {
-        final int displayWidth = 1000;
-        final int displayHeight = 2000;
+        final int displayWidth = 540;
+        final int displayHeight = 960;
+        final int density = 192;
+        final int expectedWidthDp = 450; // = 540/(192/160)
+        final int expectedHeightDp = 800; // = 960/(192/160)
         final int windowingMode = WINDOWING_MODE_FULLSCREEN;
         final boolean ignoreOrientationRequests = false;
         final float fixedOrientationLetterboxRatio = 0;
         final DisplayContent testDisplayContent = new TestDisplayContent.Builder(mAtm, displayWidth,
-                displayHeight).build();
+                displayHeight).setDensityDpi(density).build();
 
         // test display info
         final DisplayInfo di = testDisplayContent.getDisplayInfo();
         assertEquals(displayWidth, di.logicalWidth);
         assertEquals(displayHeight, di.logicalHeight);
-        assertEquals(TestDisplayContent.DEFAULT_LOGICAL_DISPLAY_DENSITY, di.logicalDensityDpi);
+        assertEquals(density, di.logicalDensityDpi);
 
         // test configuration
-        final WindowConfiguration windowConfig = testDisplayContent.getConfiguration()
-                .windowConfiguration;
+        final Configuration config = testDisplayContent.getConfiguration();
+        assertEquals(expectedWidthDp, config.screenWidthDp);
+        assertEquals(expectedHeightDp, config.screenHeightDp);
+        final WindowConfiguration windowConfig = config.windowConfiguration;
         assertEquals(displayWidth, windowConfig.getBounds().width());
         assertEquals(displayHeight, windowConfig.getBounds().height());
         assertEquals(windowingMode, windowConfig.getWindowingMode());
@@ -2460,7 +2468,7 @@ public class DisplayContentTests extends WindowTestsBase {
         ContentRecordingSession session = ContentRecordingSession.createDisplaySession(
                 tokenToMirror);
         session.setDisplayId(displayId);
-        mWm.setContentRecordingSession(session);
+        mWm.mContentRecordingController.setContentRecordingSessionLocked(session, mWm);
         actualDC.updateRecording();
 
         // THEN mirroring is not started, since a null surface indicates the VirtualDisplay is off.
@@ -2489,7 +2497,7 @@ public class DisplayContentTests extends WindowTestsBase {
         ContentRecordingSession session = ContentRecordingSession.createDisplaySession(
                 tokenToMirror);
         session.setDisplayId(displayId);
-        mWm.setContentRecordingSession(session);
+        mWm.mContentRecordingController.setContentRecordingSessionLocked(session, mWm);
         mWm.mRoot.onDisplayAdded(displayId);
 
         // WHEN getting the DisplayContent for the new virtual display.

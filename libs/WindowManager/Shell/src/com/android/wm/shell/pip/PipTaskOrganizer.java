@@ -367,7 +367,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         }
         mPipBoundsState.setBounds(destinationBounds);
         mSwipePipToHomeOverlay = overlay;
-        if (ENABLE_SHELL_TRANSITIONS) {
+        if (ENABLE_SHELL_TRANSITIONS && overlay != null) {
             // With Shell transition, the overlay was attached to the remote transition leash, which
             // will be removed when the current transition is finished, so we need to reparent it
             // to the actual Task surface now.
@@ -434,7 +434,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             }
         }
 
-        final Rect destinationBounds = mPipBoundsState.getDisplayBounds();
+        final Rect destinationBounds = getExitDestinationBounds();
         final int direction = syncWithSplitScreenBounds(destinationBounds, requestEnterSplit)
                 ? TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN
                 : TRANSITION_DIRECTION_LEAVE_PIP;
@@ -487,6 +487,11 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
                 animator.applySurfaceControlTransaction(mLeash, t, FRACTION_START);
             }
         });
+    }
+
+    /** Returns the bounds to restore to when exiting PIP mode. */
+    public Rect getExitDestinationBounds() {
+        return mPipBoundsState.getDisplayBounds();
     }
 
     private void exitLaunchIntoPipTask(WindowContainerTransaction wct) {
@@ -969,6 +974,17 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mDeferredAnimEndTransaction = null;
     }
 
+    /** Explicitly set the visibility of PiP window. */
+    public void setPipVisibility(boolean visible) {
+        if (!isInPip()) {
+            return;
+        }
+        final SurfaceControl.Transaction tx =
+                mSurfaceControlTransactionFactory.getTransaction();
+        mSurfaceTransactionHelper.alpha(tx, mLeash, visible ? 1f : 0f);
+        tx.apply();
+    }
+
     @Override
     public void onDisplayConfigurationChanged(int displayId, Configuration newConfig) {
         mCurrentRotation = newConfig.windowConfiguration.getRotation();
@@ -1089,11 +1105,13 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
      * Handles all changes to the PictureInPictureParams.
      */
     protected void applyNewPictureInPictureParams(@NonNull PictureInPictureParams params) {
-        if (PipUtils.aspectRatioChanged(params.getAspectRatioFloat(),
+        if (mDeferredTaskInfo != null || PipUtils.aspectRatioChanged(params.getAspectRatioFloat(),
                 mPictureInPictureParams.getAspectRatioFloat())) {
             mPipParamsChangedForwarder.notifyAspectRatioChanged(params.getAspectRatioFloat());
         }
-        if (PipUtils.remoteActionsChanged(params.getActions(), mPictureInPictureParams.getActions())
+        if (mDeferredTaskInfo != null
+                || PipUtils.remoteActionsChanged(params.getActions(),
+                mPictureInPictureParams.getActions())
                 || !PipUtils.remoteActionsMatch(params.getCloseAction(),
                 mPictureInPictureParams.getCloseAction())) {
             mPipParamsChangedForwarder.notifyActionsChanged(params.getActions(),
@@ -1285,7 +1303,8 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
      */
     public void scheduleOffsetPip(Rect originalBounds, int offset, int duration,
             Consumer<Rect> updateBoundsCallback) {
-        if (mPipTransitionState.shouldBlockResizeRequest()) {
+        if (mPipTransitionState.shouldBlockResizeRequest()
+                || mPipTransitionState.getInSwipePipToHomeTransition()) {
             return;
         }
         if (mWaitForFixedRotation) {

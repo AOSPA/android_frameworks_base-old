@@ -118,6 +118,7 @@ import static com.android.server.wm.DisplayContent.IME_TARGET_CONTROL;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
@@ -172,6 +173,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
@@ -224,6 +226,7 @@ import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.MergedConfiguration;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
@@ -236,10 +239,10 @@ import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.ICrossWindowBlurEnabledListener;
+import android.view.IDisplayChangeWindowController;
 import android.view.IDisplayFoldListener;
 import android.view.IDisplayWindowInsetsController;
 import android.view.IDisplayWindowListener;
-import android.view.IDisplayWindowRotationController;
 import android.view.IInputFilter;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedTaskListener;
@@ -684,9 +687,9 @@ public class WindowManagerService extends IWindowManager.Stub
     final WallpaperVisibilityListeners mWallpaperVisibilityListeners =
             new WallpaperVisibilityListeners();
 
-    IDisplayWindowRotationController mDisplayRotationController = null;
-    private final DeathRecipient mDisplayRotationControllerDeath =
-            () -> mDisplayRotationController = null;
+    IDisplayChangeWindowController mDisplayChangeController = null;
+    private final DeathRecipient mDisplayChangeControllerDeath =
+            () -> mDisplayChangeController = null;
 
     final DisplayWindowListenerController mDisplayNotificationController;
     final TaskSystemBarsListenerController mTaskSystemBarsListenerController;
@@ -2947,16 +2950,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    /**
-     * Updates the current content mirroring session.
-     */
-    @Override
-    public void setContentRecordingSession(@Nullable ContentRecordingSession incomingSession) {
-        synchronized (mGlobalLock) {
-            mContentRecordingController.setContentRecordingSessionLocked(incomingSession, this);
-        }
-    }
-
     // TODO(multi-display): remove when no default display use case.
     void prepareAppTransitionNone() {
         if (!checkCallingPermission(MANAGE_APP_TOKENS, "prepareAppTransition()")) {
@@ -3044,13 +3037,22 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+
     void cleanupRecentsAnimation(@RecentsAnimationController.ReorderMode int reorderMode) {
         if (mRecentsAnimationController != null) {
             final RecentsAnimationController controller = mRecentsAnimationController;
             mRecentsAnimationController = null;
             controller.cleanupAnimation(reorderMode);
-            // TODO(mult-display): currently only default display support recents animation.
-            getDefaultDisplayContentLocked().mAppTransition.updateBooster();
+            // TODO(multi-display): currently only default display support recents animation.
+            final DisplayContent dc = getDefaultDisplayContentLocked();
+            if (dc.mAppTransition.isTransitionSet()) {
+                dc.mSkipAppTransitionAnimation = true;
+            }
+            dc.forAllWindowContainers((wc) -> {
+                if (wc.isAnimating(TRANSITION, ANIMATION_TYPE_APP_TRANSITION)) {
+                    wc.cancelAnimation();
+                }
+            });
         }
     }
 
@@ -4269,12 +4271,13 @@ public class WindowManagerService extends IWindowManager.Stub
                                 .notifyOnActivityRotation(displayContent.mDisplayId);
                     }
 
-                    final boolean pendingRemoteRotation = rotationChanged
-                            && (displayContent.getDisplayRotation().isWaitingForRemoteRotation()
+                    final boolean pendingRemoteDisplayChange = rotationChanged
+                            && (displayContent.mRemoteDisplayChangeController
+                                    .isWaitingForRemoteDisplayChange()
                             || displayContent.mTransitionController.isCollecting());
                     // Even if alwaysSend, we are waiting for a transition or remote to provide
-                    // rotated configuration, so we can't update configuration yet.
-                    if (!pendingRemoteRotation) {
+                    // updated configuration, so we can't update configuration yet.
+                    if (!pendingRemoteDisplayChange) {
                         if (!rotationChanged || forceRelayout) {
                             displayContent.setLayoutNeeded();
                             layoutNeeded = true;
@@ -4306,17 +4309,17 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void setDisplayWindowRotationController(IDisplayWindowRotationController controller) {
+    public void setDisplayChangeWindowController(IDisplayChangeWindowController controller) {
         mAtmService.enforceTaskPermission("setDisplayWindowRotationController");
         try {
             synchronized (mGlobalLock) {
-                if (mDisplayRotationController != null) {
-                    mDisplayRotationController.asBinder().unlinkToDeath(
-                            mDisplayRotationControllerDeath, 0);
-                    mDisplayRotationController = null;
+                if (mDisplayChangeController != null) {
+                    mDisplayChangeController.asBinder().unlinkToDeath(
+                            mDisplayChangeControllerDeath, 0);
+                    mDisplayChangeController = null;
                 }
-                controller.asBinder().linkToDeath(mDisplayRotationControllerDeath, 0);
-                mDisplayRotationController = controller;
+                controller.asBinder().linkToDeath(mDisplayChangeControllerDeath, 0);
+                mDisplayChangeController = controller;
             }
         } catch (RemoteException e) {
             throw new RuntimeException("Unable to set rotation controller");
@@ -6121,24 +6124,24 @@ public class WindowManagerService extends IWindowManager.Stub
         final DisplayContent displayContent = mRoot.getDisplayContent(mFrozenDisplayId);
         final int numOpeningApps;
         final boolean waitingForConfig;
-        final boolean waitingForRemoteRotation;
+        final boolean waitingForRemoteDisplayChange;
         if (displayContent != null) {
             numOpeningApps = displayContent.mOpeningApps.size();
             waitingForConfig = displayContent.mWaitingForConfig;
-            waitingForRemoteRotation =
-                    displayContent.getDisplayRotation().isWaitingForRemoteRotation();
+            waitingForRemoteDisplayChange = displayContent.mRemoteDisplayChangeController
+                    .isWaitingForRemoteDisplayChange();
         } else {
-            waitingForConfig = waitingForRemoteRotation = false;
+            waitingForConfig = waitingForRemoteDisplayChange = false;
             numOpeningApps = 0;
         }
-        if (waitingForConfig || waitingForRemoteRotation || mAppsFreezingScreen > 0
+        if (waitingForConfig || waitingForRemoteDisplayChange || mAppsFreezingScreen > 0
                 || mWindowsFreezingScreen == WINDOWS_FREEZING_SCREENS_ACTIVE
                 || mClientFreezingScreen || numOpeningApps > 0) {
             ProtoLog.d(WM_DEBUG_ORIENTATION, "stopFreezingDisplayLocked: Returning "
-                    + "waitingForConfig=%b, waitingForRemoteRotation=%b, "
+                    + "waitingForConfig=%b, waitingForRemoteDisplayChange=%b, "
                     + "mAppsFreezingScreen=%d, mWindowsFreezingScreen=%d, "
                     + "mClientFreezingScreen=%b, mOpeningApps.size()=%d",
-                    waitingForConfig, waitingForRemoteRotation,
+                    waitingForConfig, waitingForRemoteDisplayChange,
                     mAppsFreezingScreen, mWindowsFreezingScreen,
                     mClientFreezingScreen, numOpeningApps);
             return;
@@ -7779,6 +7782,13 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
+        public Pair<Matrix, MagnificationSpec> getWindowTransformationMatrixAndMagnificationSpec(
+                IBinder token) {
+            return mAccessibilityController
+                    .getWindowTransformationMatrixAndMagnificationSpec(token);
+        }
+
+        @Override
         public void waitForAllWindowsDrawn(Runnable callback, long timeout, int displayId) {
             final WindowContainer container = displayId == INVALID_DISPLAY
                     ? mRoot : mRoot.getDisplayContent(displayId);
@@ -8251,23 +8261,23 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void replaceInputSurfaceTouchableRegionWithWindowCrop(
-                @NonNull SurfaceControl inputSurface,
-                @NonNull InputWindowHandle inputWindowHandle,
-                @NonNull IBinder windowToken) {
+        public boolean isPointInsideWindow(@NonNull IBinder windowToken, int displayId,
+                float displayX, float displayY) {
             synchronized (mGlobalLock) {
                 final WindowState w = mWindowMap.get(windowToken);
-                if (w == null) {
-                    return;
+                if (w == null || w.getDisplayId() != displayId) {
+                    return false;
                 }
-                // Make a copy of the InputWindowHandle to avoid leaking the window's
-                // SurfaceControl.
-                final InputWindowHandle localHandle = new InputWindowHandle(inputWindowHandle);
-                localHandle.replaceTouchableRegionWithCrop(w.getSurfaceControl());
-                final SurfaceControl.Transaction t = mTransactionFactory.get();
-                t.setInputWindowInfo(inputSurface, localHandle);
-                t.apply();
-                t.close();
+
+                return w.getBounds().contains((int) displayX, (int) displayY);
+            }
+        }
+
+        @Override
+        public void setContentRecordingSession(@Nullable ContentRecordingSession incomingSession) {
+            synchronized (mGlobalLock) {
+                mContentRecordingController.setContentRecordingSessionLocked(incomingSession,
+                        WindowManagerService.this);
             }
         }
     }
