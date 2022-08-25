@@ -1028,6 +1028,18 @@ public class InternetDialogController implements AccessPointController.AccessPoi
 
         @Override
         public void onSubscriptionsChanged() {
+            List<SubscriptionInfo> subInfos = mSubscriptionManager.getActiveSubscriptionInfoList();
+            int numberOfActiveSubscriptions = subInfos.size();
+            /*
+             * When there is only one subscription, there is no nDDS sub, so call state of nDDS is
+             * idle by default. Ensure that call state of nDDS is correctly updated when number of
+             * subscriptions change at runtime.
+             */
+            if (numberOfActiveSubscriptions == 1){
+                Log.d(TAG, "Resetting call state of nDDS");
+                mNonDdsCallState = TelephonyManager.CALL_STATE_IDLE;
+            }
+
             updateListener();
         }
     }
