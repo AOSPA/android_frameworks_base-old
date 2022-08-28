@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "1ad8538b_bfa24148",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-08-28T20:27:45Z",
+      "side": 1,
+      "message": "I would like 20% and 10%\u0027s battery to turn red inside to indicate low battery. Seems like good UX to me",
+      "revId": "0a48c0de82b5b589405be54faa99eb0b677e11bc",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
