@@ -16,6 +16,24 @@
       "message": "https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/19913 is a smaller delta.  I could go either way but that change may make future AOSP merges easier.",
       "revId": "009960b041279e21ee9af8db8425352bf56432a5",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "a6578f6c_a29e0dc2",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-08-28T18:51:10Z",
+      "side": 1,
+      "message": "I brought that up in a chat but was vetoed because of the \"\u0026\u0026 false\" being ugly - adding Adithya",
+      "parentUuid": "5989cd65_eaedbb82",
+      "revId": "009960b041279e21ee9af8db8425352bf56432a5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
