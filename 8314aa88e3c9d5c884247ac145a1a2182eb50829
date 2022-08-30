@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "db0e9369_6bebd0aa",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-08-30T00:01:37Z",
+      "side": 1,
+      "message": "already pushed here: https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/23157 altho different values",
+      "revId": "8314aa88e3c9d5c884247ac145a1a2182eb50829",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
