@@ -21,6 +21,7 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.people.widget.PeopleSpaceWidgetManager
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption
 import com.android.systemui.statusbar.NotificationListener
+import com.android.systemui.statusbar.NotificationMediaManager
 import com.android.systemui.statusbar.NotificationPresenter
 import com.android.systemui.statusbar.notification.AnimatedImageNotificationManager
 import com.android.systemui.statusbar.notification.NotifPipelineFlags
@@ -41,6 +42,7 @@ import com.android.systemui.statusbar.notification.collection.provider.DebugMode
 import com.android.systemui.statusbar.notification.collection.render.NotifStackController
 import com.android.systemui.statusbar.notification.interruption.HeadsUpController
 import com.android.systemui.statusbar.notification.interruption.HeadsUpViewBinder
+import com.android.systemui.statusbar.notification.logging.NotificationLogger
 import com.android.systemui.statusbar.notification.row.NotifBindPipelineInitializer
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer
 import com.android.systemui.statusbar.phone.CentralSurfaces
@@ -63,7 +65,6 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class NotificationsControllerImpl @Inject constructor(
-    private val centralSurfaces: Lazy<CentralSurfaces>,
     private val notifPipelineFlags: NotifPipelineFlags,
     private val notificationListener: NotificationListener,
     private val entryManager: NotificationEntryManager,
@@ -75,12 +76,14 @@ class NotificationsControllerImpl @Inject constructor(
     private val targetSdkResolver: TargetSdkResolver,
     private val newNotifPipelineInitializer: Lazy<NotifPipelineInitializer>,
     private val notifBindPipelineInitializer: NotifBindPipelineInitializer,
+    private val notificationLogger: NotificationLogger,
     private val deviceProvisionedController: DeviceProvisionedController,
     private val notificationRowBinder: NotificationRowBinderImpl,
     private val bindEventManagerImpl: BindEventManagerImpl,
     private val remoteInputUriController: RemoteInputUriController,
     private val groupManagerLegacy: Lazy<NotificationGroupManagerLegacy>,
     private val groupAlertTransferHelper: NotificationGroupAlertTransferHelper,
+    private val notificationsMediaManager: NotificationMediaManager,
     private val headsUpManager: HeadsUpManager,
     private val headsUpController: HeadsUpController,
     private val headsUpViewBinder: HeadsUpViewBinder,
@@ -91,6 +94,7 @@ class NotificationsControllerImpl @Inject constructor(
 ) : NotificationsController {
 
     override fun initialize(
+        centralSurfaces: CentralSurfaces,
         presenter: NotificationPresenter,
         listContainer: NotificationListContainer,
         stackController: NotifStackController,
@@ -108,8 +112,8 @@ class NotificationsControllerImpl @Inject constructor(
 
         notificationRowBinder.setNotificationClicker(
                 clickerBuilder.build(
-                    Optional.of(
-                        centralSurfaces.get()), bubblesOptional, notificationActivityStarter))
+                    Optional.ofNullable(centralSurfaces), bubblesOptional,
+                        notificationActivityStarter))
         notificationRowBinder.setUpWithPresenter(
                 presenter,
                 listContainer,
@@ -118,34 +122,15 @@ class NotificationsControllerImpl @Inject constructor(
         notifBindPipelineInitializer.initialize()
         animatedImageNotificationManager.bind()
 
-        if (INITIALIZE_NEW_PIPELINE) {
-            newNotifPipelineInitializer.get().initialize(
-                    notificationListener,
-                    notificationRowBinder,
-                    listContainer,
-                    stackController)
-        }
+        newNotifPipelineInitializer.get().initialize(
+                notificationListener,
+                notificationRowBinder,
+                listContainer,
+                stackController)
 
-        if (notifPipelineFlags.isNewPipelineEnabled()) {
-            targetSdkResolver.initialize(notifPipeline.get())
-            // TODO
-        } else {
-            targetSdkResolver.initialize(entryManager)
-            remoteInputUriController.attach(entryManager)
-            groupAlertTransferHelper.bind(entryManager, groupManagerLegacy.get())
-            bindEventManagerImpl.attachToLegacyPipeline(entryManager)
-            headsUpManager.addListener(groupManagerLegacy.get())
-            headsUpManager.addListener(groupAlertTransferHelper)
-            headsUpController.attach(entryManager, headsUpManager)
-            groupManagerLegacy.get().setHeadsUpManager(headsUpManager)
-            groupAlertTransferHelper.setHeadsUpManager(headsUpManager)
-            debugModeFilterProvider.registerInvalidationListener {
-                entryManager.updateNotifications("debug mode filter changed")
-            }
-
-            entryManager.initialize(notificationListener, legacyRanker)
-        }
-
+        targetSdkResolver.initialize(notifPipeline.get())
+        notificationsMediaManager.setUpWithPresenter(presenter)
+        notificationLogger.setUpWithContainer(listContainer)
         peopleSpaceWidgetManager.attach(notificationListener)
     }
 

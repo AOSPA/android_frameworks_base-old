@@ -32,11 +32,10 @@ import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
-import static android.view.WindowManager.TRANSIT_CLOSE;
-import static android.view.WindowManager.TRANSIT_FLAG_APP_CRASHED;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_PIP;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
+import static android.view.WindowManager.TRANSIT_WAKE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_KEEP_SCREEN_ON;
@@ -2056,6 +2055,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                             task.mLastRecentsAnimationTransaction,
                             task.mLastRecentsAnimationOverlay);
                     task.clearLastRecentsAnimationTransaction(false /* forceRemoveOverlay */);
+                } else {
+                    // Reset the original task surface
+                    task.resetSurfaceControlTransforms();
                 }
 
                 // The organized TaskFragment is becoming empty because this activity is reparented
@@ -2122,6 +2124,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             rootTask.setWindowingMode(WINDOWING_MODE_PINNED);
             // Set the launch bounds for launch-into-pip Activity on the root task.
             if (r.getOptions() != null && r.getOptions().isLaunchIntoPip()) {
+                // Record the snapshot now, it will be later fetched for content-pip animation.
+                // We do this early in the process to make sure the right snapshot is used for
+                // entering content-pip animation.
+                mWindowManager.mTaskSnapshotController.recordTaskSnapshot(
+                        task, false /* allowSnapshotHome */);
                 rootTask.setBounds(r.getOptions().getLaunchBounds());
             }
             rootTask.setDeferTaskAppear(false);
@@ -2438,6 +2445,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 continue;
             }
 
+            // Prepare transition before resume top activity, so it can be collected.
+            if (!displayShouldSleep && display.isDefaultDisplay
+                    && !display.getDisplayPolicy().isAwake()
+                    && display.mTransitionController.isShellTransitionsEnabled()
+                    && !display.mTransitionController.isCollecting()) {
+                display.mTransitionController.requestTransitionIfNeeded(TRANSIT_WAKE,
+                        0 /* flags */, null /* trigger */, display);
+            }
             // Set the sleeping state of the root tasks on the display.
             display.forAllRootTasks(rootTask -> {
                 if (displayShouldSleep) {
@@ -2821,23 +2836,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
         });
         return result[0];
-    }
-
-    void handleAppCrash(WindowProcessController app) {
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                RootWindowContainer::handleAppCrash, PooledLambda.__(ActivityRecord.class), app);
-        forAllActivities(c);
-        c.recycle();
-    }
-
-    private static void handleAppCrash(ActivityRecord r, WindowProcessController app) {
-        if (r.app != app) return;
-        Slog.w(TAG, "  Force finishing activity "
-                + r.intent.getComponent().flattenToShortString());
-        r.detachFromProcess();
-        r.mDisplayContent.requestTransitionAndLegacyPrepare(TRANSIT_CLOSE,
-                TRANSIT_FLAG_APP_CRASHED);
-        r.destroyIfPossible("handleAppCrashed");
     }
 
     ActivityRecord findActivity(Intent intent, ActivityInfo info, boolean compareIntentFilters) {

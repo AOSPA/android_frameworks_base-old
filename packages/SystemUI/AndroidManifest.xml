@@ -716,7 +716,7 @@
 
         <service
             android:name=".dreams.DreamOverlayService"
-            android:enabled="@bool/config_dreamOverlayServiceEnabled"
+            android:enabled="false"
             android:exported="true" />
 
         <activity android:name=".keyguard.WorkLockActivity"
@@ -791,6 +791,7 @@
                   android:theme="@style/EditTextActivity"
                   android:exported="false"
                   android:excludeFromRecents="true"
+                  android:label="@string/clipboard_editor"
                   />
 
         <activity android:name=".controls.management.ControlsProviderSelectorActivity"

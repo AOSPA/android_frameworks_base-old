@@ -756,8 +756,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = createActivityWithTask();
         ActivityRecord topActivity = new ActivityBuilder(mAtm).setTask(activity.getTask()).build();
         topActivity.setOccludesParent(false);
-        // The requested occluding state doesn't affect whether it fills parent.
-        assertTrue(topActivity.fillsParent());
+        // The requested occluding state doesn't affect whether it can decide orientation.
+        assertTrue(topActivity.providesOrientation());
         activity.setState(STOPPED, "Testing");
         activity.setVisibility(true);
         activity.makeActiveIfNeeded(null /* activeActivity */);
@@ -1158,6 +1158,45 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertTrue(activity2.inTransition());
         assertEquals(lastTransition, testPlayer.mLastTransit);
         assertTrue(lastTransition.allReady());
+    }
+
+    @Test
+    public void testFinishActivityIfPossible_sendResultImmediately() {
+        // Create activity representing the source of the activity result.
+        final ComponentName sourceComponent = ComponentName.createRelative(
+                DEFAULT_COMPONENT_PACKAGE_NAME, ".SourceActivity");
+        final ComponentName targetComponent = ComponentName.createRelative(
+                sourceComponent.getPackageName(), ".TargetActivity");
+
+        final ActivityRecord sourceActivity = new ActivityBuilder(mWm.mAtmService)
+                .setComponent(sourceComponent)
+                .setLaunchMode(ActivityInfo.LAUNCH_SINGLE_INSTANCE)
+                .setCreateTask(true)
+                .build();
+        sourceActivity.finishing = false;
+        sourceActivity.setState(STOPPED, "test");
+
+        final ActivityRecord targetActivity = new ActivityBuilder(mWm.mAtmService)
+                .setComponent(targetComponent)
+                .setTargetActivity(sourceComponent.getClassName())
+                .setLaunchMode(ActivityInfo.LAUNCH_SINGLE_INSTANCE)
+                .setCreateTask(true)
+                .setOnTop(true)
+                .build();
+        targetActivity.finishing = false;
+        targetActivity.setState(RESUMED, "test");
+        targetActivity.resultTo = sourceActivity;
+        targetActivity.setForceSendResultForMediaProjection();
+
+        clearInvocations(mAtm.getLifecycleManager());
+
+        targetActivity.finishIfPossible(0, new Intent(), null, "test", false /* oomAdj */);
+
+        try {
+            verify(mAtm.getLifecycleManager(), atLeastOnce()).scheduleTransaction(
+                    any(ClientTransaction.class));
+        } catch (RemoteException ignored) {
+        }
     }
 
     /**

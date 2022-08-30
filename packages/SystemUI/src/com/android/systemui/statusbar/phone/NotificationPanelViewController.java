@@ -32,6 +32,7 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_N
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
+import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_FOLD_TO_AOD;
 import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_CLOSED;
@@ -194,6 +195,7 @@ import com.android.systemui.statusbar.policy.KeyguardUserSwitcherView;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
+import com.android.systemui.util.Compile;
 import com.android.systemui.util.LargeScreenUtils;
 import com.android.systemui.util.ListenerSet;
 import com.android.systemui.util.Utils;
@@ -218,7 +220,8 @@ import javax.inject.Provider;
 @CentralSurfacesComponent.CentralSurfacesScope
 public class NotificationPanelViewController extends PanelViewController {
 
-    private static final boolean DEBUG_LOGCAT = Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean DEBUG_LOGCAT = Compile.IS_DEBUG && Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean SPEW_LOGCAT = Compile.IS_DEBUG && Log.isLoggable(TAG, Log.VERBOSE);
     private static final boolean DEBUG_DRAWABLE = false;
 
     /**
@@ -649,6 +652,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private int mScrimCornerRadius;
     private int mScreenCornerRadius;
     private boolean mQSAnimatingHiddenFromCollapsed;
+    private boolean mUseLargeScreenShadeHeader;
 
     private int mQsClipTop;
     private int mQsClipBottom;
@@ -1142,18 +1146,20 @@ public class NotificationPanelViewController extends PanelViewController {
         final boolean splitShadeChanged = mSplitShadeEnabled != newSplitShadeEnabled;
         mSplitShadeEnabled = newSplitShadeEnabled;
 
-        boolean useLargeScreenShadeHeader =
-                LargeScreenUtils.shouldUseLargeScreenShadeHeader(mView.getResources());
         if (mQs != null) {
             mQs.setInSplitShade(mSplitShadeEnabled);
         }
+
+        mUseLargeScreenShadeHeader =
+                LargeScreenUtils.shouldUseLargeScreenShadeHeader(mView.getResources());
+
         mLargeScreenShadeHeaderHeight =
                 mResources.getDimensionPixelSize(R.dimen.large_screen_shade_header_height);
-        mQuickQsHeaderHeight = useLargeScreenShadeHeader ? mLargeScreenShadeHeaderHeight :
+        mQuickQsHeaderHeight = mUseLargeScreenShadeHeader ? mLargeScreenShadeHeaderHeight :
                 SystemBarUtils.getQuickQsOffsetHeight(mView.getContext());
-        int topMargin = useLargeScreenShadeHeader ? mLargeScreenShadeHeaderHeight :
+        int topMargin = mUseLargeScreenShadeHeader ? mLargeScreenShadeHeaderHeight :
                 mResources.getDimensionPixelSize(R.dimen.notification_panel_margin_top);
-        mLargeScreenShadeHeaderController.setActive(useLargeScreenShadeHeader);
+        mLargeScreenShadeHeaderController.setActive(mUseLargeScreenShadeHeader);
         mAmbientState.setStackTopMargin(topMargin);
         mNotificationsQSContainerController.updateResources();
 
@@ -1305,6 +1311,8 @@ public class NotificationPanelViewController extends PanelViewController {
     private void updateMaxDisplayedNotifications(boolean recompute) {
         if (recompute) {
             mMaxAllowedKeyguardNotifications = Math.max(computeMaxKeyguardNotifications(), 1);
+        } else {
+            if (SPEW_LOGCAT) Log.d(TAG, "Skipping computeMaxKeyguardNotifications() by request");
         }
 
         if (mKeyguardShowing && !mKeyguardBypassController.getBypassEnabled()) {
@@ -1527,37 +1535,77 @@ public class NotificationPanelViewController extends PanelViewController {
         return (mQs != null ? mQs.getHeader().getHeight() : 0) + mQsPeekHeight;
     }
 
-    /**
-     * @return Space available to show notifications on lockscreen.
-     */
+    /** Returns space between top of lock icon and bottom of NotificationStackScrollLayout. */
+    private float getLockIconPadding() {
+        float lockIconPadding = 0f;
+        if (mLockIconViewController.getTop() != 0f) {
+            lockIconPadding = mNotificationStackScrollLayoutController.getBottom()
+                    - mLockIconViewController.getTop();
+        }
+        return lockIconPadding;
+    }
+
+    /** Returns space available to show notifications on lockscreen. */
     @VisibleForTesting
-    float getSpaceForLockscreenNotifications() {
+    float getVerticalSpaceForLockscreenNotifications() {
+        final float lockIconPadding = getLockIconPadding();
+
+        float bottomPadding = Math.max(lockIconPadding,
+                Math.max(mIndicationBottomPadding, mAmbientIndicationBottomPadding));
+        mKeyguardNotificationBottomPadding = bottomPadding;
+
         float staticTopPadding = mClockPositionAlgorithm.getLockscreenMinStackScrollerPadding()
                 // getMinStackScrollerPadding is from the top of the screen,
                 // but we need it from the top of the NSSL.
                 - mNotificationStackScrollLayoutController.getTop();
-
-        // Space between bottom of notifications and top of lock icon or udfps background.
-        float lockIconPadding = mLockIconViewController.getTop();
-        if (mLockIconViewController.getTop() != 0) {
-            lockIconPadding = mNotificationStackScrollLayoutController.getBottom()
-                    - mLockIconViewController.getTop()
-                    - mShelfAndLockIconOverlap;
-        }
-
-        float bottomPadding = Math.max(lockIconPadding,
-                Math.max(mIndicationBottomPadding, mAmbientIndicationBottomPadding));
-
-        mKeyguardNotificationBottomPadding = bottomPadding;
         mKeyguardNotificationTopPadding = staticTopPadding;
 
         // To debug the available space, enable debug lines in this class. If you change how the
         // available space is calculated, please also update those lines.
-        float availableSpace =
+        final float verticalSpace =
                 mNotificationStackScrollLayoutController.getHeight()
                         - staticTopPadding
                         - bottomPadding;
-        return availableSpace;
+
+        if (SPEW_LOGCAT) {
+            Log.i(TAG, "\n");
+            Log.i(TAG, "staticTopPadding[" + staticTopPadding
+                    + "] = Clock.padding["
+                    + mClockPositionAlgorithm.getLockscreenMinStackScrollerPadding()
+                    + "] - NSSLC.top[" + mNotificationStackScrollLayoutController.getTop()
+                    + "]"
+            );
+            Log.i(TAG, "bottomPadding[" + bottomPadding
+                    + "] = max(ambientIndicationBottomPadding[" + mAmbientIndicationBottomPadding
+                    + "], mIndicationBottomPadding[" + mIndicationBottomPadding
+                    + "], lockIconPadding[" + lockIconPadding
+                    + "])"
+            );
+            Log.i(TAG, "verticalSpaceForNotifications[" + verticalSpace
+                    + "] = NSSL.height[" + mNotificationStackScrollLayoutController.getHeight()
+                    + "] - staticTopPadding[" + staticTopPadding
+                    + "] - bottomPadding[" + bottomPadding
+                    + "]"
+            );
+        }
+        return verticalSpace;
+    }
+
+    /** Returns extra space available to show the shelf on lockscreen */
+    @VisibleForTesting
+    float getVerticalSpaceForLockscreenShelf() {
+        final float lockIconPadding = getLockIconPadding();
+
+        final float noShelfOverlapBottomPadding =
+                Math.max(mIndicationBottomPadding, mAmbientIndicationBottomPadding);
+
+        final float extraSpaceForShelf = lockIconPadding - noShelfOverlapBottomPadding;
+
+        if (extraSpaceForShelf > 0f) {
+            return Math.min(mNotificationShelfController.getIntrinsicHeight(),
+                    extraSpaceForShelf);
+        }
+        return 0f;
     }
 
     /**
@@ -1565,19 +1613,20 @@ public class NotificationPanelViewController extends PanelViewController {
      */
     @VisibleForTesting
     int computeMaxKeyguardNotifications() {
-        if (mAmbientState.getFractionToShade() > 0 || mAmbientState.getDozeAmount() > 0) {
+        if (mAmbientState.getFractionToShade() > 0) {
+            if (SPEW_LOGCAT) {
+                Log.v(TAG, "Internally skipping computeMaxKeyguardNotifications()"
+                        + " fractionToShade=" + mAmbientState.getFractionToShade()
+                );
+            }
             return mMaxAllowedKeyguardNotifications;
         }
-
-        final float shelfIntrinsicHeight =
-                mNotificationShelfController.getVisibility() == View.GONE
-                        ? 0
-                        : mNotificationShelfController.getIntrinsicHeight();
-
         return mNotificationStackSizeCalculator.computeMaxKeyguardNotifications(
                 mNotificationStackScrollLayoutController.getView(),
-                getSpaceForLockscreenNotifications(),
-                shelfIntrinsicHeight);
+                getVerticalSpaceForLockscreenNotifications(),
+                getVerticalSpaceForLockscreenShelf(),
+                mNotificationShelfController.getIntrinsicHeight()
+        );
     }
 
     private void updateClock() {
@@ -2425,8 +2474,8 @@ public class NotificationPanelViewController extends PanelViewController {
     }
 
     /**
-     * Updates scrim bounds, QS clipping, and KSV clipping as well based on the bounds of the shade
-     * and QS state.
+     * Updates scrim bounds, QS clipping, notifications clipping and keyguard status view clipping
+     * as well based on the bounds of the shade and QS state.
      */
     private void setQSClippingBounds() {
         final int qsPanelBottomY = calculateQsBottomPosition(computeQsExpansionFraction());
@@ -2502,6 +2551,13 @@ public class NotificationPanelViewController extends PanelViewController {
         }
     }
 
+    /**
+     * Applies clipping to quick settings, notifications layout and
+     * updates bounds of the notifications background (notifications scrim).
+     *
+     * The parameters are bounds of the notifications area rectangle, this function
+     * calculates bounds for the QS clipping based on the notifications bounds.
+     */
     private void applyQSClippingBounds(int left, int top, int right, int bottom,
             boolean qsVisible) {
         if (!mAnimateNextNotificationBounds || mKeyguardStatusAreaClipBounds.isEmpty()) {
@@ -2637,12 +2693,10 @@ public class NotificationPanelViewController extends PanelViewController {
         if (mTransitioningToFullShadeProgress > 0.0f) {
             return mTransitionToFullShadeQSPosition;
         } else {
-            int qsBottomY = (int) getHeaderTranslation() + mQs.getQsMinExpansionHeight();
-            if (qsExpansionFraction != 0.0) {
-                qsBottomY = (int) MathUtils.lerp(
-                        qsBottomY, mQs.getDesiredHeight(), qsExpansionFraction);
-            }
-            return qsBottomY;
+            int qsBottomYFrom = (int) getHeaderTranslation() + mQs.getQsMinExpansionHeight();
+            int expandedTopMargin = mUseLargeScreenShadeHeader ? mLargeScreenShadeHeaderHeight : 0;
+            int qsBottomYTo = mQs.getDesiredHeight() + expandedTopMargin;
+            return (int) MathUtils.lerp(qsBottomYFrom, qsBottomYTo, qsExpansionFraction);
         }
     }
 
@@ -2661,8 +2715,8 @@ public class NotificationPanelViewController extends PanelViewController {
     }
 
     private float calculateNotificationsTopPadding() {
-        if (mSplitShadeEnabled && !mKeyguardShowing) {
-            return 0;
+        if (mSplitShadeEnabled) {
+            return mKeyguardShowing ? getKeyguardNotificationStaticPadding() : 0;
         }
         if (mKeyguardShowing && (mQsExpandImmediate
                 || mIsExpanding && mQsExpandedWhenExpandingStarted)) {
@@ -2736,6 +2790,9 @@ public class NotificationPanelViewController extends PanelViewController {
             mIsQsTranslationResetAnimator = mQsTranslationForFullShadeTransition > 0.0f;
         }
 
+        if (mSplitShadeEnabled) {
+            updateQsExpansionForLockscreenToShadeTransition(pxAmount);
+        }
         float endPosition = 0;
         if (pxAmount > 0.0f) {
             if (mNotificationStackScrollLayoutController.getVisibleNotificationCount() == 0
@@ -2773,6 +2830,18 @@ public class NotificationPanelViewController extends PanelViewController {
         }
         mTransitionToFullShadeQSPosition = position;
         updateQsExpansion();
+    }
+
+    private void updateQsExpansionForLockscreenToShadeTransition(float pxAmount) {
+        float qsExpansion = 0;
+        if (pxAmount > 0.0f) {
+            qsExpansion = MathUtils.lerp(mQsMinExpansionHeight, mQsMaxExpansionHeight,
+                    mLockscreenShadeTransitionController.getQSDragProgress());
+        }
+        // SHADE_LOCKED means transition is over and we don't want further updates
+        if (mBarState != SHADE_LOCKED) {
+            setQsExpansion(qsExpansion);
+        }
     }
 
     /**
@@ -2978,7 +3047,7 @@ public class NotificationPanelViewController extends PanelViewController {
         }
         int maxHeight;
         if (mQsExpandImmediate || mQsExpanded || mIsExpanding && mQsExpandedWhenExpandingStarted
-                || mPulsing) {
+                || mPulsing || mSplitShadeEnabled) {
             maxHeight = calculatePanelHeightQsExpanded();
         } else {
             maxHeight = calculatePanelHeightShade();
@@ -3799,7 +3868,7 @@ public class NotificationPanelViewController extends PanelViewController {
     public void setAmbientIndicationTop(int ambientIndicationTop, boolean ambientTextVisible) {
         int ambientIndicationBottomPadding = 0;
         if (ambientTextVisible) {
-            int stackBottom = mNotificationStackScrollLayoutController.getView().getBottom();
+            int stackBottom = mNotificationStackScrollLayoutController.getBottom();
             ambientIndicationBottomPadding = stackBottom - ambientIndicationTop;
         }
         if (mAmbientIndicationBottomPadding != ambientIndicationBottomPadding) {
@@ -4349,6 +4418,9 @@ public class NotificationPanelViewController extends PanelViewController {
                     == firstRow))) {
                 requestScrollerTopPaddingUpdate(false /* animate */);
             }
+            if (mKeyguardShowing) {
+                updateMaxDisplayedNotifications(true);
+            }
             requestPanelHeightUpdate();
         }
 
@@ -4724,11 +4796,6 @@ public class NotificationPanelViewController extends PanelViewController {
                     duration = StackStateAnimator.ANIMATION_DURATION_STANDARD;
                 }
                 mKeyguardStatusBarViewController.animateKeyguardStatusBarOut(startDelay, duration);
-                if (mSplitShadeEnabled) {
-                    // temporary workaround for QS height not being updated during lockscreen to
-                    // shade transition
-                    setQsExpanded(true);
-                }
                 updateQSMinHeight();
             } else if (oldState == StatusBarState.SHADE_LOCKED
                     && statusBarState == KEYGUARD) {
@@ -4999,7 +5066,8 @@ public class NotificationPanelViewController extends PanelViewController {
             mDebugPaint.setColor(color);
             canvas.drawLine(/* startX= */ 0, /* startY= */ y, /* stopX= */ mView.getWidth(),
                     /* stopY= */ y, mDebugPaint);
-            canvas.drawText(label, /* x= */ 0, /* y= */ computeDebugYTextPosition(y), mDebugPaint);
+            canvas.drawText(label + " = " + y + "px", /* x= */ 0,
+                    /* y= */ computeDebugYTextPosition(y), mDebugPaint);
         }
 
         private int computeDebugYTextPosition(int lineY) {

@@ -482,6 +482,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Se încarcă rapid"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Se încarcă lent"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Se încarcă wireless"</string>
+    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"Suport de încărcare"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Nu se încarcă"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Conectat, nu se încarcă"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Încărcată"</string>
@@ -671,4 +672,7 @@
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"Dacă difuzați <xliff:g id="SWITCHAPP">%1$s</xliff:g> sau schimbați rezultatul, difuzarea actuală se va opri"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"Difuzați <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"Schimbați rezultatul"</string>
+    <string name="back_navigation_animation" msgid="8105467568421689484">"Animații pentru gestul înapoi predictiv"</string>
+    <string name="back_navigation_animation_summary" msgid="741292224121599456">"Activați animațiile de sistem pentru gestul înapoi predictiv."</string>
+    <string name="back_navigation_animation_dialog" msgid="8696966520944625596">"Această setare activează animațiile de sistem pentru animația gesturilor predictive. Necesită setarea valorii true în cazul atributului enableOnBackInvokedCallback pentru fiecare aplicație în fișierul manifest."</string>
 </resources>

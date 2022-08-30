@@ -18,7 +18,6 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
@@ -364,12 +363,8 @@ class WindowToken extends WindowContainer<WindowState> {
 
     @Override
     void assignLayer(SurfaceControl.Transaction t, int layer) {
-        if (windowType == TYPE_DOCK_DIVIDER) {
-            // See {@link DisplayContent#mSplitScreenDividerAnchor}
-            super.assignRelativeLayer(t,
-                    mDisplayContent.getDefaultTaskDisplayArea().getSplitScreenDividerAnchor(), 1);
-        } else if (mRoundedCornerOverlay) {
-            super.assignLayer(t, WindowManagerPolicy.COLOR_FADE_LAYER + 1);
+        if (mRoundedCornerOverlay) {
+            super.assignLayer(t, WindowManagerPolicy.SCREEN_DECOR_DISPLAY_OVERLAY_LAYER);
         } else {
             super.assignLayer(t, layer);
         }
@@ -379,7 +374,7 @@ class WindowToken extends WindowContainer<WindowState> {
     SurfaceControl.Builder makeSurface() {
         final SurfaceControl.Builder builder = super.makeSurface();
         if (mRoundedCornerOverlay) {
-            builder.setParent(null);
+            builder.setParent(getDisplayContent().getOverlayLayer());
         }
         return builder;
     }
@@ -671,6 +666,15 @@ class WindowToken extends WindowContainer<WindowState> {
         if (!isFixedRotationTransforming()) {
             super.resetSurfacePositionForAnimationLeash(t);
         }
+    }
+
+    @Override
+    boolean prepareSync() {
+        if (mDisplayContent != null && mDisplayContent.isRotationChanging()
+                && AsyncRotationController.canBeAsync(this)) {
+            return false;
+        }
+        return super.prepareSync();
     }
 
     @CallSuper

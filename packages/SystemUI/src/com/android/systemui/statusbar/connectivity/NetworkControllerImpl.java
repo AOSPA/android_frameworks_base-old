@@ -75,6 +75,9 @@ import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
+import com.android.systemui.log.LogBuffer;
+import com.android.systemui.log.LogLevel;
+import com.android.systemui.log.dagger.StatusBarNetworkControllerLog;
 import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
 import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -96,8 +99,11 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import javax.inject.Inject;
+
+import kotlin.Unit;
 
 /** Platform implementation of the network controller. **/
 @SysUISingleton
@@ -134,6 +140,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private Config mConfig;
     private final CarrierConfigTracker mCarrierConfigTracker;
     private final FeatureFlags mFeatureFlags;
+    private final LogBuffer mLogBuffer;
 
     private TelephonyCallback.ActiveDataSubscriptionIdListener mPhoneStateListener;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -234,7 +241,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
             WifiStatusTrackerFactory trackerFactory,
             @Main Handler handler,
             InternetDialogFactory internetDialogFactory,
-            FeatureFlags featureFlags) {
+            FeatureFlags featureFlags,
+            @StatusBarNetworkControllerLog LogBuffer logBuffer) {
         this(context, connectivityManager,
                 telephonyManager,
                 telephonyListenerManager,
@@ -253,7 +261,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 carrierConfigTracker,
                 trackerFactory,
                 handler,
-                featureFlags);
+                featureFlags,
+                logBuffer);
         mReceiverHandler.post(mRegisterListeners);
         mInternetDialogFactory = internetDialogFactory;
     }
@@ -277,7 +286,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
             CarrierConfigTracker carrierConfigTracker,
             WifiStatusTrackerFactory trackerFactory,
             @Main Handler handler,
-            FeatureFlags featureFlags
+            FeatureFlags featureFlags,
+            LogBuffer logBuffer
     ) {
         mContext = context;
         mTelephonyListenerManager = telephonyListenerManager;
@@ -297,6 +307,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mDemoModeController = demoModeController;
         mCarrierConfigTracker = carrierConfigTracker;
         mFeatureFlags = featureFlags;
+        mLogBuffer = logBuffer;
 
         // telephony
         mPhone = telephonyManager;
@@ -778,6 +789,17 @@ public class NetworkControllerImpl extends BroadcastReceiver
             Log.d(TAG, "onReceive: intent=" + intent);
         }
         final String action = intent.getAction();
+        mLogBuffer.log(
+                TAG,
+                LogLevel.INFO,
+                logMessage -> {
+                    logMessage.setStr1(action);
+                    return Unit.INSTANCE;
+                },
+                logMessage -> String.format(
+                        Locale.US,
+                        "Received broadcast with action \"%s\"",
+                        logMessage.getStr1()));
         switch (action) {
             case ConnectivityManager.CONNECTIVITY_ACTION:
                 updateConnectivity();
@@ -945,6 +967,12 @@ public class NetworkControllerImpl extends BroadcastReceiver
                         : lhs.getSimSlotIndex() - rhs.getSimSlotIndex();
             }
         });
+        Log.i(
+                TAG,
+                String.format(
+                        Locale.US,
+                        "Subscriptions changed: %s",
+                        createSubscriptionChangeStatement(mCurrentSubscriptions, subscriptions)));
         mCurrentSubscriptions = subscriptions;
 
         SparseArray<MobileSignalController> cachedControllers =
@@ -1164,6 +1192,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         pw.print("  hasVoiceCallingFeature()=");
         pw.println(hasVoiceCallingFeature());
         pw.println("  mListening=" + mListening);
+        pw.println("  mActiveMobileDataSubscription=" + mActiveMobileDataSubscription);
 
         pw.println("  - connectivity ------");
         pw.print("  mConnectedTransports=");
@@ -1478,4 +1507,23 @@ public class NetworkControllerImpl extends BroadcastReceiver
      * get created will also run on the BG Looper.
      */
     private final Runnable mRegisterListeners = () -> registerListeners();
+
+    /** Returns a logging statement for the given old and new list of {@link SubscriptionInfo} */
+    private static String createSubscriptionChangeStatement(
+            final @Nullable List<SubscriptionInfo> oldSubscriptions,
+            final @Nullable List<SubscriptionInfo> newSubscriptions) {
+        return String.format(
+                Locale.US,
+                "old=%s, new=%s",
+                toSubscriptionIds(oldSubscriptions),
+                toSubscriptionIds(newSubscriptions));
+    }
+
+    /** Returns to a list of subscription IDs for the given list of {@link SubscriptionInfo} */
+    @Nullable
+    private static List<Integer> toSubscriptionIds(
+            final @Nullable List<SubscriptionInfo> subscriptions) {
+        return subscriptions != null ? subscriptions.stream().map(
+                SubscriptionInfo::getSubscriptionId).collect(Collectors.toList()) : null;
+    }
 }

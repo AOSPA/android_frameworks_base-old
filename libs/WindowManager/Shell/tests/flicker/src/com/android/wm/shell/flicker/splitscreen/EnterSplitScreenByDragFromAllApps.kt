@@ -27,6 +27,10 @@ import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.appWindowBecomesVisible
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
 import com.android.wm.shell.flicker.helpers.SplitScreenHelper
+import com.android.wm.shell.flicker.layerBecomesVisible
+import com.android.wm.shell.flicker.layerIsVisibleAtEnd
+import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesVisible
+import com.android.wm.shell.flicker.splitAppLayerBoundsIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitScreenDividerBecomesVisible
 import org.junit.Assume
 import org.junit.Before
@@ -67,10 +71,10 @@ class EnterSplitScreenByDragFromAllApps(
             }
             transitions {
                 taplInstrumentation.launchedAppState.taskbar
-                        .openAllApps()
-                        .getAppIcon(secondaryApp.appName)
-                        .dragToSplitscreen(secondaryApp.component.packageName,
-                                primaryApp.component.packageName)
+                    .openAllApps()
+                    .getAppIcon(secondaryApp.appName)
+                    .dragToSplitscreen(secondaryApp.component.packageName,
+                        primaryApp.component.packageName)
             }
         }
 
@@ -80,22 +84,40 @@ class EnterSplitScreenByDragFromAllApps(
 
     @Presubmit
     @Test
+    fun primaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(primaryApp.component)
+
+    @Presubmit
+    @Test
+    fun secondaryAppLayerBecomesVisible() = testSpec.layerBecomesVisible(secondaryApp.component)
+
+    @Presubmit
+    @Test
+    fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
+        testSpec.endRotation, primaryApp.component, false /* splitLeftTop */)
+
+    @Presubmit
+    @Test
+    fun secondaryAppBoundsBecomesVisible() = testSpec.splitAppLayerBoundsBecomesVisible(
+        testSpec.endRotation, secondaryApp.component, true /* splitLeftTop */)
+
+    @Presubmit
+    @Test
     fun primaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(primaryApp.component)
 
     @Presubmit
     @Test
     fun secondaryAppWindowBecomesVisible() =
-            testSpec.appWindowBecomesVisible(secondaryApp.component)
+        testSpec.appWindowBecomesVisible(secondaryApp.component)
 
     companion object {
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                    repetitions = SplitScreenHelper.TEST_REPETITIONS,
-                    // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
-                    supportedNavigationModes =
-                        listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))
+                repetitions = SplitScreenHelper.TEST_REPETITIONS,
+                // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
+                supportedNavigationModes =
+                    listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))
         }
     }
 }

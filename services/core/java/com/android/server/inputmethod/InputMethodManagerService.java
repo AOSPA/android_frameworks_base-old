@@ -96,7 +96,6 @@ import android.media.AudioManagerInternal;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
-import android.os.DeadObjectException;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
@@ -158,8 +157,10 @@ import com.android.internal.infra.AndroidFuture;
 import com.android.internal.inputmethod.DirectBootAwareness;
 import com.android.internal.inputmethod.IAccessibilityInputMethodSession;
 import com.android.internal.inputmethod.IInputContentUriToken;
+import com.android.internal.inputmethod.IInputMethodClient;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.IRemoteAccessibilityInputConnection;
+import com.android.internal.inputmethod.IRemoteInputConnection;
 import com.android.internal.inputmethod.ImeTracing;
 import com.android.internal.inputmethod.InputBindResult;
 import com.android.internal.inputmethod.InputMethodDebug;
@@ -176,8 +177,6 @@ import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
 import com.android.internal.view.IInlineSuggestionsResponseCallback;
-import com.android.internal.view.IInputContext;
-import com.android.internal.view.IInputMethodClient;
 import com.android.internal.view.IInputMethodManager;
 import com.android.internal.view.IInputMethodSession;
 import com.android.internal.view.IInputSessionCallback;
@@ -245,13 +244,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     private static final int MSG_START_HANDWRITING = 1100;
     private static final int MSG_FINISH_HANDWRITING = 1110;
 
-    private static final int MSG_UNBIND_CLIENT = 3000;
-    private static final int MSG_UNBIND_ACCESSIBILITY_SERVICE = 3001;
-    private static final int MSG_BIND_CLIENT = 3010;
-    private static final int MSG_BIND_ACCESSIBILITY_SERVICE = 3011;
-    private static final int MSG_SET_ACTIVE = 3020;
     private static final int MSG_SET_INTERACTIVE = 3030;
-    private static final int MSG_REPORT_FULLSCREEN_MODE = 3045;
 
     private static final int MSG_HARD_KEYBOARD_SWITCH_CHANGED = 4000;
 
@@ -469,8 +462,8 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     static final class ClientState {
-        final IInputMethodClient client;
-        final IInputContext inputContext;
+        final IInputMethodClientInvoker client;
+        final IRemoteInputConnection fallbackInputConnection;
         final int uid;
         final int pid;
         final int selfReportedDisplayId;
@@ -489,15 +482,16 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                     + " pid=" + pid + " displayId=" + selfReportedDisplayId + "}";
         }
 
-        ClientState(IInputMethodClient _client, IInputContext _inputContext,
+        ClientState(IInputMethodClientInvoker _client,
+                IRemoteInputConnection _fallbackInputConnection,
                 int _uid, int _pid, int _selfReportedDisplayId,
                 ClientDeathRecipient _clientDeathRecipient) {
             client = _client;
-            inputContext = _inputContext;
+            fallbackInputConnection = _fallbackInputConnection;
             uid = _uid;
             pid = _pid;
             selfReportedDisplayId = _selfReportedDisplayId;
-            binding = new InputBinding(null, inputContext.asBinder(), uid, pid);
+            binding = new InputBinding(null, fallbackInputConnection.asBinder(), uid, pid);
             clientDeathRecipient = _clientDeathRecipient;
         }
     }
@@ -621,9 +615,9 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     ClientState mCurFocusedWindowClient;
 
     /**
-     * The input context last provided by the current client.
+     * The {@link IRemoteInputConnection} last provided by the current client.
      */
-    IInputContext mCurInputContext;
+    IRemoteInputConnection mCurInputConnection;
 
     /**
      * The {@link ImeOnBackInvokedDispatcher} last provided by the current client to
@@ -847,7 +841,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
 
     /**
      * Internal state snapshot when
-     * {@link com.android.internal.view.IInputMethod#startInput(IBinder, IInputContext, EditorInfo,
+     * {@link com.android.internal.view.IInputMethod#startInput(IBinder, IRemoteInputConnection, EditorInfo,
      * boolean)} is about to be called.
      *
      * <p>Calling that IPC endpoint basically means that
@@ -1619,10 +1613,10 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         final int mToUserId;
 
         @Nullable
-        IInputMethodClient mClientToBeReset;
+        IInputMethodClientInvoker mClientToBeReset;
 
         UserSwitchHandlerTask(InputMethodManagerService service, @UserIdInt int toUserId,
-                @Nullable IInputMethodClient clientToBeReset) {
+                @Nullable IInputMethodClientInvoker clientToBeReset) {
             mService = service;
             mToUserId = toUserId;
             mClientToBeReset = clientToBeReset;
@@ -1713,7 +1707,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
 
     @GuardedBy("ImfLock.class")
     void scheduleSwitchUserTaskLocked(@UserIdInt int userId,
-            @Nullable IInputMethodClient clientToBeReset) {
+            @Nullable IInputMethodClientInvoker clientToBeReset) {
         if (mUserSwitchHandlerTask != null) {
             if (mUserSwitchHandlerTask.mToUserId == userId) {
                 mUserSwitchHandlerTask.mClientToBeReset = clientToBeReset;
@@ -1880,7 +1874,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
 
     @GuardedBy("ImfLock.class")
     private void switchUserOnHandlerLocked(@UserIdInt int newUserId,
-            IInputMethodClient clientToBeReset) {
+            IInputMethodClientInvoker clientToBeReset) {
         if (DEBUG) Slog.d(TAG, "Switching user stage 1/3. newUserId=" + newUserId
                 + " currentUserId=" + mSettings.getCurrentUserId());
 
@@ -1938,10 +1932,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                 // The client is already gone.
                 return;
             }
-            try {
-                cs.client.scheduleStartInputIfNecessary(mInFullscreenMode);
-            } catch (RemoteException e) {
-            }
+            cs.client.scheduleStartInputIfNecessary(mInFullscreenMode);
         }
     }
 
@@ -2412,14 +2403,14 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
      * @param client {@link android.os.Binder} proxy that is associated with the singleton instance
      *               of {@link android.view.inputmethod.InputMethodManager} that runs on the client
      *               process
-     * @param inputContext communication channel for the fallback {@link InputConnection}
+     * @param inputConnection communication channel for the fallback {@link InputConnection}
      * @param selfReportedDisplayId self-reported display ID to which the client is associated.
      *                              Whether the client is still allowed to access to this display
      *                              or not needs to be evaluated every time the client interacts
      *                              with the display
      */
     @Override
-    public void addClient(IInputMethodClient client, IInputContext inputContext,
+    public void addClient(IInputMethodClient client, IRemoteInputConnection inputConnection,
             int selfReportedDisplayId) {
         // Here there are two scenarios where this method is called:
         // A. IMM is being instantiated in a different process and this is an IPC from that process
@@ -2456,8 +2447,10 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             // have the client crash.  Thus we do not verify the display ID at all here.  Instead we
             // later check the display ID every time the client needs to interact with the specified
             // display.
-            mClients.put(client.asBinder(), new ClientState(client, inputContext, callerUid,
-                    callerPid, selfReportedDisplayId, deathRecipient));
+            final IInputMethodClientInvoker clientInvoker =
+                    IInputMethodClientInvoker.create(client, mHandler);
+            mClients.put(client.asBinder(), new ClientState(clientInvoker, inputConnection,
+                    callerUid, callerPid, selfReportedDisplayId, deathRecipient));
         }
     }
 
@@ -2501,57 +2494,6 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
-    @NonNull
-    private Message obtainMessageOO(int what, Object arg1, Object arg2) {
-        final SomeArgs args = SomeArgs.obtain();
-        args.arg1 = arg1;
-        args.arg2 = arg2;
-        return mHandler.obtainMessage(what, 0, 0, args);
-    }
-
-    @NonNull
-    private Message obtainMessageOOO(int what, Object arg1, Object arg2, Object arg3) {
-        SomeArgs args = SomeArgs.obtain();
-        args.arg1 = arg1;
-        args.arg2 = arg2;
-        args.arg3 = arg3;
-        return mHandler.obtainMessage(what, 0, 0, args);
-    }
-
-    @NonNull
-    private Message obtainMessageIIOO(int what, int arg1, int arg2,
-            Object arg3, Object arg4) {
-        SomeArgs args = SomeArgs.obtain();
-        args.arg1 = arg3;
-        args.arg2 = arg4;
-        return mHandler.obtainMessage(what, arg1, arg2, args);
-    }
-
-    @NonNull
-    private Message obtainMessageIIIO(int what, int argi1, int argi2, int argi3, Object arg1) {
-        final SomeArgs args = SomeArgs.obtain();
-        args.arg1 = arg1;
-        args.argi1 = argi1;
-        args.argi2 = argi2;
-        args.argi3 = argi3;
-        return mHandler.obtainMessage(what, 0, 0, args);
-    }
-
-    private void executeOrSendMessage(IInputMethodClient target, Message msg) {
-         if (target.asBinder() instanceof Binder) {
-             // This is supposed to be emulating the one-way semantics when the IME client is
-             // system_server itself, which has not been explicitly prohibited so far while we have
-             // never ever officially supported such a use case...
-             // We probably should create a simple wrapper of IInputMethodClient as the first step
-             // to get rid of executeOrSendMessage() then should prohibit system_server to be the
-             // IME client for long term.
-             msg.sendToTarget();
-         } else {
-             handleMessage(msg);
-             msg.recycle();
-         }
-    }
-
     @GuardedBy("ImfLock.class")
     void unbindCurrentClientLocked(@UnbindReason int unbindClientReason) {
         if (mCurClient != null) {
@@ -2569,11 +2511,9 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             // Since we set active false to current client and set mCurClient to null, let's unbind
             // all accessibility too. That means, when input method get disconnected (including
             // switching ime), we also unbind accessibility
-            scheduleSetActiveToClient(mCurClient, false /* active */, false /* fullscreen */,
+            mCurClient.client.setActive(false /* active */, false /* fullscreen */,
                     false /* reportToImeController */);
-            executeOrSendMessage(mCurClient.client, mHandler.obtainMessage(
-                    MSG_UNBIND_CLIENT, getSequenceNumberLocked(), unbindClientReason,
-                    mCurClient.client));
+            mCurClient.client.onUnbindMethod(getSequenceNumberLocked(), unbindClientReason);
             mCurClient.sessionRequested = false;
             mCurClient.mSessionRequestedForAccessibility = false;
             mCurClient = null;
@@ -2646,7 +2586,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         final int navButtonFlags = getInputMethodNavButtonFlagsLocked();
         final SessionState session = mCurClient.curSession;
         setEnabledSessionLocked(session);
-        session.method.startInput(startInputToken, mCurInputContext, mCurAttribute, restarting,
+        session.method.startInput(startInputToken, mCurInputConnection, mCurAttribute, restarting,
                 navButtonFlags, mCurImeDispatcher);
         if (mShowRequested) {
             if (DEBUG) Slog.v(TAG, "Attach new input asks to show input");
@@ -2753,7 +2693,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     @GuardedBy("ImfLock.class")
     @NonNull
     private InputBindResult startInputUncheckedLocked(@NonNull ClientState cs,
-            IInputContext inputContext,
+            IRemoteInputConnection inputConnection,
             @Nullable IRemoteAccessibilityInputConnection remoteAccessibilityInputConnection,
             @NonNull EditorInfo attribute, @StartInputFlags int startInputFlags,
             @StartInputReason int startInputReason,
@@ -2800,7 +2740,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         // Bump up the sequence for this client and attach it.
         advanceSequenceNumberLocked();
         mCurClient = cs;
-        mCurInputContext = inputContext;
+        mCurInputConnection = inputConnection;
         mCurRemoteAccessibilityInputConnection = remoteAccessibilityInputConnection;
         mCurImeDispatcher = imeDispatcher;
         mCurVirtualDisplayToScreenMatrix =
@@ -2905,7 +2845,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         unbindCurrentClientLocked(UnbindReason.SWITCH_CLIENT);
         // If the screen is on, inform the new client it is active
         if (mIsInteractive) {
-            scheduleSetActiveToClient(cs, true /* active */, false /* fullscreen */,
+            cs.client.setActive(true /* active */, false /* fullscreen */,
                     false /* reportToImeController */);
         }
     }
@@ -3024,8 +2964,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                         attachNewAccessibilityLocked(StartInputReason.SESSION_CREATED_BY_IME,
                                 true, -1);
                         if (res.method != null) {
-                            executeOrSendMessage(mCurClient.client, obtainMessageOO(
-                                    MSG_BIND_CLIENT, mCurClient.client, res));
+                            mCurClient.client.onBindMethod(res);
                         }
                         return;
                     }
@@ -3817,12 +3756,12 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     public InputBindResult startInputOrWindowGainedFocus(
             @StartInputReason int startInputReason, IInputMethodClient client, IBinder windowToken,
             @StartInputFlags int startInputFlags, @SoftInputModeFlags int softInputMode,
-            int windowFlags, @Nullable EditorInfo attribute, IInputContext inputContext,
+            int windowFlags, @Nullable EditorInfo attribute, IRemoteInputConnection inputConnection,
             IRemoteAccessibilityInputConnection remoteAccessibilityInputConnection,
             int unverifiedTargetSdkVersion,
             @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
         return startInputOrWindowGainedFocusInternal(startInputReason, client, windowToken,
-                startInputFlags, softInputMode, windowFlags, attribute, inputContext,
+                startInputFlags, softInputMode, windowFlags, attribute, inputConnection,
                 remoteAccessibilityInputConnection, unverifiedTargetSdkVersion,
                 imeDispatcher);
     }
@@ -3831,7 +3770,8 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     private InputBindResult startInputOrWindowGainedFocusInternal(
             @StartInputReason int startInputReason, IInputMethodClient client, IBinder windowToken,
             @StartInputFlags int startInputFlags, @SoftInputModeFlags int softInputMode,
-            int windowFlags, @Nullable EditorInfo attribute, @Nullable IInputContext inputContext,
+            int windowFlags, @Nullable EditorInfo attribute,
+            @Nullable IRemoteInputConnection inputConnection,
             @Nullable IRemoteAccessibilityInputConnection remoteAccessibilityInputConnection,
             int unverifiedTargetSdkVersion,
             @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
@@ -3870,7 +3810,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                 try {
                     result = startInputOrWindowGainedFocusInternalLocked(startInputReason,
                             client, windowToken, startInputFlags, softInputMode, windowFlags,
-                            attribute, inputContext, remoteAccessibilityInputConnection,
+                            attribute, inputConnection, remoteAccessibilityInputConnection,
                             unverifiedTargetSdkVersion, userId, imeDispatcher);
                 } finally {
                     Binder.restoreCallingIdentity(ident);
@@ -3897,7 +3837,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             @StartInputReason int startInputReason, IInputMethodClient client,
             @NonNull IBinder windowToken, @StartInputFlags int startInputFlags,
             @SoftInputModeFlags int softInputMode, int windowFlags, EditorInfo attribute,
-            IInputContext inputContext,
+            IRemoteInputConnection inputContext,
             @Nullable IRemoteAccessibilityInputConnection remoteAccessibilityInputConnection,
             int unverifiedTargetSdkVersion, @UserIdInt int userId,
             @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
@@ -4531,6 +4471,8 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
     @Override
     public void reportVirtualDisplayGeometryAsync(IInputMethodClient parentClient,
             int childDisplayId, float[] matrixValues) {
+        final IInputMethodClientInvoker parentClientInvoker =
+                IInputMethodClientInvoker.create(parentClient, mHandler);
         try {
             final DisplayInfo displayInfo = mDisplayManagerInternal.getDisplayInfo(childDisplayId);
             if (displayInfo == null) {
@@ -4543,7 +4485,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             }
 
             synchronized (ImfLock.class) {
-                final ClientState cs = mClients.get(parentClient.asBinder());
+                final ClientState cs = mClients.get(parentClientInvoker.asBinder());
                 if (cs == null) {
                     return;
                 }
@@ -4600,15 +4542,8 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                         if (needToNotify) {
                             final float[] values = new float[9];
                             matrix.getValues(values);
-                            try {
-                                mCurClient.client.updateVirtualDisplayToScreenMatrix(
-                                        getSequenceNumberLocked(), values);
-                            } catch (RemoteException e) {
-                                Slog.e(TAG,
-                                        "Exception calling updateVirtualDisplayToScreenMatrix()",
-                                        e);
-
-                            }
+                            mCurClient.client.updateVirtualDisplayToScreenMatrix(
+                                    getSequenceNumberLocked(), values);
                         }
                         break;
                     }
@@ -4616,12 +4551,8 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                 }
             }
         } catch (Throwable t) {
-            if (parentClient != null) {
-                try {
-                    parentClient.throwExceptionFromSystem(t.toString());
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Exception calling throwExceptionFromSystem()", e);
-                }
+            if (parentClientInvoker != null) {
+                parentClientInvoker.throwExceptionFromSystem(t.toString());
             }
         }
     }
@@ -4701,11 +4632,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         }
         for (ClientState state : clients.values()) {
             if (state != null) {
-                try {
-                    state.client.setImeTraceEnabled(true /* enabled */);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error while trying to enable ime trace on client window", e);
-                }
+                state.client.setImeTraceEnabled(true /* enabled */);
             }
         }
     }
@@ -4720,11 +4647,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         }
         for (ClientState state : clients.values()) {
             if (state != null) {
-                try {
-                    state.client.setImeTraceEnabled(false /* enabled */);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error while trying to disable ime trace on client window", e);
-                }
+                state.client.setImeTraceEnabled(false /* enabled */);
             }
         }
     }
@@ -5017,100 +4940,9 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
 
             // ---------------------------------------------------------
 
-            case MSG_UNBIND_CLIENT: {
-                try {
-                    // This unbinds all accessibility services too.
-                    ((IInputMethodClient) msg.obj).onUnbindMethod(msg.arg1, msg.arg2);
-                } catch (RemoteException e) {
-                    // There is nothing interesting about the last client dying.
-                    if (!(e instanceof DeadObjectException)) {
-                        Slog.w(TAG, "RemoteException when unbinding input method service or"
-                                + "accessibility services");
-                    }
-                }
-                return true;
-            }
-            case MSG_UNBIND_ACCESSIBILITY_SERVICE: {
-                args = (SomeArgs) msg.obj;
-                IInputMethodClient client = (IInputMethodClient) args.arg1;
-                int id = (int) args.arg2;
-                try {
-                    client.onUnbindAccessibilityService(msg.arg1, id);
-                } catch (RemoteException e) {
-                    // There is nothing interesting about the last client dying.
-                    if (!(e instanceof DeadObjectException)) {
-                        Slog.w(TAG, "RemoteException when unbinding accessibility services");
-                    }
-                }
-                args.recycle();
-                return true;
-            }
-            case MSG_BIND_CLIENT: {
-                args = (SomeArgs)msg.obj;
-                IInputMethodClient client = (IInputMethodClient)args.arg1;
-                InputBindResult res = (InputBindResult)args.arg2;
-                try {
-                    client.onBindMethod(res);
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "Client died receiving input method " + args.arg2);
-                } finally {
-                    // Dispose the channel if the input method is not local to this process
-                    // because the remote proxy will get its own copy when unparceled.
-                    if (res.channel != null && Binder.isProxy(client)) {
-                        res.channel.dispose();
-                    }
-                }
-                args.recycle();
-                return true;
-            }
-            case MSG_BIND_ACCESSIBILITY_SERVICE: {
-                args = (SomeArgs) msg.obj;
-                IInputMethodClient client = (IInputMethodClient) args.arg1;
-                InputBindResult res = (InputBindResult) args.arg2;
-                int id = (int) args.arg3;
-                try {
-                    client.onBindAccessibilityService(res, id);
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "Client died receiving input method " + args.arg2);
-                } finally {
-                    // Dispose the channel if the accessibility service is not local to this process
-                    // because the remote proxy will get its own copy when unparceled.
-                    if (res.channel != null && Binder.isProxy(client)) {
-                        res.channel.dispose();
-                    }
-                }
-                args.recycle();
-                return true;
-            }
-            case MSG_SET_ACTIVE: {
-                args = (SomeArgs) msg.obj;
-                final ClientState clientState = (ClientState) args.arg1;
-                try {
-                    clientState.client.setActive(args.argi1 != 0 /* active */,
-                            args.argi2 != 0 /* fullScreen */,
-                            args.argi3 != 0 /* reportToImeController */);
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "Got RemoteException sending setActive(false) notification to pid "
-                            + clientState.pid + " uid " + clientState.uid);
-                }
-                args.recycle();
-                return true;
-            }
             case MSG_SET_INTERACTIVE:
                 handleSetInteractive(msg.arg1 != 0);
                 return true;
-            case MSG_REPORT_FULLSCREEN_MODE: {
-                final boolean fullscreen = msg.arg1 != 0;
-                final ClientState clientState = (ClientState)msg.obj;
-                try {
-                    clientState.client.reportFullscreenMode(fullscreen);
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "Got RemoteException sending "
-                            + "reportFullscreen(" + fullscreen + ") notification to pid="
-                            + clientState.pid + " uid=" + clientState.uid);
-                }
-                return true;
-            }
 
             // --------------------------------------------------------------
             case MSG_HARD_KEYBOARD_SWITCH_CHANGED:
@@ -5204,17 +5036,11 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
 
             // Inform the current client of the change in active status
             if (mCurClient != null && mCurClient.client != null) {
-                scheduleSetActiveToClient(mCurClient, mIsInteractive, mInFullscreenMode,
+                mCurClient.client.setActive(mIsInteractive, mInFullscreenMode,
                         mImePlatformCompatUtils.shouldFinishInputWithReportToIme(
                                 getCurMethodUidLocked()));
             }
         }
-    }
-
-    private void scheduleSetActiveToClient(ClientState state, boolean active, boolean fullscreen,
-            boolean reportToImeController) {
-        executeOrSendMessage(state.client, obtainMessageIIIO(MSG_SET_ACTIVE,
-                active ? 1 : 0, fullscreen ? 1 : 0, reportToImeController ? 1 : 0, state));
     }
 
     @GuardedBy("ImfLock.class")
@@ -5790,9 +5616,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                     InputBindResult res = attachNewAccessibilityLocked(
                             StartInputReason.SESSION_CREATED_BY_ACCESSIBILITY, true,
                             accessibilityConnectionId);
-                    executeOrSendMessage(mCurClient.client, obtainMessageOOO(
-                            MSG_BIND_ACCESSIBILITY_SERVICE, mCurClient.client, res,
-                            accessibilityConnectionId));
+                    mCurClient.client.onBindAccessibilityService(res, accessibilityConnectionId);
                 }
             }
         }
@@ -5807,11 +5631,8 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                     }
                     // A11yManagerService unbinds the disabled accessibility service. We don't need
                     // to do it here.
-                    @UnbindReason int unbindClientReason =
-                            UnbindReason.ACCESSIBILITY_SERVICE_DISABLED;
-                    executeOrSendMessage(mCurClient.client, obtainMessageIIOO(
-                            MSG_UNBIND_ACCESSIBILITY_SERVICE, getSequenceNumberLocked(),
-                            unbindClientReason, mCurClient.client, accessibilityConnectionId));
+                    mCurClient.client.onUnbindAccessibilityService(getSequenceNumberLocked(),
+                            accessibilityConnectionId);
                 }
                 // We only have sessions when we bound to an input method. Remove this session
                 // from all clients.
@@ -5905,9 +5726,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
             }
             if (mCurClient != null && mCurClient.client != null) {
                 mInFullscreenMode = fullscreen;
-                executeOrSendMessage(mCurClient.client, mHandler.obtainMessage(
-                        MSG_REPORT_FULLSCREEN_MODE, fullscreen ? 1 : 0, 0 /* unused */,
-                        mCurClient));
+                mCurClient.client.reportFullscreenMode(fullscreen);
             }
         }
     }
@@ -5998,7 +5817,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                 final ClientState ci = mClients.valueAt(i);
                 p.println("  Client " + ci + ":");
                 p.println("    client=" + ci.client);
-                p.println("    inputContext=" + ci.inputContext);
+                p.println("    fallbackInputConnection=" + ci.fallbackInputConnection);
                 p.println("    sessionRequested=" + ci.sessionRequested);
                 p.println("    sessionRequestedForAccessibility="
                         + ci.mSessionRequestedForAccessibility);
@@ -6608,12 +6427,7 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
         }
         for (ClientState state : clients.values()) {
             if (state != null) {
-                try {
-                    state.client.setImeTraceEnabled(isImeTraceEnabled);
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error while trying to enable/disable ime trace on client window",
-                            e);
-                }
+                state.client.setImeTraceEnabled(isImeTraceEnabled);
             }
         }
         return ShellCommandResult.SUCCESS;

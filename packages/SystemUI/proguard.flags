@@ -1,6 +1,9 @@
 # Preserve line number information for debugging stack traces.
 -keepattributes SourceFile,LineNumberTable
 
+# Preserve relationship information that can impact simple class naming.
+-keepattributes EnclosingMethod,InnerClasses
+
 -keep class com.android.systemui.recents.OverviewProxyRecentsImpl
 -keep class com.android.systemui.statusbar.car.CarStatusBar
 -keep class com.android.systemui.statusbar.phone.CentralSurfaces
@@ -90,12 +93,3 @@
     # on every field access without this.
     static void throwUninitializedPropertyAccessException(java.lang.String);
 }
-# Strip verbose logs.
--assumenosideeffects class android.util.Log {
-  static *** v(...);
-  static *** isLoggable(...);
-}
--assumenosideeffects class android.util.Slog {
-  static *** v(...);
-}
--maximumremovedandroidloglevel 2

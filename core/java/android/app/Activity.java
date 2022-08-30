@@ -6433,6 +6433,20 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
+     * Ensures the activity's result is immediately returned to the caller when {@link #finish()}
+     * is invoked
+     *
+     * <p>Should be invoked alongside {@link #setResult(int, Intent)}, so the provided results are
+     * in place before finishing. Must only be invoked during MediaProjection setup.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_MEDIA_PROJECTION)
+    public final void setForceSendResultForMediaProjection() {
+        ActivityClient.getInstance().setForceSendResultForMediaProjection(mToken);
+    }
+
+    /**
      * Call this to set the result that your activity will return to its
      * caller.
      *
@@ -8258,6 +8272,11 @@ public class Activity extends ContextThemeWrapper
     @VisibleForTesting
     public final ActivityThread getActivityThread() {
         return mMainThread;
+    }
+
+    /** @hide */
+    public final ActivityInfo getActivityInfo() {
+        return mActivityInfo;
     }
 
     final void performCreate(Bundle icicle) {

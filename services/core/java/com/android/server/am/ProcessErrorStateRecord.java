@@ -53,7 +53,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.trace.SmartTraceUtils;
-import com.android.server.MemoryPressureUtil;
+import com.android.server.ResourcePressureUtil;
 import com.android.server.criticalevents.CriticalEventLog;
 import com.android.server.Watchdog;
 import com.android.server.wm.WindowProcessController;
@@ -417,7 +417,7 @@ class ProcessErrorStateRecord {
         }
 
         StringBuilder report = new StringBuilder();
-        report.append(MemoryPressureUtil.currentPsiState());
+        report.append(ResourcePressureUtil.currentPsiState());
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(true);
         ArrayList<Integer> nativePids = null;
         boolean smTraceEnabled = isSmartTraceEnabled(isSilentAnr);

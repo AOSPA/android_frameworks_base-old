@@ -4791,12 +4791,19 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * TextView is {@link Layout#BREAK_STRATEGY_HIGH_QUALITY}, and the default value for
      * EditText is {@link Layout#BREAK_STRATEGY_SIMPLE}, the latter to avoid the
      * text "dancing" when being edited.
-     * <p/>
+     * <p>
      * Enabling hyphenation with either using {@link Layout#HYPHENATION_FREQUENCY_NORMAL} or
      * {@link Layout#HYPHENATION_FREQUENCY_FULL} while line breaking is set to one of
      * {@link Layout#BREAK_STRATEGY_BALANCED}, {@link Layout#BREAK_STRATEGY_HIGH_QUALITY}
      * improves the structure of text layout however has performance impact and requires more time
-     * to do the text layout.
+     * to do the text layout.</p>
+     * <p>
+     * Compared with {@link #setLineBreakStyle(int)}, line break style with different strictness is
+     * evaluated in the ICU to identify the potential breakpoints. In
+     * {@link #setBreakStrategy(int)}, line break strategy handles the post processing of ICU's line
+     * break result. It aims to evaluate ICU's breakpoints and break the lines based on the
+     * constraint.
+     * </p>
      *
      * @attr ref android.R.styleable#TextView_breakStrategy
      * @see #getBreakStrategy()
@@ -12484,6 +12491,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             float viewportToContentVerticalOffset) {
         final int minLine = mLayout.getLineForOffset(startIndex);
         final int maxLine = mLayout.getLineForOffset(endIndex - 1);
+        final Rect rect = new Rect();
+        getLocalVisibleRect(rect);
+        final RectF visibleRect = new RectF(rect);
         for (int line = minLine; line <= maxLine; ++line) {
             final int lineStart = mLayout.getLineStart(line);
             final int lineEnd = mLayout.getLineEnd(line);
@@ -12498,37 +12508,31 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             for (int offset = offsetStart; offset < offsetEnd; ++offset) {
                 final float charWidth = widths[offset - offsetStart];
                 final boolean isRtl = mLayout.isRtlCharAt(offset);
-                final float primary = mLayout.getPrimaryHorizontal(offset);
-                final float secondary = mLayout.getSecondaryHorizontal(offset);
                 // TODO: This doesn't work perfectly for text with custom styles and
                 // TAB chars.
                 final float left;
-                final float right;
                 if (ltrLine) {
                     if (isRtl) {
-                        left = secondary - charWidth;
-                        right = secondary;
+                        left = mLayout.getSecondaryHorizontal(offset) - charWidth;
                     } else {
-                        left = primary;
-                        right = primary + charWidth;
+                        left = mLayout.getPrimaryHorizontal(offset);
                     }
                 } else {
                     if (!isRtl) {
-                        left = secondary;
-                        right = secondary + charWidth;
+                        left = mLayout.getSecondaryHorizontal(offset);
                     } else {
-                        left = primary - charWidth;
-                        right = primary;
+                        left = mLayout.getPrimaryHorizontal(offset) - charWidth;
                     }
                 }
+                final float right = left + charWidth;
                 // TODO: Check top-right and bottom-left as well.
                 final float localLeft = left + viewportToContentHorizontalOffset;
                 final float localRight = right + viewportToContentHorizontalOffset;
                 final float localTop = top + viewportToContentVerticalOffset;
                 final float localBottom = bottom + viewportToContentVerticalOffset;
-                final boolean isTopLeftVisible = isPositionVisible(localLeft, localTop);
+                final boolean isTopLeftVisible = visibleRect.contains(localLeft, localTop);
                 final boolean isBottomRightVisible =
-                        isPositionVisible(localRight, localBottom);
+                        visibleRect.contains(localRight, localBottom);
                 int characterBoundsFlags = 0;
                 if (isTopLeftVisible || isBottomRightVisible) {
                     characterBoundsFlags |= FLAG_HAS_VISIBLE_REGION;
@@ -14258,13 +14262,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Collects a {@link ViewTranslationRequest} which represents the content to be translated in
      * the view.
      *
-     * <p>NOTE: When overriding the method, it should not translate the password. If the subclass
-     * uses {@link TransformationMethod} to display the translated result, it's also not recommend
-     * to translate text is selectable or editable.
+     * <p>NOTE: When overriding the method, it should not collect a request to translate this
+     * TextView if it is displaying a password.
      *
      * @param supportedFormats the supported translation format. The value could be {@link
      *                         android.view.translation.TranslationSpec#DATA_FORMAT_TEXT}.
-     * @return the {@link ViewTranslationRequest} which contains the information to be translated.
+     * @param requestsCollector {@link Consumer} to receiver the {@link ViewTranslationRequest}
+     *                                         which contains the information to be translated.
      */
     @Override
     public void onCreateViewTranslationRequest(@NonNull int[] supportedFormats,
@@ -14286,18 +14290,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 return;
             }
             boolean isPassword = isAnyPasswordInputType() || hasPasswordTransformationMethod();
-            // TODO(b/177214256): support selectable text translation.
-            //  We use the TransformationMethod to implement showing the translated text. The
-            //  TextView does not support the text length change for TransformationMethod. If the
-            //  text is selectable or editable, it will crash while selecting the text. To support
-            //  it, it needs broader changes to text APIs, we only allow to translate non selectable
-            //  and editable text in S.
-            if (isTextEditable() || isPassword || isTextSelectable()) {
-                if (UiTranslationController.DEBUG) {
-                    Log.w(LOG_TAG, "Cannot create translation request. editable = "
-                            + isTextEditable() + ", isPassword = " + isPassword + ", selectable = "
-                            + isTextSelectable());
-                }
+            if (isTextEditable() || isPassword) {
+                Log.w(LOG_TAG, "Cannot create translation request. editable = "
+                        + isTextEditable() + ", isPassword = " + isPassword);
                 return;
             }
             // TODO(b/176488462): apply the view's important for translation

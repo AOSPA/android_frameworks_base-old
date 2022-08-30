@@ -201,13 +201,11 @@ interface IPackageManager {
     ParceledListSlice queryContentProviders(
             String processName, int uid, long flags, String metaDataKey);
 
-    @UnsupportedAppUsage
-    InstrumentationInfo getInstrumentationInfo(
-            in ComponentName className, int flags);
+    InstrumentationInfo getInstrumentationInfoAsUser(
+            in ComponentName className, int flags, int userId);
 
-    @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
-    ParceledListSlice queryInstrumentation(
-            String targetPackage, int flags);
+    ParceledListSlice queryInstrumentationAsUser(
+            String targetPackage, int flags, int userId);
 
     void finishPackageInstall(int token, boolean didLaunch);
 
@@ -748,7 +746,7 @@ interface IPackageManager {
     // We need to keep these in IPackageManager for app compatibility
     //------------------------------------------------------------------------
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
-    String[] getAppOpPermissionPackages(String permissionName);
+    String[] getAppOpPermissionPackages(String permissionName, int userId);
 
     @UnsupportedAppUsage
     PermissionGroupInfo getPermissionGroupInfo(String name, int flags);

@@ -22,10 +22,11 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.content.res.Configuration.ASSETS_SEQ_UNDEFINED;
 import static android.os.Build.VERSION_CODES.Q;
 import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+import static android.view.WindowManager.TRANSIT_CLOSE;
+import static android.view.WindowManager.TRANSIT_FLAG_APP_CRASHED;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.internal.util.Preconditions.checkArgument;
-import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.wm.ActivityRecord.State.DESTROYED;
 import static com.android.server.wm.ActivityRecord.State.DESTROYING;
 import static com.android.server.wm.ActivityRecord.State.PAUSED;
@@ -40,6 +41,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskManagerService.INSTRUMENTATION_KEY_DISPATCHING_TIMEOUT_MILLIS;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
+import static com.android.server.wm.WindowManagerService.MY_PID;
 
 import android.Manifest;
 import android.annotation.NonNull;
@@ -351,6 +353,18 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
     public void setCrashing(boolean crashing) {
         mCrashing = crashing;
+    }
+
+    void handleAppCrash() {
+        for (int i = mActivities.size() - 1; i >= 0; --i) {
+            final ActivityRecord r = mActivities.get(i);
+            Slog.w(TAG, "  Force finishing activity "
+                    + r.mActivityComponent.flattenToShortString());
+            r.detachFromProcess();
+            r.mDisplayContent.requestTransitionAndLegacyPrepare(TRANSIT_CLOSE,
+                    TRANSIT_FLAG_APP_CRASHED);
+            r.destroyIfPossible("handleAppCrashed");
+        }
     }
 
     boolean isCrashing() {

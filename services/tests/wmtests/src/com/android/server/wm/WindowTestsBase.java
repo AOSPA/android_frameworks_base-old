@@ -64,7 +64,6 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
-import android.app.IApplicationThread;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -245,6 +244,12 @@ class WindowTestsBase extends SystemServiceTestsBase {
         // {@link com.android.internal.R.bool.config_letterboxIsVerticalReachabilityEnabled},
         // may be set on some device form factors.
         mAtm.mWindowManager.mLetterboxConfiguration.setIsVerticalReachabilityEnabled(false);
+        // Ensure aspect ratio for unresizable apps isn't overridden on any device target.
+        // {@link com.android.internal.R.bool
+        // .config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled}, may be set on some
+        // device form factors.
+        mAtm.mWindowManager.mLetterboxConfiguration
+                .setIsSplitScreenAspectRatioForUnresizableAppsEnabled(false);
 
         checkDeviceSpecificOverridesNotApplied();
     }
@@ -254,8 +259,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
         // Revert back to device overrides.
         mAtm.mWindowManager.mLetterboxConfiguration.resetFixedOrientationLetterboxAspectRatio();
         mAtm.mWindowManager.mLetterboxConfiguration.resetLetterboxHorizontalPositionMultiplier();
+        mAtm.mWindowManager.mLetterboxConfiguration.resetLetterboxVerticalPositionMultiplier();
         mAtm.mWindowManager.mLetterboxConfiguration.resetIsHorizontalReachabilityEnabled();
         mAtm.mWindowManager.mLetterboxConfiguration.resetIsVerticalReachabilityEnabled();
+        mAtm.mWindowManager.mLetterboxConfiguration
+                .resetIsSplitScreenAspectRatioForUnresizableAppsEnabled();
     }
 
     /**
@@ -924,13 +932,15 @@ class WindowTestsBase extends SystemServiceTestsBase {
      */
     protected static class ActivityBuilder {
         static final int DEFAULT_FAKE_UID = 12345;
+        static final String DEFAULT_PROCESS_NAME = "procName";
+        static int sProcNameSeq;
 
         private final ActivityTaskManagerService mService;
 
         private ComponentName mComponent;
         private String mTargetActivity;
         private Task mTask;
-        private String mProcessName = "name";
+        private String mProcessName = DEFAULT_PROCESS_NAME;
         private String mAffinity;
         private int mUid = DEFAULT_FAKE_UID;
         private boolean mCreateTask = false;
@@ -1118,6 +1128,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
             aInfo.applicationInfo.targetSdkVersion = Build.VERSION_CODES.CUR_DEVELOPMENT;
             aInfo.applicationInfo.packageName = mComponent.getPackageName();
             aInfo.applicationInfo.uid = mUid;
+            if (DEFAULT_PROCESS_NAME.equals(mProcessName)) {
+                mProcessName += ++sProcNameSeq;
+            }
             aInfo.processName = mProcessName;
             aInfo.packageName = mComponent.getPackageName();
             aInfo.name = mComponent.getClassName();
@@ -1182,16 +1195,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
             if (mWpc != null) {
                 wpc = mWpc;
             } else {
-                wpc = new WindowProcessController(mService,
-                        aInfo.applicationInfo, mProcessName, mUid,
-                        UserHandle.getUserId(mUid), mock(Object.class),
-                        mock(WindowProcessListener.class));
-                wpc.setThread(mock(IApplicationThread.class));
+                final WindowProcessController p = mService.getProcessController(mProcessName, mUid);
+                wpc = p != null ? p : SystemServicesTestRule.addProcess(
+                        mService, aInfo.applicationInfo, mProcessName, 0 /* pid */);
             }
-            wpc.setThread(mock(IApplicationThread.class));
             activity.setProcess(wpc);
-            doReturn(wpc).when(mService).getProcessController(
-                    activity.processName, activity.info.applicationInfo.uid);
 
             // Resume top activities to make sure all other signals in the system are connected.
             mService.mRootWindowContainer.resumeFocusedTasksTopActivities();
@@ -1208,6 +1216,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         @Nullable
         private TaskFragmentOrganizer mOrganizer;
         private IBinder mFragmentToken;
+        private Rect mBounds;
 
         TaskFragmentBuilder(ActivityTaskManagerService service) {
             mAtm = service;
@@ -1244,6 +1253,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
             return this;
         }
 
+        TaskFragmentBuilder setBounds(@Nullable Rect bounds) {
+            mBounds = bounds;
+            return this;
+        }
+
         TaskFragment build() {
             SystemServicesTestRule.checkHoldsLock(mAtm.mGlobalLock);
 
@@ -1270,6 +1284,9 @@ class WindowTestsBase extends SystemServiceTestsBase {
                 taskFragment.setTaskFragmentOrganizer(
                         mOrganizer.getOrganizerToken(), DEFAULT_TASK_FRAGMENT_ORGANIZER_UID,
                         DEFAULT_TASK_FRAGMENT_ORGANIZER_PROCESS_NAME);
+            }
+            if (mBounds != null && !mBounds.isEmpty()) {
+                taskFragment.setBounds(mBounds);
             }
             spyOn(taskFragment);
             return taskFragment;
@@ -1550,7 +1567,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mSecondary = mService.mTaskOrganizerController.createRootTask(
                     display, WINDOWING_MODE_MULTI_WINDOW, null);
 
-            mPrimary.setAdjacentTaskFragment(mSecondary, true);
+            mPrimary.setAdjacentTaskFragment(mSecondary);
             display.getDefaultTaskDisplayArea().setLaunchAdjacentFlagRootTask(mSecondary);
 
             final Rect primaryBounds = new Rect();

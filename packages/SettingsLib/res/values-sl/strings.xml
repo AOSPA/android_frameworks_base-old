@@ -482,6 +482,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Hitro polnjenje"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Počasno polnjenje"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Brezžično polnjenje"</string>
+    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"Polnjenje na nosilcu"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Se ne polni"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Povezano, se ne polni"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Napolnjeno"</string>
@@ -671,4 +672,7 @@
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"Če oddajate aplikacijo <xliff:g id="SWITCHAPP">%1$s</xliff:g> ali spremenite izhod, bo trenutno oddajanje ustavljeno."</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"Oddajaj aplikacijo <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"Sprememba izhoda"</string>
+    <string name="back_navigation_animation" msgid="8105467568421689484">"Animacije poteze za nazaj s predvidevanjem"</string>
+    <string name="back_navigation_animation_summary" msgid="741292224121599456">"Omogoči sistemske animacije za potezo za nazaj s predvidevanjem."</string>
+    <string name="back_navigation_animation_dialog" msgid="8696966520944625596">"Ta nastavitev omogoča sistemske animacije za animacijo poteze s predvidevanjem. V datoteki manifesta mora biti parameter »enableOnBackInvokedCallback« za posamezno aplikacijo nastavljen na »true«."</string>
 </resources>

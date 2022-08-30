@@ -1498,8 +1498,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     int getOrientation(int candidate) {
         mLastOrientationSource = null;
-        if (!fillsParent()) {
-            // Ignore containers that don't completely fill their parents.
+        if (!providesOrientation()) {
             return SCREEN_ORIENTATION_UNSET;
         }
 
@@ -1533,8 +1532,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 continue;
             }
 
-            if (wc.fillsParent() || orientation != SCREEN_ORIENTATION_UNSPECIFIED) {
-                // Use the orientation if the container fills its parent or requested an explicit
+            if (wc.providesOrientation() || orientation != SCREEN_ORIENTATION_UNSPECIFIED) {
+                // Use the orientation if the container can provide or requested an explicit
                 // orientation that isn't SCREEN_ORIENTATION_UNSPECIFIED.
                 ProtoLog.v(WM_DEBUG_ORIENTATION, "%s is requesting orientation %d (%s)",
                         wc.toString(), orientation,
@@ -1561,6 +1560,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             }
         }
         return source;
+    }
+
+    boolean providesOrientation() {
+        return fillsParent();
     }
 
     /**
@@ -2636,7 +2639,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void applyMagnificationSpec(Transaction t, MagnificationSpec spec) {
         if (shouldMagnify()) {
             t.setMatrix(mSurfaceControl, spec.scale, 0, 0, spec.scale)
-                    .setPosition(mSurfaceControl, spec.offsetX, spec.offsetY);
+                    .setPosition(mSurfaceControl, spec.offsetX + mLastSurfacePosition.x,
+                            spec.offsetY + mLastSurfacePosition.y);
             mLastMagnificationSpec = spec;
         } else {
             clearMagnificationSpec(t);
@@ -2649,7 +2653,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void clearMagnificationSpec(Transaction t) {
         if (mLastMagnificationSpec != null) {
             t.setMatrix(mSurfaceControl, 1, 0, 0, 1)
-                .setPosition(mSurfaceControl, 0, 0);
+                .setPosition(mSurfaceControl, mLastSurfacePosition.x, mLastSurfacePosition.y);
         }
         mLastMagnificationSpec = null;
         for (int i = 0; i < mChildren.size(); i++) {
@@ -3664,10 +3668,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             mChildren.get(i).finishSync(outMergedTransaction, cancel);
         }
         if (cancel && mSyncGroup != null) mSyncGroup.onCancelSync(this);
-        clearSyncState();
-    }
-
-    void clearSyncState() {
         mSyncState = SYNC_STATE_NONE;
         mSyncGroup = null;
     }

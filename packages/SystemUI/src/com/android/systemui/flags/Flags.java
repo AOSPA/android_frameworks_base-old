@@ -43,9 +43,6 @@ public class Flags {
 
     /***************************************/
     // 100 - notification
-    public static final BooleanFlag NEW_NOTIFICATION_PIPELINE_RENDERING =
-            new BooleanFlag(101, true);
-
     public static final BooleanFlag NOTIFICATION_PIPELINE_DEVELOPER_LOGGING =
             new BooleanFlag(103, false);
 
@@ -171,7 +168,7 @@ public class Flags {
      */
     @Keep
     public static final SysPropBooleanFlag BUBBLES_HOME_GESTURE =
-            new SysPropBooleanFlag(1101, "persist.wm.debug.bubbles_home_gesture", false);
+            new SysPropBooleanFlag(1101, "persist.wm.debug.bubbles_home_gesture", true);
 
     // 1200 - predictive back
     @Keep

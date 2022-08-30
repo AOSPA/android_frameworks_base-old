@@ -482,6 +482,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"急速充電中"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"低速充電中"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"ワイヤレス充電中"</string>
+    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"充電ホルダー"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"充電していません"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"接続済み、充電していません"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"充電が完了しました"</string>
@@ -671,4 +672,7 @@
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"<xliff:g id="SWITCHAPP">%1$s</xliff:g> をブロードキャストしたり、出力を変更したりすると、現在のブロードキャストが停止します。"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"<xliff:g id="SWITCHAPP">%1$s</xliff:g> をブロードキャスト"</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"出力を変更"</string>
+    <string name="back_navigation_animation" msgid="8105467568421689484">"予測型「戻る」アニメーション"</string>
+    <string name="back_navigation_animation_summary" msgid="741292224121599456">"予測型「戻る」のシステム アニメーションを有効にする。"</string>
+    <string name="back_navigation_animation_dialog" msgid="8696966520944625596">"この設定は、予測型操作のシステム アニメーションを有効にします。アプリごとにマニフェスト ファイルで enableOnBackInvokedCallback を true に設定する必要があります。"</string>
 </resources>

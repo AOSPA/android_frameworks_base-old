@@ -175,7 +175,7 @@
     <string name="data_usage_ota" msgid="7984667793701597001">"ການອັບເດດລະບົບ"</string>
     <string name="tether_settings_title_usb" msgid="3728686573430917722">"ການປ່ອຍສັນຍານຜ່ານ USB"</string>
     <string name="tether_settings_title_wifi" msgid="4803402057533895526">"ຮັອດສະປອດເຄື່ອນທີ່"</string>
-    <string name="tether_settings_title_bluetooth" msgid="916519902721399656">"ປ່ອຍສັນຍານຜ່ານ Bluetooth"</string>
+    <string name="tether_settings_title_bluetooth" msgid="916519902721399656">"ການປ່ອຍສັນຍານດ້ວຍ Bluetooth"</string>
     <string name="tether_settings_title_usb_bluetooth" msgid="1727111807207577322">"ການປ່ອຍສັນຍານ"</string>
     <string name="tether_settings_title_all" msgid="8910259483383010470">"ການປ່ອຍສັນຍານ &amp; ຮັອດສະປອດເຄື່ອນທີ່"</string>
     <string name="managed_user_title" msgid="449081789742645723">"ແອັບເຮັດວຽກທັງໝົດ"</string>
@@ -482,6 +482,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"ກຳລັງສາກໄຟດ່ວນ"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"ກຳລັງສາກໄຟຊ້າໆ"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"ກຳລັງສາກໄຟໄຮ້ສາຍ"</string>
+    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"ກຳລັງສາກໄຟຜ່ານດັອກ"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"ບໍ່ໄດ້ສາກໄຟ"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"ເຊື່ອມຕໍ່ແລ້ວ, ບໍ່ໄດ້ສາກໄຟ"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"ສາກເຕັມແລ້ວ"</string>
@@ -671,4 +672,7 @@
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"ຫາກທ່ານອອກອາກາດ <xliff:g id="SWITCHAPP">%1$s</xliff:g> ຫຼື ປ່ຽນເອົ້າພຸດ, ການອອກອາກາດປັດຈຸບັນຂອງທ່ານຈະຢຸດ"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"ອອກອາກາດ <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"ປ່ຽນເອົ້າພຸດ"</string>
+    <string name="back_navigation_animation" msgid="8105467568421689484">"ອະນິເມຊັນກັບຫຼັງແບບຄາດເດົາ"</string>
+    <string name="back_navigation_animation_summary" msgid="741292224121599456">"ເປີດການນຳໃຊ້ອະນິເມຊັນລະບົບສຳລັບການກັບຫຼັງແບບຄາດເດົາ."</string>
+    <string name="back_navigation_animation_dialog" msgid="8696966520944625596">"ການຕັ້ງຄ່ານີ້ຈະເປີດການນຳໃຊ້ອະນິເມຊັນລະບົບສຳລັບອະນິເມຊັນທ່າທາງແບບຄາດເດົາ. ມັນຕ້ອງໃຊ້ການຕັ້ງຄ່າຕໍ່ແອັບ enableOnBackInvokedCallback ເປັນ true ໃນໄຟລ໌ manifest."</string>
 </resources>

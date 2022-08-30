@@ -1872,7 +1872,7 @@
     <!-- The package name of the default captive portal login app. Must be granted the
          POST_NOTIFICATIONS permission.
     -->
-    <string name="config_defaultCaptivePortalLoginPackageName" translatable="false"></string>
+    <string name="config_defaultCaptivePortalLoginPackageName" translatable="false">com.android.captiveportallogin</string>
 
     <!-- Whether to enable geocoder overlay which allows geocoder to be replaced
          by an app at run-time. When disabled, only the
@@ -2032,6 +2032,10 @@
          one single stream. If true, all audio streams are mapped to
          STREAM_MUSIC as if it's on TV platform. -->
     <bool name="config_single_volume">false</bool>
+
+    <!-- Flag indicating whether notification and ringtone volumes
+         are controlled together (aliasing is true) or not. -->
+    <bool name="config_alias_ring_notif_stream_types">true</bool>
 
     <!-- Flag indicating whether platform level volume adjustments are enabled for remote sessions
          on grouped devices. -->
@@ -2425,7 +2429,7 @@
 
     <!-- Whether to dismiss the active dream when an activity is started. Doesn't apply to
          assistant activities (ACTIVITY_TYPE_ASSISTANT) -->
-    <bool name="config_dismissDreamOnActivityStart">true</bool>
+    <bool name="config_dismissDreamOnActivityStart">false</bool>
 
     <!-- The prefix of dream component names that are loggable. If empty, logs "other" for all. -->
     <string name="config_loggable_dream_prefix" translatable="false"></string>
@@ -3006,6 +3010,10 @@
         <item>com.android.server.notification.CriticalNotificationExtractor</item>
 
     </string-array>
+
+    <!-- Whether to show a notification informing users about notification permission settings
+         upon upgrade to T from a pre-T version -->
+    <bool name="config_notificationReviewPermissions">false</bool>
 
     <!-- Default Gravity setting for the system Toast view. Equivalent to: Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM -->
     <integer name="config_toastDefaultGravity">0x00000051</integer>
@@ -4376,6 +4384,9 @@
     <!-- Name of a font family to use for medium body text. -->
     <string name="config_bodyFontFamilyMedium" translatable="false">sans-serif-medium</string>
 
+    <!-- Name of the font family to use in the default lockscreen clock -->
+    <string name="config_clockFontFamily" translatable="false">monospace</string>
+
     <!-- Size of icon shown beside a preference locked by admin -->
     <dimen name="config_restrictedIconSize">@dimen/restricted_icon_size_material</dimen>
 
@@ -5194,6 +5205,15 @@
 
     <!-- Whether displaying letterbox education is enabled for letterboxed fullscreen apps. -->
     <bool name="config_letterboxIsEducationEnabled">false</bool>
+
+    <!-- Default min aspect ratio for unresizable apps which is used when an app doesn't specify
+         android:minAspectRatio in accordance with CDD 7.1.1.2 requirement:
+         https://source.android.com/compatibility/12/android-12-cdd#7112_screen_aspect_ratio.
+         An exception will be thrown if the given aspect ratio < 4:3.  -->
+    <item name="config_letterboxDefaultMinAspectRatioForUnresizableApps" format="float" type="dimen">1.5</item>
+
+    <!-- Whether using split screen aspect ratio as a default aspect ratio for unresizable apps. -->
+    <bool name="config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled">false</bool>
 
     <!-- Whether a camera compat controller is enabled to allow the user to apply or revert
          treatment for stretched issues in camera viewfinder. -->

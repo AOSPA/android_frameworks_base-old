@@ -17,6 +17,7 @@ package com.android.systemui.statusbar.notification.interruption;
 
 
 import static android.app.Notification.FLAG_BUBBLE;
+import static android.app.Notification.GROUP_ALERT_SUMMARY;
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 import static android.app.NotificationManager.IMPORTANCE_HIGH;
 import static android.app.NotificationManager.IMPORTANCE_LOW;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.graphics.drawable.Icon;
@@ -431,6 +433,17 @@ public class NotificationInterruptStateProviderImplTest extends SysuiTestCase {
     }
 
     /**
+     * Test that notification can bubble even if it is a child in a group and group settings are
+     * set to alert only for summary notifications.
+     */
+    @Test
+    public void testShouldBubbleUp_notifInGroupWithOnlySummaryAlerts() {
+        ensureStateForBubbleUp();
+        NotificationEntry bubble = createBubble("testgroup", GROUP_ALERT_SUMMARY);
+        assertThat(mNotifInterruptionStateProvider.shouldBubbleUp(bubble)).isTrue();
+    }
+
+    /**
      * If the notification doesn't have permission to bubble, it shouldn't bubble.
      */
     @Test
@@ -497,16 +510,27 @@ public class NotificationInterruptStateProviderImplTest extends SysuiTestCase {
     }
 
     private NotificationEntry createBubble() {
+        return createBubble(null, null);
+    }
+
+    private NotificationEntry createBubble(String groupKey, Integer groupAlert) {
         Notification.BubbleMetadata data = new Notification.BubbleMetadata.Builder(
                 PendingIntent.getActivity(mContext, 0, new Intent(),
                     PendingIntent.FLAG_MUTABLE),
                         Icon.createWithResource(mContext.getResources(), R.drawable.android))
                 .build();
-        Notification n = new Notification.Builder(getContext(), "a")
+        Notification.Builder nb = new Notification.Builder(getContext(), "a")
                 .setContentTitle("title")
                 .setContentText("content text")
-                .setBubbleMetadata(data)
-                .build();
+                .setBubbleMetadata(data);
+        if (groupKey != null) {
+            nb.setGroup(groupKey);
+            nb.setGroupSummary(false);
+        }
+        if (groupAlert != null) {
+            nb.setGroupAlertBehavior(groupAlert);
+        }
+        Notification n = nb.build();
         n.flags |= FLAG_BUBBLE;
 
         return new NotificationEntryBuilder()
@@ -529,6 +553,7 @@ public class NotificationInterruptStateProviderImplTest extends SysuiTestCase {
                 .setPkg("a")
                 .setOpPkg("a")
                 .setTag("a")
+                .setChannel(new NotificationChannel("a", null, importance))
                 .setNotification(n)
                 .setImportance(importance)
                 .build();
