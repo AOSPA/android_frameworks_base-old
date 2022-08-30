@@ -16,6 +16,24 @@
       "message": "https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/23156",
       "revId": "01d006f18cba0ad6f69c027bce99578188feae5b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f7927381_6ea245fc",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000730
+      },
+      "writtenOn": "2022-08-30T00:14:02Z",
+      "side": 1,
+      "message": "MB, pushed the entire HEAD",
+      "parentUuid": "56de7f72_cf515b20",
+      "revId": "01d006f18cba0ad6f69c027bce99578188feae5b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
