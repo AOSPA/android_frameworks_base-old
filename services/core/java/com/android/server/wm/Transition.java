@@ -229,7 +229,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
         if (restoreBelow != null) {
             final ChangeInfo info = mChanges.get(restoreBelow);
-            info.mFlags |= ChangeInfo.FLAG_ABOVE_TRANSIENT_LAUNCH;
+            if (info != null) {
+                info.mFlags |= ChangeInfo.FLAG_ABOVE_TRANSIENT_LAUNCH;
+            }
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Transition %d: Set %s as "
                 + "transient-launch", mSyncId, activity);
@@ -301,6 +303,16 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     @TransitionFlags
     int getFlags() {
         return mFlags;
+    }
+
+    @VisibleForTesting
+    SurfaceControl.Transaction getStartTransaction() {
+        return mStartTransaction;
+    }
+
+    @VisibleForTesting
+    SurfaceControl.Transaction getFinishTransaction() {
+        return mFinishTransaction;
     }
 
     /** Starts collecting phase. Once this starts, all relevant surface operations are sync. */
@@ -769,6 +781,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
 
         mState = STATE_PLAYING;
+        mStartTransaction = transaction;
+        mFinishTransaction = mController.mAtm.mWindowManager.mTransactionFactory.get();
         mController.moveToPlaying(this);
 
         if (dc.isKeyguardLocked()) {
@@ -854,8 +868,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (controller != null && mTargets.contains(dc)) {
             controller.setupStartTransaction(transaction);
         }
-        mStartTransaction = transaction;
-        mFinishTransaction = mController.mAtm.mWindowManager.mTransactionFactory.get();
         buildFinishTransaction(mFinishTransaction, info.getRootLeash());
         if (mController.getTransitionPlayer() != null) {
             mController.dispatchLegacyAppTransitionStarting(info);

@@ -1823,7 +1823,7 @@ public class BubbleStackView extends FrameLayout
     /**
      * Update bubble order and pointer position.
      */
-    public void updateBubbleOrder(List<Bubble> bubbles) {
+    public void updateBubbleOrder(List<Bubble> bubbles, boolean updatePointerPositoion) {
         final Runnable reorder = () -> {
             for (int i = 0; i < bubbles.size(); i++) {
                 Bubble bubble = bubbles.get(i);
@@ -1839,7 +1839,10 @@ public class BubbleStackView extends FrameLayout
                     .map(b -> b.getIconView()).collect(Collectors.toList());
             mStackAnimationController.animateReorder(bubbleViews, reorder);
         }
-        updatePointerPosition(false /* forIme */);
+
+        if (updatePointerPositoion) {
+            updatePointerPosition(false /* forIme */);
+        }
     }
 
     /**
@@ -2466,10 +2469,9 @@ public class BubbleStackView extends FrameLayout
     private void animateSwitchBubbles() {
         // If we're no longer expanded, this is meaningless.
         if (!mIsExpanded) {
+            mIsBubbleSwitchAnimating = false;
             return;
         }
-
-        mIsBubbleSwitchAnimating = true;
 
         // The surface contains a screenshot of the animating out bubble, so we just need to animate
         // it out (and then release the GraphicBuffer).
@@ -3151,6 +3153,7 @@ public class BubbleStackView extends FrameLayout
             }, 0);
 
             if (!mIsExpansionAnimating) {
+                mIsBubbleSwitchAnimating = true;
                 mSurfaceSynchronizer.syncSurfaceAndRun(() -> {
                     post(this::animateSwitchBubbles);
                 });

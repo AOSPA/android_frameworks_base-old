@@ -18,6 +18,8 @@ package com.android.wm.shell.splitscreen;
 
 import static android.app.ActivityOptions.KEY_LAUNCH_ROOT_TASK_TOKEN;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
+import static android.app.ComponentOptions.KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED;
+import static android.app.ComponentOptions.KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED_BY_PERMISSION;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
@@ -77,6 +79,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.Slog;
+import android.view.Choreographer;
 import android.view.IRemoteAnimationFinishedCallback;
 import android.view.IRemoteAnimationRunner;
 import android.view.RemoteAnimationAdapter;
@@ -608,6 +611,21 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         }
     }
 
+    void setSideStagePositionAnimated(@SplitPosition int sideStagePosition) {
+        if (mSideStagePosition == sideStagePosition) return;
+        SurfaceControl.Transaction t = mTransactionPool.acquire();
+        final StageTaskListener topLeftStage =
+                mSideStagePosition == SPLIT_POSITION_TOP_OR_LEFT ? mSideStage : mMainStage;
+        final StageTaskListener bottomRightStage =
+                mSideStagePosition == SPLIT_POSITION_TOP_OR_LEFT ? mMainStage : mSideStage;
+        mSplitLayout.splitSwitching(t, topLeftStage.mRootLeash, bottomRightStage.mRootLeash,
+                () -> {
+                    setSideStagePosition(SplitLayout.reversePosition(mSideStagePosition),
+                            null /* wct */);
+                    mTransactionPool.release(t);
+                });
+    }
+
     void setSideStagePosition(@SplitPosition int sideStagePosition,
             @Nullable WindowContainerTransaction wct) {
         setSideStagePosition(sideStagePosition, true /* updateBounds */, wct);
@@ -835,6 +853,9 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
     private void addActivityOptions(Bundle opts, StageTaskListener stage) {
         opts.putParcelable(KEY_LAUNCH_ROOT_TASK_TOKEN, stage.mRootTaskInfo.token);
+        // Put BAL flags to avoid activity start aborted.
+        opts.putBoolean(KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED, true);
+        opts.putBoolean(KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED_BY_PERMISSION, true);
     }
 
     void updateActivityOptions(Bundle opts, @SplitPosition int position) {
@@ -1116,6 +1137,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                     mDividerFadeInAnimator.cancel();
                     return;
                 }
+                transaction.setFrameTimelineVsync(Choreographer.getInstance().getVsyncId());
                 transaction.setAlpha(dividerLeash, (float) animation.getAnimatedValue());
                 transaction.apply();
             });
@@ -1202,7 +1224,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
     @Override
     public void onDoubleTappedDivider() {
-        setSideStagePosition(SplitLayout.reversePosition(mSideStagePosition), null /* wct */);
+        setSideStagePositionAnimated(SplitLayout.reversePosition(mSideStagePosition));
         mLogger.logSwap(getMainStagePosition(), mMainStage.getTopChildTaskUid(),
                 getSideStagePosition(), mSideStage.getTopChildTaskUid(),
                 mSplitLayout.isLandscape());
@@ -1210,17 +1232,23 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
     @Override
     public void onLayoutPositionChanging(SplitLayout layout) {
-        mSyncQueue.runInSync(t -> updateSurfaceBounds(layout, t, false /* applyResizingOffset */));
+        final SurfaceControl.Transaction t = mTransactionPool.acquire();
+        t.setFrameTimelineVsync(Choreographer.getInstance().getVsyncId());
+        updateSurfaceBounds(layout, t, false /* applyResizingOffset */);
+        t.apply();
+        mTransactionPool.release(t);
     }
 
     @Override
     public void onLayoutSizeChanging(SplitLayout layout) {
-        mSyncQueue.runInSync(t -> {
-            setResizingSplits(true /* resizing */);
-            updateSurfaceBounds(layout, t, true /* applyResizingOffset */);
-            mMainStage.onResizing(getMainStageBounds(), t);
-            mSideStage.onResizing(getSideStageBounds(), t);
-        });
+        final SurfaceControl.Transaction t = mTransactionPool.acquire();
+        t.setFrameTimelineVsync(Choreographer.getInstance().getVsyncId());
+        setResizingSplits(true /* resizing */);
+        updateSurfaceBounds(layout, t, true /* applyResizingOffset */);
+        mMainStage.onResizing(getMainStageBounds(), t);
+        mSideStage.onResizing(getSideStageBounds(), t);
+        t.apply();
+        mTransactionPool.release(t);
     }
 
     @Override
@@ -1491,6 +1519,11 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             SurfaceControl.Transaction t, IBinder mergeTarget,
             Transitions.TransitionFinishCallback finishCallback) {
         mSplitTransitions.mergeAnimation(transition, info, t, mergeTarget, finishCallback);
+    }
+
+    /** Jump the current transition animation to the end. */
+    public boolean end() {
+        return mSplitTransitions.end();
     }
 
     @Override

@@ -16,6 +16,8 @@
 
 package com.android.systemui.flags;
 
+import static android.provider.DeviceConfig.NAMESPACE_WINDOW_MANAGER;
+
 import com.android.internal.annotations.Keep;
 import com.android.systemui.R;
 
@@ -76,6 +78,14 @@ public class Flags {
 
     public static final ResourceBooleanFlag BOUNCER_USER_SWITCHER =
             new ResourceBooleanFlag(204, R.bool.config_enableBouncerUserSwitcher);
+
+    public static final ResourceBooleanFlag FACE_SCANNING_ANIM =
+            new ResourceBooleanFlag(205, R.bool.config_enableFaceScanningAnimation);
+    /**
+     * Whether the KeyguardBottomArea(View|Controller) should use the modern architecture or the old
+     * one.
+     */
+    public static final BooleanFlag MODERN_BOTTOM_AREA = new BooleanFlag(206, false);
 
     /***************************************/
     // 300 - power menu
@@ -147,7 +157,7 @@ public class Flags {
 
     /***************************************/
     // 900 - media
-    public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, true);
+    public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, false);
     public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, false);
     public static final BooleanFlag MEDIA_NEARBY_DEVICES = new BooleanFlag(903, true);
     public static final BooleanFlag MEDIA_MUTE_AWAIT = new BooleanFlag(904, true);
@@ -170,6 +180,11 @@ public class Flags {
     public static final SysPropBooleanFlag BUBBLES_HOME_GESTURE =
             new SysPropBooleanFlag(1101, "persist.wm.debug.bubbles_home_gesture", true);
 
+    @Keep
+    public static final DeviceConfigBooleanFlag WM_ENABLE_PARTIAL_SCREEN_SHARING =
+            new DeviceConfigBooleanFlag(1102, "record_task_content",
+                    NAMESPACE_WINDOW_MANAGER, false, true);
+
     // 1200 - predictive back
     @Keep
     public static final SysPropBooleanFlag WM_ENABLE_PREDICTIVE_BACK = new SysPropBooleanFlag(
@@ -180,6 +195,8 @@ public class Flags {
     @Keep
     public static final SysPropBooleanFlag WM_ALWAYS_ENFORCE_PREDICTIVE_BACK =
             new SysPropBooleanFlag(1202, "persist.wm.debug.predictive_back_always_enforce", false);
+
+    public static final BooleanFlag NEW_BACK_AFFORDANCE = new BooleanFlag(1203, true);
 
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================

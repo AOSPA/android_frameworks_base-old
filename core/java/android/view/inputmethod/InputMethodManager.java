@@ -97,6 +97,7 @@ import android.window.WindowOnBackInvokedDispatcher;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.inputmethod.DirectBootAwareness;
 import com.android.internal.inputmethod.IInputMethodClient;
+import com.android.internal.inputmethod.IInputMethodSession;
 import com.android.internal.inputmethod.IRemoteAccessibilityInputConnection;
 import com.android.internal.inputmethod.ImeTracing;
 import com.android.internal.inputmethod.InputBindResult;
@@ -109,7 +110,6 @@ import com.android.internal.inputmethod.StartInputReason;
 import com.android.internal.inputmethod.UnbindReason;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.view.IInputMethodManager;
-import com.android.internal.view.IInputMethodSession;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -525,7 +525,7 @@ public final class InputMethodManager {
      */
     @Nullable
     @GuardedBy("mH")
-    private InputMethodSessionWrapper mCurrentInputMethodSession = null;
+    private IInputMethodSessionInvoker mCurrentInputMethodSession = null;
     /**
      * Encapsulates IPCs to the currently connected AccessibilityServices.
      */
@@ -541,7 +541,9 @@ public final class InputMethodManager {
 
     /**
      * The monitor mode for {@link #updateCursorAnchorInfo(View, CursorAnchorInfo)}.
+     * @deprecated This is kept for {@link UnsupportedAppUsage}.  Must not be used.
      */
+    @Deprecated
     private int mRequestUpdateCursorAnchorInfoMonitorMode = REQUEST_UPDATE_CURSOR_ANCHOR_INFO_NONE;
 
     /**
@@ -932,7 +934,7 @@ public final class InputMethodManager {
                         setInputChannelLocked(res.channel);
                         mCurMethod = res.method; // for @UnsupportedAppUsage
                         mCurrentInputMethodSession =
-                                InputMethodSessionWrapper.createOrNull(res.method);
+                                IInputMethodSessionInvoker.createOrNull(res.method);
                         mCurId = res.id;
                         mBindSequence = res.sequence;
                         mVirtualDisplayToScreenMatrix = res.getVirtualDisplayToScreenMatrix();
@@ -1131,9 +1133,7 @@ public final class InputMethodManager {
                                 || mServedInputConnection == null) {
                             return;
                         }
-                        final boolean isMonitoring = (mRequestUpdateCursorAnchorInfoMonitorMode
-                                & InputConnection.CURSOR_UPDATE_MONITOR) != 0;
-                        if (!isMonitoring) {
+                        if (!mServedInputConnection.isCursorAnchorInfoMonitoring()) {
                             return;
                         }
                         // Since the host VirtualDisplay is moved, we need to issue
@@ -2419,7 +2419,7 @@ public final class InputMethodManager {
                 setInputChannelLocked(res.channel);
                 mBindSequence = res.sequence;
                 mCurMethod = res.method; // for @UnsupportedAppUsage
-                mCurrentInputMethodSession = InputMethodSessionWrapper.createOrNull(res.method);
+                mCurrentInputMethodSession = IInputMethodSessionInvoker.createOrNull(res.method);
                 mAccessibilityInputMethodSession.clear();
                 if (res.accessibilitySessions != null) {
                     for (int i = 0; i < res.accessibilitySessions.size(); i++) {
@@ -2675,19 +2675,14 @@ public final class InputMethodManager {
                 if (DEBUG) {
                     Log.v(TAG, "SELECTION CHANGE: " + mCurrentInputMethodSession);
                 }
-                final int oldSelStart = mCursorSelStart;
-                final int oldSelEnd = mCursorSelEnd;
-                // Update internal values before sending updateSelection to the IME, because
-                // if it changes the text within its onUpdateSelection handler in a way that
-                // does not move the cursor we don't want to call it again with the same values.
+                mCurrentInputMethodSession.updateSelection(mCursorSelStart, mCursorSelEnd, selStart,
+                        selEnd, candidatesStart, candidatesEnd);
+                forAccessibilitySessionsLocked(wrapper -> wrapper.updateSelection(mCursorSelStart,
+                        mCursorSelEnd, selStart, selEnd, candidatesStart, candidatesEnd));
                 mCursorSelStart = selStart;
                 mCursorSelEnd = selEnd;
                 mCursorCandStart = candidatesStart;
                 mCursorCandEnd = candidatesEnd;
-                mCurrentInputMethodSession.updateSelection(
-                        oldSelStart, oldSelEnd, selStart, selEnd, candidatesStart, candidatesEnd);
-                forAccessibilitySessionsLocked(wrapper -> wrapper.updateSelection(oldSelStart,
-                        oldSelEnd, selStart, selEnd, candidatesStart, candidatesEnd));
             }
         }
     }
@@ -2744,8 +2739,10 @@ public final class InputMethodManager {
      * Return true if the current input method wants to be notified when cursor/anchor location
      * is changed.
      *
+     * @deprecated This method is kept for {@link UnsupportedAppUsage}.  Must not be used.
      * @hide
      */
+    @Deprecated
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public boolean isCursorAnchorInfoEnabled() {
         synchronized (mH) {
@@ -2760,23 +2757,14 @@ public final class InputMethodManager {
     /**
      * Set the requested mode for {@link #updateCursorAnchorInfo(View, CursorAnchorInfo)}.
      *
+     * @deprecated This method is kept for {@link UnsupportedAppUsage}.  Must not be used.
      * @hide
      */
+    @Deprecated
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public void setUpdateCursorAnchorInfoMode(int flags) {
         synchronized (mH) {
             mRequestUpdateCursorAnchorInfoMonitorMode = flags;
-        }
-    }
-
-    /**
-     * Get the requested mode for {@link #updateCursorAnchorInfo(View, CursorAnchorInfo)}.
-     *
-     * @hide
-     */
-    public int getUpdateCursorAnchorInfoMode() {
-        synchronized (mH) {
-            return mRequestUpdateCursorAnchorInfoMonitorMode;
         }
     }
 
@@ -2834,8 +2822,8 @@ public final class InputMethodManager {
             }
             // If immediate bit is set, we will call updateCursorAnchorInfo() even when the data has
             // not been changed from the previous call.
-            final boolean isImmediate = (mRequestUpdateCursorAnchorInfoMonitorMode &
-                    CURSOR_UPDATE_IMMEDIATE) != 0;
+            final boolean isImmediate = mServedInputConnection != null
+                    && mServedInputConnection.resetHasPendingImmediateCursorAnchorInfoUpdate();
             if (!isImmediate && Objects.equals(mCursorAnchorInfo, cursorAnchorInfo)) {
                 // TODO: Consider always emitting this message once we have addressed redundant
                 // calls of this method from android.widget.Editor.
@@ -2854,8 +2842,6 @@ public final class InputMethodManager {
                 mCurrentInputMethodSession.updateCursorAnchorInfo(cursorAnchorInfo);
             }
             mCursorAnchorInfo = cursorAnchorInfo;
-            // Clear immediate bit (if any).
-            mRequestUpdateCursorAnchorInfoMonitorMode &= ~CURSOR_UPDATE_IMMEDIATE;
         }
     }
 

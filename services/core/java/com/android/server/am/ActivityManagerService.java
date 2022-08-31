@@ -352,7 +352,6 @@ import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BackgroundThread;
-import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.BinderCallHeavyHitterWatcher.BinderCallHeavyHitterListener;
 import com.android.internal.os.BinderCallHeavyHitterWatcher.HeavyHitterContainer;
 import com.android.internal.os.BinderInternal;
@@ -413,6 +412,7 @@ import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.SELinuxUtil;
 import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import com.android.server.pm.snapshot.PackageDataSnapshot;
+import com.android.server.power.stats.BatteryStatsImpl;
 import com.android.server.sdksandbox.SdkSandboxManagerLocal;
 import com.android.server.uri.GrantUri;
 import com.android.server.uri.NeededUriGrants;
@@ -3822,7 +3822,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                     final Intent intent = new Intent(Intent.ACTION_PACKAGE_DATA_CLEARED,
                             Uri.fromParts("package", packageName, null));
-                    intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+                    intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND
+                            | Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
                     intent.putExtra(Intent.EXTRA_UID, (appInfo != null) ? appInfo.uid : -1);
                     intent.putExtra(Intent.EXTRA_USER_HANDLE, resolvedUserId);
                     final int[] visibilityAllowList =
@@ -15388,6 +15389,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                             app.processName, app.toShortString(), cpuLimit, app)) {
                     mHandler.post(() -> {
                         synchronized (ActivityManagerService.this) {
+                            if (app.getThread() == null
+                               || app.mState.getSetProcState() < ActivityManager.PROCESS_STATE_HOME) {
+                                   return;
+                            }
                             app.killLocked("excessive cpu " + cpuTimeUsed + " during "
                                     + uptimeSince + " dur=" + checkDur + " limit=" + cpuLimit,
                                     ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
@@ -15413,6 +15418,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                             app.processName, r.toString(), cpuLimit, app)) {
                     mHandler.post(() -> {
                         synchronized (ActivityManagerService.this) {
+                            if (app.getThread() == null
+                               || app.mState.getSetProcState() < ActivityManager.PROCESS_STATE_HOME) {
+                                   return;
+                            }
                             mPhantomProcessList.killPhantomProcessGroupLocked(app, r,
                                     ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
                                     ApplicationExitInfo.SUBREASON_EXCESSIVE_CPU,

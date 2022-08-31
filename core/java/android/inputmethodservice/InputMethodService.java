@@ -135,28 +135,30 @@ import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.window.CompatOnBackInvokedCallback;
 import android.window.ImeOnBackInvokedDispatcher;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.window.WindowMetricsHelper;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.inputmethod.IInlineSuggestionsRequestCallback;
 import com.android.internal.inputmethod.IInputContentUriToken;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.IRemoteInputConnection;
 import com.android.internal.inputmethod.ImeTracing;
+import com.android.internal.inputmethod.InlineSuggestionsRequestInfo;
 import com.android.internal.inputmethod.InputMethodNavButtonFlags;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.util.RingBuffer;
-import com.android.internal.view.IInlineSuggestionsRequestCallback;
-import com.android.internal.view.InlineSuggestionsRequestInfo;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -351,17 +353,24 @@ public class InputMethodService extends AbstractInputMethodService {
      * @see #onStartStylusHandwriting()
      * @see #onFinishStylusHandwriting()
      */
-    private static final int STYLUS_HANDWRITING_IDLE_TIMEOUT_MS = 10000;
+    private static final long STYLUS_HANDWRITING_IDLE_TIMEOUT_MS = 10000;
+
+    /**
+     * Max allowed stylus handwriting session idle-timeout.
+     */
+    private static final long STYLUS_HANDWRITING_IDLE_TIMEOUT_MAX_MS =
+            STYLUS_HANDWRITING_IDLE_TIMEOUT_MS * 3;
 
     /**
      * A circular buffer of size MAX_EVENTS_BUFFER in case IME is taking too long to add ink view.
      **/
     private RingBuffer<MotionEvent> mPendingEvents;
     private ImeOnBackInvokedDispatcher mImeDispatcher;
-    private Boolean mBackCallbackRegistered = false;
-    private final OnBackInvokedCallback mCompatBackCallback = this::compatHandleBack;
+    private boolean mBackCallbackRegistered = false;
+    private final CompatOnBackInvokedCallback mCompatBackCallback = this::compatHandleBack;
     private Runnable mImeSurfaceRemoverRunnable;
     private Runnable mFinishHwRunnable;
+    private long mStylusHwSessionsTimeout = STYLUS_HANDWRITING_IDLE_TIMEOUT_MS;
 
     /**
      * Returns whether {@link InputMethodService} is responsible for rendering the back button and
@@ -2474,7 +2483,8 @@ public class InputMethodService extends AbstractInputMethodService {
      *
      * Note for IME developers: Call this method at any time to finish current handwriting session.
      * Generally, this should be invoked after a short timeout, giving the user enough time
-     * to start the next stylus stroke, if any.
+     * to start the next stylus stroke, if any. By default, system will time-out after few seconds.
+     * To override default timeout, use {@link #setStylusHandwritingSessionTimeout(Duration)}.
      *
      * Handwriting session will be finished by framework on next {@link #onFinishInput()}.
      */
@@ -2503,6 +2513,59 @@ public class InputMethodService extends AbstractInputMethodService {
         onFinishStylusHandwriting();
     }
 
+    /**
+     * Sets the duration after which an ongoing stylus handwriting session that hasn't received new
+     * {@link MotionEvent}s will time out and {@link #finishStylusHandwriting()} will be called.
+     *
+     * The maximum allowed duration is returned by
+     * {@link #getStylusHandwritingIdleTimeoutMax()}, larger values will be clamped.
+     *
+     * Note: this value is bound to the {@link InputMethodService} instance and resets to the
+     * default whenever a new instance is constructed.
+     * @param duration timeout to set.
+     * @see #onStartStylusHandwriting()
+     * @see #onFinishStylusHandwriting()
+     * @see #getStylusHandwritingSessionTimeout()
+     */
+    public final void setStylusHandwritingSessionTimeout(@NonNull Duration duration) {
+        long timeoutMs = duration.toMillis();
+        if (timeoutMs <= 0) {
+            throw new IllegalStateException(
+                    "A positive value should be set for Stylus handwriting session timeout.");
+        }
+        if (timeoutMs > STYLUS_HANDWRITING_IDLE_TIMEOUT_MAX_MS) {
+            timeoutMs = STYLUS_HANDWRITING_IDLE_TIMEOUT_MAX_MS;
+        }
+        mStylusHwSessionsTimeout = timeoutMs;
+        scheduleHandwritingSessionTimeout();
+    }
+
+    /**
+     * Returns the maximum stylus handwriting session idle-timeout for use with
+     * {@link #setStylusHandwritingSessionTimeout(Duration)}.
+     * @see #onStartStylusHandwriting()
+     * @see #onFinishStylusHandwriting()
+     * @see #getStylusHandwritingSessionTimeout()
+     */
+    @NonNull
+    public static final Duration getStylusHandwritingIdleTimeoutMax() {
+        return Duration.ofMillis(STYLUS_HANDWRITING_IDLE_TIMEOUT_MAX_MS);
+    }
+
+    /**
+     * Returns the duration after which an ongoing stylus handwriting session that hasn't received
+     * new {@link MotionEvent}s will time out and {@link #finishStylusHandwriting()} will be called.
+     * The current timeout can be changed using
+     * {@link #setStylusHandwritingSessionTimeout(Duration)}.
+     * @see #getStylusHandwritingIdleTimeoutMax
+     * @see #onStartStylusHandwriting()
+     * @see #onFinishStylusHandwriting()
+     */
+    @NonNull
+    public final Duration getStylusHandwritingSessionTimeout() {
+        return Duration.ofMillis(mStylusHwSessionsTimeout);
+    }
+
     private Runnable getFinishHandwritingRunnable() {
         if (mFinishHwRunnable != null) {
             return mFinishHwRunnable;
@@ -2524,7 +2587,7 @@ public class InputMethodService extends AbstractInputMethodService {
         if (mFinishHwRunnable != null) {
             mHandler.removeCallbacks(mFinishHwRunnable);
         }
-        mHandler.postDelayed(getFinishHandwritingRunnable(), STYLUS_HANDWRITING_IDLE_TIMEOUT_MS);
+        mHandler.postDelayed(getFinishHandwritingRunnable(), mStylusHwSessionsTimeout);
     }
 
     /**
@@ -2924,11 +2987,6 @@ public class InputMethodService extends AbstractInputMethodService {
      * the text.  This is called whether or not the input method has requested
      * extracted text updates, although if so it will not receive this call
      * if the extracted text has changed as well.
-     *
-     * <p>Be careful about changing the text in reaction to this call with
-     * methods such as setComposingText, commitText or
-     * deleteSurroundingText. If the cursor moves as a result, this method
-     * will be called again, which may result in an infinite loop.
      * 
      * <p>The default implementation takes care of updating the cursor in
      * the extract text, if it is being shown.

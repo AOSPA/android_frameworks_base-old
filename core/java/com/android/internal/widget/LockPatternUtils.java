@@ -775,7 +775,7 @@ public class LockPatternUtils {
      * @return true if device is file encrypted
      */
     public static boolean isFileEncryptionEnabled() {
-        return StorageManager.isFileEncryptedNativeOrEmulated();
+        return StorageManager.isFileEncrypted();
     }
 
     /**

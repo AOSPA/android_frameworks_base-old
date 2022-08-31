@@ -6673,7 +6673,7 @@
                 android:process=":ui">
         </activity>
         <activity android:name="com.android.internal.app.PlatLogoActivity"
-                android:theme="@style/Theme.DeviceDefault.Wallpaper.NoTitleBar"
+                android:theme="@style/Theme.Wallpaper.NoTitleBar.Fullscreen"
                 android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
                 android:icon="@drawable/platlogo"
                 android:process=":ui">
@@ -7049,10 +7049,6 @@
         </service>
 
         <service android:name="com.android.server.camera.CameraStatsJobService"
-                 android:permission="android.permission.BIND_JOB_SERVICE" >
-        </service>
-
-        <service android:name="com.android.server.timezone.TimeZoneUpdateIdler"
                  android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 

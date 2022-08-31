@@ -121,6 +121,7 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeSetAnimationTransaction(long transactionObj);
     private static native void nativeSetEarlyWakeupStart(long transactionObj);
     private static native void nativeSetEarlyWakeupEnd(long transactionObj);
+    private static native long nativeGetTransactionId(long transactionObj);
 
     private static native void nativeSetLayer(long transactionObj, long nativeObject, int zorder);
     private static native void nativeSetRelativeLayer(long transactionObj, long nativeObject,
@@ -939,10 +940,14 @@ public final class SurfaceControl implements Parcelable {
 
             /**
              * The portion of the screen to capture into the buffer. Caller may pass  in
-             * 'new Rect()' if no cropping is desired.
+             * 'new Rect()' or null if no cropping is desired.
              */
-            public T setSourceCrop(Rect sourceCrop) {
-                mSourceCrop.set(sourceCrop);
+            public T setSourceCrop(@Nullable Rect sourceCrop) {
+                if (sourceCrop == null) {
+                    mSourceCrop.setEmpty();
+                } else {
+                    mSourceCrop.set(sourceCrop);
+                }
                 return getThis();
             }
 
@@ -2522,8 +2527,8 @@ public final class SurfaceControl implements Parcelable {
      * @return Returns a HardwareBuffer that contains the layer capture.
      * @hide
      */
-    public static ScreenshotHardwareBuffer captureLayers(SurfaceControl layer, Rect sourceCrop,
-            float frameScale, int format) {
+    public static ScreenshotHardwareBuffer captureLayers(@NonNull SurfaceControl layer,
+            @Nullable Rect sourceCrop, float frameScale, int format) {
         LayerCaptureArgs captureArgs = new LayerCaptureArgs.Builder(layer)
                 .setSourceCrop(sourceCrop)
                 .setFrameScale(frameScale)
@@ -3537,6 +3542,15 @@ public final class SurfaceControl implements Parcelable {
         public Transaction setEarlyWakeupEnd() {
             nativeSetEarlyWakeupEnd(mNativeObject);
             return this;
+        }
+
+        /**
+         * @hide
+         * @return The transaction's current id.
+         *         The id changed every time the transaction is applied.
+         */
+        public long getId() {
+            return nativeGetTransactionId(mNativeObject);
         }
 
         /**

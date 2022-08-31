@@ -180,8 +180,7 @@ public final class MovePackageHelper {
         // If we're moving app data around, we need all the users unlocked
         if (moveCompleteApp) {
             for (int userId : installedUserIds) {
-                if (StorageManager.isFileEncryptedNativeOrEmulated()
-                        && !StorageManager.isUserKeyUnlocked(userId)) {
+                if (StorageManager.isFileEncrypted() && !StorageManager.isUserKeyUnlocked(userId)) {
                     freezer.close();
                     throw new PackageManagerException(MOVE_FAILED_LOCKED_USER,
                             "User " + userId + " must be unlocked");
@@ -291,10 +290,10 @@ public final class MovePackageHelper {
         final ParseResult<PackageLite> ret = ApkLiteParseUtils.parsePackageLite(input,
                 new File(origin.mResolvedPath), /* flags */ 0);
         final PackageLite lite = ret.isSuccess() ? ret.getResult() : null;
-        final InstallParams params = new InstallParams(origin, move, installObserver, installFlags,
-                installSource, volumeUuid, user, packageAbiOverride,
+        final InstallingSession installingSession = new InstallingSession(origin, move,
+                installObserver, installFlags, installSource, volumeUuid, user, packageAbiOverride,
                 PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED, lite, mPm);
-        params.movePackage();
+        installingSession.movePackage();
     }
 
     /**

@@ -130,7 +130,6 @@ import static com.android.server.wm.DisplayContentProto.RESUMED_ACTIVITY;
 import static com.android.server.wm.DisplayContentProto.ROOT_DISPLAY_AREA;
 import static com.android.server.wm.DisplayContentProto.SCREEN_ROTATION_ANIMATION;
 import static com.android.server.wm.DisplayContentProto.SLEEP_TOKENS;
-import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -240,6 +239,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.policy.WindowManagerPolicy;
+import com.android.server.wm.utils.RegionUtils;
 import com.android.server.wm.utils.RotationCache;
 import com.android.server.wm.utils.WmDisplayCutout;
 
@@ -757,8 +757,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         if (w.mAttrs.type == TYPE_INPUT_METHOD_DIALOG && mImeLayeringTarget != null
                 && !mImeLayeringTarget.getRequestedVisibility(ITYPE_IME)
-                && mImeLayeringTarget.isAnimating(PARENTS | TRANSITION,
-                ANIMATION_TYPE_APP_TRANSITION)) {
+                && !mImeLayeringTarget.isVisibleRequested()) {
             return false;
         }
 
@@ -1782,7 +1781,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * rotation transform to it and indicate that the display may be rotated after it is launched.
      */
     void setFixedRotationLaunchingApp(@NonNull ActivityRecord r, @Rotation int rotation) {
-        final WindowToken prevRotatedLaunchingApp = mFixedRotationLaunchingApp;
+        final ActivityRecord prevRotatedLaunchingApp = mFixedRotationLaunchingApp;
         if (prevRotatedLaunchingApp == r
                 && r.getWindowConfiguration().getRotation() == rotation) {
             // The given launching app and target rotation are the same as the existing ones.
@@ -1791,8 +1790,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (prevRotatedLaunchingApp != null
                 && prevRotatedLaunchingApp.getWindowConfiguration().getRotation() == rotation
                 // It is animating so we can expect there will have a transition callback.
-                && (prevRotatedLaunchingApp.isAnimating(TRANSITION | PARENTS)
-                        || mTransitionController.inTransition(prevRotatedLaunchingApp))) {
+                && (prevRotatedLaunchingApp.isInTransition())) {
             // It may be the case that multiple activities launch consecutively. Because their
             // rotation are the same, the transformed state can be shared to avoid duplicating
             // the heavy operations. This also benefits that the states of multiple activities
@@ -5408,7 +5406,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     SurfaceControl[] findRoundedCornerOverlays() {
         List<SurfaceControl> roundedCornerOverlays = new ArrayList<>();
         for (WindowToken token : mTokenMap.values()) {
-            if (token.mRoundedCornerOverlay) {
+            if (token.mRoundedCornerOverlay && token.isVisible()) {
                 roundedCornerOverlays.add(token.mSurfaceControl);
             }
         }
@@ -5683,6 +5681,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         forAllWindows(w -> {
             if (w.isVisible() && !w.inPinnedWindowingMode()) {
                 w.getKeepClearAreas(outRestricted, outUnrestricted, tmpMatrix, tmpFloat9);
+
+                if (w.mIsImWindow) {
+                    Region touchableRegion = Region.obtain();
+                    w.getEffectiveTouchableRegion(touchableRegion);
+                    RegionUtils.forEachRect(touchableRegion, rect -> outUnrestricted.add(rect));
+                }
             }
 
             // We stop traversing when we reach the base of a fullscreen app.
@@ -6461,7 +6465,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     // Different tasks won't be in one activity transition animation.
                     return;
                 }
-                if (task.isAppTransitioning()) {
+                if (task.getActivity(ActivityRecord::isInTransition) != null) {
                     return;
                     // Continue to update orientation because the transition of the top rotated
                     // launching activity is done.

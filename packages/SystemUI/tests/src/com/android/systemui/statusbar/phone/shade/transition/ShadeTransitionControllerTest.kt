@@ -4,6 +4,7 @@ import android.testing.AndroidTestingRunner
 import androidx.test.filters.SmallTest
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.qs.QS
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController
 import com.android.systemui.statusbar.phone.NotificationPanelViewController
@@ -28,6 +29,8 @@ class ShadeTransitionControllerTest : SysuiTestCase() {
     @Mock private lateinit var qs: QS
     @Mock private lateinit var noOpOverScroller: NoOpOverScroller
     @Mock private lateinit var splitShadeOverScroller: SplitShadeOverScroller
+    @Mock private lateinit var scrimShadeTransitionController: ScrimShadeTransitionController
+    @Mock private lateinit var dumpManager: DumpManager
 
     private lateinit var controller: ShadeTransitionController
 
@@ -42,9 +45,12 @@ class ShadeTransitionControllerTest : SysuiTestCase() {
             ShadeTransitionController(
                 configurationController,
                 panelExpansionStateManager,
+                dumpManager,
                 context,
                 splitShadeOverScrollerFactory = { _, _ -> splitShadeOverScroller },
-                noOpOverScroller)
+                noOpOverScroller,
+                scrimShadeTransitionController
+            )
 
         // Resetting as they are notified upon initialization.
         reset(noOpOverScroller, splitShadeOverScroller)
@@ -109,7 +115,8 @@ class ShadeTransitionControllerTest : SysuiTestCase() {
             fraction = 0.5f,
             expanded = true,
             tracking = true,
-            dragDownPxAmount = DEFAULT_DRAG_DOWN_AMOUNT)
+            dragDownPxAmount = DEFAULT_DRAG_DOWN_AMOUNT
+        )
     }
 
     companion object {

@@ -2528,7 +2528,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (!hasChild()) {
             return false;
         }
-        return isExitAnimationRunningSelfOrChild() || inTransition();
+        return isExitAnimationRunningSelfOrChild();
     }
 
     @Override
@@ -2601,16 +2601,37 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     @Override
-    boolean canBeAnimationTarget() {
-        return true;
-    }
-
-    @Override
     boolean fillsParent() {
         // From the perspective of policy, we still want to report that this task fills parent
         // in fullscreen windowing mode even it doesn't match parent bounds because there will be
         // letterbox around its real content.
         return getWindowingMode() == WINDOWING_MODE_FULLSCREEN || matchParentBounds();
+    }
+
+    String toFullString() {
+        final StringBuilder sb = new StringBuilder(128);
+        sb.append(this);
+        sb.setLength(sb.length() - 1); // Remove tail '}'.
+        if (mTaskFragmentOrganizerUid != INVALID_UID) {
+            sb.append(" organizerUid=");
+            sb.append(mTaskFragmentOrganizerUid);
+        }
+        if (mTaskFragmentOrganizerProcessName != null) {
+            sb.append(" organizerProc=");
+            sb.append(mTaskFragmentOrganizerProcessName);
+        }
+        if (mAdjacentTaskFragment != null) {
+            sb.append(" adjacent=");
+            sb.append(mAdjacentTaskFragment);
+        }
+        sb.append('}');
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return "TaskFragment{" + Integer.toHexString(System.identityHashCode(this))
+                + " mode=" + WindowConfiguration.windowingModeToString(getWindowingMode()) + "}";
     }
 
     boolean dump(String prefix, FileDescriptor fd, PrintWriter pw, boolean dumpAll,
@@ -2651,7 +2672,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     void dumpInner(String prefix, PrintWriter pw, boolean dumpAll, String dumpPackage) {
-        pw.print(prefix); pw.print("* "); pw.println(this);
+        pw.print(prefix); pw.print("* "); pw.println(toFullString());
         final Rect bounds = getRequestedOverrideBounds();
         if (!bounds.isEmpty()) {
             pw.println(prefix + "  mBounds=" + bounds);
@@ -2672,10 +2693,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         final String doublePrefix = prefix + "  ";
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final WindowContainer<?> child = mChildren.get(i);
-            pw.println(prefix + "* " + child);
+            final TaskFragment tf = child.asTaskFragment();
+            pw.println(prefix + "* " + (tf != null ? tf.toFullString() : child));
             // Only dump non-activity because full activity info is already printed by
             // RootWindowContainer#dumpActivities.
-            if (child.asActivityRecord() == null) {
+            if (tf != null) {
                 child.dump(pw, doublePrefix, dumpAll);
             }
         }

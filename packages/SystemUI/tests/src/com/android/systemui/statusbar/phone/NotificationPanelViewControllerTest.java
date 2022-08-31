@@ -60,6 +60,7 @@ import android.view.View;
 import android.view.ViewParent;
 import android.view.ViewPropertyAnimator;
 import android.view.ViewStub;
+import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -172,6 +173,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private NotificationStackScrollLayout mNotificationStackScrollLayout;
     @Mock
     private KeyguardBottomAreaView mKeyguardBottomArea;
+    @Mock
+    private KeyguardBottomAreaViewController mKeyguardBottomAreaViewController;
     @Mock
     private KeyguardBottomAreaView mQsFrame;
     private KeyguardStatusView mKeyguardStatusView;
@@ -352,6 +355,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private View mQsHeader;
     @Mock
     private ViewParent mViewParent;
+    @Mock
+    private ViewTreeObserver mViewTreeObserver;
     private NotificationPanelViewController.PanelEventsEmitter mPanelEventsEmitter;
     private Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
     private SysuiStatusBarStateController mStatusBarStateController;
@@ -400,6 +405,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         when(mNotificationStackScrollLayoutController.getHeight()).thenReturn(1000);
         when(mNotificationStackScrollLayoutController.getHeadsUpCallback())
                 .thenReturn(mHeadsUpCallback);
+        when(mKeyguardBottomAreaViewController.getView()).thenReturn(mKeyguardBottomArea);
         when(mView.findViewById(R.id.keyguard_bottom_area)).thenReturn(mKeyguardBottomArea);
         when(mKeyguardBottomArea.getLeftView()).thenReturn(mock(KeyguardAffordanceView.class));
         when(mKeyguardBottomArea.getRightView()).thenReturn(mock(KeyguardAffordanceView.class));
@@ -477,13 +483,15 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
             return null;
         }).when(mNotificationShadeWindowController).batchApplyWindowLayoutParams(any());
 
+        when(mView.getViewTreeObserver()).thenReturn(mViewTreeObserver);
         when(mView.getParent()).thenReturn(mViewParent);
         when(mQs.getHeader()).thenReturn(mQsHeader);
 
         mMainHandler = new Handler(Looper.getMainLooper());
         mPanelEventsEmitter = new NotificationPanelViewController.PanelEventsEmitter();
 
-        mNotificationPanelViewController = new NotificationPanelViewController(mView,
+        mNotificationPanelViewController = new NotificationPanelViewController(
+                mView,
                 mResources,
                 mMainHandler,
                 mLayoutInflater,
@@ -537,6 +545,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mInteractionJankMonitor,
                 mQsFrameTranslateController,
                 mSysUiState,
+                () -> mKeyguardBottomAreaViewController,
                 mKeyguardUnlockAnimationController,
                 mNotificationListContainer,
                 mPanelEventsEmitter,
@@ -893,11 +902,40 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         updateSmallestScreenWidth(300);
         when(mResources.getBoolean(
                 com.android.internal.R.bool.config_keyguardUserSwitcher)).thenReturn(true);
-        when(mUserManager.isUserSwitcherEnabled()).thenReturn(true);
+        when(mResources.getBoolean(R.bool.qs_show_user_switcher_for_single_user)).thenReturn(false);
+        when(mUserManager.isUserSwitcherEnabled(false)).thenReturn(true);
 
         updateSmallestScreenWidth(800);
 
         verify(mUserSwitcherStubView).inflate();
+    }
+
+    @Test
+    public void testFinishInflate_userSwitcherDisabled_doNotInflateUserSwitchView() {
+        givenViewAttached();
+        when(mResources.getBoolean(
+                com.android.internal.R.bool.config_keyguardUserSwitcher)).thenReturn(true);
+        when(mResources.getBoolean(R.bool.qs_show_user_switcher_for_single_user)).thenReturn(false);
+        when(mUserManager.isUserSwitcherEnabled(false /* showEvenIfNotActionable */))
+                .thenReturn(false);
+
+        mNotificationPanelViewController.onFinishInflate();
+
+        verify(mUserSwitcherStubView, never()).inflate();
+    }
+
+    @Test
+    public void testReInflateViews_userSwitcherDisabled_doNotInflateUserSwitchView() {
+        givenViewAttached();
+        when(mResources.getBoolean(
+                com.android.internal.R.bool.config_keyguardUserSwitcher)).thenReturn(true);
+        when(mResources.getBoolean(R.bool.qs_show_user_switcher_for_single_user)).thenReturn(false);
+        when(mUserManager.isUserSwitcherEnabled(false /* showEvenIfNotActionable */))
+                .thenReturn(false);
+
+        mNotificationPanelViewController.reInflateViews();
+
+        verify(mUserSwitcherStubView, never()).inflate();
     }
 
     @Test
@@ -978,6 +1016,16 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         listener.onDoubleTapRequired();
 
         verify(mTapAgainViewController).show();
+    }
+
+    @Test
+    public void testRotatingToSplitShadeWithQsExpanded_transitionsToShadeLocked() {
+        mStatusBarStateController.setState(KEYGUARD);
+        mNotificationPanelViewController.setQsExpanded(true);
+
+        enableSplitShade(true);
+
+        assertThat(mStatusBarStateController.getState()).isEqualTo(SHADE_LOCKED);
     }
 
     @Test
@@ -1261,6 +1309,43 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 false/*goingToFullShade*/, SHADE/*oldStatusBarState*/);
     }
 
+    @Test
+    public void getMaxPanelHeight_expanding_inSplitShade_returnsSplitShadeFullTransitionDistance() {
+        int splitShadeFullTransitionDistance = 123456;
+        enableSplitShade(true);
+        setSplitShadeFullTransitionDistance(splitShadeFullTransitionDistance);
+        mNotificationPanelViewController.expandWithQs();
+
+        int maxPanelHeight = mNotificationPanelViewController.getMaxPanelHeight();
+
+        assertThat(maxPanelHeight).isEqualTo(splitShadeFullTransitionDistance);
+    }
+
+    @Test
+    public void getMaxPanelHeight_expandingSplitShade_keyguard_returnsNonSplitShadeValue() {
+        mStatusBarStateController.setState(KEYGUARD);
+        int splitShadeFullTransitionDistance = 123456;
+        enableSplitShade(true);
+        setSplitShadeFullTransitionDistance(splitShadeFullTransitionDistance);
+        mNotificationPanelViewController.expandWithQs();
+
+        int maxPanelHeight = mNotificationPanelViewController.getMaxPanelHeight();
+
+        assertThat(maxPanelHeight).isNotEqualTo(splitShadeFullTransitionDistance);
+    }
+
+    @Test
+    public void getMaxPanelHeight_expanding_notSplitShade_returnsNonSplitShadeValue() {
+        int splitShadeFullTransitionDistance = 123456;
+        enableSplitShade(false);
+        setSplitShadeFullTransitionDistance(splitShadeFullTransitionDistance);
+        mNotificationPanelViewController.expandWithQs();
+
+        int maxPanelHeight = mNotificationPanelViewController.getMaxPanelHeight();
+
+        assertThat(maxPanelHeight).isNotEqualTo(splitShadeFullTransitionDistance);
+    }
+
     private static MotionEvent createMotionEvent(int x, int y, int action) {
         return MotionEvent.obtain(
                 /* downTime= */ 0, /* eventTime= */ 0, action, x, y, /* metaState= */ 0);
@@ -1302,7 +1387,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     private void updateMultiUserSetting(boolean enabled) {
-        when(mUserManager.isUserSwitcherEnabled()).thenReturn(enabled);
+        when(mResources.getBoolean(R.bool.qs_show_user_switcher_for_single_user)).thenReturn(false);
+        when(mUserManager.isUserSwitcherEnabled(false)).thenReturn(enabled);
         final ArgumentCaptor<ContentObserver> observerCaptor =
                 ArgumentCaptor.forClass(ContentObserver.class);
         verify(mContentResolver)
@@ -1318,5 +1404,11 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
     private void onTouchEvent(MotionEvent ev) {
         mTouchHandler.onTouch(mView, ev);
+    }
+
+    private void setSplitShadeFullTransitionDistance(int splitShadeFullTransitionDistance) {
+        when(mResources.getDimensionPixelSize(R.dimen.split_shade_full_transition_distance))
+                .thenReturn(splitShadeFullTransitionDistance);
+        mNotificationPanelViewController.updateResources();
     }
 }

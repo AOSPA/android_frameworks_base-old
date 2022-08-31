@@ -58,6 +58,7 @@ import static com.android.server.pm.PackageManagerService.EMPTY_INT_ARRAY;
 import static com.android.server.pm.PackageManagerService.HIDE_EPHEMERAL_APIS;
 import static com.android.server.pm.PackageManagerService.TAG;
 import static com.android.server.pm.PackageManagerServiceUtils.compareSignatures;
+import static com.android.server.pm.PackageManagerServiceUtils.isSystemOrRootOrShell;
 import static com.android.server.pm.resolution.ComponentResolver.RESOLVE_PRIORITY_SORTER;
 
 import android.Manifest;
@@ -2726,7 +2727,7 @@ public class ComputerEngine implements Computer {
         if (Process.isSdkSandboxUid(callingUid)) {
             int clientAppUid = Process.getAppUidForSdkSandboxUid(callingUid);
             // SDK sandbox should be able to see it's client app
-            if (clientAppUid == UserHandle.getUid(userId, ps.getAppId())) {
+            if (ps != null && clientAppUid == UserHandle.getUid(userId, ps.getAppId())) {
                 return false;
             }
         }
@@ -2737,12 +2738,16 @@ public class ComputerEngine implements Computer {
         final String instantAppPkgName = getInstantAppPackageName(callingUid);
         final boolean callerIsInstantApp = instantAppPkgName != null;
         // Don't treat hiddenUntilInstalled as an uninstalled state, phone app needs to access
-        // these hidden application details to customize carrier apps.
-        if (ps == null || (filterUninstall && !ps.isHiddenUntilInstalled()
-                && !ps.getUserStateOrDefault(userId).isInstalled())) {
-            // If caller is instant app and ps is null, pretend the application exists,
-            // but, needs to be filtered
-            return (callerIsInstantApp || filterUninstall);
+        // these hidden application details to customize carrier apps. Also, allowing the system
+        // caller accessing to application across users.
+        if (ps == null
+                || (filterUninstall
+                        && !isSystemOrRootOrShell(callingUid)
+                        && !ps.isHiddenUntilInstalled()
+                        && !ps.getUserStateOrDefault(userId).isInstalled())) {
+            // If caller is instant app or sdk sandbox and ps is null, pretend the application
+            // exists, but, needs to be filtered
+            return (callerIsInstantApp || filterUninstall || Process.isSdkSandboxUid(callingUid));
         }
         // if the target and caller are the same application, don't filter
         if (isCallerSameApp(ps.getPackageName(), callingUid)) {
@@ -2836,6 +2841,9 @@ public class ComputerEngine implements Computer {
             @NonNull SharedUserSetting sus, int callingUid, int userId) {
         if (shouldFilterApplication(sus, callingUid, userId)) {
             return true;
+        }
+        if (isSystemOrRootOrShell(callingUid)) {
+            return false;
         }
         final ArraySet<PackageStateInternal> packageStates =
                 (ArraySet<PackageStateInternal>) sus.getPackageStates();
@@ -3162,30 +3170,44 @@ public class ComputerEngine implements Computer {
 
     public boolean filterAppAccess(AndroidPackage pkg, int callingUid, int userId) {
         PackageStateInternal ps = getPackageStateInternal(pkg.getPackageName());
-        return shouldFilterApplication(ps, callingUid,
-                userId);
+        return shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId);
     }
 
-    public boolean filterAppAccess(String packageName, int callingUid, int userId) {
+    public boolean filterAppAccess(String packageName, int callingUid, int userId,
+            boolean filterUninstalled) {
         PackageStateInternal ps = getPackageStateInternal(packageName);
-        return shouldFilterApplication(ps, callingUid,
-                userId);
+        return shouldFilterApplication(
+                ps, callingUid, null /* component */, TYPE_UNKNOWN, userId, filterUninstalled);
     }
 
     public boolean filterAppAccess(int uid, int callingUid) {
+        if (Process.isSdkSandboxUid(uid)) {
+            // Sdk sandbox instance should be able to see itself.
+            if (callingUid == uid) {
+                return false;
+            }
+            final int clientAppUid = Process.getAppUidForSdkSandboxUid(uid);
+            // Client app of this sdk sandbox process should be able to see it.
+            if (clientAppUid == uid) {
+                return false;
+            }
+            // Nobody else should be able to see the sdk sandbox process.
+            return true;
+        }
         final int userId = UserHandle.getUserId(uid);
         final int appId = UserHandle.getAppId(uid);
         final Object setting = mSettings.getSettingBase(appId);
-
+        if (setting == null) {
+            return true;
+        }
         if (setting instanceof SharedUserSetting) {
-            return shouldFilterApplication(
+            return shouldFilterApplicationIncludingUninstalled(
                     (SharedUserSetting) setting, callingUid, userId);
-        } else if (setting == null
-                || setting instanceof PackageStateInternal) {
-            return shouldFilterApplication(
+        } else if (setting instanceof PackageStateInternal) {
+            return shouldFilterApplicationIncludingUninstalled(
                     (PackageStateInternal) setting, callingUid, userId);
         }
-        return false;
+        return true;
     }
 
     public void dump(int type, FileDescriptor fd, PrintWriter pw, DumpState dumpState) {
@@ -4453,13 +4475,11 @@ public class ComputerEngine implements Computer {
         if (p == null) {
             return false;
         }
-        final PackageStateInternal ps = getPackageStateInternal(p.getPackageName());
-        if (ps == null) {
-            return false;
-        }
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+        final PackageStateInternal ps = getPackageStateInternal(p.getPackageName());
+        if (ps == null
+                || shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
             return false;
         }
         switch (type) {
@@ -5549,7 +5569,7 @@ public class ComputerEngine implements Computer {
         final PackageStateInternal packageState =
                 getPackageStateInternal(component.getPackageName());
         return packageState != null && !shouldFilterApplication(packageState, callingUid,
-                component, TYPE_UNKNOWN, userId);
+                component, TYPE_UNKNOWN, userId, true /* filterUninstall */);
     }
 
     @Override
@@ -5593,9 +5613,9 @@ public class ComputerEngine implements Computer {
         boolean throwException = sourceSetting == null || targetSetting == null;
         if (!throwException) {
             final boolean filterSource =
-                    shouldFilterApplication(sourceSetting, callingUid, userId);
+                    shouldFilterApplicationIncludingUninstalled(sourceSetting, callingUid, userId);
             final boolean filterTarget =
-                    shouldFilterApplication(targetSetting, callingUid, userId);
+                    shouldFilterApplicationIncludingUninstalled(targetSetting, callingUid, userId);
             // The caller must have visibility of the both packages
             throwException = filterSource || filterTarget;
         }

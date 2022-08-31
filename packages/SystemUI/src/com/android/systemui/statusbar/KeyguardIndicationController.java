@@ -18,6 +18,7 @@ package com.android.systemui.statusbar;
 
 import static android.app.admin.DevicePolicyManager.DEVICE_OWNER_TYPE_FINANCED;
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.KEYGUARD_MANAGEMENT_DISCLOSURE;
+import static android.app.admin.DevicePolicyResources.Strings.SystemUi.KEYGUARD_NAMED_MANAGEMENT_DISCLOSURE;
 import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
 
@@ -56,7 +57,6 @@ import android.os.Message;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.provider.Settings;
 import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.util.Log;
@@ -244,19 +244,10 @@ public class KeyguardIndicationController {
         mScreenLifecycle.addObserver(mScreenObserver);
 
         mCoExFaceHelpMsgIdsToShow = new HashSet<>();
-        final String msgsToShowOverride = Settings.Global.getString(mContext.getContentResolver(),
-                "coex_face_help_msgs"); // TODO: remove after UX testing b/231733975
-        if (msgsToShowOverride != null) {
-            final String[] msgIds = msgsToShowOverride.split("\\|");
-            for (String msgId : msgIds) {
-                mCoExFaceHelpMsgIdsToShow.add(Integer.parseInt(msgId));
-            }
-        } else {
-            int[] msgIds = context.getResources().getIntArray(
-                    com.android.systemui.R.array.config_face_help_msgs_when_fingerprint_enrolled);
-            for (int msgId : msgIds) {
-                mCoExFaceHelpMsgIdsToShow.add(msgId);
-            }
+        int[] msgIds = context.getResources().getIntArray(
+                com.android.systemui.R.array.config_face_help_msgs_when_fingerprint_enrolled);
+        for (int msgId : msgIds) {
+            mCoExFaceHelpMsgIdsToShow.add(msgId);
         }
 
         mHandler = new Handler(mainLooper) {
@@ -417,7 +408,7 @@ public class KeyguardIndicationController {
                     organizationName);
         } else {
             return mDevicePolicyManager.getResources().getString(
-                    KEYGUARD_MANAGEMENT_DISCLOSURE,
+                    KEYGUARD_NAMED_MANAGEMENT_DISCLOSURE,
                     () -> packageResources.getString(
                             R.string.do_disclosure_with_name, organizationName),
                     organizationName);
@@ -1032,7 +1023,15 @@ public class KeyguardIndicationController {
                 return;
             }
 
-            if (msgId == FaceManager.FACE_ERROR_TIMEOUT) {
+            if (biometricSourceType == BiometricSourceType.FACE
+                    && msgId == FaceManager.FACE_ERROR_UNABLE_TO_PROCESS) {
+                // suppress all face UNABLE_TO_PROCESS errors
+                if (DEBUG) {
+                    Log.d(TAG, "skip showing FACE_ERROR_UNABLE_TO_PROCESS errString="
+                            + errString);
+                }
+            } else if (biometricSourceType == BiometricSourceType.FACE
+                    && msgId == FaceManager.FACE_ERROR_TIMEOUT) {
                 if (mKeyguardUpdateMonitor.getCachedIsUnlockWithFingerprintPossible(
                         KeyguardUpdateMonitor.getCurrentUser())) {
                     // no message if fingerprint is also enrolled

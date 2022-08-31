@@ -21,23 +21,37 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SystemUIThemeTest {
-    @get:Rule
-    val composeRule = createComposeRule()
+    @get:Rule val composeRule = createComposeRule()
 
     @Test
     fun testThemeShowsContent() {
+        composeRule.setContent { SystemUITheme { Text("foo") } }
+
+        composeRule.onNodeWithText("foo").assertIsDisplayed()
+    }
+
+    @Test
+    fun testAndroidColorsAreAvailableInsideTheme() {
         composeRule.setContent {
-            SystemUITheme {
-                Text("foo")
-            }
+            SystemUITheme { Text("foo", color = LocalAndroidColorScheme.current.colorAccent) }
         }
 
         composeRule.onNodeWithText("foo").assertIsDisplayed()
+    }
+
+    @Test
+    fun testAccessingAndroidColorsWithoutThemeThrows() {
+        assertThrows(IllegalStateException::class.java) {
+            composeRule.setContent {
+                Text("foo", color = LocalAndroidColorScheme.current.colorAccent)
+            }
+        }
     }
 }
