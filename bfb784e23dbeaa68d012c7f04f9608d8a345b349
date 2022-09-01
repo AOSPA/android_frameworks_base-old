@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "e9f3c4e7_c34b7340",
+        "filename": "packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsDialog.java",
+        "patchSetId": 6
+      },
+      "lineNbr": 39,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2022-09-01T00:21:54Z",
+      "side": 1,
+      "message": "delet",
+      "revId": "bfb784e23dbeaa68d012c7f04f9608d8a345b349",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
