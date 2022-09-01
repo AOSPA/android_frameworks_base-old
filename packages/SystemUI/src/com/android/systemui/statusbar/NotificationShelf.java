@@ -229,6 +229,17 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mActualWidth = actualWidth;
     }
 
+    @Override
+    public void getBoundsOnScreen(Rect outRect, boolean clipToParent) {
+        super.getBoundsOnScreen(outRect, clipToParent);
+        final int actualWidth = getActualWidth();
+        if (isLayoutRtl()) {
+            outRect.left = outRect.right - actualWidth;
+        } else {
+            outRect.right = outRect.left + actualWidth;
+        }
+    }
+
     /**
      * @return Actual width of shelf, accounting for possible ongoing width animation
      */
@@ -387,7 +398,14 @@ public class NotificationShelf extends ActivatableNotificationView implements
             if (child instanceof ActivatableNotificationView) {
                 ActivatableNotificationView anv =
                         (ActivatableNotificationView) child;
-                updateCornerRoundnessOnScroll(anv, viewStart, shelfStart);
+                // Because we show whole notifications on the lockscreen, the bottom notification is
+                // always "just about to enter the shelf" by normal scrolling rules.  This is fine
+                // if the shelf is visible, but if the shelf is hidden, it causes incorrect curling.
+                // notificationClipEnd handles the discrepancy between a visible and hidden shelf,
+                // so we use that when on the keyguard (and while animating away) to reduce curling.
+                final float keyguardSafeShelfStart =
+                        mAmbientState.isOnKeyguard() ? notificationClipEnd : shelfStart;
+                updateCornerRoundnessOnScroll(anv, viewStart, keyguardSafeShelfStart);
             }
         }
 

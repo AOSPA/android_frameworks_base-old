@@ -438,6 +438,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private static final int DESTROY_TIMEOUT = 10 * 1000;
 
     final ActivityTaskManagerService mAtmService;
+    @NonNull
     final ActivityInfo info; // activity info provided by developer in AndroidManifest
     // Which user is this running for?
     final int mUserId;
@@ -603,6 +604,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // pre-NYC apps that don't have a sense of being resized.
     int mRelaunchReason = RELAUNCH_REASON_NONE;
 
+    private boolean mForceSendResultForMediaProjection = false;
+
     TaskDescription taskDescription; // the recents information for this activity
 
     // The locusId associated with this activity, if set.
@@ -682,9 +685,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * from the style of activity. Because we don't want {@link WindowContainer#getOrientation()}
      * to be affected by the temporal state of {@link ActivityClientController#convertToTranslucent}
      * when running ANIM_SCENE_TRANSITION.
-     * @see WindowContainer#fillsParent()
+     * @see WindowContainer#providesOrientation()
      */
-    private final boolean mFillsParent;
+    private final boolean mStyleFillsParent;
 
     // The input dispatching timeout for this application token in milliseconds.
     long mInputDispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
@@ -936,7 +939,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // SystemUi sets the pinned mode on activity after transition is done.
     boolean mWaitForEnteringPinnedMode;
 
-    private final ActivityRecordInputSink mActivityRecordInputSink;
+    final ActivityRecordInputSink mActivityRecordInputSink;
 
     // Activities with this uid are allowed to not create an input sink while being in the same
     // task and directly above this ActivityRecord. This field is updated whenever a new activity
@@ -1983,10 +1986,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     // This style is propagated to the main window attributes with
                     // FLAG_SHOW_WALLPAPER from PhoneWindow#generateLayout.
                     || ent.array.getBoolean(R.styleable.Window_windowShowWallpaper, false);
-            mFillsParent = mOccludesParent;
+            mStyleFillsParent = mOccludesParent;
             noDisplay = ent.array.getBoolean(R.styleable.Window_windowNoDisplay, false);
         } else {
-            mFillsParent = mOccludesParent = true;
+            mStyleFillsParent = mOccludesParent = true;
             noDisplay = false;
         }
 
@@ -2080,6 +2083,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         launchMode = aInfo.launchMode;
 
+        // Don't move below setActivityType since it triggers onConfigurationChange ->
+        // resolveOverrideConfiguration that requires having mLetterboxUiController initialised.
+        mLetterboxUiController = new LetterboxUiController(mWmService, this);
+        mCameraCompatControlEnabled = mWmService.mContext.getResources()
+                .getBoolean(R.bool.config_isCameraCompatControlForStretchedIssuesEnabled);
+
         setActivityType(_componentSpecified, _launchedFromUid, _intent, options, sourceRecord);
 
         immersive = (aInfo.flags & FLAG_IMMERSIVE) != 0;
@@ -2108,9 +2117,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mPersistentState = persistentState;
         taskDescription = _taskDescription;
 
-        mLetterboxUiController = new LetterboxUiController(mWmService, this);
-        mCameraCompatControlEnabled = mWmService.mContext.getResources()
-                .getBoolean(R.bool.config_isCameraCompatControlForStretchedIssuesEnabled);
         shouldDockBigOverlays = mWmService.mContext.getResources()
                 .getBoolean(R.bool.config_dockBigOverlayWindows);
 
@@ -2805,7 +2811,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @VisibleForTesting
     boolean canLaunchHomeActivity(int uid, ActivityRecord sourceRecord) {
-        if (uid == Process.myUid() || uid == 0) {
+        if (uid == SYSTEM_UID || uid == 0) {
             // System process can launch home activity.
             return true;
         }
@@ -2899,8 +2905,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     @Override
+    boolean providesOrientation() {
+        return mStyleFillsParent;
+    }
+
+    @Override
     boolean fillsParent() {
-        return mFillsParent;
+        return occludesParent(true /* includingFinishing */);
     }
 
     /** Returns true if this activity is not finishing, is opaque and fills the entire space of
@@ -3270,7 +3281,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mAtmService.mUgmInternal.grantUriPermissionUncheckedFromIntent(resultGrants,
                         resultTo.getUriPermissionsLocked());
             }
-            resultTo.addResultLocked(this, resultWho, requestCode, resultCode, resultData);
+            if (mForceSendResultForMediaProjection) {
+                resultTo.sendResult(this.getUid(), resultWho, requestCode, resultCode,
+                        resultData, resultGrants, true /* forceSendForMediaProjection */);
+            } else {
+                resultTo.addResultLocked(this, resultWho, requestCode, resultCode, resultData);
+            }
             resultTo = null;
         } else if (DEBUG_RESULTS) {
             Slog.v(TAG_RESULTS, "No result destination from " + this);
@@ -3462,6 +3478,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } finally {
             mAtmService.continueWindowLayout();
         }
+    }
+
+    void setForceSendResultForMediaProjection() {
+        mForceSendResultForMediaProjection = true;
     }
 
     private void prepareActivityHideTransitionAnimationIfOvarlay() {
@@ -4563,6 +4583,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     void sendResult(int callingUid, String resultWho, int requestCode, int resultCode,
             Intent data, NeededUriGrants dataGrants) {
+        sendResult(callingUid, resultWho, requestCode, resultCode, data, dataGrants,
+                false /* forceSendForMediaProjection */);
+    }
+
+    private void sendResult(int callingUid, String resultWho, int requestCode, int resultCode,
+            Intent data, NeededUriGrants dataGrants, boolean forceSendForMediaProjection) {
         if (callingUid > 0) {
             mAtmService.mUgmInternal.grantUriPermissionUncheckedFromIntent(dataGrants,
                     getUriPermissionsLocked());
@@ -4571,8 +4597,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (DEBUG_RESULTS) {
             Slog.v(TAG, "Send activity result to " + this
                     + " : who=" + resultWho + " req=" + requestCode
-                    + " res=" + resultCode + " data=" + data);
+                    + " res=" + resultCode + " data=" + data
+                    + " forceSendForMediaProjection=" + forceSendForMediaProjection);
         }
+
         if (isState(RESUMED) && attachedToProcess()) {
             try {
                 final ArrayList<ResultInfo> list = new ArrayList<ResultInfo>();
@@ -4585,7 +4613,61 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
         }
 
+        // Schedule sending results now for Media Projection setup.
+        if (forceSendForMediaProjection && attachedToProcess() && isState(STARTED, PAUSING, PAUSED,
+                STOPPING, STOPPED)) {
+            final ClientTransaction transaction = ClientTransaction.obtain(app.getThread(), token);
+            // Build result to be returned immediately.
+            transaction.addCallback(ActivityResultItem.obtain(
+                    List.of(new ResultInfo(resultWho, requestCode, resultCode, data))));
+            // When the activity result is delivered, the activity will transition to RESUMED.
+            // Since the activity is only resumed so the result can be immediately delivered,
+            // return it to its original lifecycle state.
+            ActivityLifecycleItem lifecycleItem = getLifecycleItemForCurrentStateForResult();
+            if (lifecycleItem != null) {
+                transaction.setLifecycleStateRequest(lifecycleItem);
+            } else {
+                Slog.w(TAG, "Unable to get the lifecycle item for state " + mState
+                        + " so couldn't immediately send result");
+            }
+            try {
+                mAtmService.getLifecycleManager().scheduleTransaction(transaction);
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Exception thrown sending result to " + this, e);
+            }
+        }
+
         addResultLocked(null /* from */, resultWho, requestCode, resultCode, data);
+    }
+
+    /**
+     * Provides a lifecycle item for the current stat. Only to be used when force sending an
+     * activity result (as part of MeidaProjection setup). Does not support the following states:
+     * {@link State#INITIALIZING}, {@link State#RESTARTING_PROCESS},
+     * {@link State#FINISHING}, {@link State#DESTROYING}, {@link State#DESTROYED}. It does not make
+     * sense to force send a result to an activity in these states. Does not support
+     * {@link State#RESUMED} since a resumed activity will end in the resumed state after handling
+     * the result.
+     *
+     * @return an {@link ActivityLifecycleItem} for the current state, or {@code null} if the
+     * state is not valid.
+     */
+    @Nullable
+    private ActivityLifecycleItem getLifecycleItemForCurrentStateForResult() {
+        switch (mState) {
+            case STARTED:
+                return StartActivityItem.obtain(null);
+            case PAUSING:
+            case PAUSED:
+                return PauseActivityItem.obtain();
+            case STOPPING:
+            case STOPPED:
+                return StopActivityItem.obtain(configChangeFlags);
+            default:
+                // Do not send a result immediately if the activity is in state INITIALIZING,
+                // RESTARTING_PROCESS, FINISHING, DESTROYING, or DESTROYED.
+                return null;
+        }
     }
 
     private void addNewIntentLocked(ReferrerIntent intent) {
@@ -5250,17 +5332,22 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final boolean delayed = isAnimating(PARENTS | CHILDREN,
                 ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_WINDOW_ANIMATION
                         | ANIMATION_TYPE_RECENTS);
-        if (!delayed && !usingShellTransitions) {
+        if (!delayed) {
             // We aren't delayed anything, but exiting windows rely on the animation finished
             // callback being called in case the ActivityRecord was pretending to be delayed,
             // which we might have done because we were in closing/opening apps list.
-            onAnimationFinished(ANIMATION_TYPE_APP_TRANSITION, null /* AnimationAdapter */);
-            if (visible) {
-                // The token was made immediately visible, there will be no entrance animation.
-                // We need to inform the client the enter animation was finished.
-                mEnteringAnimation = true;
-                mWmService.mActivityManagerAppTransitionNotifier.onAppTransitionFinishedLocked(
-                        token);
+            if (!usingShellTransitions) {
+                onAnimationFinished(ANIMATION_TYPE_APP_TRANSITION, null /* AnimationAdapter */);
+                if (visible) {
+                    // The token was made immediately visible, there will be no entrance animation.
+                    // We need to inform the client the enter animation was finished.
+                    mEnteringAnimation = true;
+                    mWmService.mActivityManagerAppTransitionNotifier.onAppTransitionFinishedLocked(
+                            token);
+                }
+            } else {
+                // update wallpaper target
+                setAppLayoutChanges(FINISH_LAYOUT_REDO_WALLPAPER, "ActivityRecord");
             }
         }
 
@@ -7436,6 +7523,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mTransit = TRANSIT_OLD_UNSET;
         mTransitFlags = 0;
         mNeedsAnimationBoundsLayer = false;
+        mDismissKeyguard = false;
 
         setAppLayoutChanges(FINISH_LAYOUT_REDO_ANIM | FINISH_LAYOUT_REDO_WALLPAPER,
                 "ActivityRecord");
@@ -7984,7 +8072,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Vertical position
         int offsetY = 0;
         if (parentBounds.height() != screenResolvedBounds.height()) {
-
             if (screenResolvedBounds.height() >= parentAppBounds.height()) {
                 // If resolved bounds overlap with insets, center within app bounds.
                 offsetY = getCenterOffset(
@@ -8016,7 +8103,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     boolean isInTransition() {
-        return mTransitionController.inTransition() // Shell transitions.
+        return mTransitionController.inTransition(this) // Shell transitions.
                 || isAnimating(PARENTS | TRANSITION); // Legacy transitions.
     }
 
@@ -8030,6 +8117,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     boolean isLetterboxedForFixedOrientationAndAspectRatio() {
         return mLetterboxBoundsForFixedOrientationAndAspectRatio != null;
+    }
+
+    boolean isAspectRatioApplied() {
+        return mIsAspectRatioApplied;
     }
 
     /**
@@ -8203,7 +8294,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         resolvedBounds.set(containingBounds);
 
         final float letterboxAspectRatioOverride =
-                mLetterboxUiController.getFixedOrientationLetterboxAspectRatio(newParentConfig);
+                mWmService.mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
         final float desiredAspectRatio =
                 letterboxAspectRatioOverride > MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO
                         ? letterboxAspectRatioOverride : computeAspectRatio(parentBounds);
@@ -8756,7 +8847,18 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * Returns the min aspect ratio of this activity.
      */
     private float getMinAspectRatio() {
-        return info.getMinAspectRatio(getRequestedOrientation());
+        float infoAspectRatio = info.getMinAspectRatio(getRequestedOrientation());
+        // Complying with the CDD 7.1.1.2 requirement for unresizble apps:
+        // https://source.android.com/compatibility/12/android-12-cdd#7112_screen_aspect_ratio
+        return infoAspectRatio < 1f && info.resizeMode == RESIZE_MODE_UNRESIZEABLE
+                    // TODO(233582832): Consider removing fixed-orientation condition.
+                    // Some apps switching from tablet to phone layout at the certain size
+                    // threshold. This may lead to flickering on tablets in landscape orientation
+                    // if an app sets orientation to portrait dynamically because of aspect ratio
+                    // restriction applied here.
+                    && getRequestedConfigurationOrientation() != ORIENTATION_UNDEFINED
+                ? mLetterboxUiController.getDefaultMinAspectRatioForUnresizableApps()
+                : infoAspectRatio;
     }
 
     /**
@@ -9452,7 +9554,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         sb.append(mUserId);
         sb.append(' ');
         sb.append(intent.getComponent().flattenToShortString());
-        sb.append("}");
         stringName = sb.toString();
         return stringName;
     }
@@ -9816,6 +9917,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     @Override
     boolean canBeAnimationTarget() {
         return true;
+    }
+
+    @Nullable
+    Point getMinDimensions() {
+        final ActivityInfo.WindowLayout windowLayout = info.windowLayout;
+        if (windowLayout == null) {
+            return null;
+        }
+        return new Point(windowLayout.minWidth, windowLayout.minHeight);
     }
 
     static class Builder {

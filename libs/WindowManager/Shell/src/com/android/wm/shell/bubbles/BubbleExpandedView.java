@@ -106,6 +106,20 @@ public class BubbleExpandedView extends LinearLayout {
                 }
             };
 
+    /** {@link FloatProperty} for updating background and pointer alpha */
+    public static final FloatProperty<BubbleExpandedView> BACKGROUND_ALPHA =
+            new FloatProperty<BubbleExpandedView>("backgroundAlpha") {
+                @Override
+                public void setValue(BubbleExpandedView expandedView, float value) {
+                    expandedView.setBackgroundAlpha(value);
+                }
+
+                @Override
+                public Float get(BubbleExpandedView expandedView) {
+                    return expandedView.getAlpha();
+                }
+            };
+
     /** {@link FloatProperty} for updating manage button alpha */
     public static final FloatProperty<BubbleExpandedView> MANAGE_BUTTON_ALPHA =
             new FloatProperty<BubbleExpandedView>("manageButtonAlpha") {
@@ -603,6 +617,14 @@ public class BubbleExpandedView extends LinearLayout {
     }
 
     /**
+     * Sets the alpha of the background and the pointer view.
+     */
+    public void setBackgroundAlpha(float alpha) {
+        mPointerView.setAlpha(alpha);
+        setAlpha(alpha);
+    }
+
+    /**
      * Set translation Y for the expanded view content.
      * Excludes manage button and pointer.
      */
@@ -908,6 +930,8 @@ public class BubbleExpandedView extends LinearLayout {
      * @param animate whether the pointer should animate to this position.
      */
     public void setPointerPosition(float bubblePosition, boolean onLeft, boolean animate) {
+        final boolean isRtl = mContext.getResources().getConfiguration().getLayoutDirection()
+                == LAYOUT_DIRECTION_RTL;
         // Pointer gets drawn in the padding
         final boolean showVertically = mPositioner.showBubblesVertically();
         final float paddingLeft = (showVertically && onLeft)
@@ -932,12 +956,23 @@ public class BubbleExpandedView extends LinearLayout {
             updatePointerView();
             if (showVertically) {
                 mPointerPos.y = bubbleCenter - (mPointerWidth / 2f);
-                mPointerPos.x = onLeft
-                        ? -mPointerHeight + mPointerOverlap
-                        : getWidth() - mPaddingRight - mPointerOverlap;
+                if (!isRtl) {
+                    mPointerPos.x = onLeft
+                            ? -mPointerHeight + mPointerOverlap
+                            : getWidth() - mPaddingRight - mPointerOverlap;
+                } else {
+                    mPointerPos.x = onLeft
+                            ? -(getWidth() - mPaddingLeft - mPointerOverlap)
+                            : mPointerHeight - mPointerOverlap;
+                }
             } else {
                 mPointerPos.y = mPointerOverlap;
-                mPointerPos.x = bubbleCenter - (mPointerWidth / 2f);
+                if (!isRtl) {
+                    mPointerPos.x = bubbleCenter - (mPointerWidth / 2f);
+                } else {
+                    mPointerPos.x = -(getWidth() - mPaddingLeft - bubbleCenter)
+                            + (mPointerWidth / 2f);
+                }
             }
             if (animate) {
                 mPointerView.animate().translationX(mPointerPos.x).translationY(

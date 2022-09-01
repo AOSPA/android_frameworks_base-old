@@ -96,6 +96,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -108,7 +109,7 @@ public class BubbleStackView extends FrameLayout
      * Set to {@code true} to enable home gesture handling in bubbles
      */
     public static final boolean HOME_GESTURE_ENABLED =
-            SystemProperties.getBoolean("persist.wm.debug.bubbles_home_gesture", false);
+            SystemProperties.getBoolean("persist.wm.debug.bubbles_home_gesture", true);
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubbleStackView" : TAG_BUBBLES;
 
@@ -135,6 +136,9 @@ public class BubbleStackView extends FrameLayout
     private static final int EXPANDED_VIEW_ALPHA_ANIMATION_DURATION = 150;
 
     private static final float SCRIM_ALPHA = 0.6f;
+
+    /** Minimum alpha value for scrim when alpha is being changed via drag */
+    private static final float MIN_SCRIM_ALPHA_FOR_DRAG = 0.2f;
 
     /**
      * How long to wait to animate the stack temporarily invisible after a drag/flyout hide
@@ -213,6 +217,7 @@ public class BubbleStackView extends FrameLayout
     private ExpandedViewAnimationController mExpandedViewAnimationController;
 
     private View mScrim;
+    private boolean mScrimAnimating;
     private View mManageMenuScrim;
     private FrameLayout mExpandedViewContainer;
 
@@ -749,9 +754,14 @@ public class BubbleStackView extends FrameLayout
             if (mShowingManage) {
                 showManageMenu(false /* show */);
             }
-            // Only allow up
-            float collapsed = Math.min(dy, 0);
-            mExpandedViewAnimationController.updateDrag((int) -collapsed);
+            // Only allow up, normalize for up direction
+            float collapsed = -Math.min(dy, 0);
+            mExpandedViewAnimationController.updateDrag((int) collapsed);
+
+            // Update scrim
+            if (!mScrimAnimating) {
+                mScrim.setAlpha(getScrimAlphaForDrag(collapsed));
+            }
         }
 
         @Override
@@ -767,7 +777,25 @@ public class BubbleStackView extends FrameLayout
                 mBubbleData.setExpanded(false);
             } else {
                 mExpandedViewAnimationController.animateBackToExpanded();
+
+                // Update scrim
+                if (!mScrimAnimating) {
+                    showScrim(true);
+                }
             }
+        }
+
+        private float getScrimAlphaForDrag(float dragAmount) {
+            // dragAmount should be negative as we allow scroll up only
+            if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
+                float alphaRange = SCRIM_ALPHA - MIN_SCRIM_ALPHA_FOR_DRAG;
+
+                int dragMax = mExpandedBubble.getExpandedView().getContentHeight();
+                float dragFraction = dragAmount / dragMax;
+
+                return Math.max(SCRIM_ALPHA - alphaRange * dragFraction, MIN_SCRIM_ALPHA_FOR_DRAG);
+            }
+            return SCRIM_ALPHA;
         }
     };
 
@@ -1079,7 +1107,7 @@ public class BubbleStackView extends FrameLayout
             if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
                 float alpha = (float) valueAnimator.getAnimatedValue();
                 mExpandedBubble.getExpandedView().setContentAlpha(alpha);
-                mExpandedBubble.getExpandedView().setAlpha(alpha);
+                mExpandedBubble.getExpandedView().setBackgroundAlpha(alpha);
             }
         });
 
@@ -2124,15 +2152,28 @@ public class BubbleStackView extends FrameLayout
     }
 
     private void showScrim(boolean show) {
+        AnimatorListenerAdapter listener = new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+                mScrimAnimating = true;
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                mScrimAnimating = false;
+            }
+        };
         if (show) {
             mScrim.animate()
                     .setInterpolator(ALPHA_IN)
                     .alpha(SCRIM_ALPHA)
+                    .setListener(listener)
                     .start();
         } else {
             mScrim.animate()
                     .alpha(0f)
                     .setInterpolator(ALPHA_OUT)
+                    .setListener(listener)
                     .start();
         }
     }
@@ -2215,7 +2256,7 @@ public class BubbleStackView extends FrameLayout
 
         if (mExpandedBubble.getExpandedView() != null) {
             mExpandedBubble.getExpandedView().setContentAlpha(0f);
-            mExpandedBubble.getExpandedView().setAlpha(0f);
+            mExpandedBubble.getExpandedView().setBackgroundAlpha(0f);
 
             // We'll be starting the alpha animation after a slight delay, so set this flag early
             // here.
@@ -2744,8 +2785,10 @@ public class BubbleStackView extends FrameLayout
 
     private void dismissBubbleIfExists(@Nullable BubbleViewProvider bubble) {
         if (bubble != null && mBubbleData.hasBubbleInStackWithKey(bubble.getKey())) {
-            if (mIsExpanded && mBubbleData.getBubbles().size() > 1) {
-                // If we have more than 1 bubble we will perform the switch animation
+            if (mIsExpanded && mBubbleData.getBubbles().size() > 1
+                    && Objects.equals(bubble, mExpandedBubble)) {
+                // If we have more than 1 bubble and it's the current bubble being dismissed,
+                // we will perform the switch animation
                 mIsBubbleSwitchAnimating = true;
             }
             mBubbleData.dismissBubbleWithKey(bubble.getKey(), Bubbles.DISMISS_USER_GESTURE);

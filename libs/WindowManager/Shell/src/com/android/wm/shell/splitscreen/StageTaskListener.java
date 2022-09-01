@@ -31,6 +31,7 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.os.IBinder;
 import android.util.SparseArray;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
@@ -47,6 +48,7 @@ import com.android.wm.shell.common.split.SplitDecorManager;
 import com.android.wm.shell.splitscreen.SplitScreen.StageType;
 
 import java.io.PrintWriter;
+import java.util.function.Predicate;
 
 /**
  * Base class that handle common task org. related for split-screen stages.
@@ -95,18 +97,14 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
     // TODO(b/204308910): Extracts SplitDecorManager related code to common package.
     private SplitDecorManager mSplitDecorManager;
 
-    private final StageTaskUnfoldController mStageTaskUnfoldController;
-
     StageTaskListener(Context context, ShellTaskOrganizer taskOrganizer, int displayId,
             StageListenerCallbacks callbacks, SyncTransactionQueue syncQueue,
-            SurfaceSession surfaceSession, IconProvider iconProvider,
-            @Nullable StageTaskUnfoldController stageTaskUnfoldController) {
+            SurfaceSession surfaceSession, IconProvider iconProvider) {
         mContext = context;
         mCallbacks = callbacks;
         mSyncQueue = syncQueue;
         mSurfaceSession = surfaceSession;
         mIconProvider = iconProvider;
-        mStageTaskUnfoldController = stageTaskUnfoldController;
         taskOrganizer.createRootTask(displayId, WINDOWING_MODE_MULTI_WINDOW, this);
     }
 
@@ -119,63 +117,53 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
     }
 
     boolean containsToken(WindowContainerToken token) {
-        if (token.equals(mRootTaskInfo.token)) {
-            return true;
-        }
+        return contains(t -> t.token.equals(token));
+    }
 
-        for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
-            if (token.equals(mChildrenTaskInfo.valueAt(i).token)) {
-                return true;
-            }
-        }
-
-        return false;
+    boolean containsContainer(IBinder binder) {
+        return contains(t -> t.token.asBinder() == binder);
     }
 
     /**
      * Returns the top visible child task's id.
      */
     int getTopVisibleChildTaskId() {
-        for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
-            final ActivityManager.RunningTaskInfo info = mChildrenTaskInfo.valueAt(i);
-            if (info.isVisible) {
-                return info.taskId;
-            }
-        }
-        return INVALID_TASK_ID;
+        final ActivityManager.RunningTaskInfo taskInfo = getChildTaskInfo(t -> t.isVisible);
+        return taskInfo != null ? taskInfo.taskId : INVALID_TASK_ID;
     }
 
     /**
      * Returns the top activity uid for the top child task.
      */
     int getTopChildTaskUid() {
-        for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
-            final ActivityManager.RunningTaskInfo info = mChildrenTaskInfo.valueAt(i);
-            if (info.topActivityInfo == null) {
-                continue;
-            }
-            return info.topActivityInfo.applicationInfo.uid;
-        }
-        return 0;
+        final ActivityManager.RunningTaskInfo taskInfo =
+                getChildTaskInfo(t -> t.topActivityInfo != null);
+        return taskInfo != null ? taskInfo.topActivityInfo.applicationInfo.uid : 0;
     }
 
     /** @return {@code true} if this listener contains the currently focused task. */
     boolean isFocused() {
-        if (mRootTaskInfo == null) {
-            return false;
-        }
+        return contains(t -> t.isFocused);
+    }
 
-        if (mRootTaskInfo.isFocused) {
+    private boolean contains(Predicate<ActivityManager.RunningTaskInfo> predicate) {
+        if (mRootTaskInfo != null && predicate.test(mRootTaskInfo)) {
             return true;
         }
 
+        return getChildTaskInfo(predicate) != null;
+    }
+
+    @Nullable
+    private ActivityManager.RunningTaskInfo getChildTaskInfo(
+            Predicate<ActivityManager.RunningTaskInfo> predicate) {
         for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
-            if (mChildrenTaskInfo.valueAt(i).isFocused) {
-                return true;
+            final ActivityManager.RunningTaskInfo taskInfo = mChildrenTaskInfo.valueAt(i);
+            if (predicate.test(taskInfo)) {
+                return taskInfo;
             }
         }
-
-        return false;
+        return null;
     }
 
     @Override
@@ -206,10 +194,6 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         } else {
             throw new IllegalArgumentException(this + "\n Unknown task: " + taskInfo
                     + "\n mRootTaskInfo: " + mRootTaskInfo);
-        }
-
-        if (mStageTaskUnfoldController != null) {
-            mStageTaskUnfoldController.onTaskAppeared(taskInfo, leash);
         }
     }
 
@@ -277,10 +261,6 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         } else {
             throw new IllegalArgumentException(this + "\n Unknown task: " + taskInfo
                     + "\n mRootTaskInfo: " + mRootTaskInfo);
-        }
-
-        if (mStageTaskUnfoldController != null) {
-            mStageTaskUnfoldController.onTaskVanished(taskInfo);
         }
     }
 

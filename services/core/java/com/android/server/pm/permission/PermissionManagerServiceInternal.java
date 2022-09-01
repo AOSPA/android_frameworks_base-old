@@ -102,6 +102,14 @@ public interface PermissionManagerServiceInternal extends PermissionManagerInter
             @UserIdInt int userId);
 
     /**
+     * Reset the runtime permission state changes for all packages in a user.
+     *
+     * @param userId the user ID
+     */
+    //@SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
+    void resetRuntimePermissionsForUser(@UserIdInt int userId);
+
+    /**
      * Read legacy permission state from package settings.
      *
      * TODO(zhanghai): This is a temporary method because we should not expose
@@ -449,8 +457,8 @@ public interface PermissionManagerServiceInternal extends PermissionManagerInter
 
     /**
      * Provides the uid of the currently active
-     * {@link android.service.voice.HotwordDetectionService}, which should be granted RECORD_AUDIO
-     * and CAPTURE_AUDIO_HOTWORD permissions.
+     * {@link android.service.voice.HotwordDetectionService}, which should be granted RECORD_AUDIO,
+     * CAPTURE_AUDIO_HOTWORD and CAPTURE_AUDIO_OUTPUT permissions.
      */
     interface HotwordDetectionServiceProvider {
         int getUid();

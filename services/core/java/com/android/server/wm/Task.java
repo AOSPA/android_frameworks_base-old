@@ -71,8 +71,6 @@ import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 
-import static com.android.internal.policy.DecorView.DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP;
-import static com.android.internal.policy.DecorView.DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BACK_PREVIEW;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_LOCKTASK;
@@ -133,7 +131,6 @@ import static com.android.server.wm.WindowContainerChildProto.TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.dipToPixel;
 
 import static java.lang.Integer.MAX_VALUE;
 
@@ -1519,16 +1516,7 @@ class Task extends TaskFragment {
                         !REMOVE_FROM_RECENTS, reason);
             }
         } else if (!mReuseTask && shouldRemoveSelfOnLastChildRemoval()) {
-            // Remove entire task if it doesn't have any activity left and it isn't marked for reuse
-            // or created by task organizer.
-            if (!isRootTask()) {
-                final WindowContainer<?> parent = getParent();
-                if (parent != null) {
-                    parent.asTaskFragment().removeChild(this);
-                }
-            }
-            EventLogTags.writeWmTaskRemoved(mTaskId,
-                    "removeChild:" + reason + " last r=" + r + " in t=" + this);
+            reason += ", last child = " + r + " in " + this;
             removeIfPossible(reason);
         }
     }
@@ -1640,7 +1628,7 @@ class Task extends TaskFragment {
      * activities on top of it and return the instance.
      *
      * @param newR Description of the new activity being started.
-     * @return Returns the old activity that should be continued to be used,
+     * @return Returns the existing activity in the task that performs the clear-top operation,
      * or {@code null} if none was found.
      */
     private ActivityRecord clearTopActivities(ActivityRecord newR, int launchFlags) {
@@ -1659,7 +1647,6 @@ class Task extends TaskFragment {
                 && !ActivityStarter.isDocumentLaunchesIntoExisting(launchFlags)) {
             if (!r.finishing) {
                 r.finishIfPossible("clear-task-top", false /* oomAdj */);
-                return null;
             }
         }
 
@@ -3285,7 +3272,6 @@ class Task extends TaskFragment {
         }
 
         final SurfaceControl.Transaction t = getSyncTransaction();
-        updateShadowsRadius(isFocused(), t);
 
         if (mDimmer.updateDims(t, mTmpDimBoundsRect)) {
             scheduleAnimation();
@@ -4257,48 +4243,10 @@ class Task extends TaskFragment {
     }
 
     /**
-     * @return the desired shadow radius in pixels for the current task.
-     */
-    private float getShadowRadius(boolean taskIsFocused) {
-        int elevation = 0;
-
-        // Get elevation for a specific windowing mode.
-        if (inFreeformWindowingMode()) {
-            elevation = taskIsFocused
-                    ? DECOR_SHADOW_FOCUSED_HEIGHT_IN_DIP : DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP;
-        } else {
-            // For all other windowing modes, do not draw a shadow.
-            return 0;
-        }
-
-        // If the task has no visible children, do not draw a shadow.
-        if (!hasVisibleChildren()) {
-            return 0;
-        }
-
-        return dipToPixel(elevation, getDisplayContent().getDisplayMetrics());
-    }
-
-    /**
-     * Update the length of the shadow if needed based on windowing mode and task focus state.
-     */
-    private void updateShadowsRadius(boolean taskIsFocused,
-            SurfaceControl.Transaction pendingTransaction) {
-        if (!isRootTask()) return;
-
-        final float newShadowRadius = getShadowRadius(taskIsFocused);
-        if (mShadowRadius != newShadowRadius) {
-            mShadowRadius = newShadowRadius;
-            pendingTransaction.setShadowRadius(getSurfaceControl(), mShadowRadius);
-        }
-    }
-
-    /**
      * Called on the task when it gained or lost focus.
      * @param hasFocus
      */
     void onAppFocusChanged(boolean hasFocus) {
-        updateShadowsRadius(hasFocus, getSyncTransaction());
         dispatchTaskInfoChangedIfNeeded(false /* force */);
     }
 
@@ -4574,22 +4522,12 @@ class Task extends TaskFragment {
         moveToFront(reason, null);
     }
 
-    void moveToFront(String reason, Task task) {
-        if (mMoveAdjacentTogether && getAdjacentTaskFragment() != null) {
-            final Task adjacentTask = getAdjacentTaskFragment().asTask();
-            if (adjacentTask != null) {
-                adjacentTask.moveToFrontInner(reason + " adjacentTaskToTop", null /* task */);
-            }
-        }
-        moveToFrontInner(reason, task);
-    }
-
     /**
      * @param reason The reason for moving the root task to the front.
      * @param task If non-null, the task will be moved to the top of the root task.
      */
     @VisibleForTesting
-    void moveToFrontInner(String reason, Task task) {
+    void moveToFront(String reason, Task task) {
         if (!isAttached()) {
             return;
         }
@@ -5995,8 +5933,13 @@ class Task extends TaskFragment {
         mLastRecentsAnimationTransaction = null;
         mLastRecentsAnimationOverlay = null;
         // reset also the crop and transform introduced by mLastRecentsAnimationTransaction
-        getPendingTransaction().setMatrix(mSurfaceControl, Matrix.IDENTITY_MATRIX, new float[9])
+        resetSurfaceControlTransforms();
+    }
+
+    void resetSurfaceControlTransforms() {
+        getSyncTransaction().setMatrix(mSurfaceControl, Matrix.IDENTITY_MATRIX, new float[9])
                 .setWindowCrop(mSurfaceControl, null)
+                .setShadowRadius(mSurfaceControl, 0)
                 .setCornerRadius(mSurfaceControl, 0);
     }
 

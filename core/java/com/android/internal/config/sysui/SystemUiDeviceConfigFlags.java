@@ -543,6 +543,11 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String TASK_MANAGER_ENABLED = "task_manager_enabled";
 
+    /**
+     * (boolean) Whether the task manager should show an attention grabbing dot when tasks changed.
+     */
+    public static final String TASK_MANAGER_SHOW_FOOTER_DOT = "task_manager_show_footer_dot";
+
 
     /**
      * (boolean) Whether the clipboard overlay is enabled.
@@ -566,6 +571,11 @@ public final class SystemUiDeviceConfigFlags {
      * (boolean) Whether to show smart chips (based on TextClassifier) in the clipboard overlay.
      */
     public static final String CLIPBOARD_OVERLAY_SHOW_ACTIONS = "clipboard_overlay_show_actions";
+
+    /**
+     * (boolean) Whether to combine the broadcasts APPWIDGET_ENABLED and APPWIDGET_UPDATE
+     */
+    public static final String COMBINED_BROADCAST_ENABLED = "combined_broadcast_enabled";
 
     private SystemUiDeviceConfigFlags() {
     }

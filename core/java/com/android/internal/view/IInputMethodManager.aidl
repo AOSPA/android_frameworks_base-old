@@ -22,17 +22,17 @@ import android.view.inputmethod.InputMethodSubtype;
 import android.view.inputmethod.EditorInfo;
 import android.window.ImeOnBackInvokedDispatcher;
 
-import com.android.internal.inputmethod.InputBindResult;
+import com.android.internal.inputmethod.IInputMethodClient;
 import com.android.internal.inputmethod.IRemoteAccessibilityInputConnection;
-import com.android.internal.view.IInputContext;
-import com.android.internal.view.IInputMethodClient;
+import com.android.internal.inputmethod.IRemoteInputConnection;
+import com.android.internal.inputmethod.InputBindResult;
 
 /**
  * Public interface to the global input method manager, used by all client
  * applications.
  */
 interface IInputMethodManager {
-    void addClient(in IInputMethodClient client, in IInputContext inputContext,
+    void addClient(in IInputMethodClient client, in IRemoteInputConnection inputmethod,
             int untrustedDisplayId);
 
     // TODO: Use ParceledListSlice instead
@@ -56,7 +56,7 @@ interface IInputMethodManager {
             in IInputMethodClient client, in IBinder windowToken,
             /* @StartInputFlags */ int startInputFlags,
             /* @android.view.WindowManager.LayoutParams.SoftInputModeFlags */ int softInputMode,
-            int windowFlags, in EditorInfo attribute, in IInputContext inputContext,
+            int windowFlags, in EditorInfo attribute, in IRemoteInputConnection inputConnection,
             in IRemoteAccessibilityInputConnection remoteAccessibilityInputConnection,
             int unverifiedTargetSdkVersion, in ImeOnBackInvokedDispatcher imeDispatcher);
 

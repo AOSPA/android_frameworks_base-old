@@ -41,6 +41,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.UserInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Process;
@@ -85,6 +86,7 @@ public class PackageInstallerActivity extends AlertActivity {
     private Uri mReferrerURI;
     private int mOriginatingUid = PackageInstaller.SessionParams.UID_UNKNOWN;
     private String mOriginatingPackage; // The package name corresponding to #mOriginatingUid
+    private int mActivityResultCode = Activity.RESULT_CANCELED;
 
     private final boolean mLocalLOGV = false;
     PackageManager mPm;
@@ -304,6 +306,7 @@ public class PackageInstallerActivity extends AlertActivity {
         if (icicle != null) {
             mAllowUnknownSources = icicle.getBoolean(ALLOW_UNKNOWN_SOURCES_KEY);
         }
+        setFinishOnTouchOutside(true);
 
         mPm = getPackageManager();
         mIpm = AppGlobals.getPackageManager();
@@ -415,7 +418,7 @@ public class PackageInstallerActivity extends AlertActivity {
                 (ignored, ignored2) -> {
                     if (mOk.isEnabled()) {
                         if (mSessionId != -1) {
-                            mInstaller.setPermissionsResult(mSessionId, true);
+                            setActivityResult(RESULT_OK);
                             finish();
                         } else {
                             startInstall();
@@ -425,10 +428,7 @@ public class PackageInstallerActivity extends AlertActivity {
         mAlert.setButton(DialogInterface.BUTTON_NEGATIVE, getString(R.string.cancel),
                 (ignored, ignored2) -> {
                     // Cancel and finish
-                    setResult(RESULT_CANCELED);
-                    if (mSessionId != -1) {
-                        mInstaller.setPermissionsResult(mSessionId, false);
-                    }
+                    setActivityResult(RESULT_CANCELED);
                     finish();
                 }, null);
         setupAlert();
@@ -439,6 +439,23 @@ public class PackageInstallerActivity extends AlertActivity {
         if (!mOk.isInTouchMode()) {
             mAlert.getButton(DialogInterface.BUTTON_NEGATIVE).requestFocus();
         }
+    }
+
+    private void setActivityResult(int resultCode) {
+        mActivityResultCode = resultCode;
+        super.setResult(resultCode);
+    }
+
+    @Override
+    public void finish() {
+        if (mSessionId != -1) {
+            if (mActivityResultCode == Activity.RESULT_OK) {
+                mInstaller.setPermissionsResult(mSessionId, true);
+            } else {
+                mInstaller.setPermissionsResult(mSessionId, false);
+            }
+        }
+        super.finish();
     }
 
     /**
@@ -546,20 +563,27 @@ public class PackageInstallerActivity extends AlertActivity {
      */
     private boolean processPackageUri(final Uri packageUri) {
         mPackageURI = packageUri;
-
         final String scheme = packageUri.getScheme();
+        final String packageName = packageUri.getSchemeSpecificPart();
+
         if (mLocalLOGV) Log.i(TAG, "processPackageUri(): uri=" + packageUri + ", scheme=" + scheme);
 
         switch (scheme) {
             case SCHEME_PACKAGE: {
-                try {
-                    mPkgInfo = mPm.getPackageInfo(packageUri.getSchemeSpecificPart(),
-                            PackageManager.GET_PERMISSIONS
-                                    | PackageManager.MATCH_UNINSTALLED_PACKAGES);
-                } catch (NameNotFoundException e) {
+                for (UserInfo info : mUserManager.getUsers()) {
+                    PackageManager pmForUser = createContextAsUser(info.getUserHandle(), 0)
+                                                .getPackageManager();
+                    try {
+                        if (pmForUser.canPackageQuery(mCallingPackage, packageName)) {
+                            mPkgInfo = pmForUser.getPackageInfo(packageName,
+                                    PackageManager.GET_PERMISSIONS
+                                            | PackageManager.MATCH_UNINSTALLED_PACKAGES);
+                        }
+                    } catch (NameNotFoundException e) {
+                    }
                 }
                 if (mPkgInfo == null) {
-                    Log.w(TAG, "Requested package " + packageUri.getScheme()
+                    Log.w(TAG, "Requested package " + packageUri.getSchemeSpecificPart()
                             + " not available. Discontinuing installation");
                     showDialogInner(DLG_PACKAGE_ERROR);
                     setPmResult(PackageManager.INSTALL_FAILED_INVALID_APK);
@@ -598,7 +622,7 @@ public class PackageInstallerActivity extends AlertActivity {
     @Override
     public void onBackPressed() {
         if (mSessionId != -1) {
-            mInstaller.setPermissionsResult(mSessionId, false);
+            setActivityResult(RESULT_CANCELED);
         }
         super.onBackPressed();
     }

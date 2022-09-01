@@ -482,6 +482,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"กำลังชาร์จอย่างเร็ว"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"กำลังชาร์จอย่างช้าๆ"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"กำลังชาร์จแบบไร้สาย"</string>
+    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"กำลังชาร์จบนแท่น"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"ไม่ได้ชาร์จ"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"เชื่อมต่ออยู่ ไม่ได้ชาร์จ"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"ชาร์จแล้ว"</string>
@@ -671,4 +672,7 @@
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"หากคุณออกอากาศ <xliff:g id="SWITCHAPP">%1$s</xliff:g> หรือเปลี่ยนแปลงเอาต์พุต การออกอากาศในปัจจุบันจะหยุดลง"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"ออกอากาศ <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"เปลี่ยนเอาต์พุต"</string>
+    <string name="back_navigation_animation" msgid="8105467568421689484">"การเคลื่อนไหวย้อนกลับแบบคาดเดา"</string>
+    <string name="back_navigation_animation_summary" msgid="741292224121599456">"เปิดใช้การเคลื่อนไหวของระบบสำหรับท่าทางสัมผัสย้อนกลับแบบคาดเดา"</string>
+    <string name="back_navigation_animation_dialog" msgid="8696966520944625596">"การตั้งค่านี้จะเปิดใช้การเคลื่อนไหวของระบบสำหรับการเคลื่อนไหวจากท่าทางสัมผัสแบบคาดเดา โดยต้องตั้งค่า enableOnBackInvokedCallback สำหรับแต่ละแอปให้เป็น \"จริง\" ในไฟล์ Manifest"</string>
 </resources>

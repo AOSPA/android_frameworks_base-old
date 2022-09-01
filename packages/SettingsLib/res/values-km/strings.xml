@@ -482,6 +482,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"កំពុងសាកថ្មយ៉ាងឆាប់រហ័ស"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"កំពុង​សាកថ្មយឺត"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"កំពុង​សាកថ្ម​ឥតខ្សែ"</string>
+    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"ឧបករណ៍ភ្ជាប់សាកថ្ម"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"មិនកំពុង​សាក​ថ្ម"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"បានភ្ជាប់ មិនកំពុង​សាកថ្ម"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"បាន​សាក​ថ្មពេញ"</string>
@@ -671,4 +672,7 @@
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"ប្រសិនបើអ្នក​ផ្សាយ <xliff:g id="SWITCHAPP">%1$s</xliff:g> ឬប្ដូរឧបករណ៍បញ្ចេញសំឡេង ការផ្សាយបច្ចុប្បន្នរបស់អ្នកនឹង​បញ្ឈប់"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"ការផ្សាយ <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"ប្ដូរឧបករណ៍បញ្ចេញសំឡេង"</string>
+    <string name="back_navigation_animation" msgid="8105467568421689484">"ចលនា​ថយក្រោយ​ដែល​ព្យាករ"</string>
+    <string name="back_navigation_animation_summary" msgid="741292224121599456">"បើក​ចលនា​ប្រព័ន្ធ​សម្រាប់​ការ​ថយក្រោយ​ព្យាករ។"</string>
+    <string name="back_navigation_animation_dialog" msgid="8696966520944625596">"ការ​កំណត់នេះ​បើក​ចលនា​ប្រព័ន្ធ​សម្រាប់​ចលនាព្យាករ។ ចលនា​នេះ​ទាមទារ​ការ​កំណត់ enableOnBackInvokedCallback នៅ​ក្នុងកម្មវិធី​ទៅពិត​នៅ​ក្នុង​ឯកសារ​មេនីហ្វេសថ៍។"</string>
 </resources>

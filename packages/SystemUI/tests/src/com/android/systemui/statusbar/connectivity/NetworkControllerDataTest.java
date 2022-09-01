@@ -37,6 +37,7 @@ import android.testing.TestableLooper.RunWithLooper;
 
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.DataUsageController;
+import com.android.systemui.log.LogBuffer;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.util.CarrierConfigTracker;
 
@@ -124,16 +125,28 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
     public void test4gDataIcon() {
         // Switch to showing 4g icon and re-initialize the NetworkController.
         mConfig.show4gForLte = true;
-        mNetworkController = new NetworkControllerImpl(mContext, mMockCm, mMockTm,
-                mTelephonyListenerManager, mMockWm,
-                mMockSm, mConfig, Looper.getMainLooper(), mFakeExecutor, mCallbackHandler,
+        mNetworkController = new NetworkControllerImpl(
+                mContext,
+                mMockCm,
+                mMockTm,
+                mTelephonyListenerManager,
+                mMockWm,
+                mMockSm,
+                mConfig,
+                Looper.getMainLooper(),
+                mFakeExecutor,
+                mCallbackHandler,
                 mock(AccessPointControllerImpl.class),
-                mock(DataUsageController.class), mMockSubDefaults,
-                mock(DeviceProvisionedController.class), mMockBd, mDemoModeController,
+                mock(DataUsageController.class),
+                mMockSubDefaults,
+                mock(DeviceProvisionedController.class),
+                mMockBd,
+                mDemoModeController,
                 mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
                 new Handler(TestableLooper.get(this).getLooper()),
-                mFeatureFlags);
+                mFeatureFlags,
+                mock(LogBuffer.class));
         setupNetworkController();
 
         setupDefaultSignal();

@@ -17,6 +17,8 @@
 package com.android.systemui.qs.tiles;
 
 import android.content.Context;
+import static com.android.systemui.util.PluralMessageFormaterKt.icuMessageFormat;
+
 import android.content.Intent;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
@@ -203,9 +205,8 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
             return mContext.getString(
                     R.string.quick_settings_hotspot_secondary_label_data_saver_enabled);
         } else if (numConnectedDevices > 0 && isActive) {
-            return mContext.getResources().getQuantityString(
-                    R.plurals.quick_settings_hotspot_secondary_label_num_devices,
-                    numConnectedDevices,
+            return icuMessageFormat(mContext.getResources(),
+                    R.string.quick_settings_hotspot_secondary_label_num_devices,
                     numConnectedDevices);
         }
 

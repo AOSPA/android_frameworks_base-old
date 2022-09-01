@@ -53,6 +53,7 @@ import com.android.wm.shell.common.SystemWindows;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ShellAnimationThread;
+import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
 import com.android.wm.shell.compatui.CompatUI;
@@ -63,7 +64,6 @@ import com.android.wm.shell.draganddrop.DragAndDrop;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformTaskListener;
 import com.android.wm.shell.fullscreen.FullscreenTaskListener;
-import com.android.wm.shell.fullscreen.FullscreenUnfoldController;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
 import com.android.wm.shell.kidsmode.KidsModeTaskOrganizer;
@@ -87,6 +87,7 @@ import com.android.wm.shell.tasksurfacehelper.TaskSurfaceHelperController;
 import com.android.wm.shell.transition.ShellTransitions;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
+import com.android.wm.shell.unfold.UnfoldAnimationController;
 import com.android.wm.shell.unfold.UnfoldTransitionHandler;
 
 import java.util.Optional;
@@ -175,9 +176,11 @@ public abstract class WMShellBaseModule {
     static ShellTaskOrganizer provideShellTaskOrganizer(@ShellMainThread ShellExecutor mainExecutor,
             Context context,
             CompatUIController compatUI,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<RecentTasksController> recentTasksOptional
     ) {
-        return new ShellTaskOrganizer(mainExecutor, context, compatUI, recentTasksOptional);
+        return new ShellTaskOrganizer(mainExecutor, context, compatUI, unfoldAnimationController,
+                recentTasksOptional);
     }
 
     @WMSingleton
@@ -189,10 +192,12 @@ public abstract class WMShellBaseModule {
             SyncTransactionQueue syncTransactionQueue,
             DisplayController displayController,
             DisplayInsetsController displayInsetsController,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<RecentTasksController> recentTasksOptional
     ) {
         return new KidsModeTaskOrganizer(mainExecutor, mainHandler, context, syncTransactionQueue,
-                displayController, displayInsetsController, recentTasksOptional);
+                displayController, displayInsetsController, unfoldAnimationController,
+                recentTasksOptional);
     }
 
     @WMSingleton
@@ -289,13 +294,11 @@ public abstract class WMShellBaseModule {
     static FullscreenTaskListener provideFullscreenTaskListener(
             @DynamicOverride Optional<FullscreenTaskListener> fullscreenTaskListener,
             SyncTransactionQueue syncQueue,
-            Optional<FullscreenUnfoldController> optionalFullscreenUnfoldController,
             Optional<RecentTasksController> recentTasksOptional) {
         if (fullscreenTaskListener.isPresent()) {
             return fullscreenTaskListener.get();
         } else {
-            return new FullscreenTaskListener(syncQueue, optionalFullscreenUnfoldController,
-                    recentTasksOptional);
+            return new FullscreenTaskListener(syncQueue, recentTasksOptional);
         }
     }
 
@@ -309,12 +312,13 @@ public abstract class WMShellBaseModule {
     // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
     @BindsOptionalOf
     @DynamicOverride
-    abstract FullscreenUnfoldController optionalFullscreenUnfoldController();
+    abstract UnfoldAnimationController optionalUnfoldController();
 
     @WMSingleton
     @Provides
-    static Optional<FullscreenUnfoldController> provideFullscreenUnfoldController(
-            @DynamicOverride Lazy<Optional<FullscreenUnfoldController>> fullscreenUnfoldController,
+    static Optional<UnfoldAnimationController> provideUnfoldController(
+            @DynamicOverride Lazy<Optional<UnfoldAnimationController>>
+                    fullscreenUnfoldController,
             Optional<ShellUnfoldProgressProvider> progressProvider) {
         if (progressProvider.isPresent()
                 && progressProvider.get() != ShellUnfoldProgressProvider.NO_PROVIDER) {
@@ -346,12 +350,12 @@ public abstract class WMShellBaseModule {
     // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
     @BindsOptionalOf
     @DynamicOverride
-    abstract FreeformTaskListener optionalFreeformTaskListener();
+    abstract FreeformTaskListener<?> optionalFreeformTaskListener();
 
     @WMSingleton
     @Provides
-    static Optional<FreeformTaskListener> provideFreeformTaskListener(
-            @DynamicOverride Optional<FreeformTaskListener> freeformTaskListener,
+    static Optional<FreeformTaskListener<?>> provideFreeformTaskListener(
+            @DynamicOverride Optional<FreeformTaskListener<?>> freeformTaskListener,
             Context context) {
         if (FreeformTaskListener.isFreeformEnabled(context)) {
             return freeformTaskListener;
@@ -639,9 +643,9 @@ public abstract class WMShellBaseModule {
             Optional<SplitScreenController> splitScreenOptional,
             Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
-            Optional<FullscreenUnfoldController> appUnfoldTransitionController,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<UnfoldTransitionHandler> unfoldTransitionHandler,
-            Optional<FreeformTaskListener> freeformTaskListener,
+            Optional<FreeformTaskListener<?>> freeformTaskListener,
             Optional<RecentTasksController> recentTasksOptional,
             Transitions transitions,
             StartingWindowController startingWindow,
@@ -656,7 +660,7 @@ public abstract class WMShellBaseModule {
                 splitScreenOptional,
                 pipTouchHandlerOptional,
                 fullscreenTaskListener,
-                appUnfoldTransitionController,
+                unfoldAnimationController,
                 unfoldTransitionHandler,
                 freeformTaskListener,
                 recentTasksOptional,
@@ -695,11 +699,12 @@ public abstract class WMShellBaseModule {
     @Provides
     static Optional<BackAnimationController> provideBackAnimationController(
             Context context,
-            @ShellMainThread ShellExecutor shellExecutor
+            @ShellMainThread ShellExecutor shellExecutor,
+            @ShellBackgroundThread Handler backgroundHandler
     ) {
         if (BackAnimationController.IS_ENABLED) {
             return Optional.of(
-                    new BackAnimationController(shellExecutor, context));
+                    new BackAnimationController(shellExecutor, backgroundHandler, context));
         }
         return Optional.empty();
     }

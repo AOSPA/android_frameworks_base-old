@@ -149,6 +149,8 @@ public class WindowManagerShellCommand extends ShellCommand {
                     return runReset(pw);
                 case "disable-blur":
                     return runSetBlurDisabled(pw);
+                case "shell":
+                    return runWmShellCommand(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -629,6 +631,26 @@ public class WindowManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runSetDefaultMinAspectRatioForUnresizableApps(PrintWriter pw)
+            throws RemoteException {
+        final float aspectRatio;
+        try {
+            String arg = getNextArgRequired();
+            aspectRatio = Float.parseFloat(arg);
+        } catch (NumberFormatException  e) {
+            getErrPrintWriter().println("Error: bad aspect ratio format " + e);
+            return -1;
+        } catch (IllegalArgumentException  e) {
+            getErrPrintWriter().println(
+                    "Error: aspect ratio should be provided as an argument " + e);
+            return -1;
+        }
+        synchronized (mInternal.mGlobalLock) {
+            mLetterboxConfiguration.setDefaultMinAspectRatioForUnresizableApps(aspectRatio);
+        }
+        return 0;
+    }
+
     private int runSetLetterboxActivityCornersRadius(PrintWriter pw) throws RemoteException {
         final int cornersRadius;
         try {
@@ -929,6 +951,30 @@ public class WindowManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runSetLetterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled(PrintWriter pw)
+            throws RemoteException {
+        String arg = getNextArg();
+        final boolean enabled;
+        switch (arg) {
+            case "true":
+            case "1":
+                enabled = true;
+                break;
+            case "false":
+            case "0":
+                enabled = false;
+                break;
+            default:
+                getErrPrintWriter().println("Error: expected true, 1, false, 0, but got " + arg);
+                return -1;
+        }
+
+        synchronized (mInternal.mGlobalLock) {
+            mLetterboxConfiguration.setIsSplitScreenAspectRatioForUnresizableAppsEnabled(enabled);
+        }
+        return 0;
+    }
+
     private int runSetLetterboxStyle(PrintWriter pw) throws RemoteException {
         if (peekNextArg() == null) {
             getErrPrintWriter().println("Error: No arguments provided.");
@@ -938,6 +984,9 @@ public class WindowManagerShellCommand extends ShellCommand {
             switch (arg) {
                 case "--aspectRatio":
                     runSetFixedOrientationLetterboxAspectRatio(pw);
+                    break;
+                case "--minAspectRatioForUnresizable":
+                    runSetDefaultMinAspectRatioForUnresizableApps(pw);
                     break;
                 case "--cornerRadius":
                     runSetLetterboxActivityCornersRadius(pw);
@@ -978,6 +1027,9 @@ public class WindowManagerShellCommand extends ShellCommand {
                 case "--isEducationEnabled":
                     runSetLetterboxIsEducationEnabled(pw);
                     break;
+                case "--isSplitScreenAspectRatioForUnresizableAppsEnabled":
+                    runSetLetterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled(pw);
+                    break;
                 default:
                     getErrPrintWriter().println(
                             "Error: Unrecognized letterbox style option: " + arg);
@@ -997,6 +1049,9 @@ public class WindowManagerShellCommand extends ShellCommand {
                 switch (arg) {
                     case "aspectRatio":
                         mLetterboxConfiguration.resetFixedOrientationLetterboxAspectRatio();
+                        break;
+                    case "minAspectRatioForUnresizable":
+                        mLetterboxConfiguration.resetDefaultMinAspectRatioForUnresizableApps();
                         break;
                     case "cornerRadius":
                         mLetterboxConfiguration.resetLetterboxActivityCornersRadius();
@@ -1033,6 +1088,10 @@ public class WindowManagerShellCommand extends ShellCommand {
                         break;
                     case "isEducationEnabled":
                         mLetterboxConfiguration.getIsEducationEnabled();
+                        break;
+                    case "isSplitScreenAspectRatioForUnresizableAppsEnabled":
+                        mLetterboxConfiguration
+                                .getIsSplitScreenAspectRatioForUnresizableAppsEnabled();
                         break;
                     default:
                         getErrPrintWriter().println(
@@ -1121,6 +1180,7 @@ public class WindowManagerShellCommand extends ShellCommand {
     private void resetLetterboxStyle() {
         synchronized (mInternal.mGlobalLock) {
             mLetterboxConfiguration.resetFixedOrientationLetterboxAspectRatio();
+            mLetterboxConfiguration.resetDefaultMinAspectRatioForUnresizableApps();
             mLetterboxConfiguration.resetLetterboxActivityCornersRadius();
             mLetterboxConfiguration.resetLetterboxBackgroundType();
             mLetterboxConfiguration.resetLetterboxBackgroundColor();
@@ -1132,6 +1192,7 @@ public class WindowManagerShellCommand extends ShellCommand {
             mLetterboxConfiguration.resetDefaultPositionForHorizontalReachability();
             mLetterboxConfiguration.resetDefaultPositionForVerticalReachability();
             mLetterboxConfiguration.resetIsEducationEnabled();
+            mLetterboxConfiguration.resetIsSplitScreenAspectRatioForUnresizableAppsEnabled();
         }
     }
 
@@ -1145,6 +1206,8 @@ public class WindowManagerShellCommand extends ShellCommand {
                     + mLetterboxConfiguration.getLetterboxVerticalPositionMultiplier());
             pw.println("Aspect ratio: "
                     + mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio());
+            pw.println("Default min aspect ratio for unresizable apps: "
+                    + mLetterboxConfiguration.getDefaultMinAspectRatioForUnresizableApps());
             pw.println("Is horizontal reachability enabled: "
                     + mLetterboxConfiguration.getIsHorizontalReachabilityEnabled());
             pw.println("Is vertical reachability enabled: "
@@ -1157,6 +1220,9 @@ public class WindowManagerShellCommand extends ShellCommand {
                     mLetterboxConfiguration.getDefaultPositionForVerticalReachability()));
             pw.println("Is education enabled: "
                     + mLetterboxConfiguration.getIsEducationEnabled());
+            pw.println("Is using split screen aspect ratio as aspect ratio for unresizable apps: "
+                    + mLetterboxConfiguration
+                            .getIsSplitScreenAspectRatioForUnresizableAppsEnabled());
 
             pw.println("Background type: "
                     + LetterboxConfiguration.letterboxBackgroundTypeToString(
@@ -1168,6 +1234,47 @@ public class WindowManagerShellCommand extends ShellCommand {
             pw.println("    Wallpaper dark scrim alpha: "
                     + mLetterboxConfiguration.getLetterboxBackgroundWallpaperDarkScrimAlpha());
         }
+        return 0;
+    }
+
+    private int runWmShellCommand(PrintWriter pw) {
+        String arg = getNextArg();
+
+        switch (arg) {
+            case "tracing":
+                return runWmShellTracing(pw);
+            case "help":
+            default:
+                return runHelp(pw);
+        }
+    }
+
+    private int runHelp(PrintWriter pw) {
+        pw.println("Window Manager Shell commands:");
+        pw.println("  help");
+        pw.println("    Print this help text.");
+        pw.println("  tracing <start/stop>");
+        pw.println("    Start/stop shell transition tracing.");
+
+        return 0;
+    }
+
+    private int runWmShellTracing(PrintWriter pw) {
+        String arg = getNextArg();
+
+        switch (arg) {
+            case "start":
+                mInternal.mTransitionTracer.startTrace(pw);
+                break;
+            case "stop":
+                mInternal.mTransitionTracer.stopTrace(pw);
+                break;
+            default:
+                getErrPrintWriter()
+                        .println("Error: expected 'start' or 'stop', but got '" + arg + "'");
+                return -1;
+        }
+
         return 0;
     }
 
@@ -1261,6 +1368,11 @@ public class WindowManagerShellCommand extends ShellCommand {
                 + LetterboxConfiguration.MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO);
         pw.println("        both it and R.dimen.config_fixedOrientationLetterboxAspectRatio will");
         pw.println("        be ignored and framework implementation will determine aspect ratio.");
+        pw.println("      --minAspectRatioForUnresizable aspectRatio");
+        pw.println("        Default min aspect ratio for unresizable apps which is used when an");
+        pw.println("        app doesn't specify android:minAspectRatio. An exception will be");
+        pw.println("        thrown if aspectRatio < "
+                + LetterboxConfiguration.MIN_UNRESIZABLE_ASPECT_RATIO);
         pw.println("      --cornerRadius radius");
         pw.println("        Corners radius for activities in the letterbox mode. If radius < 0,");
         pw.println("        both it and R.integer.config_letterboxActivityCornersRadius will be");
@@ -1309,6 +1421,9 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("        enabled.");
         pw.println("      --isEducationEnabled [true|1|false|0]");
         pw.println("        Whether education is allowed for letterboxed fullscreen apps.");
+        pw.println("      --isSplitScreenAspectRatioForUnresizableAppsEnabled [true|1|false|0]");
+        pw.println("        Whether using split screen aspect ratio as a default aspect ratio for");
+        pw.println("        unresizable apps.");
         pw.println("  reset-letterbox-style [aspectRatio|cornerRadius|backgroundType");
         pw.println("      |backgroundColor|wallpaperBlurRadius|wallpaperDarkScrimAlpha");
         pw.println("      |horizontalPositionMultiplier|verticalPositionMultiplier");

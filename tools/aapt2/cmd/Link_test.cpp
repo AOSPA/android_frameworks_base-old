@@ -19,10 +19,10 @@
 #include <android-base/file.h>
 
 #include "AppInfo.h"
+#include "Diagnostics.h"
 #include "LoadedApk.h"
 #include "test/Test.h"
 
-using android::ConfigDescription;
 using testing::Eq;
 using testing::HasSubstr;
 using testing::IsNull;
@@ -87,7 +87,8 @@ TEST_F(LinkTest, KeepRawXmlStrings) {
   // Check that the raw string index has been set to the correct string pool entry
   int32_t raw_index = tree.getAttributeValueStringID(0);
   ASSERT_THAT(raw_index, Ne(-1));
-  EXPECT_THAT(util::GetString(tree.getStrings(), static_cast<size_t>(raw_index)), Eq("007"));
+  EXPECT_THAT(android::util::GetString(tree.getStrings(), static_cast<size_t>(raw_index)),
+              Eq("007"));
 }
 
 TEST_F(LinkTest, NoCompressAssets) {
@@ -410,7 +411,7 @@ struct SourceXML {
 
 static void BuildApk(const std::vector<SourceXML>& source_files, const std::string& apk_path,
                      LinkCommandBuilder&& link_args, CommandTestFixture* fixture,
-                     IDiagnostics* diag) {
+                     android::IDiagnostics* diag) {
   TemporaryDir res_dir;
   TemporaryDir compiled_res_dir;
   for (auto& source_file : source_files) {
@@ -423,7 +424,7 @@ static void BuildApk(const std::vector<SourceXML>& source_files, const std::stri
 
 static void BuildSDK(const std::vector<SourceXML>& source_files, const std::string& apk_path,
                      const std::string& java_root_path, CommandTestFixture* fixture,
-                     IDiagnostics* diag) {
+                     android::IDiagnostics* diag) {
   auto android_manifest = ManifestBuilder(fixture).SetPackageName("android").Build();
 
   auto android_link_args = LinkCommandBuilder(fixture)
@@ -435,7 +436,7 @@ static void BuildSDK(const std::vector<SourceXML>& source_files, const std::stri
 }
 
 static void BuildNonFinalizedSDK(const std::string& apk_path, const std::string& java_path,
-                                 CommandTestFixture* fixture, IDiagnostics* diag) {
+                                 CommandTestFixture* fixture, android::IDiagnostics* diag) {
   const std::string android_values =
       R"(<resources>
           <public type="attr" name="finalized_res" id="0x01010001"/>
@@ -471,7 +472,7 @@ static void BuildNonFinalizedSDK(const std::string& apk_path, const std::string&
 }
 
 static void BuildFinalizedSDK(const std::string& apk_path, const std::string& java_path,
-                              CommandTestFixture* fixture, IDiagnostics* diag) {
+                              CommandTestFixture* fixture, android::IDiagnostics* diag) {
   const std::string android_values =
       R"(<resources>
           <public type="attr" name="finalized_res" id="0x01010001"/>
@@ -511,7 +512,7 @@ static void BuildFinalizedSDK(const std::string& apk_path, const std::string& ja
 
 static void BuildAppAgainstSDK(const std::string& apk_path, const std::string& java_path,
                                const std::string& sdk_path, CommandTestFixture* fixture,
-                               IDiagnostics* diag) {
+                               android::IDiagnostics* diag) {
   const std::string app_values =
       R"(<resources xmlns:android="http://schemas.android.com/apk/res/android">
            <attr name="bar" />
@@ -782,53 +783,6 @@ TEST_F(LinkTest, MacroSubstitution) {
 
   EXPECT_THAT(xml_attrs[1].compiled_value.get(), IsNull());
   EXPECT_THAT(xml_attrs[1].value, Eq("Hello World!"));
-}
-
-TEST_F(LinkTest, ParseLocaleConfig) {
-  StdErrDiagnostics diag;
-  const std::string xml_values =
-      R"(<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
-            <locale android:name="pt"/>
-            <locale android:name="chr"/>
-            <locale android:name="chr-US"/>
-            <locale android:name="zh-Hant"/>
-            <locale android:name="es-419"/>
-            <locale android:name="en-US"/>
-            <locale android:name="zh-Hans-SG"/>
-        </locale-config>)";
-
-  const std::string res = GetTestPath("test-res");
-  ASSERT_TRUE(CompileFile(GetTestPath("res/xml/locale_config.xml"), xml_values, res, &diag));
-
-  const std::string out_apk = GetTestPath("out.apk");
-  auto link_args = LinkCommandBuilder(this)
-                       .SetManifestFile(ManifestBuilder(this).SetPackageName("com.test").Build())
-                       .AddCompiledResDir(res, &diag)
-                       .AddFlag("--no-auto-version")
-                       .Build(out_apk);
-  ASSERT_TRUE(Link(link_args, &diag));
-
-  std::unique_ptr<LoadedApk> apk = LoadedApk::LoadApkFromPath(out_apk, &diag);
-  ASSERT_THAT(apk, Ne(nullptr));
-
-  auto xml = apk->LoadXml("res/xml/locale_config.xml", &diag);
-  ASSERT_THAT(xml, NotNull());
-  EXPECT_THAT(xml->root->name, Eq("locale-config"));
-  ASSERT_THAT(xml->root->children.size(), Eq(7));
-  for (auto& node : xml->root->children) {
-    const xml::Element* child_el = xml::NodeCast<xml::Element>(node.get());
-    ASSERT_THAT(child_el, NotNull());
-    EXPECT_THAT(child_el->name, Eq("locale"));
-
-    auto& xml_attrs = child_el->attributes;
-    for (auto& attr : xml_attrs) {
-      std::string locale = "b+";
-      locale += attr.value;
-      std::replace(locale.begin(), locale.end(), '-', '+');
-      ConfigDescription config;
-      ASSERT_TRUE(ConfigDescription::Parse(locale, &config));
-    }
-  }
 }
 
 }  // namespace aapt

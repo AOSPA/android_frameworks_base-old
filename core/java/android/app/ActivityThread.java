@@ -208,7 +208,6 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
-import com.android.org.conscrypt.OpenSSLSocketImpl;
 import com.android.org.conscrypt.TrustedCertificateStore;
 import com.android.server.am.MemInfoDumpProto;
 
@@ -297,6 +296,11 @@ public final class ActivityThread extends ClientTransactionHandler
     private static final int VM_PROCESS_STATE_JANK_PERCEPTIBLE = 0;
     /** Use background GC policy and default JIT threshold. */
     private static final int VM_PROCESS_STATE_JANK_IMPERCEPTIBLE = 1;
+
+    /** The delay time for retrying to request DirectActions. */
+    private static final long REQUEST_DIRECT_ACTIONS_RETRY_TIME_MS = 200;
+    /** The max count for retrying to request DirectActions. */
+    private static final int REQUEST_DIRECT_ACTIONS_RETRY_MAX_COUNT = 7;
 
     /**
      * Denotes an invalid sequence number corresponding to a process state change.
@@ -1405,7 +1409,6 @@ public final class ActivityThread extends ClientTransactionHandler
                     ContextImpl.class,
                     Activity.class,
                     WebView.class,
-                    OpenSSLSocketImpl.class,
                     View.class,
                     ViewRootImpl.class
             };
@@ -1413,9 +1416,8 @@ public final class ActivityThread extends ClientTransactionHandler
             long appContextInstanceCount = instanceCounts[0];
             long activityInstanceCount = instanceCounts[1];
             long webviewInstanceCount = instanceCounts[2];
-            long openSslSocketCount = instanceCounts[3];
-            long viewInstanceCount = instanceCounts[4];
-            long viewRootInstanceCount = instanceCounts[5];
+            long viewInstanceCount = instanceCounts[3];
+            long viewRootInstanceCount = instanceCounts[4];
 
             int globalAssetCount = AssetManager.getGlobalAssetCount();
             int globalAssetManagerCount = AssetManager.getGlobalAssetManagerCount();
@@ -1448,7 +1450,6 @@ public final class ActivityThread extends ClientTransactionHandler
                 pw.print(binderProxyObjectCount); pw.print(',');
 
                 pw.print(binderDeathObjectCount); pw.print(',');
-                pw.print(openSslSocketCount); pw.print(',');
 
                 // SQL
                 pw.print(stats.memoryUsed / 1024); pw.print(',');
@@ -1485,8 +1486,7 @@ public final class ActivityThread extends ClientTransactionHandler
             printRow(pw, TWO_COUNT_COLUMNS, "Parcel memory:", parcelSize/1024,
                     "Parcel count:", parcelCount);
             printRow(pw, TWO_COUNT_COLUMNS, "Death Recipients:", binderDeathObjectCount,
-                    "OpenSSL Sockets:", openSslSocketCount);
-            printRow(pw, ONE_COUNT_COLUMN, "WebViews:", webviewInstanceCount);
+                    "WebViews:", webviewInstanceCount);
 
             // SQLite mem info
             pw.println(" ");
@@ -1559,7 +1559,6 @@ public final class ActivityThread extends ClientTransactionHandler
                     ContextImpl.class,
                     Activity.class,
                     WebView.class,
-                    OpenSSLSocketImpl.class,
                     View.class,
                     ViewRootImpl.class
             };
@@ -1567,9 +1566,8 @@ public final class ActivityThread extends ClientTransactionHandler
             long appContextInstanceCount = instanceCounts[0];
             long activityInstanceCount = instanceCounts[1];
             long webviewInstanceCount = instanceCounts[2];
-            long openSslSocketCount = instanceCounts[3];
-            long viewInstanceCount = instanceCounts[4];
-            long viewRootInstanceCount = instanceCounts[5];
+            long viewInstanceCount = instanceCounts[3];
+            long viewRootInstanceCount = instanceCounts[4];
 
             int globalAssetCount = AssetManager.getGlobalAssetCount();
             int globalAssetManagerCount = AssetManager.getGlobalAssetManagerCount();
@@ -1611,8 +1609,6 @@ public final class ActivityThread extends ClientTransactionHandler
             proto.write(MemInfoDumpProto.AppData.ObjectStats.PARCEL_COUNT, parcelCount);
             proto.write(MemInfoDumpProto.AppData.ObjectStats.BINDER_OBJECT_DEATH_COUNT,
                     binderDeathObjectCount);
-            proto.write(MemInfoDumpProto.AppData.ObjectStats.OPEN_SSL_SOCKET_COUNT,
-                    openSslSocketCount);
             proto.write(MemInfoDumpProto.AppData.ObjectStats.WEBVIEW_INSTANCE_COUNT,
                     webviewInstanceCount);
             proto.end(oToken);
@@ -1868,7 +1864,8 @@ public final class ActivityThread extends ClientTransactionHandler
                 cancellationCallback.sendResult(cancellationResult);
             }
             mH.sendMessage(PooledLambda.obtainMessage(ActivityThread::handleRequestDirectActions,
-                    ActivityThread.this, activityToken, interactor, cancellationSignal, callback));
+                    ActivityThread.this, activityToken, interactor, cancellationSignal, callback,
+                    REQUEST_DIRECT_ACTIONS_RETRY_MAX_COUNT));
         }
 
         @Override
@@ -3944,7 +3941,7 @@ public final class ActivityThread extends ClientTransactionHandler
     /** Fetches the user actions for the corresponding activity */
     private void handleRequestDirectActions(@NonNull IBinder activityToken,
             @NonNull IVoiceInteractor interactor, @NonNull CancellationSignal cancellationSignal,
-            @NonNull RemoteCallback callback) {
+            @NonNull RemoteCallback callback, int retryCount) {
         final ActivityClientRecord r = mActivities.get(activityToken);
         if (r == null) {
             Log.w(TAG, "requestDirectActions(): no activity for " + activityToken);
@@ -3952,7 +3949,20 @@ public final class ActivityThread extends ClientTransactionHandler
             return;
         }
         final int lifecycleState = r.getLifecycleState();
-        if (lifecycleState < ON_START || lifecycleState >= ON_STOP) {
+        if (lifecycleState < ON_START) {
+            // TODO(b/234173463): requestDirectActions callback should indicate errors
+            if (retryCount > 0) {
+                mH.sendMessageDelayed(
+                        PooledLambda.obtainMessage(ActivityThread::handleRequestDirectActions,
+                                ActivityThread.this, activityToken, interactor, cancellationSignal,
+                                callback, retryCount - 1), REQUEST_DIRECT_ACTIONS_RETRY_TIME_MS);
+                return;
+            }
+            Log.w(TAG, "requestDirectActions(" + r + "): wrong lifecycle: " + lifecycleState);
+            callback.sendResult(null);
+            return;
+        }
+        if (lifecycleState >= ON_STOP) {
             Log.w(TAG, "requestDirectActions(" + r + "): wrong lifecycle: " + lifecycleState);
             callback.sendResult(null);
             return;
@@ -6904,9 +6914,12 @@ public final class ActivityThread extends ClientTransactionHandler
     private InstrumentationInfo prepareInstrumentation(AppBindData data) {
         final InstrumentationInfo ii;
         try {
-            ii = new ApplicationPackageManager(null, getPackageManager())
-                    .getInstrumentationInfo(data.instrumentationName, 0);
-        } catch (PackageManager.NameNotFoundException e) {
+            ii = getPackageManager().getInstrumentationInfoAsUser(data.instrumentationName,
+                    0 /* flags */, UserHandle.myUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        if (ii == null) {
             throw new RuntimeException(
                     "Unable to find instrumentation info for: " + data.instrumentationName);
         }

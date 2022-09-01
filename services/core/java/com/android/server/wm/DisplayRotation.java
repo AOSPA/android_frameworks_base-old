@@ -1595,8 +1595,8 @@ public class DisplayRotation {
         }
 
         @Override
-        public boolean isKeyguardLocked() {
-            return mService.isKeyguardLocked();
+        public boolean isKeyguardShowingAndNotOccluded() {
+            return mService.isKeyguardShowingAndNotOccluded();
         }
 
         @Override
@@ -1708,7 +1708,9 @@ public class DisplayRotation {
                 final WindowContainer<?> source = dc.getLastOrientationSource();
                 if (source != null) {
                     mLastOrientationSource = source.toString();
-                    mSourceOrientation = source.mOrientation;
+                    final WindowState w = source.asWindowState();
+                    mSourceOrientation =
+                            w != null ? w.mAttrs.screenOrientation : source.mOrientation;
                 } else {
                     mLastOrientationSource = null;
                     mSourceOrientation = SCREEN_ORIENTATION_UNSET;

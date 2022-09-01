@@ -509,6 +509,11 @@ class MediaDataManager(
      */
     private fun updateState(key: String, state: PlaybackState) {
         mediaEntries.get(key)?.let {
+            val token = it.token
+            if (token == null) {
+                if (DEBUG) Log.d(TAG, "State updated, but token was null")
+                return
+            }
             val actions = createActionsFromState(it.packageName,
                     mediaControllerFactory.create(it.token), UserHandle(it.userId))
             val data = it.copy(
@@ -681,7 +686,8 @@ class MediaDataManager(
                 val enabled = deviceIntent != null && deviceIntent.isActivity
                 val deviceDrawable = Icon.createWithResource(sbn.packageName, deviceIcon)
                         .loadDrawable(sbn.getPackageContext(context))
-                device = MediaDeviceData(enabled, deviceDrawable, deviceName, deviceIntent)
+                device = MediaDeviceData(enabled, deviceDrawable, deviceName, deviceIntent,
+                        showBroadcastButton = false)
             }
         }
 

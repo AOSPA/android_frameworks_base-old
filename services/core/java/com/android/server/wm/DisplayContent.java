@@ -225,6 +225,7 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
+import android.window.DisplayWindowPolicyController;
 import android.window.IDisplayAreaOrganizer;
 import android.window.TransitionRequestInfo;
 
@@ -1881,7 +1882,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     /** Returns {@code true} if the decided new rotation has not applied to configuration yet. */
-    private boolean isRotationChanging() {
+    boolean isRotationChanging() {
         return mDisplayRotation.getRotation() != getWindowConfiguration().getRotation();
     }
 
@@ -1977,6 +1978,16 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     boolean updateRotationUnchecked() {
         return mDisplayRotation.updateRotationUnchecked(false /* forceUpdate */);
+    }
+
+    /**
+     * @see DisplayWindowPolicyController#canShowTasksInRecents()
+     */
+    boolean canShowTasksInRecents() {
+        if (mDwpcHelper == null) {
+            return true;
+        }
+        return mDwpcHelper.canShowTasksInRecents();
     }
 
     /**
@@ -4395,8 +4406,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             boolean imeLayeringTargetMayUseIme =
                     LayoutParams.mayUseInputMethod(mImeLayeringTarget.mAttrs.flags)
                     || mImeLayeringTarget.mAttrs.type == TYPE_APPLICATION_STARTING;
-            if (imeLayeringTargetMayUseIme && mImeInputTarget != null
-                    && mImeLayeringTarget.mActivityRecord != mImeInputTarget.getActivityRecord()) {
+            if (imeLayeringTargetMayUseIme && (mImeInputTarget == null
+                    || mImeLayeringTarget.mActivityRecord != mImeInputTarget.getActivityRecord())) {
                 // Do not change parent if the window hasn't requested IME.
                 return null;
             }
@@ -4867,9 +4878,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 return true;
             }
 
-            // TODO(b/165794880): Freeform task organizer doesn't support drag-resize yet. Remove
-            // the special case when it does.
-            if (task.isOrganized() && task.getWindowingMode() != WINDOWING_MODE_FREEFORM) {
+            if (task.isOrganized()) {
                 return true;
             }
 
@@ -5394,6 +5403,16 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     SurfaceControl getOverlayLayer() {
         return mOverlayLayer;
+    }
+
+    SurfaceControl[] findRoundedCornerOverlays() {
+        List<SurfaceControl> roundedCornerOverlays = new ArrayList<>();
+        for (WindowToken token : mTokenMap.values()) {
+            if (token.mRoundedCornerOverlay) {
+                roundedCornerOverlays.add(token.mSurfaceControl);
+            }
+        }
+        return roundedCornerOverlays.toArray(new SurfaceControl[0]);
     }
 
     /**

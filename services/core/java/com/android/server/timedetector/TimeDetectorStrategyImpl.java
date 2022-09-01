@@ -18,8 +18,8 @@ package com.android.server.timedetector;
 
 import static com.android.server.timedetector.TimeDetectorStrategy.originToString;
 
-import static java.util.stream.Collectors.joining;
-
+import android.annotation.CurrentTimeMillisLong;
+import android.annotation.ElapsedRealtimeLong;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -99,6 +99,10 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
     @NonNull
     private final Environment mEnvironment;
 
+    @GuardedBy("this")
+    @NonNull
+    private ConfigurationInternal mCurrentConfigurationInternal;
+
     // Used to store the last time the system clock state was set automatically. It is used to
     // detect (and log) issues with the realtime clock or whether the clock is being set without
     // going through this strategy code.
@@ -128,73 +132,41 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
             new ReferenceWithHistory<>(KEEP_SUGGESTION_HISTORY_SIZE);
 
     /**
-     * The interface used by the strategy to interact with the surrounding service.
+     * Used by {@link TimeDetectorStrategyImpl} to interact with device configuration / settings
+     * / system properties. It can be faked for testing.
      *
-     * <p>Note: Because the system properties-derived value {@link #isAutoTimeDetectionEnabled()}
-     * can be modified independently and from different threads (and processes!), its use is prone
-     * to race conditions. That will be true until the responsibility for setting their values is
-     * moved to {@link TimeDetectorStrategy}. There are similar issues with
-     * {@link #systemClockMillis()} while any process can modify the system clock.
+     * <p>Note: Because the settings / system properties-derived values can currently be modified
+     * independently and from different threads (and processes!), their use is prone to race
+     * conditions.
      */
     public interface Environment {
 
         /**
          * Sets a {@link ConfigurationChangeListener} that will be invoked when there are any
-         * changes that could affect time detection. This is invoked during system server setup.
+         * changes that could affect the content of {@link ConfigurationInternal}.
+         * This is invoked during system server setup.
          */
-        void setConfigChangeListener(@NonNull ConfigurationChangeListener listener);
+        void setConfigurationInternalChangeListener(@NonNull ConfigurationChangeListener listener);
 
-        /**
-         * The absolute threshold below which the system clock need not be updated. i.e. if setting
-         * the system clock would adjust it by less than this (either backwards or forwards) then it
-         * need not be set.
-         */
-        int systemClockUpdateThresholdMillis();
-
-        /** Returns true if automatic time detection is enabled. */
-        boolean isAutoTimeDetectionEnabled();
-
-        /**
-         * Returns a lower bound for valid automatic times. It is guaranteed to be in the past,
-         * i.e. it is unrelated to the current system clock time.
-         * It holds no other meaning; it could be related to when the device system image was built,
-         * or could be updated by a mainline module.
-         */
-        @NonNull
-        Instant autoTimeLowerBound();
-
-        /**
-         * Returns the order to look at time suggestions when automatically detecting time.
-         * See {@code #ORIGIN_} constants
-         */
-        @Origin int[] autoOriginPriorities();
-
-        /**
-         * Returns {@link ConfigurationInternal} for specified user.
-         */
-        @NonNull
-        ConfigurationInternal configurationInternal(@UserIdInt int userId);
+        /** Returns the {@link ConfigurationInternal} for the current user. */
+        @NonNull ConfigurationInternal getCurrentUserConfigurationInternal();
 
         /** Acquire a suitable wake lock. Must be followed by {@link #releaseWakeLock()} */
         void acquireWakeLock();
 
         /** Returns the elapsedRealtimeMillis clock value. */
+        @ElapsedRealtimeLong
         long elapsedRealtimeMillis();
 
         /** Returns the system clock value. */
+        @CurrentTimeMillisLong
         long systemClockMillis();
 
         /** Sets the device system clock. The WakeLock must be held. */
-        void setSystemClock(long newTimeMillis);
+        void setSystemClock(@CurrentTimeMillisLong long newTimeMillis);
 
         /** Release the wake lock acquired by a call to {@link #acquireWakeLock()}. */
         void releaseWakeLock();
-
-        /**
-         * Returns {@code true} if the device may be at risk of time_t overflow (because bionic
-         * defines time_t as a 32-bit signed integer for 32-bit processes).
-         */
-        boolean deviceHasY2038Issue();
     }
 
     static TimeDetectorStrategy create(
@@ -209,39 +181,73 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
     @VisibleForTesting
     TimeDetectorStrategyImpl(@NonNull Environment environment) {
         mEnvironment = Objects.requireNonNull(environment);
-        mEnvironment.setConfigChangeListener(this::handleAutoTimeConfigChanged);
+
+        synchronized (this) {
+            mEnvironment.setConfigurationInternalChangeListener(
+                    this::handleConfigurationInternalChanged);
+            mCurrentConfigurationInternal = mEnvironment.getCurrentUserConfigurationInternal();
+        }
     }
 
     @Override
-    public synchronized void suggestExternalTime(@NonNull ExternalTimeSuggestion timeSuggestion) {
-        final TimestampedValue<Long> newUnixEpochTime = timeSuggestion.getUnixEpochTime();
+    public synchronized void suggestExternalTime(@NonNull ExternalTimeSuggestion suggestion) {
+        ConfigurationInternal currentUserConfig = mCurrentConfigurationInternal;
+        if (DBG) {
+            Slog.d(LOG_TAG, "External suggestion received."
+                    + " currentUserConfig=" + currentUserConfig
+                    + " newSuggestion=" + suggestion);
+        }
+        Objects.requireNonNull(suggestion);
 
-        if (!validateAutoSuggestionTime(newUnixEpochTime, timeSuggestion)) {
+        final TimestampedValue<Long> newUnixEpochTime = suggestion.getUnixEpochTime();
+
+        if (!validateAutoSuggestionTime(newUnixEpochTime, suggestion)) {
             return;
         }
 
-        mLastExternalSuggestion.set(timeSuggestion);
+        mLastExternalSuggestion.set(suggestion);
 
-        String reason = "External time suggestion received: suggestion=" + timeSuggestion;
+        String reason = "External time suggestion received: suggestion=" + suggestion;
         doAutoTimeDetection(reason);
     }
 
     @Override
-    public synchronized void suggestGnssTime(@NonNull GnssTimeSuggestion timeSuggestion) {
-        final TimestampedValue<Long> newUnixEpochTime = timeSuggestion.getUnixEpochTime();
+    public synchronized void suggestGnssTime(@NonNull GnssTimeSuggestion suggestion) {
+        ConfigurationInternal currentUserConfig = mCurrentConfigurationInternal;
+        if (DBG) {
+            Slog.d(LOG_TAG, "GNSS suggestion received."
+                    + " currentUserConfig=" + currentUserConfig
+                    + " newSuggestion=" + suggestion);
+        }
+        Objects.requireNonNull(suggestion);
 
-        if (!validateAutoSuggestionTime(newUnixEpochTime, timeSuggestion)) {
+        final TimestampedValue<Long> newUnixEpochTime = suggestion.getUnixEpochTime();
+
+        if (!validateAutoSuggestionTime(newUnixEpochTime, suggestion)) {
             return;
         }
 
-        mLastGnssSuggestion.set(timeSuggestion);
+        mLastGnssSuggestion.set(suggestion);
 
-        String reason = "GNSS time suggestion received: suggestion=" + timeSuggestion;
+        String reason = "GNSS time suggestion received: suggestion=" + suggestion;
         doAutoTimeDetection(reason);
     }
 
     @Override
-    public synchronized boolean suggestManualTime(@NonNull ManualTimeSuggestion suggestion) {
+    public synchronized boolean suggestManualTime(
+            @UserIdInt int userId, @NonNull ManualTimeSuggestion suggestion) {
+
+        ConfigurationInternal currentUserConfig = mCurrentConfigurationInternal;
+        if (currentUserConfig.getUserId() != userId) {
+            Slog.w(LOG_TAG, "Manual suggestion received but user != current user, userId=" + userId
+                    + " suggestion=" + suggestion);
+
+            // Only listen to changes from the current user.
+            return false;
+        }
+
+        Objects.requireNonNull(suggestion);
+
         final TimestampedValue<Long> newUnixEpochTime = suggestion.getUnixEpochTime();
 
         if (!validateSuggestionTime(newUnixEpochTime, suggestion)) {
@@ -253,8 +259,16 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
     }
 
     @Override
-    public synchronized void suggestNetworkTime(@NonNull NetworkTimeSuggestion timeSuggestion) {
-        if (!validateAutoSuggestionTime(timeSuggestion.getUnixEpochTime(), timeSuggestion)) {
+    public synchronized void suggestNetworkTime(@NonNull NetworkTimeSuggestion suggestion) {
+        ConfigurationInternal currentUserConfig = mCurrentConfigurationInternal;
+        if (DBG) {
+            Slog.d(LOG_TAG, "Network suggestion received."
+                    + " currentUserConfig=" + currentUserConfig
+                    + " newSuggestion=" + suggestion);
+        }
+        Objects.requireNonNull(suggestion);
+
+        if (!validateAutoSuggestionTime(suggestion.getUnixEpochTime(), suggestion)) {
             return;
         }
 
@@ -266,13 +280,13 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
         // the suggestion and device state are always re-evaluated, which might produce a different
         // detected time if, for example, the age of all suggestions are considered.
         NetworkTimeSuggestion lastNetworkSuggestion = mLastNetworkSuggestion.get();
-        if (lastNetworkSuggestion == null || !lastNetworkSuggestion.equals(timeSuggestion)) {
-            mLastNetworkSuggestion.set(timeSuggestion);
+        if (lastNetworkSuggestion == null || !lastNetworkSuggestion.equals(suggestion)) {
+            mLastNetworkSuggestion.set(suggestion);
         }
 
         // Now perform auto time detection. The new suggestion may be used to modify the system
         // clock.
-        String reason = "New network time suggested. timeSuggestion=" + timeSuggestion;
+        String reason = "New network time suggested. timeSuggestion=" + suggestion;
         doAutoTimeDetection(reason);
     }
 
@@ -303,17 +317,20 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
         doAutoTimeDetection(reason);
     }
 
-    @Override
-    @NonNull
-    public ConfigurationInternal getConfigurationInternal(@UserIdInt int userId) {
-        return mEnvironment.configurationInternal(userId);
-    }
+    private synchronized void handleConfigurationInternalChanged() {
+        ConfigurationInternal currentUserConfig =
+                mEnvironment.getCurrentUserConfigurationInternal();
+        String logMsg = "handleConfigurationInternalChanged:"
+                + " oldConfiguration=" + mCurrentConfigurationInternal
+                + ", newConfiguration=" + currentUserConfig;
+        logTimeDetectorChange(logMsg);
+        mCurrentConfigurationInternal = currentUserConfig;
 
-    private synchronized void handleAutoTimeConfigChanged() {
-        boolean enabled = mEnvironment.isAutoTimeDetectionEnabled();
+        boolean autoDetectionEnabled =
+                mCurrentConfigurationInternal.getAutoDetectionEnabledBehavior();
         // When automatic time detection is enabled we update the system clock instantly if we can.
         // Conversely, when automatic time detection is disabled we leave the clock as it is.
-        if (enabled) {
+        if (autoDetectionEnabled) {
             String reason = "Auto time zone detection config changed.";
             doAutoTimeDetection(reason);
         } else {
@@ -323,31 +340,27 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
         }
     }
 
+    private void logTimeDetectorChange(@NonNull String logMsg) {
+        if (DBG) {
+            Slog.d(LOG_TAG, logMsg);
+        }
+        mTimeChangesLog.log(logMsg);
+    }
+
     @Override
     public synchronized void dump(@NonNull IndentingPrintWriter ipw, @Nullable String[] args) {
         ipw.println("TimeDetectorStrategy:");
         ipw.increaseIndent(); // level 1
 
         ipw.println("mLastAutoSystemClockTimeSet=" + mLastAutoSystemClockTimeSet);
-        ipw.println("mEnvironment.isAutoTimeDetectionEnabled()="
-                + mEnvironment.isAutoTimeDetectionEnabled());
+        ipw.println("mCurrentConfigurationInternal=" + mCurrentConfigurationInternal);
+        ipw.println("[Capabilities=" + mCurrentConfigurationInternal.capabilitiesAndConfig() + "]");
         long elapsedRealtimeMillis = mEnvironment.elapsedRealtimeMillis();
         ipw.printf("mEnvironment.elapsedRealtimeMillis()=%s (%s)\n",
                 Duration.ofMillis(elapsedRealtimeMillis), elapsedRealtimeMillis);
         long systemClockMillis = mEnvironment.systemClockMillis();
         ipw.printf("mEnvironment.systemClockMillis()=%s (%s)\n",
                 Instant.ofEpochMilli(systemClockMillis), systemClockMillis);
-        ipw.println("mEnvironment.systemClockUpdateThresholdMillis()="
-                + mEnvironment.systemClockUpdateThresholdMillis());
-        Instant autoTimeLowerBound = mEnvironment.autoTimeLowerBound();
-        ipw.printf("mEnvironment.autoTimeLowerBound()=%s (%s)\n",
-                autoTimeLowerBound, autoTimeLowerBound.toEpochMilli());
-        String priorities =
-                Arrays.stream(mEnvironment.autoOriginPriorities())
-                        .mapToObj(TimeDetectorStrategy::originToString)
-                        .collect(joining(",", "[", "]"));
-        ipw.println("mEnvironment.autoOriginPriorities()=" + priorities);
-        ipw.println("mEnvironment.deviceHasY2038Issue()=" + mEnvironment.deviceHasY2038Issue());
 
         ipw.println("Time change log:");
         ipw.increaseIndent(); // level 2
@@ -412,6 +425,7 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
         return true;
     }
 
+    @GuardedBy("this")
     private boolean validateSuggestionTime(
             @NonNull TimestampedValue<Long> newUnixEpochTime, @NonNull Object suggestion) {
         if (newUnixEpochTime.getValue() == null) {
@@ -430,7 +444,7 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
         }
 
         if (newUnixEpochTime.getValue() > Y2038_LIMIT_IN_MILLIS
-                && mEnvironment.deviceHasY2038Issue()) {
+                && mCurrentConfigurationInternal.getDeviceHasY2038Issue()) {
             // This check won't prevent a device's system clock exceeding Integer.MAX_VALUE Unix
             // seconds through the normal passage of time, but it will stop it jumping above 2038
             // because of a "bad" suggestion. b/204193177
@@ -441,15 +455,17 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
         return true;
     }
 
+    @GuardedBy("this")
     private boolean validateAutoSuggestionTime(
             @NonNull TimestampedValue<Long> newUnixEpochTime, @NonNull Object suggestion)  {
         return validateSuggestionTime(newUnixEpochTime, suggestion)
                 && validateSuggestionAgainstLowerBound(newUnixEpochTime, suggestion);
     }
 
+    @GuardedBy("this")
     private boolean validateSuggestionAgainstLowerBound(
             @NonNull TimestampedValue<Long> newUnixEpochTime, @NonNull Object suggestion) {
-        Instant lowerBound = mEnvironment.autoTimeLowerBound();
+        Instant lowerBound = mCurrentConfigurationInternal.getAutoTimeLowerBound();
 
         // Suggestion is definitely wrong if it comes before lower time bound.
         if (lowerBound.isAfter(Instant.ofEpochMilli(newUnixEpochTime.getValue()))) {
@@ -463,13 +479,13 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
 
     @GuardedBy("this")
     private void doAutoTimeDetection(@NonNull String detectionReason) {
-        if (!mEnvironment.isAutoTimeDetectionEnabled()) {
+        if (!mCurrentConfigurationInternal.getAutoDetectionEnabledBehavior()) {
             // Avoid doing unnecessary work with this (race-prone) check.
             return;
         }
 
         // Try the different origins one at a time.
-        int[] originPriorities = mEnvironment.autoOriginPriorities();
+        int[] originPriorities = mCurrentConfigurationInternal.getAutoOriginPriorities();
         for (int origin : originPriorities) {
             TimestampedValue<Long> newUnixEpochTime = null;
             String cause = null;
@@ -692,7 +708,7 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
 
         boolean isOriginAutomatic = isOriginAutomatic(origin);
         if (isOriginAutomatic) {
-            if (!mEnvironment.isAutoTimeDetectionEnabled()) {
+            if (!mCurrentConfigurationInternal.getAutoDetectionEnabledBehavior()) {
                 if (DBG) {
                     Slog.d(LOG_TAG, "Auto time detection is not enabled."
                             + " origin=" + originToString(origin)
@@ -702,7 +718,7 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
                 return false;
             }
         } else {
-            if (mEnvironment.isAutoTimeDetectionEnabled()) {
+            if (mCurrentConfigurationInternal.getAutoDetectionEnabledBehavior()) {
                 if (DBG) {
                     Slog.d(LOG_TAG, "Auto time detection is enabled."
                             + " origin=" + originToString(origin)
@@ -759,7 +775,8 @@ public final class TimeDetectorStrategyImpl implements TimeDetectorStrategy {
         // Check if the new signal would make sufficient difference to the system clock. If it's
         // below the threshold then ignore it.
         long absTimeDifference = Math.abs(newSystemClockMillis - actualSystemClockMillis);
-        long systemClockUpdateThreshold = mEnvironment.systemClockUpdateThresholdMillis();
+        long systemClockUpdateThreshold =
+                mCurrentConfigurationInternal.getSystemClockUpdateThresholdMillis();
         if (absTimeDifference < systemClockUpdateThreshold) {
             if (DBG) {
                 Slog.d(LOG_TAG, "Not setting system clock. New time and"

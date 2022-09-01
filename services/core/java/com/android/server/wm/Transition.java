@@ -131,18 +131,27 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
      */
     private static final int STATE_ABORT = 3;
 
+    /**
+     * This transition has finished playing successfully.
+     */
+    private static final int STATE_FINISHED = 4;
+
     @IntDef(prefix = { "STATE_" }, value = {
             STATE_PENDING,
             STATE_COLLECTING,
             STATE_STARTED,
             STATE_PLAYING,
-            STATE_ABORT
+            STATE_ABORT,
+            STATE_FINISHED
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface TransitionState {}
 
     final @TransitionType int mType;
     private int mSyncId = -1;
+    // Used for tracking a Transition throughout a lifecycle (i.e. from STATE_COLLECTING to
+    // STATE_FINISHED or STATE_ABORT), and should only be used for testing and debugging.
+    private int mDebugId = -1;
     private @TransitionFlags int mFlags;
     private final TransitionController mController;
     private final BLASTSyncEngine mSyncEngine;
@@ -202,6 +211,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         mFlags = flags;
         mController = controller;
         mSyncEngine = syncEngine;
+
+        controller.mTransitionTracer.logState(this);
     }
 
     void addFlag(int flag) {
@@ -214,8 +225,24 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             mTransientLaunches = new ArrayMap<>();
         }
         mTransientLaunches.put(activity, restoreBelow);
+        setTransientLaunchToChanges(activity);
+
+        if (restoreBelow != null) {
+            final ChangeInfo info = mChanges.get(restoreBelow);
+            info.mFlags |= ChangeInfo.FLAG_ABOVE_TRANSIENT_LAUNCH;
+        }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Transition %d: Set %s as "
                 + "transient-launch", mSyncId, activity);
+    }
+
+    boolean isTransientHide(@NonNull Task task) {
+        if (mTransientLaunches == null) return false;
+        for (int i = 0; i < mTransientLaunches.size(); ++i) {
+            if (mTransientLaunches.valueAt(i) == task) {
+                return true;
+            }
+        }
+        return false;
     }
 
     boolean isTransientLaunch(@NonNull ActivityRecord activity) {
@@ -242,9 +269,33 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         info.mFlags = info.mFlags | ChangeInfo.FLAG_SEAMLESS_ROTATION;
     }
 
+    /**
+     * Only set flag to the parent tasks and activity itself.
+     */
+    private void setTransientLaunchToChanges(@NonNull WindowContainer wc) {
+        for (WindowContainer curr = wc; curr != null && mChanges.containsKey(curr);
+                curr = curr.getParent()) {
+            if (curr.asTask() == null && curr.asActivityRecord() == null) {
+                return;
+            }
+            final ChangeInfo info = mChanges.get(curr);
+            info.mFlags = info.mFlags | ChangeInfo.FLAG_TRANSIENT_LAUNCH;
+        }
+    }
+
+    @TransitionState
+    int getState() {
+        return mState;
+    }
+
     @VisibleForTesting
     int getSyncId() {
         return mSyncId;
+    }
+
+    @VisibleForTesting
+    int getDebugId() {
+        return mDebugId;
     }
 
     @TransitionFlags
@@ -259,6 +310,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
         mState = STATE_COLLECTING;
         mSyncId = mSyncEngine.startSyncSet(this, timeoutMs, TAG);
+        mDebugId = mSyncId;
+
+        mController.mTransitionTracer.logState(this);
     }
 
     /**
@@ -276,6 +330,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Starting Transition %d",
                 mSyncId);
         applyReady();
+
+        mController.mTransitionTracer.logState(this);
     }
 
     /**
@@ -599,6 +655,19 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 mController.dispatchLegacyAppTransitionFinished(ar);
             }
         }
+
+        // Update the input-sink (touch-blocking) state now that the animation is finished.
+        SurfaceControl.Transaction inputSinkTransaction = null;
+        for (int i = 0; i < mParticipants.size(); ++i) {
+            final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
+            if (ar == null || !ar.isVisible()) continue;
+            if (inputSinkTransaction == null) {
+                inputSinkTransaction = new SurfaceControl.Transaction();
+            }
+            ar.mActivityRecordInputSink.applyChangesToSurfaceIfChanged(inputSinkTransaction);
+        }
+        if (inputSinkTransaction != null) inputSinkTransaction.apply();
+
         // Always schedule stop processing when transition finishes because activities don't
         // stop while they are in a transition thus their stop could still be pending.
         mController.mAtm.mTaskSupervisor
@@ -644,6 +713,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             dc.removeImeSurfaceImmediately();
             dc.handleCompleteDeferredRemoval();
         }
+
+        mState = STATE_FINISHED;
+        mController.mTransitionTracer.logState(this);
     }
 
     void abort() {
@@ -1546,10 +1618,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
          * seamless rotation. This is currently only used by DisplayContent during fixed-rotation.
          */
         private static final int FLAG_SEAMLESS_ROTATION = 1;
+        private static final int FLAG_TRANSIENT_LAUNCH = 2;
+        private static final int FLAG_ABOVE_TRANSIENT_LAUNCH = 4;
 
         @IntDef(prefix = { "FLAG_" }, value = {
                 FLAG_NONE,
-                FLAG_SEAMLESS_ROTATION
+                FLAG_SEAMLESS_ROTATION,
+                FLAG_TRANSIENT_LAUNCH,
+                FLAG_ABOVE_TRANSIENT_LAUNCH
         })
         @Retention(RetentionPolicy.SOURCE)
         @interface Flag {}
@@ -1586,6 +1662,11 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
 
         boolean hasChanged(@NonNull WindowContainer newState) {
+            // the task including transient launch must promote to root task
+            if ((mFlags & ChangeInfo.FLAG_TRANSIENT_LAUNCH) != 0
+                    || (mFlags & ChangeInfo.FLAG_ABOVE_TRANSIENT_LAUNCH) != 0) {
+                return true;
+            }
             // If it's invisible and hasn't changed visibility, always return false since even if
             // something changed, it wouldn't be a visible change.
             final boolean currVisible = newState.isVisibleRequested();
@@ -1601,6 +1682,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
         @TransitionInfo.TransitionMode
         int getTransitMode(@NonNull WindowContainer wc) {
+            if ((mFlags & ChangeInfo.FLAG_ABOVE_TRANSIENT_LAUNCH) != 0) {
+                return TRANSIT_CLOSE;
+            }
             final boolean nowVisible = wc.isVisibleRequested();
             if (nowVisible == mVisible) {
                 return TRANSIT_CHANGE;
