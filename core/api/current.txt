@@ -78,6 +78,7 @@ package android {
     field public static final String CHANGE_WIFI_MULTICAST_STATE = "android.permission.CHANGE_WIFI_MULTICAST_STATE";
     field public static final String CHANGE_WIFI_STATE = "android.permission.CHANGE_WIFI_STATE";
     field public static final String CLEAR_APP_CACHE = "android.permission.CLEAR_APP_CACHE";
+    field public static final String CONFIGURE_WIFI_DISPLAY = "android.permission.CONFIGURE_WIFI_DISPLAY";
     field public static final String CONTROL_LOCATION_UPDATES = "android.permission.CONTROL_LOCATION_UPDATES";
     field public static final String DELETE_CACHE_FILES = "android.permission.DELETE_CACHE_FILES";
     field public static final String DELETE_PACKAGES = "android.permission.DELETE_PACKAGES";
@@ -191,6 +192,7 @@ package android {
     field public static final String SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE = "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE";
     field public static final String SYSTEM_ALERT_WINDOW = "android.permission.SYSTEM_ALERT_WINDOW";
     field public static final String TRANSMIT_IR = "android.permission.TRANSMIT_IR";
+    field public static final String TURN_SCREEN_ON = "android.permission.TURN_SCREEN_ON";
     field public static final String UNINSTALL_SHORTCUT = "com.android.launcher.permission.UNINSTALL_SHORTCUT";
     field public static final String UPDATE_DEVICE_STATS = "android.permission.UPDATE_DEVICE_STATS";
     field public static final String UPDATE_PACKAGES_WITHOUT_USER_ACTION = "android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION";
@@ -9008,7 +9010,8 @@ package android.companion {
     method @Deprecated public boolean hasNotificationAccess(android.content.ComponentName);
     method public void requestNotificationAccess(android.content.ComponentName);
     method @RequiresPermission(android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE) public void startObservingDevicePresence(@NonNull String) throws android.companion.DeviceNotAssociatedException;
-    method public void startSystemDataTransfer(int) throws android.companion.DeviceNotAssociatedException;
+    method @Deprecated public void startSystemDataTransfer(int) throws android.companion.DeviceNotAssociatedException;
+    method public void startSystemDataTransfer(int, @NonNull java.util.concurrent.Executor, @NonNull android.os.OutcomeReceiver<java.lang.Void,android.companion.CompanionException>) throws android.companion.DeviceNotAssociatedException;
     method @RequiresPermission(android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE) public void stopObservingDevicePresence(@NonNull String) throws android.companion.DeviceNotAssociatedException;
     field public static final String EXTRA_ASSOCIATION = "android.companion.extra.ASSOCIATION";
     field @Deprecated public static final String EXTRA_DEVICE = "android.companion.extra.DEVICE";
@@ -9032,6 +9035,9 @@ package android.companion {
     method @MainThread public void onDeviceDisappeared(@NonNull android.companion.AssociationInfo);
     method public void onMessageDispatchedFromSystem(int, int, @NonNull byte[]);
     field public static final String SERVICE_INTERFACE = "android.companion.CompanionDeviceService";
+  }
+
+  public class CompanionException extends java.lang.RuntimeException {
   }
 
   public interface DeviceFilter<D extends android.os.Parcelable> extends android.os.Parcelable {
@@ -18154,7 +18160,7 @@ package android.hardware.camera2.params {
   }
 
   public final class Capability {
-    ctor public Capability(int, int, int, float, float);
+    ctor public Capability(int, @NonNull android.util.Size, @NonNull android.util.Range<java.lang.Float>);
     method @NonNull public android.util.Size getMaxStreamingSize();
     method public int getMode();
     method @NonNull public android.util.Range<java.lang.Float> getZoomRatioRange();
@@ -18169,10 +18175,15 @@ package android.hardware.camera2.params {
   }
 
   public final class DeviceStateSensorOrientationMap {
-    ctor public DeviceStateSensorOrientationMap(@NonNull long[]);
     method public int getSensorOrientation(long);
     field public static final long FOLDED = 4L; // 0x4L
     field public static final long NORMAL = 0L; // 0x0L
+  }
+
+  public static final class DeviceStateSensorOrientationMap.Builder {
+    ctor public DeviceStateSensorOrientationMap.Builder();
+    method @NonNull public android.hardware.camera2.params.DeviceStateSensorOrientationMap.Builder addOrientationForState(long, long);
+    method @NonNull public android.hardware.camera2.params.DeviceStateSensorOrientationMap build();
   }
 
   public final class DynamicRangeProfiles {
@@ -18204,8 +18215,6 @@ package android.hardware.camera2.params {
   }
 
   public final class Face {
-    ctor public Face(@NonNull android.graphics.Rect, int, int, @NonNull android.graphics.Point, @NonNull android.graphics.Point, @NonNull android.graphics.Point);
-    ctor public Face(@NonNull android.graphics.Rect, int);
     method public android.graphics.Rect getBounds();
     method public int getId();
     method public android.graphics.Point getLeftEyePosition();
@@ -18215,6 +18224,18 @@ package android.hardware.camera2.params {
     field public static final int ID_UNSUPPORTED = -1; // 0xffffffff
     field public static final int SCORE_MAX = 100; // 0x64
     field public static final int SCORE_MIN = 1; // 0x1
+  }
+
+  public static final class Face.Builder {
+    ctor public Face.Builder();
+    ctor public Face.Builder(@NonNull android.hardware.camera2.params.Face);
+    method @NonNull public android.hardware.camera2.params.Face build();
+    method @NonNull public android.hardware.camera2.params.Face.Builder setBounds(@NonNull android.graphics.Rect);
+    method @NonNull public android.hardware.camera2.params.Face.Builder setId(int);
+    method @NonNull public android.hardware.camera2.params.Face.Builder setLeftEyePosition(@NonNull android.graphics.Point);
+    method @NonNull public android.hardware.camera2.params.Face.Builder setMouthPosition(@NonNull android.graphics.Point);
+    method @NonNull public android.hardware.camera2.params.Face.Builder setRightEyePosition(@NonNull android.graphics.Point);
+    method @NonNull public android.hardware.camera2.params.Face.Builder setScore(int);
   }
 
   public final class InputConfiguration {
@@ -31900,7 +31921,7 @@ package android.os {
     method public android.os.PowerManager.WakeLock newWakeLock(int, String);
     method @RequiresPermission(android.Manifest.permission.REBOOT) public void reboot(@Nullable String);
     method public void removeThermalStatusListener(@NonNull android.os.PowerManager.OnThermalStatusChangedListener);
-    field @Deprecated public static final int ACQUIRE_CAUSES_WAKEUP = 268435456; // 0x10000000
+    field @Deprecated @RequiresPermission(value=android.Manifest.permission.TURN_SCREEN_ON, conditional=true) public static final int ACQUIRE_CAUSES_WAKEUP = 268435456; // 0x10000000
     field public static final String ACTION_DEVICE_IDLE_MODE_CHANGED = "android.os.action.DEVICE_IDLE_MODE_CHANGED";
     field public static final String ACTION_DEVICE_LIGHT_IDLE_MODE_CHANGED = "android.os.action.LIGHT_DEVICE_IDLE_MODE_CHANGED";
     field public static final String ACTION_LOW_POWER_STANDBY_ENABLED_CHANGED = "android.os.action.LOW_POWER_STANDBY_ENABLED_CHANGED";

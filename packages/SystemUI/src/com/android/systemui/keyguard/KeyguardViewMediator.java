@@ -849,7 +849,6 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
 
                 @Override
                 public void onLaunchAnimationCancelled() {
-                    setOccluded(true /* occluded */, false /* animate */);
                     Log.d(TAG, "Occlude launch animation cancelled. Occluded state is now: "
                             + mOccluded);
                 }
@@ -917,12 +916,12 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
                 private final Matrix mUnoccludeMatrix = new Matrix();
 
                 @Override
-                public void onAnimationCancelled() {
+                public void onAnimationCancelled(boolean isKeyguardOccluded) {
                     if (mUnoccludeAnimator != null) {
                         mUnoccludeAnimator.cancel();
                     }
 
-                    setOccluded(false /* isOccluded */, false /* animate */);
+                    setOccluded(isKeyguardOccluded /* isOccluded */, false /* animate */);
                     Log.d(TAG, "Unocclude animation cancelled. Occluded state is now: "
                             + mOccluded);
                 }
@@ -3177,9 +3176,9 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         }
 
         @Override
-        public void onAnimationCancelled() throws RemoteException {
+        public void onAnimationCancelled(boolean isKeyguardOccluded) throws RemoteException {
             if (mRunner != null) {
-                mRunner.onAnimationCancelled();
+                mRunner.onAnimationCancelled(isKeyguardOccluded);
             }
         }
 
@@ -3220,9 +3219,12 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
         }
 
         @Override
-        public void onAnimationCancelled() throws RemoteException {
-            super.onAnimationCancelled();
-            Log.d(TAG, "Occlude launch animation cancelled. Occluded state is now: " + mOccluded);
+        public void onAnimationCancelled(boolean isKeyguardOccluded) throws RemoteException {
+            super.onAnimationCancelled(isKeyguardOccluded);
+            setOccluded(isKeyguardOccluded /* occluded */, false /* animate */);
+
+            Log.d(TAG, "Occlude animation cancelled by WM. "
+                    + "Setting occluded state to: " + mOccluded);
         }
     }
 }

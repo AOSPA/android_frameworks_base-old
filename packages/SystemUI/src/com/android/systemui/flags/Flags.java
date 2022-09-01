@@ -60,6 +60,9 @@ public class Flags {
     public static final ResourceBooleanFlag NOTIFICATION_DRAG_TO_CONTENTS =
             new ResourceBooleanFlag(108, R.bool.config_notificationToContents);
 
+    public static final BooleanFlag REMOVE_UNRANKED_NOTIFICATIONS =
+            new BooleanFlag(109, false);
+
     /***************************************/
     // 200 - keyguard/lockscreen
 
@@ -81,11 +84,14 @@ public class Flags {
 
     public static final ResourceBooleanFlag FACE_SCANNING_ANIM =
             new ResourceBooleanFlag(205, R.bool.config_enableFaceScanningAnimation);
+
     /**
      * Whether the KeyguardBottomArea(View|Controller) should use the modern architecture or the old
      * one.
      */
     public static final BooleanFlag MODERN_BOTTOM_AREA = new BooleanFlag(206, false);
+
+    public static final BooleanFlag LOCKSCREEN_CUSTOM_CLOCKS = new BooleanFlag(207, false);
 
     /***************************************/
     // 300 - power menu
@@ -156,8 +162,13 @@ public class Flags {
             new ResourceBooleanFlag(800, R.bool.flag_monet);
 
     /***************************************/
+    // 801 - region sampling
+    public static final BooleanFlag REGION_SAMPLING =
+            new BooleanFlag(801, false);
+
+    /***************************************/
     // 900 - media
-    public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, false);
+    public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, true);
     public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, false);
     public static final BooleanFlag MEDIA_NEARBY_DEVICES = new BooleanFlag(903, true);
     public static final BooleanFlag MEDIA_MUTE_AWAIT = new BooleanFlag(904, true);

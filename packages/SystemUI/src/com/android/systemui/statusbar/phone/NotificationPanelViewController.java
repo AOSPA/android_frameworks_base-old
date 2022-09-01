@@ -4592,13 +4592,6 @@ public class NotificationPanelViewController extends PanelViewController {
         @Override
         public void onSwipingStarted(boolean rightIcon) {
             mFalsingCollector.onAffordanceSwipingStarted(rightIcon);
-            boolean
-                    camera =
-                    mView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL ? !rightIcon
-                            : rightIcon;
-            if (camera) {
-                mKeyguardBottomArea.bindCameraPrewarmService();
-            }
             mView.requestDisallowInterceptTouchEvent(true);
             mOnlyAffordanceInThisMotion = true;
             mQsTracking = false;
@@ -4607,7 +4600,6 @@ public class NotificationPanelViewController extends PanelViewController {
         @Override
         public void onSwipingAborted() {
             mFalsingCollector.onAffordanceSwipingAborted();
-            mKeyguardBottomArea.unbindCameraPrewarmService(false /* launched */);
         }
 
         @Override

@@ -75,7 +75,6 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INSET_PARENT_
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
@@ -807,6 +806,7 @@ public final class ViewRootImpl implements ViewParent,
     private final ViewRootRectTracker mUnrestrictedKeepClearRectsTracker =
             new ViewRootRectTracker(v -> v.collectUnrestrictedPreferKeepClearRects());
     private boolean mHasPendingKeepClearAreaChange;
+    private Rect mKeepClearAccessibilityFocusRect;
 
     private IAccessibilityEmbeddedConnection mAccessibilityEmbeddedConnection;
 
@@ -2823,10 +2823,6 @@ public final class ViewRootImpl implements ViewParent,
         // Execute enqueued actions on every traversal in case a detached view enqueued an action
         getRunQueue().executeActions(mAttachInfo.mHandler);
 
-        if (mApplyInsetsRequested) {
-            dispatchApplyInsets(host);
-        }
-
         if (mFirst) {
             // make sure touch mode code executes by setting cached value
             // to opposite of the added touch mode.
@@ -2887,6 +2883,18 @@ public final class ViewRootImpl implements ViewParent,
                     lp.softInputMode = (lp.softInputMode & ~SOFT_INPUT_MASK_ADJUST) | resizeMode;
                     params = lp;
                 }
+            }
+        }
+
+        if (mApplyInsetsRequested) {
+            dispatchApplyInsets(host);
+            if (mLayoutRequested) {
+                // Short-circuit catching a new layout request here, so
+                // we don't need to go through two layout passes when things
+                // change due to fitting system windows, which can happen a lot.
+                windowSizeMayChange |= measureHierarchy(host, lp,
+                        mView.getContext().getResources(),
+                        desiredWindowWidth, desiredWindowHeight);
             }
         }
 
@@ -4869,13 +4877,27 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.sendEmptyMessage(MSG_KEEP_CLEAR_RECTS_CHANGED);
     }
 
-    void keepClearRectsChanged() {
+    private void updateKeepClearForAccessibilityFocusRect() {
+        if (mViewConfiguration.isPreferKeepClearForFocusEnabled()) {
+            if (mKeepClearAccessibilityFocusRect == null) {
+                mKeepClearAccessibilityFocusRect = new Rect();
+            }
+            boolean hasAccessibilityFocus =
+                    getAccessibilityFocusedRect(mKeepClearAccessibilityFocusRect);
+            if (!hasAccessibilityFocus) {
+                mKeepClearAccessibilityFocusRect.setEmpty();
+            }
+            mHandler.obtainMessage(MSG_KEEP_CLEAR_RECTS_CHANGED, 1, 0).sendToTarget();
+        }
+    }
+
+    void keepClearRectsChanged(boolean accessibilityFocusRectChanged) {
         boolean restrictedKeepClearRectsChanged = mKeepClearRectsTracker.computeChanges();
         boolean unrestrictedKeepClearRectsChanged =
                 mUnrestrictedKeepClearRectsTracker.computeChanges();
 
-        if ((restrictedKeepClearRectsChanged || unrestrictedKeepClearRectsChanged)
-                && mView != null) {
+        if ((restrictedKeepClearRectsChanged || unrestrictedKeepClearRectsChanged
+                || accessibilityFocusRectChanged) && mView != null) {
             mHasPendingKeepClearAreaChange = true;
             // Only report keep clear areas immediately if they have not been reported recently
             if (!mHandler.hasMessages(MSG_REPORT_KEEP_CLEAR_RECTS)) {
@@ -4892,9 +4914,15 @@ public final class ViewRootImpl implements ViewParent,
         }
         mHasPendingKeepClearAreaChange = false;
 
-        final List<Rect> restrictedKeepClearRects = mKeepClearRectsTracker.getLastComputedRects();
+        List<Rect> restrictedKeepClearRects = mKeepClearRectsTracker.getLastComputedRects();
         final List<Rect> unrestrictedKeepClearRects =
                 mUnrestrictedKeepClearRectsTracker.getLastComputedRects();
+
+        if (mKeepClearAccessibilityFocusRect != null
+                && !mKeepClearAccessibilityFocusRect.isEmpty()) {
+            restrictedKeepClearRects = new ArrayList<>(restrictedKeepClearRects);
+            restrictedKeepClearRects.add(mKeepClearAccessibilityFocusRect);
+        }
 
         try {
             mWindowSession.reportKeepClearAreasChanged(mWindow, restrictedKeepClearRects,
@@ -5095,6 +5123,7 @@ public final class ViewRootImpl implements ViewParent,
         // Set the new focus host and node.
         mAccessibilityFocusedHost = view;
         mAccessibilityFocusedVirtualView = node;
+        updateKeepClearForAccessibilityFocusRect();
 
         if (mAttachInfo.mThreadedRenderer != null) {
             mAttachInfo.mThreadedRenderer.invalidateRoot();
@@ -5683,7 +5712,7 @@ public final class ViewRootImpl implements ViewParent,
                     systemGestureExclusionChanged();
                 }   break;
                 case MSG_KEEP_CLEAR_RECTS_CHANGED: {
-                    keepClearRectsChanged();
+                    keepClearRectsChanged(/* accessibilityFocusRectChanged= */ msg.arg1 == 1);
                 }   break;
                 case MSG_REPORT_KEEP_CLEAR_RECTS: {
                     reportKeepClearAreasChanged();
@@ -8050,70 +8079,20 @@ public final class ViewRootImpl implements ViewParent,
         final int requestedWidth = (int) (mView.getMeasuredWidth() * appScale + 0.5f);
         final int requestedHeight = (int) (mView.getMeasuredHeight() * appScale + 0.5f);
 
-        int relayoutResult = 0;
-        WindowConfiguration winConfig = getConfiguration().windowConfiguration;
-        if (LOCAL_LAYOUT) {
-            if (mFirst || viewVisibility != mViewVisibility) {
-                relayoutResult = mWindowSession.updateVisibility(mWindow, params, viewVisibility,
-                        mPendingMergedConfiguration, mSurfaceControl, mTempInsets, mTempControls);
-                if (mTranslator != null) {
-                    mTranslator.translateInsetsStateInScreenToAppWindow(mTempInsets);
-                    mTranslator.translateSourceControlsInScreenToAppWindow(mTempControls);
-                }
-                mInsetsController.onStateChanged(mTempInsets);
-                mInsetsController.onControlsChanged(mTempControls);
-
-                mPendingAlwaysConsumeSystemBars =
-                        (relayoutResult & RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS) != 0;
-            }
-            final InsetsState state = mInsetsController.getState();
-            final Rect displayCutoutSafe = mTempRect;
-            state.getDisplayCutoutSafe(displayCutoutSafe);
-            if (mWindowAttributes.type == TYPE_APPLICATION_STARTING) {
-                // TODO(b/210378379): Remove the special logic.
-                // Letting starting window use the window bounds from the pending config is for the
-                // fixed rotation, because the config is not overridden before the starting window
-                // is created.
-                winConfig = mPendingMergedConfiguration.getMergedConfiguration()
-                        .windowConfiguration;
-            }
-            mWindowLayout.computeFrames(mWindowAttributes, state, displayCutoutSafe,
-                    winConfig.getBounds(), winConfig.getWindowingMode(), requestedWidth,
-                    requestedHeight, mInsetsController.getRequestedVisibilities(),
-                    1f /* compatScale */, mTmpFrames);
-
-            mWindowSession.updateLayout(mWindow, params,
-                    insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0, mTmpFrames,
-                    requestedWidth, requestedHeight);
-
-        } else {
-            relayoutResult = mWindowSession.relayout(mWindow, params,
-                    requestedWidth, requestedHeight, viewVisibility,
-                    insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0,
-                    mTmpFrames, mPendingMergedConfiguration, mSurfaceControl, mTempInsets,
-                    mTempControls, mRelayoutBundle);
-            final int maybeSyncSeqId = mRelayoutBundle.getInt("seqid");
-            if (maybeSyncSeqId > 0) {
-                mSyncSeqId = maybeSyncSeqId;
-            }
-
-            if (mTranslator != null) {
-                mTranslator.translateRectInScreenToAppWindow(mTmpFrames.frame);
-                mTranslator.translateRectInScreenToAppWindow(mTmpFrames.displayFrame);
-                mTranslator.translateRectInScreenToAppWindow(mTmpFrames.attachedFrame);
-                mTranslator.translateInsetsStateInScreenToAppWindow(mTempInsets);
-                mTranslator.translateSourceControlsInScreenToAppWindow(mTempControls);
-            }
-            mInsetsController.onStateChanged(mTempInsets);
-            mInsetsController.onControlsChanged(mTempControls);
-
-            mPendingAlwaysConsumeSystemBars =
-                    (relayoutResult & RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS) != 0;
+        int relayoutResult = mWindowSession.relayout(mWindow, params,
+                requestedWidth, requestedHeight, viewVisibility,
+                insetsPending ? WindowManagerGlobal.RELAYOUT_INSETS_PENDING : 0,
+                mTmpFrames, mPendingMergedConfiguration, mSurfaceControl, mTempInsets,
+                mTempControls, mRelayoutBundle);
+        final int maybeSyncSeqId = mRelayoutBundle.getInt("seqid");
+        if (maybeSyncSeqId > 0) {
+            mSyncSeqId = maybeSyncSeqId;
         }
 
         final int transformHint = SurfaceControl.rotationToBufferTransform(
                 (mDisplayInstallOrientation + mDisplay.getRotation()) % 4);
 
+        final WindowConfiguration winConfig = getConfiguration().windowConfiguration;
         WindowLayout.computeSurfaceSize(mWindowAttributes, winConfig.getMaxBounds(), requestedWidth,
                 requestedHeight, mTmpFrames.frame, mPendingDragResizing, mSurfaceSize);
 
@@ -8162,10 +8141,23 @@ public final class ViewRootImpl implements ViewParent,
             destroySurface();
         }
 
+        mPendingAlwaysConsumeSystemBars =
+                (relayoutResult & RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS) != 0;
+
         if (restore) {
             params.restore();
         }
+
+        if (mTranslator != null) {
+            mTranslator.translateRectInScreenToAppWindow(mTmpFrames.frame);
+            mTranslator.translateRectInScreenToAppWindow(mTmpFrames.displayFrame);
+            mTranslator.translateRectInScreenToAppWindow(mTmpFrames.attachedFrame);
+            mTranslator.translateInsetsStateInScreenToAppWindow(mTempInsets);
+            mTranslator.translateSourceControlsInScreenToAppWindow(mTempControls);
+        }
         setFrame(mTmpFrames.frame);
+        mInsetsController.onStateChanged(mTempInsets);
+        mInsetsController.onControlsChanged(mTempControls);
         return relayoutResult;
     }
 

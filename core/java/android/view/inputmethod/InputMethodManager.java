@@ -446,7 +446,7 @@ public final class InputMethodManager {
      * the attributes that were last retrieved from the served view and given
      * to the input connection.
      */
-    EditorInfo mCurrentTextBoxAttribute;
+    EditorInfo mCurrentEditorInfo;
     /**
      * The InputConnection that was last retrieved from the served view.
      */
@@ -654,15 +654,13 @@ public final class InputMethodManager {
         public boolean startInput(@StartInputReason int startInputReason, View focusedView,
                 @StartInputFlags int startInputFlags, @SoftInputModeFlags int softInputMode,
                 int windowFlags) {
-            final View servedView;
             ImeTracing.getInstance().triggerClientDump(
                     "InputMethodManager.DelegateImpl#startInput", InputMethodManager.this,
                     null /* icProto */);
             synchronized (mH) {
-                mCurrentTextBoxAttribute = null;
+                mCurrentEditorInfo = null;
                 mCompletions = null;
                 mServedConnecting = true;
-                servedView = getServedViewLocked();
             }
             return startInputInner(startInputReason,
                     focusedView != null ? focusedView.getWindowToken() : null, startInputFlags,
@@ -1423,14 +1421,38 @@ public final class InputMethodManager {
     }
 
     /**
-     * Returns {@code true} if currently selected IME supports Stylus handwriting.
+     * Returns {@code true} if currently selected IME supports Stylus handwriting & is enabled.
      * If the method returns {@code false}, {@link #startStylusHandwriting(View)} shouldn't be
      * called and Stylus touch should continue as normal touch input.
      * @see #startStylusHandwriting(View)
      */
     public boolean isStylusHandwritingAvailable() {
+        return isStylusHandwritingAvailableAsUser(UserHandle.myUserId());
+    }
+
+    /**
+     * Returns {@code true} if currently selected IME supports Stylus handwriting & is enabled for
+     * the given userId.
+     * If the method returns {@code false}, {@link #startStylusHandwriting(View)} shouldn't be
+     * called and Stylus touch should continue as normal touch input.
+     * @see #startStylusHandwriting(View)
+     * @param userId user ID to query.
+     * @hide
+     */
+    public boolean isStylusHandwritingAvailableAsUser(@UserIdInt int userId) {
+        final Context fallbackContext = ActivityThread.currentApplication();
+        if (fallbackContext == null) {
+            return false;
+        }
+        if (Settings.Global.getInt(fallbackContext.getContentResolver(),
+                Settings.Global.STYLUS_HANDWRITING_ENABLED, 0) == 0) {
+            if (DEBUG) {
+                Log.d(TAG, "Stylus handwriting is not enabled in settings.");
+            }
+            return false;
+        }
         try {
-            return mService.isStylusHandwritingAvailable();
+            return mService.isStylusHandwritingAvailableAsUser(userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1600,7 +1622,7 @@ public final class InputMethodManager {
 
         checkFocus();
         synchronized (mH) {
-            return hasServedByInputMethodLocked(view) && mCurrentTextBoxAttribute != null;
+            return hasServedByInputMethodLocked(view) && mCurrentEditorInfo != null;
         }
     }
 
@@ -1610,7 +1632,7 @@ public final class InputMethodManager {
     public boolean isActive() {
         checkFocus();
         synchronized (mH) {
-            return getServedViewLocked() != null && mCurrentTextBoxAttribute != null;
+            return getServedViewLocked() != null && mCurrentEditorInfo != null;
         }
     }
 
@@ -1647,6 +1669,7 @@ public final class InputMethodManager {
         mCurId = null;
         mCurMethod = null; // for @UnsupportedAppUsage
         mCurrentInputMethodSession = null;
+        mIsInputMethodSuppressingSpellChecker = false;
     }
 
     /**
@@ -1694,7 +1717,7 @@ public final class InputMethodManager {
      * to an input method
      */
     void clearConnectionLocked() {
-        mCurrentTextBoxAttribute = null;
+        mCurrentEditorInfo = null;
         if (mServedInputConnection != null) {
             mServedInputConnection.deactivate();
             mServedInputConnection = null;
@@ -1709,7 +1732,6 @@ public final class InputMethodManager {
     @GuardedBy("mH")
     void finishInputLocked() {
         mVirtualDisplayToScreenMatrix = null;
-        mIsInputMethodSuppressingSpellChecker = false;
         setNextServedViewLocked(null);
         if (getServedViewLocked() != null) {
             if (DEBUG) {
@@ -2192,7 +2214,7 @@ public final class InputMethodManager {
     public boolean doInvalidateInput(@NonNull RemoteInputConnectionImpl inputConnection,
             @NonNull TextSnapshot textSnapshot, int sessionId) {
         synchronized (mH) {
-            if (mServedInputConnection != inputConnection || mCurrentTextBoxAttribute == null) {
+            if (mServedInputConnection != inputConnection || mCurrentEditorInfo == null) {
                 // OK to ignore because the calling InputConnection is already abandoned.
                 return true;
             }
@@ -2200,7 +2222,7 @@ public final class InputMethodManager {
                 // IME is not yet bound to the client.  Need to fall back to the restartInput().
                 return false;
             }
-            final EditorInfo editorInfo = mCurrentTextBoxAttribute.createCopyInternal();
+            final EditorInfo editorInfo = mCurrentEditorInfo.createCopyInternal();
             editorInfo.initialSelStart = mCursorSelStart = textSnapshot.getSelectionStart();
             editorInfo.initialSelEnd = mCursorSelEnd = textSnapshot.getSelectionEnd();
             mCursorCandStart = textSnapshot.getCompositionStart();
@@ -2339,7 +2361,7 @@ public final class InputMethodManager {
                     // This is not an error. Once IME binds (MSG_BIND), InputConnection is fully
                     // established. So we report this to interested recipients.
                     reportInputConnectionOpened(
-                            mServedInputConnection.getInputConnection(), mCurrentTextBoxAttribute,
+                            mServedInputConnection.getInputConnection(), mCurrentEditorInfo,
                             mServedInputConnectionHandler, view);
                 }
                 return false;
@@ -2347,12 +2369,12 @@ public final class InputMethodManager {
 
             // If we already have a text box, then this view is already
             // connected so we want to restart it.
-            if (mCurrentTextBoxAttribute == null) {
+            if (mCurrentEditorInfo == null) {
                 startInputFlags |= StartInputFlags.INITIAL_CONNECTION;
             }
 
             // Hook 'em up and let 'er rip.
-            mCurrentTextBoxAttribute = tba.createCopyInternal();
+            mCurrentEditorInfo = tba.createCopyInternal();
 
             mServedConnecting = false;
             if (mServedInputConnection != null) {
@@ -2658,7 +2680,7 @@ public final class InputMethodManager {
 
         checkFocus();
         synchronized (mH) {
-            if (!hasServedByInputMethodLocked(view) || mCurrentTextBoxAttribute == null
+            if (!hasServedByInputMethodLocked(view) || mCurrentEditorInfo == null
                     || mCurrentInputMethodSession == null) {
                 return;
             }
@@ -2715,7 +2737,7 @@ public final class InputMethodManager {
         final boolean focusChanged = servedView != nextServedView;
         checkFocus();
         synchronized (mH) {
-            if (!hasServedByInputMethodLocked(view) || mCurrentTextBoxAttribute == null
+            if (!hasServedByInputMethodLocked(view) || mCurrentEditorInfo == null
                     || mCurrentInputMethodSession == null) {
                 return;
             }
@@ -2784,7 +2806,7 @@ public final class InputMethodManager {
 
         checkFocus();
         synchronized (mH) {
-            if (!hasServedByInputMethodLocked(view) || mCurrentTextBoxAttribute == null
+            if (!hasServedByInputMethodLocked(view) || mCurrentEditorInfo == null
                     || mCurrentInputMethodSession == null) {
                 return;
             }
@@ -2816,7 +2838,7 @@ public final class InputMethodManager {
 
         checkFocus();
         synchronized (mH) {
-            if (!hasServedByInputMethodLocked(view) || mCurrentTextBoxAttribute == null
+            if (!hasServedByInputMethodLocked(view) || mCurrentEditorInfo == null
                     || mCurrentInputMethodSession == null) {
                 return;
             }
@@ -2866,7 +2888,7 @@ public final class InputMethodManager {
 
         checkFocus();
         synchronized (mH) {
-            if (!hasServedByInputMethodLocked(view) || mCurrentTextBoxAttribute == null
+            if (!hasServedByInputMethodLocked(view) || mCurrentEditorInfo == null
                     || mCurrentInputMethodSession == null) {
                 return;
             }
@@ -3592,11 +3614,11 @@ public final class InputMethodManager {
         p.println("  mServedView=" + getServedViewLocked());
         p.println("  mNextServedView=" + getNextServedViewLocked());
         p.println("  mServedConnecting=" + mServedConnecting);
-        if (mCurrentTextBoxAttribute != null) {
-            p.println("  mCurrentTextBoxAttribute:");
-            mCurrentTextBoxAttribute.dump(p, "    ", false /* dumpExtras */);
+        if (mCurrentEditorInfo != null) {
+            p.println("  mCurrentEditorInfo:");
+            mCurrentEditorInfo.dump(p, "    ", false /* dumpExtras */);
         } else {
-            p.println("  mCurrentTextBoxAttribute: null");
+            p.println("  mCurrentEditorInfo: null");
         }
         p.println("  mServedInputConnection=" + mServedInputConnection);
         p.println("  mServedInputConnectionHandler=" + mServedInputConnectionHandler);
@@ -3719,8 +3741,8 @@ public final class InputMethodManager {
             if (mCurRootView != null) {
                 mCurRootView.dumpDebug(proto, VIEW_ROOT_IMPL);
             }
-            if (mCurrentTextBoxAttribute != null) {
-                mCurrentTextBoxAttribute.dumpDebug(proto, EDITOR_INFO);
+            if (mCurrentEditorInfo != null) {
+                mCurrentEditorInfo.dumpDebug(proto, EDITOR_INFO);
             }
             if (mImeInsetsConsumer != null) {
                 mImeInsetsConsumer.dumpDebug(proto, IME_INSETS_SOURCE_CONSUMER);

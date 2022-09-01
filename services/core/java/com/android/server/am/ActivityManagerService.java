@@ -8839,7 +8839,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static String processClass(ProcessRecord process) {
         if (process == null || process.getPid() == MY_PID) {
             return "system_server";
-        } else if ((process.info.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+        } else if (process.info.isSystemApp() || process.info.isSystemExt()) {
             return "system_app";
         } else {
             return "data_app";
@@ -8874,8 +8874,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         // otherwise the watchdog may be prevented from resetting the system.
 
         // Bail early if not published yet
-        if (ServiceManager.getService(Context.DROPBOX_SERVICE) == null) return;
-        final DropBoxManager dbox = mContext.getSystemService(DropBoxManager.class);
+        final DropBoxManager dbox;
+        try {
+            dbox = mContext.getSystemService(DropBoxManager.class);
+        } catch (Exception e) {
+            return;
+        }
 
         // Exit early if the dropbox isn't configured to accept this report type.
         final String dropboxTag = processClass(process) + "_" + eventType;
@@ -12586,6 +12590,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public PendingIntent getRunningServiceControlPanel(ComponentName name) {
         enforceNotIsolatedCaller("getRunningServiceControlPanel");
+        final int callingUid = Binder.getCallingUid();
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        if (name == null || getPackageManagerInternal()
+                .filterAppAccess(name.getPackageName(), callingUid, callingUserId)) {
+            return null;
+        }
         synchronized (this) {
             return mServices.getRunningServiceControlPanelLocked(name);
         }
