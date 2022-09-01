@@ -73,4 +73,10 @@
     <!-- Cycle through ringer modes -->
     <java-symbol type="string" name="volume_dialog_ringer_guidance_normal" />
 
+    <!-- Fingerprint from a certified Pixel Device -->
+    <java-symbol type="string" name="pixel_fingerprint" />
+
+    <!-- Fingerprint from stock ROM -->
+    <java-symbol type="string" name="stock_fingerprint" />
+
 </resources>
