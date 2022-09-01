@@ -32,4 +32,10 @@
     <string-array name="config_deviceKeyHandlerClasses" translatable="false">
     </string-array>
 
+    <!-- Fingerprint from a certified Pixel Device -->
+    <string name="pixel_fingerprint" translatable="false"></string>
+
+    <!-- Fingerprint from stock ROM -->
+    <string name="stock_fingerprint" translatable="false"></string>
+
 </resources>
