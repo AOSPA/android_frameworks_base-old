@@ -70,4 +70,9 @@
     <!-- Whether to to intercept inputs on screen off. -->
     <java-symbol type="bool" name="config_enableKeyHandler" />
 
+    <!-- Fingerprint from a certified device against current platform SPL level -->
+    <java-symbol type="string" name="config_certifiedFingerprint" />
+
+    <!-- Fingerprint from stock ROM -->
+    <java-symbol type="string" name="config_stockFingerprint" />
 </resources>
