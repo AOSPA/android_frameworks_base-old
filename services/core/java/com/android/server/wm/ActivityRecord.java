@@ -2486,8 +2486,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (!newTask && taskSwitch && processRunning && !activityCreated && task.intent != null
                 && mActivityComponent.equals(task.intent.getComponent())) {
             final ActivityRecord topAttached = task.getActivity(ActivityRecord::attachedToProcess);
-            if (topAttached != null && topAttached.isSnapshotCompatible(snapshot)) {
-                return STARTING_WINDOW_TYPE_SNAPSHOT;
+            if (topAttached != null) {
+                if (topAttached.isSnapshotCompatible(snapshot)
+                        // This trampoline must be the same rotation.
+                        && mDisplayContent.getDisplayRotation().rotationForOrientation(mOrientation,
+                                mDisplayContent.getRotation()) == snapshot.getRotation()) {
+                    return STARTING_WINDOW_TYPE_SNAPSHOT;
+                }
+                // No usable snapshot. And a splash screen may also be weird because an existing
+                // activity may be shown right after the trampoline is finished.
+                return STARTING_WINDOW_TYPE_NONE;
             }
         }
         final boolean isActivityHome = isActivityTypeHome();
@@ -3226,12 +3234,29 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return false;
         }
 
-        if (mRootWindowContainer.getTopResumedActivity() == this
-                && getDisplayContent().mFocusedApp == this) {
-            ProtoLog.d(WM_DEBUG_FOCUS, "moveFocusableActivityToTop: already on top, "
-                    + "activity=%s", this);
-            return !isState(RESUMED);
+        // If this activity already positions on the top focused task, moving the task to front
+        // is not needed. But we still need to ensure this activity is focused because the
+        // current focused activity could be another activity in the same Task if activities are
+        // displayed on adjacent TaskFragments.
+        final ActivityRecord currentFocusedApp = mDisplayContent.mFocusedApp;
+        if (currentFocusedApp != null && currentFocusedApp.task == task) {
+            final Task topFocusableTask = mDisplayContent.getTask(
+                    (t) -> t.isLeafTask() && t.isFocusable(), true /*  traverseTopToBottom */);
+            if (task == topFocusableTask) {
+                if (currentFocusedApp == this) {
+                    ProtoLog.d(WM_DEBUG_FOCUS, "moveFocusableActivityToTop: already on top "
+                            + "and focused, activity=%s", this);
+                } else {
+                    ProtoLog.d(WM_DEBUG_FOCUS, "moveFocusableActivityToTop: set focused, "
+                            + "activity=%s", this);
+                    mDisplayContent.setFocusedApp(this);
+                    mAtmService.mWindowManager.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
+                            true /* updateInputWindows */);
+                }
+                return !isState(RESUMED);
+            }
         }
+
         ProtoLog.d(WM_DEBUG_FOCUS, "moveFocusableActivityToTop: activity=%s", this);
 
         rootTask.moveToFront(reason, task);
@@ -4323,9 +4348,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mTransitionController.collect(tStartingWindow);
                 tStartingWindow.reparent(this, POSITION_TOP);
 
-                // Propagate other interesting state between the tokens. If the old token is displayed,
-                // we should immediately force the new one to be displayed. If it is animating, we need
-                // to move that animation to the new one.
+                // Clear the frozen insets state when transferring the existing starting window to
+                // the next target activity.  In case the frozen state from a trampoline activity
+                // affecting the starting window frame computation to see the window being
+                // clipped if the rotation change during the transition animation.
+                tStartingWindow.clearFrozenInsetsState();
+
+                // Propagate other interesting state between the tokens. If the old token is
+                // displayed, we should immediately force the new one to be displayed. If it is
+                // animating, we need to move that animation to the new one.
                 if (fromActivity.allDrawn) {
                     allDrawn = true;
                 }
@@ -7523,7 +7554,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mTransit = TRANSIT_OLD_UNSET;
         mTransitFlags = 0;
         mNeedsAnimationBoundsLayer = false;
-        mDismissKeyguard = false;
 
         setAppLayoutChanges(FINISH_LAYOUT_REDO_ANIM | FINISH_LAYOUT_REDO_WALLPAPER,
                 "ActivityRecord");
@@ -7907,11 +7937,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 newParentConfiguration.windowConfiguration.getWindowingMode();
         final boolean isFixedOrientationLetterboxAllowed =
                 parentWindowingMode == WINDOWING_MODE_MULTI_WINDOW
-                        || parentWindowingMode == WINDOWING_MODE_FULLSCREEN;
+                        || parentWindowingMode == WINDOWING_MODE_FULLSCREEN
+                        // Switching from PiP to fullscreen.
+                        || (parentWindowingMode == WINDOWING_MODE_PINNED
+                                && resolvedConfig.windowConfiguration.getWindowingMode()
+                                        == WINDOWING_MODE_FULLSCREEN);
         // TODO(b/181207944): Consider removing the if condition and always run
         // resolveFixedOrientationConfiguration() since this should be applied for all cases.
         if (isFixedOrientationLetterboxAllowed) {
-            resolveFixedOrientationConfiguration(newParentConfiguration, parentWindowingMode);
+            resolveFixedOrientationConfiguration(newParentConfiguration);
         }
 
         if (mCompatDisplayInsets != null) {
@@ -8103,8 +8137,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     boolean isInTransition() {
-        return mTransitionController.inTransition(this) // Shell transitions.
-                || isAnimating(PARENTS | TRANSITION); // Legacy transitions.
+        return inTransitionSelfOrParent();
     }
 
     /**
@@ -8204,8 +8237,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * <p>If letterboxed due to fixed orientation then aspect ratio restrictions are also applied
      * in this method.
      */
-    private void resolveFixedOrientationConfiguration(@NonNull Configuration newParentConfig,
-            int windowingMode) {
+    private void resolveFixedOrientationConfiguration(@NonNull Configuration newParentConfig) {
         mLetterboxBoundsForFixedOrientationAndAspectRatio = null;
         mIsEligibleForFixedOrientationLetterbox = false;
         final Rect parentBounds = newParentConfig.windowConfiguration.getBounds();
@@ -8223,11 +8255,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Ignore orientation request for activity in ActivityEmbedding split.
         final TaskFragment organizedTf = getOrganizedTaskFragment();
         if (organizedTf != null && !organizedTf.fillsParent()) {
-            return;
-        }
-        if (windowingMode == WINDOWING_MODE_PINNED) {
-            // PiP bounds have higher priority than the requested orientation. Otherwise the
-            // activity may be squeezed into a small piece.
             return;
         }
 
@@ -8294,7 +8321,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         resolvedBounds.set(containingBounds);
 
         final float letterboxAspectRatioOverride =
-                mWmService.mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
+                mLetterboxUiController.getFixedOrientationLetterboxAspectRatio();
         final float desiredAspectRatio =
                 letterboxAspectRatioOverride > MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO
                         ? letterboxAspectRatioOverride : computeAspectRatio(parentBounds);
@@ -8847,18 +8874,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * Returns the min aspect ratio of this activity.
      */
     private float getMinAspectRatio() {
-        float infoAspectRatio = info.getMinAspectRatio(getRequestedOrientation());
-        // Complying with the CDD 7.1.1.2 requirement for unresizble apps:
-        // https://source.android.com/compatibility/12/android-12-cdd#7112_screen_aspect_ratio
-        return infoAspectRatio < 1f && info.resizeMode == RESIZE_MODE_UNRESIZEABLE
-                    // TODO(233582832): Consider removing fixed-orientation condition.
-                    // Some apps switching from tablet to phone layout at the certain size
-                    // threshold. This may lead to flickering on tablets in landscape orientation
-                    // if an app sets orientation to portrait dynamically because of aspect ratio
-                    // restriction applied here.
-                    && getRequestedConfigurationOrientation() != ORIENTATION_UNDEFINED
-                ? mLetterboxUiController.getDefaultMinAspectRatioForUnresizableApps()
-                : infoAspectRatio;
+        return info.getMinAspectRatio(getRequestedOrientation());
     }
 
     /**
@@ -9856,6 +9872,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 false /*isNotInRecents*/,
                 record.mThumbnailAdapter != null ? record.mThumbnailAdapter.mCapturedLeash : null,
                 record.mStartBounds, task.getTaskInfo(), checkEnterPictureInPictureAppOpsState());
+        target.setShowBackdrop(record.mShowBackdrop);
         target.hasAnimatingParent = record.hasAnimatingParent();
         return target;
     }
@@ -9912,11 +9929,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // finish because finish resets all the states.
         mLastAllReadyAtSync = allSyncFinished();
         super.finishSync(outMergedTransaction, cancel);
-    }
-
-    @Override
-    boolean canBeAnimationTarget() {
-        return true;
     }
 
     @Nullable

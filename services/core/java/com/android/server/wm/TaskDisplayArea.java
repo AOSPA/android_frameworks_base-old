@@ -1116,7 +1116,10 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         // If a task is launching from a created-by-organizer task, it should be launched into the
         // same created-by-organizer task as well. Unless, the candidate task is already positioned
         // in the another adjacent task.
-        if (sourceTask != null) {
+        if (sourceTask != null && (candidateTask == null
+                // A pinned task relaunching should be handled by its task organizer. Skip fallback
+                // launch target of a pinned task from source task.
+                || candidateTask.getWindowingMode() != WINDOWING_MODE_PINNED)) {
             Task launchTarget = sourceTask.getCreatedByOrganizerTask();
             if (launchTarget != null && launchTarget.getAdjacentTaskFragment() != null) {
                 if (candidateTask != null) {
@@ -1780,7 +1783,9 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
     @Override
     boolean canCreateRemoteAnimationTarget() {
-        return true;
+        // In the legacy transition system, promoting animation target from TaskFragment to
+        // TaskDisplayArea prevents running finish animation. See b/194649929.
+        return WindowManagerService.sEnableShellTransitions;
     }
 
     /**
@@ -1939,7 +1944,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                 continue;
             }
             final Task rootTask = child.asTask();
-            pw.println(doublePrefix + "* " + rootTask);
+            pw.println(doublePrefix + "* " + rootTask.toFullString());
             rootTask.dump(pw, triplePrefix, dumpAll);
         }
     }

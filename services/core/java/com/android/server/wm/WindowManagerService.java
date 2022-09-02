@@ -48,6 +48,7 @@ import static android.provider.Settings.Global.DEVELOPMENT_FORCE_DESKTOP_MODE_ON
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES;
 import static android.provider.Settings.Global.DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR;
 import static android.provider.Settings.Global.DEVELOPMENT_WM_DISPLAY_SETTINGS_PATH;
+import static android.view.ContentRecordingSession.RECORD_CONTENT_TASK;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
@@ -89,6 +90,7 @@ import static android.view.WindowManager.REMOVE_CONTENT_MODE_UNDEFINED;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_RELAUNCH;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
+import static android.view.WindowManagerGlobal.RELAYOUT_RES_CANCEL_AND_REDRAW;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 import static android.view.WindowManagerPolicyConstants.TYPE_LAYER_MULTIPLIER;
@@ -288,6 +290,7 @@ import android.view.displayhash.VerifiedDisplayHash;
 import android.window.ClientWindowFrames;
 import android.window.ITaskFpsCallback;
 import android.window.TaskSnapshot;
+import android.window.WindowContainerToken;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
@@ -1443,7 +1446,7 @@ public class WindowManagerService extends IWindowManager.Stub
     public int addWindow(Session session, IWindow client, LayoutParams attrs, int viewVisibility,
             int displayId, int requestUserId, InsetsVisibilities requestedVisibilities,
             InputChannel outInputChannel, InsetsState outInsetsState,
-            InsetsSourceControl[] outActiveControls) {
+            InsetsSourceControl[] outActiveControls, Rect outAttachedFrame) {
         Arrays.fill(outActiveControls, null);
         int[] appOp = new int[1];
         final boolean isRoundedCornerOverlay = (attrs.privateFlags
@@ -1858,6 +1861,13 @@ public class WindowManagerService extends IWindowManager.Stub
 
             outInsetsState.set(win.getCompatInsetsState(), win.isClientLocal());
             getInsetsSourceControls(win, outActiveControls);
+
+            if (win.mLayoutAttached) {
+                outAttachedFrame.set(win.getParentWindow().getCompatFrame());
+            } else {
+                // Make this invalid which indicates a null attached frame.
+                outAttachedFrame.set(0, 0, -1, -1);
+            }
         }
 
         Binder.restoreCallingIdentity(origId);
@@ -2210,6 +2220,20 @@ public class WindowManagerService extends IWindowManager.Stub
                         == PackageManager.PERMISSION_GRANTED;
     }
 
+    /**
+     * Returns whether this window can proceed with drawing or needs to retry later.
+     */
+    public boolean cancelDraw(Session session, IWindow client) {
+        synchronized (mGlobalLock) {
+            final WindowState win = windowForClientLocked(session, client, false);
+            if (win == null) {
+                return false;
+            }
+
+            return win.cancelAndRedraw();
+        }
+    }
+
     public int relayoutWindow(Session session, IWindow client, LayoutParams attrs,
             int requestedWidth, int requestedHeight, int viewVisibility, int flags,
             ClientWindowFrames outFrames, MergedConfiguration mergedConfiguration,
@@ -2226,6 +2250,11 @@ public class WindowManagerService extends IWindowManager.Stub
             if (win == null) {
                 return 0;
             }
+
+            if (win.cancelAndRedraw() && win.mPrepareSyncSeqId <= win.mLastSeqIdSentToRelayout) {
+                result |= RELAYOUT_RES_CANCEL_AND_REDRAW;
+            }
+
             final DisplayContent displayContent = win.getDisplayContent();
             final DisplayPolicy displayPolicy = displayContent.getDisplayPolicy();
 
@@ -2252,9 +2281,21 @@ public class WindowManagerService extends IWindowManager.Stub
                     throw new IllegalArgumentException(
                             "Window type can not be changed after the window is added.");
                 }
-                if (!Arrays.equals(win.mAttrs.providesInsetsTypes, attrs.providesInsetsTypes)) {
-                    throw new IllegalArgumentException(
-                            "Insets types can not be changed after the window is added.");
+                if (!(win.mAttrs.providedInsets == null && attrs.providedInsets == null)) {
+                    if (win.mAttrs.providedInsets == null || attrs.providedInsets == null
+                            || (win.mAttrs.providedInsets.length != attrs.providedInsets.length)) {
+                        throw new IllegalArgumentException(
+                                "Insets types can not be changed after the window is added.");
+                    } else {
+                        final int insetsTypes = attrs.providedInsets.length;
+                        for (int i = 0; i < insetsTypes; i++) {
+                            if (win.mAttrs.providedInsets[i].type != attrs.providedInsets[i].type) {
+                                throw new IllegalArgumentException(
+                                        "Insets types can not be changed after the window is "
+                                                + "added.");
+                            }
+                        }
+                    }
                 }
 
                 flagChanges = win.mAttrs.flags ^ attrs.flags;
@@ -2626,29 +2667,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         return result;
-    }
-
-    int updateViewVisibility(Session session, IWindow client, LayoutParams attrs,
-            int viewVisibility, MergedConfiguration outMergedConfiguration,
-            SurfaceControl outSurfaceControl, InsetsState outInsetsState,
-            InsetsSourceControl[] outActiveControls) {
-        // TODO(b/161810301): Finish the implementation.
-        return 0;
-    }
-
-    void updateWindowLayout(Session session, IWindow client, LayoutParams attrs, int flags,
-            ClientWindowFrames clientWindowFrames, int requestedWidth, int requestedHeight) {
-        final long origId = Binder.clearCallingIdentity();
-        synchronized (mGlobalLock) {
-            final WindowState win = windowForClientLocked(session, client, false);
-            if (win == null) {
-                return;
-            }
-            win.setFrames(clientWindowFrames, requestedWidth, requestedHeight);
-
-            // TODO(b/161810301): Finish the implementation.
-        }
-        Binder.restoreCallingIdentity(origId);
     }
 
     public boolean outOfMemoryWindow(Session session, IWindow client) {
@@ -6044,9 +6062,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /** Note that Locked in this case is on mLayoutToAnim */
     void scheduleAnimationLocked() {
-        if (mAnimator != null) {
-            mAnimator.scheduleAnimation();
-        }
+        mAnimator.scheduleAnimation();
     }
 
     boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {
@@ -8291,6 +8307,26 @@ public class WindowManagerService extends IWindowManager.Stub
         @Override
         public void setContentRecordingSession(@Nullable ContentRecordingSession incomingSession) {
             synchronized (mGlobalLock) {
+                // Allow the controller to handle teardown or a non-task session.
+                if (incomingSession == null
+                        || incomingSession.getContentToRecord() != RECORD_CONTENT_TASK) {
+                    mContentRecordingController.setContentRecordingSessionLocked(incomingSession,
+                            WindowManagerService.this);
+                    return;
+                }
+                // For a task session, find the activity identified by the launch cookie.
+                final WindowContainerToken wct = getTaskWindowContainerTokenForLaunchCookie(
+                        incomingSession.getTokenToRecord());
+                if (wct == null) {
+                    Slog.w(TAG, "Handling a new recording session; unable to find the "
+                            + "WindowContainerToken");
+                    mContentRecordingController.setContentRecordingSessionLocked(null,
+                            WindowManagerService.this);
+                    return;
+                }
+                // Replace the launch cookie in the session details with the task's
+                // WindowContainerToken.
+                incomingSession.setTokenToRecord(wct.asBinder());
                 mContentRecordingController.setContentRecordingSessionLocked(incomingSession,
                         WindowManagerService.this);
             }
@@ -8549,6 +8585,38 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     /**
+     * Retrieve the {@link WindowContainerToken} of the task that contains the activity started
+     * with the given launch cookie.
+     *
+     * @param launchCookie the launch cookie set on the {@link ActivityOptions} when starting an
+     *                     activity
+     * @return a token representing the task containing the activity started with the given launch
+     * cookie, or {@code null} if the token couldn't be found.
+     */
+    @VisibleForTesting
+    @Nullable
+    WindowContainerToken getTaskWindowContainerTokenForLaunchCookie(@NonNull IBinder launchCookie) {
+        // Find the activity identified by the launch cookie.
+        final ActivityRecord targetActivity = mRoot.getActivity(
+                activity -> activity.mLaunchCookie == launchCookie);
+        if (targetActivity == null) {
+            Slog.w(TAG, "Unable to find the activity for this launch cookie");
+            return null;
+        }
+        if (targetActivity.getTask() == null) {
+            Slog.w(TAG, "Unable to find the task for this launch cookie");
+            return null;
+        }
+        WindowContainerToken taskWindowContainerToken =
+                targetActivity.getTask().mRemoteToken.toWindowContainerToken();
+        if (taskWindowContainerToken == null) {
+            Slog.w(TAG, "Unable to find the WindowContainerToken for " + targetActivity.getName());
+            return null;
+        }
+        return taskWindowContainerToken;
+    }
+
+    /**
      * You need ALLOW_SLIPPERY_TOUCHES permission to be able to set FLAG_SLIPPERY.
      */
     private int sanitizeFlagSlippery(int flags, String windowName, int callingUid, int callingPid) {
@@ -8772,6 +8840,41 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failed to set layer tracing flags");
+            } finally {
+                if (data != null) {
+                    data.recycle();
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Toggle active transaction tracing.
+     * Setting to true increases the buffer size for active debugging.
+     * Setting to false resets the buffer size and dumps the trace to file.
+     */
+    public void setActiveTransactionTracing(boolean active) {
+        if (!checkCallingPermission(
+                android.Manifest.permission.DUMP, "setActiveTransactionTracing()")) {
+            throw new SecurityException("Requires DUMP permission");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            Parcel data = null;
+            try {
+                IBinder sf = ServiceManager.getService("SurfaceFlinger");
+                if (sf != null) {
+                    data = Parcel.obtain();
+                    data.writeInterfaceToken("android.ui.ISurfaceComposer");
+                    data.writeInt(active ? 1 : 0);
+                    sf.transact(/* TRANSACTION_TRACE_CONTROL_CODE */ 1041, data,
+                            null, 0 /* flags */);
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to set transaction tracing");
             } finally {
                 if (data != null) {
                     data.recycle();

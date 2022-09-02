@@ -16,8 +16,6 @@
 
 package com.android.internal.app;
 
-import com.android.internal.os.BatteryStatsImpl;
-
 import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
@@ -69,13 +67,6 @@ interface IBatteryStats {
     // Remaining methods are only used in Java.
     @EnforcePermission("BATTERY_STATS")
     List<BatteryUsageStats> getBatteryUsageStats(in List<BatteryUsageStatsQuery> queries);
-
-    @UnsupportedAppUsage
-    @EnforcePermission("BATTERY_STATS")
-    byte[] getStatistics();
-
-    @EnforcePermission("BATTERY_STATS")
-    ParcelFileDescriptor getStatisticsStream(boolean updateAll);
 
     // Return true if we see the battery as currently charging.
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)

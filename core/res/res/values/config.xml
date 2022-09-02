@@ -1743,49 +1743,6 @@
          suggestions to TimeDetector service. See also config_autoTimeSourcesPriority. -->
     <bool name="config_enableGnssTimeUpdateService">false</bool>
 
-    <!-- Enables the TimeZoneRuleManager service. This is the global switch for the updateable time
-         zone update mechanism. -->
-    <bool name="config_enableUpdateableTimeZoneRules">false</bool>
-
-    <!-- Enables APK-based time zone update triggering. Set this to false when updates are triggered
-         via external events and not by APK updates. For example, if an updater checks with a server
-         on a regular schedule.
-         [This is only used if config_enableUpdateableTimeZoneRules is true.] -->
-    <bool name="config_timeZoneRulesUpdateTrackingEnabled">false</bool>
-
-    <!-- The package of the time zone rules updater application. Expected to be the same
-         for all Android devices that support APK-based time zone rule updates.
-         A package-targeted com.android.intent.action.timezone.TRIGGER_RULES_UPDATE_CHECK intent
-         will be sent to the updater app if the system server detects an update to the updater or
-         data app packages.
-         The package referenced here must have the android.permission.UPDATE_TIME_ZONE_RULES
-         permission.
-         [This is only used if config_enableUpdateableTimeZoneRules and
-         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
-    <string name="config_timeZoneRulesUpdaterPackage" translatable="false">com.android.timezone.updater</string>
-
-    <!-- The package of the time zone rules data application. Expected to be configured
-         by OEMs to reference their own priv-app APK package.
-         A package-targeted com.android.intent.action.timezone.TRIGGER_RULES_UPDATE_CHECK intent
-         will be sent to the updater app if the system server detects an update to the updater or
-         data app packages.
-         [This is only used if config_enableUpdateableTimeZoneRules and
-         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
-    <string name="config_timeZoneRulesDataPackage" translatable="false"></string>
-
-    <!-- The allowed time in milliseconds between an update check intent being broadcast and the
-         response being considered overdue. Reliability triggers will not fire in this time.
-         [This is only used if config_enableUpdateableTimeZoneRules and
-         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
-    <!-- 5 minutes -->
-    <integer name="config_timeZoneRulesCheckTimeMillisAllowed">300000</integer>
-
-    <!-- The number of times a time zone update check is allowed to fail before the system will stop
-         reacting to reliability triggers.
-         [This is only used if config_enableUpdateableTimeZoneRules and
-         config_timeZoneRulesUpdateTrackingEnabled are true.] -->
-    <integer name="config_timeZoneRulesCheckRetryCount">5</integer>
-
     <!-- Whether the geolocation time zone detection feature is enabled. Setting this to false means
          the feature cannot be used. Setting this to true means system server components can be
          tested and location time zone detection may be used if other configuration allows (see
@@ -2951,7 +2908,7 @@
 
     <!-- System bluetooth stack package name -->
     <string name="config_systemBluetoothStack" translatable="false">
-        com.android.bluetooth.services
+        com.android.bluetooth
     </string>
 
     <!-- Flag indicating that the media framework should not allow changes or mute on any
@@ -5206,11 +5163,11 @@
     <!-- Whether displaying letterbox education is enabled for letterboxed fullscreen apps. -->
     <bool name="config_letterboxIsEducationEnabled">false</bool>
 
-    <!-- Default min aspect ratio for unresizable apps which is used when an app doesn't specify
-         android:minAspectRatio in accordance with CDD 7.1.1.2 requirement:
-         https://source.android.com/compatibility/12/android-12-cdd#7112_screen_aspect_ratio.
-         An exception will be thrown if the given aspect ratio < 4:3.  -->
-    <item name="config_letterboxDefaultMinAspectRatioForUnresizableApps" format="float" type="dimen">1.5</item>
+    <!-- Default min aspect ratio for unresizable apps which are eligible for size compat mode.
+         Values <= 1.0 will be ignored. Activity min/max aspect ratio restrictions will still be
+         espected so this override can control the maximum screen area that can be occupied by
+         the app in the letterbox mode. -->
+    <item name="config_letterboxDefaultMinAspectRatioForUnresizableApps" format="float" type="dimen">0.0</item>
 
     <!-- Whether using split screen aspect ratio as a default aspect ratio for unresizable apps. -->
     <bool name="config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled">false</bool>
@@ -5717,6 +5674,9 @@
 
     <!-- Determines whether SafetyCenter feature is enabled. -->
     <bool name="config_enableSafetyCenter">true</bool>
+
+    <!-- Config for whether Safety Protection is enabled. -->
+    <bool name="config_safetyProtectionEnabled">true</bool>
 
     <!-- Flag indicating if help links for Settings app should be enabled. -->
     <bool name="config_settingsHelpLinksEnabled">false</bool>

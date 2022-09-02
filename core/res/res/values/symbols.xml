@@ -108,6 +108,8 @@
   <java-symbol type="id" name="list_item" />
   <java-symbol type="id" name="listContainer" />
   <java-symbol type="id" name="locale" />
+  <java-symbol type="id" name="locale_native" />
+  <java-symbol type="id" name="locale_secondary" />
   <java-symbol type="id" name="matches" />
   <java-symbol type="id" name="mediacontroller_progress" />
   <java-symbol type="id" name="minute" />
@@ -324,12 +326,6 @@
   <java-symbol type="bool" name="config_checkWallpaperAtBoot" />
   <java-symbol type="string" name="config_wallpaperManagerServiceName" />
   <java-symbol type="string" name="config_inputEventCompatProcessorOverrideClassName" />
-  <java-symbol type="bool" name="config_enableUpdateableTimeZoneRules" />
-  <java-symbol type="bool" name="config_timeZoneRulesUpdateTrackingEnabled" />
-  <java-symbol type="string" name="config_timeZoneRulesUpdaterPackage" />
-  <java-symbol type="string" name="config_timeZoneRulesDataPackage" />
-  <java-symbol type="integer" name="config_timeZoneRulesCheckTimeMillisAllowed" />
-  <java-symbol type="integer" name="config_timeZoneRulesCheckRetryCount" />
   <java-symbol type="bool" name="config_sendAudioBecomingNoisy" />
   <java-symbol type="bool" name="config_enableScreenshotChord" />
   <java-symbol type="bool" name="config_enableWifiDisplay" />
@@ -750,7 +746,6 @@
   <java-symbol type="string" name="fileSizeSuffix" />
   <java-symbol type="string" name="force_close" />
   <java-symbol type="string" name="gadget_host_error_inflating" />
-  <java-symbol type="string" name="gigabyteShort" />
   <java-symbol type="string" name="gpsNotifMessage" />
   <java-symbol type="string" name="gpsNotifTicker" />
   <java-symbol type="string" name="gpsNotifTitle" />
@@ -807,7 +802,6 @@
   <java-symbol type="string" name="keyboardview_keycode_enter" />
   <java-symbol type="string" name="keyboardview_keycode_mode_change" />
   <java-symbol type="string" name="keyboardview_keycode_shift" />
-  <java-symbol type="string" name="kilobyteShort" />
   <java-symbol type="string" name="last_month" />
   <java-symbol type="string" name="launchBrowserDefault" />
   <java-symbol type="string" name="lock_to_app_unlock_pin" />
@@ -824,7 +818,6 @@
   <java-symbol type="string" name="lockscreen_emergency_call" />
   <java-symbol type="string" name="lockscreen_return_to_call" />
   <java-symbol type="string" name="low_memory" />
-  <java-symbol type="string" name="megabyteShort" />
   <java-symbol type="string" name="midnight" />
   <java-symbol type="string" name="mismatchPin" />
   <java-symbol type="string" name="mmiComplete" />
@@ -854,7 +847,6 @@
   <java-symbol type="string" name="passwordIncorrect" />
   <java-symbol type="string" name="perms_description_app" />
   <java-symbol type="string" name="perms_new_perm_prefix" />
-  <java-symbol type="string" name="petabyteShort" />
   <java-symbol type="string" name="peerTtyModeFull" />
   <java-symbol type="string" name="peerTtyModeHco" />
   <java-symbol type="string" name="peerTtyModeVco" />
@@ -1031,7 +1023,6 @@
   <java-symbol type="string" name="sync_really_delete" />
   <java-symbol type="string" name="sync_too_many_deletes_desc" />
   <java-symbol type="string" name="sync_undo_deletes" />
-  <java-symbol type="string" name="terabyteShort" />
   <java-symbol type="string" name="text_copied" />
   <java-symbol type="string" name="time_of_day" />
   <java-symbol type="string" name="time_picker_decrement_hour_button" />
@@ -1726,6 +1717,10 @@
   <java-symbol type="anim" name="task_fragment_close_exit" />
   <java-symbol type="anim" name="task_fragment_open_enter" />
   <java-symbol type="anim" name="task_fragment_open_exit" />
+  <java-symbol type="anim" name="task_fragment_clear_top_close_enter" />
+  <java-symbol type="anim" name="task_fragment_clear_top_close_exit" />
+  <java-symbol type="anim" name="task_fragment_clear_top_open_enter" />
+  <java-symbol type="anim" name="task_fragment_clear_top_open_exit" />
 
   <java-symbol type="array" name="config_autoRotationTiltTolerance" />
   <java-symbol type="array" name="config_longPressVibePattern" />
@@ -3133,12 +3128,16 @@
   <!-- Locale picker -->
   <java-symbol type="id" name="locale_search_menu" />
   <java-symbol type="layout" name="language_picker_item" />
+  <java-symbol type="layout" name="language_picker_bilingual_item" />
   <java-symbol type="layout" name="language_picker_section_header" />
+  <java-symbol type="layout" name="language_picker_bilingual_section_header" />
   <java-symbol type="menu" name="language_selection_list" />
   <java-symbol type="string" name="country_selection_title" />
   <java-symbol type="string" name="language_picker_section_all" />
   <java-symbol type="string" name="region_picker_section_all" />
   <java-symbol type="string" name="language_picker_section_suggested" />
+  <java-symbol type="string" name="language_picker_section_suggested_bilingual" />
+  <java-symbol type="string" name="region_picker_section_suggested_bilingual" />
   <java-symbol type="string" name="language_selection_title" />
   <java-symbol type="string" name="search_language_hint" />
 
@@ -4782,6 +4781,8 @@
 
   <java-symbol type="bool" name="config_enableSafetyCenter" />
 
+  <java-symbol type="bool" name="config_safetyProtectionEnabled" />
+
   <java-symbol type="string" name="config_devicePolicyManagementUpdater" />
 
   <java-symbol type="string" name="config_deviceSpecificDeviceStatePolicyProvider" />
@@ -4838,5 +4839,7 @@
   <java-symbol type="id" name="language_picker_header" />
 
   <java-symbol type="dimen" name="status_bar_height_default" />
+
+  <java-symbol type="bool" name="system_server_plays_face_haptics" />
   <java-symbol type="integer" name="config_maximumDelayTimeToDeactivateDataCall" />
 </resources>

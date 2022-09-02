@@ -31,10 +31,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.window.ImeOnBackInvokedDispatcher;
 
+import com.android.internal.inputmethod.IInlineSuggestionsRequestCallback;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
+import com.android.internal.inputmethod.InlineSuggestionsRequestInfo;
 import com.android.internal.inputmethod.InputMethodNavButtonFlags;
-import com.android.internal.view.IInlineSuggestionsRequestCallback;
-import com.android.internal.view.InlineSuggestionsRequestInfo;
 
 import java.util.List;
 
@@ -182,13 +182,13 @@ public interface InputMethod {
      * @param inputConnection Optional specific input connection for
      * communicating with the text box; if null, you should use the generic
      * bound input connection.
-     * @param info Information about the text box (typically, an EditText)
+     * @param editorInfo Information about the text box (typically, an EditText)
      *        that requests input.
      * 
      * @see EditorInfo
      */
     @MainThread
-    public void startInput(InputConnection inputConnection, EditorInfo info);
+    public void startInput(InputConnection inputConnection, EditorInfo editorInfo);
 
     /**
      * This method is called when the state of this input method needs to be
@@ -201,13 +201,13 @@ public interface InputMethod {
      * @param inputConnection Optional specific input connection for
      * communicating with the text box; if null, you should use the generic
      * bound input connection.
-     * @param attribute The attribute of the text box (typically, a EditText)
+     * @param editorInfo The attribute of the text box (typically, a EditText)
      *        that requests input.
      * 
      * @see EditorInfo
      */
     @MainThread
-    public void restartInput(InputConnection inputConnection, EditorInfo attribute);
+    public void restartInput(InputConnection inputConnection, EditorInfo editorInfo);
 
     /**
      * This method is called when {@code {@link #startInput(InputConnection, EditorInfo)} or
@@ -233,7 +233,7 @@ public interface InputMethod {
      *                        long as your implementation of {@link InputMethod} relies on such
      *                        IPCs
      * @param navButtonFlags {@link InputMethodNavButtonFlags} in the initial state of this session.
-     * @param imeDispatcher The {@link ImeOnBackInvokedDispatcher }} to be set on the
+     * @param imeDispatcher The {@link ImeOnBackInvokedDispatcher} to be set on the
      *                      IME's {@link android.window.WindowOnBackInvokedDispatcher}, so that IME
      *                      {@link android.window.OnBackInvokedCallback}s can be forwarded to
      *                      the client requesting to start input.

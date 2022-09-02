@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -50,9 +49,7 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group3
-@FlakyTest(bugId = 234848637)
 class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest(testSpec) {
-
     /**
      * Defines the transition used to run the test
      */
@@ -71,10 +68,7 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
                 }
             }
             transitions {
-                when (testSpec.isGesturalNavigation) {
-                    true -> pipApp.enterPipViaSwipeToHome(wmHelper)
-                    false -> pipApp.enterPipViaHomeButton(wmHelper)
-                }
+                tapl.goHome()
             }
         }
 

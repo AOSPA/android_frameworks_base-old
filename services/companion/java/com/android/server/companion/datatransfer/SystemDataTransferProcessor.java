@@ -24,13 +24,12 @@ import static android.content.ComponentName.createRelative;
 
 import static com.android.server.companion.Utils.prepareForIpc;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.PendingIntent;
 import android.companion.AssociationInfo;
 import android.companion.DeviceNotAssociatedException;
+import android.companion.ISystemDataTransferCallback;
 import android.companion.datatransfer.PermissionSyncRequest;
 import android.companion.datatransfer.SystemDataTransferRequest;
 import android.content.ComponentName;
@@ -39,25 +38,29 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.ParcelFileDescriptor;
 import android.os.ResultReceiver;
 import android.os.UserHandle;
+import android.permission.PermissionControllerManager;
 import android.util.Slog;
-import android.util.Xml;
+import android.util.SparseArray;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.server.companion.AssociationStore;
 import com.android.server.companion.CompanionDeviceManagerService;
 import com.android.server.companion.PermissionsUtils;
-import com.android.server.companion.datatransfer.permbackup.BackupHelper;
 import com.android.server.companion.proto.CompanionMessage;
 
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
+import libcore.io.IoUtils;
+import libcore.io.Streams;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * This processor builds user consent intent for a given SystemDataTransferRequest and processes the
@@ -83,6 +86,10 @@ public class SystemDataTransferProcessor {
     private final AssociationStore mAssociationStore;
     private final SystemDataTransferRequestStore mSystemDataTransferRequestStore;
     private final CompanionMessageProcessor mCompanionMessageProcessor;
+    private final PermissionControllerManager mPermissionControllerManager;
+    private final ExecutorService mExecutor;
+    @GuardedBy("mTransports")
+    private final SparseArray<Transport> mTransports = new SparseArray<>();
 
     public SystemDataTransferProcessor(CompanionDeviceManagerService service,
             AssociationStore associationStore,
@@ -93,13 +100,16 @@ public class SystemDataTransferProcessor {
         mSystemDataTransferRequestStore = systemDataTransferRequestStore;
         mCompanionMessageProcessor = companionMessageProcessor;
         mCompanionMessageProcessor.setListener(this::onCompleteMessageReceived);
+        mPermissionControllerManager = mContext.getSystemService(PermissionControllerManager.class);
+        mExecutor = Executors.newSingleThreadExecutor();
     }
 
     /**
-     * Build a PendingIntent of permission sync user consent dialog
+     * Resolve the requested association, throwing if the caller doesn't have
+     * adequate permissions.
      */
-    public PendingIntent buildPermissionTransferUserConsentIntent(String packageName,
-            @UserIdInt int userId, int associationId) {
+    private @NonNull AssociationInfo resolveAssociation(String packageName, int userId,
+            int associationId) {
         AssociationInfo association = mAssociationStore.getAssociationById(associationId);
         association = PermissionsUtils.sanitizeWithCallerChecks(mContext, association);
         if (association == null) {
@@ -107,6 +117,15 @@ public class SystemDataTransferProcessor {
                     + associationId + " is not associated with the app " + packageName
                     + " for user " + userId);
         }
+        return association;
+    }
+
+    /**
+     * Build a PendingIntent of permission sync user consent dialog
+     */
+    public PendingIntent buildPermissionTransferUserConsentIntent(String packageName,
+            @UserIdInt int userId, int associationId) {
+        final AssociationInfo association = resolveAssociation(packageName, userId, associationId);
 
         // Check if the request's data type has been requested before.
         List<SystemDataTransferRequest> storedRequests =
@@ -149,18 +168,15 @@ public class SystemDataTransferProcessor {
     /**
      * Start system data transfer. It should first try to establish a secure channel and then sync
      * system data.
+     *
+     * TODO: execute callback when the transfer finishes successfully or with errors.
      */
-    public void startSystemDataTransfer(String packageName, int userId, int associationId) {
+    public void startSystemDataTransfer(String packageName, int userId, int associationId,
+            ISystemDataTransferCallback callback) {
         Slog.i(LOG_TAG, "Start system data transfer for package [" + packageName
                 + "] userId [" + userId + "] associationId [" + associationId + "]");
 
-        AssociationInfo association = mAssociationStore.getAssociationById(associationId);
-        association = PermissionsUtils.sanitizeWithCallerChecks(mContext, association);
-        if (association == null) {
-            throw new DeviceNotAssociatedException("Association "
-                    + associationId + " is not associated with the app " + packageName
-                    + " for user " + userId);
-        }
+        final AssociationInfo association = resolveAssociation(packageName, userId, associationId);
 
         // Check if the request has been consented by the user.
         List<SystemDataTransferRequest> storedRequests =
@@ -180,25 +196,44 @@ public class SystemDataTransferProcessor {
 
         // TODO: Establish a secure channel
 
-        final long callingIdentityToken = Binder.clearCallingIdentity();
-
         // Start permission sync
+        final long callingIdentityToken = Binder.clearCallingIdentity();
         try {
-            BackupHelper backupHelper = new BackupHelper(mContext, UserHandle.of(userId));
-            XmlSerializer serializer = Xml.newSerializer();
-            ByteArrayOutputStream backup = new ByteArrayOutputStream();
-            serializer.setOutput(backup, UTF_8.name());
-
-            backupHelper.writeState(serializer);
-
-            serializer.flush();
-
-            mCompanionMessageProcessor.paginateAndDispatchMessagesToApp(backup.toByteArray(),
-                    CompanionMessage.PERMISSION_SYNC, packageName, userId, associationId);
-        } catch (IOException ioe) {
-            Slog.e(LOG_TAG, "Error while writing permission state.");
+            mPermissionControllerManager.getRuntimePermissionBackup(UserHandle.of(userId),
+                    mExecutor,
+                    backup -> mCompanionMessageProcessor.paginateAndDispatchMessagesToApp(backup,
+                        CompanionMessage.PERMISSION_SYNC, packageName, userId, associationId));
         } finally {
             Binder.restoreCallingIdentity(callingIdentityToken);
+        }
+    }
+
+    public void attachSystemDataTransport(String packageName, int userId, int associationId,
+            ParcelFileDescriptor fd) {
+        synchronized (mTransports) {
+            // TODO: restore once testing has evolved
+            // resolveAssociation(packageName, userId, associationId);
+
+            if (mTransports.contains(associationId)) {
+                detachSystemDataTransport(packageName, userId, associationId);
+            }
+
+            final Transport transport = new Transport(fd);
+            transport.start();
+            mTransports.put(associationId, transport);
+        }
+    }
+
+    public void detachSystemDataTransport(String packageName, int userId, int associationId) {
+        synchronized (mTransports) {
+            // TODO: restore once testing has evolved
+            // resolveAssociation(packageName, userId, associationId);
+
+            final Transport transport = mTransports.get(associationId);
+            if (transport != null) {
+                mTransports.delete(associationId);
+                transport.stop();
+            }
         }
     }
 
@@ -219,21 +254,11 @@ public class SystemDataTransferProcessor {
     private void processPermissionSyncMessage(CompanionMessageInfo messageInfo) {
         Slog.i(LOG_TAG, "Applying permissions.");
         // Start applying permissions
+        UserHandle user = mContext.getUser();
         final long callingIdentityToken = Binder.clearCallingIdentity();
         try {
-            BackupHelper backupHelper = new BackupHelper(mContext, mContext.getUser());
-            XmlPullParser parser = Xml.newPullParser();
-            ByteArrayInputStream stream = new ByteArrayInputStream(
-                    messageInfo.getData());
-            parser.setInput(stream, UTF_8.name());
-
-            backupHelper.restoreState(parser);
-        } catch (IOException e) {
-            Slog.e(LOG_TAG, "IOException reading message: "
-                    + new String(messageInfo.getData()));
-        } catch (XmlPullParserException e) {
-            Slog.e(LOG_TAG, "Error parsing message: "
-                    + new String(messageInfo.getData()));
+            mPermissionControllerManager.stageAndApplyRuntimePermissionsBackup(
+                    messageInfo.getData(), user);
         } finally {
             Slog.i(LOG_TAG, "Permissions applied.");
             Binder.restoreCallingIdentity(callingIdentityToken);
@@ -266,4 +291,74 @@ public class SystemDataTransferProcessor {
                     Slog.e(LOG_TAG, "Unknown result code:" + resultCode);
                 }
             };
+
+    private class Transport {
+        private final InputStream mRemoteIn;
+        private final OutputStream mRemoteOut;
+
+        private volatile boolean mStopped;
+
+        public Transport(ParcelFileDescriptor fd) {
+            mRemoteIn = new ParcelFileDescriptor.AutoCloseInputStream(fd);
+            mRemoteOut = new ParcelFileDescriptor.AutoCloseOutputStream(fd);
+        }
+
+        public void start() {
+            new Thread(() -> {
+                try {
+                    while (!mStopped) {
+                        processNextCommand();
+                    }
+                } catch (IOException e) {
+                    if (!mStopped) {
+                        Slog.w(LOG_TAG, "Trouble during transport", e);
+                        stop();
+                    }
+                }
+            }).start();
+        }
+
+        public void stop() {
+            mStopped = true;
+
+            IoUtils.closeQuietly(mRemoteIn);
+            IoUtils.closeQuietly(mRemoteOut);
+        }
+
+        private void processNextCommand() throws IOException {
+            Slog.d(LOG_TAG, "Waiting for next command...");
+
+            // Read message header
+            final byte[] headerBytes = new byte[8];
+            Streams.readFully(mRemoteIn, headerBytes);
+            final ByteBuffer header = ByteBuffer.wrap(headerBytes);
+            final int command = header.getInt();
+            final int length = header.getInt();
+
+            Slog.d(LOG_TAG, "Received command 0x" + Integer.toHexString(command)
+                    + " length " + length);
+            switch (command) {
+                case 0x50490000: // PI(NG) version 0
+                    // Repeat back the given payload, within reason
+                    final int target = Math.min(length, 1_000_000);
+                    final byte[] payload = new byte[target];
+                    Streams.readFully(mRemoteIn, payload);
+                    Streams.skipByReading(mRemoteIn, length - target);
+
+                    // Respond with PO(NG) version 0
+                    header.rewind();
+                    header.putInt(0x504F0000);
+                    header.putInt(target);
+                    mRemoteOut.write(header.array());
+                    mRemoteOut.write(payload);
+                    break;
+
+                default:
+                    // Emit local warning, and skip message to
+                    // handle next one
+                    Slog.w(LOG_TAG, "Unknown command 0x" + Integer.toHexString(command));
+                    mRemoteIn.skip(length);
+            }
+        }
+    }
 }

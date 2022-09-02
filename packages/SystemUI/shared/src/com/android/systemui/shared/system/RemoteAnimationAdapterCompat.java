@@ -105,7 +105,7 @@ public class RemoteAnimationAdapterCompat {
             }
 
             @Override
-            public void onAnimationCancelled() {
+            public void onAnimationCancelled(boolean isKeyguardOccluded) {
                 remoteAnimationAdapter.onAnimationCancelled();
             }
         };
@@ -114,6 +114,8 @@ public class RemoteAnimationAdapterCompat {
     private static IRemoteTransition.Stub wrapRemoteTransition(
             final RemoteAnimationRunnerCompat remoteAnimationAdapter) {
         return new IRemoteTransition.Stub() {
+            final ArrayMap<IBinder, Runnable> mFinishRunnables = new ArrayMap<>();
+
             @Override
             public void startAnimation(IBinder token, TransitionInfo info,
                     SurfaceControl.Transaction t,
@@ -218,9 +220,9 @@ public class RemoteAnimationAdapterCompat {
                         for (int i = info.getChanges().size() - 1; i >= 0; --i) {
                             info.getChanges().get(i).getLeash().release();
                         }
-                        for (int i = leashMap.size() - 1; i >= 0; --i) {
-                            leashMap.valueAt(i).release();
-                        }
+                        // Don't release here since launcher might still be using them. Instead
+                        // let launcher release them (eg. via RemoteAnimationTargets)
+                        leashMap.clear();
                         try {
                             finishCallback.onTransitionFinished(null /* wct */, finishTransaction);
                         } catch (RemoteException e) {
@@ -229,19 +231,32 @@ public class RemoteAnimationAdapterCompat {
                         }
                     }
                 };
+                synchronized (mFinishRunnables) {
+                    mFinishRunnables.put(token, animationFinishedCallback);
+                }
                 // TODO(bc-unlcok): Pass correct transit type.
-                remoteAnimationAdapter.onAnimationStart(
-                        TRANSIT_OLD_NONE,
-                        appsCompat, wallpapersCompat, nonAppsCompat,
-                        animationFinishedCallback);
+                remoteAnimationAdapter.onAnimationStart(TRANSIT_OLD_NONE,
+                        appsCompat, wallpapersCompat, nonAppsCompat, () -> {
+                            synchronized (mFinishRunnables) {
+                                if (mFinishRunnables.remove(token) == null) return;
+                            }
+                            animationFinishedCallback.run();
+                        });
             }
 
             @Override
             public void mergeAnimation(IBinder token, TransitionInfo info,
                     SurfaceControl.Transaction t, IBinder mergeTarget,
                     IRemoteTransitionFinishedCallback finishCallback) {
-                // TODO: hook up merge to recents onTaskAppeared if applicable. Until then, ignore
-                //       any incoming merges.
+                // TODO: hook up merge to recents onTaskAppeared if applicable. Until then, adapt
+                //       to legacy cancel.
+                final Runnable finishRunnable;
+                synchronized (mFinishRunnables) {
+                    finishRunnable = mFinishRunnables.remove(mergeTarget);
+                }
+                if (finishRunnable == null) return;
+                remoteAnimationAdapter.onAnimationCancelled();
+                finishRunnable.run();
             }
         };
     }

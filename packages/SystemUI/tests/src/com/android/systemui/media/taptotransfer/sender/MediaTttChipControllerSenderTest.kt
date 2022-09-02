@@ -25,9 +25,10 @@ import android.os.PowerManager
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.test.filters.SmallTest
 import com.android.internal.logging.testing.UiEventLoggerFake
@@ -67,6 +68,8 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
     @Mock
     private lateinit var logger: MediaTttLogger
     @Mock
+    private lateinit var accessibilityManager: AccessibilityManager
+    @Mock
     private lateinit var powerManager: PowerManager
     @Mock
     private lateinit var windowManager: WindowManager
@@ -95,8 +98,11 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
 
         fakeClock = FakeSystemClock()
         fakeExecutor = FakeExecutor(fakeClock)
+
         uiEventLoggerFake = UiEventLoggerFake()
         senderUiEventLogger = MediaTttSenderUiEventLogger(uiEventLoggerFake)
+
+        whenever(accessibilityManager.getRecommendedTimeoutMillis(any(), any())).thenReturn(TIMEOUT)
 
         controllerSender = MediaTttChipControllerSender(
             commandQueue,
@@ -105,6 +111,7 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
             windowManager,
             viewUtil,
             fakeExecutor,
+            accessibilityManager,
             TapGestureDetector(context),
             powerManager,
             senderUiEventLogger
@@ -592,7 +599,7 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
         fakeClock.advanceTime(1000L)
         controllerSender.removeChip("fakeRemovalReason")
 
-        fakeClock.advanceTime(state.state.timeout + 1)
+        fakeClock.advanceTime(TIMEOUT + 1L)
 
         verify(windowManager).removeView(any())
     }
@@ -615,27 +622,27 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
         fakeClock.advanceTime(1000L)
         controllerSender.removeChip("fakeRemovalReason")
 
-        fakeClock.advanceTime(state.state.timeout + 1)
+        fakeClock.advanceTime(TIMEOUT + 1L)
 
         verify(windowManager).removeView(any())
     }
 
-    private fun LinearLayout.getAppIconView() = this.requireViewById<ImageView>(R.id.app_icon)
+    private fun ViewGroup.getAppIconView() = this.requireViewById<ImageView>(R.id.app_icon)
 
-    private fun LinearLayout.getChipText(): String =
+    private fun ViewGroup.getChipText(): String =
         (this.requireViewById<TextView>(R.id.text)).text as String
 
-    private fun LinearLayout.getLoadingIconVisibility(): Int =
+    private fun ViewGroup.getLoadingIconVisibility(): Int =
         this.requireViewById<View>(R.id.loading).visibility
 
-    private fun LinearLayout.getUndoButton(): View = this.requireViewById(R.id.undo)
+    private fun ViewGroup.getUndoButton(): View = this.requireViewById(R.id.undo)
 
-    private fun LinearLayout.getFailureIcon(): View = this.requireViewById(R.id.failure_icon)
+    private fun ViewGroup.getFailureIcon(): View = this.requireViewById(R.id.failure_icon)
 
-    private fun getChipView(): LinearLayout {
+    private fun getChipView(): ViewGroup {
         val viewCaptor = ArgumentCaptor.forClass(View::class.java)
         verify(windowManager).addView(viewCaptor.capture(), any())
-        return viewCaptor.value as LinearLayout
+        return viewCaptor.value as ViewGroup
     }
 
     /** Helper method providing default parameters to not clutter up the tests. */
@@ -674,6 +681,7 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
 private const val APP_NAME = "Fake app name"
 private const val OTHER_DEVICE_NAME = "My Tablet"
 private const val PACKAGE_NAME = "com.android.systemui"
+private const val TIMEOUT = 10000
 
 private val routeInfo = MediaRoute2Info.Builder("id", OTHER_DEVICE_NAME)
     .addFeature("feature")

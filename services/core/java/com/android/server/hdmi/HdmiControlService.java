@@ -1331,13 +1331,11 @@ public class HdmiControlService extends SystemService {
      */
     private boolean sourceAddressIsLocal(HdmiCecMessage message) {
         for (HdmiCecLocalDevice device : getAllLocalDevices()) {
-            synchronized (device.mLock) {
-                if (message.getSource() == device.getDeviceInfo().getLogicalAddress()
-                        && message.getSource() != Constants.ADDR_UNREGISTERED) {
-                    HdmiLogger.warning(
-                            "Unexpected source: message sent from device itself, " + message);
-                    return true;
-                }
+            if (message.getSource() == device.getDeviceInfo().getLogicalAddress()
+                    && message.getSource() != Constants.ADDR_UNREGISTERED) {
+                HdmiLogger.warning(
+                        "Unexpected source: message sent from device itself, " + message);
+                return true;
             }
         }
         return false;
@@ -1560,9 +1558,7 @@ public class HdmiControlService extends SystemService {
             if (deviceInfo.getDisplayName().equals(newDisplayName)) {
                 continue;
             }
-            synchronized (device.mLock) {
-                device.setDeviceInfo(deviceInfo.toBuilder().setDisplayName(newDisplayName).build());
-            }
+            device.setDeviceInfo(deviceInfo.toBuilder().setDisplayName(newDisplayName).build());
             sendCecCommand(
                     HdmiCecMessageBuilder.buildSetOsdNameCommand(
                             deviceInfo.getLogicalAddress(), Constants.ADDR_TV, newDisplayName));
@@ -2728,6 +2724,15 @@ public class HdmiControlService extends SystemService {
         return mIsCecAvailable;
     }
 
+    /**
+     * Queries the display status of the TV and calls {@code callback} upon completion.
+     *
+     * If this is a non-source device, or if the query fails for any reason, the callback will
+     * be called with {@link HdmiControlManager.POWER_STATUS_UNKNOWN}.
+     *
+     * If the query succeeds, the callback will be called with one of the other power status
+     * constants.
+     */
     @ServiceThreadOnly
     protected void queryDisplayStatus(final IHdmiControlCallback callback) {
         assertRunOnServiceThread();
@@ -2745,7 +2750,7 @@ public class HdmiControlService extends SystemService {
 
         if (source == null) {
             Slog.w(TAG, "Local source device not available");
-            invokeCallback(callback, HdmiControlManager.RESULT_SOURCE_NOT_AVAILABLE);
+            invokeCallback(callback, HdmiControlManager.POWER_STATUS_UNKNOWN);
             return;
         }
         source.queryDisplayStatus(callback);
@@ -3114,13 +3119,7 @@ public class HdmiControlService extends SystemService {
         if (isEnabled == HdmiControlManager.HDMI_CEC_CONTROL_ENABLED) {
             queryDisplayStatus(new IHdmiControlCallback.Stub() {
                 public void onComplete(int status) {
-                    if (status == HdmiControlManager.POWER_STATUS_UNKNOWN
-                            || status == HdmiControlManager.RESULT_EXCEPTION
-                            || status == HdmiControlManager.RESULT_SOURCE_NOT_AVAILABLE) {
-                        mIsCecAvailable = false;
-                    } else {
-                        mIsCecAvailable = true;
-                    }
+                    mIsCecAvailable = status != HdmiControlManager.POWER_STATUS_UNKNOWN;
                     if (!listeners.isEmpty()) {
                         invokeHdmiControlStatusChangeListenerLocked(listeners,
                                 isEnabled, mIsCecAvailable);
@@ -4096,10 +4095,7 @@ public class HdmiControlService extends SystemService {
         public void onAudioDeviceVolumeChanged(
                 @NonNull AudioDeviceAttributes audioDevice,
                 @NonNull VolumeInfo volumeInfo) {
-            int localDeviceAddress;
-            synchronized (mLocalDevice.mLock) {
-                localDeviceAddress = mLocalDevice.getDeviceInfo().getLogicalAddress();
-            }
+            int localDeviceAddress = mLocalDevice.getDeviceInfo().getLogicalAddress();
             sendCecCommand(SetAudioVolumeLevelMessage.build(
                             localDeviceAddress,
                             mSystemAudioDevice.getLogicalAddress(),

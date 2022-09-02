@@ -32,14 +32,14 @@ import android.view.inputmethod.InputBinding;
 import android.view.inputmethod.InputMethodSubtype;
 import android.window.ImeOnBackInvokedDispatcher;
 
+import com.android.internal.inputmethod.IInlineSuggestionsRequestCallback;
+import com.android.internal.inputmethod.IInputMethod;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
+import com.android.internal.inputmethod.IInputMethodSession;
+import com.android.internal.inputmethod.IInputMethodSessionCallback;
 import com.android.internal.inputmethod.IRemoteInputConnection;
+import com.android.internal.inputmethod.InlineSuggestionsRequestInfo;
 import com.android.internal.inputmethod.InputMethodNavButtonFlags;
-import com.android.internal.view.IInlineSuggestionsRequestCallback;
-import com.android.internal.view.IInputMethod;
-import com.android.internal.view.IInputMethodSession;
-import com.android.internal.view.IInputSessionCallback;
-import com.android.internal.view.InlineSuggestionsRequestInfo;
 
 import java.util.List;
 
@@ -149,10 +149,11 @@ final class IInputMethodInvoker {
 
     @AnyThread
     void startInput(IBinder startInputToken, IRemoteInputConnection inputConnection,
-            EditorInfo attribute, boolean restarting, @InputMethodNavButtonFlags int navButtonFlags,
+            EditorInfo editorInfo, boolean restarting,
+            @InputMethodNavButtonFlags int navButtonFlags,
             @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
         try {
-            mTarget.startInput(startInputToken, inputConnection, attribute, restarting,
+            mTarget.startInput(startInputToken, inputConnection, editorInfo, restarting,
                     navButtonFlags, imeDispatcher);
         } catch (RemoteException e) {
             logRemoteException(e);
@@ -169,7 +170,7 @@ final class IInputMethodInvoker {
     }
 
     @AnyThread
-    void createSession(InputChannel channel, IInputSessionCallback callback) {
+    void createSession(InputChannel channel, IInputMethodSessionCallback callback) {
         try {
             mTarget.createSession(channel, callback);
         } catch (RemoteException e) {

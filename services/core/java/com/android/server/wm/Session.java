@@ -115,8 +115,6 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     private float mLastReportedAnimatorScale;
     private String mPackageName;
     private String mRelayoutTag;
-    private String mUpdateViewVisibilityTag;
-    private String mUpdateWindowLayoutTag;
     private final InsetsVisibilities mDummyRequestedVisibilities = new InsetsVisibilities();
     private final InsetsSourceControl[] mDummyControls =  new InsetsSourceControl[0];
     final boolean mSetsUnrestrictedKeepClearAreas;
@@ -195,27 +193,28 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     public int addToDisplay(IWindow window, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, InsetsVisibilities requestedVisibilities,
             InputChannel outInputChannel, InsetsState outInsetsState,
-            InsetsSourceControl[] outActiveControls) {
+            InsetsSourceControl[] outActiveControls, Rect outAttachedFrame) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId,
                 UserHandle.getUserId(mUid), requestedVisibilities, outInputChannel, outInsetsState,
-                outActiveControls);
+                outActiveControls, outAttachedFrame);
     }
 
     @Override
     public int addToDisplayAsUser(IWindow window, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, int userId, InsetsVisibilities requestedVisibilities,
             InputChannel outInputChannel, InsetsState outInsetsState,
-            InsetsSourceControl[] outActiveControls) {
+            InsetsSourceControl[] outActiveControls, Rect outAttachedFrame) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId, userId,
-                requestedVisibilities, outInputChannel, outInsetsState, outActiveControls);
+                requestedVisibilities, outInputChannel, outInsetsState, outActiveControls,
+                outAttachedFrame);
     }
 
     @Override
     public int addToDisplayWithoutInputChannel(IWindow window, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, InsetsState outInsetsState) {
+            int viewVisibility, int displayId, InsetsState outInsetsState, Rect outAttachedFrame) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId,
                 UserHandle.getUserId(mUid), mDummyRequestedVisibilities, null /* outInputChannel */,
-                outInsetsState, mDummyControls);
+                outInsetsState, mDummyControls, outAttachedFrame);
     }
 
     @Override
@@ -224,29 +223,13 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public int updateVisibility(IWindow client, WindowManager.LayoutParams attrs,
-            int viewVisibility, MergedConfiguration outMergedConfiguration,
-            SurfaceControl outSurfaceControl, InsetsState outInsetsState,
-            InsetsSourceControl[] outActiveControls) {
-        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, mUpdateViewVisibilityTag);
-        int res = mService.updateViewVisibility(this, client, attrs, viewVisibility,
-                outMergedConfiguration, outSurfaceControl, outInsetsState, outActiveControls);
-        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
-        return res;
-    }
-
-    @Override
-    public void updateLayout(IWindow window, WindowManager.LayoutParams attrs, int flags,
-            ClientWindowFrames clientFrames, int requestedWidth, int requestedHeight) {
-        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, mUpdateWindowLayoutTag);
-        mService.updateWindowLayout(this, window, attrs, flags, clientFrames, requestedWidth,
-                requestedHeight);
-        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
-    }
-
-    @Override
     public void prepareToReplaceWindows(IBinder appToken, boolean childrenOnly) {
         mService.setWillReplaceWindows(appToken, childrenOnly);
+    }
+
+    @Override
+    public boolean cancelDraw(IWindow window) {
+        return mService.cancelDraw(this, window);
     }
 
     @Override
@@ -711,8 +694,6 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             if (wpc != null) {
                 mPackageName = wpc.mInfo.packageName;
                 mRelayoutTag = "relayoutWindow: " + mPackageName;
-                mUpdateViewVisibilityTag = "updateVisibility: " + mPackageName;
-                mUpdateWindowLayoutTag = "updateLayout: " + mPackageName;
             } else {
                 Slog.e(TAG_WM, "Unknown process pid=" + mPid);
             }

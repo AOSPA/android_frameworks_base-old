@@ -89,6 +89,7 @@ import com.android.systemui.statusbar.notification.collection.notifcollection.In
 import com.android.systemui.statusbar.notification.collection.notifcollection.InternalNotifUpdater;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionLogger;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionLoggerKt;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifDismissInterceptor;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifEvent;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
@@ -104,11 +105,13 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import javax.inject.Inject;
@@ -137,7 +140,7 @@ import javax.inject.Inject;
  */
 @MainThread
 @SysUISingleton
-public class NotifCollection implements Dumpable {
+public class NotifCollection implements Dumpable, PipelineDumpable {
     private final IStatusBarService mStatusBarService;
     private final SystemClock mClock;
     private final NotifPipelineFlags mNotifPipelineFlags;
@@ -155,6 +158,8 @@ public class NotifCollection implements Dumpable {
     private final List<NotifCollectionListener> mNotifCollectionListeners = new ArrayList<>();
     private final List<NotifLifetimeExtender> mLifetimeExtenders = new ArrayList<>();
     private final List<NotifDismissInterceptor> mDismissInterceptors = new ArrayList<>();
+
+    private Set<String> mNotificationsWithoutRankings = Collections.emptySet();
 
     private Queue<NotifEvent> mEventQueue = new ArrayDeque<>();
 
@@ -266,13 +271,14 @@ public class NotifCollection implements Dumpable {
             requireNonNull(stats);
             NotificationEntry storedEntry = mNotificationSet.get(entry.getKey());
             if (storedEntry == null) {
-                mLogger.logNonExistentNotifDismissed(entry.getKey());
+                mLogger.logNonExistentNotifDismissed(entry);
                 continue;
             }
             if (entry != storedEntry) {
                 throw mEulogizer.record(
                         new IllegalStateException("Invalid entry: "
-                                + "different stored and dismissed entries for " + entry.getKey()));
+                                + "different stored and dismissed entries for " + logKey(entry)
+                                + " stored=@" + Integer.toHexString(storedEntry.hashCode())));
             }
 
             if (entry.getDismissState() == DISMISSED) {
@@ -281,7 +287,7 @@ public class NotifCollection implements Dumpable {
 
             updateDismissInterceptors(entry);
             if (isDismissIntercepted(entry)) {
-                mLogger.logNotifDismissedIntercepted(entry.getKey());
+                mLogger.logNotifDismissedIntercepted(entry);
                 continue;
             }
 
@@ -298,7 +304,7 @@ public class NotifCollection implements Dumpable {
                             stats.notificationVisibility);
                 } catch (RemoteException e) {
                     // system process is dead if we're here.
-                    mLogger.logRemoteExceptionOnNotificationClear(entry.getKey(), e);
+                    mLogger.logRemoteExceptionOnNotificationClear(entry, e);
                 }
             }
         }
@@ -341,7 +347,7 @@ public class NotifCollection implements Dumpable {
                 // interceptors the chance to filter the notification
                 updateDismissInterceptors(entry);
                 if (isDismissIntercepted(entry)) {
-                    mLogger.logNotifClearAllDismissalIntercepted(entry.getKey());
+                    mLogger.logNotifClearAllDismissalIntercepted(entry);
                 }
                 entries.remove(i);
             }
@@ -362,7 +368,7 @@ public class NotifCollection implements Dumpable {
             NotificationEntry entry = entries.get(i);
 
             entry.setDismissState(DISMISSED);
-            mLogger.logNotifDismissed(entry.getKey());
+            mLogger.logNotifDismissed(entry);
 
             if (isCanceled(entry)) {
                 canceledEntries.add(entry);
@@ -415,12 +421,12 @@ public class NotifCollection implements Dumpable {
             int reason) {
         Assert.isMainThread();
 
-        mLogger.logNotifRemoved(sbn.getKey(), reason);
+        mLogger.logNotifRemoved(sbn, reason);
 
         final NotificationEntry entry = mNotificationSet.get(sbn.getKey());
         if (entry == null) {
             // TODO (b/160008901): Throw an exception here
-            mLogger.logNoNotificationToRemoveWithKey(sbn.getKey(), reason);
+            mLogger.logNoNotificationToRemoveWithKey(sbn, reason);
             return;
         }
 
@@ -463,7 +469,7 @@ public class NotifCollection implements Dumpable {
             mEventQueue.add(new BindEntryEvent(entry, sbn));
             mNotificationSet.put(sbn.getKey(), entry);
 
-            mLogger.logNotifPosted(sbn.getKey());
+            mLogger.logNotifPosted(entry);
             mEventQueue.add(new EntryAddedEvent(entry));
 
         } else {
@@ -482,7 +488,7 @@ public class NotifCollection implements Dumpable {
             entry.setSbn(sbn);
             mEventQueue.add(new BindEntryEvent(entry, sbn));
 
-            mLogger.logNotifUpdated(sbn.getKey());
+            mLogger.logNotifUpdated(entry);
             mEventQueue.add(new EntryUpdatedEvent(entry, true /* fromSystem */));
         }
     }
@@ -497,12 +503,12 @@ public class NotifCollection implements Dumpable {
         if (mNotificationSet.get(entry.getKey()) != entry) {
             throw mEulogizer.record(
                     new IllegalStateException("No notification to remove with key "
-                            + entry.getKey()));
+                            + logKey(entry)));
         }
 
         if (!isCanceled(entry)) {
             throw mEulogizer.record(
-                    new IllegalStateException("Cannot remove notification " + entry.getKey()
+                    new IllegalStateException("Cannot remove notification " + logKey(entry)
                             + ": has not been marked for removal"));
         }
 
@@ -513,7 +519,7 @@ public class NotifCollection implements Dumpable {
         }
 
         if (!isLifetimeExtended(entry)) {
-            mLogger.logNotifReleased(entry.getKey());
+            mLogger.logNotifReleased(entry);
             mNotificationSet.remove(entry.getKey());
             cancelDismissInterception(entry);
             mEventQueue.add(new EntryRemovedEvent(entry, entry.mCancellationReason));
@@ -558,6 +564,7 @@ public class NotifCollection implements Dumpable {
     }
 
     private void applyRanking(@NonNull RankingMap rankingMap) {
+        ArrayMap<String, NotificationEntry> currentEntriesWithoutRankings = null;
         for (NotificationEntry entry : mNotificationSet.values()) {
             if (!isCanceled(entry)) {
 
@@ -579,8 +586,25 @@ public class NotifCollection implements Dumpable {
                         }
                     }
                 } else {
-                    mLogger.logRankingMissing(entry.getKey(), rankingMap);
+                    if (currentEntriesWithoutRankings == null) {
+                        currentEntriesWithoutRankings = new ArrayMap<>();
+                    }
+                    currentEntriesWithoutRankings.put(entry.getKey(), entry);
                 }
+            }
+        }
+        NotifCollectionLoggerKt.maybeLogInconsistentRankings(
+                mLogger,
+                mNotificationsWithoutRankings,
+                currentEntriesWithoutRankings,
+                rankingMap
+        );
+        mNotificationsWithoutRankings = currentEntriesWithoutRankings == null
+                ? Collections.emptySet() : currentEntriesWithoutRankings.keySet();
+        if (currentEntriesWithoutRankings != null && mNotifPipelineFlags.removeUnrankedNotifs()) {
+            for (NotificationEntry entry : currentEntriesWithoutRankings.values()) {
+                entry.mCancellationReason = REASON_UNKNOWN;
+                tryRemoveNotification(entry);
             }
         }
         mEventQueue.add(new RankingAppliedEvent());
@@ -626,10 +650,7 @@ public class NotifCollection implements Dumpable {
                             extender.getName(), logKey, collectionEntryIs)));
         }
 
-        mLogger.logLifetimeExtensionEnded(
-                entry.getKey(),
-                extender,
-                entry.mLifetimeExtenders.size());
+        mLogger.logLifetimeExtensionEnded(entry, extender, entry.mLifetimeExtenders.size());
 
         if (!isLifetimeExtended(entry)) {
             if (tryRemoveNotification(entry)) {
@@ -656,7 +677,7 @@ public class NotifCollection implements Dumpable {
         mAmDispatchingToOtherCode = true;
         for (NotifLifetimeExtender extender : mLifetimeExtenders) {
             if (extender.maybeExtendLifetime(entry, entry.mCancellationReason)) {
-                mLogger.logLifetimeExtended(entry.getKey(), extender);
+                mLogger.logLifetimeExtended(entry, extender);
                 entry.mLifetimeExtenders.add(extender);
             }
         }
@@ -829,16 +850,27 @@ public class NotifCollection implements Dumpable {
     @Override
     public void dump(PrintWriter pw, @NonNull String[] args) {
         final List<NotificationEntry> entries = new ArrayList<>(getAllNotifs());
+        entries.sort(Comparator.comparing(NotificationEntry::getKey));
 
-        pw.println("\t" + TAG + " unsorted/unfiltered notifications:");
-        if (entries.size() == 0) {
-            pw.println("\t\t None");
-        }
+        pw.println("\t" + TAG + " unsorted/unfiltered notifications: " + entries.size());
         pw.println(
                 ListDumper.dumpList(
                         entries,
                         true,
                         "\t\t"));
+
+        pw.println("\n\tmNotificationsWithoutRankings: " + mNotificationsWithoutRankings.size());
+        for (String key : mNotificationsWithoutRankings) {
+            pw.println("\t * : " + key);
+        }
+    }
+
+    @Override
+    public void dumpPipeline(@NonNull PipelineDumper d) {
+        d.dump("notifCollectionListeners", mNotifCollectionListeners);
+        d.dump("lifetimeExtenders", mLifetimeExtenders);
+        d.dump("dismissInterceptors", mDismissInterceptors);
+        d.dump("buildListener", mBuildListener);
     }
 
     private final BatchableNotificationHandler mNotifHandler = new BatchableNotificationHandler() {
@@ -917,17 +949,17 @@ public class NotifCollection implements Dumpable {
         // Make sure we have the notification to update
         NotificationEntry entry = mNotificationSet.get(sbn.getKey());
         if (entry == null) {
-            mLogger.logNotifInternalUpdateFailed(sbn.getKey(), name, reason);
+            mLogger.logNotifInternalUpdateFailed(sbn, name, reason);
             return;
         }
-        mLogger.logNotifInternalUpdate(sbn.getKey(), name, reason);
+        mLogger.logNotifInternalUpdate(entry, name, reason);
 
         // First do the pieces of postNotification which are not about assuming the notification
         // was sent by the app
         entry.setSbn(sbn);
         mEventQueue.add(new BindEntryEvent(entry, sbn));
 
-        mLogger.logNotifUpdated(sbn.getKey());
+        mLogger.logNotifUpdated(entry);
         mEventQueue.add(new EntryUpdatedEvent(entry, false /* fromSystem */));
 
         // Skip the applyRanking step and go straight to dispatching the events

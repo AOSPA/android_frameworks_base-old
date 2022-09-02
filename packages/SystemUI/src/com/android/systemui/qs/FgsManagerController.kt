@@ -40,13 +40,17 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.annotation.GuardedBy
+import androidx.annotation.VisibleForTesting
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags.TASK_MANAGER_ENABLED
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags.TASK_MANAGER_SHOW_FOOTER_DOT
+import com.android.internal.config.sysui.SystemUiDeviceConfigFlags.TASK_MANAGER_SHOW_STOP_BUTTON_FOR_USER_ALLOWLISTED_APPS
+import com.android.internal.jank.InteractionJankMonitor
 import com.android.systemui.Dumpable
 import com.android.systemui.R
+import com.android.systemui.animation.DialogCuj
 import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.dagger.SysUISingleton
@@ -81,9 +85,11 @@ class FgsManagerController @Inject constructor(
 ) : IForegroundServiceObserver.Stub(), Dumpable {
 
     companion object {
+        private const val INTERACTION_JANK_TAG = "active_background_apps"
         private val LOG_TAG = FgsManagerController::class.java.simpleName
         private const val DEFAULT_TASK_MANAGER_ENABLED = true
         private const val DEFAULT_TASK_MANAGER_SHOW_FOOTER_DOT = false
+        private const val DEFAULT_TASK_MANAGER_SHOW_STOP_BUTTON_FOR_USER_ALLOWLISTED_APPS = true
     }
 
     var changesSinceDialog = false
@@ -92,6 +98,8 @@ class FgsManagerController @Inject constructor(
     var isAvailable = false
         private set
     var showFooterDot = false
+        private set
+    var showStopBtnForUserAllowlistedApps = false
         private set
 
     private val lock = Any()
@@ -160,6 +168,9 @@ class FgsManagerController @Inject constructor(
                 isAvailable = it.getBoolean(TASK_MANAGER_ENABLED, isAvailable)
                 showFooterDot =
                     it.getBoolean(TASK_MANAGER_SHOW_FOOTER_DOT, showFooterDot)
+                showStopBtnForUserAllowlistedApps = it.getBoolean(
+                    TASK_MANAGER_SHOW_STOP_BUTTON_FOR_USER_ALLOWLISTED_APPS,
+                    showStopBtnForUserAllowlistedApps)
             }
 
             isAvailable = deviceConfigProxy.getBoolean(
@@ -170,6 +181,10 @@ class FgsManagerController @Inject constructor(
                 NAMESPACE_SYSTEMUI,
                 TASK_MANAGER_SHOW_FOOTER_DOT, DEFAULT_TASK_MANAGER_SHOW_FOOTER_DOT
             )
+            showStopBtnForUserAllowlistedApps = deviceConfigProxy.getBoolean(
+                NAMESPACE_SYSTEMUI,
+                TASK_MANAGER_SHOW_STOP_BUTTON_FOR_USER_ALLOWLISTED_APPS,
+                DEFAULT_TASK_MANAGER_SHOW_STOP_BUTTON_FOR_USER_ALLOWLISTED_APPS)
 
             dumpManager.registerDumpable(this)
 
@@ -272,6 +287,20 @@ class FgsManagerController @Inject constructor(
         }
     }
 
+    @VisibleForTesting
+    @JvmName("getNumVisibleButtons")
+    internal fun getNumVisibleButtons(): Int {
+        synchronized(lock) {
+            return getNumVisibleButtonsLocked()
+        }
+    }
+
+    private fun getNumVisibleButtonsLocked(): Int {
+        return runningServiceTokens.keys.count {
+            it.uiControl != UIControl.HIDE_BUTTON && currentProfileIds.contains(it.userId)
+        }
+    }
+
     fun shouldUpdateFooterVisibility() = dialog == null
 
     fun showDialog(viewLaunchedFrom: View?) {
@@ -311,7 +340,15 @@ class FgsManagerController @Inject constructor(
 
                 mainExecutor.execute {
                     viewLaunchedFrom
-                        ?.let { dialogLaunchAnimator.showFromView(dialog, it) } ?: dialog.show()
+                        ?.let {
+                            dialogLaunchAnimator.showFromView(
+                                dialog, it,
+                                cuj = DialogCuj(
+                                    InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN,
+                                    INTERACTION_JANK_TAG
+                                )
+                            )
+                        } ?: dialog.show()
                 }
 
                 backgroundExecutor.execute {
@@ -331,7 +368,8 @@ class FgsManagerController @Inject constructor(
         }
 
         val addedPackages = runningServiceTokens.keys.filter {
-            it.uiControl != UIControl.HIDE_ENTRY && runningApps[it]?.stopped != true
+            currentProfileIds.contains(it.userId) &&
+                    it.uiControl != UIControl.HIDE_ENTRY && runningApps[it]?.stopped != true
         }
         val removedPackages = runningApps.keys.filter { !runningServiceTokens.containsKey(it) }
 
@@ -493,6 +531,13 @@ class FgsManagerController @Inject constructor(
                 PowerExemptionManager.REASON_PROC_STATE_PERSISTENT_UI,
                 PowerExemptionManager.REASON_ROLE_DIALER,
                 PowerExemptionManager.REASON_SYSTEM_MODULE -> UIControl.HIDE_BUTTON
+
+                PowerExemptionManager.REASON_ALLOWLISTED_PACKAGE ->
+                    if (showStopBtnForUserAllowlistedApps) {
+                        UIControl.NORMAL
+                    } else {
+                        UIControl.HIDE_BUTTON
+                    }
                 else -> UIControl.NORMAL
             }
             uiControlInitialized = true

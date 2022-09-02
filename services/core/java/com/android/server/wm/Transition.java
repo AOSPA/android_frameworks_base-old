@@ -149,9 +149,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
     final @TransitionType int mType;
     private int mSyncId = -1;
-    // Used for tracking a Transition throughout a lifecycle (i.e. from STATE_COLLECTING to
-    // STATE_FINISHED or STATE_ABORT), and should only be used for testing and debugging.
-    private int mDebugId = -1;
     private @TransitionFlags int mFlags;
     private final TransitionController mController;
     private final BLASTSyncEngine mSyncEngine;
@@ -229,7 +226,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
         if (restoreBelow != null) {
             final ChangeInfo info = mChanges.get(restoreBelow);
-            info.mFlags |= ChangeInfo.FLAG_ABOVE_TRANSIENT_LAUNCH;
+            if (info != null) {
+                info.mFlags |= ChangeInfo.FLAG_ABOVE_TRANSIENT_LAUNCH;
+            }
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Transition %d: Set %s as "
                 + "transient-launch", mSyncId, activity);
@@ -293,14 +292,23 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         return mSyncId;
     }
 
-    @VisibleForTesting
-    int getDebugId() {
-        return mDebugId;
-    }
-
     @TransitionFlags
     int getFlags() {
         return mFlags;
+    }
+
+    @VisibleForTesting
+    SurfaceControl.Transaction getStartTransaction() {
+        return mStartTransaction;
+    }
+
+    @VisibleForTesting
+    SurfaceControl.Transaction getFinishTransaction() {
+        return mFinishTransaction;
+    }
+
+    private boolean isCollecting() {
+        return mState == STATE_COLLECTING || mState == STATE_STARTED;
     }
 
     /** Starts collecting phase. Once this starts, all relevant surface operations are sync. */
@@ -310,7 +318,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
         mState = STATE_COLLECTING;
         mSyncId = mSyncEngine.startSyncSet(this, timeoutMs, TAG);
-        mDebugId = mSyncId;
 
         mController.mTransitionTracer.logState(this);
     }
@@ -341,7 +348,10 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (mState < STATE_COLLECTING) {
             throw new IllegalStateException("Transition hasn't started collecting.");
         }
-        if (mSyncId < 0) return;
+        if (!isCollecting()) {
+            // Too late, transition already started playing, so don't collect.
+            return;
+        }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Collecting in transition %d: %s",
                 mSyncId, wc);
         // "snapshot" all parents (as potential promotion targets). Do this before checking
@@ -391,7 +401,10 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
      * or waiting until after the animation to close).
      */
     void collectExistenceChange(@NonNull WindowContainer wc) {
-        if (mSyncId < 0) return;
+        if (mState >= STATE_PLAYING) {
+            // Too late to collect. Don't check too-early here since `collect` will check that.
+            return;
+        }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Existence Changed in transition %d:"
                 + " %s", mSyncId, wc);
         collect(wc);
@@ -425,7 +438,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
      */
     void setOverrideAnimation(TransitionInfo.AnimationOptions options,
             @Nullable IRemoteCallback startCallback, @Nullable IRemoteCallback finishCallback) {
-        if (mSyncId < 0) return;
+        if (!isCollecting()) return;
         mOverrideOptions = options;
         sendRemoteCallback(mClientAnimationStartCallback);
         mClientAnimationStartCallback = startCallback;
@@ -443,7 +456,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
      *           The transition will wait for all groups to be ready.
      */
     void setReady(WindowContainer wc, boolean ready) {
-        if (mSyncId < 0) return;
+        if (!isCollecting() || mSyncId < 0) return;
         mReadyTracker.setReadyFrom(wc, ready);
         applyReady();
     }
@@ -461,7 +474,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
      * @see ReadyTracker#setAllReady.
      */
     void setAllReady() {
-        if (mSyncId < 0) return;
+        if (!isCollecting() || mSyncId < 0) return;
         mReadyTracker.setAllReady();
         applyReady();
     }
@@ -769,6 +782,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
 
         mState = STATE_PLAYING;
+        mStartTransaction = transaction;
+        mFinishTransaction = mController.mAtm.mWindowManager.mTransactionFactory.get();
         mController.moveToPlaying(this);
 
         if (dc.isKeyguardLocked()) {
@@ -854,8 +869,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (controller != null && mTargets.contains(dc)) {
             controller.setupStartTransaction(transaction);
         }
-        mStartTransaction = transaction;
-        mFinishTransaction = mController.mAtm.mWindowManager.mTransactionFactory.get();
         buildFinishTransaction(mFinishTransaction, info.getRootLeash());
         if (mController.getTransitionPlayer() != null) {
             mController.dispatchLegacyAppTransitionStarting(info);
@@ -877,7 +890,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             // No player registered, so just finish/apply immediately
             cleanUpOnFailure();
         }
-        mSyncId = -1;
         mOverrideOptions = null;
 
         reportStartReasonsToLogger();
@@ -1602,7 +1614,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     }
 
     boolean getLegacyIsReady() {
-        return (mState == STATE_STARTED || mState == STATE_COLLECTING) && mSyncId >= 0;
+        return isCollecting() && mSyncId >= 0;
     }
 
     static Transition fromBinder(IBinder binder) {

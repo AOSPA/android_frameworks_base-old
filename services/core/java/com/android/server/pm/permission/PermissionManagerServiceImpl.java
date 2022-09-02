@@ -122,6 +122,7 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
+import com.android.server.PermissionThread;
 import com.android.server.ServiceThread;
 import com.android.server.SystemConfig;
 import com.android.server.Watchdog;
@@ -524,7 +525,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
         final int callingUserId = UserHandle.getUserId(callingUid);
         out.removeIf(it -> mPackageManagerInt.filterAppAccess(it.packageName, callingUid,
-                callingUserId));
+                callingUserId, false /* filterUninstalled */));
         return out;
     }
 
@@ -549,7 +550,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
         final int callingUserId = UserHandle.getUserId(callingUid);
         if (mPackageManagerInt.filterAppAccess(permissionGroupInfo.packageName, callingUid,
-                callingUserId)) {
+                callingUserId, false /* filterUninstalled */)) {
             EventLog.writeEvent(0x534e4554, "186113473", callingUid, groupName);
             return null;
         }
@@ -579,7 +580,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
         final int callingUserId = UserHandle.getUserId(callingUid);
         if (mPackageManagerInt.filterAppAccess(permissionInfo.packageName, callingUid,
-                callingUserId)) {
+                callingUserId, false /* filterUninstalled */)) {
             EventLog.writeEvent(0x534e4554, "183122164", callingUid, permName);
             return null;
         }
@@ -624,11 +625,12 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
         final int callingUserId = UserHandle.getUserId(callingUid);
         if (permissionGroup != null && mPackageManagerInt.filterAppAccess(
-                permissionGroup.getPackageName(), callingUid, callingUserId)) {
+                permissionGroup.getPackageName(), callingUid, callingUserId,
+                false /* filterUninstalled */)) {
             return null;
         }
         out.removeIf(it -> mPackageManagerInt.filterAppAccess(it.packageName, callingUid,
-                callingUserId));
+                callingUserId, false /* filterUninstalled */));
         return out;
     }
 
@@ -710,7 +712,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         if (pkg == null) {
             return 0;
         }
-        if (mPackageManagerInt.filterAppAccess(pkg, callingUid, userId)) {
+        if (mPackageManagerInt.filterAppAccess(packageName, callingUid, userId,
+                false /* filterUninstalled */)) {
             return 0;
         }
 
@@ -820,7 +823,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             Log.e(TAG, "Unknown package: " + packageName);
             return;
         }
-        if (mPackageManagerInt.filterAppAccess(pkg, callingUid, userId)) {
+        if (mPackageManagerInt.filterAppAccess(packageName, callingUid, userId,
+                false /* filterUninstalled */)) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
 
@@ -946,7 +950,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             @NonNull String permissionName, @UserIdInt int userId) {
         final int callingUid = Binder.getCallingUid();
         if (isPackageExplicit || pkg.getSharedUserId() == null) {
-            if (mPackageManagerInt.filterAppAccess(pkg, callingUid, userId)) {
+            if (mPackageManagerInt.filterAppAccess(pkg.getPackageName(), callingUid, userId,
+                    false /* filterUninstalled */)) {
                 return PackageManager.PERMISSION_DENIED;
             }
         } else {
@@ -1082,7 +1087,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         }
 
         final int callingUid = Binder.getCallingUid();
-        if (mPackageManagerInt.filterAppAccess(pkg, callingUid, UserHandle.getCallingUserId())) {
+        if (mPackageManagerInt.filterAppAccess(packageName, callingUid,
+                UserHandle.getCallingUserId(), false /* filterUninstalled */)) {
             return null;
         }
         final boolean isCallerPrivileged = mContext.checkCallingOrSelfPermission(
@@ -1196,7 +1202,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        if (mPackageManagerInt.filterAppAccess(permissionPackageName, callingUid, callingUserId)) {
+        if (mPackageManagerInt.filterAppAccess(permissionPackageName, callingUid, callingUserId,
+                false /* filterUninstalled */)) {
             EventLog.writeEvent(0x534e4554, "186404356", callingUid, permName);
             return false;
         }
@@ -1254,7 +1261,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         }
 
         final int callingUid = Binder.getCallingUid();
-        if (mPackageManagerInt.filterAppAccess(pkg, callingUid, UserHandle.getCallingUserId())) {
+        if (mPackageManagerInt.filterAppAccess(packageName, callingUid,
+                UserHandle.getCallingUserId(), false /* filterUninstalled */)) {
             return false;
         }
 
@@ -1353,7 +1361,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             Log.e(TAG, "Unknown package: " + packageName);
             return;
         }
-        if (mPackageManagerInt.filterAppAccess(pkg, callingUid, userId)) {
+        if (mPackageManagerInt.filterAppAccess(packageName, callingUid, userId,
+                false /* filterUninstalled */)) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
 
@@ -1550,7 +1559,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             Log.e(TAG, "Unknown package: " + packageName);
             return;
         }
-        if (mPackageManagerInt.filterAppAccess(pkg, callingUid, userId)) {
+        if (mPackageManagerInt.filterAppAccess(packageName, callingUid, userId,
+                false /* filterUninstalled */)) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
 
@@ -1966,7 +1976,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         }
 
         final int callingUid = Binder.getCallingUid();
-        if (mPackageManagerInt.filterAppAccess(packageName, callingUid, userId)) {
+        if (mPackageManagerInt.filterAppAccess(packageName, callingUid, userId,
+                false /* filterUninstalled */)) {
             return false;
         }
 
@@ -1994,7 +2005,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         Preconditions.checkArgumentNonNegative(userId, "userId");
         CompletableFuture<byte[]> backup = new CompletableFuture<>();
         mPermissionControllerManager.getRuntimePermissionBackup(UserHandle.of(userId),
-                mContext.getMainExecutor(), backup::complete);
+                PermissionThread.getExecutor(), backup::complete);
 
         try {
             return backup.get(BACKUP_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
@@ -2045,7 +2056,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             }
         }
         mPermissionControllerManager.applyStagedRuntimePermissionBackup(packageName,
-                UserHandle.of(userId), mContext.getMainExecutor(), (hasMoreBackup) -> {
+                UserHandle.of(userId), PermissionThread.getExecutor(), (hasMoreBackup) -> {
                     if (hasMoreBackup) {
                         return;
                     }
@@ -4433,9 +4444,9 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             }
         }
 
-        mPermissionControllerManager = mContext.getSystemService(PermissionControllerManager.class);
-        mPermissionPolicyInternal = LocalServices.getService(PermissionPolicyInternal.class);
-    }
+        mPermissionControllerManager = new PermissionControllerManager(
+                mContext, PermissionThread.getHandler());
+        mPermissionPolicyInternal = LocalServices.getService(PermissionPolicyInternal.class);    }
 
     private static String getVolumeUuidForPackage(AndroidPackage pkg) {
         if (pkg == null) {

@@ -116,7 +116,6 @@ public class AppTransitionController {
     private final DisplayContent mDisplayContent;
     private final WallpaperController mWallpaperControllerLocked;
     private RemoteAnimationDefinition mRemoteAnimationDefinition = null;
-    private static final int KEYGUARD_GOING_AWAY_ANIMATION_DURATION = 400;
 
     private static final int TYPE_NONE = 0;
     private static final int TYPE_ACTIVITY = 1;
@@ -465,6 +464,16 @@ public class AppTransitionController {
             return TRANSIT_OLD_WALLPAPER_OPEN;
         }
 
+        // Some devices don't show a wallpaper. In that case we should still trigger wallpaper
+        // transitions when animating to/from the home activity
+        if (wallpaperTarget == null) {
+            if (topOpeningApp != null && topOpeningApp.isActivityTypeHome()) {
+                return TRANSIT_OLD_WALLPAPER_OPEN;
+            } else if (topClosingApp != null && topClosingApp.isActivityTypeHome()) {
+                return TRANSIT_OLD_WALLPAPER_CLOSE;
+            }
+        }
+
         final ArraySet<WindowContainer> openingWcs = getAnimationTargets(
                 openingApps, closingApps, true /* visible */);
         final ArraySet<WindowContainer> closingWcs = getAnimationTargets(
@@ -693,7 +702,8 @@ public class AppTransitionController {
         if (adapter == null) {
             return false;
         }
-        mDisplayContent.mAppTransition.overridePendingAppTransitionRemote(adapter);
+        mDisplayContent.mAppTransition.overridePendingAppTransitionRemote(
+                adapter, false /* sync */, true /*isActivityEmbedding*/);
         ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
                 "Override with TaskFragment remote animation for transit=%s",
                 AppTransition.appTransitionOldToString(transit));
@@ -726,14 +736,17 @@ public class AppTransitionController {
      */
     private void overrideWithRemoteAnimationIfSet(@Nullable ActivityRecord animLpActivity,
             @TransitionOldType int transit, ArraySet<Integer> activityTypes) {
+        RemoteAnimationAdapter adapter = null;
         if (transit == TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE) {
             // The crash transition has higher priority than any involved remote animations.
-            return;
+        } else if (AppTransition.isKeyguardGoingAwayTransitOld(transit)) {
+            adapter = mRemoteAnimationDefinition != null
+                    ? mRemoteAnimationDefinition.getAdapter(transit, activityTypes)
+                    : null;
+        } else if (mDisplayContent.mAppTransition.getRemoteAnimationController() == null) {
+            adapter = getRemoteAnimationOverride(animLpActivity, transit, activityTypes);
         }
-        final RemoteAnimationAdapter adapter =
-                getRemoteAnimationOverride(animLpActivity, transit, activityTypes);
-        if (adapter != null
-                && mDisplayContent.mAppTransition.getRemoteAnimationController() == null) {
+        if (adapter != null) {
             mDisplayContent.mAppTransition.overridePendingAppTransitionRemote(adapter);
         }
     }
@@ -928,7 +941,6 @@ public class AppTransitionController {
                 // TODO(b/213312721): Remove this once ShellTransition is enabled.
                 continue;
             } else if (parent == null || !parent.canCreateRemoteAnimationTarget()
-                    || !parent.canBeAnimationTarget()
                     // We cannot promote the animation on Task's parent when the task is in
                     // clearing task in case the animating get stuck when performing the opening
                     // task that behind it.

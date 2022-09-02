@@ -87,7 +87,7 @@ import javax.inject.Inject;
  */
 @MainThread
 @SysUISingleton
-public class ShadeListBuilder implements Dumpable {
+public class ShadeListBuilder implements Dumpable, PipelineDumpable {
     private final SystemClock mSystemClock;
     private final ShadeListBuilderLogger mLogger;
     private final NotificationInteractionTracker mInteractionTracker;
@@ -579,11 +579,7 @@ public class ShadeListBuilder implements Dumpable {
                     if (existingSummary == null) {
                         group.setSummary(entry);
                     } else {
-                        mLogger.logDuplicateSummary(
-                                mIterationCount,
-                                group.getKey(),
-                                existingSummary.getKey(),
-                                entry.getKey());
+                        mLogger.logDuplicateSummary(mIterationCount, group, existingSummary, entry);
 
                         // Use whichever one was posted most recently
                         if (entry.getSbn().getPostTime()
@@ -1084,7 +1080,7 @@ public class ShadeListBuilder implements Dumpable {
         if (!Objects.equals(curr, prev)) {
             mLogger.logEntryAttachStateChanged(
                     mIterationCount,
-                    entry.getKey(),
+                    entry,
                     prev.getParent(),
                     curr.getParent());
 
@@ -1395,6 +1391,21 @@ public class ShadeListBuilder implements Dumpable {
                 mInteractionTracker,
                 true,
                 "\t\t"));
+    }
+
+    @Override
+    public void dumpPipeline(@NonNull PipelineDumper d) {
+        d.dump("choreographer", mChoreographer);
+        d.dump("notifPreGroupFilters", mNotifPreGroupFilters);
+        d.dump("onBeforeTransformGroupsListeners", mOnBeforeTransformGroupsListeners);
+        d.dump("notifPromoters", mNotifPromoters);
+        d.dump("onBeforeSortListeners", mOnBeforeSortListeners);
+        d.dump("notifSections", mNotifSections);
+        d.dump("notifComparators", mNotifComparators);
+        d.dump("onBeforeFinalizeFilterListeners", mOnBeforeFinalizeFilterListeners);
+        d.dump("notifFinalizeFilters", mNotifFinalizeFilters);
+        d.dump("onBeforeRenderListListeners", mOnBeforeRenderListListeners);
+        d.dump("onRenderListListener", mOnRenderListListener);
     }
 
     /** See {@link #setOnRenderListListener(OnRenderListListener)} */

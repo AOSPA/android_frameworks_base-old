@@ -20,23 +20,11 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <!-- Suffix added to a number to signify size in bytes. -->
     <string name="byteShort">B</string>
-    <!-- Suffix added to a number to signify size in kilobytes (1000 bytes).
-        If you retain the Latin script for the localization, please use the lowercase
-        'k', as it signifies 1000 bytes as opposed to 1024 bytes. -->
-    <string name="kilobyteShort">kB</string>
-    <!-- Suffix added to a number to signify size in megabytes. -->
-    <string name="megabyteShort">MB</string>
-    <!-- Suffix added to a number to signify size in gigabytes. -->
-    <string name="gigabyteShort">GB</string>
-    <!-- Suffix added to a number to signify size in terabytes. -->
-    <string name="terabyteShort">TB</string>
-    <!-- Suffix added to a number to signify size in petabytes. -->
-    <string name="petabyteShort">PB</string>
-    <!-- Format string used to add a suffix like "kB" or "MB" to a number
-         to display a size in kilobytes, megabytes, or other size units.
-         Some languages (like French) will want to add a space between
-         the placeholders. -->
-    <string name="fileSizeSuffix"><xliff:g id="number" example="123">%1$s</xliff:g> <xliff:g id="unit" example="MB">%2$s</xliff:g></string>
+    <!-- Format string used to add a suffix like "B" to a number
+         to display a size in bytes.
+         Some languages may want to remove the space between the placeholders
+         or replace it with a non-breaking space. -->
+    <string name="fileSizeSuffix"><xliff:g id="number" example="123">%1$s</xliff:g> <xliff:g id="unit" example="B">%2$s</xliff:g></string>
 
     <!-- Used in Contacts for a field that has no label and in Note Pad
          for a note with no name. -->
@@ -1631,6 +1619,11 @@
     <string name="permlab_postNotification">show notifications</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
     <string name="permdesc_postNotification">Allows the app to show notifications</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permlab_turnScreenOn">turn on the screen</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permdesc_turnScreenOn">Allows the app to turn on the screen.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
     <string name="permlab_useBiometric">use biometric hardware</string>
@@ -5435,6 +5428,11 @@
 
     <!-- List section subheader for the language picker, containing a list of suggested languages determined by the default region [CHAR LIMIT=30] -->
     <string name="language_picker_section_suggested">Suggested</string>
+
+    <!-- List section subheader for the language picker, containing a list of suggested languages determined by the default region [CHAR LIMIT=30] -->
+    <string name="language_picker_section_suggested_bilingual">Suggested languages</string>
+    <!-- List section subheader for the language picker, containing a list of suggested regions determined by the default region [CHAR LIMIT=30] -->
+    <string name="region_picker_section_suggested_bilingual">Suggested regions</string>
     <!-- List section subheader for the language picker, containing a list of all languages available [CHAR LIMIT=30] -->
     <string name="language_picker_section_all">All languages</string>
     <!-- List section subheader for the region picker, containing a list of all regions supported for the selected language.
@@ -5837,9 +5835,9 @@
     <!-- The user visible name of the notification channel for the routine mode battery saver fyi notification [CHAR_LIMIT=80]-->
     <string name="dynamic_mode_notification_channel_name">Routine Mode info notification</string>
     <!-- Title of notification letting users know why battery saver was turned on automatically [CHAR_LIMIT=NONE]-->
-    <string name="dynamic_mode_notification_title">Battery may run out before usual charge</string>
+    <string name="dynamic_mode_notification_title">Battery Saver turned on</string>
     <!-- Summary of notification letting users know why battery saver was turned on automatically [CHAR_LIMIT=NONE]-->
-    <string name="dynamic_mode_notification_summary">Battery Saver activated to extend battery life</string>
+    <string name="dynamic_mode_notification_summary">Reducing battery usage to extend battery life</string>
 
     <!-- Battery saver strings -->
     <!-- The user visible name of the notification channel for battery saver notifications [CHAR_LIMIT=80] -->

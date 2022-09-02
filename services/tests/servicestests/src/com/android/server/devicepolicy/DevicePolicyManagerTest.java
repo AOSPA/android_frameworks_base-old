@@ -3360,9 +3360,11 @@ public class DevicePolicyManagerTest extends DpmTestBase {
             assertThat(dpmi.isActiveSupervisionApp(uid)).isTrue();
             assertThat(dpm.getProfileOwnerOrDeviceOwnerSupervisionComponent(user))
                         .isEqualTo(admin1);
+            assertThat(dpm.isSupervisionComponent(admin1)).isTrue();
         } else {
             assertThat(dpmi.isActiveSupervisionApp(uid)).isFalse();
             assertThat(dpm.getProfileOwnerOrDeviceOwnerSupervisionComponent(user)).isNull();
+            assertThat(dpm.isSupervisionComponent(admin1)).isFalse();
         }
     }
 
@@ -7846,7 +7848,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         setDeviceOwner();
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
         when(getServices().ipackageManager.getBlockUninstallForUser(
-                eq(packageName), eq(UserHandle.USER_SYSTEM)))
+                eq(packageName), eq(UserHandle.getCallingUserId())))
                 .thenReturn(true);
 
         assertThat(dpm.isUninstallBlocked(admin1, packageName)).isTrue();

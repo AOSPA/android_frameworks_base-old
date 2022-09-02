@@ -352,7 +352,6 @@ import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BackgroundThread;
-import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.BinderCallHeavyHitterWatcher.BinderCallHeavyHitterListener;
 import com.android.internal.os.BinderCallHeavyHitterWatcher.HeavyHitterContainer;
 import com.android.internal.os.BinderInternal;
@@ -413,6 +412,7 @@ import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.SELinuxUtil;
 import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import com.android.server.pm.snapshot.PackageDataSnapshot;
+import com.android.server.power.stats.BatteryStatsImpl;
 import com.android.server.sdksandbox.SdkSandboxManagerLocal;
 import com.android.server.uri.GrantUri;
 import com.android.server.uri.NeededUriGrants;
@@ -3822,7 +3822,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                     final Intent intent = new Intent(Intent.ACTION_PACKAGE_DATA_CLEARED,
                             Uri.fromParts("package", packageName, null));
-                    intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+                    intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND
+                            | Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
                     intent.putExtra(Intent.EXTRA_UID, (appInfo != null) ? appInfo.uid : -1);
                     intent.putExtra(Intent.EXTRA_USER_HANDLE, resolvedUserId);
                     final int[] visibilityAllowList =
@@ -8838,7 +8839,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static String processClass(ProcessRecord process) {
         if (process == null || process.getPid() == MY_PID) {
             return "system_server";
-        } else if ((process.info.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+        } else if (process.info.isSystemApp() || process.info.isSystemExt()) {
             return "system_app";
         } else {
             return "data_app";
@@ -8873,8 +8874,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         // otherwise the watchdog may be prevented from resetting the system.
 
         // Bail early if not published yet
-        if (ServiceManager.getService(Context.DROPBOX_SERVICE) == null) return;
-        final DropBoxManager dbox = mContext.getSystemService(DropBoxManager.class);
+        final DropBoxManager dbox;
+        try {
+            dbox = mContext.getSystemService(DropBoxManager.class);
+        } catch (Exception e) {
+            return;
+        }
 
         // Exit early if the dropbox isn't configured to accept this report type.
         final String dropboxTag = processClass(process) + "_" + eventType;
@@ -12585,6 +12590,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public PendingIntent getRunningServiceControlPanel(ComponentName name) {
         enforceNotIsolatedCaller("getRunningServiceControlPanel");
+        final int callingUid = Binder.getCallingUid();
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        if (name == null || getPackageManagerInternal()
+                .filterAppAccess(name.getPackageName(), callingUid, callingUserId)) {
+            return null;
+        }
         synchronized (this) {
             return mServices.getRunningServiceControlPanelLocked(name);
         }
@@ -15388,6 +15399,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                             app.processName, app.toShortString(), cpuLimit, app)) {
                     mHandler.post(() -> {
                         synchronized (ActivityManagerService.this) {
+                            if (app.getThread() == null
+                               || app.mState.getSetProcState() < ActivityManager.PROCESS_STATE_HOME) {
+                                   return;
+                            }
                             app.killLocked("excessive cpu " + cpuTimeUsed + " during "
                                     + uptimeSince + " dur=" + checkDur + " limit=" + cpuLimit,
                                     ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
@@ -15413,6 +15428,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                             app.processName, r.toString(), cpuLimit, app)) {
                     mHandler.post(() -> {
                         synchronized (ActivityManagerService.this) {
+                            if (app.getThread() == null
+                               || app.mState.getSetProcState() < ActivityManager.PROCESS_STATE_HOME) {
+                                   return;
+                            }
                             mPhantomProcessList.killPhantomProcessGroupLocked(app, r,
                                     ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
                                     ApplicationExitInfo.SUBREASON_EXCESSIVE_CPU,

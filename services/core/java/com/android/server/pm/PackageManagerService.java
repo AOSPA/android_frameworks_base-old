@@ -753,7 +753,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
      * List of packages waiting for rollback to be enabled.
      * Handler thread only!
      */
-    final SparseArray<VerificationParams> mPendingEnableRollback = new SparseArray<>();
+    final SparseArray<VerifyingSession> mPendingEnableRollback = new SparseArray<>();
 
     final PackageInstallerService mInstallerService;
 
@@ -858,7 +858,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     final PendingPackageBroadcasts mPendingBroadcasts;
 
     static final int SEND_PENDING_BROADCAST = 1;
-    static final int INIT_COPY = 5;
+    // public static final int UNUSED = 5;
     static final int POST_INSTALL = 9;
     static final int WRITE_SETTINGS = 13;
     static final int WRITE_PACKAGE_RESTRICTIONS = 14;
@@ -2870,12 +2870,15 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mDexOptHelper.performPackageDexOptUpgradeIfNeeded();
     }
 
-
     private void notifyPackageUseInternal(String packageName, int reason) {
         long time = System.currentTimeMillis();
-        commitPackageStateMutation(null, packageName, packageState -> {
-            packageState.setLastPackageUsageTime(reason, time);
-        });
+        synchronized (mLock) {
+            final PackageSetting pkgSetting = mSettings.getPackageLPr(packageName);
+            if (pkgSetting == null) {
+                return;
+            }
+            pkgSetting.getPkgState().setLastPackageUsageTimeInMills(reason, time);
+        }
     }
 
     /*package*/ DexManager getDexManager() {
@@ -6790,6 +6793,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     }
 
     long deleteOatArtifactsOfPackage(@NonNull Computer snapshot, String packageName) {
+        PackageManagerServiceUtils.enforceSystemOrRootOrShell(
+                "Only the system or shell can delete oat artifacts");
+
         PackageStateInternal packageState = snapshot.getPackageStateInternal(packageName);
         if (packageState == null || packageState.getPkg() == null) {
             return -1; // error code of deleteOptimizedFiles

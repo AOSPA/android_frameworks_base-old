@@ -16,14 +16,13 @@
 
 package com.android.server.wm.flicker.launch
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.RequiresDevice
 import android.view.WindowInsets
 import android.view.WindowManager
-import android.platform.test.annotations.FlakyTest
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
-import com.android.launcher3.tapl.LauncherInstrumentation
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
@@ -53,10 +52,8 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
 @Postsubmit
-open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter)
-    : OpenAppTransition(testSpec) {
-    protected val taplInstrumentation = LauncherInstrumentation()
-
+open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
+    OpenAppTransition(testSpec) {
     override val testApp: NotificationAppHelper = NotificationAppHelper(instrumentation)
 
     open val openingNotificationsFromLockScreen = false
@@ -70,10 +67,14 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter)
                 }
                 eachRun {
                     testApp.launchViaIntent(wmHelper)
-                    wmHelper.waitForFullScreenApp(testApp.component)
-                    testApp.postNotification(device, wmHelper)
-                    device.pressHome()
-                    wmHelper.waitForAppTransitionIdle()
+                    wmHelper.StateSyncBuilder()
+                        .withFullScreenApp(testApp.component)
+                        .waitForAndVerify()
+                    testApp.postNotification(wmHelper)
+                    tapl.goHome()
+                    wmHelper.StateSyncBuilder()
+                        .withHomeActivityVisible()
+                        .waitForAndVerify()
                 }
             }
 
@@ -106,7 +107,9 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter)
                 instrumentation.uiAutomation.syncInputTransactions()
 
                 // Wait for the app to launch
-                wmHelper.waitForFullScreenApp(testApp.component)
+                wmHelper.StateSyncBuilder()
+                    .withFullScreenApp(testApp.component)
+                    .waitForAndVerify()
             }
 
             teardown {
@@ -179,6 +182,32 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter)
         Assume.assumeTrue(isShellTransitionsEnabled)
         super.appWindowBecomesTopWindow()
     }
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarWindowIsVisible() = super.statusBarWindowIsVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     companion object {
         /**

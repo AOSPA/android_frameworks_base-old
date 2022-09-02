@@ -661,13 +661,7 @@
     <!-- When large clock is showing, offset the smartspace by this amount -->
     <dimen name="keyguard_smartspace_top_offset">12dp</dimen>
     <!-- With the large clock, move up slightly from the center -->
-    <dimen name="keyguard_large_clock_top_margin">-60dp</dimen>
-
-    <!-- TODO: Remove during migration -->
-    <!-- Default line spacing multiplier between hours and minutes of the keyguard clock -->
-    <item name="keyguard_clock_line_spacing_scale" type="dimen" format="float">.7</item>
-    <!-- Burmese line spacing multiplier between hours and minutes of the keyguard clock -->
-    <item name="keyguard_clock_line_spacing_scale_burmese" type="dimen" format="float">1</item>
+    <dimen name="keyguard_large_clock_top_padding">100dp</dimen>
 
     <dimen name="notification_scrim_corner_radius">32dp</dimen>
 
@@ -890,11 +884,6 @@
          burn-in on AOD. -->
     <dimen name="burn_in_prevention_offset_y_clock">42dp</dimen>
 
-    <!-- Clock maximum font size (dp is intentional, to prevent any further scaling) -->
-     <!-- TODO: Remove when clock migration complete -->
-    <dimen name="large_clock_text_size">150dp</dimen>
-    <dimen name="clock_text_size">86dp</dimen>
-
     <!-- The maximum offset in either direction that icons move to prevent burn-in on AOD. -->
     <dimen name="default_burn_in_prevention_offset">15dp</dimen>
 
@@ -1062,6 +1051,7 @@
     <!-- Since the generic icon isn't circular, we need to scale it down so it still fits within
          the circular chip. -->
     <dimen name="media_ttt_generic_icon_size_receiver">70dp</dimen>
+    <dimen name="media_ttt_receiver_vert_translation">20dp</dimen>
 
     <!-- Window magnification -->
     <dimen name="magnification_border_drag_size">35dp</dimen>
@@ -1250,6 +1240,15 @@
 
     <!-- Maximum overshoot for the pulse expansion -->
     <dimen name="pulse_expansion_max_top_overshoot">32dp</dimen>
+
+    <!-- The drag amount required for the split shade to fully expand. -->
+    <dimen name="split_shade_full_transition_distance">200dp</dimen>
+    <!--
+        The drag amount required for the scrim to fully fade in when expanding the split shade.
+        Currently setting it a little longer than the full shade transition distance, to avoid
+        having a state where the screen is fully black without any content showing.
+    -->
+    <dimen name="split_shade_scrim_transition_distance">300dp</dimen>
 
     <!-- Alpha in duration in ms for the auth ripple to become fully vislble. If set to 0,
          it is immediately visible. -->
@@ -1498,6 +1497,10 @@
     <dimen name="dream_overlay_complication_margin">0dp</dimen>
 
     <dimen name="dream_overlay_y_offset">80dp</dimen>
+
+    <dimen name="dream_aqi_badge_corner_radius">28dp</dimen>
+    <dimen name="dream_aqi_badge_padding_vertical">6dp</dimen>
+    <dimen name="dream_aqi_badge_padding_horizontal">16dp</dimen>
 
     <dimen name="status_view_margin_horizontal">0dp</dimen>
 

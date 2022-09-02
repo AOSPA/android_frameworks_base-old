@@ -1856,6 +1856,11 @@ class Task extends TaskFragment {
         if (getRequestedOverrideWindowingMode() == WINDOWING_MODE_UNDEFINED) {
             nextPersistTaskBounds = newParentConfig.windowConfiguration.persistTaskBounds();
         }
+        // Only restore to the last non-fullscreen bounds when the requested override bounds
+        // have not been explicitly set already.
+        nextPersistTaskBounds &=
+                (getRequestedOverrideConfiguration().windowConfiguration.getBounds() == null
+                || getRequestedOverrideConfiguration().windowConfiguration.getBounds().isEmpty());
         if (!prevPersistTaskBounds && nextPersistTaskBounds
                 && mLastNonFullscreenBounds != null && !mLastNonFullscreenBounds.isEmpty()) {
             // Bypass onRequestedOverrideConfigurationChanged here to avoid infinite loop.
@@ -3617,30 +3622,35 @@ class Task extends TaskFragment {
     }
 
     @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder(128);
-        if (stringName != null) {
-            sb.append(stringName);
-            sb.append(" U=");
-            sb.append(mUserId);
-            final Task rootTask = getRootTask();
-            if (rootTask != this) {
-                sb.append(" rootTaskId=");
-                sb.append(rootTask.mTaskId);
-            }
-            sb.append(" visible=");
-            sb.append(shouldBeVisible(null /* starting */));
-            sb.append(" visibleRequested=");
-            sb.append(isVisibleRequested());
-            sb.append(" mode=");
-            sb.append(windowingModeToString(getWindowingMode()));
-            sb.append(" translucent=");
-            sb.append(isTranslucent(null /* starting */));
-            sb.append(" sz=");
-            sb.append(getChildCount());
-            sb.append('}');
-            return sb.toString();
+    String toFullString() {
+        final StringBuilder sb = new StringBuilder(192);
+        sb.append(this);
+        sb.setLength(sb.length() - 1); // Remove tail '}'.
+        sb.append(" U=");
+        sb.append(mUserId);
+        final Task rootTask = getRootTask();
+        if (rootTask != this) {
+            sb.append(" rootTaskId=");
+            sb.append(rootTask.mTaskId);
         }
+        sb.append(" visible=");
+        sb.append(shouldBeVisible(null /* starting */));
+        sb.append(" visibleRequested=");
+        sb.append(isVisibleRequested());
+        sb.append(" mode=");
+        sb.append(windowingModeToString(getWindowingMode()));
+        sb.append(" translucent=");
+        sb.append(isTranslucent(null /* starting */));
+        sb.append(" sz=");
+        sb.append(getChildCount());
+        sb.append('}');
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        if (stringName != null) return stringName;
+        StringBuilder sb = new StringBuilder(128);
         sb.append("Task{");
         sb.append(Integer.toHexString(System.identityHashCode(this)));
         sb.append(" #");
@@ -3655,11 +3665,9 @@ class Task extends TaskFragment {
         } else if (affinityIntent != null && affinityIntent.getComponent() != null) {
             sb.append(" aI=");
             sb.append(affinityIntent.getComponent().flattenToShortString());
-        } else {
-            sb.append(" ??");
         }
-        stringName = sb.toString();
-        return toString();
+        sb.append('}');
+        return stringName = sb.toString();
     }
 
     /**
@@ -4425,13 +4433,13 @@ class Task extends TaskFragment {
                     : WINDOWING_MODE_FULLSCREEN;
         }
         if (currentMode == WINDOWING_MODE_PINNED) {
+            // In the case that we've disabled affecting the SysUI flags as a part of seamlessly
+            // transferring the transform on the leash to the task, reset this state once we're
+            // moving out of pip
+            setCanAffectSystemUiFlags(true);
             mRootWindowContainer.notifyActivityPipModeChanged(this, null);
         }
         if (likelyResolvedMode == WINDOWING_MODE_PINNED) {
-            // In the case that we've disabled affecting the SysUI flags as a part of seamlessly
-            // transferring the transform on the leash to the task, reset this state once we've
-            // actually entered pip
-            setCanAffectSystemUiFlags(true);
             if (taskDisplayArea.getRootPinnedTask() != null) {
                 // Can only have 1 pip at a time, so replace an existing pip
                 taskDisplayArea.getRootPinnedTask().dismissPip();

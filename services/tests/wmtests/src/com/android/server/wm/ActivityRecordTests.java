@@ -29,6 +29,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
+import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
+import static android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
 import static android.content.pm.ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_ALWAYS;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_DEFAULT;
@@ -181,6 +183,10 @@ import java.util.function.Consumer;
 public class ActivityRecordTests extends WindowTestsBase {
 
     private final String mPackageName = getInstrumentation().getTargetContext().getPackageName();
+
+    private static final int ORIENTATION_CONFIG_CHANGES =
+            CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT | CONFIG_SCREEN_SIZE
+                    | CONFIG_SMALLEST_SCREEN_SIZE;
 
     @Before
     public void setUp() throws Exception {
@@ -487,7 +493,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testSetRequestedOrientationUpdatesConfiguration() throws Exception {
         final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
-                .setConfigChanges(CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT)
+                .setConfigChanges(ORIENTATION_CONFIG_CHANGES)
                 .build();
         activity.setState(RESUMED, "Testing");
 
@@ -710,7 +716,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setLaunchTaskBehind(true)
-                .setConfigChanges(CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT)
+                .setConfigChanges(ORIENTATION_CONFIG_CHANGES)
                 .build();
         final Task task = activity.getTask();
         activity.setState(STOPPED, "Testing");
@@ -779,7 +785,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                     }
 
                     @Override
-                    public void onAnimationCancelled() {
+                    public void onAnimationCancelled(boolean isKeyguardOccluded) {
                     }
                 }, 0, 0));
         activity.updateOptionsLocked(opts);
@@ -1996,7 +2002,8 @@ public class ActivityRecordTests extends WindowTestsBase {
                     any() /* window */,  any() /* attrs */,
                     anyInt() /* viewVisibility */, anyInt() /* displayId */,
                     any() /* requestedVisibilities */, any() /* outInputChannel */,
-                    any() /* outInsetsState */, any() /* outActiveControls */);
+                    any() /* outInsetsState */, any() /* outActiveControls */,
+                    any() /* outAttachedFrame */);
             mAtm.mWindowManager.mStartingSurfaceController
                     .createTaskSnapshotSurface(activity, snapshot);
         } catch (RemoteException ignored) {
@@ -2820,11 +2827,17 @@ public class ActivityRecordTests extends WindowTestsBase {
                 true, false, false, false);
         waitUntilHandlersIdle();
 
+        final WindowState startingWindow = activityTop.mStartingWindow;
+        assertNotNull(startingWindow);
+
         // Make the top one invisible, and try transferring the starting window from the top to the
         // bottom one.
         activityTop.setVisibility(false, false);
         activityBottom.transferStartingWindowFromHiddenAboveTokenIfNeeded();
         waitUntilHandlersIdle();
+
+        // Expect getFrozenInsetsState will be null when transferring the starting window.
+        assertNull(startingWindow.getFrozenInsetsState());
 
         // Assert that the bottom window now has the starting window.
         assertNoStartingWindow(activityTop);

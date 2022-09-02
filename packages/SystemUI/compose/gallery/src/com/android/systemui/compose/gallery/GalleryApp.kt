@@ -30,7 +30,8 @@ import com.android.systemui.compose.theme.SystemUITheme
 enum class Screen {
     Home,
     Typography,
-    Colors,
+    MaterialColors,
+    AndroidColors,
     ExampleFeature,
 }
 
@@ -49,7 +50,8 @@ private fun MainContent() {
                 )
             }
             composable(Screen.Typography.name) { TypographyScreen() }
-            composable(Screen.Colors.name) { ColorsScreen() }
+            composable(Screen.MaterialColors.name) { MaterialColorsScreen() }
+            composable(Screen.AndroidColors.name) { AndroidColorsScreen() }
             composable(Screen.ExampleFeature.name) { ExampleFeatureScreen() }
         }
     }
@@ -67,30 +69,29 @@ fun GalleryApp(
     val systemFontScale = LocalDensity.current.fontScale
     var fontScale: FontScale by remember {
         mutableStateOf(
-            FontScale
-                .values()
-                .firstOrNull { it.scale == systemFontScale }
-                ?: FontScale.Normal
+            FontScale.values().firstOrNull { it.scale == systemFontScale } ?: FontScale.Normal
         )
     }
     val context = LocalContext.current
     val density = Density(context.resources.displayMetrics.density, fontScale.scale)
     val onChangeFontScale = {
-        fontScale = when (fontScale) {
-            FontScale.Small -> FontScale.Normal
-            FontScale.Normal -> FontScale.Big
-            FontScale.Big -> FontScale.Bigger
-            FontScale.Bigger -> FontScale.Small
-        }
+        fontScale =
+            when (fontScale) {
+                FontScale.Small -> FontScale.Normal
+                FontScale.Normal -> FontScale.Big
+                FontScale.Big -> FontScale.Bigger
+                FontScale.Bigger -> FontScale.Small
+            }
     }
 
     val systemLayoutDirection = LocalLayoutDirection.current
     var layoutDirection by remember { mutableStateOf(systemLayoutDirection) }
     val onChangeLayoutDirection = {
-        layoutDirection = when (layoutDirection) {
-            LayoutDirection.Ltr -> LayoutDirection.Rtl
-            LayoutDirection.Rtl -> LayoutDirection.Ltr
-        }
+        layoutDirection =
+            when (layoutDirection) {
+                LayoutDirection.Ltr -> LayoutDirection.Rtl
+                LayoutDirection.Rtl -> LayoutDirection.Ltr
+            }
     }
 
     CompositionLocalProvider(
@@ -102,12 +103,7 @@ fun GalleryApp(
                 Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background,
             ) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .systemBarsPadding()
-                        .padding(16.dp)
-                ) {
+                Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp)) {
                     ConfigurationControls(
                         isDarkTheme,
                         fontScale,

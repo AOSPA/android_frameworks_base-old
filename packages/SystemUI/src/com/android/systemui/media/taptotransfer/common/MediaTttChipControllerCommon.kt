@@ -25,13 +25,14 @@ import android.graphics.drawable.Drawable
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.LinearLayout
+import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS
+import android.view.accessibility.AccessibilityManager.FLAG_CONTENT_ICONS
+import android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT
 import com.android.internal.widget.CachingIconView
 import com.android.settingslib.Utils
 import com.android.systemui.R
@@ -56,22 +57,34 @@ abstract class MediaTttChipControllerCommon<T : ChipInfoCommon>(
     private val windowManager: WindowManager,
     private val viewUtil: ViewUtil,
     @Main private val mainExecutor: DelayableExecutor,
+    private val accessibilityManager: AccessibilityManager,
     private val tapGestureDetector: TapGestureDetector,
     private val powerManager: PowerManager,
     @LayoutRes private val chipLayoutRes: Int
 ) {
-    /** The window layout parameters we'll use when attaching the view to a window. */
+
+    /**
+     * Window layout params that will be used as a starting point for the [windowLayoutParams] of
+     * all subclasses.
+     */
     @SuppressLint("WrongConstant") // We're allowed to use TYPE_VOLUME_OVERLAY
-    private val windowLayoutParams = WindowManager.LayoutParams().apply {
+    internal val commonWindowLayoutParams = WindowManager.LayoutParams().apply {
         width = WindowManager.LayoutParams.WRAP_CONTENT
         height = WindowManager.LayoutParams.WRAP_CONTENT
-        gravity = Gravity.TOP.or(Gravity.CENTER_HORIZONTAL)
         type = WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY
         flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         title = WINDOW_TITLE
         format = PixelFormat.TRANSLUCENT
         setTrustedOverlay()
     }
+
+    /**
+     * The window layout parameters we'll use when attaching the view to a window.
+     *
+     * Subclasses must override this to provide their specific layout params, and they should use
+     * [commonWindowLayoutParams] as part of their layout params.
+     */
+    internal abstract val windowLayoutParams: WindowManager.LayoutParams
 
     /** The chip view currently being displayed. Null if the chip is not being displayed. */
     private var chipView: ViewGroup? = null
@@ -106,13 +119,20 @@ abstract class MediaTttChipControllerCommon<T : ChipInfoCommon>(
                 PowerManager.WAKE_REASON_APPLICATION,
                 "com.android.systemui:media_tap_to_transfer_activated"
             )
+            animateChipIn(currentChipView)
         }
 
         // Cancel and re-set the chip timeout each time we get a new state.
+        val timeout = accessibilityManager.getRecommendedTimeoutMillis(
+            chipInfo.getTimeoutMs().toInt(),
+            // Not all chips have controls so FLAG_CONTENT_CONTROLS might be superfluous, but
+            // include it just to be safe.
+            FLAG_CONTENT_ICONS or FLAG_CONTENT_TEXT or FLAG_CONTENT_CONTROLS
+       )
         cancelChipViewTimeout?.run()
         cancelChipViewTimeout = mainExecutor.executeDelayed(
             { removeChip(MediaTttRemovalReason.REASON_TIMEOUT) },
-            chipInfo.getTimeoutMs()
+            timeout.toLong()
         )
     }
 
@@ -136,6 +156,12 @@ abstract class MediaTttChipControllerCommon<T : ChipInfoCommon>(
      * A method implemented by subclasses to update [currentChipView] based on [chipInfo].
      */
     abstract fun updateChipView(chipInfo: T, currentChipView: ViewGroup)
+
+    /**
+     * A method that can be implemented by subclcasses to do custom animations for when the chip
+     * appears.
+     */
+    open fun animateChipIn(chipView: ViewGroup) {}
 
     /**
      * Returns the size that the icon should be, or null if no size override is needed.
