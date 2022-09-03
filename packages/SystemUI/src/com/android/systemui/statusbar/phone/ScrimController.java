@@ -54,6 +54,7 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.scrim.ScrimView;
+import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.statusbar.notification.stack.ViewState;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -783,7 +784,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                 mInFrontAlpha = 0;
             }
 
-            if (mBouncerHiddenFraction != KeyguardBouncer.EXPANSION_HIDDEN) {
+            if (mState == ScrimState.DREAMING
+                    && mBouncerHiddenFraction != KeyguardBouncer.EXPANSION_HIDDEN) {
                 final float interpolatedFraction =
                         BouncerPanelExpansionCalculator.aboutToShowBouncerProgress(
                                 mBouncerHiddenFraction);

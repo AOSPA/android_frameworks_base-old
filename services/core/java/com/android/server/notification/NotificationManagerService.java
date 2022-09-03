@@ -1795,6 +1795,7 @@ public class NotificationManagerService extends SystemService {
                 if (userHandle >= 0) {
                     cancelAllNotificationsInt(MY_UID, MY_PID, null, null, 0, 0, true, userHandle,
                             REASON_PROFILE_TURNED_OFF, null);
+                    mSnoozeHelper.clearData(userHandle);
                 }
             } else if (action.equals(Intent.ACTION_USER_PRESENT)) {
                 // turn off LED when user passes through lock screen
@@ -3386,11 +3387,9 @@ public class NotificationManagerService extends SystemService {
             }
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.MANAGE_TOAST_RATE_LIMITING)
         @Override
         public void setToastRateLimitingEnabled(boolean enable) {
-            getContext().enforceCallingPermission(
-                    android.Manifest.permission.MANAGE_TOAST_RATE_LIMITING,
-                    "App doesn't have the permission to enable/disable toast rate limiting");
 
             synchronized (mToastQueue) {
                 int uid = Binder.getCallingUid();
@@ -7031,6 +7030,7 @@ public class NotificationManagerService extends SystemService {
 
         @GuardedBy("mNotificationLock")
         void snoozeLocked(NotificationRecord r) {
+            final List<NotificationRecord> recordsToSnooze = new ArrayList<>();
             if (r.getSbn().isGroup()) {
                 final List<NotificationRecord> groupNotifications =
                         findCurrentAndSnoozedGroupNotificationsLocked(
@@ -7039,8 +7039,8 @@ public class NotificationManagerService extends SystemService {
                 if (r.getNotification().isGroupSummary()) {
                     // snooze all children
                     for (int i = 0; i < groupNotifications.size(); i++) {
-                        if (mKey != groupNotifications.get(i).getKey()) {
-                            snoozeNotificationLocked(groupNotifications.get(i));
+                        if (!mKey.equals(groupNotifications.get(i).getKey())) {
+                            recordsToSnooze.add(groupNotifications.get(i));
                         }
                     }
                 } else {
@@ -7050,8 +7050,8 @@ public class NotificationManagerService extends SystemService {
                         if (groupNotifications.size() == 2) {
                             // snooze summary and the one child
                             for (int i = 0; i < groupNotifications.size(); i++) {
-                                if (mKey != groupNotifications.get(i).getKey()) {
-                                    snoozeNotificationLocked(groupNotifications.get(i));
+                                if (!mKey.equals(groupNotifications.get(i).getKey())) {
+                                    recordsToSnooze.add(groupNotifications.get(i));
                                 }
                             }
                         }
@@ -7059,7 +7059,15 @@ public class NotificationManagerService extends SystemService {
                 }
             }
             // snooze the notification
-            snoozeNotificationLocked(r);
+            recordsToSnooze.add(r);
+
+            if (mSnoozeHelper.canSnooze(recordsToSnooze.size())) {
+                for (int i = 0; i < recordsToSnooze.size(); i++) {
+                    snoozeNotificationLocked(recordsToSnooze.get(i));
+                }
+            } else {
+                Log.w(TAG, "Cannot snooze " + r.getKey() + ": too many snoozed notifications");
+            }
 
         }
 

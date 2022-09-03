@@ -20,8 +20,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
-import android.app.timedetector.NetworkTimeSuggestion;
-import android.app.timedetector.TimeDetector;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -48,6 +46,7 @@ import android.util.NtpTrustedTime;
 import android.util.NtpTrustedTime.TimeResult;
 
 import com.android.internal.util.DumpUtils;
+import com.android.server.LocalServices;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -80,7 +79,7 @@ public class NetworkTimeUpdateService extends Binder {
     private final Context mContext;
     private final NtpTrustedTime mTime;
     private final AlarmManager mAlarmManager;
-    private final TimeDetector mTimeDetector;
+    private final TimeDetectorInternal mTimeDetectorInternal;
     private final ConnectivityManager mCM;
     private final PendingIntent mPendingPollIntent;
     private final PowerManager.WakeLock mWakeLock;
@@ -112,7 +111,7 @@ public class NetworkTimeUpdateService extends Binder {
         mContext = context;
         mTime = NtpTrustedTime.getInstance(context);
         mAlarmManager = mContext.getSystemService(AlarmManager.class);
-        mTimeDetector = mContext.getSystemService(TimeDetector.class);
+        mTimeDetectorInternal = LocalServices.getService(TimeDetectorInternal.class);
         mCM = mContext.getSystemService(ConnectivityManager.class);
 
         Intent pollIntent = new Intent(ACTION_POLL, null);
@@ -196,15 +195,12 @@ public class NetworkTimeUpdateService extends Binder {
      * Overrides the NTP server config for tests. Passing {@code null} to a parameter clears the
      * test value, i.e. so the normal value will be used next time.
      */
-    void setServerConfigForTests(
-            @Nullable String hostname, @Nullable Integer port, @Nullable Duration timeout) {
+    void setServerConfigForTests(@Nullable NtpTrustedTime.NtpConfig ntpConfig) {
         mContext.enforceCallingPermission(
                 android.Manifest.permission.SET_TIME, "set NTP server config for tests");
 
-        mLocalLog.log("Setting server config for tests: hostname=" + hostname
-                + ", port=" + port
-                + ", timeout=" + timeout);
-        mTime.setServerConfigForTests(hostname, port, timeout);
+        mLocalLog.log("Setting server config for tests: ntpConnectionInfo=" + ntpConfig);
+        mTime.setServerConfigForTests(ntpConfig);
     }
 
     private void onPollNetworkTime(int event) {
@@ -272,9 +268,11 @@ public class NetworkTimeUpdateService extends Binder {
     private void makeNetworkTimeSuggestion(TimeResult ntpResult, String debugInfo) {
         TimestampedValue<Long> timeSignal = new TimestampedValue<>(
                 ntpResult.getElapsedRealtimeMillis(), ntpResult.getTimeMillis());
-        NetworkTimeSuggestion timeSuggestion = new NetworkTimeSuggestion(timeSignal);
+        NetworkTimeSuggestion timeSuggestion =
+                new NetworkTimeSuggestion(timeSignal, ntpResult.getUncertaintyMillis());
         timeSuggestion.addDebugInfo(debugInfo);
-        mTimeDetector.suggestNetworkTime(timeSuggestion);
+        timeSuggestion.addDebugInfo(ntpResult.toString());
+        mTimeDetectorInternal.suggestNetworkTime(timeSuggestion);
     }
 
     /**

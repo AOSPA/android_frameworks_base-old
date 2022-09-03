@@ -116,6 +116,10 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         clickObject(ENTER_PIP_ON_USER_LEAVE_HINT)
     }
 
+    fun enableAutoEnterForPipActivity() {
+        clickObject(ENTER_PIP_AUTOENTER)
+    }
+
     fun clickStartMediaSessionButton() {
         clickObject(MEDIA_SESSION_START_RADIO_BUTTON_ID)
     }
@@ -145,7 +149,7 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
     }
 
     private fun getWindowRect(wmHelper: WindowManagerStateHelper): Rect {
-        val windowRegion = wmHelper.getWindowRegion(component)
+        val windowRegion = wmHelper.getWindowRegion(this)
         require(!windowRegion.isEmpty) {
             "Unable to find a PIP window in the current state"
         }
@@ -192,7 +196,7 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         uiDevice.click(expandButtonBounds.centerX(), expandButtonBounds.centerY())
         wmHelper.StateSyncBuilder()
             .withPipGone()
-            .withFullScreenApp(component)
+            .withFullScreenApp(this)
             .waitForAndVerify()
     }
 
@@ -214,5 +218,6 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         private const val WITH_CUSTOM_ACTIONS_BUTTON_ID = "with_custom_actions"
         private const val MEDIA_SESSION_START_RADIO_BUTTON_ID = "media_session_start"
         private const val ENTER_PIP_ON_USER_LEAVE_HINT = "enter_pip_on_leave_manual"
+        private const val ENTER_PIP_AUTOENTER = "enter_pip_on_leave_autoenter"
     }
 }

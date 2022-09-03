@@ -90,6 +90,8 @@ public class AuthContainerView extends LinearLayout
     private static final int STATE_ANIMATING_OUT = 4;
     private static final int STATE_GONE = 5;
 
+    private static final float BACKGROUND_DIM_AMOUNT = 0.5f;
+
     /** Shows biometric prompt dialog animation. */
     private static final String SHOW = "show";
     /** Dismiss biometric prompt dialog animation.  */
@@ -247,13 +249,13 @@ public class AuthContainerView extends LinearLayout
                     break;
                 case AuthBiometricView.Callback.ACTION_BUTTON_TRY_AGAIN:
                     mFailedModalities.clear();
-                    mConfig.mCallback.onTryAgainPressed();
+                    mConfig.mCallback.onTryAgainPressed(getRequestId());
                     break;
                 case AuthBiometricView.Callback.ACTION_ERROR:
                     animateAway(AuthDialogCallback.DISMISSED_ERROR);
                     break;
                 case AuthBiometricView.Callback.ACTION_USE_DEVICE_CREDENTIAL:
-                    mConfig.mCallback.onDeviceCredentialPressed();
+                    mConfig.mCallback.onDeviceCredentialPressed(getRequestId());
                     mHandler.postDelayed(() -> {
                         addCredentialView(false /* animatePanel */, true /* animateContents */);
                     }, mConfig.mSkipAnimation ? 0 : AuthDialog.ANIMATE_CREDENTIAL_START_DELAY_MS);
@@ -371,7 +373,7 @@ public class AuthContainerView extends LinearLayout
 
     void sendEarlyUserCanceled() {
         mConfig.mCallback.onSystemEvent(
-                BiometricConstants.BIOMETRIC_SYSTEM_EVENT_EARLY_USER_CANCEL);
+                BiometricConstants.BIOMETRIC_SYSTEM_EVENT_EARLY_USER_CANCEL, getRequestId());
     }
 
     @Override
@@ -754,6 +756,16 @@ public class AuthContainerView extends LinearLayout
                     .setDuration(animateDuration)
                     .setInterpolator(mLinearOutSlowIn)
                     .setListener(getJankListener(this, DISMISS, animateDuration))
+                    .setUpdateListener(animation -> {
+                        if (mWindowManager == null || getViewRootImpl() == null) {
+                            Log.w(TAG, "skip updateViewLayout() for dim animation.");
+                            return;
+                        }
+                        final WindowManager.LayoutParams lp = getViewRootImpl().mWindowAttributes;
+                        lp.dimAmount = (1.0f - (Float) animation.getAnimatedValue())
+                                * BACKGROUND_DIM_AMOUNT;
+                        mWindowManager.updateViewLayout(this, lp);
+                    })
                     .withLayer()
                     .start();
         });
@@ -762,7 +774,8 @@ public class AuthContainerView extends LinearLayout
     private void sendPendingCallbackIfNotNull() {
         Log.d(TAG, "pendingCallback: " + mPendingCallbackReason);
         if (mPendingCallbackReason != null) {
-            mConfig.mCallback.onDismissed(mPendingCallbackReason, mCredentialAttestation);
+            mConfig.mCallback.onDismissed(mPendingCallbackReason,
+                    mCredentialAttestation, getRequestId());
             mPendingCallbackReason = null;
         }
     }
@@ -792,7 +805,7 @@ public class AuthContainerView extends LinearLayout
         }
         mContainerState = STATE_SHOWING;
         if (mBiometricView != null) {
-            mConfig.mCallback.onDialogAnimatedIn();
+            mConfig.mCallback.onDialogAnimatedIn(getRequestId());
             mBiometricView.onDialogAnimatedIn();
         }
     }
@@ -800,7 +813,8 @@ public class AuthContainerView extends LinearLayout
     @VisibleForTesting
     static WindowManager.LayoutParams getLayoutParams(IBinder windowToken, CharSequence title) {
         final int windowFlags = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
-                | WindowManager.LayoutParams.FLAG_SECURE;
+                | WindowManager.LayoutParams.FLAG_SECURE
+                | WindowManager.LayoutParams.FLAG_DIM_BEHIND;
         final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -811,6 +825,7 @@ public class AuthContainerView extends LinearLayout
         lp.setFitInsetsTypes(lp.getFitInsetsTypes() & ~WindowInsets.Type.ime());
         lp.setTitle("BiometricPrompt");
         lp.accessibilityTitle = title;
+        lp.dimAmount = BACKGROUND_DIM_AMOUNT;
         lp.token = windowToken;
         return lp;
     }

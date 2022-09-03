@@ -64,6 +64,7 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group4
 class CloseAppHomeButtonTest(testSpec: FlickerTestParameter) : CloseAppTransition(testSpec) {
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
@@ -82,20 +83,7 @@ class CloseAppHomeButtonTest(testSpec: FlickerTestParameter) : CloseAppTransitio
     /** {@inheritDoc} */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() {
-        super.statusBarLayerRotatesScales()
-    }
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 229762973)
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     companion object {
         /**

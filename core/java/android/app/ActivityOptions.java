@@ -22,6 +22,7 @@ import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -221,6 +222,14 @@ public class ActivityOptions extends ComponentOptions {
      */
     private static final String KEY_LAUNCH_TASK_DISPLAY_AREA_TOKEN =
             "android.activity.launchTaskDisplayAreaToken";
+
+    /**
+     * The task display area feature id the activity should be launched into.
+     * @see #setLaunchTaskDisplayAreaFeatureId(int)
+     * @hide
+     */
+    private static final String KEY_LAUNCH_TASK_DISPLAY_AREA_FEATURE_ID =
+            "android.activity.launchTaskDisplayAreaFeatureId";
 
     /**
      * The root task token the activity should be launched into.
@@ -432,6 +441,7 @@ public class ActivityOptions extends ComponentOptions {
     private int mLaunchDisplayId = INVALID_DISPLAY;
     private int mCallerDisplayId = INVALID_DISPLAY;
     private WindowContainerToken mLaunchTaskDisplayArea;
+    private int mLaunchTaskDisplayAreaFeatureId = FEATURE_UNDEFINED;
     private WindowContainerToken mLaunchRootTask;
     private IBinder mLaunchTaskFragmentToken;
     @WindowConfiguration.WindowingMode
@@ -1149,7 +1159,6 @@ public class ActivityOptions extends ComponentOptions {
         opts.mLaunchIntoPipParams = new PictureInPictureParams.Builder(pictureInPictureParams)
                 .setIsLaunchIntoPip(true)
                 .build();
-        opts.mLaunchBounds = new Rect(pictureInPictureParams.getSourceRectHint());
         return opts;
     }
 
@@ -1172,7 +1181,7 @@ public class ActivityOptions extends ComponentOptions {
         } catch (RuntimeException e) {
             Slog.w(TAG, e);
         }
-        mLaunchBounds = opts.getParcelable(KEY_LAUNCH_BOUNDS);
+        mLaunchBounds = opts.getParcelable(KEY_LAUNCH_BOUNDS, android.graphics.Rect.class);
         mAnimationType = opts.getInt(KEY_ANIM_TYPE, ANIM_UNDEFINED);
         switch (mAnimationType) {
             case ANIM_CUSTOM:
@@ -1200,7 +1209,7 @@ public class ActivityOptions extends ComponentOptions {
             case ANIM_THUMBNAIL_ASPECT_SCALE_UP:
             case ANIM_THUMBNAIL_ASPECT_SCALE_DOWN:
                 // Unpackage the HardwareBuffer from the parceled thumbnail
-                final HardwareBuffer buffer = opts.getParcelable(KEY_ANIM_THUMBNAIL);
+                final HardwareBuffer buffer = opts.getParcelable(KEY_ANIM_THUMBNAIL, android.hardware.HardwareBuffer.class);
                 if (buffer != null) {
                     mThumbnail = Bitmap.wrapHardwareBuffer(buffer, null);
                 }
@@ -1213,10 +1222,10 @@ public class ActivityOptions extends ComponentOptions {
                 break;
 
             case ANIM_SCENE_TRANSITION:
-                mTransitionReceiver = opts.getParcelable(KEY_TRANSITION_COMPLETE_LISTENER);
+                mTransitionReceiver = opts.getParcelable(KEY_TRANSITION_COMPLETE_LISTENER, android.os.ResultReceiver.class);
                 mIsReturning = opts.getBoolean(KEY_TRANSITION_IS_RETURNING, false);
                 mSharedElementNames = opts.getStringArrayList(KEY_TRANSITION_SHARED_ELEMENTS);
-                mResultData = opts.getParcelable(KEY_RESULT_DATA);
+                mResultData = opts.getParcelable(KEY_RESULT_DATA, android.content.Intent.class);
                 mResultCode = opts.getInt(KEY_RESULT_CODE);
                 mExitCoordinatorIndex = opts.getInt(KEY_EXIT_COORDINATOR_INDEX);
                 break;
@@ -1224,8 +1233,10 @@ public class ActivityOptions extends ComponentOptions {
         mLockTaskMode = opts.getBoolean(KEY_LOCK_TASK_MODE, false);
         mLaunchDisplayId = opts.getInt(KEY_LAUNCH_DISPLAY_ID, INVALID_DISPLAY);
         mCallerDisplayId = opts.getInt(KEY_CALLER_DISPLAY_ID, INVALID_DISPLAY);
-        mLaunchTaskDisplayArea = opts.getParcelable(KEY_LAUNCH_TASK_DISPLAY_AREA_TOKEN);
-        mLaunchRootTask = opts.getParcelable(KEY_LAUNCH_ROOT_TASK_TOKEN);
+        mLaunchTaskDisplayArea = opts.getParcelable(KEY_LAUNCH_TASK_DISPLAY_AREA_TOKEN, android.window.WindowContainerToken.class);
+        mLaunchTaskDisplayAreaFeatureId = opts.getInt(KEY_LAUNCH_TASK_DISPLAY_AREA_FEATURE_ID,
+                FEATURE_UNDEFINED);
+        mLaunchRootTask = opts.getParcelable(KEY_LAUNCH_ROOT_TASK_TOKEN, android.window.WindowContainerToken.class);
         mLaunchTaskFragmentToken = opts.getBinder(KEY_LAUNCH_TASK_FRAGMENT_TOKEN);
         mLaunchWindowingMode = opts.getInt(KEY_LAUNCH_WINDOWING_MODE, WINDOWING_MODE_UNDEFINED);
         mLaunchActivityType = opts.getInt(KEY_LAUNCH_ACTIVITY_TYPE, ACTIVITY_TYPE_UNDEFINED);
@@ -1251,23 +1262,23 @@ public class ActivityOptions extends ComponentOptions {
             mAnimationFinishedListener = IRemoteCallback.Stub.asInterface(
                     opts.getBinder(KEY_ANIMATION_FINISHED_LISTENER));
         }
-        mSourceInfo = opts.getParcelable(KEY_SOURCE_INFO);
+        mSourceInfo = opts.getParcelable(KEY_SOURCE_INFO, android.app.ActivityOptions.SourceInfo.class);
         mRotationAnimationHint = opts.getInt(KEY_ROTATION_ANIMATION_HINT, -1);
         mAppVerificationBundle = opts.getBundle(KEY_INSTANT_APP_VERIFICATION_BUNDLE);
         if (opts.containsKey(KEY_SPECS_FUTURE)) {
             mSpecsFuture = IAppTransitionAnimationSpecsFuture.Stub.asInterface(opts.getBinder(
                     KEY_SPECS_FUTURE));
         }
-        mRemoteAnimationAdapter = opts.getParcelable(KEY_REMOTE_ANIMATION_ADAPTER);
+        mRemoteAnimationAdapter = opts.getParcelable(KEY_REMOTE_ANIMATION_ADAPTER, android.view.RemoteAnimationAdapter.class);
         mLaunchCookie = opts.getBinder(KEY_LAUNCH_COOKIE);
-        mRemoteTransition = opts.getParcelable(KEY_REMOTE_TRANSITION);
+        mRemoteTransition = opts.getParcelable(KEY_REMOTE_TRANSITION, android.window.RemoteTransition.class);
         mOverrideTaskTransition = opts.getBoolean(KEY_OVERRIDE_TASK_TRANSITION);
         mSplashScreenThemeResName = opts.getString(KEY_SPLASH_SCREEN_THEME);
         mRemoveWithTaskOrganizer = opts.getBoolean(KEY_REMOVE_WITH_TASK_ORGANIZER);
         mLaunchedFromBubble = opts.getBoolean(KEY_LAUNCHED_FROM_BUBBLE);
         mTransientLaunch = opts.getBoolean(KEY_TRANSIENT_LAUNCH);
         mSplashScreenStyle = opts.getInt(KEY_SPLASH_SCREEN_STYLE);
-        mLaunchIntoPipParams = opts.getParcelable(KEY_LAUNCH_INTO_PIP_PARAMS);
+        mLaunchIntoPipParams = opts.getParcelable(KEY_LAUNCH_INTO_PIP_PARAMS, android.app.PictureInPictureParams.class);
         mIsEligibleForLegacyPermissionPrompt =
                 opts.getBoolean(KEY_LEGACY_PERMISSION_PROMPT_ELIGIBLE);
         mDismissKeyguard = opts.getBoolean(KEY_DISMISS_KEYGUARD);
@@ -1582,6 +1593,23 @@ public class ActivityOptions extends ComponentOptions {
             WindowContainerToken windowContainerToken) {
         mLaunchTaskDisplayArea = windowContainerToken;
         return this;
+    }
+
+    /** @hide */
+    public int getLaunchTaskDisplayAreaFeatureId() {
+        return mLaunchTaskDisplayAreaFeatureId;
+    }
+
+    /**
+     * Sets the TaskDisplayArea feature Id the activity should launch into.
+     * Note: It is possible to have TaskDisplayAreas with the same featureId on multiple displays.
+     * If launch display id is not specified, the TaskDisplayArea on the default display will be
+     * used.
+     * @hide
+     */
+    @TestApi
+    public void setLaunchTaskDisplayAreaFeatureId(int launchTaskDisplayAreaFeatureId) {
+        mLaunchTaskDisplayAreaFeatureId = launchTaskDisplayAreaFeatureId;
     }
 
     /** @hide */
@@ -2074,6 +2102,9 @@ public class ActivityOptions extends ComponentOptions {
         }
         if (mLaunchTaskDisplayArea != null) {
             b.putParcelable(KEY_LAUNCH_TASK_DISPLAY_AREA_TOKEN, mLaunchTaskDisplayArea);
+        }
+        if (mLaunchTaskDisplayAreaFeatureId != FEATURE_UNDEFINED) {
+            b.putInt(KEY_LAUNCH_TASK_DISPLAY_AREA_FEATURE_ID, mLaunchTaskDisplayAreaFeatureId);
         }
         if (mLaunchRootTask != null) {
             b.putParcelable(KEY_LAUNCH_ROOT_TASK_TOKEN, mLaunchRootTask);

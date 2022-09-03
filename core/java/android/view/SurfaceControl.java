@@ -249,6 +249,8 @@ public final class SurfaceControl implements Parcelable {
 
     private static native void nativeSetFrameRate(long transactionObj, long nativeObject,
             float frameRate, int compatibility, int changeFrameRateStrategy);
+    private static native void nativeSetDefaultFrameRateCompatibility(long transactionObj,
+            long nativeObject, int compatibility);
     private static native long nativeGetHandle(long nativeObject);
 
     private static native void nativeSetFixedTransformHint(long transactionObj, long nativeObject,
@@ -2354,47 +2356,6 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static void setDisplayProjection(IBinder displayToken,
-            int orientation, Rect layerStackRect, Rect displayRect) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplayProjection(displayToken, orientation,
-                    layerStackRect, displayRect);
-        }
-    }
-
-    /**
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static void setDisplayLayerStack(IBinder displayToken, int layerStack) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplayLayerStack(displayToken, layerStack);
-        }
-    }
-
-    /**
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static void setDisplaySurface(IBinder displayToken, Surface surface) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplaySurface(displayToken, surface);
-        }
-    }
-
-    /**
-     * @hide
-     */
-    public static void setDisplaySize(IBinder displayToken, int width, int height) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplaySize(displayToken, width, height);
-        }
-    }
-
-    /**
      * Overrides HDR modes for a display device.
      *
      * If the caller does not have ACCESS_SURFACE_FLINGER permission, this will throw a Security
@@ -3654,6 +3615,25 @@ public final class SurfaceControl implements Parcelable {
             checkPreconditions(sc);
             nativeSetFrameRate(mNativeObject, sc.mNativeObject, frameRate, compatibility,
                     changeFrameRateStrategy);
+            return this;
+        }
+
+        /**
+         * Sets the default frame rate compatibility for the surface {@link SurfaceControl}
+         *
+         * @param sc The SurfaceControl to specify the frame rate of.
+         * @param compatibility The frame rate compatibility of this surface. The compatibility
+         *               value may influence the system's choice of display frame rate.
+         *
+         * @return This transaction object.
+         *
+         * @hide
+         */
+        @NonNull
+        public Transaction setDefaultFrameRateCompatibility(@NonNull SurfaceControl sc,
+                @Surface.FrameRateCompatibility int compatibility) {
+            checkPreconditions(sc);
+            nativeSetDefaultFrameRateCompatibility(mNativeObject, sc.mNativeObject, compatibility);
             return this;
         }
 

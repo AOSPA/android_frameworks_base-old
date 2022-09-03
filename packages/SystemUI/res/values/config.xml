@@ -37,12 +37,6 @@
         <item>400</item>
     </integer-array>
 
-    <!-- Show mic or phone affordance on Keyguard -->
-    <bool name="config_keyguardShowLeftAffordance">false</bool>
-
-    <!-- Show camera affordance on Keyguard -->
-    <bool name="config_keyguardShowCameraAffordance">false</bool>
-
     <!-- decay duration (from size_max -> size), in ms -->
     <integer name="navigation_bar_deadzone_hold">333</integer>
     <integer name="navigation_bar_deadzone_decay">333</integer>
@@ -292,7 +286,7 @@
     <bool name="config_enableFullscreenUserSwitcher">false</bool>
 
     <!-- SystemUIFactory component -->
-    <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIFactory</string>
+    <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIInitializerImpl</string>
 
     <!-- QS tile shape store width. negative implies fill configuration instead of stroke-->
     <dimen name="config_qsTileStrokeWidthActive">-1dp</dimen>

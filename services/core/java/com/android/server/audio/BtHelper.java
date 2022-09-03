@@ -469,7 +469,7 @@ public class BtHelper {
 
         Log.i(TAG, "receiveBtEvent action: " + action + " mScoAudioState: " + mScoAudioState);
         if (action.equals(BluetoothHeadset.ACTION_ACTIVE_DEVICE_CHANGED)) {
-            BluetoothDevice btDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            BluetoothDevice btDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, android.bluetooth.BluetoothDevice.class);
             setBtScoActiveDevice(btDevice);
         } else if (action.equals(BluetoothHeadset.ACTION_AUDIO_STATE_CHANGED)) {
             int btState = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
@@ -616,7 +616,8 @@ public class BtHelper {
         mLeAudio.setVolume(volume);
     }
 
-    /*package*/ synchronized void setHearingAidVolume(int index, int streamType) {
+    /*package*/ synchronized void setHearingAidVolume(int index, int streamType,
+            boolean isHeadAidConnected) {
         if (mHearingAid == null) {
             if (AudioService.DEBUG_VOL) {
                 Log.i(TAG, "setHearingAidVolume: null mHearingAid");
@@ -633,8 +634,11 @@ public class BtHelper {
             Log.i(TAG, "setHearingAidVolume: calling mHearingAid.setVolume idx="
                     + index + " gain=" + gainDB);
         }
-        AudioService.sVolumeLogger.log(new AudioServiceEvents.VolumeEvent(
-                AudioServiceEvents.VolumeEvent.VOL_SET_HEARING_AID_VOL, index, gainDB));
+        // do not log when hearing aid is not connected to avoid confusion when reading dumpsys
+        if (isHeadAidConnected) {
+            AudioService.sVolumeLogger.log(new AudioServiceEvents.VolumeEvent(
+                    AudioServiceEvents.VolumeEvent.VOL_SET_HEARING_AID_VOL, index, gainDB));
+        }
         mHearingAid.setVolume(gainDB);
     }
 

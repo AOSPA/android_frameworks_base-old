@@ -61,7 +61,7 @@ interface Clock {
 
     /** Initializes various rendering parameters. If never called, provides reasonable defaults. */
     fun initialize(resources: Resources, dozeFraction: Float, foldFraction: Float) {
-        events.onColorPaletteChanged(resources)
+        events.onColorPaletteChanged(resources, RegionDarkness.DEFAULT, RegionDarkness.DEFAULT)
         animations.doze(dozeFraction)
         animations.fold(foldFraction)
         events.onTimeTick()
@@ -89,7 +89,11 @@ interface ClockEvents {
     fun onFontSettingChanged() { }
 
     /** Call whenever the color palette should update */
-    fun onColorPaletteChanged(resources: Resources) { }
+    fun onColorPaletteChanged(
+            resources: Resources,
+            smallClockIsDark: RegionDarkness,
+            largeClockIsDark: RegionDarkness
+    ) { }
 }
 
 /** Methods which trigger various clock animations */
@@ -112,3 +116,12 @@ data class ClockMetadata(
     val clockId: ClockId,
     val name: String
 )
+
+/**
+ * Enum for whether clock region is dark or light.
+ */
+enum class RegionDarkness(val isDark: Boolean) {
+    DEFAULT(false),
+    DARK(true),
+    LIGHT(false)
+}

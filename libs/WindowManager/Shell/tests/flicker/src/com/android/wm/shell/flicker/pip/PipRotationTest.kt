@@ -16,9 +16,9 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
-import android.platform.test.annotations.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -27,10 +27,11 @@ import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.WindowUtils
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.wm.shell.flicker.helpers.FixedAppHelper
+import org.junit.Assume
+import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,6 +67,11 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     private val screenBoundsStart = WindowUtils.getDisplayBounds(testSpec.startRotation)
     private val screenBoundsEnd = WindowUtils.getDisplayBounds(testSpec.endRotation)
 
+    @Before
+    open fun before() {
+        Assume.assumeFalse(isShellTransitionsEnabled)
+    }
+
     override val transition: FlickerBuilder.() -> Unit
         get() = buildTransition(eachRun = false) {
             setup {
@@ -93,14 +99,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
      */
     @FlakyTest
     @Test
-    override fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
-
-    /**
-     * Checks the position of the status bar at the start and end of the transition
-     */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /**
      * Checks that [fixedApp] layer is within [screenBoundsStart] at the start of the transition
@@ -109,7 +108,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     @Test
     fun appLayerRotates_StartingBounds() {
         testSpec.assertLayersStart {
-            visibleRegion(fixedApp.component).coversExactly(screenBoundsStart)
+            visibleRegion(fixedApp).coversExactly(screenBoundsStart)
         }
     }
 
@@ -120,7 +119,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     @Test
     fun appLayerRotates_EndingBounds() {
         testSpec.assertLayersEnd {
-            visibleRegion(fixedApp.component).coversExactly(screenBoundsEnd)
+            visibleRegion(fixedApp).coversExactly(screenBoundsEnd)
         }
     }
 
@@ -129,7 +128,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
      */
     private fun pipLayerRotates_StartingBounds_internal() {
         testSpec.assertLayersStart {
-            visibleRegion(pipApp.component).coversAtMost(screenBoundsStart)
+            visibleRegion(pipApp).coversAtMost(screenBoundsStart)
         }
     }
 
@@ -149,7 +148,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     @Test
     fun pipLayerRotates_EndingBounds() {
         testSpec.assertLayersEnd {
-            visibleRegion(pipApp.component).coversAtMost(screenBoundsEnd)
+            visibleRegion(pipApp).coversAtMost(screenBoundsEnd)
         }
     }
 
@@ -161,7 +160,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     @Test
     fun pipIsAboveFixedAppWindow_Start() {
         testSpec.assertWmStart {
-            isAboveWindow(pipApp.component, fixedApp.component)
+            isAboveWindow(pipApp, fixedApp)
         }
     }
 
@@ -173,7 +172,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     @Test
     fun pipIsAboveFixedAppWindow_End() {
         testSpec.assertWmEnd {
-            isAboveWindow(pipApp.component, fixedApp.component)
+            isAboveWindow(pipApp, fixedApp)
         }
     }
 

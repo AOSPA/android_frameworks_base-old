@@ -3168,7 +3168,7 @@ public final class Settings {
                             synchronized (NameValueCache.this) {
                                 if (needsGenerationTracker) {
                                     MemoryIntArray array = b.getParcelable(
-                                            CALL_METHOD_TRACK_GENERATION_KEY);
+                                            CALL_METHOD_TRACK_GENERATION_KEY, android.util.MemoryIntArray.class);
                                     final int index = b.getInt(
                                             CALL_METHOD_GENERATION_INDEX_KEY, -1);
                                     if (array != null && index >= 0) {
@@ -3354,7 +3354,7 @@ public final class Settings {
 
                 // All flags for the namespace
                 Map<String, String> flagsToValues =
-                        (HashMap) b.getSerializable(Settings.NameValueTable.VALUE);
+                        (HashMap) b.getSerializable(Settings.NameValueTable.VALUE, java.util.HashMap.class);
                 // Only the flags requested by the caller
                 if (!names.isEmpty()) {
                     for (Map.Entry<String, String> flag : flagsToValues.entrySet()) {
@@ -3369,7 +3369,7 @@ public final class Settings {
                 synchronized (NameValueCache.this) {
                     if (needsGenerationTracker) {
                         MemoryIntArray array = b.getParcelable(
-                                CALL_METHOD_TRACK_GENERATION_KEY);
+                                CALL_METHOD_TRACK_GENERATION_KEY, android.util.MemoryIntArray.class);
                         final int index = b.getInt(
                                 CALL_METHOD_GENERATION_INDEX_KEY, -1);
                         if (array != null && index >= 0) {
@@ -9750,6 +9750,43 @@ public final class Settings {
         public static final String FACE_UNLOCK_RE_ENROLL = "face_unlock_re_enroll";
 
         /**
+         * The time (in millis) to wait for a power button before sending a
+         * successful auth in to keyguard(for side fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_KG_POWER_WINDOW =
+                "fingerprint_side_fps_kg_power_window";
+
+        /**
+         * The time (in millis) to wait for a power button before sending
+         * a successful auth in biometric prompt(for side fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_BP_POWER_WINDOW =
+                "fingerprint_side_fps_bp_power_window";
+
+        /**
+         * The time (in millis) that a finger tap will wait for a power button
+         * before dismissing the power dialog during enrollment(for side
+         * fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_ENROLL_TAP_WINDOW =
+                "fingerprint_side_fps_enroll_tap_window";
+
+        /**
+         * The time (in millis) that a power event will ignore future authentications
+         * (for side fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_AUTH_DOWNTIME =
+                "fingerprint_side_fps_auth_downtime";
+
+        /**
          * Whether or not debugging is enabled.
          * @hide
          */
@@ -11382,6 +11419,7 @@ public final class Settings {
          * <li>{@link BatteryManager#BATTERY_PLUGGED_AC} to stay on for AC charger</li>
          * <li>{@link BatteryManager#BATTERY_PLUGGED_USB} to stay on for USB charger</li>
          * <li>{@link BatteryManager#BATTERY_PLUGGED_WIRELESS} to stay on for wireless charger</li>
+         * <li>{@link BatteryManager#BATTERY_PLUGGED_DOCK} to stay on for dock charger</li>
          * </ul>
          * These values can be OR-ed together.
          */
@@ -12018,10 +12056,41 @@ public final class Settings {
         public static final String NITZ_NETWORK_DISCONNECT_RETENTION =
                 "nitz_network_disconnect_retention";
 
-        /** Preferred NTP server. {@hide} */
+        /**
+         * SNTP client config: The preferred NTP server. This setting overrides the static
+         * config.xml configuration when present and valid.
+         *
+         * <p>The legacy form is the NTP server name as a string.
+         * <p>Newer code should use the form: ntp://{server name}[:port] (the standard NTP port,
+         * 123, is used if not specified).
+         *
+         * <p>The settings value can consist of a pipe ("|") delimited list of server names or
+         * ntp:// URIs. When present, all server name / ntp:// URIs must be valid or the entire
+         * setting value will be ignored and Android's xml config will be used.
+         *
+         * <p>For example, the following examples are valid:
+         * <ul>
+         *     <li>"time.android.com"</li>
+         *     <li>"ntp://time.android.com"</li>
+         *     <li>"ntp://time.android.com:123"</li>
+         *     <li>"time.android.com|time.other"</li>
+         *     <li>"ntp://time.android.com:123|ntp://time.other:123"</li>
+         *     <li>"time.android.com|ntp://time.other:123"</li>
+         * </ul>
+         *
+         * @hide
+         */
         @Readable
         public static final String NTP_SERVER = "ntp_server";
-        /** Timeout in milliseconds to wait for NTP server. {@hide} */
+
+        /**
+         * SNTP client config: Timeout to wait for an NTP server response. This setting overrides
+         * the static config.xml configuration when present and valid.
+         *
+         * <p>The value is the timeout in milliseconds. It must be > 0.
+         *
+         * @hide
+         */
         @Readable
         public static final String NTP_TIMEOUT = "ntp_timeout";
         /** Secondary NTP server. {@hide} */
@@ -17462,7 +17531,8 @@ public final class Settings {
              * Whether touch and hold to edit WF is enabled
              * @hide
              */
-            public static final String TOUCH_AND_HOLD_WATCH_FACE = "touch_and_hold_watchface";
+            public static final String GESTURE_TOUCH_AND_HOLD_WATCH_FACE_ENABLED =
+                    "gesture_touch_and_hold_watchface_enabled";
 
             /**
              * Whether bedtime mode is enabled.

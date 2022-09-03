@@ -7693,7 +7693,7 @@ public class AppOpsManager {
                     request.mOpNames, request.mHistoryFlags, request.mFilter,
                     request.mBeginTimeMillis, request.mEndTimeMillis, request.mFlags,
                     new RemoteCallback((result) -> {
-                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
+                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS, android.app.AppOpsManager.HistoricalOps.class);
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     executor.execute(() -> callback.accept(ops));
@@ -7733,7 +7733,7 @@ public class AppOpsManager {
                     request.mAttributionTag, request.mOpNames, request.mHistoryFlags,
                     request.mFilter, request.mBeginTimeMillis, request.mEndTimeMillis,
                     request.mFlags, new RemoteCallback((result) -> {
-                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
+                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS, android.app.AppOpsManager.HistoricalOps.class);
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     executor.execute(() -> callback.accept(ops));
@@ -10291,6 +10291,9 @@ public class AppOpsManager {
 
         // system alert window is disable on low ram phones starting from Q
         final PackageManager pm = context.getPackageManager();
+        if (null == pm) {
+            return AppOpsManager.MODE_DEFAULT;
+        }
         // TVs are constantly plugged in and has less concern for memory/power
         if (ActivityManager.isLowRamDeviceStatic()
                 && !pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK, 0)) {

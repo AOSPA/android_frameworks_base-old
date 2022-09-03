@@ -87,39 +87,12 @@ open class OpenAppWarmTest(testSpec: FlickerTestParameter) :
     /** {@inheritDoc} */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun appWindowReplacesLauncherAsTopWindow() =
-            super.appWindowReplacesLauncherAsTopWindow()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-            super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc} */
-    @FlakyTest
-    @Test
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Presubmit
     @Test
     override fun appLayerReplacesLauncher() = super.appLayerReplacesLauncher()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
 
     /** {@inheritDoc} */
     @Presubmit
@@ -130,10 +103,6 @@ open class OpenAppWarmTest(testSpec: FlickerTestParameter) :
     @Presubmit
     @Test
     override fun appWindowBecomesVisible() = super.appWindowBecomesVisible_warmStart()
-
-    @FlakyTest(bugId = 229735718)
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

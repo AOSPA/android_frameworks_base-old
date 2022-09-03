@@ -161,6 +161,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityInfo.ScreenOrientation;
@@ -1363,7 +1364,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     void setInsetProvider(@InternalInsetsType int type, WindowContainer win,
             @Nullable TriConsumer<DisplayFrames, WindowContainer, Rect> frameProvider) {
-        setInsetProvider(type, win, frameProvider, null /* imeFrameProvider */);
+        setInsetProvider(type, win, frameProvider, null /* overrideFrameProviders */);
     }
 
     /**
@@ -1372,15 +1373,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * @param type The type of inset this window provides.
      * @param win The window.
      * @param frameProvider Function to compute the frame, or {@code null} if the just the frame of
-     *                      the window should be taken.
-     * @param imeFrameProvider Function to compute the frame when dispatching insets to the IME, or
-     *                         {@code null} if the normal frame should be taken.
+     *                      the window should be taken. Only for non-WindowState providers, nav bar
+     *                      and status bar.
+     * @param overrideFrameProviders Functions to compute the frame when dispatching insets to the
+     *                               given window types, or {@code null} if the normal frame should
+     *                               be taken.
      */
     void setInsetProvider(@InternalInsetsType int type, WindowContainer win,
             @Nullable TriConsumer<DisplayFrames, WindowContainer, Rect> frameProvider,
-            @Nullable TriConsumer<DisplayFrames, WindowContainer, Rect> imeFrameProvider) {
+            @Nullable SparseArray<TriConsumer<DisplayFrames, WindowContainer, Rect>>
+                    overrideFrameProviders) {
         mInsetsStateController.getSourceProvider(type).setWindowContainer(win, frameProvider,
-                imeFrameProvider);
+                overrideFrameProviders);
     }
 
     InsetsStateController getInsetsStateController() {
@@ -1685,7 +1689,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     return false;
                 }
             }
-            if (r.isState(RESUMED) && !r.getRootTask().mInResumeTopActivity) {
+            if (r.isState(RESUMED) && !r.getTask().mInResumeTopActivity) {
                 // If the activity is executing or has done the lifecycle callback, use normal
                 // rotation animation so the display info can be updated immediately (see
                 // updateDisplayAndOrientation). This prevents a compatibility issue such as
@@ -3866,7 +3870,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mAtmService.onImeWindowSetOnDisplayArea(imePid, mImeWindowsContainer);
         }
         mInsetsStateController.getSourceProvider(ITYPE_IME).setWindowContainer(win,
-                mDisplayPolicy.getImeSourceFrameProvider(), null /* imeFrameProvider */);
+                mDisplayPolicy.getImeSourceFrameProvider(), null);
         computeImeTarget(true /* updateImeTarget */);
         updateImeControlTarget();
     }
@@ -4810,16 +4814,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Bitmap bitmap = screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
         if (bitmap == null) {
             Slog.w(TAG_WM, "Failed to take screenshot");
-            return null;
         }
-
-        // Create a copy of the screenshot that is immutable and backed in ashmem.
-        // This greatly reduces the overhead of passing the bitmap between processes.
-        final Bitmap ret = bitmap.asShared();
-        if (ret != bitmap) {
-            bitmap.recycle();
-        }
-        return ret;
+        return bitmap;
     }
 
     @Override
@@ -5680,7 +5676,16 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void getKeepClearAreas(Set<Rect> outRestricted, Set<Rect> outUnrestricted) {
         final Matrix tmpMatrix = new Matrix();
         final float[] tmpFloat9 = new float[9];
+        final RecentsAnimationController recentsAnimationController =
+                mWmService.getRecentsAnimationController();
         forAllWindows(w -> {
+            // Skip the window if it is part of Recents animation
+            final boolean ignoreRecentsAnimationTarget = recentsAnimationController != null
+                    && recentsAnimationController.shouldApplyInputConsumer(w.getActivityRecord());
+            if (ignoreRecentsAnimationTarget) {
+                return false;  // continue traversal
+            }
+
             if (w.isVisible() && !w.inPinnedWindowingMode()) {
                 w.getKeepClearAreas(outRestricted, outUnrestricted, tmpMatrix, tmpFloat9);
 
@@ -6508,12 +6513,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         /**
          * Notifies the remote insets controller that the top focused window has changed.
          *
-         * @param packageName The name of the package that is open in the top focused window.
+         * @param component The application component that is open in the top focussed window.
          * @param requestedVisibilities The insets visibilities requested by the focussed window.
          */
-        void topFocusedWindowChanged(String packageName, InsetsVisibilities requestedVisibilities) {
+        void topFocusedWindowChanged(ComponentName component,
+                InsetsVisibilities requestedVisibilities) {
             try {
-                mRemoteInsetsController.topFocusedWindowChanged(packageName, requestedVisibilities);
+                mRemoteInsetsController.topFocusedWindowChanged(component, requestedVisibilities);
             } catch (RemoteException e) {
                 Slog.w(TAG, "Failed to deliver package in top focused window change", e);
             }

@@ -25,9 +25,7 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.setRotation
-import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,8 +56,9 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
-open class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) :
-    OpenAppFromLauncherTransition(testSpec) {
+open class OpenAppFromOverviewTest(
+    testSpec: FlickerTestParameter
+) : OpenAppFromLauncherTransition(testSpec) {
 
     /**
      * Defines the transition used to run the test
@@ -77,8 +76,12 @@ open class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) :
                     wmHelper.StateSyncBuilder()
                         .withHomeActivityVisible()
                         .waitForAndVerify()
-                    // Launcher is always ROTATION_0
-                    tapl.setExpectedRotation(Surface.ROTATION_0)
+                    // By default, launcher doesn't rotate on phones, but rotates on tablets
+                    if (testSpec.isTablet) {
+                        tapl.setExpectedRotation(testSpec.startRotation)
+                    } else {
+                        tapl.setExpectedRotation(Surface.ROTATION_0)
+                    }
                     tapl.workspace.switchToOverview()
                     wmHelper.StateSyncBuilder()
                         .withRecentsActivityVisible()
@@ -89,15 +92,10 @@ open class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) :
             transitions {
                 tapl.overview.currentTask.open()
                 wmHelper.StateSyncBuilder()
-                    .withFullScreenApp(testApp.component)
+                    .withFullScreenApp(testApp)
                     .waitForAndVerify()
             }
         }
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
     /** {@inheritDoc} */
     @Presubmit
@@ -107,17 +105,7 @@ open class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) :
     /** {@inheritDoc} */
     @FlakyTest
     @Test
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Presubmit
@@ -128,41 +116,6 @@ open class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) :
     @Presubmit
     @Test
     override fun appWindowBecomesVisible() = super.appWindowBecomesVisible_warmStart()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 229735718)
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun appWindowReplacesLauncherAsTopWindow() {
-        Assume.assumeFalse(isShellTransitionsEnabled)
-        super.appWindowReplacesLauncherAsTopWindow()
-    }
-
-    @FlakyTest(bugId = 229738092)
-    @Test
-    fun appWindowReplacesLauncherAsTopWindow_ShellTransit() {
-        Assume.assumeTrue(isShellTransitionsEnabled)
-        super.appWindowReplacesLauncherAsTopWindow()
-    }
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun appWindowBecomesTopWindow() {
-        Assume.assumeFalse(isShellTransitionsEnabled)
-        super.appWindowBecomesTopWindow()
-    }
-
-    @FlakyTest(bugId = 229738092)
-    @Test
-    fun appWindowBecomesTopWindow_ShellTransit() {
-        Assume.assumeTrue(isShellTransitionsEnabled)
-        super.appWindowBecomesTopWindow()
-    }
 
     companion object {
         /**

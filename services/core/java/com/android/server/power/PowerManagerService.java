@@ -376,6 +376,10 @@ public final class PowerManagerService extends SystemService
     private long mLastGlobalWakeTime;
     private long mLastGlobalSleepTime;
 
+    // Timestamp (in the elapsed realtime timebase) of the last time was awoken or put to sleep.
+    private long mLastGlobalWakeTimeRealtime;
+    private long mLastGlobalSleepTimeRealtime;
+
     // Last reason the device went to sleep.
     private @WakeReason int mLastGlobalWakeReason;
     private @GoToSleepReason int mLastGlobalSleepReason;
@@ -927,6 +931,11 @@ public final class PowerManagerService extends SystemService
          * Returns current time in milliseconds since boot, not counting time spent in deep sleep.
          */
         long uptimeMillis();
+
+        /**
+         * Returns milliseconds since boot, including time spent in sleep.
+         */
+        long elapsedRealtime();
     }
 
     @VisibleForTesting
@@ -1005,7 +1014,18 @@ public final class PowerManagerService extends SystemService
         }
 
         Clock createClock() {
-            return SystemClock::uptimeMillis;
+            return new Clock() {
+                @Override
+                public long uptimeMillis() {
+                    return SystemClock.uptimeMillis();
+                }
+
+                @Override
+                public long elapsedRealtime() {
+                    return SystemClock.elapsedRealtime();
+                }
+            };
+
         }
 
         /**
@@ -1206,8 +1226,8 @@ public final class PowerManagerService extends SystemService
                 millisUntilNormalTimeout =
                         powerGroup.getLastUserActivityTimeLocked() + screenOffTimeout - currentTime;
                 userActivityInternal(Display.DEFAULT_DISPLAY, currentTime,
-                        PowerManager.USER_ACTIVITY_EVENT_FACE_DOWN, /* flags= */0,
-                        Process.SYSTEM_UID);
+                        PowerManager.USER_ACTIVITY_EVENT_FACE_DOWN,
+                        PowerManager.USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS, Process.SYSTEM_UID);
             }
         }
         if (isFaceDown) {
@@ -2141,6 +2161,7 @@ public final class PowerManagerService extends SystemService
                         + ")...");
                 mLastGlobalWakeTime = eventTime;
                 mLastGlobalWakeReason = reason;
+                mLastGlobalWakeTimeRealtime = mClock.elapsedRealtime();
                 break;
 
             case WAKEFULNESS_DREAMING:
@@ -2152,9 +2173,9 @@ public final class PowerManagerService extends SystemService
                 traceMethodName = "goToSleep";
                 Slog.i(TAG, "Going to sleep due to " + PowerManager.sleepReasonToString(reason)
                         + " (uid " + uid + ")...");
-
                 mLastGlobalSleepTime = eventTime;
                 mLastGlobalSleepReason = reason;
+                mLastGlobalSleepTimeRealtime = mClock.elapsedRealtime();
                 mDozeStartInProgress = true;
                 break;
 
@@ -4404,6 +4425,10 @@ public final class PowerManagerService extends SystemService
             pw.println("  mLastSleepTime=" + TimeUtils.formatUptime(mLastGlobalSleepTime));
             pw.println("  mLastSleepReason=" + PowerManager.sleepReasonToString(
                     mLastGlobalSleepReason));
+            pw.println("  mLastGlobalWakeTimeRealtime="
+                    + TimeUtils.formatUptime(mLastGlobalWakeTimeRealtime));
+            pw.println("  mLastGlobalSleepTimeRealtime="
+                    + TimeUtils.formatUptime(mLastGlobalSleepTimeRealtime));
             pw.println("  mLastInteractivePowerHintTime="
                     + TimeUtils.formatUptime(mLastInteractivePowerHintTime));
             pw.println("  mLastScreenBrightnessBoostTime="
@@ -4829,6 +4854,11 @@ public final class PowerManagerService extends SystemService
                     PowerServiceSettingsAndConfigurationDumpProto.StayOnWhilePluggedInProto
                             .IS_STAY_ON_WHILE_PLUGGED_IN_WIRELESS,
                     ((mStayOnWhilePluggedInSetting & BatteryManager.BATTERY_PLUGGED_WIRELESS)
+                            != 0));
+            proto.write(
+                    PowerServiceSettingsAndConfigurationDumpProto.StayOnWhilePluggedInProto
+                            .IS_STAY_ON_WHILE_PLUGGED_IN_DOCK,
+                    ((mStayOnWhilePluggedInSetting & BatteryManager.BATTERY_PLUGGED_DOCK)
                             != 0));
             proto.end(stayOnWhilePluggedInToken);
 
@@ -5886,7 +5916,7 @@ public final class PowerManagerService extends SystemService
                 boolean isPersonalized) {
             // Get current time before acquiring the lock so that the calculated end time is as
             // accurate as possible.
-            final long nowElapsed = SystemClock.elapsedRealtime();
+            final long nowElapsed = mClock.elapsedRealtime();
             if (mContext.checkCallingOrSelfPermission(
                     android.Manifest.permission.BATTERY_PREDICTION)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -5950,7 +5980,7 @@ public final class PowerManagerService extends SystemService
                 synchronized (mEnhancedDischargeTimeLock) {
                     // Get current time after acquiring the lock so that the calculated duration
                     // is as accurate as possible.
-                    final long nowElapsed = SystemClock.elapsedRealtime();
+                    final long nowElapsed = mClock.elapsedRealtime();
                     if (isEnhancedDischargePredictionValidLocked(nowElapsed)) {
                         return new ParcelDuration(mEnhancedDischargeTimeElapsed - nowElapsed);
                     }
@@ -5969,7 +5999,7 @@ public final class PowerManagerService extends SystemService
             final long ident = Binder.clearCallingIdentity();
             try {
                 synchronized (mEnhancedDischargeTimeLock) {
-                    return isEnhancedDischargePredictionValidLocked(SystemClock.elapsedRealtime())
+                    return isEnhancedDischargePredictionValidLocked(mClock.elapsedRealtime())
                             && mEnhancedDischargePredictionIsPersonalized;
                 }
             } finally {
@@ -6459,7 +6489,7 @@ public final class PowerManagerService extends SystemService
     private PowerManager.WakeData getLastWakeupInternal() {
         synchronized (mLock) {
             return new PowerManager.WakeData(mLastGlobalWakeTime, mLastGlobalWakeReason,
-                    mLastGlobalWakeTime - mLastGlobalSleepTime);
+                    mLastGlobalWakeTimeRealtime - mLastGlobalSleepTimeRealtime);
         }
     }
 

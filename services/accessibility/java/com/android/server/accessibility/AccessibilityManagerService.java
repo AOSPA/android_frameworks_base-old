@@ -114,6 +114,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityInteractionClient;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowAttributes;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.accessibility.IAccessibilityInteractionConnection;
 import android.view.accessibility.IAccessibilityManager;
@@ -198,9 +199,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
     private static final String FUNCTION_REGISTER_UI_TEST_AUTOMATION_SERVICE =
         "registerUiTestAutomationService";
-
-    private static final String TEMPORARY_ENABLE_ACCESSIBILITY_UNTIL_KEYGUARD_REMOVED =
-            "temporaryEnableAccessibilityStateUntilKeyguardRemoved";
 
     private static final String GET_WINDOW_TOKEN = "getWindowToken";
 
@@ -1231,46 +1229,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
         synchronized (mLock) {
             mUiAutomationManager.unregisterUiTestAutomationServiceLocked(serviceClient);
-        }
-    }
-
-    @Override
-    public void temporaryEnableAccessibilityStateUntilKeyguardRemoved(
-            ComponentName service, boolean touchExplorationEnabled) {
-        if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_ACCESSIBILITY_MANAGER)) {
-            mTraceManager.logTrace(
-                    LOG_TAG + ".temporaryEnableAccessibilityStateUntilKeyguardRemoved",
-                    FLAGS_ACCESSIBILITY_MANAGER,
-                    "service=" + service + ";touchExplorationEnabled=" + touchExplorationEnabled);
-        }
-
-        mSecurityPolicy.enforceCallingPermission(
-                Manifest.permission.TEMPORARY_ENABLE_ACCESSIBILITY,
-                TEMPORARY_ENABLE_ACCESSIBILITY_UNTIL_KEYGUARD_REMOVED);
-        if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_WINDOW_MANAGER_INTERNAL)) {
-            mTraceManager.logTrace("WindowManagerInternal.isKeyguardLocked",
-                    FLAGS_WINDOW_MANAGER_INTERNAL);
-        }
-        if (!mWindowManagerService.isKeyguardLocked()) {
-            return;
-        }
-        synchronized (mLock) {
-            // Set the temporary state.
-            AccessibilityUserState userState = getCurrentUserStateLocked();
-
-            userState.setTouchExplorationEnabledLocked(touchExplorationEnabled);
-            userState.setDisplayMagnificationEnabledLocked(false);
-            userState.disableShortcutMagnificationLocked();
-            userState.setAutoclickEnabledLocked(false);
-            userState.mEnabledServices.clear();
-            userState.mEnabledServices.add(service);
-            userState.getBindingServicesLocked().clear();
-            userState.getCrashedServicesLocked().clear();
-            userState.mTouchExplorationGrantedServices.clear();
-            userState.mTouchExplorationGrantedServices.add(service);
-
-            // User the current state instead settings.
-            onUserStateChangedLocked(userState);
         }
     }
 
@@ -3595,6 +3553,26 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
             return userState.isAudioDescriptionByDefaultEnabledLocked();
         }
+    }
+
+    /**
+     * Sets the {@link AccessibilityWindowAttributes} to the window associated with the given
+     * window id.
+     *
+     * @param displayId The display id of the window.
+     * @param windowId The id of the window
+     * @param userId The user id.
+     * @param attributes The accessibility window attributes.
+     */
+    @Override
+    public void setAccessibilityWindowAttributes(int displayId, int windowId, int userId,
+            AccessibilityWindowAttributes attributes) {
+        if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_ACCESSIBILITY_MANAGER)) {
+            mTraceManager.logTrace(LOG_TAG + ".setAccessibilityWindowAttributes",
+                    FLAGS_ACCESSIBILITY_MANAGER);
+        }
+        mA11yWindowManager.setAccessibilityWindowAttributes(displayId, windowId, userId,
+                attributes);
     }
 
     @Override

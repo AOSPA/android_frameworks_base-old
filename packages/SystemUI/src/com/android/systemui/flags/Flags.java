@@ -176,7 +176,7 @@ public class Flags {
     // 1000 - dock
     public static final BooleanFlag SIMULATE_DOCK_THROUGH_CHARGING =
             new BooleanFlag(1000, true);
-    public static final BooleanFlag DOCK_SETUP_ENABLED = new BooleanFlag(1001, false);
+    public static final BooleanFlag DOCK_SETUP_ENABLED = new BooleanFlag(1001, true);
 
 
     // 1100 - windowing
@@ -207,7 +207,8 @@ public class Flags {
     public static final SysPropBooleanFlag WM_ALWAYS_ENFORCE_PREDICTIVE_BACK =
             new SysPropBooleanFlag(1202, "persist.wm.debug.predictive_back_always_enforce", false);
 
-    public static final BooleanFlag NEW_BACK_AFFORDANCE = new BooleanFlag(1203, true);
+    public static final BooleanFlag NEW_BACK_AFFORDANCE =
+            new BooleanFlag(1203, false /* default */, true /* teamfood */);
 
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================

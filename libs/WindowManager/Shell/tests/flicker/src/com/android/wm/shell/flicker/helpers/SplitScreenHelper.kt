@@ -25,7 +25,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.launcher3.tapl.LauncherInstrumentation
+import com.android.server.wm.traces.common.IComponentMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import com.android.wm.shell.flicker.SYSTEM_UI_PACKAGE_NAME
@@ -34,7 +35,7 @@ import com.android.wm.shell.flicker.testapp.Components
 class SplitScreenHelper(
     instrumentation: Instrumentation,
     activityLabel: String,
-    componentsInfo: FlickerComponentName
+    componentsInfo: IComponentMatcher
 ) : BaseAppHelper(instrumentation, activityLabel, componentsInfo) {
 
     companion object {
@@ -109,9 +110,9 @@ class SplitScreenHelper(
             }
 
             // Drag to split
-            var dragStart = notificationContent.visibleCenter
-            var dragMiddle = Point(dragStart.x + 50, dragStart.y)
-            var dragEnd = Point(displayBounds.width / 4, displayBounds.width / 4)
+            val dragStart = notificationContent.visibleCenter
+            val dragMiddle = Point(dragStart.x + 50, dragStart.y)
+            val dragEnd = Point(displayBounds.width / 4, displayBounds.width / 4)
             val downTime = SystemClock.uptimeMillis()
 
             touch(
@@ -185,6 +186,21 @@ class SplitScreenHelper(
                     currentY += stepY
                 }
                 SystemClock.sleep(GESTURE_STEP_MS)
+            }
+        }
+
+        fun createShortcutOnHotseatIfNotExist(
+            taplInstrumentation: LauncherInstrumentation,
+            appName: String
+        ) {
+            taplInstrumentation.workspace
+                .deleteAppIcon(taplInstrumentation.workspace.getHotseatAppIcon(0))
+            val allApps = taplInstrumentation.workspace.switchToAllApps()
+            allApps.freeze()
+            try {
+                allApps.getAppIcon(appName).dragToHotseat(0)
+            } finally {
+                allApps.unfreeze()
             }
         }
     }

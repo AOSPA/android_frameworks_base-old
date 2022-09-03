@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.WindowManagerPolicyConstants
 import androidx.test.filters.RequiresDevice
@@ -60,9 +61,10 @@ class EnterSplitScreenByDragFromNotification(
 
     @Before
     fun before() {
-        Assume.assumeTrue(taplInstrumentation.isTablet)
+        Assume.assumeTrue(tapl.isTablet)
     }
 
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
@@ -76,7 +78,7 @@ class EnterSplitScreenByDragFromNotification(
                     )
                     sendNotification?.click() ?: error("Send notification button not found")
 
-                    taplInstrumentation.goHome()
+                    tapl.goHome()
                     primaryApp.launchViaIntent(wmHelper)
                 }
             }
@@ -96,33 +98,99 @@ class EnterSplitScreenByDragFromNotification(
 
     @Presubmit
     @Test
-    fun primaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(primaryApp.component)
+    fun primaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(primaryApp)
 
     @Presubmit
     @Test
     fun secondaryAppLayerBecomesVisible() =
-        testSpec.layerBecomesVisible(sendNotificationApp.component)
+        testSpec.layerBecomesVisible(sendNotificationApp)
 
     @Presubmit
     @Test
     fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
-        testSpec.endRotation, primaryApp.component, false /* splitLeftTop */
+        testSpec.endRotation, primaryApp, false /* splitLeftTop */
     )
 
     @Presubmit
     @Test
     fun secondaryAppBoundsBecomesVisible() = testSpec.splitAppLayerBoundsBecomesVisible(
-        testSpec.endRotation, sendNotificationApp.component, true /* splitLeftTop */
+        testSpec.endRotation, sendNotificationApp, true /* splitLeftTop */
     )
 
     @Presubmit
     @Test
-    fun primaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(primaryApp.component)
+    fun primaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(primaryApp)
 
     @Presubmit
     @Test
     fun secondaryAppWindowIsVisibleAtEnd() =
-        testSpec.appWindowIsVisibleAtEnd(sendNotificationApp.component)
+        testSpec.appWindowIsVisibleAtEnd(sendNotificationApp)
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun entireScreenCovered() =
+        super.entireScreenCovered()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarLayerIsVisibleAtStartAndEnd() =
+        super.navBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarLayerPositionAtStartAndEnd() =
+        super.navBarLayerPositionAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarWindowIsAlwaysVisible() =
+        super.navBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerIsVisibleAtStartAndEnd() =
+        super.statusBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerPositionAtStartAndEnd() =
+        super.statusBarLayerPositionAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarWindowIsAlwaysVisible() =
+        super.statusBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun taskBarLayerIsVisibleAtStartAndEnd() =
+        super.taskBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun taskBarWindowIsAlwaysVisible() =
+        super.taskBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

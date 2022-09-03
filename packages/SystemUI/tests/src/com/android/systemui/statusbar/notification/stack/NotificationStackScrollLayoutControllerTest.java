@@ -52,6 +52,7 @@ import com.android.systemui.media.KeyguardMediaController;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEventListener;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.shade.transition.ShadeTransitionController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager.UserChangedListener;
@@ -75,7 +76,6 @@ import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ShadeController;
-import com.android.systemui.statusbar.phone.shade.transition.ShadeTransitionController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -150,7 +150,6 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
 
         when(mNotificationSwipeHelperBuilder.build()).thenReturn(mNotificationSwipeHelper);
-        when(mNotifPipelineFlags.isNewPipelineEnabled()).thenReturn(false);
 
         mController = new NotificationStackScrollLayoutController(
                 true,
@@ -166,7 +165,6 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
                 mKeyguardMediaController,
                 mKeyguardBypassController,
                 mZenModeController,
-                mColorExtractor,
                 mNotificationLockscreenUserManager,
                 mMetricsLogger,
                 mDumpManager,
@@ -179,15 +177,12 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
                 mLegacyGroupManager,
                 mLegacyGroupManager,
                 mSilentHeaderController,
-                mNotifPipelineFlags,
                 mNotifPipeline,
                 mNotifCollection,
                 mEntryManager,
                 mLockscreenShadeTransitionController,
                 mShadeTransitionController,
-                mIStatusBarService,
                 mUiEventLogger,
-                mLayoutInflater,
                 mRemoteInputManager,
                 mVisualStabilityManager,
                 mShadeController,

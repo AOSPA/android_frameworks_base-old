@@ -42,13 +42,18 @@ class SideStage extends StageTaskListener {
                 iconProvider);
     }
 
+    @Override
+    void dismiss(WindowContainerTransaction wct, boolean toTop) {
+        removeAllTasks(wct, toTop);
+    }
+
     boolean removeAllTasks(WindowContainerTransaction wct, boolean toTop) {
         if (mChildrenTaskInfo.size() == 0) return false;
         wct.reparentTasks(
                 mRootTaskInfo.token,
                 null /* newParent */,
-                CONTROLLED_WINDOWING_MODES_WHEN_ACTIVE,
-                CONTROLLED_ACTIVITY_TYPES,
+                null /* windowingModes */,
+                null /* activityTypes */,
                 toTop);
         return true;
     }

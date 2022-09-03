@@ -32,6 +32,7 @@ import static com.android.wm.shell.animation.Interpolators.SLOWDOWN_INTERPOLATOR
 import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_BOTTOM_OR_RIGHT;
 import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_TOP_OR_LEFT;
 import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_UNDEFINED;
+import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_DRAG_DIVIDER;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -198,6 +199,44 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         final Rect outBounds = getDividerBounds();
         outBounds.offset(-mRootBounds.left, -mRootBounds.top);
         return outBounds;
+    }
+
+    /** Gets bounds of the primary split with screen based coordinate on the param Rect. */
+    public void getBounds1(Rect rect) {
+        rect.set(mBounds1);
+    }
+
+    /** Gets bounds of the primary split with parent based coordinate on the param Rect. */
+    public void getRefBounds1(Rect rect) {
+        getBounds1(rect);
+        rect.offset(-mRootBounds.left, -mRootBounds.top);
+    }
+
+    /** Gets bounds of the secondary split with screen based coordinate on the param Rect. */
+    public void getBounds2(Rect rect) {
+        rect.set(mBounds2);
+    }
+
+    /** Gets bounds of the secondary split with parent based coordinate on the param Rect. */
+    public void getRefBounds2(Rect rect) {
+        getBounds2(rect);
+        rect.offset(-mRootBounds.left, -mRootBounds.top);
+    }
+
+    /** Gets root bounds of the whole split layout on the param Rect. */
+    public void getRootBounds(Rect rect) {
+        rect.set(mRootBounds);
+    }
+
+    /** Gets bounds of divider window with screen based coordinate on the param Rect. */
+    public void getDividerBounds(Rect rect) {
+        rect.set(mDividerBounds);
+    }
+
+    /** Gets bounds of divider window with parent based coordinate on the param Rect. */
+    public void getRefDividerBounds(Rect rect) {
+        getDividerBounds(rect);
+        rect.offset(-mRootBounds.left, -mRootBounds.top);
     }
 
     /** Returns leash of the current divider bar. */
@@ -411,11 +450,13 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         switch (snapTarget.flag) {
             case FLAG_DISMISS_START:
                 flingDividePosition(currentPosition, snapTarget.position,
-                        () -> mSplitLayoutHandler.onSnappedToDismiss(false /* bottomOrRight */));
+                        () -> mSplitLayoutHandler.onSnappedToDismiss(false /* bottomOrRight */,
+                                EXIT_REASON_DRAG_DIVIDER));
                 break;
             case FLAG_DISMISS_END:
                 flingDividePosition(currentPosition, snapTarget.position,
-                        () -> mSplitLayoutHandler.onSnappedToDismiss(true /* bottomOrRight */));
+                        () -> mSplitLayoutHandler.onSnappedToDismiss(true /* bottomOrRight */,
+                                EXIT_REASON_DRAG_DIVIDER));
                 break;
             default:
                 flingDividePosition(currentPosition, snapTarget.position,
@@ -449,14 +490,34 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
     private DividerSnapAlgorithm getSnapAlgorithm(Context context, Rect rootBounds,
             @Nullable Rect stableInsets) {
         final boolean isLandscape = isLandscape(rootBounds);
+        final Rect insets = stableInsets != null ? stableInsets : getDisplayInsets(context);
+
+        // Make split axis insets value same as the larger one to avoid bounds1 and bounds2
+        // have difference after split switching for solving issues on non-resizable app case.
+        if (isLandscape) {
+            final int largerInsets = Math.max(insets.left, insets.right);
+            insets.set(largerInsets, insets.top, largerInsets, insets.bottom);
+        } else {
+            final int largerInsets = Math.max(insets.top, insets.bottom);
+            insets.set(insets.left, largerInsets, insets.right, largerInsets);
+        }
+
         return new DividerSnapAlgorithm(
                 context.getResources(),
                 rootBounds.width(),
                 rootBounds.height(),
                 mDividerSize,
                 !isLandscape,
-                stableInsets != null ? stableInsets : getDisplayInsets(context),
+                insets,
                 isLandscape ? DOCKED_LEFT : DOCKED_TOP /* dockSide */);
+    }
+
+    /** Fling divider from current position to end or start position then exit */
+    public void flingDividerToDismiss(boolean toEnd, int reason) {
+        final int target = toEnd ? mDividerSnapAlgorithm.getDismissEndTarget().position
+                : mDividerSnapAlgorithm.getDismissStartTarget().position;
+        flingDividePosition(getDividePosition(), target,
+                () -> mSplitLayoutHandler.onSnappedToDismiss(toEnd, reason));
     }
 
     @VisibleForTesting
@@ -560,8 +621,8 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
                 t.setPosition(leash, distX, distY);
                 t.setWindowCrop(leash, width, height);
             } else {
-                final int offsetX = width - start.width();
-                final int offsetY = height - start.height();
+                final int offsetX = width - tempStart.width();
+                final int offsetY = height - tempStart.height();
                 t.setPosition(leash, distX + offsetX, distY + offsetY);
                 mTempRect.set(0, 0, width, height);
                 mTempRect.offsetTo(-offsetX, -offsetY);
@@ -610,15 +671,15 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
             boolean applyResizingOffset) {
         final SurfaceControl dividerLeash = getDividerLeash();
         if (dividerLeash != null) {
-            mTempRect.set(getRefDividerBounds());
+            getRefDividerBounds(mTempRect);
             t.setPosition(dividerLeash, mTempRect.left, mTempRect.top);
             // Resets layer of divider bar to make sure it is always on top.
             t.setLayer(dividerLeash, Integer.MAX_VALUE);
         }
-        mTempRect.set(getRefBounds1());
+        getRefBounds1(mTempRect);
         t.setPosition(leash1, mTempRect.left, mTempRect.top)
                 .setWindowCrop(leash1, mTempRect.width(), mTempRect.height());
-        mTempRect.set(getRefBounds2());
+        getRefBounds2(mTempRect);
         t.setPosition(leash2, mTempRect.left, mTempRect.top)
                 .setWindowCrop(leash2, mTempRect.width(), mTempRect.height());
 
@@ -708,7 +769,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
     public interface SplitLayoutHandler {
 
         /** Calls when dismissing split. */
-        void onSnappedToDismiss(boolean snappedToEnd);
+        void onSnappedToDismiss(boolean snappedToEnd, int reason);
 
         /**
          * Calls when resizing the split bounds.

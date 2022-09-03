@@ -140,6 +140,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.Trace;
 import android.os.TransactionTooLargeException;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -2890,6 +2891,14 @@ public final class ActiveServices {
             return -1;
         }
         ServiceRecord s = res.record;
+        final AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);
+        final ProcessServiceRecord clientPsr = b.client.mServices;
+        if (clientPsr.numberOfConnections() >= mAm.mConstants.mMaxServiceConnectionsPerProcess) {
+            Slog.w(TAG, "bindService exceeded max service connection number per process, "
+                    + "callerApp:" + callerApp.processName
+                    + " intent:" + service);
+            return 0;
+        }
 
         // The package could be frozen (meaning it's doing surgery), defer the actual
         // binding until the package is unfrozen.
@@ -2940,7 +2949,6 @@ public final class ActiveServices {
             mAm.grantImplicitAccess(callerApp.userId, service,
                     callerApp.uid, UserHandle.getAppId(s.appInfo.uid));
 
-            AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);
             ConnectionRecord c = new ConnectionRecord(b, activity,
                     connection, flags, clientLabel, clientIntent,
                     callerApp.uid, callerApp.processName, callingPackage, res.aliasComponent);
@@ -2951,7 +2959,6 @@ public final class ActiveServices {
             if (activity != null) {
                 activity.addConnection(c);
             }
-            final ProcessServiceRecord clientPsr = b.client.mServices;
             clientPsr.addConnection(c);
             c.startAssociationIfNeeded();
             if ((c.flags&Context.BIND_ABOVE_CLIENT) != 0) {
@@ -3216,8 +3223,20 @@ public final class ActiveServices {
             return false;
         }
 
+        final int callingPid = Binder.getCallingPid();
         final long origId = Binder.clearCallingIdentity();
         try {
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                String info;
+                if (clist.size() > 0) {
+                    final ConnectionRecord r = clist.get(0);
+                    info = r.binding.service.shortInstanceName + " from " + r.clientProcessName;
+                } else {
+                    info = Integer.toString(callingPid);
+                }
+                Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "unbindServiceLocked: " + info);
+            }
+
             while (clist.size() > 0) {
                 ConnectionRecord r = clist.get(0);
                 ServiceData sData = new ServiceData();
@@ -3268,6 +3287,7 @@ public final class ActiveServices {
             mAm.updateOomAdjPendingTargetsLocked(OomAdjuster.OOM_ADJ_REASON_UNBIND_SERVICE);
 
         } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
             Binder.restoreCallingIdentity(origId);
         }
 
@@ -4286,6 +4306,22 @@ public final class ActiveServices {
             boolean whileRestarting, boolean permissionsReviewRequired, boolean packageFrozen,
             boolean enqueueOomAdj)
             throws TransactionTooLargeException {
+        try {
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                        "bringUpServiceLocked: " + r.shortInstanceName);
+            }
+            return bringUpServiceInnerLocked(r, intentFlags, execInFg, whileRestarting,
+                    permissionsReviewRequired, packageFrozen, enqueueOomAdj);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+        }
+    }
+
+    private String bringUpServiceInnerLocked(ServiceRecord r, int intentFlags, boolean execInFg,
+            boolean whileRestarting, boolean permissionsReviewRequired, boolean packageFrozen,
+            boolean enqueueOomAdj)
+            throws TransactionTooLargeException {
         if (r.app != null && r.app.getThread() != null) {
             sendServiceArgsLocked(r, execInFg, false);
             return null;
@@ -4360,6 +4396,10 @@ public final class ActiveServices {
                 final UidRecord uidRecord = app.getUidRecord();
                 if (thread != null) {
                     try {
+                        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                                    "realStartServiceLocked: " + r.shortInstanceName);
+                        }
                         app.addPackage(r.appInfo.packageName, r.appInfo.longVersionCode,
                                 mAm.mProcessStats);
                         realStartServiceLocked(r, app, thread, pid, uidRecord, execInFg,
@@ -4369,6 +4409,8 @@ public final class ActiveServices {
                         throw e;
                     } catch (RemoteException e) {
                         Slog.w(TAG, "Exception when starting service " + r.shortInstanceName, e);
+                    } finally {
+                        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     }
 
                     // If a dead object exception was thrown -- fall through to
@@ -5285,8 +5327,16 @@ public final class ActiveServices {
                     i--;
                     proc.addPackage(sr.appInfo.packageName, sr.appInfo.longVersionCode,
                             mAm.mProcessStats);
-                    realStartServiceLocked(sr, proc, thread, pid, uidRecord, sr.createdFromFg,
-                            true);
+                    try {
+                        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                                    "realStartServiceLocked: " + sr.shortInstanceName);
+                        }
+                        realStartServiceLocked(sr, proc, thread, pid, uidRecord, sr.createdFromFg,
+                                true);
+                    } finally {
+                        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                    }
                     didSomething = true;
                     if (!isServiceNeededLocked(sr, false, false)) {
                         // We were waiting for this service to start, but it is actually no

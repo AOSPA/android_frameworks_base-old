@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
@@ -25,7 +24,7 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,31 +58,30 @@ class ExitPipWithSwipeDownTest(testSpec: FlickerTestParameter) : ExitPipTransiti
         get() = {
             super.transition(this)
             transitions {
-                val pipRegion = wmHelper.getWindowRegion(pipApp.component).bounds
+                val pipRegion = wmHelper.getWindowRegion(pipApp).bounds
                 val pipCenterX = pipRegion.centerX()
                 val pipCenterY = pipRegion.centerY()
                 val displayCenterX = device.displayWidth / 2
-                device.swipe(pipCenterX, pipCenterY, displayCenterX, device.displayHeight, 10)
+                val barComponent = if (testSpec.isTablet) {
+                    ComponentMatcher.TASK_BAR
+                } else {
+                    ComponentMatcher.NAV_BAR
+                }
+                val barLayerHeight = wmHelper.currentState.layerState
+                    .getLayerWithBuffer(barComponent)
+                    ?.visibleRegion
+                    ?.height ?: error("Couldn't find Nav or Task bar layer")
+                // The dismiss button doesn't appear at the complete bottom of the screen,
+                val displayY = device.displayHeight - barLayerHeight
+                device.swipe(pipCenterX, pipCenterY, displayCenterX, displayY, 50)
                 // Wait until the other app is no longer visible
                 wmHelper.StateSyncBuilder()
                     .withPipGone()
-                    .withWindowSurfaceDisappeared(pipApp.component)
+                    .withWindowSurfaceDisappeared(pipApp)
                     .withAppTransitionIdle()
                     .waitForAndVerify()
             }
         }
-
-    @FlakyTest
-    @Test
-    override fun pipWindowBecomesInvisible() = super.pipWindowBecomesInvisible()
-
-    @FlakyTest
-    @Test
-    override fun pipLayerBecomesInvisible() = super.pipLayerBecomesInvisible()
-
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
     /**
      * Checks that the focus doesn't change between windows during the transition

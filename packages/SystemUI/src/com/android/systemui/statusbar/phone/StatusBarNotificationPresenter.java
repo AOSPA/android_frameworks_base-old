@@ -30,19 +30,17 @@ import android.util.Log;
 import android.util.Slog;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
-import android.widget.TextView;
 
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
-import com.android.internal.widget.MessagingGroup;
-import com.android.internal.widget.MessagingMessage;
-import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dependency;
 import com.android.systemui.ForegroundServiceNotificationListener;
 import com.android.systemui.InitController;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
+import com.android.systemui.shade.NotificationPanelViewController;
+import com.android.systemui.shade.NotificationShadeWindowView;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
@@ -56,7 +54,6 @@ import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.AboveShelfObserver;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
 import com.android.systemui.statusbar.notification.collection.render.NotifShadeEventSource;
@@ -71,16 +68,12 @@ import com.android.systemui.statusbar.notification.stack.NotificationListContain
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger.LockscreenUiEvent;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
-import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-
-import java.util.List;
 
 import javax.inject.Inject;
 
 @CentralSurfacesComponent.CentralSurfacesScope
 class StatusBarNotificationPresenter implements NotificationPresenter,
-        ConfigurationController.ConfigurationListener,
         NotificationRowBinderImpl.BindRowCallback,
         CommandQueue.Callbacks {
     private static final String TAG = "StatusBarNotificationPresenter";
@@ -90,10 +83,8 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
     private final NotificationLockscreenUserManager mLockscreenUserManager;
     private final SysuiStatusBarStateController mStatusBarStateController;
     private final NotifShadeEventSource mNotifShadeEventSource;
-    private final NotificationEntryManager mEntryManager;
     private final NotificationMediaManager mMediaManager;
     private final NotificationGutsManager mGutsManager;
-    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final LockscreenGestureLogger mLockscreenGestureLogger;
 
     private final NotificationPanelViewController mNotificationPanel;
@@ -114,9 +105,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
     private final IStatusBarService mBarService;
     private final DynamicPrivacyController mDynamicPrivacyController;
     private final NotificationListContainer mNotifListContainer;
-    private boolean mReinflateNotificationsOnUserSwitched;
-    private boolean mDispatchUiModeChangeOnUserSwitched;
-    private TextView mNotificationPanelDebugText;
 
     protected boolean mVrMode;
 
@@ -140,15 +128,12 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
             NotificationLockscreenUserManager lockscreenUserManager,
             SysuiStatusBarStateController sysuiStatusBarStateController,
             NotifShadeEventSource notifShadeEventSource,
-            NotificationEntryManager notificationEntryManager,
             NotificationMediaManager notificationMediaManager,
             NotificationGutsManager notificationGutsManager,
-            KeyguardUpdateMonitor keyguardUpdateMonitor,
             LockscreenGestureLogger lockscreenGestureLogger,
             InitController initController,
             NotificationInterruptStateProvider notificationInterruptStateProvider,
             NotificationRemoteInputManager remoteInputManager,
-            ConfigurationController configurationController,
             NotifPipelineFlags notifPipelineFlags,
             NotificationRemoteInputManager.Callback remoteInputManagerCallback,
             NotificationListContainer notificationListContainer) {
@@ -166,10 +151,8 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
         mLockscreenUserManager = lockscreenUserManager;
         mStatusBarStateController = sysuiStatusBarStateController;
         mNotifShadeEventSource = notifShadeEventSource;
-        mEntryManager = notificationEntryManager;
         mMediaManager = notificationMediaManager;
         mGutsManager = notificationGutsManager;
-        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mLockscreenGestureLogger = lockscreenGestureLogger;
         mAboveShelfObserver = new AboveShelfObserver(stackScrollerController.getView());
         mNotificationShadeWindowController = notificationShadeWindowController;
@@ -212,7 +195,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
 
             onUserSwitched(mLockscreenUserManager.getCurrentUserId());
         });
-        configurationController.addCallback(this);
     }
 
     /** Called when the shade has been emptied to attempt to close the shade */
@@ -225,65 +207,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
             mStatusBarStateController.setState(StatusBarState.KEYGUARD);
         }
     }
-
-    @Override
-    public void onDensityOrFontScaleChanged() {
-        // TODO(b/145659174): Remove legacy pipeline code
-        if (mNotifPipelineFlags.isNewPipelineEnabled()) return;
-        MessagingMessage.dropCache();
-        MessagingGroup.dropCache();
-        if (!mKeyguardUpdateMonitor.isSwitchingUser()) {
-            updateNotificationsOnDensityOrFontScaleChanged();
-        } else {
-            mReinflateNotificationsOnUserSwitched = true;
-        }
-    }
-
-    @Override
-    public void onUiModeChanged() {
-        // TODO(b/145659174): Remove legacy pipeline code
-        if (mNotifPipelineFlags.isNewPipelineEnabled()) return;
-        if (!mKeyguardUpdateMonitor.isSwitchingUser()) {
-            updateNotificationsOnUiModeChanged();
-        } else {
-            mDispatchUiModeChangeOnUserSwitched = true;
-        }
-    }
-
-    @Override
-    public void onThemeChanged() {
-        onDensityOrFontScaleChanged();
-    }
-
-    private void updateNotificationsOnUiModeChanged() {
-        // TODO(b/145659174): Remove legacy pipeline code
-        if (mNotifPipelineFlags.isNewPipelineEnabled()) return;
-        List<NotificationEntry> userNotifications =
-                mEntryManager.getActiveNotificationsForCurrentUser();
-        for (int i = 0; i < userNotifications.size(); i++) {
-            NotificationEntry entry = userNotifications.get(i);
-            ExpandableNotificationRow row = entry.getRow();
-            if (row != null) {
-                row.onUiModeChanged();
-            }
-        }
-    }
-
-    private void updateNotificationsOnDensityOrFontScaleChanged() {
-        // TODO(b/145659174): Remove legacy pipeline code
-        if (mNotifPipelineFlags.isNewPipelineEnabled()) return;
-        List<NotificationEntry> userNotifications =
-                mEntryManager.getActiveNotificationsForCurrentUser();
-        for (int i = 0; i < userNotifications.size(); i++) {
-            NotificationEntry entry = userNotifications.get(i);
-            entry.onDensityOrFontScaleChanged();
-            boolean exposedGuts = entry.areGutsExposed();
-            if (exposedGuts) {
-                mGutsManager.onDensityOrFontScaleChanged(entry);
-            }
-        }
-    }
-
 
     @Override
     public boolean isCollapsing() {
@@ -324,17 +247,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
         // End old BaseStatusBar.userSwitched
         if (MULTIUSER_DEBUG) mNotificationPanel.setHeaderDebugInfo("USER " + newUserId);
         mCommandQueue.animateCollapsePanels();
-        if (!mNotifPipelineFlags.isNewPipelineEnabled()) {
-            if (mReinflateNotificationsOnUserSwitched) {
-                updateNotificationsOnDensityOrFontScaleChanged();
-                mReinflateNotificationsOnUserSwitched = false;
-            }
-            if (mDispatchUiModeChangeOnUserSwitched) {
-                updateNotificationsOnUiModeChanged();
-                mDispatchUiModeChangeOnUserSwitched = false;
-            }
-            updateNotificationViews("user switched");
-        }
         mMediaManager.clearCurrentMediaNotification();
         mCentralSurfaces.setLockscreenUser(newUserId);
         updateMediaMetaData(true, false);

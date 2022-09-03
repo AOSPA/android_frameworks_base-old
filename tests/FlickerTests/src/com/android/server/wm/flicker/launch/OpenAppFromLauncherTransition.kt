@@ -19,17 +19,18 @@ package com.android.server.wm.flicker.launch
 import android.platform.test.annotations.Presubmit
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.replacesLayer
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.Test
 
 /**
  * Base class for app launch tests
  */
-abstract class OpenAppFromLauncherTransition(testSpec: FlickerTestParameter) :
-    OpenAppTransition(testSpec) {
+abstract class OpenAppFromLauncherTransition(
+    testSpec: FlickerTestParameter
+) : OpenAppTransition(testSpec) {
 
     /**
-     * Checks that the focus changes from the launcher to [testApp]
+     * Checks that the focus changes from the [ComponentMatcher.LAUNCHER] to [testApp]
      */
     @Presubmit
     @Test
@@ -40,31 +41,44 @@ abstract class OpenAppFromLauncherTransition(testSpec: FlickerTestParameter) :
     }
 
     /**
-     * Checks that [FlickerComponentName.LAUNCHER] layer is visible at the start of the transition,
+     * Checks that [ComponentMatcher.LAUNCHER] layer is visible at the start of the transition,
      * and is replaced by [testApp], which remains visible until the end
      */
     open fun appLayerReplacesLauncher() {
-        testSpec.replacesLayer(FlickerComponentName.LAUNCHER, testApp.component,
-                ignoreEntriesWithRotationLayer = true, ignoreSnapshot = true,
-                ignoreSplashscreen = true)
+        testSpec.replacesLayer(
+            ComponentMatcher.LAUNCHER, testApp,
+            ignoreEntriesWithRotationLayer = true, ignoreSnapshot = true,
+            ignoreSplashscreen = true
+        )
     }
 
     /**
-     * Checks that [FlickerComponentName.LAUNCHER] window is visible at the start of the
-     * transition, and is replaced by a snapshot or splash screen (optional), and finally, is
-     * replaced by [testApp], which remains visible until the end
+     * Checks that [ComponentMatcher.LAUNCHER] window is the top window at the start of the
+     * transition, and is replaced by a [ComponentMatcher.SNAPSHOT] or
+     * [ComponentMatcher.SPLASH_SCREEN], or [testApp], which remains visible until the end
      */
     @Presubmit
     @Test
     open fun appWindowReplacesLauncherAsTopWindow() {
         testSpec.assertWm {
-            this.isAppWindowOnTop(FlickerComponentName.LAUNCHER)
-                    .then()
-                    .isAppWindowOnTop(FlickerComponentName.SNAPSHOT, isOptional = true)
-                    .then()
-                    .isAppWindowOnTop(FlickerComponentName.SPLASH_SCREEN, isOptional = true)
-                    .then()
-                    .isAppWindowOnTop(testApp.component)
+            this.isAppWindowOnTop(ComponentMatcher.LAUNCHER)
+                .then()
+                .isAppWindowOnTop(
+                    testApp
+                        .or(ComponentMatcher.SNAPSHOT)
+                        .or(ComponentMatcher.SPLASH_SCREEN)
+                )
+        }
+    }
+
+    /**
+     * Checks that [testApp] window is the top window at the en dof the trace
+     */
+    @Presubmit
+    @Test
+    open fun appWindowAsTopWindowAtEnd() {
+        testSpec.assertWmEnd {
+            this.isAppWindowOnTop(testApp)
         }
     }
 }
