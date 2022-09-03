@@ -16,6 +16,24 @@
       "message": "I would like 20% and 10%\u0027s battery to turn red inside to indicate low battery. Seems like good UX to me",
       "revId": "0a48c0de82b5b589405be54faa99eb0b677e11bc",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "7c59cd70_32d7da74",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-09-03T16:34:07Z",
+      "side": 1,
+      "message": "blocking it until done, I remember us having red colours before on ruby or quartz",
+      "parentUuid": "1ad8538b_bfa24148",
+      "revId": "0a48c0de82b5b589405be54faa99eb0b677e11bc",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
