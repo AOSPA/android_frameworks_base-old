@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "161fabd5_6e2b6e5a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2022-09-03T20:54:31Z",
+      "side": 1,
+      "message": "use from hardware/google/pixel",
+      "revId": "1ae43f68f92abe90f665c103c38a25a8b524a3b9",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
