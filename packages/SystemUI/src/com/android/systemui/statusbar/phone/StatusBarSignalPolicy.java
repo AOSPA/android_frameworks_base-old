@@ -197,6 +197,7 @@ public class StatusBarSignalPolicy implements SignalCallback,
             newState.contentDescription = indicators.statusIcon.contentDescription;
             MobileIconState first = getFirstMobileState();
             newState.signalSpacerVisible = first != null && first.typeId != 0;
+            newState.wifiStandard = indicators.wifiStandard;
         }
         newState.slot = mSlotWifi;
         newState.airplaneSpacerVisible = mIsAirplaneMode;
@@ -512,6 +513,7 @@ public class StatusBarSignalPolicy implements SignalCallback,
         public boolean noDefaultNetwork;
         public boolean noValidatedNetwork;
         public boolean noNetworksAvailable;
+        public int wifiStandard;
 
         @Override
         public boolean equals(Object o) {
@@ -528,7 +530,8 @@ public class StatusBarSignalPolicy implements SignalCallback,
                     && signalSpacerVisible == that.signalSpacerVisible
                     && noDefaultNetwork == that.noDefaultNetwork
                     && noValidatedNetwork == that.noValidatedNetwork
-                    && noNetworksAvailable == that.noNetworksAvailable;
+                    && noNetworksAvailable == that.noNetworksAvailable
+                    && wifiStandard == that.wifiStandard;
         }
 
         public void copyTo(WifiIconState other) {
@@ -539,6 +542,7 @@ public class StatusBarSignalPolicy implements SignalCallback,
             other.noDefaultNetwork = noDefaultNetwork;
             other.noValidatedNetwork = noValidatedNetwork;
             other.noNetworksAvailable = noNetworksAvailable;
+            other.wifiStandard = wifiStandard;
         }
 
         public WifiIconState copy() {
