@@ -16,6 +16,24 @@
       "message": "why two commits for this?  should we just pick from lineage?",
       "revId": "441ea6a13c8181cf03a1b54ec0cea32829ea321c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fdaab720_8abf9716",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-09-04T13:56:22Z",
+      "side": 1,
+      "message": "I just forwarded port the stuff from Sapphire. Lineage implementation is a bit different in some terms.",
+      "parentUuid": "d49c54fb_ef3e4543",
+      "revId": "441ea6a13c8181cf03a1b54ec0cea32829ea321c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
