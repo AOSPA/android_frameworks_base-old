@@ -90,7 +90,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
-import android.os.ParcelableException;
 import android.os.PowerExemptionManager;
 import android.os.PowerManager;
 import android.os.Process;
@@ -116,7 +115,6 @@ import android.util.EventLog;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.LongArrayQueue;
-import android.util.NtpTrustedTime;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -161,7 +159,6 @@ import libcore.util.EmptyArray;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
-import java.time.DateTimeException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -335,12 +332,18 @@ public class AlarmManagerService extends SystemService {
             "REORDER_ALARMS_FOR_TARE",
     });
 
-    BroadcastOptions mOptsWithFgs = BroadcastOptions.makeBasic();
-    BroadcastOptions mOptsWithFgsForAlarmClock = BroadcastOptions.makeBasic();
-    BroadcastOptions mOptsWithoutFgs = BroadcastOptions.makeBasic();
-    BroadcastOptions mOptsTimeBroadcast = BroadcastOptions.makeBasic();
+    BroadcastOptions mOptsWithFgs = makeBasicAlarmBroadcastOptions();
+    BroadcastOptions mOptsWithFgsForAlarmClock = makeBasicAlarmBroadcastOptions();
+    BroadcastOptions mOptsWithoutFgs = makeBasicAlarmBroadcastOptions();
+    BroadcastOptions mOptsTimeBroadcast = makeBasicAlarmBroadcastOptions();
     ActivityOptions mActivityOptsRestrictBal = ActivityOptions.makeBasic();
-    BroadcastOptions mBroadcastOptsRestrictBal = BroadcastOptions.makeBasic();
+    BroadcastOptions mBroadcastOptsRestrictBal = makeBasicAlarmBroadcastOptions();
+
+    private static BroadcastOptions makeBasicAlarmBroadcastOptions() {
+        final BroadcastOptions b = BroadcastOptions.makeBasic();
+        b.setAlarmBroadcast(true);
+        return b;
+    }
 
     // TODO(b/172085676): Move inside alarm store.
     private final SparseArray<AlarmManager.AlarmClockInfo> mNextAlarmClockForUser =
@@ -670,9 +673,6 @@ public class AlarmManagerService extends SystemService {
         private static final String KEY_APP_STANDBY_RESTRICTED_WINDOW =
                 "app_standby_restricted_window";
 
-        @VisibleForTesting
-        static final String KEY_LAZY_BATCHING = "lazy_batching";
-
         private static final String KEY_TIME_TICK_ALLOWED_WHILE_IDLE =
                 "time_tick_allowed_while_idle";
 
@@ -687,8 +687,6 @@ public class AlarmManagerService extends SystemService {
         @VisibleForTesting
         static final String KEY_ALLOW_WHILE_IDLE_COMPAT_WINDOW = "allow_while_idle_compat_window";
 
-        @VisibleForTesting
-        static final String KEY_CRASH_NON_CLOCK_APPS = "crash_non_clock_apps";
         @VisibleForTesting
         static final String KEY_PRIORITY_ALARM_DELAY = "priority_alarm_delay";
         @VisibleForTesting
@@ -724,7 +722,6 @@ public class AlarmManagerService extends SystemService {
         private static final int DEFAULT_APP_STANDBY_RESTRICTED_QUOTA = 1;
         private static final long DEFAULT_APP_STANDBY_RESTRICTED_WINDOW = INTERVAL_DAY;
 
-        private static final boolean DEFAULT_LAZY_BATCHING = true;
         private static final boolean DEFAULT_TIME_TICK_ALLOWED_WHILE_IDLE = true;
 
         /**
@@ -736,8 +733,6 @@ public class AlarmManagerService extends SystemService {
 
         private static final long DEFAULT_ALLOW_WHILE_IDLE_WINDOW = 60 * 60 * 1000; // 1 hour.
         private static final long DEFAULT_ALLOW_WHILE_IDLE_COMPAT_WINDOW = 9 * 60 * 1000; // 9 mins.
-
-        private static final boolean DEFAULT_CRASH_NON_CLOCK_APPS = true;
 
         private static final long DEFAULT_PRIORITY_ALARM_DELAY = 9 * 60_000;
 
@@ -773,7 +768,6 @@ public class AlarmManagerService extends SystemService {
         public int APP_STANDBY_RESTRICTED_QUOTA = DEFAULT_APP_STANDBY_RESTRICTED_QUOTA;
         public long APP_STANDBY_RESTRICTED_WINDOW = DEFAULT_APP_STANDBY_RESTRICTED_WINDOW;
 
-        public boolean LAZY_BATCHING = DEFAULT_LAZY_BATCHING;
         public boolean TIME_TICK_ALLOWED_WHILE_IDLE = DEFAULT_TIME_TICK_ALLOWED_WHILE_IDLE;
 
         public int ALLOW_WHILE_IDLE_QUOTA = DEFAULT_ALLOW_WHILE_IDLE_QUOTA;
@@ -795,13 +789,6 @@ public class AlarmManagerService extends SystemService {
          * Can be configured, but only recommended for testing.
          */
         public long ALLOW_WHILE_IDLE_WINDOW = DEFAULT_ALLOW_WHILE_IDLE_WINDOW;
-
-        /**
-         * Whether or not to crash callers that use setExactAndAllowWhileIdle or setAlarmClock
-         * but don't hold the required permission. This is useful to catch broken
-         * apps and reverting to a softer failure in case of broken apps.
-         */
-        public boolean CRASH_NON_CLOCK_APPS = DEFAULT_CRASH_NON_CLOCK_APPS;
 
         /**
          * Minimum delay between two slots that an app can get for their prioritized alarms, while
@@ -984,22 +971,10 @@ public class AlarmManagerService extends SystemService {
                         case KEY_APP_STANDBY_RESTRICTED_WINDOW:
                             updateStandbyWindowsLocked();
                             break;
-                        case KEY_LAZY_BATCHING:
-                            final boolean oldLazyBatching = LAZY_BATCHING;
-                            LAZY_BATCHING = properties.getBoolean(
-                                    KEY_LAZY_BATCHING, DEFAULT_LAZY_BATCHING);
-                            if (oldLazyBatching != LAZY_BATCHING) {
-                                migrateAlarmsToNewStoreLocked();
-                            }
-                            break;
                         case KEY_TIME_TICK_ALLOWED_WHILE_IDLE:
                             TIME_TICK_ALLOWED_WHILE_IDLE = properties.getBoolean(
                                     KEY_TIME_TICK_ALLOWED_WHILE_IDLE,
                                     DEFAULT_TIME_TICK_ALLOWED_WHILE_IDLE);
-                            break;
-                        case KEY_CRASH_NON_CLOCK_APPS:
-                            CRASH_NON_CLOCK_APPS = properties.getBoolean(KEY_CRASH_NON_CLOCK_APPS,
-                                    DEFAULT_CRASH_NON_CLOCK_APPS);
                             break;
                         case KEY_PRIORITY_ALARM_DELAY:
                             PRIORITY_ALARM_DELAY = properties.getLong(KEY_PRIORITY_ALARM_DELAY,
@@ -1104,15 +1079,6 @@ public class AlarmManagerService extends SystemService {
             } else {
                 EXACT_ALARM_DENY_LIST = newSet;
             }
-        }
-
-        private void migrateAlarmsToNewStoreLocked() {
-            final AlarmStore newStore = LAZY_BATCHING ? new LazyAlarmStore()
-                    : new BatchingAlarmStore();
-            final ArrayList<Alarm> allAlarms = mAlarmStore.remove((unused) -> true);
-            newStore.addAll(allAlarms);
-            mAlarmStore = newStore;
-            mAlarmStore.setAlarmClockRemovalListener(mAlarmClockUpdater);
         }
 
         private void updateDeviceIdleFuzzBoundaries() {
@@ -1252,13 +1218,7 @@ public class AlarmManagerService extends SystemService {
             TimeUtils.formatDuration(APP_STANDBY_RESTRICTED_WINDOW, pw);
             pw.println();
 
-            pw.print(KEY_LAZY_BATCHING, LAZY_BATCHING);
-            pw.println();
-
             pw.print(KEY_TIME_TICK_ALLOWED_WHILE_IDLE, TIME_TICK_ALLOWED_WHILE_IDLE);
-            pw.println();
-
-            pw.print(KEY_CRASH_NON_CLOCK_APPS, CRASH_NON_CLOCK_APPS);
             pw.println();
 
             pw.print(KEY_PRIORITY_ALARM_DELAY);
@@ -1893,8 +1853,7 @@ public class AlarmManagerService extends SystemService {
             mHandler = new AlarmHandler();
             mConstants = new Constants(mHandler);
 
-            mAlarmStore = mConstants.LAZY_BATCHING ? new LazyAlarmStore()
-                    : new BatchingAlarmStore();
+            mAlarmStore = new LazyAlarmStore();
             mAlarmStore.setAlarmClockRemovalListener(mAlarmClockUpdater);
 
             mAppWakeupHistory = new AppWakeupHistory(Constants.DEFAULT_APP_STANDBY_WINDOW);
@@ -2908,11 +2867,7 @@ public class AlarmManagerService extends SystemService {
                                             + Manifest.permission.SCHEDULE_EXACT_ALARM + " or "
                                             + Manifest.permission.USE_EXACT_ALARM + " to set "
                                             + "exact alarms.";
-                            if (mConstants.CRASH_NON_CLOCK_APPS) {
-                                throw new SecurityException(errorMessage);
-                            } else {
-                                Slog.wtf(TAG, errorMessage);
-                            }
+                            throw new SecurityException(errorMessage);
                         }
                         // If the app is on the full system power allow-list (not except-idle),
                         // or the user-elected allow-list, or we're in a soft failure mode, we still
@@ -3021,17 +2976,6 @@ public class AlarmManagerService extends SystemService {
                     Binder.getCallingUid(), userId, /*allowAll=*/false, ALLOW_NON_FULL,
                     "getNextAlarmClock", null);
             return getNextAlarmClockImpl(userId);
-        }
-
-        @Override
-        public long currentNetworkTimeMillis() {
-            final NtpTrustedTime time = NtpTrustedTime.getInstance(getContext());
-            NtpTrustedTime.TimeResult ntpResult = time.getCachedTimeResult();
-            if (ntpResult != null) {
-                return ntpResult.currentTimeMillis();
-            } else {
-                throw new ParcelableException(new DateTimeException("Missing NTP fix"));
-            }
         }
 
         @Override

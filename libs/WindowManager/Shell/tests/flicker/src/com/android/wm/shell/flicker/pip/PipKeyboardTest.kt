@@ -16,9 +16,9 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
-import android.platform.test.annotations.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -28,7 +28,7 @@ import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import com.android.wm.shell.flicker.helpers.ImeAppHelper
 import org.junit.Assume.assumeFalse
 import org.junit.Before
@@ -47,7 +47,6 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group4
-@FlakyTest(bugId = 218604389)
 open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     private val imeApp = ImeAppHelper(instrumentation)
 
@@ -56,6 +55,7 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
         assumeFalse(isShellTransitionsEnabled)
     }
 
+    /** {@inheritDoc}  */
     override val transition: FlickerBuilder.() -> Unit
         get() = buildTransition(eachRun = false) {
             setup {
@@ -83,7 +83,8 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
     /** {@inheritDoc}  */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
+    override fun statusBarLayerPositionAtStartAndEnd() =
+        super.statusBarLayerPositionAtStartAndEnd()
 
     /**
      * Ensure the pip window remains visible throughout any keyboard interactions
@@ -91,7 +92,7 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
     @Presubmit
     @Test
     open fun pipInVisibleBounds() {
-        testSpec.assertWmVisibleRegion(pipApp.component) {
+        testSpec.assertWmVisibleRegion(pipApp) {
             val displayBounds = WindowUtils.getDisplayBounds(testSpec.startRotation)
             coversAtMost(displayBounds)
         }
@@ -104,7 +105,7 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
     @Test
     open fun pipIsAboveAppWindow() {
         testSpec.assertWmTag(TAG_IME_VISIBLE) {
-            isAboveWindow(FlickerComponentName.IME, pipApp.component)
+            isAboveWindow(ComponentMatcher.IME, pipApp)
         }
     }
 

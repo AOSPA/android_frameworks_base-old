@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
@@ -25,7 +24,7 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.traces.common.FlickerComponentName.Companion.LAUNCHER
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -56,9 +55,7 @@ import org.junit.runners.Parameterized
 @Group3
 open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
 
-    /**
-     * Defines the transition used to run the test
-     */
+    /** {@inheritDoc}  */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             setupAndTeardown(this)
@@ -77,11 +74,6 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
             }
         }
 
-    /** {@inheritDoc}  */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
-
     /**
      * Checks [pipApp] window remains visible throughout the animation
      */
@@ -89,7 +81,7 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
     @Test
     fun pipAppWindowAlwaysVisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(pipApp.component)
+            this.isAppWindowVisible(pipApp)
         }
     }
 
@@ -100,7 +92,7 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
     @Test
     open fun pipAppLayerAlwaysVisible() {
         testSpec.assertLayers {
-            this.isVisible(pipApp.component)
+            this.isVisible(pipApp)
         }
     }
 
@@ -111,7 +103,7 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
     @Presubmit
     @Test
     fun pipWindowRemainInsideVisibleBounds() {
-        testSpec.assertWmVisibleRegion(pipApp.component) {
+        testSpec.assertWmVisibleRegion(pipApp) {
             coversAtMost(displayBounds)
         }
     }
@@ -123,7 +115,7 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
     @Presubmit
     @Test
     open fun pipLayerRemainInsideVisibleBounds() {
-        testSpec.assertLayersVisibleRegion(pipApp.component) {
+        testSpec.assertLayersVisibleRegion(pipApp) {
             coversAtMost(displayBounds)
         }
     }
@@ -134,9 +126,8 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
     @Presubmit
     @Test
     open fun pipLayerReduces() {
-        val layerName = pipApp.component.toLayerName()
         testSpec.assertLayers {
-            val pipLayerList = this.layers { it.name.contains(layerName) && it.isVisible }
+            val pipLayerList = this.layers { pipApp.layerMatchesAnyOf(it) && it.isVisible }
             pipLayerList.zipWithNext { previous, current ->
                 current.visibleRegion.coversAtMost(previous.visibleRegion.region)
             }
@@ -150,22 +141,22 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
     @Test
     fun pipWindowBecomesPinned() {
         testSpec.assertWm {
-            invoke("pipWindowIsNotPinned") { it.isNotPinned(pipApp.component) }
+            invoke("pipWindowIsNotPinned") { it.isNotPinned(pipApp) }
                 .then()
-                .invoke("pipWindowIsPinned") { it.isPinned(pipApp.component) }
+                .invoke("pipWindowIsPinned") { it.isPinned(pipApp) }
         }
     }
 
     /**
-     * Checks [LAUNCHER] layer remains visible throughout the animation
+     * Checks [ComponentMatcher.LAUNCHER] layer remains visible throughout the animation
      */
     @Presubmit
     @Test
     fun launcherLayerBecomesVisible() {
         testSpec.assertLayers {
-            isInvisible(LAUNCHER)
+            isInvisible(ComponentMatcher.LAUNCHER)
                 .then()
-                .isVisible(LAUNCHER)
+                .isVisible(ComponentMatcher.LAUNCHER)
         }
     }
 

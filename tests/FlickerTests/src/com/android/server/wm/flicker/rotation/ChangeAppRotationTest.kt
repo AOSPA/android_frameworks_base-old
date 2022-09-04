@@ -16,8 +16,8 @@
 
 package com.android.server.wm.flicker.rotation
 
-import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.Presubmit
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -25,10 +25,7 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
-import com.android.server.wm.flicker.statusBarLayerIsVisible
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.flicker.statusBarWindowIsVisible
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -102,22 +99,22 @@ class ChangeAppRotationTest(
     }
 
     /**
-     * Checks that the [FlickerComponentName.ROTATION] layer appears during the transition,
+     * Checks that the [ComponentMatcher.ROTATION] layer appears during the transition,
      * doesn't flicker, and disappears before the transition is complete
      */
     fun rotationLayerAppearsAndVanishesAssertion() {
         testSpec.assertLayers {
-            this.isVisible(testApp.component)
+            this.isVisible(testApp)
                 .then()
-                .isVisible(FlickerComponentName.ROTATION)
+                .isVisible(ComponentMatcher.ROTATION)
                 .then()
-                .isVisible(testApp.component)
-                .isInvisible(FlickerComponentName.ROTATION)
+                .isVisible(testApp)
+                .isInvisible(ComponentMatcher.ROTATION)
         }
     }
 
     /**
-     * Checks that the [FlickerComponentName.ROTATION] layer appears during the transition,
+     * Checks that the [ComponentMatcher.ROTATION] layer appears during the transition,
      * doesn't flicker, and disappears before the transition is complete
      */
     @Presubmit
@@ -126,38 +123,11 @@ class ChangeAppRotationTest(
         rotationLayerAppearsAndVanishesAssertion()
     }
 
-    /**
-     * Checks that the status bar window is visible and above the app windows in all WM
-     * trace entries
-     */
-    @Presubmit
-    @Test
-    fun statusBarWindowIsVisible() {
-        testSpec.statusBarWindowIsVisible()
-    }
-
-    /**
-     * Checks that the status bar layer is visible at the start and end of the transition
-     */
-    @Presubmit
-    @Test
-    fun statusBarLayerIsVisible() {
-        testSpec.statusBarLayerIsVisible()
-    }
-
-    /**
-     * Checks the position of the status bar at the start and end of the transition
-     */
+    /** {@inheritDoc} */
     @FlakyTest(bugId = 206753786)
     @Test
-    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
-
-    /** {@inheritDoc} */
-    @FlakyTest
-    @Test
-    override fun navBarLayerRotatesAndScales() {
-        super.navBarLayerRotatesAndScales()
-    }
+    override fun navBarLayerPositionAtStartAndEnd() =
+        super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @FlakyTest

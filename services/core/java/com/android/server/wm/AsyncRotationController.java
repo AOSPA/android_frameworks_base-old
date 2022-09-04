@@ -120,7 +120,7 @@ class AsyncRotationController extends FadeAnimationController implements Consume
             } else {
                 mTransitionOp = OP_CHANGE;
             }
-        } else if (transitionType != WindowManager.TRANSIT_NONE) {
+        } else if (displayContent.mTransitionController.isShellTransitionsEnabled()) {
             mTransitionOp = OP_APP_SWITCH;
         } else {
             mTransitionOp = OP_LEGACY;
@@ -357,7 +357,7 @@ class AsyncRotationController extends FadeAnimationController implements Consume
      * or seamless transformation in a rotated display.
      */
     boolean shouldFreezeInsetsPosition(WindowState w) {
-        return mTransitionOp == OP_APP_SWITCH && w.mTransitionController.inTransition()
+        return mTransitionOp != OP_LEGACY && w.mTransitionController.inTransition()
                 && isTargetToken(w.mToken);
     }
 

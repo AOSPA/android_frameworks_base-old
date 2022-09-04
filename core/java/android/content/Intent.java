@@ -11953,7 +11953,7 @@ public class Intent implements Parcelable, Cloneable {
         // passed via Bluetooth intents
         if (mAction != null && mAction.startsWith("android.bluetooth.")
                 && hasExtra(BluetoothDevice.EXTRA_DEVICE)) {
-            final BluetoothDevice device = getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            final BluetoothDevice device = getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
             if (device != null) {
                 device.prepareToEnterProcess(source);
             }
@@ -12002,12 +12002,12 @@ public class Intent implements Parcelable, Cloneable {
         }
         String action = getAction();
         if (ACTION_SEND.equals(action)) {
-            final Uri stream = getParcelableExtra(EXTRA_STREAM);
+            final Uri stream = getParcelableExtra(EXTRA_STREAM, Uri.class);
             if (stream != null) {
                 putExtra(EXTRA_STREAM, maybeAddUserId(stream, contentUserHint));
             }
         } else if (ACTION_SEND_MULTIPLE.equals(action)) {
-            final ArrayList<Uri> streams = getParcelableArrayListExtra(EXTRA_STREAM);
+            final ArrayList<Uri> streams = getParcelableArrayListExtra(EXTRA_STREAM, Uri.class);
             if (streams != null) {
                 ArrayList<Uri> newStreams = new ArrayList<Uri>();
                 for (int i = 0; i < streams.size(); i++) {
@@ -12016,7 +12016,7 @@ public class Intent implements Parcelable, Cloneable {
                 putParcelableArrayListExtra(EXTRA_STREAM, newStreams);
             }
         } else if (isImageCaptureIntent()) {
-            final Uri output = getParcelableExtra(MediaStore.EXTRA_OUTPUT);
+            final Uri output = getParcelableExtra(MediaStore.EXTRA_OUTPUT, Uri.class);
             if (output != null) {
                 putExtra(MediaStore.EXTRA_OUTPUT, maybeAddUserId(output, contentUserHint));
             }
@@ -12060,7 +12060,7 @@ public class Intent implements Parcelable, Cloneable {
 
             boolean migrated = false;
             try {
-                final Intent intent = getParcelableExtra(EXTRA_INTENT);
+                final Intent intent = getParcelableExtra(EXTRA_INTENT, Intent.class);
                 if (intent != null) {
                     migrated |= intent.migrateExtraStreamToClipData(context);
                 }
@@ -12082,7 +12082,7 @@ public class Intent implements Parcelable, Cloneable {
 
         } else if (ACTION_SEND.equals(action)) {
             try {
-                final Uri stream = getParcelableExtra(EXTRA_STREAM);
+                final Uri stream = getParcelableExtra(EXTRA_STREAM, Uri.class);
                 final CharSequence text = getCharSequenceExtra(EXTRA_TEXT);
                 final String htmlText = getStringExtra(EXTRA_HTML_TEXT);
                 if (stream != null || text != null || htmlText != null) {
@@ -12098,7 +12098,7 @@ public class Intent implements Parcelable, Cloneable {
 
         } else if (ACTION_SEND_MULTIPLE.equals(action)) {
             try {
-                final ArrayList<Uri> streams = getParcelableArrayListExtra(EXTRA_STREAM);
+                final ArrayList<Uri> streams = getParcelableArrayListExtra(EXTRA_STREAM, Uri.class);
                 final ArrayList<CharSequence> texts = getCharSequenceArrayListExtra(EXTRA_TEXT);
                 final ArrayList<String> htmlTexts = getStringArrayListExtra(EXTRA_HTML_TEXT);
                 int num = -1;
@@ -12137,7 +12137,7 @@ public class Intent implements Parcelable, Cloneable {
         } else if (isImageCaptureIntent()) {
             Uri output;
             try {
-                output = getParcelableExtra(MediaStore.EXTRA_OUTPUT);
+                output = getParcelableExtra(MediaStore.EXTRA_OUTPUT, Uri.class);
             } catch (ClassCastException e) {
                 return false;
             }

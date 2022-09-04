@@ -180,6 +180,7 @@ import android.view.accessibility.AccessibilityNodeIdManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityNodeProvider;
+import android.view.accessibility.AccessibilityWindowAttributes;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.accessibility.IAccessibilityEmbeddedConnection;
 import android.view.accessibility.IAccessibilityInteractionConnection;
@@ -604,6 +605,8 @@ public final class ViewRootImpl implements ViewParent,
      * deadlock the client by trying to request draws when there may not be any buffers available.
      */
     private boolean mCheckIfCanDraw = false;
+
+    private boolean mDrewOnceForSync = false;
 
     int mSyncSeqId = 0;
     int mLastSyncSeqId = 0;
@@ -1362,6 +1365,7 @@ public final class ViewRootImpl implements ViewParent,
 
                 if (mAccessibilityManager.isEnabled()) {
                     mAccessibilityInteractionConnectionManager.ensureConnection();
+                    setAccessibilityWindowAttributesIfNeeded();
                 }
 
                 if (view.getImportantForAccessibility() == View.IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
@@ -1387,6 +1391,17 @@ public final class ViewRootImpl implements ViewParent,
 
                 AnimationHandler.requestAnimatorsEnabled(mAppVisible, this);
             }
+        }
+    }
+
+    private void setAccessibilityWindowAttributesIfNeeded() {
+        final boolean registered = mAttachInfo.mAccessibilityWindowId
+                != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
+        if (registered) {
+            final AccessibilityWindowAttributes attributes = new AccessibilityWindowAttributes(
+                    mWindowAttributes);
+            mAccessibilityManager.setAccessibilityWindowAttributes(getDisplayId(),
+                    mAttachInfo.mAccessibilityWindowId, attributes);
         }
     }
 
@@ -1707,6 +1722,7 @@ public final class ViewRootImpl implements ViewParent,
 
             mWindowAttributesChanged = true;
             scheduleTraversals();
+            setAccessibilityWindowAttributesIfNeeded();
         }
     }
 
@@ -2806,6 +2822,7 @@ public final class ViewRootImpl implements ViewParent,
         if (viewVisibilityChanged) {
             mAttachInfo.mWindowVisibility = viewVisibility;
             host.dispatchWindowVisibilityChanged(viewVisibility);
+            mAttachInfo.mTreeObserver.dispatchOnWindowVisibilityChange(viewVisibility);
             if (viewUserVisibilityChanged) {
                 host.dispatchVisibilityAggregated(viewVisibility == View.VISIBLE);
             }
@@ -3006,6 +3023,9 @@ public final class ViewRootImpl implements ViewParent,
                     reportNextDraw();
                     mSyncBuffer = true;
                     isSyncRequest = true;
+                    if (!cancelDraw) {
+                        mDrewOnceForSync = false;
+                    }
                 }
 
                 final boolean surfaceControlChanged =
@@ -3020,6 +3040,12 @@ public final class ViewRootImpl implements ViewParent,
                     // SurfaceControl.
                     if (surfaceControlChanged && mDisplayDecorationCached) {
                         updateDisplayDecoration();
+                    }
+                    if (surfaceControlChanged
+                            && mWindowAttributes.type
+                            == WindowManager.LayoutParams.TYPE_STATUS_BAR) {
+                        mTransaction.setDefaultFrameRateCompatibility(mSurfaceControl,
+                            Surface.FRAME_RATE_COMPATIBILITY_NO_VOTE).apply();
                     }
                 }
 
@@ -3061,7 +3087,6 @@ public final class ViewRootImpl implements ViewParent,
                 if (surfaceReplaced) {
                     mSurfaceSequenceId++;
                 }
-
                 if (alwaysConsumeSystemBarsChanged) {
                     mAttachInfo.mAlwaysConsumeSystemBars = mPendingAlwaysConsumeSystemBars;
                     dispatchApplyInsets = true;
@@ -3527,9 +3552,11 @@ public final class ViewRootImpl implements ViewParent,
 
         mCheckIfCanDraw = isSyncRequest || cancelDraw;
 
-        boolean cancelAndRedraw = mAttachInfo.mTreeObserver.dispatchOnPreDraw() || cancelDraw;
+        boolean cancelAndRedraw =
+                mAttachInfo.mTreeObserver.dispatchOnPreDraw() || (cancelDraw && mDrewOnceForSync);
         if (!cancelAndRedraw) {
             createSyncIfNeeded();
+            mDrewOnceForSync = true;
         }
 
         if (!isViewVisible) {
@@ -10289,6 +10316,7 @@ public final class ViewRootImpl implements ViewParent,
         public void onAccessibilityStateChanged(boolean enabled) {
             if (enabled) {
                 ensureConnection();
+                setAccessibilityWindowAttributesIfNeeded();
                 if (mAttachInfo.mHasWindowFocus && (mView != null)) {
                     mView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
                     View focusedView = mView.findFocus();

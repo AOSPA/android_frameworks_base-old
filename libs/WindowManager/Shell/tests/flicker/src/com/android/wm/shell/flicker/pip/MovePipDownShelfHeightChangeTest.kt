@@ -17,7 +17,6 @@
 package com.android.wm.shell.flicker.pip
 
 import android.view.Surface
-import android.platform.test.annotations.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -26,7 +25,6 @@ import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.traces.region.RegionSubject
 import org.junit.FixMethodOrder
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -72,18 +70,13 @@ open class MovePipDownShelfHeightChangeTest(
                 }
             }
             transitions {
-                taplInstrumentation.pressHome()
+                tapl.pressHome()
             }
         }
 
     override fun assertRegionMovement(previous: RegionSubject, current: RegionSubject) {
         current.isHigherOrEqual(previous.region)
     }
-
-    /** {@inheritDoc}  */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
     companion object {
         /**
@@ -96,7 +89,8 @@ open class MovePipDownShelfHeightChangeTest(
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                    supportedRotations = listOf(Surface.ROTATION_0), repetitions = 3)
+                supportedRotations = listOf(Surface.ROTATION_0), repetitions = 3
+            )
         }
     }
 }

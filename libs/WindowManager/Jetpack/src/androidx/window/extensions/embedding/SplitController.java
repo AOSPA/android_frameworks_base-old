@@ -16,6 +16,7 @@
 
 package androidx.window.extensions.embedding;
 
+import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
@@ -43,6 +44,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemProperties;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
@@ -70,6 +72,8 @@ import java.util.function.Consumer;
 public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmentCallback,
         ActivityEmbeddingComponent {
     static final String TAG = "SplitController";
+    static final boolean ENABLE_SHELL_TRANSITIONS =
+            SystemProperties.getBoolean("persist.wm.debug.shell_transit", false);
 
     @VisibleForTesting
     @GuardedBy("mLock")
@@ -94,6 +98,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     private final List<SplitInfo> mLastReportedSplitStates = new ArrayList<>();
     private final Handler mHandler;
     private final Object mLock = new Object();
+    private final ActivityStartMonitor mActivityStartMonitor;
 
     public SplitController() {
         final MainThreadExecutor executor = new MainThreadExecutor();
@@ -105,7 +110,8 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                 new LifecycleCallbacks());
         // Intercept activity starts to route activities to new containers if necessary.
         Instrumentation instrumentation = activityThread.getInstrumentation();
-        instrumentation.addMonitor(new ActivityStartMonitor());
+        mActivityStartMonitor = new ActivityStartMonitor();
+        instrumentation.addMonitor(mActivityStartMonitor);
     }
 
     /** Updates the embedding rules applied to future activity launches. */
@@ -332,6 +338,11 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
      * bounds is large enough for at least one split rule.
      */
     private void updateAnimationOverride(@NonNull TaskContainer taskContainer) {
+        if (ENABLE_SHELL_TRANSITIONS) {
+            // TODO(b/207070762): cleanup with legacy app transition
+            // Animation will be handled by WM Shell with Shell transition enabled.
+            return;
+        }
         if (!taskContainer.isTaskBoundsInitialized()
                 || !taskContainer.isWindowingModeInitialized()) {
             // We don't know about the Task bounds/windowingMode yet.
@@ -1377,6 +1388,11 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
         return ActivityThread.currentActivityThread().getActivity(activityToken);
     }
 
+    @VisibleForTesting
+    ActivityStartMonitor getActivityStartMonitor() {
+        return mActivityStartMonitor;
+    }
+
     /**
      * Gets the token of the initial TaskFragment that embedded this activity. Do not rely on it
      * after creation because the activity could be reparented.
@@ -1528,7 +1544,10 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
      * A monitor that intercepts all activity start requests originating in the client process and
      * can amend them to target a specific task fragment to form a split.
      */
-    private class ActivityStartMonitor extends Instrumentation.ActivityMonitor {
+    @VisibleForTesting
+    class ActivityStartMonitor extends Instrumentation.ActivityMonitor {
+        @VisibleForTesting
+        Intent mCurrentIntent;
 
         @Override
         public Instrumentation.ActivityResult onStartActivity(@NonNull Context who,
@@ -1556,10 +1575,28 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                     // the dedicated container.
                     options.putBinder(ActivityOptions.KEY_LAUNCH_TASK_FRAGMENT_TOKEN,
                             launchedInTaskFragment.getTaskFragmentToken());
+                    mCurrentIntent = intent;
                 }
             }
 
             return super.onStartActivity(who, intent, options);
+        }
+
+        @Override
+        public void onStartActivityResult(int result, @NonNull Bundle bOptions) {
+            super.onStartActivityResult(result, bOptions);
+            if (mCurrentIntent != null && result != START_SUCCESS) {
+                // Clear the pending appeared intent if the activity was not started successfully.
+                final IBinder token = bOptions.getBinder(
+                        ActivityOptions.KEY_LAUNCH_TASK_FRAGMENT_TOKEN);
+                if (token != null) {
+                    final TaskFragmentContainer container = getContainer(token);
+                    if (container != null) {
+                        container.clearPendingAppearedIntentIfNeeded(mCurrentIntent);
+                    }
+                }
+            }
+            mCurrentIntent = null;
         }
     }
 

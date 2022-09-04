@@ -42,14 +42,11 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
     private static final String TAG = "MediaOutputAdapter";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    private final MediaOutputDialog mMediaOutputDialog;
     private ViewGroup mConnectedItem;
     private boolean mIncludeDynamicGroup;
 
-    public MediaOutputAdapter(MediaOutputController controller,
-            MediaOutputDialog mediaOutputDialog) {
+    public MediaOutputAdapter(MediaOutputController controller) {
         super(controller);
-        mMediaOutputDialog = mediaOutputDialog;
         setHasStableIds(true);
     }
 
@@ -63,7 +60,7 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
     @Override
     public void onBindViewHolder(@NonNull MediaDeviceBaseViewHolder viewHolder, int position) {
         final int size = mController.getMediaDevices().size();
-        if (position == size && mController.isZeroMode()) {
+        if (position == size) {
             viewHolder.onBind(CUSTOMIZED_ITEM_PAIR_NEW, false /* topMargin */,
                     true /* bottomMargin */);
         } else if (position < size) {
@@ -78,7 +75,7 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
     @Override
     public long getItemId(int position) {
         final int size = mController.getMediaDevices().size();
-        if (position == size && mController.isZeroMode()) {
+        if (position == size) {
             return -1;
         } else if (position < size) {
             return ((List<MediaDevice>) (mController.getMediaDevices()))
@@ -91,11 +88,8 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
 
     @Override
     public int getItemCount() {
-        if (mController.isZeroMode()) {
-            // Add extra one for "pair new" or dynamic group
-            return mController.getMediaDevices().size() + 1;
-        }
-        return mController.getMediaDevices().size();
+        // Add extra one for "pair new"
+        return mController.getMediaDevices().size() + 1;
     }
 
     class MediaDeviceViewHolder extends MediaDeviceBaseViewHolder {

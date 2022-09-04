@@ -32,7 +32,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
-import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -92,10 +91,8 @@ import com.android.systemui.util.settings.SecureSettings;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
@@ -452,6 +449,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                     }
                 }
 
+                boolean needToUpdateProviderViews = false;
                 final String newUniqueId = mDisplayInfo.uniqueId;
                 if (!Objects.equals(newUniqueId, mDisplayUniqueId)) {
                     mDisplayUniqueId = newUniqueId;
@@ -474,8 +472,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                         updateHwLayerRoundedCornerDrawable();
                         updateHwLayerRoundedCornerExistAndSize();
                     }
-
-                    updateOverlayProviderViews();
+                    needToUpdateProviderViews = true;
                 }
 
                 final float newRatio = getPhysicalPixelDisplaySizeRatio();
@@ -484,7 +481,13 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                     if (mScreenDecorHwcLayer != null) {
                         updateHwLayerRoundedCornerExistAndSize();
                     }
-                    updateOverlayProviderViews();
+                    needToUpdateProviderViews = true;
+                }
+
+                if (needToUpdateProviderViews) {
+                    updateOverlayProviderViews(null);
+                } else {
+                    updateOverlayProviderViews(new Integer[] { mFaceScanningViewId });
                 }
 
                 if (mCutoutViews != null) {
@@ -494,18 +497,12 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                         if (cutoutView == null) {
                             continue;
                         }
-                        cutoutView.onDisplayChanged(displayId);
+                        cutoutView.onDisplayChanged(newUniqueId);
                     }
                 }
 
-                DisplayCutoutView overlay = (DisplayCutoutView) getOverlayView(mFaceScanningViewId);
-                if (overlay != null) {
-                    // handle display resolution changes
-                    overlay.onDisplayChanged(displayId);
-                }
-
                 if (mScreenDecorHwcLayer != null) {
-                    mScreenDecorHwcLayer.onDisplayChanged(displayId);
+                    mScreenDecorHwcLayer.onDisplayChanged(newUniqueId);
                 }
             }
         };
@@ -808,7 +805,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                     return;
                 }
                 removeOverlayView(provider.getViewId());
-                overlay.addDecorProvider(provider, mRotation);
+                overlay.addDecorProvider(provider, mRotation, mTintColor);
             });
         }
         // Use visibility of privacy dot views & face scanning view to determine the overlay's
@@ -846,7 +843,8 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH
                         | WindowManager.LayoutParams.FLAG_SLIPPERY
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT);
         lp.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS
                 | WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
@@ -958,24 +956,6 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             return;
         }
 
-        // When the hwc supports screen decorations, the layer will use the A8 color mode which
-        // won't be affected by the color inversion. If the composition goes the client composition
-        // route, the color inversion will be handled by the RenderEngine.
-        final Set<Integer> viewsMayNeedColorUpdate = new HashSet<>();
-        if (mHwcScreenDecorationSupport == null) {
-            ColorStateList tintList = ColorStateList.valueOf(mTintColor);
-            mRoundedCornerResDelegate.setColorTintList(tintList);
-            viewsMayNeedColorUpdate.add(R.id.rounded_corner_top_left);
-            viewsMayNeedColorUpdate.add(R.id.rounded_corner_top_right);
-            viewsMayNeedColorUpdate.add(R.id.rounded_corner_bottom_left);
-            viewsMayNeedColorUpdate.add(R.id.rounded_corner_bottom_right);
-            viewsMayNeedColorUpdate.add(R.id.display_cutout);
-        }
-        if (getOverlayView(mFaceScanningViewId) != null) {
-            viewsMayNeedColorUpdate.add(mFaceScanningViewId);
-        }
-        final Integer[] views = new Integer[viewsMayNeedColorUpdate.size()];
-        viewsMayNeedColorUpdate.toArray(views);
         for (int i = 0; i < BOUNDS_POSITION_LENGTH; i++) {
             if (mOverlays[i] == null) {
                 continue;
@@ -985,14 +965,19 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             View child;
             for (int j = 0; j < size; j++) {
                 child = overlayView.getChildAt(j);
-                if (viewsMayNeedColorUpdate.contains(child.getId())
-                        && child instanceof DisplayCutoutView) {
+                if (child instanceof DisplayCutoutView && child.getId() == R.id.display_cutout) {
                     ((DisplayCutoutView) child).setColor(mTintColor);
                 }
             }
-            mOverlays[i].onReloadResAndMeasure(views, mProviderRefreshToken,
-                    mRotation, mDisplayUniqueId);
         }
+
+        updateOverlayProviderViews(new Integer[] {
+                mFaceScanningViewId,
+                R.id.rounded_corner_top_left,
+                R.id.rounded_corner_top_right,
+                R.id.rounded_corner_bottom_left,
+                R.id.rounded_corner_bottom_right
+        });
     }
 
     @VisibleForTesting
@@ -1123,7 +1108,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             }
 
             // update all provider views inside overlay
-            updateOverlayProviderViews();
+            updateOverlayProviderViews(null);
         }
 
         FaceScanningOverlay faceScanningOverlay =
@@ -1199,7 +1184,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                 context.getResources(), context.getDisplay().getUniqueId());
     }
 
-    private void updateOverlayProviderViews() {
+    private void updateOverlayProviderViews(@Nullable Integer[] filterIds) {
         if (mOverlays == null) {
             return;
         }
@@ -1208,7 +1193,8 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             if (overlay == null) {
                 continue;
             }
-            overlay.onReloadResAndMeasure(null, mProviderRefreshToken, mRotation, mDisplayUniqueId);
+            overlay.onReloadResAndMeasure(filterIds, mProviderRefreshToken, mRotation, mTintColor,
+                    mDisplayUniqueId);
         }
     }
 
@@ -1247,19 +1233,12 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             } catch (NumberFormatException e) {
                 mRoundedCornerResDelegate.setTuningSizeFactor(null);
             }
-            Integer[] filterIds = {
+            updateOverlayProviderViews(new Integer[] {
                     R.id.rounded_corner_top_left,
                     R.id.rounded_corner_top_right,
                     R.id.rounded_corner_bottom_left,
                     R.id.rounded_corner_bottom_right
-            };
-            for (final OverlayWindow overlay: mOverlays) {
-                if (overlay == null) {
-                    continue;
-                }
-                overlay.onReloadResAndMeasure(filterIds, mProviderRefreshToken, mRotation,
-                        mDisplayUniqueId);
-            }
+            });
             updateHwLayerRoundedCornerExistAndSize();
         });
     }

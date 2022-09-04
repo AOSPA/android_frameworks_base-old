@@ -42,7 +42,7 @@ public class MediaOutputDialog extends MediaOutputBaseDialog {
             MediaOutputController mediaOutputController, UiEventLogger uiEventLogger) {
         super(context, broadcastSender, mediaOutputController);
         mUiEventLogger = uiEventLogger;
-        mAdapter = new MediaOutputAdapter(mMediaOutputController, this);
+        mAdapter = new MediaOutputAdapter(mMediaOutputController);
         if (!aboveStatusbar) {
             getWindow().setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
         }
@@ -132,6 +132,17 @@ public class MediaOutputDialog extends MediaOutputBaseDialog {
             mMediaOutputController.releaseSession();
             dismiss();
         }
+    }
+
+    @Override
+    public int getBroadcastIconVisibility() {
+        return (isBroadcastSupported() && mMediaOutputController.isBluetoothLeBroadcastEnabled())
+                ? View.VISIBLE : View.GONE;
+    }
+
+    @Override
+    public void onBroadcastIconClick() {
+        startLeBroadcastDialog();
     }
 
     @VisibleForTesting

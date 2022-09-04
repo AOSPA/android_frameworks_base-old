@@ -23,7 +23,6 @@ import static com.android.keyguard.LockIconView.ICON_LOCK;
 import static com.android.keyguard.LockIconView.ICON_UNLOCK;
 import static com.android.systemui.classifier.Classifier.LOCK_ICON;
 import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInOffset;
-import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInProgressOffset;
 
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -403,7 +402,6 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
         float offsetY = MathUtils.lerp(0f,
                 getBurnInOffset(mMaxBurnInOffsetY * 2, false /* xAxis */)
                         - mMaxBurnInOffsetY, mInterpolatedDarkAmount);
-        float progress = MathUtils.lerp(0f, getBurnInProgressOffset(), mInterpolatedDarkAmount);
 
         mView.setTranslationX(offsetX);
         mView.setTranslationY(offsetY);
@@ -652,7 +650,7 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
                 Process.myUid(),
                 getContext().getOpPackageName(),
                 UdfpsController.EFFECT_CLICK,
-                "lock-icon-device-entry",
+                "lock-screen-lock-icon-longpress",
                 TOUCH_VIBRATION_ATTRIBUTES);
 
         mKeyguardViewController.showBouncer(/* scrim */ true);
@@ -677,6 +675,12 @@ public class LockIconViewController extends ViewController<LockIconView> impleme
     }
 
     private boolean isActionable() {
+        if (mIsBouncerShowing) {
+            Log.v(TAG, "lock icon long-press ignored, bouncer already showing.");
+            // a long press gestures from AOD may have already triggered the bouncer to show,
+            // so this touch is no longer actionable
+            return false;
+        }
         return mUdfpsSupported || mShowUnlockIcon;
     }
 

@@ -16,13 +16,18 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.Presubmit
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import org.junit.Assume
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -35,7 +40,7 @@ import org.junit.runners.Parameterized
  * Actions:
  *     Launch an app in full screen
  *     Select "Via code behind" radio button
- *     Press Home button to put [pipApp] in pip mode
+ *     Press Home button or swipe up to go Home and put [pipApp] in pip mode
  *
  * Notes:
  *     1. All assertions are inherited from [EnterPipTest]
@@ -72,37 +77,59 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
             }
         }
 
+    @Postsubmit
+    @Test
     override fun pipAppLayerAlwaysVisible() {
         if (!testSpec.isGesturalNavigation) super.pipAppLayerAlwaysVisible() else {
             // pip layer in gesture nav will disappear during transition
             testSpec.assertLayers {
-                this.isVisible(pipApp.component)
-                    .then().isInvisible(pipApp.component)
-                    .then().isVisible(pipApp.component)
+                this.isVisible(pipApp)
+                    .then().isInvisible(pipApp)
+                    .then().isVisible(pipApp)
             }
         }
     }
 
+    @Postsubmit
+    @Test
     override fun pipLayerReduces() {
         // in gestural nav the pip enters through alpha animation
         Assume.assumeFalse(testSpec.isGesturalNavigation)
         super.pipLayerReduces()
     }
 
+    @Postsubmit
+    @Test
     override fun focusChanges() {
         // in gestural nav the focus goes to different activity on swipe up
         Assume.assumeFalse(testSpec.isGesturalNavigation)
         super.focusChanges()
     }
 
+    @Presubmit
+    @Test
+    override fun entireScreenCovered() {
+        Assume.assumeFalse(isShellTransitionsEnabled)
+        super.entireScreenCovered()
+    }
+
+    @FlakyTest(bugId = 227313015)
+    @Test
+    fun entireScreenCovered_ShellTransit() {
+        Assume.assumeTrue(isShellTransitionsEnabled)
+        super.entireScreenCovered()
+    }
+
+    @Postsubmit
+    @Test
     override fun pipLayerRemainInsideVisibleBounds() {
         if (!testSpec.isGesturalNavigation) super.pipLayerRemainInsideVisibleBounds() else {
             // pip layer in gesture nav will disappear during transition
             testSpec.assertLayersStart {
-                this.visibleRegion(pipApp.component).coversAtMost(displayBounds)
+                this.visibleRegion(pipApp).coversAtMost(displayBounds)
             }
             testSpec.assertLayersEnd {
-                this.visibleRegion(pipApp.component).coversAtMost(displayBounds)
+                this.visibleRegion(pipApp).coversAtMost(displayBounds)
             }
         }
     }

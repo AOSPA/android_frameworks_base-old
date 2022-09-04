@@ -70,10 +70,7 @@ import android.window.PictureInPictureSurfaceTransaction;
 import android.window.TaskSnapshot;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.inputmethod.SoftInputShowHideReason;
-import com.android.internal.os.BackgroundThread;
 import com.android.internal.protolog.common.ProtoLog;
-import com.android.internal.util.LatencyTracker;
 import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
@@ -99,11 +96,6 @@ import java.util.stream.Collectors;
 public class RecentsAnimationController implements DeathRecipient {
     private static final String TAG = RecentsAnimationController.class.getSimpleName();
     private static final long FAILSAFE_DELAY = 1000;
-    /**
-     * If the recents animation is canceled before the delay since the window drawn, do not log the
-     * action because the duration is too small that may be just a mistouch.
-     */
-    private static final long LATENCY_TRACKER_LOG_DELAY_MS = 300;
 
     // Constant for a yet-to-be-calculated {@link RemoteAnimationTarget#Mode} state
     private static final int MODE_UNKNOWN = -1;
@@ -144,7 +136,7 @@ public class RecentsAnimationController implements DeathRecipient {
     private boolean mPendingStart = true;
 
     // Set when the animation has been canceled
-    private volatile boolean mCanceled;
+    private boolean mCanceled;
 
     // Whether or not the input consumer is enabled. The input consumer must be both registered and
     // enabled for it to start intercepting touch events.
@@ -333,26 +325,6 @@ public class RecentsAnimationController implements DeathRecipient {
                         }
                     }
                     InputMethodManagerInternal.get().maybeFinishStylusHandwriting();
-                    if (!behindSystemBars) {
-                        // Hiding IME if IME window is not attached to app.
-                        // Since some windowing mode is not proper to snapshot Task with IME window
-                        // while the app transitioning to the next task (e.g. split-screen mode)
-                        if (!mDisplayContent.isImeAttachedToApp()) {
-                            final InputMethodManagerInternal inputMethodManagerInternal =
-                                    LocalServices.getService(InputMethodManagerInternal.class);
-                            if (inputMethodManagerInternal != null) {
-                                inputMethodManagerInternal.hideCurrentInputMethod(
-                                        SoftInputShowHideReason.HIDE_RECENTS_ANIMATION);
-                            }
-                        } else {
-                            // Disable IME icon explicitly when IME attached to the app in case
-                            // IME icon might flickering while swiping to the next app task still
-                            // in animating before the next app window focused, or IME icon
-                            // persists on the bottom when swiping the task to recents.
-                            InputMethodManagerInternal.get().updateImeWindowStatus(
-                                    true /* disableImeIcon */);
-                        }
-                    }
                     mService.mWindowPlacerLocked.requestTraversal();
                 }
             } finally {
@@ -379,10 +351,6 @@ public class RecentsAnimationController implements DeathRecipient {
                 Binder.restoreCallingIdentity(token);
             }
         }
-
-        // TODO(b/166736352): Remove this method without the need to expose to launcher.
-        @Override
-        public void hideCurrentInputMethod() { }
 
         @Override
         public void setDeferCancelUntilNextTransition(boolean defer, boolean screenshot) {
@@ -783,15 +751,6 @@ public class RecentsAnimationController implements DeathRecipient {
                         "collectTaskRemoteAnimations, target: %s", target);
             }
         }, false /* traverseTopToBottom */);
-    }
-
-    void logRecentsAnimationStartTime(int durationMs) {
-        BackgroundThread.getHandler().postDelayed(() -> {
-            if (!mCanceled) {
-                mService.mLatencyTracker.logAction(LatencyTracker.ACTION_START_RECENTS_ANIMATION,
-                        durationMs);
-            }
-        }, LATENCY_TRACKER_LOG_DELAY_MS);
     }
 
     private boolean removeTaskInternal(int taskId) {

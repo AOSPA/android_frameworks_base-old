@@ -70,6 +70,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.Dumpable;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.dump.LogBufferEulogizer;
@@ -112,6 +113,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 import javax.inject.Inject;
@@ -146,6 +148,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
     private final NotifPipelineFlags mNotifPipelineFlags;
     private final NotifCollectionLogger mLogger;
     private final Handler mMainHandler;
+    private final Executor mBgExecutor;
     private final LogBufferEulogizer mEulogizer;
     private final DumpManager mDumpManager;
 
@@ -174,6 +177,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
             NotifPipelineFlags notifPipelineFlags,
             NotifCollectionLogger logger,
             @Main Handler mainHandler,
+            @Background Executor bgExecutor,
             LogBufferEulogizer logBufferEulogizer,
             DumpManager dumpManager) {
         mStatusBarService = statusBarService;
@@ -181,6 +185,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
         mNotifPipelineFlags = notifPipelineFlags;
         mLogger = logger;
         mMainHandler = mainHandler;
+        mBgExecutor = bgExecutor;
         mEulogizer = logBufferEulogizer;
         mDumpManager = dumpManager;
     }
@@ -294,23 +299,25 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
             entriesToLocallyDismiss.add(entry);
             if (!isCanceled(entry)) {
                 // send message to system server if this notification hasn't already been cancelled
-                try {
-                    mStatusBarService.onNotificationClear(
-                            entry.getSbn().getPackageName(),
-                            entry.getSbn().getUser().getIdentifier(),
-                            entry.getSbn().getKey(),
-                            stats.dismissalSurface,
-                            stats.dismissalSentiment,
-                            stats.notificationVisibility);
-                } catch (RemoteException e) {
-                    // system process is dead if we're here.
-                    mLogger.logRemoteExceptionOnNotificationClear(entry, e);
-                }
+                mBgExecutor.execute(() -> {
+                    try {
+                        mStatusBarService.onNotificationClear(
+                                entry.getSbn().getPackageName(),
+                                entry.getSbn().getUser().getIdentifier(),
+                                entry.getSbn().getKey(),
+                                stats.dismissalSurface,
+                                stats.dismissalSentiment,
+                                stats.notificationVisibility);
+                    } catch (RemoteException e) {
+                        // system process is dead if we're here.
+                        mLogger.logRemoteExceptionOnNotificationClear(entry, e);
+                    }
+                });
             }
         }
 
         locallyDismissNotifications(entriesToLocallyDismiss);
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("dismissNotifications");
     }
 
     /**
@@ -354,7 +361,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
         }
 
         locallyDismissNotifications(entries);
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("dismissAllNotifications");
     }
 
     /**
@@ -401,7 +408,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
 
         postNotification(sbn, requireRanking(rankingMap, sbn.getKey()));
         applyRanking(rankingMap);
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("onNotificationPosted");
     }
 
     private void onNotificationGroupPosted(List<CoalescedEvent> batch) {
@@ -412,7 +419,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
         for (CoalescedEvent event : batch) {
             postNotification(event.getSbn(), event.getRanking());
         }
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("onNotificationGroupPosted");
     }
 
     private void onNotificationRemoved(
@@ -433,14 +440,14 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
         entry.mCancellationReason = reason;
         tryRemoveNotification(entry);
         applyRanking(rankingMap);
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("onNotificationRemoved");
     }
 
     private void onNotificationRankingUpdate(RankingMap rankingMap) {
         Assert.isMainThread();
         mEventQueue.add(new RankingUpdatedEvent(rankingMap));
         applyRanking(rankingMap);
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("onNotificationRankingUpdate");
     }
 
     private void onNotificationChannelModified(
@@ -450,7 +457,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
             int modificationType) {
         Assert.isMainThread();
         mEventQueue.add(new ChannelChangedEvent(pkgName, user, channel, modificationType));
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("onNotificationChannelModified");
     }
 
     private void onNotificationsInitialized() {
@@ -578,12 +585,10 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
                     // TODO: (b/145659174) update the sbn's overrideGroupKey in
                     //  NotificationEntry.setRanking instead of here once we fully migrate to the
                     //  NewNotifPipeline
-                    if (mNotifPipelineFlags.isNewPipelineEnabled()) {
-                        final String newOverrideGroupKey = ranking.getOverrideGroupKey();
-                        if (!Objects.equals(entry.getSbn().getOverrideGroupKey(),
-                                newOverrideGroupKey)) {
-                            entry.getSbn().setOverrideGroupKey(newOverrideGroupKey);
-                        }
+                    final String newOverrideGroupKey = ranking.getOverrideGroupKey();
+                    if (!Objects.equals(entry.getSbn().getOverrideGroupKey(),
+                            newOverrideGroupKey)) {
+                        entry.getSbn().setOverrideGroupKey(newOverrideGroupKey);
                     }
                 } else {
                     if (currentEntriesWithoutRankings == null) {
@@ -610,7 +615,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
         mEventQueue.add(new RankingAppliedEvent());
     }
 
-    private void dispatchEventsAndRebuildList() {
+    private void dispatchEventsAndRebuildList(String reason) {
         Trace.beginSection("NotifCollection.dispatchEventsAndRebuildList");
         mAmDispatchingToOtherCode = true;
         while (!mEventQueue.isEmpty()) {
@@ -619,7 +624,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
         mAmDispatchingToOtherCode = false;
 
         if (mBuildListener != null) {
-            mBuildListener.onBuildList(mReadOnlyNotificationSet);
+            mBuildListener.onBuildList(mReadOnlyNotificationSet, reason);
         }
         Trace.endSection();
     }
@@ -654,7 +659,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
 
         if (!isLifetimeExtended(entry)) {
             if (tryRemoveNotification(entry)) {
-                dispatchEventsAndRebuildList();
+                dispatchEventsAndRebuildList("onEndLifetimeExtension");
             }
         }
     }
@@ -963,7 +968,7 @@ public class NotifCollection implements Dumpable, PipelineDumpable {
         mEventQueue.add(new EntryUpdatedEvent(entry, false /* fromSystem */));
 
         // Skip the applyRanking step and go straight to dispatching the events
-        dispatchEventsAndRebuildList();
+        dispatchEventsAndRebuildList("updateNotificationInternally");
     }
 
     /**

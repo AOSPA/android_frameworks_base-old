@@ -556,6 +556,10 @@ public class AudioService extends IAudioService.Stub
                     if (mRecordMonitor != null) {
                         mRecordMonitor.onAudioServerDied();
                     }
+                    // Notify the playback monitor that the audio server has died
+                    if (mPlaybackMonitor != null) {
+                        mPlaybackMonitor.onAudioServerDied();
+                    }
                     sendMsg(mAudioHandler, MSG_AUDIO_SERVER_DIED,
                             SENDMSG_NOOP, 0, 0, null, 0);
                     sendMsg(mAudioHandler, MSG_DISPATCH_AUDIO_SERVER_STATE,
@@ -1827,11 +1831,11 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * @see AudioManager#setSupportedSystemUsages(int[])
      */
     public void setSupportedSystemUsages(@NonNull @AttributeSystemUsage int[] systemUsages) {
-        enforceModifyAudioRoutingPermission();
         verifySystemUsages(systemUsages);
 
         synchronized (mSupportedSystemUsagesLock) {
@@ -1840,11 +1844,11 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * @see AudioManager#getSupportedSystemUsages()
      */
     public @NonNull @AttributeSystemUsage int[] getSupportedSystemUsages() {
-        enforceModifyAudioRoutingPermission();
         synchronized (mSupportedSystemUsagesLock) {
             return Arrays.copyOf(mSupportedSystemUsages, mSupportedSystemUsages.length);
         }
@@ -1858,6 +1862,7 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * @return the {@link android.media.audiopolicy.AudioProductStrategy} discovered from the
      * platform configuration file.
@@ -1865,10 +1870,10 @@ public class AudioService extends IAudioService.Stub
     @NonNull
     public List<AudioProductStrategy> getAudioProductStrategies() {
         // verify permissions
-        enforceModifyAudioRoutingPermission();
         return AudioProductStrategy.getAudioProductStrategies();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * @return the List of {@link android.media.audiopolicy.AudioVolumeGroup} discovered from the
      * platform configuration file.
@@ -1876,7 +1881,6 @@ public class AudioService extends IAudioService.Stub
     @NonNull
     public List<AudioVolumeGroup> getAudioVolumeGroups() {
         // verify permissions
-        enforceModifyAudioRoutingPermission();
         return AudioVolumeGroup.getAudioVolumeGroups();
     }
 
@@ -2758,9 +2762,9 @@ public class AudioService extends IAudioService.Stub
         return status;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#removePreferredDeviceForStrategy(AudioProductStrategy) */
     public int removePreferredDevicesForStrategy(int strategy) {
-        enforceModifyAudioRoutingPermission();
         final String logString =
                 String.format("removePreferredDeviceForStrategy strat:%d", strategy);
         sDeviceLogger.log(new AudioEventLogger.StringEvent(logString).printLog(TAG));
@@ -2772,12 +2776,12 @@ public class AudioService extends IAudioService.Stub
         return status;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * @see AudioManager#getPreferredDeviceForStrategy(AudioProductStrategy)
      * @see AudioManager#getPreferredDevicesForStrategy(AudioProductStrategy)
      */
     public List<AudioDeviceAttributes> getPreferredDevicesForStrategy(int strategy) {
-        enforceModifyAudioRoutingPermission();
         List<AudioDeviceAttributes> devices = new ArrayList<>();
         final long identity = Binder.clearCallingIdentity();
         final int status = AudioSystem.getDevicesForRoleAndStrategy(
@@ -2845,9 +2849,9 @@ public class AudioService extends IAudioService.Stub
         return status;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#clearPreferredDevicesForCapturePreset(int) */
     public int clearPreferredDevicesForCapturePreset(int capturePreset) {
-        enforceModifyAudioRoutingPermission();
         final String logString = String.format(
                 "removePreferredDeviceForCapturePreset source:%d", capturePreset);
         sDeviceLogger.log(new AudioEventLogger.StringEvent(logString).printLog(TAG));
@@ -2859,11 +2863,11 @@ public class AudioService extends IAudioService.Stub
         return status;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * @see AudioManager#getPreferredDevicesForCapturePreset(int)
      */
     public List<AudioDeviceAttributes> getPreferredDevicesForCapturePreset(int capturePreset) {
-        enforceModifyAudioRoutingPermission();
         List<AudioDeviceAttributes> devices = new ArrayList<>();
         final long identity = Binder.clearCallingIdentity();
         final int status = AudioSystem.getDevicesForRoleAndCapturePreset(
@@ -3598,10 +3602,10 @@ public class AudioService extends IAudioService.Stub
     }
 
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#setVolumeIndexForAttributes(attr, int, int) */
     public void setVolumeIndexForAttributes(@NonNull AudioAttributes attr, int index, int flags,
             String callingPackage, String attributionTag) {
-        enforceModifyAudioRoutingPermission();
         Objects.requireNonNull(attr, "attr must not be null");
         final int volumeGroup = getVolumeGroupIdForAttributes(attr);
         if (sVolumeGroupStates.indexOfKey(volumeGroup) < 0) {
@@ -3641,9 +3645,9 @@ public class AudioService extends IAudioService.Stub
         return null;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#getVolumeIndexForAttributes(attr) */
     public int getVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
-        enforceModifyAudioRoutingPermission();
         Objects.requireNonNull(attr, "attr must not be null");
         final int volumeGroup = getVolumeGroupIdForAttributes(attr);
         if (sVolumeGroupStates.indexOfKey(volumeGroup) < 0) {
@@ -3653,16 +3657,16 @@ public class AudioService extends IAudioService.Stub
         return vgs.getVolumeIndex();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#getMaxVolumeIndexForAttributes(attr) */
     public int getMaxVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
-        enforceModifyAudioRoutingPermission();
         Objects.requireNonNull(attr, "attr must not be null");
         return AudioSystem.getMaxVolumeIndexForAttributes(attr);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#getMinVolumeIndexForAttributes(attr) */
     public int getMinVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
-        enforceModifyAudioRoutingPermission();
         Objects.requireNonNull(attr, "attr must not be null");
         return AudioSystem.getMinVolumeIndexForAttributes(attr);
     }
@@ -3704,9 +3708,9 @@ public class AudioService extends IAudioService.Stub
                 attributionTag, Binder.getCallingUid(), callingOrSelfHasAudioSettingsPermission());
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.ACCESS_ULTRASOUND)
     /** @see AudioManager#isUltrasoundSupported() */
     public boolean isUltrasoundSupported() {
-        enforceAccessUltrasoundPermission();
         return AudioSystem.isUltrasoundSupported();
     }
 
@@ -4479,10 +4483,10 @@ public class AudioService extends IAudioService.Stub
         return AudioSystem.getMasterMute();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#setMasterMute(boolean, int) */
     public void setMasterMute(boolean mute, int flags, String callingPackage, int userId,
             String attributionTag) {
-        enforceModifyAudioRoutingPermission();
         setMasterMuteInternal(mute, flags, callingPackage,
                 Binder.getCallingUid(), userId, Binder.getCallingPid(), attributionTag);
     }
@@ -4524,9 +4528,9 @@ public class AudioService extends IAudioService.Stub
         return (mStreamStates[streamType].getMinIndex(isPrivileged) + 5) / 10;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.QUERY_AUDIO_STATE)
     /** Get last audible volume before stream was muted. */
     public int getLastAudibleStreamVolume(int streamType) {
-        enforceQueryStatePermission();
         ensureValidStreamType(streamType);
         int device = getDeviceForStream(streamType);
         return (mStreamStates[streamType].getIndex(device) + 5) / 10;
@@ -5373,9 +5377,9 @@ public class AudioService extends IAudioService.Stub
         mModeDispatchers.unregister(dispatcher);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION)
     /** @see AudioManager#isPstnCallAudioInterceptable() */
     public boolean isPstnCallAudioInterceptable() {
-        enforceCallAudioInterceptionPermission();
 
         boolean uplinkDeviceFound = false;
         boolean downlinkDeviceFound = false;
@@ -6747,6 +6751,7 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * @see AudioManager#setDeviceVolumeBehavior(AudioDeviceAttributes, int)
      * @param device the audio device to be affected
@@ -6755,7 +6760,6 @@ public class AudioService extends IAudioService.Stub
     public void setDeviceVolumeBehavior(@NonNull AudioDeviceAttributes device,
             @AudioManager.DeviceVolumeBehavior int deviceVolumeBehavior, @Nullable String pkgName) {
         // verify permissions
-        enforceModifyAudioRoutingPermission();
         // verify arguments
         Objects.requireNonNull(device);
         AudioManager.enforceValidVolumeBehavior(deviceVolumeBehavior);
@@ -6905,12 +6909,12 @@ public class AudioService extends IAudioService.Stub
     @Retention(RetentionPolicy.SOURCE)
     public @interface ConnectionState {}
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /**
      * see AudioManager.setWiredDeviceConnectionState()
      */
     public void setWiredDeviceConnectionState(AudioDeviceAttributes attributes,
             @ConnectionState int state, String caller) {
-        enforceModifyAudioRoutingPermission();
         if (state != CONNECTION_STATE_CONNECTED
                 && state != CONNECTION_STATE_DISCONNECTED) {
             throw new IllegalArgumentException("Invalid state " + state);
@@ -9048,27 +9052,27 @@ public class AudioService extends IAudioService.Stub
         return mSpatializerHelper.isAvailable();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#isAvailableForDevice(AudioDeviceAttributes) */
     public boolean isSpatializerAvailableForDevice(@NonNull AudioDeviceAttributes device)  {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.isAvailableForDevice(Objects.requireNonNull(device));
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#hasHeadTracker(AudioDeviceAttributes) */
     public boolean hasHeadTracker(@NonNull AudioDeviceAttributes device) {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.hasHeadTracker(Objects.requireNonNull(device));
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#setHeadTrackerEnabled(boolean, AudioDeviceAttributes) */
     public void setHeadTrackerEnabled(boolean enabled, @NonNull AudioDeviceAttributes device) {
-        enforceModifyDefaultAudioEffectsPermission();
         mSpatializerHelper.setHeadTrackerEnabled(enabled, Objects.requireNonNull(device));
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#isHeadTrackerEnabled(AudioDeviceAttributes) */
     public boolean isHeadTrackerEnabled(@NonNull AudioDeviceAttributes device) {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.isHeadTrackerEnabled(Objects.requireNonNull(device));
     }
 
@@ -9077,9 +9081,9 @@ public class AudioService extends IAudioService.Stub
         return mSpatializerHelper.isHeadTrackerAvailable();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#setSpatializerEnabled(boolean) */
     public void setSpatializerEnabled(boolean enabled) {
-        enforceModifyDefaultAudioEffectsPermission();
         mSpatializerHelper.setFeatureEnabled(enabled);
     }
 
@@ -9105,18 +9109,18 @@ public class AudioService extends IAudioService.Stub
         mSpatializerHelper.unregisterStateCallback(cb);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#SpatializerHeadTrackingDispatcherStub */
     public void registerSpatializerHeadTrackingCallback(
             @NonNull ISpatializerHeadTrackingModeCallback cb) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(cb);
         mSpatializerHelper.registerHeadTrackingModeCallback(cb);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#SpatializerHeadTrackingDispatcherStub */
     public void unregisterSpatializerHeadTrackingCallback(
             @NonNull ISpatializerHeadTrackingModeCallback cb) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(cb);
         mSpatializerHelper.unregisterHeadTrackingModeCallback(cb);
     }
@@ -9128,76 +9132,76 @@ public class AudioService extends IAudioService.Stub
         mSpatializerHelper.registerHeadTrackerAvailableCallback(cb, register);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#setOnHeadToSoundstagePoseUpdatedListener */
     public void registerHeadToSoundstagePoseCallback(
             @NonNull ISpatializerHeadToSoundStagePoseCallback cb) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(cb);
         mSpatializerHelper.registerHeadToSoundstagePoseCallback(cb);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#clearOnHeadToSoundstagePoseUpdatedListener */
     public void unregisterHeadToSoundstagePoseCallback(
             @NonNull ISpatializerHeadToSoundStagePoseCallback cb) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(cb);
         mSpatializerHelper.unregisterHeadToSoundstagePoseCallback(cb);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#getSpatializerCompatibleAudioDevices() */
     public @NonNull List<AudioDeviceAttributes> getSpatializerCompatibleAudioDevices() {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.getCompatibleAudioDevices();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#addSpatializerCompatibleAudioDevice(AudioDeviceAttributes) */
     public void addSpatializerCompatibleAudioDevice(@NonNull AudioDeviceAttributes ada) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(ada);
         mSpatializerHelper.addCompatibleAudioDevice(ada);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#removeSpatializerCompatibleAudioDevice(AudioDeviceAttributes) */
     public void removeSpatializerCompatibleAudioDevice(@NonNull AudioDeviceAttributes ada) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(ada);
         mSpatializerHelper.removeCompatibleAudioDevice(ada);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#getSupportedHeadTrackingModes() */
     public int[] getSupportedHeadTrackingModes() {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.getSupportedHeadTrackingModes();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#getHeadTrackingMode() */
     public int getActualHeadTrackingMode() {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.getActualHeadTrackingMode();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#getDesiredHeadTrackingMode() */
     public int getDesiredHeadTrackingMode() {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.getDesiredHeadTrackingMode();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#setGlobalTransform */
     public void setSpatializerGlobalTransform(@NonNull float[] transform) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(transform);
         mSpatializerHelper.setGlobalTransform(transform);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#recenterHeadTracker() */
     public void recenterHeadTracker() {
-        enforceModifyDefaultAudioEffectsPermission();
         mSpatializerHelper.recenterHeadTracker();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#setDesiredHeadTrackingMode */
     public void setDesiredHeadTrackingMode(@Spatializer.HeadTrackingModeSet int mode) {
-        enforceModifyDefaultAudioEffectsPermission();
         switch(mode) {
             case Spatializer.HEAD_TRACKING_MODE_DISABLED:
             case Spatializer.HEAD_TRACKING_MODE_RELATIVE_WORLD:
@@ -9209,36 +9213,36 @@ public class AudioService extends IAudioService.Stub
         mSpatializerHelper.setDesiredHeadTrackingMode(mode);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#setEffectParameter */
     public void setSpatializerParameter(int key, @NonNull byte[] value) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(value);
         mSpatializerHelper.setEffectParameter(key, value);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#getEffectParameter */
     public void getSpatializerParameter(int key, @NonNull byte[] value) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(value);
         mSpatializerHelper.getEffectParameter(key, value);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#getOutput */
     public int getSpatializerOutput() {
-        enforceModifyDefaultAudioEffectsPermission();
         return mSpatializerHelper.getOutput();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#setOnSpatializerOutputChangedListener */
     public void registerSpatializerOutputCallback(ISpatializerOutputCallback cb) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(cb);
         mSpatializerHelper.registerSpatializerOutputCallback(cb);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_DEFAULT_AUDIO_EFFECTS)
     /** @see Spatializer#clearOnSpatializerOutputChangedListener */
     public void unregisterSpatializerOutputCallback(ISpatializerOutputCallback cb) {
-        enforceModifyDefaultAudioEffectsPermission();
         Objects.requireNonNull(cb);
         mSpatializerHelper.unregisterSpatializerOutputCallback(cb);
     }
@@ -9346,9 +9350,9 @@ public class AudioService extends IAudioService.Stub
             cb.dispatchOnMutedUntilConnection(device, usages); } catch (RemoteException e) { } });
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#getMutingExpectedDevice */
     public @Nullable AudioDeviceAttributes getMutingExpectedDevice() {
-        enforceModifyAudioRoutingPermission();
         synchronized (mMuteAwaitConnectionLock) {
             return mMutingExpectedDevice;
         }
@@ -9386,10 +9390,10 @@ public class AudioService extends IAudioService.Stub
     final RemoteCallbackList<IMuteAwaitConnectionCallback> mMuteAwaitConnectionDispatchers =
             new RemoteCallbackList<IMuteAwaitConnectionCallback>();
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#registerMuteAwaitConnectionCallback */
     public void registerMuteAwaitConnectionDispatcher(@NonNull IMuteAwaitConnectionCallback cb,
             boolean register) {
-        enforceModifyAudioRoutingPermission();
         if (register) {
             mMuteAwaitConnectionDispatchers.register(cb);
         } else {
@@ -10896,9 +10900,9 @@ public class AudioService extends IAudioService.Stub
         return AudioManager.SUCCESS;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioPolicy#getFocusStack() */
     public List<AudioFocusInfo> getFocusStack() {
-        enforceModifyAudioRoutingPermission();
         return mMediaFocusControl.getFocusStack();
     }
 
@@ -11102,10 +11106,10 @@ public class AudioService extends IAudioService.Stub
      * Update player event
      * @param piid Player id to update
      * @param event The new player event
-     * @param deviceId The new player device id
+     * @param eventValue The value associated with this event
      */
-    public void playerEvent(int piid, int event, int deviceId) {
-        mPlaybackMonitor.playerEvent(piid, event, deviceId, Binder.getCallingUid());
+    public void playerEvent(int piid, int event, int eventValue) {
+        mPlaybackMonitor.playerEvent(piid, event, eventValue, Binder.getCallingUid());
     }
 
     public void playerHasOpPlayAudio(int piid, boolean hasOpPlayAudio) {
@@ -11661,11 +11665,11 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.setAudioHalPids(pidsArray);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     //======================
     // Multi Audio Focus
     //======================
     public void setMultiAudioFocusEnabled(boolean enabled) {
-        enforceModifyAudioRoutingPermission();
         if (mMediaFocusControl != null) {
             boolean mafEnabled = mMediaFocusControl.getMultiAudioFocusEnabled();
             if (mafEnabled != enabled) {
@@ -11775,10 +11779,10 @@ public class AudioService extends IAudioService.Stub
         return delayMillis;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#addAssistantServicesUids(int []) */
     @Override
     public void addAssistantServicesUids(int [] assistantUids) {
-        enforceModifyAudioRoutingPermission();
         Objects.requireNonNull(assistantUids);
 
         synchronized (mSettingsLock) {
@@ -11786,20 +11790,20 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#removeAssistantServicesUids(int []) */
     @Override
     public void removeAssistantServicesUids(int [] assistantUids) {
-        enforceModifyAudioRoutingPermission();
         Objects.requireNonNull(assistantUids);
         synchronized (mSettingsLock) {
             removeAssistantServiceUidsLocked(assistantUids);
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#getAssistantServicesUids() */
     @Override
     public int[] getAssistantServicesUids() {
-        enforceModifyAudioRoutingPermission();
         int [] assistantUids;
         synchronized (mSettingsLock) {
             assistantUids = mAssistantUids.stream().mapToInt(Integer::intValue).toArray();
@@ -11807,10 +11811,10 @@ public class AudioService extends IAudioService.Stub
         return assistantUids;
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#setActiveAssistantServiceUids(int []) */
     @Override
     public void setActiveAssistantServiceUids(int [] activeAssistantUids) {
-        enforceModifyAudioRoutingPermission();
         Objects.requireNonNull(activeAssistantUids);
         synchronized (mSettingsLock) {
             mActiveAssistantServiceUids = activeAssistantUids;
@@ -11818,10 +11822,10 @@ public class AudioService extends IAudioService.Stub
         updateActiveAssistantServiceUids();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
     /** @see AudioManager#getActiveAssistantServiceUids() */
     @Override
     public int[] getActiveAssistantServiceUids() {
-        enforceModifyAudioRoutingPermission();
         int [] activeAssistantUids;
         synchronized (mSettingsLock) {
             activeAssistantUids = mActiveAssistantServiceUids.clone();

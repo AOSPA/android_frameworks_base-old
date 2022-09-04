@@ -100,6 +100,14 @@ class TransitionController {
     // TODO(b/188595497): remove when not needed.
     final StatusBarManagerInternal mStatusBar;
 
+    /**
+     * `true` when building surface layer order for the finish transaction. We want to prevent
+     * wm from touching z-order of surfaces during transitions, but we still need to be able to
+     * calculate the layers for the finishTransaction. So, when assigning layers into the finish
+     * transaction, set this to true so that the {@link canAssignLayers} will allow it.
+     */
+    boolean mBuildingFinishLayers = false;
+
     TransitionController(ActivityTaskManagerService atm,
             TaskSnapshotController taskSnapshotController,
             TransitionTracer transitionTracer) {
@@ -309,6 +317,15 @@ class TransitionController {
         return false;
     }
 
+    /**
+     * Whether WM can assign layers to window surfaces at this time. This is usually false while
+     * playing, but can be "opened-up" for certain transition operations like calculating layers
+     * for finishTransaction.
+     */
+    boolean canAssignLayers() {
+        return mBuildingFinishLayers || !isPlaying();
+    }
+
     @WindowConfiguration.WindowingMode
     int getWindowingModeAtStart(@NonNull WindowContainer wc) {
         if (mCollectingTransition == null) return wc.getWindowingMode();
@@ -462,6 +479,12 @@ class TransitionController {
         }, true /* traverseTopToBottom */);
     }
 
+    /** @see Transition#mStatusBarTransitionDelay */
+    void setStatusBarTransitionDelay(long delay) {
+        if (mCollectingTransition == null) return;
+        mCollectingTransition.mStatusBarTransitionDelay = delay;
+    }
+
     /** @see Transition#setOverrideAnimation */
     void setOverrideAnimation(TransitionInfo.AnimationOptions options,
             @Nullable IRemoteCallback startCallback, @Nullable IRemoteCallback finishCallback) {
@@ -600,13 +623,14 @@ class TransitionController {
         }
     }
 
-    void dispatchLegacyAppTransitionStarting(TransitionInfo info) {
+    void dispatchLegacyAppTransitionStarting(TransitionInfo info, long statusBarTransitionDelay) {
         final boolean keyguardGoingAway = info.isKeyguardGoingAway();
         for (int i = 0; i < mLegacyListeners.size(); ++i) {
             // TODO(shell-transitions): handle (un)occlude transition.
             mLegacyListeners.get(i).onAppTransitionStartingLocked(keyguardGoingAway,
                     false /* keyguardOcclude */, 0 /* durationHint */,
-                    SystemClock.uptimeMillis(), AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
+                    SystemClock.uptimeMillis() + statusBarTransitionDelay,
+                    AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
         }
     }
 

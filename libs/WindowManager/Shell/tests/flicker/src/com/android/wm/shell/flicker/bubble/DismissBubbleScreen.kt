@@ -18,6 +18,7 @@ package com.android.wm.shell.flicker.bubble
 
 import android.content.Context
 import android.graphics.Point
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.util.DisplayMetrics
 import android.view.WindowManager
@@ -28,8 +29,8 @@ import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
 /**
@@ -49,6 +50,7 @@ open class DismissBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScree
     private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val displaySize = DisplayMetrics()
 
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = buildTransition {
             setup {
@@ -58,10 +60,13 @@ open class DismissBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScree
                 }
             }
             transitions {
-                wm.run { wm.getDefaultDisplay().getMetrics(displaySize) }
+                wm.run { wm.defaultDisplay.getMetrics(displaySize) }
                 val dist = Point((displaySize.widthPixels / 2), displaySize.heightPixels)
-                val showBubble = device.wait(Until.findObject(
-                        By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)), FIND_OBJECT_TIMEOUT)
+                val showBubble = device.wait(
+                    Until.findObject(
+                        By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)
+                    ), FIND_OBJECT_TIMEOUT
+                )
                 showBubble?.run { drag(dist, 1000) } ?: error("Show bubble not found")
             }
         }
@@ -70,7 +75,25 @@ open class DismissBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScree
     @Test
     open fun testAppIsAlwaysVisible() {
         testSpec.assertLayers {
-            this.isVisible(testApp.component)
+            this.isVisible(testApp)
         }
     }
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun taskBarLayerIsVisibleAtStartAndEnd() =
+        super.taskBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun taskBarWindowIsAlwaysVisible() =
+        super.taskBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
 }

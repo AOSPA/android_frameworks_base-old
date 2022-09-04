@@ -54,7 +54,6 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group3
-@FlakyTest(bugId = 219750830)
 class ExitPipViaExpandButtonClickTest(
     testSpec: FlickerTestParameter
 ) : ExitPipToAppTransition(testSpec) {
@@ -75,20 +74,15 @@ class ExitPipViaExpandButtonClickTest(
                 pipApp.expandPipWindowToApp(wmHelper)
                 // Wait until the other app is no longer visible
                 wmHelper.StateSyncBuilder()
-                    .withWindowSurfaceDisappeared(testApp.component)
+                    .withWindowSurfaceDisappeared(testApp)
                     .waitForAndVerify()
             }
         }
 
     /** {@inheritDoc}  */
-    @FlakyTest(bugId = 206753786)
+    @FlakyTest(bugId = 227313015)
     @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
-
-    /** {@inheritDoc}  */
-    @FlakyTest(bugId = 197726610)
-    @Test
-    override fun pipLayerExpands() = super.pipLayerExpands()
+    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

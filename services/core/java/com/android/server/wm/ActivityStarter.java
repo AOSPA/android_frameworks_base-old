@@ -79,6 +79,10 @@ import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_BOUNDS;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_DISPLAY;
 import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
+import static com.android.server.wm.TaskFragment.EMBEDDING_ALLOWED;
+import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION;
+import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_NEW_TASK;
+import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_UNTRUSTED_HOST;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import android.annotation.NonNull;
@@ -133,6 +137,7 @@ import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.uri.NeededUriGrants;
 import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
 import com.android.server.wm.LaunchParamsController.LaunchParams;
+import com.android.server.wm.TaskFragment.EmbeddingCheckResult;
 
 import java.io.PrintWriter;
 import java.text.DateFormat;
@@ -197,8 +202,6 @@ class ActivityStarter {
     @VisibleForTesting
     boolean mAddingToTask;
 
-    private ActivityInfo mNewTaskInfo;
-    private Intent mNewTaskIntent;
     private Task mSourceRootTask;
     private Task mTargetRootTask;
     // The task that the last activity was started into. We currently reset the actual start
@@ -612,8 +615,6 @@ class ActivityStarter {
         mInTaskFragment = starter.mInTaskFragment;
         mAddingToTask = starter.mAddingToTask;
 
-        mNewTaskInfo = starter.mNewTaskInfo;
-        mNewTaskIntent = starter.mNewTaskIntent;
         mSourceRootTask = starter.mSourceRootTask;
 
         mTargetTask = starter.mTargetTask;
@@ -1059,8 +1060,8 @@ class ActivityStarter {
 
         mInterceptor.setStates(userId, realCallingPid, realCallingUid, startFlags, callingPackage,
                 callingFeatureId);
-        if (mInterceptor.intercept(intent, rInfo, aInfo, resolvedType, inTask, callingPid,
-                callingUid, checkedOptions)) {
+        if (mInterceptor.intercept(intent, rInfo, aInfo, resolvedType, inTask, inTaskFragment,
+                callingPid, callingUid, checkedOptions)) {
             // activity start was intercepted, e.g. because the target user is currently in quiet
             // mode (turn off work) or the target application is suspended
             intent = mInterceptor.mIntent;
@@ -1818,9 +1819,6 @@ class ActivityStarter {
                 voiceSession, voiceInteractor, restrictedBgActivity);
 
         computeLaunchingTaskFlags();
-
-        computeSourceRootTask();
-
         mIntent.setFlags(mLaunchFlags);
 
         boolean dreamStopping = false;
@@ -2078,24 +2076,6 @@ class ActivityStarter {
             }
         }
 
-        if (mInTaskFragment != null && !canEmbedActivity(mInTaskFragment, r, newTask, targetTask)) {
-            final StringBuilder errorMsg = new StringBuilder("Permission denied: Cannot embed " + r
-                    + " to " + mInTaskFragment.getTask() + ". newTask=" + newTask + ", targetTask= "
-                    + targetTask);
-            if (newTask && isLaunchModeOneOf(LAUNCH_SINGLE_INSTANCE,
-                    LAUNCH_SINGLE_INSTANCE_PER_TASK, LAUNCH_SINGLE_TASK)) {
-                errorMsg.append("\nActivity tries to launch on a new task because the launch mode"
-                        + " is " + launchModeToString(mLaunchMode));
-            } else if (newTask && (mLaunchFlags & (FLAG_ACTIVITY_NEW_DOCUMENT
-                    | FLAG_ACTIVITY_NEW_TASK)) != 0) {
-                errorMsg.append("\nActivity tries to launch on a new task because the launch flags"
-                        + " contains FLAG_ACTIVITY_NEW_DOCUMENT or FLAG_ACTIVITY_NEW_TASK. "
-                        + "mLaunchFlag=" + mLaunchFlags);
-            }
-            Slog.e(TAG, errorMsg.toString());
-            return START_PERMISSION_DENIED;
-        }
-
         // Do not start the activity if target display's DWPC does not allow it.
         // We can't return fatal error code here because it will crash the caller of
         // startActivity() if they don't catch the exception. We don't expect 3P apps to make
@@ -2122,19 +2102,21 @@ class ActivityStarter {
     }
 
     /**
-     * Return {@code true} if an activity can be embedded to the TaskFragment.
+     * Returns whether embedding of {@code starting} is allowed.
+     *
      * @param taskFragment the TaskFragment for embedding.
      * @param starting the starting activity.
-     * @param newTask whether the starting activity is going to be launched on a new task.
      * @param targetTask the target task for launching activity, which could be different from
      *                   the one who hosting the embedding.
      */
-    private boolean canEmbedActivity(@NonNull TaskFragment taskFragment,
-            @NonNull ActivityRecord starting, boolean newTask, Task targetTask) {
+    @VisibleForTesting
+    @EmbeddingCheckResult
+    static int canEmbedActivity(@NonNull TaskFragment taskFragment,
+            @NonNull ActivityRecord starting, @NonNull Task targetTask) {
         final Task hostTask = taskFragment.getTask();
         // Not allowed embedding a separate task or without host task.
-        if (hostTask == null || newTask || targetTask != hostTask) {
-            return false;
+        if (hostTask == null || targetTask != hostTask) {
+            return EMBEDDING_DISALLOWED_NEW_TASK;
         }
 
         return taskFragment.isAllowedToEmbedActivity(starting);
@@ -2428,8 +2410,6 @@ class ActivityStarter {
         mInTaskFragment = null;
         mAddingToTask = false;
 
-        mNewTaskInfo = null;
-        mNewTaskIntent = null;
         mSourceRootTask = null;
 
         mTargetRootTask = null;
@@ -2463,6 +2443,7 @@ class ActivityStarter {
         mOptions = options;
         mCallingUid = r.launchedFromUid;
         mSourceRecord = sourceRecord;
+        mSourceRootTask = mSourceRecord != null ? mSourceRecord.getRootTask() : null;
         mVoiceSession = voiceSession;
         mVoiceInteractor = voiceInteractor;
         mRestrictedBgActivity = restrictedBgActivity;
@@ -2580,7 +2561,6 @@ class ActivityStarter {
             mInTask = null;
         }
         mInTaskFragment = inTaskFragment;
-        sendNewTaskFragmentResultRequestIfNeeded();
 
         mStartFlags = startFlags;
         // If the onlyIfNeeded flag is set, then we can do this if the activity being launched
@@ -2616,18 +2596,6 @@ class ActivityStarter {
             // so instead immediately send back a cancel and let the new task continue launched
             // as normal without a dependency on its originator.
             Slog.w(TAG, "Activity is launching as a new task, so cancelling activity result.");
-            mStartActivity.resultTo.sendResult(INVALID_UID, mStartActivity.resultWho,
-                    mStartActivity.requestCode, RESULT_CANCELED,
-                    null /* data */, null /* dataGrants */);
-            mStartActivity.resultTo = null;
-        }
-    }
-
-    private void sendNewTaskFragmentResultRequestIfNeeded() {
-        if (mStartActivity.resultTo != null && mInTaskFragment != null
-                && mInTaskFragment != mStartActivity.resultTo.getTaskFragment()) {
-            Slog.w(TAG,
-                    "Activity is launching as a new TaskFragment, so cancelling activity result.");
             mStartActivity.resultTo.sendResult(INVALID_UID, mStartActivity.resultWho,
                     mStartActivity.requestCode, RESULT_CANCELED,
                     null /* data */, null /* dataGrants */);
@@ -2721,39 +2689,6 @@ class ActivityStarter {
             // ignore the flag if there is no the sourceRecord or without new_task flag
             mLaunchFlags &= ~FLAG_ACTIVITY_LAUNCH_ADJACENT;
         }
-    }
-
-    private void computeSourceRootTask() {
-        if (mSourceRecord == null) {
-            mSourceRootTask = null;
-            return;
-        }
-        if (!mSourceRecord.finishing) {
-            mSourceRootTask = mSourceRecord.getRootTask();
-            return;
-        }
-
-        // If the source is finishing, we can't further count it as our source. This is because the
-        // task it is associated with may now be empty and on its way out, so we don't want to
-        // blindly throw it in to that task.  Instead we will take the NEW_TASK flow and try to find
-        // a task for it. But save the task information so it can be used when creating the new task.
-        if ((mLaunchFlags & FLAG_ACTIVITY_NEW_TASK) == 0) {
-            Slog.w(TAG, "startActivity called from finishing " + mSourceRecord
-                    + "; forcing " + "Intent.FLAG_ACTIVITY_NEW_TASK for: " + mIntent);
-            mLaunchFlags |= FLAG_ACTIVITY_NEW_TASK;
-
-            // It is not guaranteed that the source record will have a task associated with it.
-            // For example, if this method is being called for processing a pending activity
-            // launch, it is possible that the activity has been removed from the task after the
-            // launch was enqueued.
-            final Task sourceTask = mSourceRecord.getTask();
-            if (sourceTask == null || sourceTask.getTopNonFinishingActivity() == null) {
-                mNewTaskInfo = mSourceRecord.info;
-                mNewTaskIntent = sourceTask != null ? sourceTask.intent : null;
-            }
-        }
-        mSourceRecord = null;
-        mSourceRootTask = null;
     }
 
     /**
@@ -2949,8 +2884,7 @@ class ActivityStarter {
     private void setNewTask(Task taskToAffiliate) {
         final boolean toTop = !mLaunchTaskBehind && !mAvoidMoveToFront;
         final Task task = mTargetRootTask.reuseOrCreateTask(
-                mNewTaskInfo != null ? mNewTaskInfo : mStartActivity.info,
-                mNewTaskIntent != null ? mNewTaskIntent : mIntent, mVoiceSession,
+                mStartActivity.info, mIntent, mVoiceSession,
                 mVoiceInteractor, toTop, mStartActivity, mSourceRecord, mOptions);
         task.mTransitionController.collectExistenceChange(task);
         addOrReparentStartingActivity(task, "setTaskFromReuseOrCreateNewTask");
@@ -2974,6 +2908,7 @@ class ActivityStarter {
         mIntentDelivered = true;
     }
 
+    /** Places {@link #mStartActivity} in {@code task} or an embedded {@link TaskFragment}. */
     private void addOrReparentStartingActivity(@NonNull Task task, String reason) {
         String packageName= mService.mContext.getPackageName();
         if (mPerf != null) {
@@ -2993,16 +2928,12 @@ class ActivityStarter {
         }
         TaskFragment newParent = task;
         if (mInTaskFragment != null) {
-            // TODO(b/234351413): remove remaining embedded Task logic.
-            // mInTaskFragment is created and added to the leaf task by task fragment organizer's
-            // request. If the task was resolved and different than mInTaskFragment, reparent the
-            // task to mInTaskFragment for embedding.
-            if (mInTaskFragment.getTask() != task) {
-                if (shouldReparentInTaskFragment(task)) {
-                    task.reparent(mInTaskFragment, POSITION_TOP);
-                }
-            } else {
+            int embeddingCheckResult = canEmbedActivity(mInTaskFragment, mStartActivity, task);
+            if (embeddingCheckResult == EMBEDDING_ALLOWED) {
                 newParent = mInTaskFragment;
+            } else {
+                // Start mStartActivity to task instead if it can't be embedded to mInTaskFragment.
+                sendCanNotEmbedActivityError(mInTaskFragment, embeddingCheckResult);
             }
         } else {
             TaskFragment candidateTf = mAddingToTaskFragment != null ? mAddingToTaskFragment : null;
@@ -3014,19 +2945,11 @@ class ActivityStarter {
                 }
             }
             if (candidateTf != null && candidateTf.isEmbedded()
-                    && canEmbedActivity(candidateTf, mStartActivity, false /* newTask */, task)) {
+                    && canEmbedActivity(candidateTf, mStartActivity, task) == EMBEDDING_ALLOWED) {
                 // Use the embedded TaskFragment of the top activity as the new parent if the
                 // activity can be embedded.
                 newParent = candidateTf;
             }
-        }
-        // Start Activity to the Task if mStartActivity's min dimensions are not satisfied.
-        if (newParent.isEmbedded() && newParent.smallerThanMinDimension(mStartActivity)) {
-            reason += " - MinimumDimensionViolation";
-            mService.mWindowOrganizerController.sendMinimumDimensionViolation(
-                    newParent, mStartActivity.getMinDimensions(), mRequest.errorCallbackToken,
-                    reason);
-            newParent = task;
         }
         if (mStartActivity.getTaskFragment() == null
                 || mStartActivity.getTaskFragment() == newParent) {
@@ -3036,16 +2959,41 @@ class ActivityStarter {
         }
     }
 
-    private boolean shouldReparentInTaskFragment(Task task) {
-        // The task has not been embedded. We should reparent the task to TaskFragment.
-        if (!task.isEmbedded()) {
-            return true;
+    /**
+     * Notifies the client side that {@link #mStartActivity} cannot be embedded to
+     * {@code taskFragment}.
+     */
+    private void sendCanNotEmbedActivityError(TaskFragment taskFragment,
+            @EmbeddingCheckResult int result) {
+        final String errMsg;
+        switch(result) {
+            case EMBEDDING_DISALLOWED_NEW_TASK: {
+                errMsg = "Cannot embed " + mStartActivity + " that launched on another task"
+                        + ",mLaunchMode=" + launchModeToString(mLaunchMode)
+                        + ",mLaunchFlag=" + Integer.toHexString(mLaunchFlags);
+                break;
+            }
+            case EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION: {
+                errMsg = "Cannot embed " + mStartActivity
+                        + ". TaskFragment's bounds:" + taskFragment.getBounds()
+                        + ", minimum dimensions:" + mStartActivity.getMinDimensions();
+                break;
+            }
+            case EMBEDDING_DISALLOWED_UNTRUSTED_HOST: {
+                errMsg = "The app:" + mCallingUid + "is not trusted to " + mStartActivity;
+                break;
+            }
+            default:
+                errMsg = "Unhandled embed result:" + result;
         }
-        WindowContainer<?> parent = task.getParent();
-        // If the Activity is going to launch on top of embedded Task in the same TaskFragment,
-        // we don't need to reparent the Task. Otherwise, the embedded Task should reparent to
-        // another TaskFragment.
-        return parent.asTaskFragment() != mInTaskFragment;
+        if (taskFragment.isOrganized()) {
+            mService.mWindowOrganizerController.sendTaskFragmentOperationFailure(
+                    taskFragment.getTaskFragmentOrganizer(), mRequest.errorCallbackToken,
+                    new SecurityException(errMsg));
+        } else {
+            // If the taskFragment is not organized, just dump error message as warning logs.
+            Slog.w(TAG, errMsg);
+        }
     }
 
     private int adjustLaunchFlagsToDocumentMode(ActivityRecord r, boolean launchSingleInstance,

@@ -47,6 +47,7 @@ import com.android.systemui.dock.DockManager;
 import com.android.systemui.dreams.DreamOverlayStateController;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
+import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
@@ -275,21 +276,18 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
         // Should be false to start, so no invocations
         mStatusBarKeyguardViewManager.setOccluded(false /* occluded */, false /* animated */);
-        verify(mKeyguardUpdateMonitor, never()).onKeyguardOccludedChanged(anyBoolean());
         verify(mKeyguardStateController, never()).notifyKeyguardState(anyBoolean(), anyBoolean());
 
         clearInvocations(mKeyguardUpdateMonitor);
         clearInvocations(mKeyguardStateController);
 
         mStatusBarKeyguardViewManager.setOccluded(true /* occluded */, false /* animated */);
-        verify(mKeyguardUpdateMonitor).onKeyguardOccludedChanged(true);
         verify(mKeyguardStateController).notifyKeyguardState(true, true);
 
         clearInvocations(mKeyguardUpdateMonitor);
         clearInvocations(mKeyguardStateController);
 
         mStatusBarKeyguardViewManager.setOccluded(true /* occluded */, false /* animated */);
-        verify(mKeyguardUpdateMonitor, never()).onKeyguardOccludedChanged(anyBoolean());
         verify(mKeyguardStateController, never()).notifyKeyguardState(anyBoolean(), anyBoolean());
     }
 
@@ -299,7 +297,6 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         mStatusBarKeyguardViewManager.show(null);
 
         mStatusBarKeyguardViewManager.setOccluded(true /* occluded */, false /* animated */);
-        verify(mKeyguardUpdateMonitor).onKeyguardOccludedChanged(true);
         verify(mKeyguardStateController).notifyKeyguardState(true, true);
     }
 
@@ -309,7 +306,6 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         mStatusBarKeyguardViewManager.show(null);
 
         mStatusBarKeyguardViewManager.setOccluded(true /* occluded */, false /* animated */);
-        verify(mKeyguardUpdateMonitor).onKeyguardOccludedChanged(true);
         verify(mKeyguardStateController).notifyKeyguardState(true, true);
     }
 
@@ -386,6 +382,16 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
         // THEN alt bouncer should be hidden
         verify(mAlternateAuthInterceptor).hideAlternateAuthBouncer();
+    }
+
+    @Test
+    public void testBouncerIsOrWillBeShowing_whenBouncerIsInTransit() {
+        when(mBouncer.isShowing()).thenReturn(false);
+        when(mBouncer.inTransit()).thenReturn(true);
+
+        assertTrue(
+                "Is or will be showing should be true when bouncer is in transit",
+                mStatusBarKeyguardViewManager.bouncerIsOrWillBeShowing());
     }
 
     @Test

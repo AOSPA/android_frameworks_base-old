@@ -16,27 +16,18 @@
 
 package com.android.server.wm.flicker.ime
 
-import android.app.Instrumentation
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import android.view.WindowManagerPolicyConstants
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerBuilderProvider
+import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.ImeAppHelper
-import com.android.server.wm.flicker.navBarLayerIsVisible
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.navBarWindowIsVisible
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.flicker.statusBarWindowIsVisible
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,52 +43,63 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group2
-class CloseImeWindowToHomeTest(private val testSpec: FlickerTestParameter) {
-    private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
+class CloseImeWindowToHomeTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val testApp = ImeAppHelper(instrumentation)
 
-    @FlickerBuilderProvider
-    fun buildFlicker(): FlickerBuilder {
-        return FlickerBuilder(instrumentation).apply {
-            setup {
-                eachRun {
-                    testApp.launchViaIntent(wmHelper)
-                    testApp.openIME(wmHelper)
-                }
+    /** {@inheritDoc} */
+    override val transition: FlickerBuilder.() -> Unit = {
+        setup {
+            eachRun {
+                testApp.launchViaIntent(wmHelper)
+                testApp.openIME(wmHelper)
             }
-            transitions {
-                device.pressHome()
-                wmHelper.StateSyncBuilder()
-                    .withHomeActivityVisible()
-                    .withImeGone()
-                    .waitForAndVerify()
-            }
-            teardown {
-                test {
-                    testApp.exit(wmHelper)
-                }
+        }
+        transitions {
+            device.pressHome()
+            wmHelper.StateSyncBuilder()
+                .withHomeActivityVisible()
+                .withImeGone()
+                .waitForAndVerify()
+        }
+        teardown {
+            test {
+                testApp.exit(wmHelper)
             }
         }
     }
 
+    /** {@inheritDoc} */
     @Presubmit
     @Test
-    fun navBarWindowIsVisible() = testSpec.navBarWindowIsVisible()
-
-    @Presubmit
-    @Test
-    fun statusBarWindowIsVisible() = testSpec.statusBarWindowIsVisible()
-
-    @Presubmit
-    @Test
-    fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
         testSpec.assertWm {
-            this.visibleWindowsShownMoreThanOneConsecutiveEntry(listOf(
-                FlickerComponentName.IME,
-                FlickerComponentName.SPLASH_SCREEN,
-                FlickerComponentName.SNAPSHOT))
+            this.visibleWindowsShownMoreThanOneConsecutiveEntry(
+                listOf(
+                    ComponentMatcher.IME,
+                    ComponentMatcher.SPLASH_SCREEN,
+                    ComponentMatcher.SNAPSHOT
+                )
+            )
         }
     }
+
+    /** {@inheritDoc} */
+    @Presubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() {
+        testSpec.assertLayers {
+            this.visibleLayersShownMoreThanOneConsecutiveEntry(
+                listOf(
+                    ComponentMatcher.IME,
+                    ComponentMatcher.SPLASH_SCREEN
+                )
+            )
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
 
     @Presubmit
     @Test
@@ -107,53 +109,19 @@ class CloseImeWindowToHomeTest(private val testSpec: FlickerTestParameter) {
     @Test
     fun imeAppWindowBecomesInvisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(testApp.component)
-                    .then()
-                    .isAppWindowInvisible(testApp.component)
+            this.isAppWindowVisible(testApp)
+                .then()
+                .isAppWindowInvisible(testApp)
         }
     }
-
-    @Presubmit
-    @Test
-    fun navBarLayerIsVisible() = testSpec.navBarLayerIsVisible()
-
-    @Presubmit
-    @Test
-    fun statusBarLayerIsVisible() = testSpec.navBarLayerIsVisible()
-
-    @Presubmit
-    @Test
-    fun entireScreenCovered() = testSpec.entireScreenCovered()
-
-    @Presubmit
-    @Test
-    fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
 
     @Presubmit
     @Test
     fun imeAppLayerBecomesInvisible() {
         testSpec.assertLayers {
-            this.isVisible(testApp.component)
-                    .then()
-                    .isInvisible(testApp.component)
-        }
-    }
-
-    @Presubmit
-    @Test
-    fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
-
-    @FlakyTest(bugId = 206753786)
-    @Test
-    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
-
-    @Presubmit
-    @Test
-    fun visibleLayersShownMoreThanOneConsecutiveEntry() {
-        testSpec.assertLayers {
-            this.visibleLayersShownMoreThanOneConsecutiveEntry(listOf(
-                FlickerComponentName.IME,
-                FlickerComponentName.SPLASH_SCREEN))
+            this.isVisible(testApp)
+                .then()
+                .isInvisible(testApp)
         }
     }
 

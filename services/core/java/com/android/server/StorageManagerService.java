@@ -352,6 +352,10 @@ class StorageManagerService extends IStorageManager.Stub
     private static final float DEFAULT_LOW_BATTERY_LEVEL = 20F;
     // Decide whether charging is required to turn on the feature
     private static final boolean DEFAULT_CHARGING_REQUIRED = true;
+    // Minimum GC interval sleep time in ms
+    private static final int DEFAULT_MIN_GC_SLEEPTIME = 10000;
+    // Target dirty segment ratio to aim to
+    private static final int DEFAULT_TARGET_DIRTY_RATIO = 80;
 
     private volatile int mLifetimePercentThreshold;
     private volatile int mMinSegmentsThreshold;
@@ -359,6 +363,8 @@ class StorageManagerService extends IStorageManager.Stub
     private volatile float mSegmentReclaimWeight;
     private volatile float mLowBatteryLevel;
     private volatile boolean mChargingRequired;
+    private volatile int mMinGCSleepTime;
+    private volatile int mTargetDirtyRatio;
     private volatile boolean mNeedGC;
 
     private volatile boolean mPassedLifetimeThresh;
@@ -1246,10 +1252,10 @@ class StorageManagerService extends IStorageManager.Stub
         mHandler.sendMessage(mHandler.obtainMessage(H_FSTRIM, callback));
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     // Binder entry point for kicking off an immediate fstrim
     @Override
     public void runMaintenance() {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
         runIdleMaintenance(null);
     }
 
@@ -2163,17 +2169,17 @@ class StorageManagerService extends IStorageManager.Stub
         mCallbacks.unregister(listener);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.SHUTDOWN)
     @Override
     public void shutdown(final IStorageShutdownObserver observer) {
-        enforcePermission(android.Manifest.permission.SHUTDOWN);
 
         Slog.i(TAG, "Shutting down");
         mHandler.obtainMessage(H_SHUTDOWN, observer).sendToTarget();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void mount(String volId) {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         final VolumeInfo vol = findVolumeByIdOrThrow(volId);
         if (isMountDisallowed(vol)) {
@@ -2239,9 +2245,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void unmount(String volId) {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         final VolumeInfo vol = findVolumeByIdOrThrow(volId);
         unmount(vol);
@@ -2263,9 +2269,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS)
     @Override
     public void format(String volId) {
-        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
 
         final VolumeInfo vol = findVolumeByIdOrThrow(volId);
         final String fsUuid = vol.fsUuid;
@@ -2282,9 +2288,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS)
     @Override
     public void benchmark(String volId, IVoldTaskListener listener) {
-        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
 
         try {
             mVold.benchmark(volId, new IVoldTaskListener.Stub() {
@@ -2321,9 +2327,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS)
     @Override
     public void partitionPublic(String diskId) {
-        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
 
         final CountDownLatch latch = findOrCreateDiskScanLatch(diskId);
         try {
@@ -2334,9 +2340,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS)
     @Override
     public void partitionPrivate(String diskId) {
-        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
         enforceAdminUser();
 
         final CountDownLatch latch = findOrCreateDiskScanLatch(diskId);
@@ -2348,9 +2354,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS)
     @Override
     public void partitionMixed(String diskId, int ratio) {
-        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
         enforceAdminUser();
 
         final CountDownLatch latch = findOrCreateDiskScanLatch(diskId);
@@ -2362,9 +2368,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void setVolumeNickname(String fsUuid, String nickname) {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         Objects.requireNonNull(fsUuid);
         synchronized (mLock) {
@@ -2375,9 +2381,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void setVolumeUserFlags(String fsUuid, int flags, int mask) {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         Objects.requireNonNull(fsUuid);
         synchronized (mLock) {
@@ -2388,9 +2394,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void forgetVolume(String fsUuid) {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         Objects.requireNonNull(fsUuid);
 
@@ -2412,9 +2418,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void forgetAllVolumes() {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         synchronized (mLock) {
             for (int i = 0; i < mRecords.size(); i++) {
@@ -2444,9 +2450,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS)
     @Override
     public void fstrim(int flags, IVoldTaskListener listener) {
-        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
 
         try {
             // Block based checkpoint process runs fstrim. So, if checkpoint is in progress
@@ -2577,6 +2583,10 @@ class StorageManagerService extends IStorageManager.Stub
                 "low_battery_level", DEFAULT_LOW_BATTERY_LEVEL);
             mChargingRequired = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
                 "charging_required", DEFAULT_CHARGING_REQUIRED);
+            mMinGCSleepTime = DeviceConfig.getInt(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                "min_gc_sleeptime", DEFAULT_MIN_GC_SLEEPTIME);
+            mTargetDirtyRatio = DeviceConfig.getInt(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                "target_dirty_ratio", DEFAULT_TARGET_DIRTY_RATIO);
 
             // If we use the smart idle maintenance, we need to turn off GC in the traditional idle
             // maintenance to avoid the conflict
@@ -2694,6 +2704,14 @@ class StorageManagerService extends IStorageManager.Stub
         enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
 
         try {
+            int latestWrite = mVold.getWriteAmount();
+            if (latestWrite == -1) {
+                Slog.w(TAG, "Failed to get storage write record");
+                return;
+            }
+
+            updateStorageWriteRecords(latestWrite);
+
             // Block based checkpoint process runs fstrim. So, if checkpoint is in progress
             // (first boot after OTA), We skip the smart idle maintenance
             if (!needsCheckpoint() || !supportsBlockCheckpoint()) {
@@ -2701,13 +2719,6 @@ class StorageManagerService extends IStorageManager.Stub
                     return;
                 }
 
-                int latestWrite = mVold.getWriteAmount();
-                if (latestWrite == -1) {
-                    Slog.w(TAG, "Failed to get storage write record");
-                    return;
-                }
-
-                updateStorageWriteRecords(latestWrite);
                 int avgWriteAmount = getAverageWriteAmount();
 
                 Slog.i(TAG, "Set smart idle maintenance: " + "latest write amount: " +
@@ -2715,9 +2726,12 @@ class StorageManagerService extends IStorageManager.Stub
                             ", min segment threshold: " + mMinSegmentsThreshold +
                             ", dirty reclaim rate: " + mDirtyReclaimRate +
                             ", segment reclaim weight: " + mSegmentReclaimWeight +
-                            ", period: " + sSmartIdleMaintPeriod);
+                            ", period(min): " + sSmartIdleMaintPeriod +
+                            ", min gc sleep time(ms): " + mMinGCSleepTime +
+                            ", target dirty ratio: " + mTargetDirtyRatio);
                 mVold.setGCUrgentPace(avgWriteAmount, mMinSegmentsThreshold, mDirtyReclaimRate,
-                                      mSegmentReclaimWeight, sSmartIdleMaintPeriod);
+                                      mSegmentReclaimWeight, sSmartIdleMaintPeriod,
+                                      mMinGCSleepTime, mTargetDirtyRatio);
             } else {
                 Slog.i(TAG, "Skipping smart idle maintenance - block based checkpoint in progress");
             }
@@ -2730,9 +2744,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void setDebugFlags(int flags, int mask) {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         if ((mask & (StorageManager.DEBUG_ADOPTABLE_FORCE_ON
                 | StorageManager.DEBUG_ADOPTABLE_FORCE_OFF)) != 0) {
@@ -2800,9 +2814,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS)
     @Override
     public void setPrimaryStorageUuid(String volumeUuid, IPackageMoveObserver callback) {
-        enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
         final VolumeInfo from;
         final VolumeInfo to;
@@ -3006,12 +3020,12 @@ class StorageManagerService extends IStorageManager.Stub
         mVold.commitChanges();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS)
     /**
      * Check if we should be mounting with checkpointing or are checkpointing now
      */
     @Override
     public boolean needsCheckpoint() throws RemoteException {
-        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
         return mVold.needsCheckpoint();
     }
 
@@ -3028,9 +3042,9 @@ class StorageManagerService extends IStorageManager.Stub
         mVold.abortChanges(message, retry);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     @Override
     public void createUserKey(int userId, int serialNumber, boolean ephemeral) {
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         try {
             mVold.createUserKey(userId, serialNumber, ephemeral);
@@ -3039,9 +3053,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     @Override
     public void destroyUserKey(int userId) {
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         try {
             mVold.destroyUserKey(userId);
@@ -3058,6 +3072,7 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     /*
      * Add this secret to the set of ways we can recover a user's disk
      * encryption key.  Changing the secret for a disk encryption key is done in
@@ -3068,7 +3083,6 @@ class StorageManagerService extends IStorageManager.Stub
      */
     @Override
     public void addUserKeyAuth(int userId, int serialNumber, byte[] secret) {
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         try {
             mVold.addUserKeyAuth(userId, serialNumber, encodeBytes(secret));
@@ -3077,6 +3091,7 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     /*
      * Store a user's disk encryption key without secret binding.  Removing the
      * secret for a disk encryption key is done in two phases.  First, this
@@ -3086,7 +3101,6 @@ class StorageManagerService extends IStorageManager.Stub
      */
     @Override
     public void clearUserKeyAuth(int userId, int serialNumber, byte[] secret) {
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         try {
             mVold.clearUserKeyAuth(userId, serialNumber, encodeBytes(secret));
@@ -3095,13 +3109,13 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     /*
      * Delete all bindings of a user's disk encryption key except the most
      * recently added one.
      */
     @Override
     public void fixateNewestUserKeyAuth(int userId) {
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         try {
             mVold.fixateNewestUserKeyAuth(userId);
@@ -3145,6 +3159,7 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     @Override
     public void lockUserKey(int userId) {
         //  Do not lock user 0 data for headless system user
@@ -3153,7 +3168,6 @@ class StorageManagerService extends IStorageManager.Stub
             throw new IllegalArgumentException("Headless system user data cannot be locked..");
         }
 
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         if (!isUserKeyUnlocked(userId)) {
             Slog.d(TAG, "User " + userId + "'s CE storage is already locked");
@@ -3208,9 +3222,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     @Override
     public void prepareUserStorage(String volumeUuid, int userId, int serialNumber, int flags) {
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         try {
             prepareUserStorageInternal(volumeUuid, userId, serialNumber, flags);
@@ -3251,9 +3265,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.STORAGE_INTERNAL)
     @Override
     public void destroyUserStorage(String volumeUuid, int userId, int flags) {
-        enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         try {
             mVold.destroyUserStorage(volumeUuid, userId, flags);
@@ -4298,9 +4312,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.WRITE_MEDIA_STORAGE)
     @Override
     public int getExternalStorageMountMode(int uid, String packageName) {
-        enforcePermission(android.Manifest.permission.WRITE_MEDIA_STORAGE);
         return mStorageManagerInternal.getExternalStorageMountMode(uid, packageName);
     }
 

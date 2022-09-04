@@ -26,9 +26,7 @@ import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ShowWhenLockedAppHelper
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
-import com.android.server.wm.flicker.navBarLayerPositionEnd
-import com.android.server.wm.flicker.statusBarLayerPositionEnd
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,7 +65,7 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
                     // Launch an activity that is shown when the device is locked
                     showWhenLockedApp.launchViaIntent(wmHelper)
                     wmHelper.StateSyncBuilder()
-                        .withFullScreenApp(showWhenLockedApp.component)
+                        .withFullScreenApp(showWhenLockedApp)
                         .waitForAndVerify()
 
                     device.sleep()
@@ -90,9 +88,9 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
         testSpec.assertWm {
             this.hasNoVisibleAppWindow()
                     .then()
-                    .isAppWindowOnTop(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isAppWindowOnTop(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isAppWindowOnTop(showWhenLockedApp.component)
+                    .isAppWindowOnTop(showWhenLockedApp)
         }
     }
 
@@ -100,11 +98,11 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
     @Postsubmit
     fun showWhenLockedAppLayerBecomesVisible() {
         testSpec.assertLayers {
-            this.isInvisible(showWhenLockedApp.component)
+            this.isInvisible(showWhenLockedApp)
                     .then()
-                    .isVisible(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isVisible(showWhenLockedApp.component)
+                    .isVisible(showWhenLockedApp)
         }
     }
 
@@ -113,72 +111,10 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
     @Test
     override fun entireScreenCovered() = super.entireScreenCovered()
 
-    /**
-     * Checks the position of the navigation bar at the start and end of the transition
-     *
-     * Differently from the normal usage of this assertion, check only the final state of the
-     * transition because the display is off at the start and the NavBar is never visible
-     */
-    @Postsubmit
-    @Test
-    override fun navBarLayerRotatesAndScales() = testSpec.navBarLayerPositionEnd()
-
-    /**
-     * Checks the position of the status bar at the start and end of the transition
-     *
-     * Differently from the normal usage of this assertion, check only the final state of the
-     * transition because the display is off at the start and the NavBar is never visible
-     */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerRotatesScales() = testSpec.statusBarLayerPositionEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun appLayerBecomesVisible() = super.appLayerBecomesVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsVisible() = super.statusBarWindowIsVisible()
-
     /** {@inheritDoc} */
     @Postsubmit
     @Test
     override fun appWindowBecomesTopWindow() = super.appWindowBecomesTopWindow()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun appWindowBecomesVisible() = super.appWindowBecomesVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerIsVisible() = super.statusBarLayerIsVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     companion object {
         /**

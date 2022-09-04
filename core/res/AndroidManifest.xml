@@ -513,8 +513,6 @@
 
     <protected-broadcast android:name="android.intent.action.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED" />
     <protected-broadcast android:name="android.intent.action.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED" />
-    <protected-broadcast android:name="android.intent.action.ACTION_SUBINFO_CONTENT_CHANGE" />
-    <protected-broadcast android:name="android.intent.action.ACTION_SUBINFO_RECORD_UPDATED" />
 
     <protected-broadcast android:name="android.intent.action.ACTION_SET_RADIO_CAPABILITY_DONE" />
     <protected-broadcast android:name="android.intent.action.ACTION_SET_RADIO_CAPABILITY_FAILED" />
@@ -4105,6 +4103,11 @@
          <p>Protection level: signature
     -->
     <permission android:name="android.permission.BIND_INPUT_METHOD"
+        android:protectionLevel="signature" />
+
+    <!-- Allows access to Test APIs defined in {@link android.view.inputmethod.InputMethodManager}.
+         @hide -->
+    <permission android:name="android.permission.TEST_INPUT_METHOD"
         android:protectionLevel="signature" />
 
     <!-- Must be required by an {@link android.media.midi.MidiDeviceService},

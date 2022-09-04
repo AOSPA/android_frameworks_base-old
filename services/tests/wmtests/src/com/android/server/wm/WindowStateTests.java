@@ -664,12 +664,11 @@ public class WindowStateTests extends WindowTestsBase {
         assertEquals(expectedChildPos, childPos);
 
         // Surface should apply the scale.
+        final SurfaceControl.Transaction t = w.getPendingTransaction();
         w.prepareSurfaces();
-        verify(w.getPendingTransaction()).setMatrix(w.getSurfaceControl(),
-                overrideScale, 0, 0, overrideScale);
+        verify(t).setMatrix(w.mSurfaceControl, overrideScale, 0, 0, overrideScale);
         // Child surface inherits parent's scale, so it doesn't need to scale.
-        verify(child.getPendingTransaction(), never()).setMatrix(any(), anyInt(), anyInt(),
-                anyInt(), anyInt());
+        verify(t, never()).setMatrix(any(), anyInt(), anyInt(), anyInt(), anyInt());
 
         // According to "dp * density / 160 = px", density is scaled and the size in dp is the same.
         final CompatibilityInfo compatInfo = cmp.compatibilityInfoForPackageLocked(
@@ -686,6 +685,13 @@ public class WindowStateTests extends WindowTestsBase {
         final Rect unscaledClientBounds = new Rect(clientConfig.windowConfiguration.getBounds());
         unscaledClientBounds.scale(overrideScale);
         assertEquals(w.getWindowConfiguration().getBounds(), unscaledClientBounds);
+
+        // Child window without scale (e.g. different app) should apply inverse scale of parent.
+        doReturn(1f).when(cmp).getCompatScale(anyString(), anyInt());
+        final WindowState child2 = createWindow(w, TYPE_APPLICATION_SUB_PANEL, "child2");
+        clearInvocations(t);
+        child2.prepareSurfaces();
+        verify(t).setMatrix(child2.mSurfaceControl, w.mInvGlobalScale, 0, 0, w.mInvGlobalScale);
     }
 
     @UseTestDisplay(addWindows = {W_ABOVE_ACTIVITY, W_NOTIFICATION_SHADE})
@@ -720,6 +726,17 @@ public class WindowStateTests extends WindowTestsBase {
         outWaitingForDrawn.clear();
         invisibleApp.requestDrawIfNeeded(outWaitingForDrawn);
         assertTrue(outWaitingForDrawn.isEmpty());
+
+        // Drawn state should not be changed for insets change when screen is off.
+        spyOn(mWm.mPolicy);
+        doReturn(false).when(mWm.mPolicy).isScreenOn();
+        makeWindowVisibleAndDrawn(startingApp);
+        startingApp.getConfiguration().orientation = 0; // Reset to be the same as last reported.
+        startingApp.getWindowFrames().setInsetsChanged(true);
+        startingApp.updateResizingWindowIfNeeded();
+        assertTrue(mWm.mResizingWindows.contains(startingApp));
+        assertTrue(startingApp.isDrawn());
+        assertFalse(startingApp.getOrientationChanging());
     }
 
     @UseTestDisplay(addWindows = W_ABOVE_ACTIVITY)
@@ -992,6 +1009,7 @@ public class WindowStateTests extends WindowTestsBase {
         assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
 
         // Verify the IME insets is visible on app, but not for app2 during app task switching.
+        mDisplayContent.computeImeTargetIfNeeded(app.mActivityRecord);
         assertTrue(app.getInsetsState().getSource(ITYPE_IME).isVisible());
         assertFalse(app2.getInsetsState().getSource(ITYPE_IME).isVisible());
     }

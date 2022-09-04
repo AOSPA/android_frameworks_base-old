@@ -52,12 +52,14 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
 @Postsubmit
-open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
-    OpenAppTransition(testSpec) {
+open class OpenAppFromNotificationWarm(
+    testSpec: FlickerTestParameter
+) : OpenAppTransition(testSpec) {
     override val testApp: NotificationAppHelper = NotificationAppHelper(instrumentation)
 
     open val openingNotificationsFromLockScreen = false
 
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             setup {
@@ -68,7 +70,7 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
                 eachRun {
                     testApp.launchViaIntent(wmHelper)
                     wmHelper.StateSyncBuilder()
-                        .withFullScreenApp(testApp.component)
+                        .withFullScreenApp(testApp)
                         .waitForAndVerify()
                     testApp.postNotification(wmHelper)
                     tapl.goHome()
@@ -83,11 +85,14 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
                 var endY = 3 * device.displayHeight / 4
                 var steps = 25
                 if (openingNotificationsFromLockScreen) {
-                    val wm = instrumentation.context.getSystemService(WindowManager::class.java)
+                    val wm: WindowManager =
+                        instrumentation.context.getSystemService(WindowManager::class.java)
+                            ?: error("Unable to connect to WindowManager service")
                     val metricInsets = wm.currentWindowMetrics.windowInsets
                     val insets = metricInsets.getInsetsIgnoringVisibility(
-                            WindowInsets.Type.statusBars()
-                                    or WindowInsets.Type.displayCutout())
+                        WindowInsets.Type.statusBars()
+                            or WindowInsets.Type.displayCutout()
+                    )
 
                     startY = insets.top + 100
                     endY = device.displayHeight / 2
@@ -101,14 +106,17 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
                 instrumentation.uiAutomation.syncInputTransactions()
 
                 // Launch the activity by clicking the notification
-                val notification = device.wait(Until.findObject(
-                        By.text("Flicker Test Notification")), 2000L)
+                val notification = device.wait(
+                    Until.findObject(
+                        By.text("Flicker Test Notification")
+                    ), 2000L
+                )
                 notification?.click() ?: error("Notification not found")
                 instrumentation.uiAutomation.syncInputTransactions()
 
                 // Wait for the app to launch
                 wmHelper.StateSyncBuilder()
-                    .withFullScreenApp(testApp.component)
+                    .withFullScreenApp(testApp)
                     .waitForAndVerify()
             }
 
@@ -119,52 +127,92 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
             }
         }
 
-    @Test
+    /** {@inheritDoc} */
     @Postsubmit
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
+    @Test
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
-    @Test
+    /** {@inheritDoc} */
     @Postsubmit
-    override fun statusBarLayerIsVisible() = super.statusBarLayerIsVisible()
+    @Test
+    override fun statusBarLayerIsVisibleAtStartAndEnd() =
+        super.statusBarLayerIsVisibleAtStartAndEnd()
 
-    @Test
+    /** {@inheritDoc} */
     @Postsubmit
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
+    @Test
+    override fun statusBarLayerPositionAtStartAndEnd() =
+        super.statusBarLayerPositionAtStartAndEnd()
 
-    @Test
+    /** {@inheritDoc} */
     @Postsubmit
+    @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-            super.visibleLayersShownMoreThanOneConsecutiveEntry()
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
-    @Test
+    /** {@inheritDoc} */
     @Postsubmit
+    @Test
     override fun appWindowBecomesVisible() = appWindowBecomesVisible_warmStart()
 
-    @Test
+    /** {@inheritDoc} */
     @Postsubmit
+    @Test
     override fun appLayerBecomesVisible() = appLayerBecomesVisible_warmStart()
 
-    @Test
+    /** {@inheritDoc} */
     @Postsubmit
-    fun notificationAppWindowVisibleAtEnd() {
+    @Test
+    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun appWindowIsTopWindowAtEnd() =
+        super.appWindowIsTopWindowAtEnd()
+
+    @Postsubmit
+    @Test
+    open fun notificationAppWindowVisibleAtEnd() {
         testSpec.assertWmEnd {
-            this.isAppWindowVisible(testApp.component)
+            this.isAppWindowVisible(testApp)
         }
     }
 
-    @Test
     @Postsubmit
-    fun notificationAppWindowOnTopAtEnd() {
+    @Test
+    open fun notificationAppWindowOnTopAtEnd() {
         testSpec.assertWmEnd {
-            this.isAppWindowOnTop(testApp.component)
+            this.isAppWindowOnTop(testApp)
         }
     }
 
-    @Test
     @Postsubmit
-    fun notificationAppLayerVisibleAtEnd() {
+    @Test
+    open fun notificationAppLayerVisibleAtEnd() {
         testSpec.assertLayersEnd {
-            this.isVisible(testApp.component)
+            this.isVisible(testApp)
         }
     }
 
@@ -178,36 +226,10 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
 
     @FlakyTest(bugId = 229738092)
     @Test
-    fun appWindowBecomesTopWindow_ShellTransit() {
+    open fun appWindowBecomesTopWindow_ShellTransit() {
         Assume.assumeTrue(isShellTransitionsEnabled)
         super.appWindowBecomesTopWindow()
     }
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsVisible() = super.statusBarWindowIsVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     companion object {
         /**
@@ -220,7 +242,7 @@ open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
-                    .getConfigNonRotationTests(repetitions = 3)
+                .getConfigNonRotationTests(repetitions = 3)
         }
     }
 }

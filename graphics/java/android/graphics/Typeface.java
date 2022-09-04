@@ -57,6 +57,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 
 import dalvik.annotation.optimization.CriticalNative;
+import dalvik.annotation.optimization.FastNative;
 
 import libcore.util.NativeAllocationRegistry;
 
@@ -1176,6 +1177,17 @@ public class Typeface {
         mWeight = nativeGetWeight(ni);
     }
 
+    /**
+     * Releases the underlying native object.
+     *
+     * <p>For testing only. Do not use the instance after this method is called.
+     * It is safe to call this method twice or more on the same instance.
+     * @hide
+     */
+    public void releaseNativeObjectForTest() {
+        mCleaner.run();
+    }
+
     private static Typeface getSystemDefaultTypeface(@NonNull String familyName) {
         Typeface tf = sSystemFontMap.get(familyName);
         return tf == null ? Typeface.DEFAULT : tf;
@@ -1395,6 +1407,9 @@ public class Typeface {
         FontConfig config = SystemFonts.getSystemPreinstalledFontConfig();
         for (int i = 0; i < config.getFontFamilies().size(); ++i) {
             FontConfig.FontFamily family = config.getFontFamilies().get(i);
+            if (!family.getLocaleList().isEmpty()) {
+                nativeRegisterLocaleList(family.getLocaleList().toLanguageTags());
+            }
             boolean loadFamily = false;
             for (int j = 0; j < family.getLocaleList().size(); ++j) {
                 String fontScript = ULocale.addLikelySubtags(
@@ -1425,7 +1440,7 @@ public class Typeface {
     public static void destroySystemFontMap() {
         synchronized (SYSTEM_FONT_MAP_LOCK) {
             for (Typeface typeface : sSystemFontMap.values()) {
-                typeface.mCleaner.run();
+                typeface.releaseNativeObjectForTest();
             }
             sSystemFontMap.clear();
             if (sSystemFontMapBuffer != null) {
@@ -1433,7 +1448,23 @@ public class Typeface {
             }
             sSystemFontMapBuffer = null;
             sSystemFontMapSharedMemory = null;
+            synchronized (sStyledCacheLock) {
+                destroyTypefaceCacheLocked(sStyledTypefaceCache);
+            }
+            synchronized (sWeightCacheLock) {
+                destroyTypefaceCacheLocked(sWeightTypefaceCache);
+            }
         }
+    }
+
+    private static void destroyTypefaceCacheLocked(LongSparseArray<SparseArray<Typeface>> cache) {
+        for (int i = 0; i < cache.size(); i++) {
+            SparseArray<Typeface> array = cache.valueAt(i);
+            for (int j = 0; j < array.size(); j++) {
+                array.valueAt(j).releaseNativeObjectForTest();
+            }
+        }
+        cache.clear();
     }
 
     /** @hide */
@@ -1541,4 +1572,7 @@ public class Typeface {
     private static native void nativeAddFontCollections(long nativePtr);
 
     private static native void nativeWarmUpCache(String fileName);
+
+    @FastNative
+    private static native void nativeRegisterLocaleList(String locales);
 }

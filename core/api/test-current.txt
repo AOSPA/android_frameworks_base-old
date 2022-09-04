@@ -167,6 +167,7 @@ package android.app {
     method public void setEligibleForLegacyPermissionPrompt(boolean);
     method public static void setExitTransitionTimeout(long);
     method public void setLaunchActivityType(int);
+    method public void setLaunchTaskDisplayAreaFeatureId(int);
     method public void setLaunchWindowingMode(int);
     method public void setLaunchedFromBubble(boolean);
     method public void setTaskAlwaysOnTop(boolean);
@@ -418,6 +419,7 @@ package android.app {
   public class TaskInfo {
     method public boolean containsLaunchCookie(@NonNull android.os.IBinder);
     method @NonNull public android.content.res.Configuration getConfiguration();
+    method public int getDisplayId();
     method public int getParentTaskId();
     method @Nullable public android.app.PictureInPictureParams getPictureInPictureParams();
     method @NonNull public android.window.WindowContainerToken getToken();
@@ -438,7 +440,6 @@ package android.app {
     method @Deprecated public boolean revokeRuntimePermission(String, String, android.os.UserHandle);
     method public void syncInputTransactions();
     method public void syncInputTransactions(boolean);
-    method @Nullable public android.graphics.Bitmap takeScreenshot(@NonNull android.view.Window);
     field @NonNull public static final java.util.Set<java.lang.String> ALL_PERMISSIONS;
   }
 
@@ -822,7 +823,7 @@ package android.content.pm {
   }
 
   public abstract class PackageManager {
-    method @Nullable public String getContentCaptureServicePackageName();
+    method @Deprecated @Nullable public final String getContentCaptureServicePackageName();
     method @Nullable public String getDefaultTextClassifierPackageName();
     method @RequiresPermission(android.Manifest.permission.INJECT_EVENTS) public android.os.IBinder getHoldLockToken();
     method public abstract int getInstallReason(@NonNull String, @NonNull android.os.UserHandle);
@@ -974,8 +975,8 @@ package android.database.sqlite {
   }
 
   public static class SQLiteDebug.DbStats {
-    ctor public SQLiteDebug.DbStats(String, long, long, int, int, int, int);
-    field public String cache;
+    ctor public SQLiteDebug.DbStats(@NonNull String, long, long, int, int, int, int, boolean);
+    field public final boolean arePoolStats;
     field public String dbName;
     field public long dbSize;
     field public int lookaside;
@@ -3108,6 +3109,7 @@ package android.view.inputmethod {
   }
 
   public final class InputMethodManager {
+    method public void addVirtualStylusIdForTestSession();
     method public int getDisplayId();
     method @NonNull @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL) public java.util.List<android.view.inputmethod.InputMethodInfo> getInputMethodListAsUser(int);
     method public boolean hasActiveInputConnection(@Nullable android.view.View);
