@@ -215,7 +215,6 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.os.WorkSource;
 import android.provider.Settings;
-import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.MergedConfiguration;
@@ -1703,7 +1702,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mFrozenInsetsState != null ? mFrozenInsetsState : getMergedInsetsState();
         final InsetsState insetsStateForWindow = insetsPolicy
                 .enforceInsetsPolicyForTarget(insetTypeProvidedByWindow,
-                        getWindowingMode(), isAlwaysOnTop(), rawInsetsState);
+                        getWindowingMode(), isAlwaysOnTop(), mAttrs.type, rawInsetsState);
         return insetsPolicy.adjustInsetsForWindow(this, insetsStateForWindow,
                 includeTransient);
     }
@@ -3461,10 +3460,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mClient.asBinder().isBinderAlive();
     }
 
-    boolean isClosing() {
-        return mAnimatingExit || (mActivityRecord != null && mActivityRecord.isClosingOrEnteringPip());
-    }
-
     void sendAppVisibilityToClients() {
         super.sendAppVisibilityToClients();
 
@@ -4703,19 +4698,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mActivityRecord != null) {
             windowInfo.activityToken = mActivityRecord.token;
         }
-        windowInfo.title = mAttrs.accessibilityTitle;
-        // Panel windows have no public way to set the a11y title directly. Use the
-        // regular title as a fallback.
-        final boolean isPanelWindow = (mAttrs.type >= WindowManager.LayoutParams.FIRST_SUB_WINDOW)
-                && (mAttrs.type <= WindowManager.LayoutParams.LAST_SUB_WINDOW);
-        // Accessibility overlays should have titles that work for accessibility, and can't set
-        // the a11y title themselves.
-        final boolean isAccessibilityOverlay =
-                windowInfo.type == WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
-        if (TextUtils.isEmpty(windowInfo.title) && (isPanelWindow || isAccessibilityOverlay)) {
-            final CharSequence title = mAttrs.getTitle();
-            windowInfo.title = TextUtils.isEmpty(title) ? null : title;
-        }
         windowInfo.accessibilityIdOfAnchor = mAttrs.accessibilityIdOfAnchor;
         windowInfo.focused = isFocused();
         Task task = getTask();
@@ -5489,17 +5471,19 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     private void updateScaleIfNeeded() {
-        if (mIsChildWindow) {
-            // Child window follows parent's scale.
-            return;
-        }
         if (!isVisibleRequested() && !(mIsWallpaper && mToken.isVisible())) {
             // Skip if it is requested to be invisible, but if it is wallpaper, it may be in
             // transition that still needs to update the scale for zoom effect.
             return;
         }
-        float newHScale = mHScale * mGlobalScale * mWallpaperScale;
-        float newVScale = mVScale * mGlobalScale * mWallpaperScale;
+        float globalScale = mGlobalScale;
+        final WindowState parent = getParentWindow();
+        if (parent != null) {
+            // Undo parent's scale because the child surface has inherited scale from parent.
+            globalScale *= parent.mInvGlobalScale;
+        }
+        final float newHScale = mHScale * globalScale * mWallpaperScale;
+        final float newVScale = mVScale * globalScale * mWallpaperScale;
         if (mLastHScale != newHScale || mLastVScale != newVScale) {
             getSyncTransaction().setMatrix(mSurfaceControl, newHScale, 0, 0, newVScale);
             mLastHScale = newHScale;

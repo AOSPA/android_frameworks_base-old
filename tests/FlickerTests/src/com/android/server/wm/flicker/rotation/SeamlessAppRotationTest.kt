@@ -16,10 +16,10 @@
 
 package com.android.server.wm.flicker.rotation
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.RequiresDevice
 import android.view.WindowManager
-import android.platform.test.annotations.FlakyTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
@@ -27,8 +27,9 @@ import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.SeamlessRotationAppHelper
 import com.android.server.wm.flicker.testapp.ActivityOptions
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
+import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
@@ -81,14 +82,18 @@ open class SeamlessAppRotationTest(
 ) : RotationTransition(testSpec) {
     override val testApp = SeamlessRotationAppHelper(instrumentation)
 
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             setup {
                 test {
-                    testApp.launchViaIntent(wmHelper,
-                        stringExtras = mapOf(ActivityOptions.EXTRA_STARVE_UI_THREAD
-                            to testSpec.starveUiThread.toString())
+                    testApp.launchViaIntent(
+                        wmHelper,
+                        stringExtras = mapOf(
+                            ActivityOptions.EXTRA_STARVE_UI_THREAD
+                                to testSpec.starveUiThread.toString()
+                        )
                     )
                 }
             }
@@ -122,8 +127,10 @@ open class SeamlessAppRotationTest(
                 val appWindow = it.windowState(testApp.`package`)
                 val rotationAnimation = appWindow.windowState?.attributes?.rotationAnimation ?: 0
                 appWindow.verify("isRotationSeamless")
-                    .that(rotationAnimation
-                        .and(WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS))
+                    .that(
+                        rotationAnimation
+                            .and(WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS)
+                    )
                     .isGreaterThan(0)
             }
         }
@@ -136,7 +143,7 @@ open class SeamlessAppRotationTest(
     @Test
     fun appLayerAlwaysVisible() {
         testSpec.assertLayers {
-            isVisible(testApp.component)
+            isVisible(testApp)
         }
     }
 
@@ -149,33 +156,46 @@ open class SeamlessAppRotationTest(
         testSpec.assertLayers {
             this.invoke("entireScreenCovered") { entry ->
                 entry.entry.displays.map { display ->
-                    entry.visibleRegion(testApp.component).coversExactly(display.layerStackSpace)
+                    entry.visibleRegion(testApp)
+                        .coversExactly(display.layerStackSpace)
                 }
             }
         }
     }
 
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. App is full screen")
+    override fun statusBarLayerPositionAtStartAndEnd() { }
+
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. App is full screen")
+    override fun statusBarLayerIsVisibleAtStartAndEnd() { }
+
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. App is full screen")
+    override fun statusBarWindowIsAlwaysVisible() { }
+
     /**
-     * Checks that the [FlickerComponentName.STATUS_BAR] window is invisible during the whole
+     * Checks that the [ComponentMatcher.STATUS_BAR] window is invisible during the whole
      * transition
      */
     @Presubmit
     @Test
     fun statusBarWindowIsAlwaysInvisible() {
         testSpec.assertWm {
-            this.isAboveAppWindowInvisible(FlickerComponentName.STATUS_BAR)
+            this.isAboveAppWindowInvisible(ComponentMatcher.STATUS_BAR)
         }
     }
 
     /**
-     * Checks that the [FlickerComponentName.STATUS_BAR] layer is invisible during the whole
+     * Checks that the [ComponentMatcher.STATUS_BAR] layer is invisible during the whole
      * transition
      */
     @Presubmit
     @Test
     fun statusBarLayerIsAlwaysInvisible() {
         testSpec.assertLayers {
-            this.isInvisible(FlickerComponentName.STATUS_BAR)
+            this.isInvisible(ComponentMatcher.STATUS_BAR)
         }
     }
 
@@ -193,7 +213,7 @@ open class SeamlessAppRotationTest(
     /** {@inheritDoc} */
     @FlakyTest
     @Test
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     companion object {
         private val FlickerTestParameter.starveUiThread

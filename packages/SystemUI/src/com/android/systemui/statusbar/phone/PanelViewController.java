@@ -42,6 +42,7 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewPropertyAnimator;
 import android.view.ViewTreeObserver;
 import android.view.animation.Interpolator;
 
@@ -67,6 +68,7 @@ import com.android.systemui.util.time.SystemClock;
 import com.android.wm.shell.animation.FlingAnimationUtils;
 
 import java.io.PrintWriter;
+import java.util.List;
 
 public abstract class PanelViewController {
     public static final boolean DEBUG = PanelView.DEBUG;
@@ -492,8 +494,6 @@ public abstract class PanelViewController {
 
     protected abstract boolean shouldGestureWaitForTouchSlop();
 
-    protected abstract boolean shouldGestureIgnoreXTouchSlop(float x, float y);
-
     protected void onTrackingStopped(boolean expand) {
         mTracking = false;
         mCentralSurfaces.onTrackingStopped(expand);
@@ -609,9 +609,7 @@ public abstract class PanelViewController {
             float collapseSpeedUpFactor, boolean expandBecauseOfFalsing) {
         if (target == mExpandedHeight && mOverExpansion == 0.0f) {
             // We're at the target and didn't fling and there's no overshoot
-            endJankMonitoring(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
-            mKeyguardStateController.notifyPanelFlingEnd();
-            notifyExpandingFinished();
+            onFlingEnd(false /* cancelled */);
             return;
         }
         mIsFlinging = true;
@@ -737,7 +735,7 @@ public abstract class PanelViewController {
         animator.start();
     }
 
-    void onFlingEnd(boolean cancelled) {
+    protected void onFlingEnd(boolean cancelled) {
         mIsFlinging = false;
         // No overshoot when the animation ends
         setOverExpansionInternal(0, false /* isFromGesture */);
@@ -1054,16 +1052,19 @@ public abstract class PanelViewController {
         animator.start();
         setAnimator(animator);
 
-        View[] viewsToAnimate = {
-                mKeyguardBottomArea.getIndicationArea(),
-                mCentralSurfaces.getAmbientIndicationContainer()};
-        for (View v : viewsToAnimate) {
-            if (v == null) {
-                continue;
-            }
-            v.animate().translationY(-mHintDistance).setDuration(250).setInterpolator(
-                    Interpolators.FAST_OUT_SLOW_IN).withEndAction(() -> v.animate().translationY(
-                    0).setDuration(450).setInterpolator(mBounceInterpolator).start()).start();
+        final List<ViewPropertyAnimator> indicationAnimators =
+                mKeyguardBottomArea.getIndicationAreaAnimators();
+        for (final ViewPropertyAnimator indicationAreaAnimator : indicationAnimators) {
+            indicationAreaAnimator
+                    .translationY(-mHintDistance)
+                    .setDuration(250)
+                    .setInterpolator(Interpolators.FAST_OUT_SLOW_IN)
+                    .withEndAction(() -> indicationAreaAnimator
+                            .translationY(0)
+                            .setDuration(450)
+                            .setInterpolator(mBounceInterpolator)
+                            .start())
+                    .start();
         }
     }
 
@@ -1130,7 +1131,7 @@ public abstract class PanelViewController {
     }
 
     /** Returns true if {@link PanelView} should be visible. */
-    abstract boolean shouldPanelBeVisible();
+    abstract protected boolean shouldPanelBeVisible();
 
     /**
      * Updates the panel expansion and {@link PanelView} visibility if necessary.
@@ -1351,7 +1352,7 @@ public abstract class PanelViewController {
 
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 mGestureWaitForTouchSlop = shouldGestureWaitForTouchSlop();
-                mIgnoreXTouchSlop = isFullyCollapsed() || shouldGestureIgnoreXTouchSlop(x, y);
+                mIgnoreXTouchSlop = true;
             }
 
             switch (event.getActionMasked()) {

@@ -92,6 +92,7 @@ import com.android.systemui.statusbar.notification.collection.notifcollection.No
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionLogger;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifDismissInterceptor;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
+import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
 
 import org.junit.Before;
@@ -146,13 +147,12 @@ public class NotifCollectionTest extends SysuiTestCase {
 
     private NoManSimulator mNoMan;
     private FakeSystemClock mClock = new FakeSystemClock();
+    private FakeExecutor mBgExecutor = new FakeExecutor(mClock);
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         allowTestableLooperAsMainThread();
-
-        when(mNotifPipelineFlags.isNewPipelineEnabled()).thenReturn(true);
 
         when(mEulogizer.record(any(Exception.class))).thenAnswer(i -> i.getArguments()[0]);
 
@@ -164,6 +164,7 @@ public class NotifCollectionTest extends SysuiTestCase {
                 mNotifPipelineFlags,
                 mLogger,
                 mMainHandler,
+                mBgExecutor,
                 mEulogizer,
                 mock(DumpManager.class));
         mCollection.attach(mGroupCoalescer);
@@ -463,6 +464,8 @@ public class NotifCollectionTest extends SysuiTestCase {
         DismissedByUserStats stats = defaultStats(entry2);
         mCollection.dismissNotification(entry2, defaultStats(entry2));
 
+        FakeExecutor.exhaustExecutors(mBgExecutor);
+
         // THEN we send the dismissal to system server
         verify(mStatusBarService).onNotificationClear(
                 notif2.sbn.getPackageName(),
@@ -675,6 +678,8 @@ public class NotifCollectionTest extends SysuiTestCase {
         mInterceptor1.shouldInterceptDismissal = false;
         mInterceptor1.onEndInterceptionCallback.onEndDismissInterception(mInterceptor1, entry,
                 stats);
+
+        FakeExecutor.exhaustExecutors(mBgExecutor);
 
         // THEN we send the dismissal to system server
         verify(mStatusBarService).onNotificationClear(
@@ -1213,6 +1218,7 @@ public class NotifCollectionTest extends SysuiTestCase {
                         new Pair<>(entry2, defaultStats(entry2))));
 
         // THEN we send the dismissals to system server
+        FakeExecutor.exhaustExecutors(mBgExecutor);
         verify(mStatusBarService).onNotificationClear(
                 notif1.sbn.getPackageName(),
                 notif1.sbn.getUser().getIdentifier(),
@@ -1579,6 +1585,7 @@ public class NotifCollectionTest extends SysuiTestCase {
 
         // WHEN finally dismissing
         onDismiss.run();
+        FakeExecutor.exhaustExecutors(mBgExecutor);
         verify(mStatusBarService).onNotificationClear(any(), anyInt(), eq(notifEvent.key),
                 anyInt(), anyInt(), any());
         verifyNoMoreInteractions(mStatusBarService);
@@ -1684,9 +1691,9 @@ public class NotifCollectionTest extends SysuiTestCase {
         return new CollectionEvent(rawEvent, requireNonNull(mEntryCaptor.getValue()));
     }
 
-    private void verifyBuiltList(Collection<NotificationEntry> list) {
-        verify(mBuildListener).onBuildList(mBuildListCaptor.capture());
-        assertEquals(new ArraySet<>(list), new ArraySet<>(mBuildListCaptor.getValue()));
+    private void verifyBuiltList(Collection<NotificationEntry> expectedList) {
+        verify(mBuildListener).onBuildList(mBuildListCaptor.capture(), any());
+        assertThat(mBuildListCaptor.getValue()).containsExactly(expectedList.toArray());
     }
 
     private static class RecordingCollectionListener implements NotifCollectionListener {

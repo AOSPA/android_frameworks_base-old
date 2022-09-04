@@ -571,7 +571,8 @@ public final class PowerManager {
             WAKE_REASON_DISPLAY_GROUP_ADDED,
             WAKE_REASON_DISPLAY_GROUP_TURNED_ON,
             WAKE_REASON_UNFOLD_DEVICE,
-            WAKE_REASON_DREAM_FINISHED
+            WAKE_REASON_DREAM_FINISHED,
+            WAKE_REASON_TILT
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface WakeReason{}
@@ -686,6 +687,12 @@ public final class PowerManager {
     public static final int WAKE_REASON_DREAM_FINISHED = 13;
 
     /**
+     * Wake up reason code: Waking due to tilt.
+     * @hide
+     */
+    public static final int WAKE_REASON_TILT = 14;
+
+    /**
      * Convert the wake reason to a string for debugging purposes.
      * @hide
      */
@@ -705,6 +712,7 @@ public final class PowerManager {
             case WAKE_REASON_DISPLAY_GROUP_TURNED_ON: return "WAKE_REASON_DISPLAY_GROUP_TURNED_ON";
             case WAKE_REASON_UNFOLD_DEVICE: return "WAKE_REASON_UNFOLD_DEVICE";
             case WAKE_REASON_DREAM_FINISHED: return "WAKE_REASON_DREAM_FINISHED";
+            case WAKE_REASON_TILT: return "WAKE_REASON_TILT";
             default: return Integer.toString(wakeReason);
         }
     }
@@ -715,28 +723,28 @@ public final class PowerManager {
      * @hide
      */
     public static class WakeData {
-        public WakeData(long wakeTime, @WakeReason int wakeReason, long sleepDuration) {
+        public WakeData(long wakeTime, @WakeReason int wakeReason, long sleepDurationRealtime) {
             this.wakeTime = wakeTime;
             this.wakeReason = wakeReason;
-            this.sleepDuration = sleepDuration;
+            this.sleepDurationRealtime = sleepDurationRealtime;
         }
         public final long wakeTime;
         public final @WakeReason int wakeReason;
-        public final long sleepDuration;
+        public final long sleepDurationRealtime;
 
         @Override
         public boolean equals(@Nullable Object o) {
             if (o instanceof WakeData) {
                 final WakeData other = (WakeData) o;
                 return wakeTime == other.wakeTime && wakeReason == other.wakeReason
-                        && sleepDuration == other.sleepDuration;
+                        && sleepDurationRealtime == other.sleepDurationRealtime;
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(wakeTime, wakeReason, sleepDuration);
+            return Objects.hash(wakeTime, wakeReason, sleepDurationRealtime);
         }
     }
 

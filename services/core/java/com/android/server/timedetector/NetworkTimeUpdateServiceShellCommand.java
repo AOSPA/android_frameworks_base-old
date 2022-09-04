@@ -18,9 +18,14 @@ package com.android.server.timedetector;
 
 import android.annotation.NonNull;
 import android.os.ShellCommand;
+import android.util.NtpTrustedTime;
 
 import java.io.PrintWriter;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /** Implements the shell command interface for {@link NetworkTimeUpdateService}. */
@@ -42,12 +47,17 @@ class NetworkTimeUpdateServiceShellCommand extends ShellCommand {
     private static final String SHELL_COMMAND_FORCE_REFRESH = "force_refresh";
 
     /**
-     * A shell command that sets the NTP server config for tests. Config is cleared on reboot.
+     * A shell command that sets the NTP server config for tests. Config is cleared on reboot or
+     * using {@link #SHELL_COMMAND_RESET_SERVER_CONFIG}.
      */
-    private static final String SHELL_COMMAND_SET_SERVER_CONFIG = "set_server_config";
-    private static final String SET_SERVER_CONFIG_HOSTNAME_ARG = "--hostname";
-    private static final String SET_SERVER_CONFIG_PORT_ARG = "--port";
+    private static final String SHELL_COMMAND_SET_SERVER_CONFIG = "set_server_config_for_tests";
+    private static final String SET_SERVER_CONFIG_SERVER_ARG = "--server";
     private static final String SET_SERVER_CONFIG_TIMEOUT_ARG = "--timeout_millis";
+
+    /**
+     * A shell command that resets the NTP server config for tests.
+     */
+    private static final String SHELL_COMMAND_RESET_SERVER_CONFIG = "reset_server_config_for_tests";
 
     @NonNull
     private final NetworkTimeUpdateService mNetworkTimeUpdateService;
@@ -69,6 +79,8 @@ class NetworkTimeUpdateServiceShellCommand extends ShellCommand {
                 return runForceRefresh();
             case SHELL_COMMAND_SET_SERVER_CONFIG:
                 return runSetServerConfig();
+            case SHELL_COMMAND_RESET_SERVER_CONFIG:
+                return runResetServerConfig();
             default: {
                 return handleDefaultCommands(cmd);
             }
@@ -87,18 +99,17 @@ class NetworkTimeUpdateServiceShellCommand extends ShellCommand {
     }
 
     private int runSetServerConfig() {
-        String hostname = null;
-        Integer port = null;
+        List<URI> serverUris = new ArrayList<>();
         Duration timeout = null;
         String opt;
         while ((opt = getNextArg()) != null) {
             switch (opt) {
-                case SET_SERVER_CONFIG_HOSTNAME_ARG: {
-                    hostname = getNextArgRequired();
-                    break;
-                }
-                case SET_SERVER_CONFIG_PORT_ARG: {
-                    port = Integer.parseInt(getNextArgRequired());
+                case SET_SERVER_CONFIG_SERVER_ARG: {
+                    try {
+                        serverUris.add(NtpTrustedTime.parseNtpUriStrict(getNextArgRequired()));
+                    } catch (URISyntaxException e) {
+                        throw new IllegalArgumentException("Bad NTP server value", e);
+                    }
                     break;
                 }
                 case SET_SERVER_CONFIG_TIMEOUT_ARG: {
@@ -110,7 +121,23 @@ class NetworkTimeUpdateServiceShellCommand extends ShellCommand {
                 }
             }
         }
-        mNetworkTimeUpdateService.setServerConfigForTests(hostname, port, timeout);
+
+        if (serverUris.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Missing required option: --" + SET_SERVER_CONFIG_SERVER_ARG);
+        }
+        if (timeout == null) {
+            throw new IllegalArgumentException(
+                    "Missing required option: --" + SET_SERVER_CONFIG_TIMEOUT_ARG);
+        }
+
+        NtpTrustedTime.NtpConfig ntpConfig = new NtpTrustedTime.NtpConfig(serverUris, timeout);
+        mNetworkTimeUpdateService.setServerConfigForTests(ntpConfig);
+        return 0;
+    }
+
+    private int runResetServerConfig() {
+        mNetworkTimeUpdateService.setServerConfigForTests(null);
         return 0;
     }
 
@@ -126,11 +153,14 @@ class NetworkTimeUpdateServiceShellCommand extends ShellCommand {
         pw.printf("    Refreshes the latest time. Prints whether it was successful.\n");
         pw.printf("  %s\n", SHELL_COMMAND_SET_SERVER_CONFIG);
         pw.printf("    Sets the NTP server config for tests. The config is not persisted.\n");
-        pw.printf("      Options: [%s <hostname>] [%s <port>] [%s <millis>]\n",
-                SET_SERVER_CONFIG_HOSTNAME_ARG, SET_SERVER_CONFIG_PORT_ARG,
+        pw.printf("      Options: %s <uri> [%s <additional uris>]+ %s <millis>\n",
+                SET_SERVER_CONFIG_SERVER_ARG, SET_SERVER_CONFIG_SERVER_ARG,
                 SET_SERVER_CONFIG_TIMEOUT_ARG);
-        pw.printf("      Each key/value is optional and must be specified to override the\n");
-        pw.printf("      normal value, not specifying a key causes it to reset to the original.\n");
+        pw.printf("      NTP server URIs must be in the form \"ntp://hostname\" or"
+                + " \"ntp://hostname:port\"");
+        pw.printf("  %s\n", SHELL_COMMAND_RESET_SERVER_CONFIG);
+        pw.printf("    Resets/clears the NTP server config set via %s.\n",
+                SHELL_COMMAND_SET_SERVER_CONFIG);
         pw.println();
     }
 }

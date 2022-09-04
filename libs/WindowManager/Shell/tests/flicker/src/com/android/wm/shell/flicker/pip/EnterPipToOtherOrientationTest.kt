@@ -16,7 +16,9 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.app.Activity
 import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
@@ -27,14 +29,15 @@ import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.WindowUtils
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.flicker.navBarLayerPositionAtStartAndEnd
+import com.android.server.wm.traces.common.ComponentMatcher
 import com.android.wm.shell.flicker.helpers.FixedAppHelper
 import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_LANDSCAPE
 import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_PORTRAIT
 import com.android.wm.shell.flicker.testapp.Components.FixedActivity.EXTRA_FIXED_ORIENTATION
 import com.android.wm.shell.flicker.testapp.Components.PipActivity.ACTION_ENTER_PIP
+import org.junit.Assume
+import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -81,11 +84,17 @@ class EnterPipToOtherOrientationTest(
             setup {
                 eachRun {
                     // Launch a portrait only app on the fullscreen stack
-                    testApp.launchViaIntent(wmHelper, stringExtras = mapOf(
-                        EXTRA_FIXED_ORIENTATION to ORIENTATION_PORTRAIT.toString()))
+                    testApp.launchViaIntent(
+                        wmHelper, stringExtras = mapOf(
+                            EXTRA_FIXED_ORIENTATION to ORIENTATION_PORTRAIT.toString()
+                        )
+                    )
                     // Launch the PiP activity fixed as landscape
-                    pipApp.launchViaIntent(wmHelper, stringExtras = mapOf(
-                        EXTRA_FIXED_ORIENTATION to ORIENTATION_LANDSCAPE.toString()))
+                    pipApp.launchViaIntent(
+                        wmHelper, stringExtras = mapOf(
+                            EXTRA_FIXED_ORIENTATION to ORIENTATION_LANDSCAPE.toString()
+                        )
+                    )
                 }
             }
             teardown {
@@ -101,27 +110,28 @@ class EnterPipToOtherOrientationTest(
                 // during rotation the status bar becomes invisible and reappears at the end
                 wmHelper.StateSyncBuilder()
                     .withPipShown()
-                    .withAppTransitionIdle()
-                    .withNavBarStatusBarVisible()
+                    .withNavOrTaskBarVisible()
+                    .withStatusBarVisible()
                     .waitForAndVerify()
             }
         }
 
     /**
-     * Checks that the [FlickerComponentName.NAV_BAR] has the correct position at
+     * This test is not compatible with Tablets. When using [Activity.setRequestedOrientation]
+     * to fix a orientation, Tablets instead keep the same orientation and add letterboxes
+     */
+    @Before
+    fun setup() {
+        Assume.assumeFalse(testSpec.isTablet)
+    }
+
+    /**
+     * Checks that the [ComponentMatcher.NAV_BAR] has the correct position at
      * the start and end of the transition
      */
     @FlakyTest
     @Test
-    override fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
-
-    /**
-     * Checks that the [FlickerComponentName.STATUS_BAR] has the correct position at
-     * the start and end of the transition
-     */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
+    override fun navBarLayerPositionAtStartAndEnd() = testSpec.navBarLayerPositionAtStartAndEnd()
 
     /**
      * Checks that all parts of the screen are covered at the start and end of the transition
@@ -130,7 +140,7 @@ class EnterPipToOtherOrientationTest(
      */
     @Presubmit
     @Test
-    override fun entireScreenCovered() = testSpec.entireScreenCovered(allStates = false)
+    fun entireScreenCoveredAtStartAndEnd() = testSpec.entireScreenCovered(allStates = false)
 
     /**
      * Checks [pipApp] window remains visible and on top throughout the transition
@@ -139,7 +149,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun pipAppWindowIsAlwaysOnTop() {
         testSpec.assertWm {
-            isAppWindowOnTop(pipApp.component)
+            isAppWindowOnTop(pipApp)
         }
     }
 
@@ -150,7 +160,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun testAppWindowInvisibleOnStart() {
         testSpec.assertWmStart {
-            isAppWindowInvisible(testApp.component)
+            isAppWindowInvisible(testApp)
         }
     }
 
@@ -161,7 +171,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun testAppWindowVisibleOnEnd() {
         testSpec.assertWmEnd {
-            isAppWindowVisible(testApp.component)
+            isAppWindowVisible(testApp)
         }
     }
 
@@ -172,7 +182,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun testAppLayerInvisibleOnStart() {
         testSpec.assertLayersStart {
-            isInvisible(testApp.component)
+            isInvisible(testApp)
         }
     }
 
@@ -183,7 +193,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun testAppLayerVisibleOnEnd() {
         testSpec.assertLayersEnd {
-            isVisible(testApp.component)
+            isVisible(testApp)
         }
     }
 
@@ -195,7 +205,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun pipAppLayerCoversFullScreenOnStart() {
         testSpec.assertLayersStart {
-            visibleRegion(pipApp.component).coversExactly(startingBounds)
+            visibleRegion(pipApp).coversExactly(startingBounds)
         }
     }
 
@@ -207,12 +217,23 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun testAppPlusPipLayerCoversFullScreenOnEnd() {
         testSpec.assertLayersEnd {
-            val pipRegion = visibleRegion(pipApp.component).region
-            visibleRegion(testApp.component)
+            val pipRegion = visibleRegion(pipApp).region
+            visibleRegion(testApp)
                 .plus(pipRegion)
                 .coversExactly(endingBounds)
         }
     }
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc}  */
+    @FlakyTest(bugId = 227313015)
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**
@@ -225,8 +246,10 @@ class EnterPipToOtherOrientationTest(
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
-                .getConfigNonRotationTests(supportedRotations = listOf(Surface.ROTATION_0),
-                    repetitions = 3)
+                .getConfigNonRotationTests(
+                    supportedRotations = listOf(Surface.ROTATION_0),
+                    repetitions = 3
+                )
         }
     }
 }

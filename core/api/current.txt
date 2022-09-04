@@ -7051,6 +7051,7 @@ package android.app {
     method public void setRunAsMonkey(boolean);
     method public void setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo);
     method public android.graphics.Bitmap takeScreenshot();
+    method @Nullable public android.graphics.Bitmap takeScreenshot(@NonNull android.view.Window);
     method public void waitForIdle(long, long) throws java.util.concurrent.TimeoutException;
     field public static final int FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES = 1; // 0x1
     field public static final int FLAG_DONT_USE_ACCESSIBILITY = 2; // 0x2
@@ -9010,8 +9011,6 @@ package android.companion {
     method @Deprecated public boolean hasNotificationAccess(android.content.ComponentName);
     method public void requestNotificationAccess(android.content.ComponentName);
     method @RequiresPermission(android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE) public void startObservingDevicePresence(@NonNull String) throws android.companion.DeviceNotAssociatedException;
-    method @Deprecated public void startSystemDataTransfer(int) throws android.companion.DeviceNotAssociatedException;
-    method public void startSystemDataTransfer(int, @NonNull java.util.concurrent.Executor, @NonNull android.os.OutcomeReceiver<java.lang.Void,android.companion.CompanionException>) throws android.companion.DeviceNotAssociatedException;
     method @RequiresPermission(android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE) public void stopObservingDevicePresence(@NonNull String) throws android.companion.DeviceNotAssociatedException;
     field public static final String EXTRA_ASSOCIATION = "android.companion.extra.ASSOCIATION";
     field @Deprecated public static final String EXTRA_DEVICE = "android.companion.extra.DEVICE";
@@ -9027,17 +9026,12 @@ package android.companion {
 
   public abstract class CompanionDeviceService extends android.app.Service {
     ctor public CompanionDeviceService();
-    method @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES) public final void dispatchMessageToSystem(int, int, @NonNull byte[]) throws android.companion.DeviceNotAssociatedException;
     method @Nullable public final android.os.IBinder onBind(@NonNull android.content.Intent);
     method @Deprecated @MainThread public void onDeviceAppeared(@NonNull String);
     method @MainThread public void onDeviceAppeared(@NonNull android.companion.AssociationInfo);
     method @Deprecated @MainThread public void onDeviceDisappeared(@NonNull String);
     method @MainThread public void onDeviceDisappeared(@NonNull android.companion.AssociationInfo);
-    method public void onMessageDispatchedFromSystem(int, int, @NonNull byte[]);
     field public static final String SERVICE_INTERFACE = "android.companion.CompanionDeviceService";
-  }
-
-  public class CompanionException extends java.lang.RuntimeException {
   }
 
   public interface DeviceFilter<D extends android.os.Parcelable> extends android.os.Parcelable {
@@ -14935,6 +14929,8 @@ package android.graphics {
     method public android.graphics.PathEffect getPathEffect();
     method public float getRunAdvance(char[], int, int, int, int, boolean, int);
     method public float getRunAdvance(CharSequence, int, int, int, int, boolean, int);
+    method public float getRunCharacterAdvance(@NonNull char[], int, int, int, int, boolean, int, @Nullable float[], int);
+    method public float getRunCharacterAdvance(@NonNull CharSequence, int, int, int, int, boolean, int, @Nullable float[], int);
     method public android.graphics.Shader getShader();
     method @ColorInt public int getShadowLayerColor();
     method @ColorLong public long getShadowLayerColorLong();
@@ -31166,7 +31162,7 @@ package android.os {
     method @Deprecated public static void changeDebugPort(int);
     method public static void dumpHprofData(String) throws java.io.IOException;
     method public static boolean dumpService(String, java.io.FileDescriptor, String[]);
-    method public static void enableEmulatorTraceOutput();
+    method @Deprecated public static void enableEmulatorTraceOutput();
     method public static int getBinderDeathObjectCount();
     method public static int getBinderLocalObjectCount();
     method public static int getBinderProxyObjectCount();
@@ -39647,6 +39643,7 @@ package android.service.wallpaper {
 package android.speech {
 
   public final class AlternativeSpan implements android.os.Parcelable {
+    ctor public AlternativeSpan(int, int, @NonNull java.util.List<java.lang.String>);
     method public int describeContents();
     method @NonNull public java.util.List<java.lang.String> getAlternatives();
     method public int getEndPosition();
@@ -39655,23 +39652,12 @@ package android.speech {
     field @NonNull public static final android.os.Parcelable.Creator<android.speech.AlternativeSpan> CREATOR;
   }
 
-  public static final class AlternativeSpan.Builder {
-    ctor public AlternativeSpan.Builder(int, int);
-    method @NonNull public android.speech.AlternativeSpan build();
-    method @NonNull public android.speech.AlternativeSpan.Builder setAlternatives(@NonNull java.util.List<java.lang.String>);
-  }
-
   public final class AlternativeSpans implements android.os.Parcelable {
+    ctor public AlternativeSpans(@NonNull java.util.List<android.speech.AlternativeSpan>);
     method public int describeContents();
     method @NonNull public java.util.List<android.speech.AlternativeSpan> getSpans();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.speech.AlternativeSpans> CREATOR;
-  }
-
-  public static final class AlternativeSpans.Builder {
-    ctor public AlternativeSpans.Builder();
-    method @NonNull public android.speech.AlternativeSpans build();
-    method @NonNull public android.speech.AlternativeSpans.Builder setSpans(@NonNull java.util.List<android.speech.AlternativeSpan>);
   }
 
   public interface RecognitionListener {
@@ -46010,7 +45996,9 @@ package android.text.style {
     ctor public DrawableMarginSpan(@NonNull android.graphics.drawable.Drawable, int);
     method public void chooseHeight(@NonNull CharSequence, int, int, int, int, @NonNull android.graphics.Paint.FontMetricsInt);
     method public void drawLeadingMargin(@NonNull android.graphics.Canvas, @NonNull android.graphics.Paint, int, int, int, int, int, @NonNull CharSequence, int, int, boolean, @NonNull android.text.Layout);
+    method @NonNull public android.graphics.drawable.Drawable getDrawable();
     method public int getLeadingMargin(boolean);
+    method @Px public int getPadding();
   }
 
   public abstract class DynamicDrawableSpan extends android.text.style.ReplacementSpan {
@@ -46053,7 +46041,9 @@ package android.text.style {
     ctor public IconMarginSpan(@NonNull android.graphics.Bitmap, @IntRange(from=0) int);
     method public void chooseHeight(CharSequence, int, int, int, int, android.graphics.Paint.FontMetricsInt);
     method public void drawLeadingMargin(android.graphics.Canvas, android.graphics.Paint, int, int, int, int, int, CharSequence, int, int, boolean, android.text.Layout);
+    method @NonNull public android.graphics.Bitmap getBitmap();
     method public int getLeadingMargin(boolean);
+    method @Px public int getPadding();
   }
 
   public class ImageSpan extends android.text.style.DynamicDrawableSpan {
@@ -46301,6 +46291,7 @@ package android.text.style {
     method public String getFamily();
     method @Nullable public String getFontFeatureSettings();
     method @Nullable public String getFontVariationSettings();
+    method public float getLetterSpacing();
     method public android.content.res.ColorStateList getLinkTextColor();
     method public int getShadowColor();
     method public float getShadowDx();
@@ -51095,6 +51086,7 @@ package android.view {
     method public void addOnTouchModeChangeListener(android.view.ViewTreeObserver.OnTouchModeChangeListener);
     method public void addOnWindowAttachListener(android.view.ViewTreeObserver.OnWindowAttachListener);
     method public void addOnWindowFocusChangeListener(android.view.ViewTreeObserver.OnWindowFocusChangeListener);
+    method public void addOnWindowVisibilityChangeListener(@NonNull android.view.ViewTreeObserver.OnWindowVisibilityChangeListener);
     method public void dispatchOnDraw();
     method public void dispatchOnGlobalLayout();
     method public boolean dispatchOnPreDraw();
@@ -51110,6 +51102,7 @@ package android.view {
     method public void removeOnTouchModeChangeListener(android.view.ViewTreeObserver.OnTouchModeChangeListener);
     method public void removeOnWindowAttachListener(android.view.ViewTreeObserver.OnWindowAttachListener);
     method public void removeOnWindowFocusChangeListener(android.view.ViewTreeObserver.OnWindowFocusChangeListener);
+    method public void removeOnWindowVisibilityChangeListener(@NonNull android.view.ViewTreeObserver.OnWindowVisibilityChangeListener);
     method public boolean unregisterFrameCommitCallback(@NonNull Runnable);
   }
 
@@ -51144,6 +51137,10 @@ package android.view {
 
   public static interface ViewTreeObserver.OnWindowFocusChangeListener {
     method public void onWindowFocusChanged(boolean);
+  }
+
+  public static interface ViewTreeObserver.OnWindowVisibilityChangeListener {
+    method public void onWindowVisibilityChanged(int);
   }
 
   public abstract class Window {
@@ -51542,6 +51539,7 @@ package android.view {
     method public default boolean isCrossWindowBlurEnabled();
     method public default void removeCrossWindowBlurEnabledListener(@NonNull java.util.function.Consumer<java.lang.Boolean>);
     method public void removeViewImmediate(android.view.View);
+    field public static final String PROPERTY_ACTIVITY_EMBEDDING_ALLOW_SYSTEM_OVERRIDE = "android.window.PROPERTY_ACTIVITY_EMBEDDING_ALLOW_SYSTEM_OVERRIDE";
   }
 
   public static class WindowManager.BadTokenException extends java.lang.RuntimeException {
@@ -53243,11 +53241,11 @@ package android.view.inputmethod {
   public final class InputMethodManager {
     method public void dispatchKeyEventFromInputMethod(@Nullable android.view.View, @NonNull android.view.KeyEvent);
     method public void displayCompletions(android.view.View, android.view.inputmethod.CompletionInfo[]);
-    method public android.view.inputmethod.InputMethodSubtype getCurrentInputMethodSubtype();
-    method public java.util.List<android.view.inputmethod.InputMethodInfo> getEnabledInputMethodList();
-    method public java.util.List<android.view.inputmethod.InputMethodSubtype> getEnabledInputMethodSubtypeList(android.view.inputmethod.InputMethodInfo, boolean);
-    method public java.util.List<android.view.inputmethod.InputMethodInfo> getInputMethodList();
-    method public android.view.inputmethod.InputMethodSubtype getLastInputMethodSubtype();
+    method @Nullable public android.view.inputmethod.InputMethodSubtype getCurrentInputMethodSubtype();
+    method @NonNull public java.util.List<android.view.inputmethod.InputMethodInfo> getEnabledInputMethodList();
+    method @NonNull public java.util.List<android.view.inputmethod.InputMethodSubtype> getEnabledInputMethodSubtypeList(@Nullable android.view.inputmethod.InputMethodInfo, boolean);
+    method @NonNull public java.util.List<android.view.inputmethod.InputMethodInfo> getInputMethodList();
+    method @Nullable public android.view.inputmethod.InputMethodSubtype getLastInputMethodSubtype();
     method public java.util.Map<android.view.inputmethod.InputMethodInfo,java.util.List<android.view.inputmethod.InputMethodSubtype>> getShortcutInputMethodsAndSubtypes();
     method @Deprecated public void hideSoftInputFromInputMethod(android.os.IBinder, int);
     method public boolean hideSoftInputFromWindow(android.os.IBinder, int);
@@ -53263,12 +53261,12 @@ package android.view.inputmethod {
     method @Deprecated public boolean isWatchingCursor(android.view.View);
     method public void restartInput(android.view.View);
     method public void sendAppPrivateCommand(android.view.View, String, android.os.Bundle);
-    method @Deprecated public void setAdditionalInputMethodSubtypes(String, android.view.inputmethod.InputMethodSubtype[]);
+    method @Deprecated public void setAdditionalInputMethodSubtypes(@NonNull String, @NonNull android.view.inputmethod.InputMethodSubtype[]);
     method @Deprecated @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public boolean setCurrentInputMethodSubtype(android.view.inputmethod.InputMethodSubtype);
     method @Deprecated public void setInputMethod(android.os.IBinder, String);
     method @Deprecated public void setInputMethodAndSubtype(@NonNull android.os.IBinder, String, android.view.inputmethod.InputMethodSubtype);
     method @Deprecated public boolean shouldOfferSwitchingToNextInputMethod(android.os.IBinder);
-    method public void showInputMethodAndSubtypeEnabler(String);
+    method public void showInputMethodAndSubtypeEnabler(@Nullable String);
     method public void showInputMethodPicker();
     method public boolean showSoftInput(android.view.View, int);
     method public boolean showSoftInput(android.view.View, int, android.os.ResultReceiver);
@@ -57706,7 +57704,7 @@ package android.widget {
     method public final void setSpannableFactory(android.text.Spannable.Factory);
     method public final void setText(CharSequence);
     method public void setText(CharSequence, android.widget.TextView.BufferType);
-    method public final void setText(char[], int, int);
+    method public final void setText(@NonNull char[], int, int);
     method public final void setText(@StringRes int);
     method public final void setText(@StringRes int, android.widget.TextView.BufferType);
     method public void setTextAppearance(@StyleRes int);

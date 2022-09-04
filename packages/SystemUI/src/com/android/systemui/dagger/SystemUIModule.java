@@ -26,7 +26,6 @@ import com.android.keyguard.clock.ClockModule;
 import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
-import com.android.systemui.SystemUIFactory;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.biometrics.AlternateUdfpsTouchProvider;
@@ -43,20 +42,20 @@ import com.android.systemui.flags.FlagsModule;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.lowlightclock.LowLightClockController;
+import com.android.systemui.media.dagger.MediaProjectionModule;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationBarComponent;
+import com.android.systemui.people.PeopleModule;
 import com.android.systemui.plugins.BcSmartspaceDataPlugin;
 import com.android.systemui.privacy.PrivacyModule;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.screenshot.dagger.ScreenshotModule;
-import com.android.systemui.settings.dagger.SettingsModule;
+import com.android.systemui.settings.dagger.MultiUserUtilsModule;
 import com.android.systemui.smartspace.dagger.SmartspaceModule;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.QsFrameTranslateModule;
-import com.android.systemui.statusbar.notification.NotifPipelineFlags;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
@@ -83,6 +82,7 @@ import com.android.systemui.unfold.SysUIUnfoldModule;
 import com.android.systemui.user.UserModule;
 import com.android.systemui.util.concurrency.SysUIConcurrencyModule;
 import com.android.systemui.util.dagger.UtilModule;
+import com.android.systemui.util.kotlin.CoroutinesModule;
 import com.android.systemui.util.sensors.SensorModule;
 import com.android.systemui.util.settings.SettingsUtilModule;
 import com.android.systemui.util.time.SystemClock;
@@ -91,6 +91,7 @@ import com.android.systemui.wallet.dagger.WalletModule;
 import com.android.systemui.wmshell.BubblesManager;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.dagger.DynamicOverride;
+import com.android.wm.shell.sysui.ShellController;
 
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -115,19 +116,22 @@ import dagger.Provides;
             AssistModule.class,
             BiometricsModule.class,
             ClockModule.class,
+            CoroutinesModule.class,
             DreamModule.class,
             ControlsModule.class,
             DemoModeModule.class,
             FalsingModule.class,
             FlagsModule.class,
             LogModule.class,
+            MediaProjectionModule.class,
             PeopleHubModule.class,
+            PeopleModule.class,
             PluginModule.class,
             PrivacyModule.class,
             QsFrameTranslateModule.class,
             ScreenshotModule.class,
             SensorModule.class,
-            SettingsModule.class,
+            MultiUserUtilsModule.class,
             SettingsUtilModule.class,
             SmartRepliesInflationModule.class,
             SmartspaceModule.class,
@@ -198,11 +202,6 @@ public abstract class SystemUIModule {
     @Binds
     abstract SystemClock bindSystemClock(SystemClockImpl systemClock);
 
-    @Provides
-    static SystemUIFactory getSystemUIFactory() {
-        return SystemUIFactory.getInstance();
-    }
-
     // TODO: This should provided by the WM component
     /** Provides Optional of BubbleManager */
     @SysUISingleton
@@ -212,7 +211,6 @@ public abstract class SystemUIModule {
             NotificationShadeWindowController notificationShadeWindowController,
             KeyguardStateController keyguardStateController,
             ShadeController shadeController,
-            ConfigurationController configurationController,
             @Nullable IStatusBarService statusBarService,
             INotificationManager notificationManager,
             NotificationVisibilityProvider visibilityProvider,
@@ -220,11 +218,9 @@ public abstract class SystemUIModule {
             ZenModeController zenModeController,
             NotificationLockscreenUserManager notifUserManager,
             NotificationGroupManagerLegacy groupManager,
-            NotificationEntryManager entryManager,
             CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
-            NotifPipelineFlags notifPipelineFlags,
             DumpManager dumpManager,
             @Main Executor sysuiMainExecutor) {
         return Optional.ofNullable(BubblesManager.create(context,
@@ -232,7 +228,6 @@ public abstract class SystemUIModule {
                 notificationShadeWindowController,
                 keyguardStateController,
                 shadeController,
-                configurationController,
                 statusBarService,
                 notificationManager,
                 visibilityProvider,
@@ -240,11 +235,9 @@ public abstract class SystemUIModule {
                 zenModeController,
                 notifUserManager,
                 groupManager,
-                entryManager,
                 notifCollection,
                 notifPipeline,
                 sysUiState,
-                notifPipelineFlags,
                 dumpManager,
                 sysuiMainExecutor));
     }

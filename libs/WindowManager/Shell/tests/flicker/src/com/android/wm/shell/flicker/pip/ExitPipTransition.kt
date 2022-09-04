@@ -16,13 +16,14 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.traces.common.FlickerComponentName.Companion.LAUNCHER
+import com.android.server.wm.traces.common.ComponentMatcher.Companion.LAUNCHER
 import org.junit.Test
 
 /**
@@ -57,21 +58,21 @@ abstract class ExitPipTransition(testSpec: FlickerTestParameter) : PipTransition
             // and isAppWindowInvisible in the same assertion block.
             testSpec.assertWm {
                 this.invoke("hasPipWindow") {
-                    it.isPinned(pipApp.component)
-                            .isAppWindowVisible(pipApp.component)
-                            .isAppWindowOnTop(pipApp.component)
+                    it.isPinned(pipApp)
+                        .isAppWindowVisible(pipApp)
+                        .isAppWindowOnTop(pipApp)
                 }.then().invoke("!hasPipWindow") {
-                    it.isNotPinned(pipApp.component)
-                            .isAppWindowNotOnTop(pipApp.component)
+                    it.isNotPinned(pipApp)
+                        .isAppWindowNotOnTop(pipApp)
                 }
             }
-            testSpec.assertWmEnd { isAppWindowInvisible(pipApp.component) }
+            testSpec.assertWmEnd { isAppWindowInvisible(pipApp) }
         } else {
             testSpec.assertWm {
                 this.invoke("hasPipWindow") {
-                    it.isPinned(pipApp.component).isAppWindowVisible(pipApp.component)
+                    it.isPinned(pipApp).isAppWindowVisible(pipApp)
                 }.then().invoke("!hasPipWindow") {
-                    it.isNotPinned(pipApp.component).isAppWindowInvisible(pipApp.component)
+                    it.isNotPinned(pipApp).isAppWindowInvisible(pipApp)
                 }
             }
         }
@@ -86,11 +87,70 @@ abstract class ExitPipTransition(testSpec: FlickerTestParameter) : PipTransition
     @Test
     open fun pipLayerBecomesInvisible() {
         testSpec.assertLayers {
-            this.isVisible(pipApp.component)
+            this.isVisible(pipApp)
                 .isVisible(LAUNCHER)
                 .then()
-                .isInvisible(pipApp.component)
+                .isInvisible(pipApp)
                 .isVisible(LAUNCHER)
         }
     }
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerIsVisibleAtStartAndEnd() =
+        super.statusBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerPositionAtStartAndEnd() =
+        super.statusBarLayerPositionAtStartAndEnd()
 }

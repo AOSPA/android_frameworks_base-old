@@ -19,6 +19,7 @@ package com.android.server.timedetector;
 import static com.android.server.timedetector.TimeDetectorStrategy.ORIGIN_NETWORK;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,16 +38,16 @@ import static org.mockito.Mockito.when;
 import android.app.time.ExternalTimeSuggestion;
 import android.app.time.ITimeDetectorListener;
 import android.app.time.TimeConfiguration;
-import android.app.timedetector.GnssTimeSuggestion;
 import android.app.timedetector.ManualTimeSuggestion;
-import android.app.timedetector.NetworkTimeSuggestion;
 import android.app.timedetector.TelephonyTimeSuggestion;
+import android.app.timedetector.TimePoint;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.ParcelableException;
 import android.os.TimestampedValue;
-import android.util.IndentingPrintWriter;
+import android.util.NtpTrustedTime;
 
 import androidx.test.runner.AndroidJUnit4;
 
@@ -60,6 +61,7 @@ import org.junit.runner.RunWith;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.InetSocketAddress;
 import java.time.Instant;
 
 @RunWith(AndroidJUnit4.class)
@@ -77,7 +79,8 @@ public class TimeDetectorServiceTest {
     private TestHandler mTestHandler;
     private TestCallerIdentityInjector mTestCallerIdentityInjector;
     private FakeServiceConfigAccessor mFakeServiceConfigAccessor;
-    private StubbedTimeDetectorStrategy mStubbedTimeDetectorStrategy;
+    private NtpTrustedTime mMockNtpTrustedTime;
+    private FakeTimeDetectorStrategy mFakeTimeDetectorStrategy;
 
 
     @Before
@@ -92,12 +95,13 @@ public class TimeDetectorServiceTest {
         mTestCallerIdentityInjector = new TestCallerIdentityInjector();
         mTestCallerIdentityInjector.initializeCallingUserId(ARBITRARY_USER_ID);
 
-        mStubbedTimeDetectorStrategy = new StubbedTimeDetectorStrategy();
+        mFakeTimeDetectorStrategy = new FakeTimeDetectorStrategy();
         mFakeServiceConfigAccessor = new FakeServiceConfigAccessor();
+        mMockNtpTrustedTime = mock(NtpTrustedTime.class);
 
         mTimeDetectorService = new TimeDetectorService(
                 mMockContext, mTestHandler, mFakeServiceConfigAccessor,
-                mStubbedTimeDetectorStrategy, mTestCallerIdentityInjector);
+                mFakeTimeDetectorStrategy, mTestCallerIdentityInjector, mMockNtpTrustedTime);
     }
 
     @After
@@ -275,7 +279,7 @@ public class TimeDetectorServiceTest {
                 anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mStubbedTimeDetectorStrategy.verifySuggestTelephonyTimeCalled(timeSuggestion);
+        mFakeTimeDetectorStrategy.verifySuggestTelephonyTimeCalled(timeSuggestion);
     }
 
     @Test(expected = SecurityException.class)
@@ -301,7 +305,8 @@ public class TimeDetectorServiceTest {
         ManualTimeSuggestion manualTimeSuggestion = createManualTimeSuggestion();
 
         assertTrue(mTimeDetectorService.suggestManualTime(manualTimeSuggestion));
-        mStubbedTimeDetectorStrategy.verifySuggestManualTimeCalled(manualTimeSuggestion);
+        mFakeTimeDetectorStrategy.verifySuggestManualTimeCalled(
+                mTestCallerIdentityInjector.getCallingUserId(), manualTimeSuggestion);
 
         verify(mMockContext).enforceCallingOrSelfPermission(
                 eq(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE),
@@ -313,10 +318,10 @@ public class TimeDetectorServiceTest {
     public void testSuggestNetworkTime_withoutPermission() {
         doThrow(new SecurityException("Mock"))
                 .when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
-        NetworkTimeSuggestion NetworkTimeSuggestion = createNetworkTimeSuggestion();
+        NetworkTimeSuggestion networkTimeSuggestion = createNetworkTimeSuggestion();
 
         try {
-            mTimeDetectorService.suggestNetworkTime(NetworkTimeSuggestion);
+            mTimeDetectorService.suggestNetworkTime(networkTimeSuggestion);
             fail();
         } finally {
             verify(mMockContext).enforceCallingOrSelfPermission(
@@ -328,15 +333,15 @@ public class TimeDetectorServiceTest {
     public void testSuggestNetworkTime() throws Exception {
         doNothing().when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
 
-        NetworkTimeSuggestion NetworkTimeSuggestion = createNetworkTimeSuggestion();
-        mTimeDetectorService.suggestNetworkTime(NetworkTimeSuggestion);
+        NetworkTimeSuggestion networkTimeSuggestion = createNetworkTimeSuggestion();
+        mTimeDetectorService.suggestNetworkTime(networkTimeSuggestion);
         mTestHandler.assertTotalMessagesEnqueued(1);
 
         verify(mMockContext).enforceCallingOrSelfPermission(
                 eq(android.Manifest.permission.SET_TIME), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mStubbedTimeDetectorStrategy.verifySuggestNetworkTimeCalled(NetworkTimeSuggestion);
+        mFakeTimeDetectorStrategy.verifySuggestNetworkTimeCalled(networkTimeSuggestion);
     }
 
     @Test(expected = SecurityException.class)
@@ -366,7 +371,7 @@ public class TimeDetectorServiceTest {
                 eq(android.Manifest.permission.SET_TIME), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mStubbedTimeDetectorStrategy.verifySuggestGnssTimeCalled(gnssTimeSuggestion);
+        mFakeTimeDetectorStrategy.verifySuggestGnssTimeCalled(gnssTimeSuggestion);
     }
 
     @Test(expected = SecurityException.class)
@@ -396,7 +401,24 @@ public class TimeDetectorServiceTest {
                 eq(android.Manifest.permission.SUGGEST_EXTERNAL_TIME), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mStubbedTimeDetectorStrategy.verifySuggestExternalTimeCalled(externalTimeSuggestion);
+        mFakeTimeDetectorStrategy.verifySuggestExternalTimeCalled(externalTimeSuggestion);
+    }
+
+    @Test
+    public void testLatestNetworkTime() {
+        NtpTrustedTime.TimeResult latestNetworkTime = new NtpTrustedTime.TimeResult(
+                1234L, 54321L, 999, InetSocketAddress.createUnresolved("test.timeserver", 123));
+        when(mMockNtpTrustedTime.getCachedTimeResult())
+                .thenReturn(latestNetworkTime);
+        TimePoint expected = new TimePoint(latestNetworkTime.getTimeMillis(),
+                latestNetworkTime.getElapsedRealtimeMillis());
+        assertEquals(expected, mTimeDetectorService.latestNetworkTime());
+    }
+
+    @Test
+    public void testLatestNetworkTime_noTimeAvailable() {
+        when(mMockNtpTrustedTime.getCachedTimeResult()).thenReturn(null);
+        assertThrows(ParcelableException.class, () -> mTimeDetectorService.latestNetworkTime());
     }
 
     @Test
@@ -408,7 +430,7 @@ public class TimeDetectorServiceTest {
         mTimeDetectorService.dump(null, pw, null);
 
         verify(mMockContext).checkCallingOrSelfPermission(eq(android.Manifest.permission.DUMP));
-        mStubbedTimeDetectorStrategy.verifyDumpCalled();
+        mFakeTimeDetectorStrategy.verifyDumpCalled();
     }
 
     private static TimeConfiguration createTimeConfiguration(boolean autoDetectionEnabled) {
@@ -444,7 +466,7 @@ public class TimeDetectorServiceTest {
 
     private static NetworkTimeSuggestion createNetworkTimeSuggestion() {
         TimestampedValue<Long> timeValue = new TimestampedValue<>(100L, 1_000_000L);
-        return new NetworkTimeSuggestion(timeValue);
+        return new NetworkTimeSuggestion(timeValue, 123);
     }
 
     private static GnssTimeSuggestion createGnssTimeSuggestion() {
@@ -454,80 +476,5 @@ public class TimeDetectorServiceTest {
 
     private static ExternalTimeSuggestion createExternalTimeSuggestion() {
         return new ExternalTimeSuggestion(100L, 1_000_000L);
-    }
-
-    private static class StubbedTimeDetectorStrategy implements TimeDetectorStrategy {
-
-        // Call tracking.
-        private TelephonyTimeSuggestion mLastTelephonySuggestion;
-        private ManualTimeSuggestion mLastManualSuggestion;
-        private NetworkTimeSuggestion mLastNetworkSuggestion;
-        private GnssTimeSuggestion mLastGnssSuggestion;
-        private ExternalTimeSuggestion mLastExternalSuggestion;
-        private boolean mDumpCalled;
-
-        @Override
-        public void suggestTelephonyTime(TelephonyTimeSuggestion timeSuggestion) {
-            mLastTelephonySuggestion = timeSuggestion;
-        }
-
-        @Override
-        public boolean suggestManualTime(int userId, ManualTimeSuggestion timeSuggestion) {
-            mLastManualSuggestion = timeSuggestion;
-            return true;
-        }
-
-        @Override
-        public void suggestNetworkTime(NetworkTimeSuggestion timeSuggestion) {
-            mLastNetworkSuggestion = timeSuggestion;
-        }
-
-        @Override
-        public void suggestGnssTime(GnssTimeSuggestion timeSuggestion) {
-            mLastGnssSuggestion = timeSuggestion;
-        }
-
-        @Override
-        public void suggestExternalTime(ExternalTimeSuggestion timeSuggestion) {
-            mLastExternalSuggestion = timeSuggestion;
-        }
-
-        @Override
-        public void dump(IndentingPrintWriter pw, String[] args) {
-            mDumpCalled = true;
-        }
-
-        void resetCallTracking() {
-            mLastTelephonySuggestion = null;
-            mLastManualSuggestion = null;
-            mLastNetworkSuggestion = null;
-            mLastGnssSuggestion = null;
-            mLastExternalSuggestion = null;
-            mDumpCalled = false;
-        }
-
-        void verifySuggestTelephonyTimeCalled(TelephonyTimeSuggestion expectedSuggestion) {
-            assertEquals(expectedSuggestion, mLastTelephonySuggestion);
-        }
-
-        void verifySuggestManualTimeCalled(ManualTimeSuggestion expectedSuggestion) {
-            assertEquals(expectedSuggestion, mLastManualSuggestion);
-        }
-
-        void verifySuggestNetworkTimeCalled(NetworkTimeSuggestion expectedSuggestion) {
-            assertEquals(expectedSuggestion, mLastNetworkSuggestion);
-        }
-
-        void verifySuggestGnssTimeCalled(GnssTimeSuggestion expectedSuggestion) {
-            assertEquals(expectedSuggestion, mLastGnssSuggestion);
-        }
-
-        void verifySuggestExternalTimeCalled(ExternalTimeSuggestion expectedSuggestion) {
-            assertEquals(expectedSuggestion, mLastExternalSuggestion);
-        }
-
-        void verifyDumpCalled() {
-            assertTrue(mDumpCalled);
-        }
     }
 }

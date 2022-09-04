@@ -24,7 +24,12 @@ import android.os.SystemClock;
 import android.os.TimestampedValue;
 
 /**
- * The interface through which system components can send signals to the TimeDetectorService.
+ * The interface through which system components can query and send signals to the
+ * TimeDetectorService.
+ *
+ * <p>SDK APIs are exposed on {@link android.app.time.TimeManager} to obscure the internal split
+ * between time and time zone detection services. Migrate APIs there if they need to be part of an
+ * SDK API.
  *
  * @hide
  */
@@ -111,20 +116,4 @@ public interface TimeDetector {
      */
     @RequiresPermission(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE)
     boolean suggestManualTime(@NonNull ManualTimeSuggestion timeSuggestion);
-
-    /**
-     * Suggests the time according to a network time source like NTP.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.SET_TIME)
-    void suggestNetworkTime(NetworkTimeSuggestion timeSuggestion);
-
-    /**
-     * Suggests the time according to a gnss time source.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.SET_TIME)
-    void suggestGnssTime(GnssTimeSuggestion timeSuggestion);
 }

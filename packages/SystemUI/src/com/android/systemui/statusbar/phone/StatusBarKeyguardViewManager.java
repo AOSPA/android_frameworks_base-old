@@ -55,6 +55,7 @@ import com.android.systemui.dreams.DreamOverlayStateController;
 import com.android.systemui.navigationbar.NavigationBarView;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -129,8 +130,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         public void onFullyShown() {
             mBouncerAnimating = false;
             updateStates();
-            mCentralSurfaces.wakeUpIfDozing(SystemClock.uptimeMillis(),
-                    mCentralSurfaces.getBouncerContainer(), "BOUNCER_VISIBLE");
         }
 
         @Override
@@ -966,7 +965,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     @Override
     public boolean bouncerIsOrWillBeShowing() {
-        return isBouncerShowing() || mBouncer.getShowingSoon();
+        return isBouncerShowing() || mBouncer.inTransit();
     }
 
     public boolean isFullscreenBouncer() {
@@ -1042,7 +1041,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         }
 
         if (occluded != mLastOccluded || mFirstUpdate) {
-            mKeyguardUpdateManager.onKeyguardOccludedChanged(occluded);
             mKeyguardStateController.notifyKeyguardState(showing, occluded);
         }
         if ((showing && !occluded) != (mLastShowing && !mLastOccluded) || mFirstUpdate) {
@@ -1069,11 +1067,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mLastGesturalNav = mGesturalNav;
         mLastIsDocked = mIsDocked;
         mCentralSurfaces.onKeyguardViewManagerStatesUpdated();
-    }
-
-    private View getCurrentNavBarView() {
-        final NavigationBarView navBarView = mCentralSurfaces.getNavigationBarView();
-        return navBarView != null ? navBarView.getCurrentView() : null;
     }
 
     /**

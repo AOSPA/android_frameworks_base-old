@@ -29,9 +29,7 @@ import static org.junit.Assert.fail;
 
 import android.annotation.UserIdInt;
 import android.app.time.ExternalTimeSuggestion;
-import android.app.timedetector.GnssTimeSuggestion;
 import android.app.timedetector.ManualTimeSuggestion;
-import android.app.timedetector.NetworkTimeSuggestion;
 import android.app.timedetector.TelephonyTimeSuggestion;
 import android.os.TimestampedValue;
 
@@ -1573,7 +1571,7 @@ public class TimeDetectorStrategyImplTest {
                     new TimestampedValue<>(
                             mFakeEnvironment.peekElapsedRealtimeMillis(),
                             suggestedTime.toEpochMilli());
-            return new NetworkTimeSuggestion(unixEpochTime);
+            return new NetworkTimeSuggestion(unixEpochTime, 123);
         }
 
         /**

@@ -304,70 +304,72 @@ public class ShadeListBuilder implements Dumpable, PipelineDumpable {
     private final CollectionReadyForBuildListener mReadyForBuildListener =
             new CollectionReadyForBuildListener() {
                 @Override
-                public void onBuildList(Collection<NotificationEntry> entries) {
+                public void onBuildList(Collection<NotificationEntry> entries, String reason) {
                     Assert.isMainThread();
                     mPipelineState.requireIsBefore(STATE_BUILD_STARTED);
 
-                    mLogger.logOnBuildList();
+                    mLogger.logOnBuildList(reason);
                     mAllEntries = entries;
                     mChoreographer.schedule();
                 }
             };
 
-    private void onPreRenderInvalidated(Invalidator invalidator) {
+    private void onPreRenderInvalidated(Invalidator invalidator, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logPreRenderInvalidated(invalidator.getName(), mPipelineState.getState());
+        mLogger.logPreRenderInvalidated(invalidator, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_FINALIZING);
     }
 
-    private void onPreGroupFilterInvalidated(NotifFilter filter) {
+    private void onPreGroupFilterInvalidated(NotifFilter filter, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logPreGroupFilterInvalidated(filter.getName(), mPipelineState.getState());
+        mLogger.logPreGroupFilterInvalidated(filter, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_PRE_GROUP_FILTERING);
     }
 
-    private void onReorderingAllowedInvalidated(NotifStabilityManager stabilityManager) {
+    private void onReorderingAllowedInvalidated(NotifStabilityManager stabilityManager,
+            @Nullable String reason) {
         Assert.isMainThread();
 
         mLogger.logReorderingAllowedInvalidated(
-                stabilityManager.getName(),
-                mPipelineState.getState());
+                stabilityManager,
+                mPipelineState.getState(),
+                reason);
 
         rebuildListIfBefore(STATE_GROUPING);
     }
 
-    private void onPromoterInvalidated(NotifPromoter promoter) {
+    private void onPromoterInvalidated(NotifPromoter promoter, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logPromoterInvalidated(promoter.getName(), mPipelineState.getState());
+        mLogger.logPromoterInvalidated(promoter, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_TRANSFORMING);
     }
 
-    private void onNotifSectionInvalidated(NotifSectioner section) {
+    private void onNotifSectionInvalidated(NotifSectioner section, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logNotifSectionInvalidated(section.getName(), mPipelineState.getState());
+        mLogger.logNotifSectionInvalidated(section, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_SORTING);
     }
 
-    private void onFinalizeFilterInvalidated(NotifFilter filter) {
+    private void onFinalizeFilterInvalidated(NotifFilter filter, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logFinalizeFilterInvalidated(filter.getName(), mPipelineState.getState());
+        mLogger.logFinalizeFilterInvalidated(filter, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_FINALIZE_FILTERING);
     }
 
-    private void onNotifComparatorInvalidated(NotifComparator comparator) {
+    private void onNotifComparatorInvalidated(NotifComparator comparator, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logNotifComparatorInvalidated(comparator.getName(), mPipelineState.getState());
+        mLogger.logNotifComparatorInvalidated(comparator, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_SORTING);
     }
@@ -456,7 +458,8 @@ public class ShadeListBuilder implements Dumpable, PipelineDumpable {
         mLogger.logEndBuildList(
                 mIterationCount,
                 mReadOnlyNotifList.size(),
-                countChildren(mReadOnlyNotifList));
+                countChildren(mReadOnlyNotifList),
+                /* enforcedVisualStability */ !mNotifStabilityManager.isEveryChangeAllowed());
         if (mAlwaysLogList || mIterationCount % 10 == 0) {
             Trace.beginSection("ShadeListBuilder.logFinalList");
             mLogger.logFinalList(mNotifList);

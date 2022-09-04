@@ -74,7 +74,7 @@ class ExitPipViaIntentTest(testSpec: FlickerTestParameter) : ExitPipToAppTransit
                 pipApp.exitPipToFullScreenViaIntent(wmHelper)
                 // Wait until the other app is no longer visible
                 wmHelper.StateSyncBuilder()
-                    .withWindowSurfaceDisappeared(testApp.component)
+                    .withWindowSurfaceDisappeared(testApp)
                     .waitForAndVerify()
             }
         }
@@ -82,16 +82,16 @@ class ExitPipViaIntentTest(testSpec: FlickerTestParameter) : ExitPipToAppTransit
     /** {@inheritDoc}  */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun statusBarLayerRotatesScales() {
+    override fun statusBarLayerPositionAtStartAndEnd() {
         Assume.assumeFalse(isShellTransitionsEnabled)
-        super.statusBarLayerRotatesScales()
+        super.statusBarLayerPositionAtStartAndEnd()
     }
 
     @Presubmit
     @Test
     fun statusBarLayerRotatesScales_ShellTransit() {
         Assume.assumeTrue(isShellTransitionsEnabled)
-        super.statusBarLayerRotatesScales()
+        super.statusBarLayerPositionAtStartAndEnd()
     }
 
     /** {@inheritDoc}  */
@@ -108,6 +108,11 @@ class ExitPipViaIntentTest(testSpec: FlickerTestParameter) : ExitPipToAppTransit
         Assume.assumeTrue(isShellTransitionsEnabled)
         super.pipLayerExpands()
     }
+
+    /** {@inheritDoc}  */
+    @FlakyTest(bugId = 227313015)
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

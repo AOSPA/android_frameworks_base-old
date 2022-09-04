@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.Manifest.permission.CONTROL_KEYGUARD;
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
+import static android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
 import static android.Manifest.permission.STATUS_BAR_SERVICE;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
@@ -26,7 +27,9 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.activityTypeToString;
 import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -247,10 +250,35 @@ public class SafeActivityOptions {
                 throw new SecurityException(msg);
             }
         }
+        if (options.getTransientLaunch() && !supervisor.mRecentTasks.isCallerRecents(callingUid)
+                && ActivityTaskManagerService.checkPermission(
+                        MANAGE_ACTIVITY_TASKS, callingPid, callingUid) == PERMISSION_DENIED) {
+            final String msg = "Permission Denial: starting transient launch from " + callerApp
+                    + ", pid=" + callingPid + ", uid=" + callingUid;
+            Slog.w(TAG, msg);
+            throw new SecurityException(msg);
+        }
         // Check if the caller is allowed to launch on the specified display area.
         final WindowContainerToken daToken = options.getLaunchTaskDisplayArea();
-        final TaskDisplayArea taskDisplayArea = daToken != null
+        TaskDisplayArea taskDisplayArea = daToken != null
                 ? (TaskDisplayArea) WindowContainer.fromBinder(daToken.asBinder()) : null;
+
+        // If we do not have a task display area token, check if the launch task display area
+        // feature id is specified.
+        if (taskDisplayArea == null) {
+            final int launchTaskDisplayAreaFeatureId = options.getLaunchTaskDisplayAreaFeatureId();
+            if (launchTaskDisplayAreaFeatureId != FEATURE_UNDEFINED) {
+                final int launchDisplayId = options.getLaunchDisplayId() == INVALID_DISPLAY
+                        ? DEFAULT_DISPLAY : options.getLaunchDisplayId();
+                final DisplayContent dc = supervisor.mRootWindowContainer
+                        .getDisplayContent(launchDisplayId);
+                if (dc != null) {
+                    taskDisplayArea = dc.getItemFromTaskDisplayAreas(tda ->
+                            tda.mFeatureId == launchTaskDisplayAreaFeatureId ? tda : null);
+                }
+            }
+        }
+
         if (aInfo != null && taskDisplayArea != null
                 && !supervisor.isCallerAllowedToLaunchOnTaskDisplayArea(callingPid, callingUid,
                 taskDisplayArea, aInfo)) {

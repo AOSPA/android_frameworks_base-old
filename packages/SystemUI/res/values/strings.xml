@@ -313,13 +313,6 @@
     <string name="accessibility_scanning_face">Scanning face</string>
     <!-- Click action label for accessibility for the smart reply buttons (not shown on-screen).". [CHAR LIMIT=NONE] -->
     <string name="accessibility_send_smart_reply">Send</string>
-    <!-- Content description of the manage notification button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <!-- Click action label for accessibility for the phone button. [CHAR LIMIT=NONE] -->
-    <string name="phone_label">open phone</string>
-    <!-- Click action label for accessibility for the voice assist button. This is not shown on-screen and is an accessibility label for the icon which launches the voice assist from the lock screen.[CHAR LIMIT=NONE] -->
-    <string name="voice_assist_label">open voice assist</string>
-    <!-- Click action label for accessibility for the phone button. [CHAR LIMIT=NONE] -->
-    <string name="camera_label">open camera</string>
     <!-- Button name for "Cancel". [CHAR LIMIT=NONE] -->
     <string name="cancel">Cancel</string>
 
@@ -809,6 +802,8 @@
     <!-- Message shown when lock screen is unlocked (ie: by trust agent) and the user taps the empty space on the lock screen and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
     <string name="keyguard_unlock_press">Press the unlock icon to open</string>
 
+    <!-- Message shown when non-bypass face authentication succeeds. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
+    <string name="keyguard_face_successful_unlock_swipe">Unlocked by face. Swipe up to open.</string>
     <!-- Message shown when non-bypass face authentication succeeds and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
     <string name="keyguard_face_successful_unlock_press">Unlocked by face. Press the unlock icon to open.</string>
     <!-- Message shown when non-bypass face authentication succeeds and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
@@ -2305,8 +2300,8 @@
     <string name="media_output_dialog_disconnected">(disconnected)</string>
     <!-- Summary for connecting error message [CHAR LIMIT=NONE] -->
     <string name="media_output_dialog_connect_failed">Can\'t switch. Tap to try again.</string>
-    <!-- Title for pairing item [CHAR LIMIT=60] -->
-    <string name="media_output_dialog_pairing_new">Pair new device</string>
+    <!-- Title for connecting item [CHAR LIMIT=60] -->
+    <string name="media_output_dialog_pairing_new">Connect a device</string>
     <!-- Title for launch app [CHAR LIMIT=60] -->
     <string name="media_output_dialog_launch_app_text">To cast this session, please open the app.</string>
     <!-- App name when can't get app name [CHAR LIMIT=60] -->
@@ -2563,6 +2558,10 @@
     <string name="dream_overlay_status_bar_priority_mode">Priority mode</string>
     <!-- Content description for the alarm set icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
     <string name="dream_overlay_status_bar_alarm_set">Alarm set</string>
+    <!-- Content description for the camera off icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_camera_off">Camera is off</string>
+    <!-- Content description for the mic off icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
+    <string name="dream_overlay_status_bar_mic_off">Mic is off</string>
     <!-- Content description for the camera and mic off icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
     <string name="dream_overlay_status_bar_camera_mic_off">Camera and mic are off</string>
     <!-- Content description for the notifications indicator icon in the dream overlay status bar [CHAR LIMIT=NONE] -->
@@ -2570,6 +2569,10 @@
     =1 {# notification}
     other {# notifications}
     }</string>
+    <!-- Accessibility label for weather complication on dreams with weather condition and temperature [CHAR_LIMIT=200] -->
+    <string name="dream_overlay_weather_complication_desc">
+        <xliff:g id="weather_condition" example="Partly cloudy">%1$s</xliff:g>, <xliff:g id="temperature" example="7°C">%2$s</xliff:g>
+    </string>
 
     <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, media app is broadcasting -->
     <string name="broadcasting_description_is_broadcasting">Broadcasting</string>

@@ -28,13 +28,13 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.shade.NotifPanelEvents;
 import com.android.systemui.statusbar.notification.collection.GroupEntry;
 import com.android.systemui.statusbar.notification.collection.ListEntry;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifStabilityManager;
 import com.android.systemui.statusbar.notification.collection.provider.VisualStabilityProvider;
-import com.android.systemui.statusbar.phone.NotifPanelEvents;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.util.Compile;
 import com.android.systemui.util.concurrency.DelayableExecutor;
@@ -192,11 +192,16 @@ public class VisualStabilityCoordinator implements Coordinator, Dumpable,
                     + "  reorderingAllowed " + wasReorderingAllowed + "->" + mReorderingAllowed
                     + "  when setting " + field + "=" + value);
         }
-        if ((mPipelineRunAllowed && mIsSuppressingPipelineRun)
-                || (mReorderingAllowed && (mIsSuppressingGroupChange
-                        || isSuppressingSectionChange()
-                        || mIsSuppressingEntryReorder))) {
-            mNotifStabilityManager.invalidateList();
+        if (mPipelineRunAllowed && mIsSuppressingPipelineRun) {
+            mNotifStabilityManager.invalidateList("pipeline run suppression ended");
+        } else if (mReorderingAllowed && (mIsSuppressingGroupChange
+                || isSuppressingSectionChange()
+                || mIsSuppressingEntryReorder)) {
+            String reason = "reorder suppression ended for"
+                    + " group=" + mIsSuppressingGroupChange
+                    + " section=" + isSuppressingSectionChange()
+                    + " sort=" + mIsSuppressingEntryReorder;
+            mNotifStabilityManager.invalidateList(reason);
         }
         mVisualStabilityProvider.setReorderingAllowed(mReorderingAllowed);
     }
@@ -241,7 +246,7 @@ public class VisualStabilityCoordinator implements Coordinator, Dumpable,
                         now + ALLOW_SECTION_CHANGE_TIMEOUT));
 
         if (!wasSectionChangeAllowed) {
-            mNotifStabilityManager.invalidateList();
+            mNotifStabilityManager.invalidateList("temporarilyAllowSectionChanges");
         }
     }
 

@@ -16,7 +16,9 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.app.Activity
 import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
@@ -32,6 +34,8 @@ import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule.Companion.r
 import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_LANDSCAPE
 import com.android.wm.shell.flicker.testapp.Components
 import com.android.wm.shell.flicker.testapp.Components.FixedActivity.EXTRA_FIXED_ORIENTATION
+import org.junit.Assume
+import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,6 +57,7 @@ open class SetRequestedOrientationWhilePinnedTest(
     private val startingBounds = WindowUtils.getDisplayBounds(Surface.ROTATION_0)
     private val endingBounds = WindowUtils.getDisplayBounds(Surface.ROTATION_90)
 
+    /** {@inheritDoc}  */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             setup {
@@ -70,7 +75,8 @@ open class SetRequestedOrientationWhilePinnedTest(
                     wmHelper.StateSyncBuilder()
                         .withPipShown()
                         .withRotation(Surface.ROTATION_0)
-                        .withNavBarStatusBarVisible()
+                        .withNavOrTaskBarVisible()
+                        .withStatusBarVisible()
                         .waitForAndVerify()
                 }
             }
@@ -88,13 +94,22 @@ open class SetRequestedOrientationWhilePinnedTest(
                 pipApp.launchViaIntent(wmHelper)
                 // System bar may fade out during fixed rotation.
                 wmHelper.StateSyncBuilder()
-                    .withFullScreenApp(pipApp.component)
+                    .withFullScreenApp(pipApp)
                     .withRotation(Surface.ROTATION_90)
-                    .withAppTransitionIdle()
-                    .withNavBarStatusBarVisible()
+                    .withNavOrTaskBarVisible()
+                    .withStatusBarVisible()
                     .waitForAndVerify()
             }
         }
+
+    /**
+     * This test is not compatible with Tablets. When using [Activity.setRequestedOrientation]
+     * to fix a orientation, Tablets instead keep the same orientation and add letterboxes
+     */
+    @Before
+    fun setup() {
+        Assume.assumeFalse(testSpec.isTablet)
+    }
 
     @Presubmit
     @Test
@@ -104,27 +119,27 @@ open class SetRequestedOrientationWhilePinnedTest(
         }
     }
 
+    /** {@inheritDoc}  */
     @Presubmit
     @Test
-    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
+    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
 
+    /** {@inheritDoc}  */
     @Presubmit
     @Test
-    override fun statusBarLayerIsVisible() = super.statusBarLayerIsVisible()
+    override fun statusBarLayerIsVisibleAtStartAndEnd() =
+        super.statusBarLayerIsVisibleAtStartAndEnd()
 
+    /** {@inheritDoc}  */
     @FlakyTest
     @Test
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
-
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     @Presubmit
     @Test
     fun pipWindowInsideDisplay() {
         testSpec.assertWmStart {
-            frameRegion(pipApp.component).coversAtMost(startingBounds)
+            visibleRegion(pipApp).coversAtMost(startingBounds)
         }
     }
 
@@ -132,7 +147,7 @@ open class SetRequestedOrientationWhilePinnedTest(
     @Test
     fun pipAppShowsOnTop() {
         testSpec.assertWmEnd {
-            isAppWindowOnTop(pipApp.component)
+            isAppWindowOnTop(pipApp)
         }
     }
 
@@ -140,7 +155,7 @@ open class SetRequestedOrientationWhilePinnedTest(
     @Test
     fun pipLayerInsideDisplay() {
         testSpec.assertLayersStart {
-            visibleRegion(pipApp.component).coversAtMost(startingBounds)
+            visibleRegion(pipApp).coversAtMost(startingBounds)
         }
     }
 
@@ -148,7 +163,7 @@ open class SetRequestedOrientationWhilePinnedTest(
     @Test
     fun pipAlwaysVisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(pipApp.component)
+            this.isAppWindowVisible(pipApp)
         }
     }
 
@@ -156,9 +171,53 @@ open class SetRequestedOrientationWhilePinnedTest(
     @Test
     fun pipAppLayerCoversFullScreen() {
         testSpec.assertLayersEnd {
-            visibleRegion(pipApp.component).coversExactly(endingBounds)
+            visibleRegion(pipApp).coversExactly(endingBounds)
         }
     }
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerPositionAtStartAndEnd() =
+        super.statusBarLayerPositionAtStartAndEnd()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun navBarWindowIsAlwaysVisible() =
+        super.navBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc}  */
+    @Postsubmit
+    @Test
+    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

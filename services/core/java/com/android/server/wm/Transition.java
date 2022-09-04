@@ -46,6 +46,7 @@ import static android.view.WindowManager.TransitionType;
 import static android.view.WindowManager.transitTypeToString;
 import static android.window.TransitionInfo.FLAG_DISPLAY_HAS_ALERT_WINDOWS;
 import static android.window.TransitionInfo.FLAG_IS_DISPLAY;
+import static android.window.TransitionInfo.FLAG_IS_EMBEDDED;
 import static android.window.TransitionInfo.FLAG_IS_INPUT_METHOD;
 import static android.window.TransitionInfo.FLAG_IS_VOICE_INTERACTION;
 import static android.window.TransitionInfo.FLAG_IS_WALLPAPER;
@@ -84,11 +85,9 @@ import android.window.TransitionInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.ColorUtils;
-import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
-import com.android.server.LocalServices;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 
 import java.lang.annotation.Retention;
@@ -198,6 +197,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     /** @see RecentsAnimationController#mNavigationBarAttachedToApp */
     private boolean mNavBarAttachedToApp = false;
     private int mRecentsDisplayId = INVALID_DISPLAY;
+
+    /** The delay for light bar appearance animation. */
+    long mStatusBarTransitionDelay;
 
     /** @see #setCanPipOnFinish */
     private boolean mCanPipOnFinish = true;
@@ -530,9 +532,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
         // Need to update layers on involved displays since they were all paused while
         // the animation played. This puts the layers back into the correct order.
-        for (int i = displays.size() - 1; i >= 0; --i) {
-            if (displays.valueAt(i) == null) continue;
-            displays.valueAt(i).assignChildLayers(t);
+        mController.mBuildingFinishLayers = true;
+        try {
+            for (int i = displays.size() - 1; i >= 0; --i) {
+                if (displays.valueAt(i) == null) continue;
+                displays.valueAt(i).assignChildLayers(t);
+            }
+        } finally {
+            mController.mBuildingFinishLayers = false;
         }
         if (rootLeash.isValid()) {
             t.reparent(rootLeash, null);
@@ -673,7 +680,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         SurfaceControl.Transaction inputSinkTransaction = null;
         for (int i = 0; i < mParticipants.size(); ++i) {
             final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
-            if (ar == null || !ar.isVisible()) continue;
+            if (ar == null || !ar.isVisible() || ar.getParent() == null) continue;
             if (inputSinkTransaction == null) {
                 inputSinkTransaction = new SurfaceControl.Transaction();
             }
@@ -871,7 +878,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
         buildFinishTransaction(mFinishTransaction, info.getRootLeash());
         if (mController.getTransitionPlayer() != null) {
-            mController.dispatchLegacyAppTransitionStarting(info);
+            mController.dispatchLegacyAppTransitionStarting(info, mStatusBarTransitionDelay);
             try {
                 ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
                         "Calling onTransitionReady: %s", info);
@@ -948,26 +955,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                         topActivity.getBounds());
                 dc.getInputMonitor().setActiveRecents(recentsActivity, topActivity);
             }
-        }
-
-        // Hiding IME/IME icon when starting quick-step with resents animation.
-        if (!mTargetDisplays.get(mRecentsDisplayId).isImeAttachedToApp()) {
-            // Hiding IME if IME window is not attached to app.
-            // Since some windowing mode is not proper to snapshot Task with IME window
-            // while the app transitioning to the next task (e.g. split-screen mode)
-            final InputMethodManagerInternal inputMethodManagerInternal =
-                    LocalServices.getService(InputMethodManagerInternal.class);
-            if (inputMethodManagerInternal != null) {
-                inputMethodManagerInternal.hideCurrentInputMethod(
-                        SoftInputShowHideReason.HIDE_RECENTS_ANIMATION);
-            }
-        } else {
-            // Disable IME icon explicitly when IME attached to the app in case
-            // IME icon might flickering while swiping to the next app task still
-            // in animating before the next app window focused, or IME icon
-            // persists on the bottom when swiping the task to recents.
-            InputMethodManagerInternal.get().updateImeWindowStatus(
-                    true /* disableImeIcon */);
         }
 
         // The rest of this function handles nav-bar reparenting
@@ -1752,6 +1739,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             }
             if (occludesKeyguard(wc)) {
                 flags |= FLAG_OCCLUDES_KEYGUARD;
+            }
+            if (wc.isEmbedded()) {
+                flags |= FLAG_IS_EMBEDDED;
             }
             return flags;
         }
