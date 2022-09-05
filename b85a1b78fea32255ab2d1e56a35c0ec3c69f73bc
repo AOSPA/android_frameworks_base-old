@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "802c9820_50edf6c4",
+        "filename": "core/res/res/values/aospa_config.xml",
+        "patchSetId": 23
+      },
+      "lineNbr": 98,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2022-09-05T19:32:12Z",
+      "side": 1,
+      "message": "Would prefer config_* prefix to keep it inline with our other configs\n\nex. config_CertifiedFingerprint",
+      "revId": "b85a1b78fea32255ab2d1e56a35c0ec3c69f73bc",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
