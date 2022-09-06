@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d465d4de_bf698c0d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-09-06T03:16:58Z",
+      "side": 1,
+      "message": "not sure the juice is worth the squeeze here.  how often are we changing QS for this to be worthwhile?  I am concerned about accidental presses.  Let\u0027s discuss on slack.",
+      "revId": "9d6bed9227ef289c8c30e1196354ae66f18e26d7",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
