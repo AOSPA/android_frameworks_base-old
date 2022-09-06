@@ -78,6 +78,11 @@ import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.Execution;
 import com.android.systemui.util.time.SystemClock;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -173,6 +178,7 @@ public class UdfpsController implements DozeReceiver {
     private final int mUdfpsVendorCode;
 
     private boolean mFrameworkDimming;
+    private String mFrameworkHbmPath;
     private int[][] mBrightnessAlphaArray;
 
     @VisibleForTesting
@@ -721,6 +727,7 @@ public class UdfpsController implements DozeReceiver {
 
     private void showUdfpsOverlay(@NonNull UdfpsControllerOverlay overlay) {
         mExecution.assertIsMainThread();
+        mFrameworkHbmPath = mContext.getResources().getString(R.string.config_udfpsFrameworkHbmPath);
         mFrameworkDimming = mContext.getResources().getBoolean(R.bool.config_udfpsFrameworkDimming);
         parseBrightnessAlphaArray();
 
@@ -852,6 +859,7 @@ public class UdfpsController implements DozeReceiver {
         }
 
         updateViewDimAmount(true);
+        updateGlobalHbmNode(true);
 
         if (!mOverlay.matchesRequestId(requestId)) {
             Log.w(TAG, "Mismatched fingerDown: " + requestId
@@ -917,6 +925,7 @@ public class UdfpsController implements DozeReceiver {
         if (view.isIlluminationRequested()) {
             view.stopIllumination();
         }
+        updateGlobalHbmNode(false);
         updateViewDimAmount(false);
     }
 
@@ -961,6 +970,27 @@ public class UdfpsController implements DozeReceiver {
                 String[] s = array[i].split(",");
                 mBrightnessAlphaArray[i][0] = Integer.parseInt(s[0]);
                 mBrightnessAlphaArray[i][1] = Integer.parseInt(s[1]);
+            }
+        }
+    }
+
+    private void updateGlobalHbmNode(boolean pressed) {
+        if (!mFrameworkHbmPath.isEmpty()) {
+            BufferedWriter writer = null;
+            String pressedStr = pressed ? "1" : "0";
+            try {
+                writer = new BufferedWriter(new FileWriter(mFrameworkHbmPath));
+                writer.write(pressedStr);
+            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
+            } finally {
+                try {
+                    if (writer != null) {
+                        writer.close();
+                    }
+                } catch (IOException e) {
+                    // Ignored, not much we can do anyway
+                }
             }
         }
     }
