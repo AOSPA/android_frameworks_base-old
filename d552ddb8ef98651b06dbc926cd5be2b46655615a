@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "eee64868_5d8aeb94",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-09-06T06:20:33Z",
+      "side": 1,
+      "message": "quoting alex 2, load the damn long press sensorssubhal\nuse existing aosp feature instead of adding more code for no reason",
+      "revId": "d552ddb8ef98651b06dbc926cd5be2b46655615a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
