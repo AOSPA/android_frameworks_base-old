@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "208f675f_a8ac963b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-09-06T03:10:10Z",
+      "side": 1,
+      "message": "discuss at https://gerrit.aospa.co/c/AOSPA/android_packages_apps_Settings/+/23154",
+      "revId": "7443b7c65bc2d52d2231f99e2d813aec70c13430",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
