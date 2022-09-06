@@ -46,4 +46,7 @@
           -->
     </string-array>
 
+    <!-- Path to hbm node for framework hbm for udfps -->
+    <string name="config_udfpsFrameworkHbmPath"></string>
+
 </resources>
