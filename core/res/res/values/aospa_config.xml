@@ -94,4 +94,7 @@
     <!-- KeaHandler to intercept inputs on screen off. -->
     <bool name="config_enableKeyHandler">false</bool>
 
+    <!-- Whether to show WiFi/Hotspot standard -->
+    <bool name="config_show_network_standard">false</bool>
+
 </resources>
