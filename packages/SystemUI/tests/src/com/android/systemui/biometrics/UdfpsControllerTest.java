@@ -55,7 +55,6 @@ import android.testing.TestableLooper.RunWithLooper;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
-import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 
@@ -192,7 +191,6 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Captor private ArgumentCaptor<IUdfpsOverlayController> mOverlayCaptor;
     private IUdfpsOverlayController mOverlayController;
     @Captor private ArgumentCaptor<UdfpsView.OnTouchListener> mTouchListenerCaptor;
-    @Captor private ArgumentCaptor<View.OnHoverListener> mHoverListenerCaptor;
     @Captor private ArgumentCaptor<Runnable> mOnIlluminatedRunnableCaptor;
     @Captor private ArgumentCaptor<ScreenLifecycle.Observer> mScreenObserverCaptor;
     private ScreenLifecycle.Observer mScreenObserver;
@@ -708,24 +706,23 @@ public class UdfpsControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void playHapticOnTouchUdfpsArea_a11yTouchExplorationEnabled() throws RemoteException {
+    public void playHapticOnTouchUdfpsArea() throws RemoteException {
         // Configure UdfpsView to accept the ACTION_DOWN event
         when(mUdfpsView.isIlluminationRequested()).thenReturn(false);
         when(mUdfpsView.isWithinSensorArea(anyFloat(), anyFloat())).thenReturn(true);
 
-        // GIVEN that the overlay is showing and a11y touch exploration enabled
-        when(mAccessibilityManager.isTouchExplorationEnabled()).thenReturn(true);
-        mOverlayController.showUdfpsOverlay(TEST_REQUEST_ID, TEST_UDFPS_SENSOR_ID,
+        // GIVEN that the overlay is showing
+        mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
                 BiometricOverlayConstants.REASON_AUTH_KEYGUARD, mUdfpsOverlayControllerCallback);
         mFgExecutor.runAllReady();
 
-        // WHEN ACTION_HOVER is received
-        verify(mUdfpsView).setOnHoverListener(mHoverListenerCaptor.capture());
-        MotionEvent enterEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_HOVER_ENTER, 0, 0, 0);
-        mHoverListenerCaptor.getValue().onHover(mUdfpsView, enterEvent);
-        enterEvent.recycle();
-        MotionEvent moveEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_HOVER_MOVE, 0, 0, 0);
-        mHoverListenerCaptor.getValue().onHover(mUdfpsView, moveEvent);
+        // WHEN ACTION_DOWN is received
+        verify(mUdfpsView).setOnTouchListener(mTouchListenerCaptor.capture());
+        MotionEvent downEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, downEvent);
+        downEvent.recycle();
+        MotionEvent moveEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, moveEvent);
         moveEvent.recycle();
 
         // THEN tick haptic is played
@@ -740,37 +737,5 @@ public class UdfpsControllerTest extends SysuiTestCase {
         // even in battery saver mode
         assertEquals(VibrationAttributes.USAGE_COMMUNICATION_REQUEST,
                 UdfpsController.VIBRATION_ATTRIBUTES.getUsage());
-    }
-
-    @Test
-    public void noHapticOnTouchUdfpsArea_a11yTouchExplorationDisabled() throws RemoteException {
-        // Configure UdfpsView to accept the ACTION_DOWN event
-        when(mUdfpsView.isIlluminationRequested()).thenReturn(false);
-        when(mUdfpsView.isWithinSensorArea(anyFloat(), anyFloat())).thenReturn(true);
-
-        // GIVEN that the overlay is showing and a11y touch exploration NOT enabled
-        when(mAccessibilityManager.isTouchExplorationEnabled()).thenReturn(false);
-        mOverlayController.showUdfpsOverlay(TEST_REQUEST_ID, TEST_UDFPS_SENSOR_ID,
-                BiometricOverlayConstants.REASON_AUTH_KEYGUARD, mUdfpsOverlayControllerCallback);
-        mFgExecutor.runAllReady();
-
-        // WHEN ACTION_DOWN is received
-        verify(mUdfpsView).setOnTouchListener(mTouchListenerCaptor.capture());
-        MotionEvent downEvent = MotionEvent.obtain(0, 0, ACTION_DOWN, 0, 0, 0);
-        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, downEvent);
-        mBiometricsExecutor.runAllReady();
-        downEvent.recycle();
-        MotionEvent moveEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 0, 0, 0);
-        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, moveEvent);
-        mBiometricsExecutor.runAllReady();
-        moveEvent.recycle();
-
-        // THEN NO haptic played
-        verify(mVibrator, never()).vibrate(
-                anyInt(),
-                anyString(),
-                any(),
-                anyString(),
-                any());
     }
 }
