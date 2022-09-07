@@ -21,6 +21,7 @@ import static android.net.wifi.WifiConfiguration.NetworkSelectionStatus.getMaxNe
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.icu.text.MessageFormat;
 import android.net.wifi.ScanResult;
@@ -386,6 +387,10 @@ public class WifiUtils {
             wifiLevel = WIFI_PIE.length - 1;
         }
         if (noInternet) return NO_INTERNET_WIFI_PIE[wifiLevel];
+        final boolean showNetworkStandard = Resources.getSystem().getBoolean(
+                com.android.internal.R.bool.config_show_network_standard);
+
+        if (!showNetworkStandard) return WIFI_PIE[wifiLevel];
         switch (standard) {
             case 4:
                 return WIFI_4_PIE[wifiLevel];
