@@ -186,6 +186,11 @@ public class UdfpsController implements DozeReceiver {
                     .setUsage(VibrationAttributes.USAGE_TOUCH)
                     .build();
 
+    // haptic to use for scanning start
+    public static final VibrationEffect EFFECT_TICK =
+            VibrationEffect.get(VibrationEffect.EFFECT_TICK);
+
+
     // haptic to use for successful device entry
     public static final VibrationEffect EFFECT_CLICK =
             VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
@@ -680,18 +685,16 @@ public class UdfpsController implements DozeReceiver {
     }
 
     /**
-     * If a11y touchExplorationEnabled, play haptic to signal UDFPS scanning started.
+     * Play haptic to signal udfps scanning started.
      */
     @VisibleForTesting
     public void playStartHaptic() {
-        if (mAccessibilityManager.isTouchExplorationEnabled()) {
-            mVibrator.vibrate(
-                    Process.myUid(),
-                    mContext.getOpPackageName(),
-                    EFFECT_CLICK,
-                    "udfps-onStart-click",
-                    UDFPS_VIBRATION_ATTRIBUTES);
-        }
+        mVibrator.vibrate(
+                Process.myUid(),
+                mContext.getOpPackageName(),
+                EFFECT_TICK,
+                "udfps-onStart-tick",
+                UDFPS_VIBRATION_ATTRIBUTES);
     }
 
     @Override
