@@ -16,6 +16,24 @@
       "message": "while I am undecided about handling the bluetooth one better, this one is definitely avoidable\nhttps://github.com/AOSPA/android_device_xiaomi_alioth/commit/32c004fd13487469ac60b12c88e370147c3c5aa7",
       "revId": "c84cb5ffa4ad1ba30df4244b54fab261b14944bc",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "69588950_8bc2de40",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000737
+      },
+      "writtenOn": "2022-09-08T17:06:58Z",
+      "side": 1,
+      "message": "sure i will use this",
+      "parentUuid": "52fabe57_44f7fe30",
+      "revId": "c84cb5ffa4ad1ba30df4244b54fab261b14944bc",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ],
   "submitRequirementResults": []
