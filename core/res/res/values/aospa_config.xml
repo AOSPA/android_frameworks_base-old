@@ -106,4 +106,7 @@
     <!-- Whether to show WiFi/Hotspot standard -->
     <bool name="config_show_network_standard">false</bool>
 
+    <!-- Whether to spoof device as Pixel XL for Google Photos -->
+    <bool name="config_spoofGooglePhotos">true</bool>
+
 </resources>
