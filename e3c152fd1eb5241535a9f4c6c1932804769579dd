@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "d1db439a_fa644ede",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-09-08T00:17:58Z",
+      "side": 1,
+      "message": "Somebody that knows how to code may check if this revert is correct, but it does work. Lack of onStart vib feels weird IMO.\n\ncommit: https://github.com/AOSPA/android_frameworks_base/commit/3d6ff2fd188fa26408a060e331349285b72686fc\n\nNot adding a topic until I know people want this back too",
+      "revId": "e3c152fd1eb5241535a9f4c6c1932804769579dd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
