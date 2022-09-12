@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "1f151728_6c8eefb5",
+        "filename": "packages/SystemUI/res/values/aospa_config.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 13,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-09-12T16:26:42Z",
+      "side": 1,
+      "message": "i see no use",
+      "revId": "34126ec5b4eeccff4026f1b8ef59dfdc6de1d546",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b4bbb8d2_5993996a",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 23,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2022-09-12T16:26:42Z",
+      "side": 1,
+      "message": "no use i guess?",
+      "revId": "34126ec5b4eeccff4026f1b8ef59dfdc6de1d546",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
