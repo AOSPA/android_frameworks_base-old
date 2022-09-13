@@ -20,6 +20,24 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "25dce1e1_cc13e115",
+        "filename": "packages/SystemUI/res/values/aospa_config.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 13,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-09-13T10:32:26Z",
+      "side": 1,
+      "message": "Yeah, it was stupid. I added back the config.",
+      "parentUuid": "1f151728_6c8eefb5",
+      "revId": "34126ec5b4eeccff4026f1b8ef59dfdc6de1d546",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "b4bbb8d2_5993996a",
         "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
         "patchSetId": 2
@@ -31,6 +49,24 @@
       "writtenOn": "2022-09-12T16:26:42Z",
       "side": 1,
       "message": "no use i guess?",
+      "revId": "34126ec5b4eeccff4026f1b8ef59dfdc6de1d546",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a6df2366_6f479d39",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 23,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-09-13T10:32:26Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "b4bbb8d2_5993996a",
       "revId": "34126ec5b4eeccff4026f1b8ef59dfdc6de1d546",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
