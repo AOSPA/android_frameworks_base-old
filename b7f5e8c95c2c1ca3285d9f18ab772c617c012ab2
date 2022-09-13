@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6bf5288b_69550a78",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2022-09-13T03:11:33Z",
+      "side": 1,
+      "message": "There\u0027s a way to import without adding the interfaces, we can add the lib from the aosp package",
+      "revId": "b7f5e8c95c2c1ca3285d9f18ab772c617c012ab2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
