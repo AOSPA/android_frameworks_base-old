@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9fb4640b_e8c89c19",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2022-09-13T03:10:45Z",
+      "side": 1,
+      "message": "Can\u0027t this go in AOSPASysUI? Any AOSPA additions should be there IMO if neccessary",
+      "revId": "77ccb52d902b95ecc66c1957a73c6a6b5125cd63",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
