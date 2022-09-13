@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2bb00090_3855c2f2",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/UdfpsController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 724,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-09-13T09:46:09Z",
+      "side": 1,
+      "message": "You already do this inside parseBrightnessAlphaArray, it isn\u0027t needed.",
+      "revId": "718f9b60dc8088d0fb7382a8e2751e1fdf46208c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
