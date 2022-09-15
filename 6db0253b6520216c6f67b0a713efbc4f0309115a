@@ -16,6 +16,24 @@
       "message": "can we make this on by default as well? pretty much most devices are amoled and it wont hurt lcds",
       "revId": "6db0253b6520216c6f67b0a713efbc4f0309115a",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "eb3bcdc5_bc46062a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-09-15T07:09:14Z",
+      "side": 1,
+      "message": "Yeah, done.",
+      "parentUuid": "3be7c408_94e11982",
+      "revId": "6db0253b6520216c6f67b0a713efbc4f0309115a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
