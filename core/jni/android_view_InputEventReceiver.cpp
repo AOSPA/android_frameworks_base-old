@@ -323,11 +323,14 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
         bool flag = false;
 
         InputEvent* inputEvent;
-
+#ifdef QTI_PERF_TOUCH_BOOST
         status_t status = mInputConsumer.consume(&mInputEventFactory,
                 consumeBatches, frameTime, &seq, &inputEvent,
                 &motionEventType, &touchMoveNum, &flag);
-
+#else
+        status_t status = mInputConsumer.consume(&mInputEventFactory,
+                consumeBatches, frameTime, &seq, &inputEvent);
+#endif
         if (!receiverObj.get()) {
             receiverObj.reset(GetReferent(env, mReceiverWeakGlobal));
             if (!receiverObj.get()) {
