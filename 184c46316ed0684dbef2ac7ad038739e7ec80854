@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0a7a5fab_283fc1e2",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2022-09-20T20:42:03Z",
+      "side": 1,
+      "message": "TODO hide this when we are not connected to internet (no wifi or data)",
+      "revId": "184c46316ed0684dbef2ac7ad038739e7ec80854",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
