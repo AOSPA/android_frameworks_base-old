@@ -21,6 +21,7 @@ import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.annotation.FlickerServiceCompatible
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.FixMethodOrder
@@ -59,6 +60,7 @@ import org.junit.runners.Parameterized
  *        apps are running before setup
  */
 @RequiresDevice
+@FlickerServiceCompatible
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -68,12 +70,17 @@ class CloseAppHomeButtonTest(testSpec: FlickerTestParameter) : CloseAppTransitio
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
+            setup {
+                test {
+                    tapl.setExpectedRotationCheckEnabled(false)
+                }
+            }
             transitions {
                 // Can't use TAPL at the moment because of rotation test issues
                 // When pressing home, TAPL expects the orientation to remain constant
                 // However, when closing a landscape app back to a portrait-only launcher
                 // this causes an error in verifyActiveContainer();
-                device.pressHome()
+                tapl.goHome()
                 wmHelper.StateSyncBuilder()
                     .withHomeActivityVisible()
                     .waitForAndVerify()

@@ -80,6 +80,8 @@ class IInputMethodWrapper extends IInputMethod.Stub
     private static final int DO_START_STYLUS_HANDWRITING = 110;
     private static final int DO_INIT_INK_WINDOW = 120;
     private static final int DO_FINISH_STYLUS_HANDWRITING = 130;
+    private static final int DO_UPDATE_TOOL_TYPE = 140;
+    private static final int DO_REMOVE_STYLUS_HANDWRITING_WINDOW = 150;
 
     final WeakReference<InputMethodServiceInternal> mTarget;
     final Context mContext;
@@ -234,6 +236,10 @@ class IInputMethodWrapper extends IInputMethod.Stub
                 inputMethod.canStartStylusHandwriting(msg.arg1);
                 return;
             }
+            case DO_UPDATE_TOOL_TYPE: {
+                inputMethod.updateEditorToolType(msg.arg1);
+                return;
+            }
             case DO_START_STYLUS_HANDWRITING: {
                 final SomeArgs args = (SomeArgs) msg.obj;
                 inputMethod.startStylusHandwriting(msg.arg1, (InputChannel) args.arg1,
@@ -247,6 +253,10 @@ class IInputMethodWrapper extends IInputMethod.Stub
             }
             case DO_FINISH_STYLUS_HANDWRITING: {
                 inputMethod.finishStylusHandwriting();
+                return;
+            }
+            case DO_REMOVE_STYLUS_HANDWRITING_WINDOW: {
+                inputMethod.removeStylusHandwritingWindow();
                 return;
             }
 
@@ -402,6 +412,14 @@ class IInputMethodWrapper extends IInputMethod.Stub
 
     @BinderThread
     @Override
+    public void updateEditorToolType(int toolType)
+            throws RemoteException {
+        mCaller.executeOrSendMessage(
+                mCaller.obtainMessageI(DO_UPDATE_TOOL_TYPE, toolType));
+    }
+
+    @BinderThread
+    @Override
     public void startStylusHandwriting(int requestId, @NonNull InputChannel channel,
             @Nullable List<MotionEvent> stylusEvents)
             throws RemoteException {
@@ -420,5 +438,11 @@ class IInputMethodWrapper extends IInputMethod.Stub
     @Override
     public void finishStylusHandwriting() {
         mCaller.executeOrSendMessage(mCaller.obtainMessage(DO_FINISH_STYLUS_HANDWRITING));
+    }
+
+    @BinderThread
+    @Override
+    public void removeStylusHandwritingWindow() {
+        mCaller.executeOrSendMessage(mCaller.obtainMessage(DO_REMOVE_STYLUS_HANDWRITING_WINDOW));
     }
 }

@@ -45,12 +45,17 @@ interface IInputMethodManager {
             + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
     List<InputMethodInfo> getEnabledInputMethodList(int userId);
 
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
     List<InputMethodSubtype> getEnabledInputMethodSubtypeList(in @nullable String imiId,
-            boolean allowsImplicitlySelectedSubtypes);
-    @nullable InputMethodSubtype getLastInputMethodSubtype();
+            boolean allowsImplicitlySelectedSubtypes, int userId);
+
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
+    InputMethodSubtype getLastInputMethodSubtype(int userId);
 
     boolean showSoftInput(in IInputMethodClient client, @nullable IBinder windowToken, int flags,
-            in @nullable ResultReceiver resultReceiver, int reason);
+            int lastClickToolType, in @nullable ResultReceiver resultReceiver, int reason);
     boolean hideSoftInput(in IInputMethodClient client, @nullable IBinder windowToken, int flags,
             in @nullable ResultReceiver resultReceiver, int reason);
 
@@ -67,7 +72,8 @@ interface IInputMethodManager {
             /* @android.view.WindowManager.LayoutParams.Flags */ int windowFlags,
             in @nullable EditorInfo editorInfo, in @nullable IRemoteInputConnection inputConnection,
             in @nullable IRemoteAccessibilityInputConnection remoteAccessibilityInputConnection,
-            int unverifiedTargetSdkVersion, in ImeOnBackInvokedDispatcher imeDispatcher);
+            int unverifiedTargetSdkVersion, int userId,
+            in ImeOnBackInvokedDispatcher imeDispatcher);
 
     void showInputMethodPickerFromClient(in IInputMethodClient client,
             int auxiliarySubtypeMode);
@@ -82,8 +88,15 @@ interface IInputMethodManager {
             + "android.Manifest.permission.TEST_INPUT_METHOD)")
     boolean isInputMethodPickerShownForTest();
 
-    @nullable InputMethodSubtype getCurrentInputMethodSubtype();
-    void setAdditionalInputMethodSubtypes(String id, in InputMethodSubtype[] subtypes);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
+    @nullable InputMethodSubtype getCurrentInputMethodSubtype(int userId);
+
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
+    void setAdditionalInputMethodSubtypes(String id, in InputMethodSubtype[] subtypes,
+            int userId);
+
     // This is kept due to @UnsupportedAppUsage.
     // TODO(Bug 113914148): Consider removing this.
     int getInputMethodWindowVisibleHeight(in IInputMethodClient client);
@@ -100,12 +113,22 @@ interface IInputMethodManager {
 
     /** Remove the IME surface. Requires passing the currently focused window. */
     oneway void removeImeSurfaceFromWindowAsync(in IBinder windowToken);
+
+    @JavaPassthrough(annotation="@android.annotation.RequiresNoPermission")
     void startProtoDump(in byte[] protoDump, int source, String where);
+
     boolean isImeTraceEnabled();
 
     // Starts an ime trace.
+    @EnforcePermission("CONTROL_UI_TRACING")
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.CONTROL_UI_TRACING)")
     void startImeTrace();
+
     // Stops an ime trace.
+    @EnforcePermission("CONTROL_UI_TRACING")
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.CONTROL_UI_TRACING)")
     void stopImeTrace();
 
     /** Start Stylus handwriting session **/

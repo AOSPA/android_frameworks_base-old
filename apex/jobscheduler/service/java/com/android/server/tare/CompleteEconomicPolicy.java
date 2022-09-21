@@ -23,24 +23,36 @@ import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
 import android.util.SparseArray;
 
-import libcore.util.EmptyArray;
+import com.android.internal.annotations.VisibleForTesting;
 
+import libcore.util.EmptyArray;
 
 /** Combines all enabled policies into one. */
 public class CompleteEconomicPolicy extends EconomicPolicy {
+
     private final ArraySet<EconomicPolicy> mEnabledEconomicPolicies = new ArraySet<>();
     /** Lazily populated set of actions covered by this policy. */
     private final SparseArray<Action> mActions = new SparseArray<>();
     /** Lazily populated set of rewards covered by this policy. */
     private final SparseArray<Reward> mRewards = new SparseArray<>();
     private final int[] mCostModifiers;
-    private long mMaxSatiatedBalance;
-    private long mConsumptionLimit;
+    private long mInitialConsumptionLimit;
+    private long mHardConsumptionLimit;
 
     CompleteEconomicPolicy(@NonNull InternalResourceService irs) {
+        this(irs, new CompleteInjector());
+    }
+
+    @VisibleForTesting
+    CompleteEconomicPolicy(@NonNull InternalResourceService irs,
+            @NonNull CompleteInjector injector) {
         super(irs);
-        mEnabledEconomicPolicies.add(new AlarmManagerEconomicPolicy(irs));
-        mEnabledEconomicPolicies.add(new JobSchedulerEconomicPolicy(irs));
+        if (injector.isPolicyEnabled(POLICY_AM)) {
+            mEnabledEconomicPolicies.add(new AlarmManagerEconomicPolicy(irs, injector));
+        }
+        if (injector.isPolicyEnabled(POLICY_JS)) {
+            mEnabledEconomicPolicies.add(new JobSchedulerEconomicPolicy(irs, injector));
+        }
 
         ArraySet<Integer> costModifiers = new ArraySet<>();
         for (int i = 0; i < mEnabledEconomicPolicies.size(); ++i) {
@@ -54,7 +66,7 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
             mCostModifiers[i] = costModifiers.valueAt(i);
         }
 
-        updateMaxBalances();
+        updateLimits();
     }
 
     @Override
@@ -63,21 +75,19 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
         for (int i = 0; i < mEnabledEconomicPolicies.size(); ++i) {
             mEnabledEconomicPolicies.valueAt(i).setup(properties);
         }
-        updateMaxBalances();
+        updateLimits();
     }
 
-    private void updateMaxBalances() {
-        long max = 0;
+    private void updateLimits() {
+        long initialConsumptionLimit = 0;
+        long hardConsumptionLimit = 0;
         for (int i = 0; i < mEnabledEconomicPolicies.size(); ++i) {
-            max += mEnabledEconomicPolicies.valueAt(i).getMaxSatiatedBalance();
+            final EconomicPolicy economicPolicy = mEnabledEconomicPolicies.valueAt(i);
+            initialConsumptionLimit += economicPolicy.getInitialSatiatedConsumptionLimit();
+            hardConsumptionLimit += economicPolicy.getHardSatiatedConsumptionLimit();
         }
-        mMaxSatiatedBalance = max;
-
-        max = 0;
-        for (int i = 0; i < mEnabledEconomicPolicies.size(); ++i) {
-            max += mEnabledEconomicPolicies.valueAt(i).getInitialSatiatedConsumptionLimit();
-        }
-        mConsumptionLimit = max;
+        mInitialConsumptionLimit = initialConsumptionLimit;
+        mHardConsumptionLimit = hardConsumptionLimit;
     }
 
     @Override
@@ -90,18 +100,22 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
     }
 
     @Override
-    long getMaxSatiatedBalance() {
-        return mMaxSatiatedBalance;
+    long getMaxSatiatedBalance(int userId, @NonNull String pkgName) {
+        long max = 0;
+        for (int i = 0; i < mEnabledEconomicPolicies.size(); ++i) {
+            max += mEnabledEconomicPolicies.valueAt(i).getMaxSatiatedBalance(userId, pkgName);
+        }
+        return max;
     }
 
     @Override
     long getInitialSatiatedConsumptionLimit() {
-        return mConsumptionLimit;
+        return mInitialConsumptionLimit;
     }
 
     @Override
     long getHardSatiatedConsumptionLimit() {
-        return mConsumptionLimit;
+        return mHardConsumptionLimit;
     }
 
     @NonNull
@@ -154,6 +168,14 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
                 ? new Reward(rewardId, instantReward, ongoingReward, maxReward) : null;
         mRewards.put(rewardId, reward);
         return reward;
+    }
+
+    @VisibleForTesting
+    static class CompleteInjector extends Injector {
+
+        boolean isPolicyEnabled(int policy) {
+            return true;
+        }
     }
 
     @Override

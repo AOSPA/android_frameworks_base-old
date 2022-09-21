@@ -223,7 +223,7 @@ public class InsetsControllerTest {
 
             InsetsSourceControl control =
                     new InsetsSourceControl(
-                            ITYPE_STATUS_BAR, mLeash, new Point(), Insets.of(0, 10, 0, 0));
+                            ITYPE_STATUS_BAR, mLeash, true, new Point(), Insets.of(0, 10, 0, 0));
             mController.onControlsChanged(new InsetsSourceControl[]{control});
             mController.controlWindowInsetsAnimation(0, 0 /* durationMs */,
                     new LinearInterpolator(),
@@ -233,6 +233,21 @@ public class InsetsControllerTest {
         });
         verify(controlListener).onCancelled(null);
         verify(controlListener, never()).onReady(any(), anyInt());
+    }
+
+    @Test
+    public void testSystemDrivenInsetsAnimationLoggingListener_onReady() {
+        prepareControls();
+        // only the original thread that created view hierarchy can touch its views
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            WindowInsetsAnimationControlListener loggingListener =
+                    mock(WindowInsetsAnimationControlListener.class);
+            mController.setSystemDrivenInsetsAnimationLoggingListener(loggingListener);
+            mController.getSourceConsumer(ITYPE_IME).onWindowFocusGained(true);
+            // since there is no focused view, forcefully make IME visible.
+            mController.show(Type.ime(), true /* fromIme */);
+            verify(loggingListener).onReady(notNull(), anyInt());
+        });
     }
 
     @Test
@@ -914,6 +929,23 @@ public class InsetsControllerTest {
         });
     }
 
+    @Test
+    public void testImeRequestedVisibleWhenImeNotControllable() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            // Simulate IME insets is not controllable
+            mController.onControlsChanged(new InsetsSourceControl[0]);
+            final InsetsSourceConsumer imeInsetsConsumer = mController.getSourceConsumer(ITYPE_IME);
+            assertNull(imeInsetsConsumer.getControl());
+
+            // Verify IME requested visibility should be updated to IME consumer from controller.
+            mController.show(ime());
+            assertTrue(imeInsetsConsumer.isRequestedVisible());
+
+            mController.hide(ime());
+            assertFalse(imeInsetsConsumer.isRequestedVisible());
+        });
+    }
+
     private void waitUntilNextFrame() throws Exception {
         final CountDownLatch latch = new CountDownLatch(1);
         Choreographer.getMainThreadInstance().postCallback(Choreographer.CALLBACK_COMMIT,
@@ -926,7 +958,8 @@ public class InsetsControllerTest {
         // Simulate binder behavior by copying SurfaceControl. Otherwise, InsetsController will
         // attempt to release mLeash directly.
         SurfaceControl copy = new SurfaceControl(mLeash, "InsetsControllerTest.createControl");
-        return new InsetsSourceControl(type, copy, new Point(), Insets.NONE);
+        return new InsetsSourceControl(type, copy, InsetsState.getDefaultVisibility(type),
+                new Point(), Insets.NONE);
     }
 
     private InsetsSourceControl[] createSingletonControl(@InternalInsetsType int type) {

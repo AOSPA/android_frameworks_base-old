@@ -1215,14 +1215,55 @@ public class CarrierConfigManager {
             "carrier_data_call_permanent_failure_strings";
 
     /**
-     * Default APN types that are metered by the carrier
-     * @hide
+     * A string array indicating the default APN types that are metered by the carrier.
+     *
+     * The string in the array is the name of the APN type. For example, "default" for
+     * {@link ApnSetting#TYPE_DEFAULT}, "mms" for {@link ApnSetting#TYPE_MMS}, etc.
+     *
+     * The default value is {@code {"default", "mms", "dun", "supl"}}.
+     *
+     * @see ApnSetting#TYPE_DEFAULT
+     * @see ApnSetting#TYPE_MMS
+     * @see ApnSetting#TYPE_SUPL
+     * @see ApnSetting#TYPE_DUN
+     * @see ApnSetting#TYPE_HIPRI
+     * @see ApnSetting#TYPE_FOTA
+     * @see ApnSetting#TYPE_IMS
+     * @see ApnSetting#TYPE_CBS
+     * @see ApnSetting#TYPE_IA
+     * @see ApnSetting#TYPE_EMERGENCY
+     * @see ApnSetting#TYPE_MCX
+     * @see ApnSetting#TYPE_XCAP
+     * @see ApnSetting#TYPE_BIP
+     * @see ApnSetting#TYPE_VSIM
+     * @see ApnSetting#TYPE_ENTERPRISE
      */
     public static final String KEY_CARRIER_METERED_APN_TYPES_STRINGS =
             "carrier_metered_apn_types_strings";
+
     /**
-     * Default APN types that are roaming-metered by the carrier
-     * @hide
+     * A string array indicating the default APN types that are roaming-metered by the carrier.
+     *
+     * The string in the array is the name of the APN type. For example, "default" for
+     * {@link ApnSetting#TYPE_DEFAULT}, "mms" for {@link ApnSetting#TYPE_MMS}, etc.
+     *
+     * The default value is {@code {"default", "mms", "dun", "supl"}}.
+     *
+     * @see ApnSetting#TYPE_DEFAULT
+     * @see ApnSetting#TYPE_MMS
+     * @see ApnSetting#TYPE_SUPL
+     * @see ApnSetting#TYPE_DUN
+     * @see ApnSetting#TYPE_HIPRI
+     * @see ApnSetting#TYPE_FOTA
+     * @see ApnSetting#TYPE_IMS
+     * @see ApnSetting#TYPE_CBS
+     * @see ApnSetting#TYPE_IA
+     * @see ApnSetting#TYPE_EMERGENCY
+     * @see ApnSetting#TYPE_MCX
+     * @see ApnSetting#TYPE_XCAP
+     * @see ApnSetting#TYPE_BIP
+     * @see ApnSetting#TYPE_VSIM
+     * @see ApnSetting#TYPE_ENTERPRISE
      */
     public static final String KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS =
             "carrier_metered_roaming_apn_types_strings";
@@ -8710,6 +8751,13 @@ public class CarrierConfigManager {
      * IWLAN handover rules that determine whether handover is allowed or disallowed between
      * cellular and IWLAN.
      *
+     * Rule syntax: "source=[GERAN|UTRAN|EUTRAN|NGRAN|IWLAN|UNKNOWN], target=[GERAN|UTRAN|EUTRAN
+     * |NGRAN|IWLAN], type=[allowed|disallowed], roaming=[true|false], capabilities=[INTERNET|MMS
+     * |FOTA|IMS|CBS|SUPL|EIMS|XCAP|DUN]"
+     *
+     * Note that UNKNOWN can be only specified in the source access network and can be only used
+     * in the disallowed rule.
+     *
      * The handover rules will be matched in the order. Here are some sample rules.
      * <string-array name="iwlan_handover_rules" num="5">
      *     <!-- Handover from IWLAN to 2G/3G is not allowed -->
@@ -9012,11 +9060,11 @@ public class CarrierConfigManager {
                 new String[]{"default", "mms", "dun", "supl"});
         sDefaults.putStringArray(KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
-        sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
         sDefaults.putStringArray(KEY_CARRIER_WWAN_DISALLOWED_APN_TYPES_STRING_ARRAY,
                 new String[]{""});
         sDefaults.putStringArray(KEY_CARRIER_WLAN_DISALLOWED_APN_TYPES_STRING_ARRAY,
                 new String[]{""});
+        sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,
                 new int[] {TelephonyManager.NETWORK_TYPE_CDMA, TelephonyManager.NETWORK_TYPE_1xRTT,
                         TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A,

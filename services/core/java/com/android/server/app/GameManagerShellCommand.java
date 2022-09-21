@@ -16,21 +16,6 @@
 
 package com.android.server.app;
 
-import static com.android.server.wm.CompatModePackages.DOWNSCALED;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_30;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_35;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_40;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_45;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_50;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_55;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_60;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_65;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_70;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_75;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_80;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_85;
-import static com.android.server.wm.CompatModePackages.DOWNSCALE_90;
-
 import android.app.ActivityManager;
 import android.app.GameManager;
 import android.app.IGameManagerService;
@@ -39,7 +24,6 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.ShellCommand;
-import android.util.ArraySet;
 
 import java.io.PrintWriter;
 import java.util.Locale;
@@ -52,23 +36,6 @@ import java.util.Locale;
 public class GameManagerShellCommand extends ShellCommand {
 
     public GameManagerShellCommand() {}
-
-    private static final ArraySet<Long> DOWNSCALE_CHANGE_IDS = new ArraySet<>(new Long[]{
-            DOWNSCALED,
-            DOWNSCALE_90,
-            DOWNSCALE_85,
-            DOWNSCALE_80,
-            DOWNSCALE_75,
-            DOWNSCALE_70,
-            DOWNSCALE_65,
-            DOWNSCALE_60,
-            DOWNSCALE_55,
-            DOWNSCALE_50,
-            DOWNSCALE_45,
-            DOWNSCALE_40,
-            DOWNSCALE_35,
-            DOWNSCALE_30,
-    });
 
     @Override
     public int onCommand(String cmd) {
@@ -114,7 +81,8 @@ public class GameManagerShellCommand extends ShellCommand {
         final GameManagerService gameManagerService = (GameManagerService)
                 ServiceManager.getService(Context.GAME_SERVICE);
 
-        final String listStr = gameManagerService.getInterventionList(packageName);
+        final String listStr = gameManagerService.getInterventionList(packageName,
+                ActivityManager.getCurrentUser());
 
         if (listStr == null) {
             pw.println("No interventions found for " + packageName);
@@ -212,11 +180,15 @@ public class GameManagerShellCommand extends ShellCommand {
                 case "--downscale":
                     if (downscaleRatio == null) {
                         downscaleRatio = getNextArgRequired();
-                        if (downscaleRatio != null
-                                && GameManagerService.getCompatChangeId(downscaleRatio) == 0
-                                && !downscaleRatio.equals("disable")) {
-                            pw.println("Invalid scaling ratio '" + downscaleRatio + "'");
-                            return -1;
+                        if ("disable".equals(downscaleRatio)) {
+                            downscaleRatio = "-1";
+                        } else {
+                            try {
+                                Float.parseFloat(downscaleRatio);
+                            } catch (NumberFormatException e) {
+                                pw.println("Invalid scaling ratio '" + downscaleRatio + "'");
+                                return -1;
+                            }
                         }
                     } else {
                         pw.println("Duplicate option '" + option + "'");

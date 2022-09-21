@@ -31,6 +31,7 @@ import android.annotation.Nullable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.ResultReceiver;
 import android.os.Trace;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
@@ -39,11 +40,15 @@ import android.view.View;
 import android.view.ViewRootImpl;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
+import android.view.inputmethod.DeleteGesture;
 import android.view.inputmethod.DumpableInputConnection;
 import android.view.inputmethod.ExtractedTextRequest;
+import android.view.inputmethod.HandwritingGesture;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputContentInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.view.inputmethod.InsertGesture;
+import android.view.inputmethod.SelectGesture;
 import android.view.inputmethod.TextAttribute;
 import android.view.inputmethod.TextSnapshot;
 
@@ -965,6 +970,61 @@ public final class RemoteInputConnectionImpl extends IRemoteInputConnection.Stub
                 return;
             }
             ic.performPrivateCommand(action, data);
+        });
+    }
+
+    @Dispatching(cancellable = true)
+    @Override
+    public void performHandwritingSelectGesture(
+            InputConnectionCommandHeader header, SelectGesture gesture,
+            ResultReceiver resultReceiver) {
+        performHandwritingGestureInternal(header, gesture, resultReceiver);
+    }
+
+    @Dispatching(cancellable = true)
+    @Override
+    public void performHandwritingInsertGesture(
+            InputConnectionCommandHeader header, InsertGesture gesture,
+            ResultReceiver resultReceiver) {
+        performHandwritingGestureInternal(header, gesture, resultReceiver);
+    }
+
+    @Dispatching(cancellable = true)
+    @Override
+    public void performHandwritingDeleteGesture(
+            InputConnectionCommandHeader header, DeleteGesture gesture,
+            ResultReceiver resultReceiver) {
+        performHandwritingGestureInternal(header, gesture, resultReceiver);
+    }
+
+    private <T extends HandwritingGesture> void performHandwritingGestureInternal(
+            InputConnectionCommandHeader header,  T gesture, ResultReceiver resultReceiver) {
+        dispatchWithTracing("performHandwritingGesture", () -> {
+            if (header.mSessionId != mCurrentSessionId.get()) {
+                if (resultReceiver != null) {
+                    resultReceiver.send(
+                            InputConnection.HANDWRITING_GESTURE_RESULT_CANCELLED, null);
+                }
+                return;  // cancelled
+            }
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "performHandwritingGesture on inactive InputConnection");
+                if (resultReceiver != null) {
+                    resultReceiver.send(
+                            InputConnection.HANDWRITING_GESTURE_RESULT_CANCELLED, null);
+                }
+                return;
+            }
+
+            // TODO(210039666): implement Cleaner to return HANDWRITING_GESTURE_RESULT_UNKNOWN if
+            //  editor doesn't return any type.
+            ic.performHandwritingGesture(
+                    gesture,
+                    resultReceiver != null ? Runnable::run : null,
+                    resultReceiver != null
+                            ? (resultCode) -> resultReceiver.send(resultCode, null /* resultData */)
+                            : null);
         });
     }
 

@@ -31,7 +31,7 @@ import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.NonResizeableAppHelper
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
-import com.android.server.wm.traces.common.ComponentMatcher
+import com.android.server.wm.traces.common.ComponentNameMatcher
 import com.android.server.wm.traces.common.Rect
 import org.junit.Assume
 import org.junit.Before
@@ -79,6 +79,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
                 testApp2.launchViaIntent(wmHelper)
                 tapl.launchedAppState.quickSwitchToPreviousApp()
                 wmHelper.StateSyncBuilder()
+                    .withFullScreenApp(testApp1)
                     .withNavOrTaskBarVisible()
                     .withStatusBarVisible()
                     .waitForAndVerify()
@@ -89,6 +90,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
         transitions {
             tapl.launchedAppState.quickSwitchToPreviousAppSwipeLeft()
             wmHelper.StateSyncBuilder()
+                .withFullScreenApp(testApp2)
                 .withNavOrTaskBarVisible()
                 .withStatusBarVisible()
                 .waitForAndVerify()
@@ -110,7 +112,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Test
     open fun startsWithApp1WindowsCoverFullScreen() {
         testSpec.assertWmStart {
-            this.visibleRegion(testApp1.or(ComponentMatcher.LETTERBOX))
+            this.visibleRegion(testApp1.or(ComponentNameMatcher.LETTERBOX))
                 .coversExactly(startDisplayBounds)
         }
     }
@@ -158,7 +160,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Test
     open fun endsWithApp2LayersCoveringFullScreen() {
         testSpec.assertLayersEnd {
-            this.visibleRegion(testApp2.or(ComponentMatcher.LETTERBOX))
+            this.visibleRegion(testApp2.or(ComponentNameMatcher.LETTERBOX))
                 .coversExactly(startDisplayBounds)
         }
     }
@@ -185,7 +187,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
         testSpec.assertWm {
             this.isAppWindowInvisible(testApp2)
                     .then()
-                    .isAppWindowVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
+                    .isAppWindowVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
                     .then()
                     .isAppWindowVisible(testApp2)
         }
@@ -244,9 +246,9 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
         testSpec.assertWm {
             this.isAppWindowVisible(testApp1)
                     .then()
-                    .isAppWindowVisible(ComponentMatcher.LAUNCHER, isOptional = true)
+                    .isAppWindowVisible(ComponentNameMatcher.LAUNCHER, isOptional = true)
                     .then()
-                    .isAppWindowVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
+                    .isAppWindowVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
                     .then()
                     .isAppWindowVisible(testApp2)
         }
@@ -263,9 +265,9 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
         testSpec.assertLayers {
             this.isVisible(testApp1)
                     .then()
-                    .isVisible(ComponentMatcher.LAUNCHER, isOptional = true)
+                    .isVisible(ComponentNameMatcher.LAUNCHER, isOptional = true)
                     .then()
-                    .isVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
+                    .isVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
                     .then()
                     .isVisible(testApp2)
         }
@@ -281,12 +283,6 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @FlakyTest(bugId = 239148258)

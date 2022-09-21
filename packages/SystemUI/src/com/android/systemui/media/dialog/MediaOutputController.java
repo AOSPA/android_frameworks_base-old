@@ -20,6 +20,7 @@ import static android.provider.Settings.ACTION_BLUETOOTH_SETTINGS;
 
 import android.annotation.CallbackExecutor;
 import android.app.AlertDialog;
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.WallpaperColors;
 import android.bluetooth.BluetoothLeBroadcast;
@@ -62,6 +63,7 @@ import com.android.settingslib.RestrictedLockUtilsInternal;
 import com.android.settingslib.Utils;
 import com.android.settingslib.bluetooth.BluetoothUtils;
 import com.android.settingslib.bluetooth.LocalBluetoothLeBroadcast;
+import com.android.settingslib.bluetooth.LocalBluetoothLeBroadcastMetadata;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.settingslib.media.InfoMediaManager;
 import com.android.settingslib.media.LocalMediaManager;
@@ -119,6 +121,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
     final List<MediaDevice> mCachedMediaDevices = new CopyOnWriteArrayList<>();
     private final AudioManager mAudioManager;
     private final PowerExemptionManager mPowerExemptionManager;
+    private final KeyguardManager mKeyGuardManager;
     private final NearbyMediaDevicesManager mNearbyMediaDevicesManager;
     private final Map<String, Integer> mNearbyDeviceInfoMap = new ConcurrentHashMap<>();
 
@@ -153,7 +156,8 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
             DialogLaunchAnimator dialogLaunchAnimator,
             Optional<NearbyMediaDevicesManager> nearbyMediaDevicesManagerOptional,
             AudioManager audioManager,
-            PowerExemptionManager powerExemptionManager) {
+            PowerExemptionManager powerExemptionManager,
+            KeyguardManager keyGuardManager) {
         mContext = context;
         mPackageName = packageName;
         mMediaSessionManager = mediaSessionManager;
@@ -162,6 +166,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         mNotifCollection = notifCollection;
         mAudioManager = audioManager;
         mPowerExemptionManager = powerExemptionManager;
+        mKeyGuardManager = keyGuardManager;
         InfoMediaManager imm = new InfoMediaManager(mContext, packageName, null, lbm);
         mLocalMediaManager = new LocalMediaManager(mContext, lbm, imm, packageName);
         mMetricLogger = new MediaOutputMetricLogger(mContext, mPackageName);
@@ -209,15 +214,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
                 Log.d(TAG, "No media controller for " + mPackageName);
             }
         }
-        if (mLocalMediaManager == null) {
-            if (DEBUG) {
-                Log.d(TAG, "No local media manager " + mPackageName);
-            }
-            return;
-        }
         mCallback = cb;
-        mLocalMediaManager.unregisterCallback(this);
-        mLocalMediaManager.stopScan();
         mLocalMediaManager.registerCallback(this);
         mLocalMediaManager.startScan();
     }
@@ -239,10 +236,8 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         if (mMediaController != null) {
             mMediaController.unregisterCallback(mCb);
         }
-        if (mLocalMediaManager != null) {
-            mLocalMediaManager.unregisterCallback(this);
-            mLocalMediaManager.stopScan();
-        }
+        mLocalMediaManager.unregisterCallback(this);
+        mLocalMediaManager.stopScan();
         synchronized (mMediaDevicesLock) {
             mCachedMediaDevices.clear();
             mMediaDevices.clear();
@@ -309,7 +304,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         }
     }
 
-    Drawable getAppSourceIcon() {
+    Drawable getAppSourceIconFromPackage() {
         if (mPackageName.isEmpty()) {
             return null;
         }
@@ -416,8 +411,26 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
                 device.getId());
         boolean isSelectedDeviceInGroup = getSelectedMediaDevice().size() > 1
                 && getSelectedMediaDevice().contains(device);
-        return (!hasAdjustVolumeUserRestriction() && isConnected && !isTransferring())
+        return (!hasAdjustVolumeUserRestriction() && isConnected && !isAnyDeviceTransferring())
                 || isSelectedDeviceInGroup;
+    }
+
+    IconCompat getNotificationSmallIcon() {
+        if (TextUtils.isEmpty(mPackageName)) {
+            return null;
+        }
+        for (NotificationEntry entry : mNotifCollection.getAllNotifs()) {
+            final Notification notification = entry.getSbn().getNotification();
+            if (notification.isMediaNotification()
+                    && TextUtils.equals(entry.getSbn().getPackageName(), mPackageName)) {
+                final Icon icon = notification.getSmallIcon();
+                if (icon == null) {
+                    break;
+                }
+                return IconCompat.createFromIcon(icon);
+            }
+        }
+        return null;
     }
 
     IconCompat getNotificationIcon() {
@@ -622,10 +635,6 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         return mLocalMediaManager.getCurrentConnectedDevice();
     }
 
-    private MediaDevice getMediaDeviceById(String id) {
-        return mLocalMediaManager.getMediaDeviceById(new ArrayList<>(mMediaDevices), id);
-    }
-
     boolean addDeviceToPlayMedia(MediaDevice device) {
         mMetricLogger.logInteractionExpansion(device);
         return mLocalMediaManager.addDeviceToPlayMedia(device);
@@ -645,10 +654,6 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
 
     List<MediaDevice> getDeselectableMediaDevice() {
         return mLocalMediaManager.getDeselectableMediaDevice();
-    }
-
-    void adjustSessionVolume(String sessionId, int volume) {
-        mLocalMediaManager.adjustSessionVolume(sessionId, volume);
     }
 
     void adjustSessionVolume(int volume) {
@@ -703,7 +708,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
                 UserHandle.of(UserHandle.myUserId()));
     }
 
-    boolean isTransferring() {
+    boolean isAnyDeviceTransferring() {
         synchronized (mMediaDevicesLock) {
             for (MediaDevice device : mMediaDevices) {
                 if (device.getState() == LocalMediaManager.MediaDeviceState.STATE_CONNECTING) {
@@ -718,7 +723,8 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         ActivityLaunchAnimator.Controller controller =
                 mDialogLaunchAnimator.createActivityLaunchController(view);
 
-        if (controller == null) {
+        if (controller == null || (mKeyGuardManager != null
+                && mKeyGuardManager.isKeyguardLocked())) {
             mCallback.dismissDialog();
         }
 
@@ -770,7 +776,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         MediaOutputController controller = new MediaOutputController(mContext, mPackageName,
                 mMediaSessionManager, mLocalBluetoothManager, mActivityStarter,
                 mNotifCollection, mDialogLaunchAnimator, Optional.of(mNearbyMediaDevicesManager),
-                mAudioManager, mPowerExemptionManager);
+                mAudioManager, mPowerExemptionManager, mKeyGuardManager);
         MediaOutputBroadcastDialog dialog = new MediaOutputBroadcastDialog(mContext, true,
                 broadcastSender, controller);
         mDialogLaunchAnimator.showFromView(dialog, mediaOutputDialog);
@@ -834,7 +840,9 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
             Log.d(TAG, "getBroadcastMetadata: LE Audio Broadcast is null");
             return "";
         }
-        return broadcast.getLocalBluetoothLeBroadcastMetaData().convertToQrCodeString();
+        final LocalBluetoothLeBroadcastMetadata metadata =
+                broadcast.getLocalBluetoothLeBroadcastMetaData();
+        return metadata != null ? metadata.convertToQrCodeString() : "";
     }
 
     boolean isActiveRemoteDevice(@NonNull MediaDevice device) {

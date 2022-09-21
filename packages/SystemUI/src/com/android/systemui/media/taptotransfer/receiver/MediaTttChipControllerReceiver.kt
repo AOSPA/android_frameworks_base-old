@@ -19,7 +19,6 @@ package com.android.systemui.media.taptotransfer.receiver
 import android.annotation.SuppressLint
 import android.app.StatusBarManager
 import android.content.Context
-import android.graphics.PointF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.media.MediaRoute2Info
@@ -41,7 +40,7 @@ import com.android.systemui.media.taptotransfer.common.DEFAULT_TIMEOUT_MILLIS
 import com.android.systemui.media.taptotransfer.common.MediaTttChipControllerCommon
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.statusbar.CommandQueue
-import com.android.systemui.statusbar.gesture.TapGestureDetector
+import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.animation.AnimationUtil.Companion.frames
 import com.android.systemui.util.concurrency.DelayableExecutor
 import com.android.systemui.util.view.ViewUtil
@@ -54,27 +53,27 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class MediaTttChipControllerReceiver @Inject constructor(
-    commandQueue: CommandQueue,
-    context: Context,
-    @MediaTttReceiverLogger logger: MediaTttLogger,
-    windowManager: WindowManager,
-    viewUtil: ViewUtil,
-    mainExecutor: DelayableExecutor,
-    accessibilityManager: AccessibilityManager,
-    tapGestureDetector: TapGestureDetector,
-    powerManager: PowerManager,
-    @Main private val mainHandler: Handler,
-    private val uiEventLogger: MediaTttReceiverUiEventLogger,
+        commandQueue: CommandQueue,
+        context: Context,
+        @MediaTttReceiverLogger logger: MediaTttLogger,
+        windowManager: WindowManager,
+        viewUtil: ViewUtil,
+        mainExecutor: DelayableExecutor,
+        accessibilityManager: AccessibilityManager,
+        configurationController: ConfigurationController,
+        powerManager: PowerManager,
+        @Main private val mainHandler: Handler,
+        private val uiEventLogger: MediaTttReceiverUiEventLogger,
 ) : MediaTttChipControllerCommon<ChipReceiverInfo>(
-    context,
-    logger,
-    windowManager,
-    viewUtil,
-    mainExecutor,
-    accessibilityManager,
-    tapGestureDetector,
-    powerManager,
-    R.layout.media_ttt_chip_receiver
+        context,
+        logger,
+        windowManager,
+        viewUtil,
+        mainExecutor,
+        accessibilityManager,
+        configurationController,
+        powerManager,
+        R.layout.media_ttt_chip_receiver,
 ) {
     @SuppressLint("WrongConstant") // We're allowed to use LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
     override val windowLayoutParams = commonWindowLayoutParams.apply {
@@ -140,13 +139,15 @@ class MediaTttChipControllerReceiver @Inject constructor(
         )
     }
 
-    override fun updateChipView(chipInfo: ChipReceiverInfo, currentChipView: ViewGroup) {
-        setIcon(
+    override fun updateChipView(newChipInfo: ChipReceiverInfo, currentChipView: ViewGroup) {
+        super.updateChipView(newChipInfo, currentChipView)
+        val iconName = setIcon(
                 currentChipView,
-                chipInfo.routeInfo.packageName,
-                chipInfo.appIconDrawableOverride,
-                chipInfo.appNameOverride
+                newChipInfo.routeInfo.clientPackageName,
+                newChipInfo.appIconDrawableOverride,
+                newChipInfo.appNameOverride
         )
+        currentChipView.contentDescription = iconName
     }
 
     override fun animateChipIn(chipView: ViewGroup) {
@@ -159,6 +160,8 @@ class MediaTttChipControllerReceiver @Inject constructor(
                 .alpha(1f)
                 .setDuration(5.frames)
                 .start()
+        // Using withEndAction{} doesn't apply a11y focus when screen is unlocked.
+        appIconView.postOnAnimation { chipView.requestAccessibilityFocus() }
         startRipple(chipView.requireViewById(R.id.ripple))
     }
 
@@ -201,10 +204,10 @@ class MediaTttChipControllerReceiver @Inject constructor(
         val height = windowBounds.height()
         val width = windowBounds.width()
 
-        rippleView.radius = height / 5f
+        val maxDiameter = height / 2.5f
+        rippleView.setMaxSize(maxDiameter, maxDiameter)
         // Center the ripple on the bottom of the screen in the middle.
-        rippleView.origin = PointF(/* x= */ width / 2f, /* y= */ height.toFloat())
-
+        rippleView.setCenter(width * 0.5f, height.toFloat())
         val color = Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColorAccent)
         val colorWithAlpha = ColorUtils.setAlphaComponent(color, 70)
         rippleView.setColor(colorWithAlpha)

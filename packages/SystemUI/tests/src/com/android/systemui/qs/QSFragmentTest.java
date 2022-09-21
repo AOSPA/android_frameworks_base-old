@@ -32,8 +32,6 @@ import android.app.Fragment;
 import android.content.Context;
 import android.graphics.Rect;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 import android.view.LayoutInflater;
@@ -42,44 +40,32 @@ import android.view.ViewGroup;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.internal.logging.UiEventLogger;
 import com.android.keyguard.BouncerPanelExpansionCalculator;
 import com.android.systemui.R;
 import com.android.systemui.SysuiBaseFragmentTest;
 import com.android.systemui.animation.ShadeInterpolation;
-import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FakeFeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.media.MediaHost;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.customize.QSCustomizerController;
 import com.android.systemui.qs.dagger.QSFragmentComponent;
-import com.android.systemui.qs.external.CustomTileStatePersister;
-import com.android.systemui.qs.external.TileLifecycleManager;
 import com.android.systemui.qs.external.TileServiceRequestController;
-import com.android.systemui.qs.logging.QSLogger;
-import com.android.systemui.qs.tileimpl.QSFactoryImpl;
-import com.android.systemui.settings.UserTracker;
-import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsViewModel;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.phone.AutoTileManager;
-import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
-import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
-import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.animation.UniqueObjectHostView;
-import com.android.systemui.util.settings.SecureSettings;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
-import java.util.Optional;
 
 @RunWith(AndroidTestingRunner.class)
 @RunWithLooper(setAsMainLooper = true)
@@ -125,33 +111,10 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
         mFragments.dispatchResume();
         processAllMessages();
 
-        QSTileHost host =
-                new QSTileHost(
-                        mContext,
-                        mock(StatusBarIconController.class),
-                        mock(QSFactoryImpl.class),
-                        new Handler(),
-                        Looper.myLooper(),
-                        mock(PluginManager.class),
-                        mock(TunerService.class),
-                        () -> mock(AutoTileManager.class),
-                        mock(DumpManager.class),
-                        mock(BroadcastDispatcher.class),
-                        Optional.of(mock(CentralSurfaces.class)),
-                        mock(QSLogger.class),
-                        mock(UiEventLogger.class),
-                        mock(UserTracker.class),
-                        mock(SecureSettings.class),
-                        mock(CustomTileStatePersister.class),
-                        mTileServiceRequestControllerBuilder,
-                        mock(TileLifecycleManager.Factory.class));
-
         qs.setListening(true);
         processAllMessages();
 
         qs.setListening(false);
-        processAllMessages();
-        host.destroy();
         processAllMessages();
     }
 
@@ -242,6 +205,40 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
         transitionProgress = 0.7f;
         fragment.setTransitionToFullShadeAmount(transitionPxAmount, transitionProgress);
         assertThat(mQsFragmentView.getAlpha()).isEqualTo(1);
+    }
+
+    @Test
+    public void setQsExpansion_inSplitShade_setsFooterActionsExpansion_basedOnPanelExpFraction() {
+        // Random test values without any meaning. They just have to be different from each other.
+        float expansion = 0.123f;
+        float panelExpansionFraction = 0.321f;
+        float proposedTranslation = 456f;
+        float squishinessFraction = 0.987f;
+
+        QSFragment fragment = resumeAndGetFragment();
+        enableSplitShade();
+
+        fragment.setQsExpansion(expansion, panelExpansionFraction, proposedTranslation,
+                squishinessFraction);
+
+        verify(mQSFooterActionController).setExpansion(panelExpansionFraction);
+    }
+
+    @Test
+    public void setQsExpansion_notInSplitShade_setsFooterActionsExpansion_basedOnExpansion() {
+        // Random test values without any meaning. They just have to be different from each other.
+        float expansion = 0.123f;
+        float panelExpansionFraction = 0.321f;
+        float proposedTranslation = 456f;
+        float squishinessFraction = 0.987f;
+
+        QSFragment fragment = resumeAndGetFragment();
+        disableSplitShade();
+
+        fragment.setQsExpansion(expansion, panelExpansionFraction, proposedTranslation,
+                squishinessFraction);
+
+        verify(mQSFooterActionController).setExpansion(expansion);
     }
 
     @Test
@@ -396,6 +393,8 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
         setUpMedia();
         setUpOther();
 
+        FakeFeatureFlags featureFlags = new FakeFeatureFlags();
+        featureFlags.set(Flags.NEW_FOOTER_ACTIONS, false);
         return new QSFragment(
                 new RemoteInputQuickSettingsDisabler(
                         context, commandQueue, mock(ConfigurationController.class)),
@@ -408,7 +407,10 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
                 mQsComponentFactory,
                 mock(QSFragmentDisableFlagsLogger.class),
                 mFalsingManager,
-                mock(DumpManager.class));
+                mock(DumpManager.class),
+                featureFlags,
+                mock(NewFooterActionsController.class),
+                mock(FooterActionsViewModel.Factory.class));
     }
 
     private void setUpOther() {

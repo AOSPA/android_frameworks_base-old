@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.ActivityOptions.ANIM_OPEN_CROSS_PROFILE_APPS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
@@ -31,13 +32,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_IS_RECENTS;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_LOCKED;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
@@ -54,6 +49,7 @@ import static android.window.TransitionInfo.FLAG_OCCLUDES_KEYGUARD;
 import static android.window.TransitionInfo.FLAG_SHOW_WALLPAPER;
 import static android.window.TransitionInfo.FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
 import static android.window.TransitionInfo.FLAG_TRANSLUCENT;
+import static android.window.TransitionInfo.FLAG_WILL_IME_SHOWN;
 
 import static com.android.server.wm.ActivityRecord.State.RESUMED;
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_RECENTS_ANIM;
@@ -67,11 +63,11 @@ import android.app.ActivityManager;
 import android.content.pm.ActivityInfo;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.hardware.HardwareBuffer;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.RemoteException;
-import android.os.SystemClock;
 import android.os.Trace;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -79,7 +75,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
-import android.view.animation.Animation;
 import android.window.RemoteTransition;
 import android.window.TransitionInfo;
 
@@ -204,6 +199,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     /** @see #setCanPipOnFinish */
     private boolean mCanPipOnFinish = true;
 
+    private boolean mIsSeamlessRotation = false;
+    private IContainerFreezer mContainerFreezer = null;
+
     Transition(@TransitionType int type, @TransitionFlags int flags,
             TransitionController controller, BLASTSyncEngine syncEngine) {
         mType = type;
@@ -264,10 +262,31 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         return mTargetDisplays.contains(dc);
     }
 
+    /** Set a transition to be a seamless-rotation. */
     void setSeamlessRotation(@NonNull WindowContainer wc) {
         final ChangeInfo info = mChanges.get(wc);
         if (info == null) return;
         info.mFlags = info.mFlags | ChangeInfo.FLAG_SEAMLESS_ROTATION;
+        onSeamlessRotating(wc.getDisplayContent());
+    }
+
+    /**
+     * Called when it's been determined that this is transition is a seamless rotation. This should
+     * be called before any WM changes have happened.
+     */
+    void onSeamlessRotating(@NonNull DisplayContent dc) {
+        // Don't need to do anything special if everything is using BLAST sync already.
+        if (mSyncEngine.getSyncSet(mSyncId).mSyncMethod == BLASTSyncEngine.METHOD_BLAST) return;
+        if (mContainerFreezer == null) {
+            mContainerFreezer = new ScreenshotFreezer();
+        }
+        mIsSeamlessRotation = true;
+        final WindowState top = dc.getDisplayPolicy().getTopFullscreenOpaqueWindow();
+        if (top != null) {
+            top.mSyncMethodOverride = BLASTSyncEngine.METHOD_BLAST;
+            ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Override sync-method for %s "
+                    + "because seamless rotating", top.getName());
+        }
     }
 
     /**
@@ -282,6 +301,11 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             final ChangeInfo info = mChanges.get(curr);
             info.mFlags = info.mFlags | ChangeInfo.FLAG_TRANSIENT_LAUNCH;
         }
+    }
+
+    /** Only for testing. */
+    void setContainerFreezer(IContainerFreezer freezer) {
+        mContainerFreezer = freezer;
     }
 
     @TransitionState
@@ -313,13 +337,18 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         return mState == STATE_COLLECTING || mState == STATE_STARTED;
     }
 
-    /** Starts collecting phase. Once this starts, all relevant surface operations are sync. */
+    @VisibleForTesting
     void startCollecting(long timeoutMs) {
+        startCollecting(timeoutMs, TransitionController.SYNC_METHOD);
+    }
+
+    /** Starts collecting phase. Once this starts, all relevant surface operations are sync. */
+    void startCollecting(long timeoutMs, int method) {
         if (mState != STATE_PENDING) {
             throw new IllegalStateException("Attempting to re-use a transition");
         }
         mState = STATE_COLLECTING;
-        mSyncId = mSyncEngine.startSyncSet(this, timeoutMs, TAG);
+        mSyncId = mSyncEngine.startSyncSet(this, timeoutMs, TAG, method);
 
         mController.mTransitionTracer.logState(this);
     }
@@ -411,6 +440,37 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 + " %s", mSyncId, wc);
         collect(wc);
         mChanges.get(wc).mExistenceChanged = true;
+    }
+
+    /**
+     * Records that a particular container is changing visibly (ie. something about it is changing
+     * while it remains visible). This only effects windows that are already in the collecting
+     * transition.
+     */
+    void collectVisibleChange(WindowContainer wc) {
+        if (mSyncEngine.getSyncSet(mSyncId).mSyncMethod == BLASTSyncEngine.METHOD_BLAST) {
+            // All windows are synced already.
+            return;
+        }
+        if (!isInTransition(wc)) return;
+
+        if (mContainerFreezer == null) {
+            mContainerFreezer = new ScreenshotFreezer();
+        }
+        Transition.ChangeInfo change = mChanges.get(wc);
+        if (change == null || !change.mVisible || !wc.isVisibleRequested()) return;
+        // Note: many more tests have already been done by caller.
+        mContainerFreezer.freeze(wc, change.mAbsoluteBounds);
+    }
+
+    /**
+     * @return {@code true} if `wc` is a participant or is a descendant of one.
+     */
+    boolean isInTransition(WindowContainer wc) {
+        for (WindowContainer p = wc; p != null; p = p.getParent()) {
+            if (mParticipants.contains(p)) return true;
+        }
+        return false;
     }
 
     /**
@@ -530,6 +590,10 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 displays.add(target.getDisplayContent());
             }
         }
+        // Remove screenshot layers if necessary
+        if (mContainerFreezer != null) {
+            mContainerFreezer.cleanUp(t);
+        }
         // Need to update layers on involved displays since they were all paused while
         // the animation played. This puts the layers back into the correct order.
         mController.mBuildingFinishLayers = true;
@@ -621,9 +685,11 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             throw new IllegalStateException("Can't finish a non-playing transition " + mSyncId);
         }
 
+        boolean hasParticipatedDisplay = false;
         // Commit all going-invisible containers
         for (int i = 0; i < mParticipants.size(); ++i) {
-            final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
+            final WindowContainer<?> participant = mParticipants.valueAt(i);
+            final ActivityRecord ar = participant.asActivityRecord();
             if (ar != null) {
                 boolean visibleAtTransitionEnd = mVisibleAtTransitionEndTokens.contains(ar);
                 // We need both the expected visibility AND current requested-visibility to be
@@ -655,8 +721,13 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                     // Legacy dispatch relies on this (for now).
                     ar.mEnteringAnimation = visibleAtTransitionEnd;
                 }
+                continue;
             }
-            final WallpaperWindowToken wt = mParticipants.valueAt(i).asWallpaperToken();
+            if (participant.asDisplayContent() != null) {
+                hasParticipatedDisplay = true;
+                continue;
+            }
+            final WallpaperWindowToken wt = participant.asWallpaperToken();
             if (wt != null) {
                 final boolean visibleAtTransitionEnd = mVisibleAtTransitionEndTokens.contains(wt);
                 if (!visibleAtTransitionEnd && !wt.isVisibleRequested()) {
@@ -736,6 +807,12 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
         mState = STATE_FINISHED;
         mController.mTransitionTracer.logState(this);
+        // Rotation change may be deferred while there is a display change transition, so check
+        // again in case there is a new pending change.
+        if (hasParticipatedDisplay && !mController.useShellTransitionsRotation()) {
+            mController.mAtm.mWindowManager.updateRotation(false /* alwaysSendConfiguration */,
+                    false /* forceRelayout */);
+        }
     }
 
     void abort() {
@@ -803,6 +880,19 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 transaction);
         if (mOverrideOptions != null) {
             info.setAnimationOptions(mOverrideOptions);
+            if (mOverrideOptions.getType() == ANIM_OPEN_CROSS_PROFILE_APPS) {
+                for (int i = 0; i < mTargets.size(); ++i) {
+                    final TransitionInfo.Change c = info.getChanges().get(i);
+                    final ActivityRecord ar = mTargets.get(i).asActivityRecord();
+                    if (ar == null || c.getMode() != TRANSIT_OPEN) continue;
+                    int flags = c.getFlags();
+                    flags |= ar.mUserId == ar.mWmService.mCurrentUserId
+                            ? TransitionInfo.FLAG_CROSS_PROFILE_OWNER_THUMBNAIL
+                            : TransitionInfo.FLAG_CROSS_PROFILE_WORK_THUMBNAIL;
+                    c.setFlags(flags);
+                    break;
+                }
+            }
         }
 
         // TODO(b/188669821): Move to animation impl in shell.
@@ -1052,36 +1142,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
     private void handleNonAppWindowsInTransition(@NonNull DisplayContent dc,
             @TransitionType int transit, @TransitionFlags int flags) {
-        if ((transit == TRANSIT_KEYGUARD_GOING_AWAY
-                || (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY) != 0)
-                && !WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation) {
-            if ((flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0
-                    && (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION) == 0
-                    && (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION) == 0) {
-                Animation anim = mController.mAtm.mWindowManager.mPolicy
-                        .createKeyguardWallpaperExit(
-                                (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE) != 0);
-                if (anim != null) {
-                    anim.scaleCurrentDuration(
-                            mController.mAtm.mWindowManager.getTransitionAnimationScaleLocked());
-                    dc.mWallpaperController.startWallpaperAnimation(anim);
-                }
-            }
-            dc.startKeyguardExitOnNonAppWindows(
-                    (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0,
-                    (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE) != 0,
-                    (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION) != 0);
-            if (!WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation) {
-                // When remote animation is enabled for KEYGUARD_GOING_AWAY transition, SysUI
-                // receives IRemoteAnimationRunner#onAnimationStart to start animation, so we don't
-                // need to call IKeyguardService#keyguardGoingAway here.
-                mController.mAtm.mWindowManager.mPolicy.startKeyguardExitAnimation(
-                        SystemClock.uptimeMillis(), 0 /* duration */);
-            }
-        }
         if ((flags & TRANSIT_FLAG_KEYGUARD_LOCKED) != 0) {
             mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange(
-                    true /* keyguardOccludingStarted */);
+                    false /* notify */);
         }
     }
 
@@ -1149,6 +1212,26 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         return false;
     }
 
+    private static boolean isTranslucent(@NonNull WindowContainer wc) {
+        final TaskFragment taskFragment = wc.asTaskFragment();
+        if (taskFragment != null) {
+            if (taskFragment.isTranslucent(null /* starting */)) {
+                return true;
+            }
+            final TaskFragment adjacentTaskFragment = taskFragment.getAdjacentTaskFragment();
+            if (adjacentTaskFragment != null) {
+                // Treat the TaskFragment as translucent if its adjacent TF is, otherwise everything
+                // behind two adjacent TaskFragments are occluded.
+                return adjacentTaskFragment.isTranslucent(null /* starting */);
+            }
+        }
+        // TODO(b/172695805): hierarchical check. This is non-trivial because for containers
+        //                    it is effected by child visibility but needs to work even
+        //                    before visibility is committed. This means refactoring some
+        //                    checks to use requested visibility.
+        return !wc.fillsParent();
+    }
+
     /**
      * Under some conditions (eg. all visible targets within a parent container are transitioning
      * the same way) the transition can be "promoted" to the parent container. This means an
@@ -1171,7 +1254,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             return false;
         }
 
-        final @TransitionInfo.TransitionMode int mode = changes.get(target).getTransitMode(target);
+        final ChangeInfo change = changes.get(target);
+        if (change.mStartParent != null && target.getParent() != change.mStartParent) {
+            // When a window is reparented, the state change won't fit into any of the parents.
+            // Don't promote such change so that we can animate the reparent if needed.
+            return false;
+        }
+
+        final @TransitionInfo.TransitionMode int mode = change.getTransitMode(target);
         for (int i = parent.getChildCount() - 1; i >= 0; --i) {
             final WindowContainer<?> sibling = parent.getChildAt(i);
             if (target == sibling) continue;
@@ -1311,14 +1401,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                     // Intermediate parents must be those that has window to be managed by Shell.
                     continue;
                 }
-                if (parentChange.mParent != null && !skipIntermediateReports) {
-                    changes.get(wc).mParent = p;
+                if (parentChange.mEndParent != null && !skipIntermediateReports) {
+                    changes.get(wc).mEndParent = p;
                     // The chain above the parent was processed.
                     break;
                 }
                 if (targetList.contains(p)) {
                     if (skipIntermediateReports) {
-                        changes.get(wc).mParent = p;
+                        changes.get(wc).mEndParent = p;
                     } else {
                         intermediates.add(p);
                     }
@@ -1330,10 +1420,10 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             }
             if (!foundParentInTargets || intermediates.isEmpty()) continue;
             // Add any always-report parents along the way.
-            changes.get(wc).mParent = intermediates.get(0);
+            changes.get(wc).mEndParent = intermediates.get(0);
             for (int j = 0; j < intermediates.size() - 1; j++) {
                 final WindowContainer<?> intermediate = intermediates.get(j);
-                changes.get(intermediate).mParent = intermediates.get(j + 1);
+                changes.get(intermediate).mEndParent = intermediates.get(j + 1);
                 targets.add(intermediate);
             }
         }
@@ -1446,8 +1536,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                     target.mRemoteToken != null ? target.mRemoteToken.toWindowContainerToken()
                             : null, getLeashSurface(target, startT));
             // TODO(shell-transitions): Use leash for non-organized windows.
-            if (info.mParent != null) {
-                change.setParent(info.mParent.mRemoteToken.toWindowContainerToken());
+            if (info.mEndParent != null) {
+                change.setParent(info.mEndParent.mRemoteToken.toWindowContainerToken());
             }
             change.setMode(info.getTransitMode(target));
             change.setStartAbsBounds(info.mAbsoluteBounds);
@@ -1600,6 +1690,19 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         return mainWin.getAttrs().rotationAnimation;
     }
 
+    /** Applies the new configuration and returns {@code true} if there is a display change. */
+    boolean applyDisplayChangeIfNeeded() {
+        boolean changed = false;
+        for (int i = mParticipants.size() - 1; i >= 0; --i) {
+            final WindowContainer<?> wc = mParticipants.valueAt(i);
+            final DisplayContent dc = wc.asDisplayContent();
+            if (dc == null || !mChanges.get(dc).hasChanged(dc)) continue;
+            dc.sendNewConfiguration();
+            changed = true;
+        }
+        return changed;
+    }
+
     boolean getLegacyIsReady() {
         return isCollecting() && mSyncId >= 0;
     }
@@ -1630,7 +1733,9 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         @interface Flag {}
 
         // Usually "post" change state.
-        WindowContainer mParent;
+        WindowContainer mEndParent;
+        // Parent before change state.
+        WindowContainer mStartParent;
 
         // State tracking
         boolean mExistenceChanged = false;
@@ -1651,6 +1756,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             mAbsoluteBounds.set(origState.getBounds());
             mShowWallpaper = origState.showWallpaper();
             mRotation = origState.getWindowConfiguration().getRotation();
+            mStartParent = origState.getParent();
         }
 
         @VisibleForTesting
@@ -1701,19 +1807,19 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             if (mShowWallpaper || wc.showWallpaper()) {
                 flags |= FLAG_SHOW_WALLPAPER;
             }
-            if (!wc.fillsParent()) {
-                // TODO(b/172695805): hierarchical check. This is non-trivial because for containers
-                //                    it is effected by child visibility but needs to work even
-                //                    before visibility is committed. This means refactoring some
-                //                    checks to use requested visibility.
+            if (isTranslucent(wc)) {
                 flags |= FLAG_TRANSLUCENT;
             }
             final Task task = wc.asTask();
             if (task != null && task.voiceSession != null) {
                 flags |= FLAG_IS_VOICE_INTERACTION;
             }
-            if (task != null && task.isTranslucent(null)) {
-                flags |= FLAG_TRANSLUCENT;
+            if (task != null) {
+                final ActivityRecord topActivity = task.getTopNonFinishingActivity();
+                if (topActivity != null && topActivity.mStartingData != null
+                        && topActivity.mStartingData.hasImeSurface()) {
+                    flags |= FLAG_WILL_IME_SHOWN;
+                }
             }
             final ActivityRecord record = wc.asActivityRecord();
             if (record != null) {
@@ -1753,11 +1859,15 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
      */
     void deferTransitionReady() {
         ++mReadyTracker.mDeferReadyDepth;
+        // Make sure it wait until #continueTransitionReady() is called.
+        mSyncEngine.setReady(mSyncId, false);
     }
 
     /** This undoes one call to {@link #deferTransitionReady}. */
     void continueTransitionReady() {
         --mReadyTracker.mDeferReadyDepth;
+        // Apply ready in case it is waiting for the previous defer call.
+        applyReady();
     }
 
     /**
@@ -1921,6 +2031,113 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 sortedTargets.add(arrayByZ.valueAt(i));
             }
             return sortedTargets;
+        }
+    }
+
+    /**
+     * Interface for freezing a container's content during sync preparation. Really just one impl
+     * but broken into an interface for testing (since you can't take screenshots in unit tests).
+     */
+    interface IContainerFreezer {
+        /**
+         * Makes sure a particular window is "frozen" for the remainder of a sync.
+         *
+         * @return whether the freeze was successful. It fails if `wc` is already in a frozen window
+         *         or is not visible/ready.
+         */
+        boolean freeze(@NonNull WindowContainer wc, @NonNull Rect bounds);
+
+        /** Populates `t` with operations that clean-up any state created to set-up the freeze. */
+        void cleanUp(SurfaceControl.Transaction t);
+    }
+
+    /**
+     * Freezes container content by taking a screenshot. Because screenshots are heavy, usage of
+     * any container "freeze" is currently explicit. WM code needs to be prudent about which
+     * containers to freeze.
+     */
+    @VisibleForTesting
+    private class ScreenshotFreezer implements IContainerFreezer {
+        /** Values are the screenshot "surfaces" or null if it was frozen via BLAST override. */
+        private final ArrayMap<WindowContainer, SurfaceControl> mSnapshots = new ArrayMap<>();
+
+        /** Takes a screenshot and puts it at the top of the container's surface. */
+        @Override
+        public boolean freeze(@NonNull WindowContainer wc, @NonNull Rect bounds) {
+            if (!wc.isVisibleRequested()) return false;
+
+            // Check if any parents have already been "frozen". If so, `wc` is already part of that
+            // snapshot, so just skip it.
+            for (WindowContainer p = wc; p != null; p = p.getParent()) {
+                if (mSnapshots.containsKey(p)) return false;
+            }
+
+            if (mIsSeamlessRotation) {
+                WindowState top = wc.getDisplayContent() == null ? null
+                        : wc.getDisplayContent().getDisplayPolicy().getTopFullscreenOpaqueWindow();
+                if (top != null && (top == wc || top.isDescendantOf(wc))) {
+                    // Don't use screenshots for seamless windows: these will use BLAST even if not
+                    // BLAST mode.
+                    mSnapshots.put(wc, null);
+                    return true;
+                }
+            }
+
+            ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Screenshotting %s [%s]",
+                    wc.toString(), bounds.toString());
+
+            Rect cropBounds = new Rect(bounds);
+            cropBounds.offsetTo(0, 0);
+            SurfaceControl.LayerCaptureArgs captureArgs =
+                    new SurfaceControl.LayerCaptureArgs.Builder(wc.getSurfaceControl())
+                            .setSourceCrop(cropBounds)
+                            .setCaptureSecureLayers(true)
+                            .setAllowProtected(true)
+                            .build();
+            SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
+                    SurfaceControl.captureLayers(captureArgs);
+            final HardwareBuffer buffer = screenshotBuffer == null ? null
+                    : screenshotBuffer.getHardwareBuffer();
+            if (buffer == null || buffer.getWidth() <= 1 || buffer.getHeight() <= 1) {
+                // This can happen when display is not ready.
+                Slog.w(TAG, "Failed to capture screenshot for " + wc);
+                return false;
+            }
+            SurfaceControl snapshotSurface = wc.makeAnimationLeash()
+                    .setName("transition snapshot: " + wc.toString())
+                    .setOpaque(true)
+                    .setParent(wc.getSurfaceControl())
+                    .setSecure(screenshotBuffer.containsSecureLayers())
+                    .setCallsite("Transition.ScreenshotSync")
+                    .setBLASTLayer()
+                    .build();
+            mSnapshots.put(wc, snapshotSurface);
+            SurfaceControl.Transaction t = wc.mWmService.mTransactionFactory.get();
+
+            t.setBuffer(snapshotSurface, buffer);
+            t.setDataSpace(snapshotSurface, screenshotBuffer.getColorSpace().getDataSpace());
+            t.show(snapshotSurface);
+
+            // Place it on top of anything else in the container.
+            t.setLayer(snapshotSurface, Integer.MAX_VALUE);
+            t.apply();
+            t.close();
+
+            // Detach the screenshot on the sync transaction (the screenshot is just meant to
+            // freeze the window until the sync transaction is applied (with all its other
+            // corresponding changes), so this is how we unfreeze it.
+            wc.getSyncTransaction().reparent(snapshotSurface, null /* newParent */);
+            return true;
+        }
+
+        @Override
+        public void cleanUp(SurfaceControl.Transaction t) {
+            for (int i = 0; i < mSnapshots.size(); ++i) {
+                SurfaceControl snap = mSnapshots.valueAt(i);
+                // May be null if it was frozen via BLAST override.
+                if (snap == null) continue;
+                t.remove(snap);
+            }
         }
     }
 }

@@ -31,6 +31,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
+import android.content.pm.UserProperties;
 import android.content.res.Resources;
 import android.os.Bundle;
 import android.os.UserHandle;
@@ -266,6 +267,8 @@ public final class UserManagerTest {
         }
 
         assertThat(createUser("User beyond", userType, 0)).isNull();
+
+        assertThat(mUserManager.canAddMoreUsers(mUserManager.USER_TYPE_FULL_GUEST)).isTrue();
     }
 
     @MediumTest
@@ -467,8 +470,10 @@ public final class UserManagerTest {
     @MediumTest
     @Test
     public void testThereCanBeOnlyOneGuest() throws Exception {
+        assertThat(mUserManager.canAddMoreUsers(mUserManager.USER_TYPE_FULL_GUEST)).isTrue();
         UserInfo userInfo1 = createUser("Guest 1", UserInfo.FLAG_GUEST);
         assertThat(userInfo1).isNotNull();
+        assertThat(mUserManager.canAddMoreUsers(mUserManager.USER_TYPE_FULL_GUEST)).isFalse();
         UserInfo userInfo2 = createUser("Guest 2", UserInfo.FLAG_GUEST);
         assertThat(userInfo2).isNull();
     }
@@ -558,6 +563,33 @@ public final class UserManagerTest {
                 "android", 0, asHandle(userId)));
         assertThat(userManagerForUser.isUserOfType(userTypeDetails.getName())).isTrue();
         assertThat(userManagerForUser.isProfile()).isEqualTo(userTypeDetails.isProfile());
+    }
+
+    /** Test that UserManager returns the correct UserProperties for a new managed profile. */
+    @MediumTest
+    @Test
+    public void testUserProperties() throws Exception {
+        assumeManagedUsersSupported();
+
+        // Get the default properties for a user type.
+        final UserTypeDetails userTypeDetails =
+                UserTypeFactory.getUserTypes().get(UserManager.USER_TYPE_PROFILE_MANAGED);
+        assertWithMessage("No %s type on device", UserManager.USER_TYPE_PROFILE_MANAGED)
+                .that(userTypeDetails).isNotNull();
+        final UserProperties typeProps = userTypeDetails.getDefaultUserPropertiesReference();
+
+        // Create an actual user (of this user type) and get its properties.
+        final int primaryUserId = mUserManager.getPrimaryUser().id;
+        final UserInfo userInfo = createProfileForUser("Managed",
+                UserManager.USER_TYPE_PROFILE_MANAGED, primaryUserId);
+        assertThat(userInfo).isNotNull();
+        final int userId = userInfo.id;
+        final UserProperties userProps = mUserManager.getUserProperties(UserHandle.of(userId));
+
+        // Check that this new user has the expected properties (relative to the defaults)
+        // provided that the test caller has the necessary permissions.
+        assertThat(userProps.getShowInLauncher()).isEqualTo(typeProps.getShowInLauncher());
+        assertThrows(SecurityException.class, userProps::getStartWithParent);
     }
 
     // Make sure only max managed profiles can be created

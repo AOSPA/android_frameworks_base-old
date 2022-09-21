@@ -29,9 +29,13 @@ import android.annotation.CallSuper;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.ContentResolver;
 import android.provider.DeviceConfig;
+import android.provider.Settings;
 import android.util.IndentingPrintWriter;
 import android.util.KeyValueListParser;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -63,6 +67,9 @@ public abstract class EconomicPolicy {
     static final int REGULATION_WEALTH_RECLAMATION = TYPE_REGULATION | 2;
     static final int REGULATION_PROMOTION = TYPE_REGULATION | 3;
     static final int REGULATION_DEMOTION = TYPE_REGULATION | 4;
+    /** App is fully restricted from running in the background. */
+    static final int REGULATION_BG_RESTRICTED = TYPE_REGULATION | 5;
+    static final int REGULATION_BG_UNRESTRICTED = TYPE_REGULATION | 6;
 
     static final int REWARD_NOTIFICATION_SEEN = TYPE_REWARD | 0;
     static final int REWARD_NOTIFICATION_INTERACTION = TYPE_REWARD | 1;
@@ -165,9 +172,11 @@ public abstract class EconomicPolicy {
         }
     }
 
+    protected final InternalResourceService mIrs;
     private static final Modifier[] COST_MODIFIER_BY_INDEX = new Modifier[NUM_COST_MODIFIERS];
 
     EconomicPolicy(@NonNull InternalResourceService irs) {
+        mIrs = irs;
         for (int mId : getCostModifiers()) {
             initModifier(mId, irs);
         }
@@ -204,7 +213,7 @@ public abstract class EconomicPolicy {
      * exists to ensure that no single app accumulate all available resources and increases fairness
      * for all apps.
      */
-    abstract long getMaxSatiatedBalance();
+    abstract long getMaxSatiatedBalance(int userId, @NonNull String pkgName);
 
     /**
      * Returns the maximum number of cakes that should be consumed during a full 100% discharge
@@ -236,7 +245,7 @@ public abstract class EconomicPolicy {
     @NonNull
     final Cost getCostOfAction(int actionId, int userId, @NonNull String pkgName) {
         final Action action = getAction(actionId);
-        if (action == null) {
+        if (action == null || mIrs.isVip(userId, pkgName)) {
             return new Cost(0, 0);
         }
         long ctp = action.costToProduce;
@@ -304,6 +313,10 @@ public abstract class EconomicPolicy {
     @EventType
     static int getEventType(int eventId) {
         return eventId & MASK_TYPE;
+    }
+
+    static boolean isReward(int eventId) {
+        return getEventType(eventId) == TYPE_REWARD;
     }
 
     @NonNull
@@ -392,6 +405,10 @@ public abstract class EconomicPolicy {
                 return "PROMOTION";
             case REGULATION_DEMOTION:
                 return "DEMOTION";
+            case REGULATION_BG_RESTRICTED:
+                return "BG_RESTRICTED";
+            case REGULATION_BG_UNRESTRICTED:
+                return "BG_UNRESTRICTED";
         }
         return "UNKNOWN_REGULATION:" + Integer.toHexString(eventId);
     }
@@ -415,18 +432,34 @@ public abstract class EconomicPolicy {
 
     protected long getConstantAsCake(@NonNull KeyValueListParser parser,
             @Nullable DeviceConfig.Properties properties, String key, long defaultValCake) {
+        return getConstantAsCake(parser, properties, key, defaultValCake, 0);
+    }
+
+    protected long getConstantAsCake(@NonNull KeyValueListParser parser,
+            @Nullable DeviceConfig.Properties properties, String key, long defaultValCake,
+            long minValCake) {
         // Don't cross the streams! Mixing Settings/local user config changes with DeviceConfig
         // config can cause issues since the scales may be different, so use one or the other.
         if (parser.size() > 0) {
             // User settings take precedence. Just stick with the Settings constants, even if there
             // are invalid values. It's not worth the time to evaluate all the key/value pairs to
             // make sure there are valid ones before deciding.
-            return parseCreditValue(parser.getString(key, null), defaultValCake);
+            return Math.max(minValCake,
+                parseCreditValue(parser.getString(key, null), defaultValCake));
         }
         if (properties != null) {
-            return parseCreditValue(properties.getString(key, null), defaultValCake);
+            return Math.max(minValCake,
+                parseCreditValue(properties.getString(key, null), defaultValCake));
         }
-        return defaultValCake;
+        return Math.max(minValCake, defaultValCake);
+    }
+
+    @VisibleForTesting
+    static class Injector {
+        @Nullable
+        String getSettingsGlobalString(@NonNull ContentResolver resolver, @NonNull String name) {
+            return Settings.Global.getString(resolver, name);
+        }
     }
 
     protected static void dumpActiveModifiers(IndentingPrintWriter pw) {

@@ -1133,7 +1133,7 @@ public abstract class WallpaperService extends Service {
 
                         if (mSession.addToDisplay(mWindow, mLayout, View.VISIBLE,
                                 mDisplay.getDisplayId(), mRequestedVisibilities, inputChannel,
-                                mInsetsState, mTempControls, new Rect()) < 0) {
+                                mInsetsState, mTempControls, new Rect(), new float[1]) < 0) {
                             Log.w(TAG, "Failed to add window while updating wallpaper surface.");
                             return;
                         }
@@ -1153,8 +1153,8 @@ public abstract class WallpaperService extends Service {
                         mLayout.surfaceInsets.set(0, 0, 0, 0);
                     }
                     final int relayoutResult = mSession.relayout(mWindow, mLayout, mWidth, mHeight,
-                            View.VISIBLE, 0, mWinFrames, mMergedConfiguration, mSurfaceControl,
-                            mInsetsState, mTempControls, mSyncSeqIdBundle);
+                            View.VISIBLE, 0, 0, 0, mWinFrames, mMergedConfiguration,
+                            mSurfaceControl, mInsetsState, mTempControls, mSyncSeqIdBundle);
 
                     final int transformHint = SurfaceControl.rotationToBufferTransform(
                             (mDisplayInstallOrientation + mDisplay.getRotation()) % 4);

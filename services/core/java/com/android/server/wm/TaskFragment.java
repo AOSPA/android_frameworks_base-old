@@ -100,6 +100,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.am.HostingRecord;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -167,6 +168,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * indicate that an Activity can't be embedded because the Activity is started on a new task.
      */
     static final int EMBEDDING_DISALLOWED_NEW_TASK = 3;
+    /**
+     * An embedding check result of
+     * {@link ActivityStarter#canEmbedActivity(TaskFragment, ActivityRecord, Task)}:
+     * indicate that an Activity can't be embedded because the Activity is started on a new
+     * TaskFragment, e.g. start an Activity on a new TaskFragment for result.
+     */
+    static final int EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT = 4;
 
     /**
      * Embedding check results of {@link #isAllowedToEmbedActivity(ActivityRecord)} or
@@ -177,6 +185,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             EMBEDDING_DISALLOWED_UNTRUSTED_HOST,
             EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION,
             EMBEDDING_DISALLOWED_NEW_TASK,
+            EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT,
     })
     @interface EmbeddingCheckResult {}
 
@@ -399,6 +408,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mTaskFragmentOrganizerProcessName = processName;
     }
 
+    void onTaskFragmentOrganizerRemoved() {
+        mTaskFragmentOrganizer = null;
+    }
+
     /** Whether this TaskFragment is organized by the given {@code organizer}. */
     boolean hasTaskFragmentOrganizer(ITaskFragmentOrganizer organizer) {
         return organizer != null && mTaskFragmentOrganizer != null
@@ -454,7 +467,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         final ActivityRecord prevR = mResumedActivity;
         mResumedActivity = r;
-        mTaskSupervisor.updateTopResumedActivityIfNeeded();
+        mTaskSupervisor.updateTopResumedActivityIfNeeded(reason);
         if (r == null && prevR.mDisplayContent != null
                 && prevR.mDisplayContent.getFocusedRootTask() == null) {
             // Only need to notify DWPC when no activity will resume.
@@ -573,9 +586,20 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (!isAllowedToEmbedActivityInUntrustedMode(a)
                 && !isAllowedToEmbedActivityInTrustedMode(a, uid)) {
             return EMBEDDING_DISALLOWED_UNTRUSTED_HOST;
-        } else if (smallerThanMinDimension(a)) {
+        }
+
+        if (smallerThanMinDimension(a)) {
             return EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION;
         }
+
+        // Cannot embed activity across TaskFragments for activity result.
+        // If the activity that started for result is finishing, it's likely that this start mode
+        // is used to place an activity in the same task. Since the finishing activity won't be
+        // able to get the results, so it's OK to embed in a different TaskFragment.
+        if (a.resultTo != null && !a.resultTo.finishing && a.resultTo.getTaskFragment() != this) {
+            return EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT;
+        }
+
         return EMBEDDING_ALLOWED;
     }
 
@@ -723,6 +747,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return false;
     }
 
+    protected boolean isForceTranslucent() {
+        return false;
+    }
+
     boolean isLeafTaskFragment() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             if (mChildren.get(i).asTaskFragment() != null) {
@@ -752,9 +780,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 Slog.v(TAG, "set resumed activity to:" + record + " reason:" + reason);
             }
             setResumedActivity(record, reason + " - onActivityStateChanged");
-            if (record == mRootWindowContainer.getTopResumedActivity()) {
-                mAtmService.setResumedActivityUncheckLocked(record, reason);
-            }
             mTaskSupervisor.mRecentTasks.add(record.getTask());
         }
     }
@@ -848,7 +873,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      */
     @VisibleForTesting
     boolean isTranslucent(ActivityRecord starting) {
-        if (!isAttached() || isForceHidden()) {
+        if (!isAttached() || isForceHidden() || isForceTranslucent()) {
             return true;
         }
         final PooledPredicate p = PooledLambda.obtainPredicate(TaskFragment::isOpaqueActivity,
@@ -1626,7 +1651,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 ProtoLog.d(WM_DEBUG_STATES, "Auto-PIP allowed, entering PIP mode "
                         + "directly: %s, didAutoPip: %b", prev, didAutoPip);
             } else {
-                schedulePauseActivity(prev, userLeaving, pauseImmediately, reason);
+                schedulePauseActivity(prev, userLeaving, pauseImmediately,
+                        false /* autoEnteringPip */, reason);
             }
         } else {
             mPausingActivity = null;
@@ -1680,7 +1706,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     void schedulePauseActivity(ActivityRecord prev, boolean userLeaving,
-            boolean pauseImmediately, String reason) {
+            boolean pauseImmediately, boolean autoEnteringPip, String reason) {
         ProtoLog.v(WM_DEBUG_STATES, "Enqueueing pending pause: %s", prev);
         try {
             EventLogTags.writeWmPauseActivity(prev.mUserId, System.identityHashCode(prev),
@@ -1688,7 +1714,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             mAtmService.getLifecycleManager().scheduleTransaction(prev.app.getThread(),
                     prev.token, PauseActivityItem.obtain(prev.finishing, userLeaving,
-                            prev.configChangeFlags, pauseImmediately));
+                            prev.configChangeFlags, pauseImmediately, autoEnteringPip));
         } catch (Exception e) {
             // Ignore exception, if process died other code will cleanup.
             Slog.w(TAG, "Exception thrown during pause", e);
@@ -2215,11 +2241,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mTmpBounds.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
 
         final DisplayPolicy policy = rootTask.mDisplayContent.getDisplayPolicy();
-        policy.getNonDecorInsetsLw(displayInfo.rotation,
-                displayInfo.displayCutout, mTmpInsets);
+        final WmDisplayCutout cutout =
+                rootTask.mDisplayContent.calculateDisplayCutoutForRotation(displayInfo.rotation);
+        final DisplayFrames displayFrames = policy.getSimulatedDisplayFrames(displayInfo.rotation,
+                displayInfo.logicalWidth, displayInfo.logicalHeight, cutout);
+        policy.getNonDecorInsetsWithSimulatedFrame(displayFrames, mTmpInsets);
         intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, mTmpInsets);
-
-        policy.convertNonDecorInsetsToStableInsets(mTmpInsets, displayInfo.rotation);
+        policy.getStableInsetsWithSimulatedFrame(displayFrames, mTmpInsets);
         intersectWithInsetsIfFits(outStableBounds, mTmpBounds, mTmpInsets);
     }
 
@@ -2345,7 +2373,30 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return false;
         }
 
-        return !startBounds.equals(getBounds());
+        // Only take snapshot if the bounds are resized.
+        final Rect endBounds = getConfiguration().windowConfiguration.getBounds();
+        return endBounds.width() != startBounds.width()
+                || endBounds.height() != startBounds.height();
+    }
+
+    boolean canHaveEmbeddingActivityTransition(@NonNull ActivityRecord child) {
+        if (!isOrganizedTaskFragment() || !mTransitionController.isShellTransitionsEnabled()) {
+            return false;
+        }
+        // The activity should request open transition when it is becoming visible.
+        return child.isVisibleRequested();
+    }
+
+    void collectEmbeddedTaskFragmentIfNeeded() {
+        if (!isOrganizedTaskFragment() || mTransitionController.isCollecting(this)) {
+            return;
+        }
+        if (getChildCount() == 0) {
+            // The TaskFragment is new created, and just becoming non-empty.
+            mTransitionController.collectExistenceChange(this);
+        } else {
+            mTransitionController.collect(this);
+        }
     }
 
     @Override

@@ -28,7 +28,7 @@ import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeEditorPopupDialogAppHelper
 import com.android.server.wm.flicker.traces.region.RegionSubject
-import com.android.server.wm.traces.common.ComponentMatcher
+import com.android.server.wm.traces.common.ComponentNameMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,11 +41,14 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group4
 class CloseImeEditorPopupDialogTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
-    private val imeTestApp = ImeEditorPopupDialogAppHelper(instrumentation, testSpec.startRotation)
+    private val imeTestApp = ImeEditorPopupDialogAppHelper(instrumentation)
 
     /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit = {
         setup {
+            test {
+                tapl.setExpectedRotationCheckEnabled(false)
+            }
             eachRun {
                 imeTestApp.launchViaIntent(wmHelper)
                 imeTestApp.openIME(wmHelper)
@@ -59,7 +62,7 @@ class CloseImeEditorPopupDialogTest(testSpec: FlickerTestParameter) : BaseTest(t
         }
         teardown {
             eachRun {
-                device.pressHome()
+                tapl.goHome()
                 wmHelper.StateSyncBuilder()
                     .withHomeActivityVisible()
                     .waitForAndVerify()
@@ -71,45 +74,7 @@ class CloseImeEditorPopupDialogTest(testSpec: FlickerTestParameter) : BaseTest(t
     /** {@inheritDoc} */
     @Postsubmit
     @Test
-    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
     override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun entireScreenCovered() =
-        super.entireScreenCovered()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerIsVisibleAtStartAndEnd() =
-        super.statusBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Postsubmit
@@ -137,12 +102,12 @@ class CloseImeEditorPopupDialogTest(testSpec: FlickerTestParameter) : BaseTest(t
     @Test
     fun imeLayerAndImeSnapshotVisibleOnScreen() {
         testSpec.assertLayers {
-            this.isVisible(ComponentMatcher.IME)
+            this.isVisible(ComponentNameMatcher.IME)
                 .then()
-                .isVisible(ComponentMatcher.IME_SNAPSHOT)
+                .isVisible(ComponentNameMatcher.IME_SNAPSHOT)
                 .then()
-                .isInvisible(ComponentMatcher.IME_SNAPSHOT, isOptional = true)
-                .isInvisible(ComponentMatcher.IME)
+                .isInvisible(ComponentNameMatcher.IME_SNAPSHOT, isOptional = true)
+                .isInvisible(ComponentNameMatcher.IME)
         }
     }
 
@@ -153,7 +118,7 @@ class CloseImeEditorPopupDialogTest(testSpec: FlickerTestParameter) : BaseTest(t
             this.invoke("imeSnapshotAssociatedOnAppVisibleRegion") {
                 val imeSnapshotLayers = it.subjects.filter { subject ->
                     subject.name.contains(
-                        ComponentMatcher.IME_SNAPSHOT.toLayerName()
+                        ComponentNameMatcher.IME_SNAPSHOT.toLayerName()
                     ) && subject.isVisible
                 }
                 if (imeSnapshotLayers.isNotEmpty()) {

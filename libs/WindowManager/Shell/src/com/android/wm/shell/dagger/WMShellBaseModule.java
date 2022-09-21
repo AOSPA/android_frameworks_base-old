@@ -29,10 +29,6 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.RootDisplayAreaOrganizer;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
-import com.android.wm.shell.ShellCommandHandler;
-import com.android.wm.shell.ShellCommandHandlerImpl;
-import com.android.wm.shell.ShellInit;
-import com.android.wm.shell.ShellInitImpl;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.TaskViewFactoryController;
@@ -61,7 +57,7 @@ import com.android.wm.shell.compatui.CompatUIController;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelper;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelperController;
 import com.android.wm.shell.draganddrop.DragAndDropController;
-import com.android.wm.shell.freeform.FreeformTaskListener;
+import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.fullscreen.FullscreenTaskListener;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
 import com.android.wm.shell.kidsmode.KidsModeTaskOrganizer;
@@ -80,13 +76,16 @@ import com.android.wm.shell.startingsurface.StartingSurface;
 import com.android.wm.shell.startingsurface.StartingWindowController;
 import com.android.wm.shell.startingsurface.StartingWindowTypeAlgorithm;
 import com.android.wm.shell.startingsurface.phone.PhoneStartingWindowTypeAlgorithm;
+import com.android.wm.shell.sysui.ShellCommandHandler;
 import com.android.wm.shell.sysui.ShellController;
+import com.android.wm.shell.sysui.ShellInit;
 import com.android.wm.shell.sysui.ShellInterface;
 import com.android.wm.shell.transition.ShellTransitions;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
 import com.android.wm.shell.unfold.UnfoldAnimationController;
 import com.android.wm.shell.unfold.UnfoldTransitionHandler;
+import com.android.wm.shell.windowdecor.WindowDecorViewModel;
 
 import java.util.Optional;
 
@@ -114,38 +113,34 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static DisplayController provideDisplayController(Context context,
-            IWindowManager wmService, @ShellMainThread ShellExecutor mainExecutor) {
-        return new DisplayController(context, wmService, mainExecutor);
+            IWindowManager wmService,
+            ShellInit shellInit,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new DisplayController(context, wmService, shellInit, mainExecutor);
     }
 
     @WMSingleton
     @Provides
-    static DisplayInsetsController provideDisplayInsetsController( IWindowManager wmService,
+    static DisplayInsetsController provideDisplayInsetsController(IWindowManager wmService,
+            ShellInit shellInit,
             DisplayController displayController,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new DisplayInsetsController(wmService, displayController, mainExecutor);
+        return new DisplayInsetsController(wmService, shellInit, displayController,
+                mainExecutor);
     }
-
-    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
-    @BindsOptionalOf
-    @DynamicOverride
-    abstract DisplayImeController optionalDisplayImeController();
 
     @WMSingleton
     @Provides
     static DisplayImeController provideDisplayImeController(
-            @DynamicOverride Optional<DisplayImeController> overrideDisplayImeController,
             IWindowManager wmService,
+            ShellInit shellInit,
             DisplayController displayController,
             DisplayInsetsController displayInsetsController,
-            @ShellMainThread ShellExecutor mainExecutor,
-            TransactionPool transactionPool
+            TransactionPool transactionPool,
+            @ShellMainThread ShellExecutor mainExecutor
     ) {
-        if (overrideDisplayImeController.isPresent()) {
-            return overrideDisplayImeController.get();
-        }
-        return new DisplayImeController(wmService, displayController, displayInsetsController,
-                mainExecutor, transactionPool);
+        return new DisplayImeController(wmService, shellInit, displayController,
+                displayInsetsController, transactionPool, mainExecutor);
     }
 
     @WMSingleton
@@ -157,52 +152,58 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static DragAndDropController provideDragAndDropController(Context context,
+            ShellInit shellInit,
             ShellController shellController,
             DisplayController displayController,
             UiEventLogger uiEventLogger,
             IconProvider iconProvider,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new DragAndDropController(context, shellController, displayController, uiEventLogger,
-                iconProvider, mainExecutor);
+        return new DragAndDropController(context, shellInit, shellController, displayController,
+                uiEventLogger, iconProvider, mainExecutor);
     }
 
     @WMSingleton
     @Provides
-    static ShellTaskOrganizer provideShellTaskOrganizer(@ShellMainThread ShellExecutor mainExecutor,
-            Context context,
+    static ShellTaskOrganizer provideShellTaskOrganizer(
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
             CompatUIController compatUI,
             Optional<UnfoldAnimationController> unfoldAnimationController,
-            Optional<RecentTasksController> recentTasksOptional
+            Optional<RecentTasksController> recentTasksOptional,
+            @ShellMainThread ShellExecutor mainExecutor
     ) {
-        return new ShellTaskOrganizer(mainExecutor, context, compatUI, unfoldAnimationController,
-                recentTasksOptional);
+        return new ShellTaskOrganizer(shellInit, shellCommandHandler, compatUI,
+                unfoldAnimationController, recentTasksOptional, mainExecutor);
     }
 
     @WMSingleton
     @Provides
     static KidsModeTaskOrganizer provideKidsModeTaskOrganizer(
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ShellMainThread Handler mainHandler,
             Context context,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
             SyncTransactionQueue syncTransactionQueue,
             DisplayController displayController,
             DisplayInsetsController displayInsetsController,
             Optional<UnfoldAnimationController> unfoldAnimationController,
-            Optional<RecentTasksController> recentTasksOptional
+            Optional<RecentTasksController> recentTasksOptional,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler
     ) {
-        return new KidsModeTaskOrganizer(mainExecutor, mainHandler, context, syncTransactionQueue,
-                displayController, displayInsetsController, unfoldAnimationController,
-                recentTasksOptional);
+        return new KidsModeTaskOrganizer(context, shellInit, shellCommandHandler,
+                syncTransactionQueue, displayController, displayInsetsController,
+                unfoldAnimationController, recentTasksOptional, mainExecutor, mainHandler);
     }
 
     @WMSingleton
     @Provides
     static CompatUIController provideCompatUIController(Context context,
+            ShellInit shellInit,
             ShellController shellController,
             DisplayController displayController, DisplayInsetsController displayInsetsController,
             DisplayImeController imeController, SyncTransactionQueue syncQueue,
             @ShellMainThread ShellExecutor mainExecutor, Lazy<Transitions> transitionsLazy) {
-        return new CompatUIController(context, shellController, displayController,
+        return new CompatUIController(context, shellInit, shellController, displayController,
                 displayInsetsController, imeController, syncQueue, mainExecutor, transitionsLazy);
     }
 
@@ -258,6 +259,22 @@ public abstract class WMShellBaseModule {
         return backAnimationController.map(BackAnimationController::getBackAnimationImpl);
     }
 
+    @WMSingleton
+    @Provides
+    static Optional<BackAnimationController> provideBackAnimationController(
+            Context context,
+            ShellInit shellInit,
+            @ShellMainThread ShellExecutor shellExecutor,
+            @ShellBackgroundThread Handler backgroundHandler
+    ) {
+        if (BackAnimationController.IS_ENABLED) {
+            return Optional.of(
+                    new BackAnimationController(shellInit, shellExecutor, backgroundHandler,
+                            context));
+        }
+        return Optional.empty();
+    }
+
     //
     // Bubbles (optional feature)
     //
@@ -278,20 +295,31 @@ public abstract class WMShellBaseModule {
     // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
     @BindsOptionalOf
     @DynamicOverride
-    abstract FullscreenTaskListener optionalFullscreenTaskListener();
+    abstract FullscreenTaskListener<?> optionalFullscreenTaskListener();
 
     @WMSingleton
     @Provides
-    static FullscreenTaskListener provideFullscreenTaskListener(
-            @DynamicOverride Optional<FullscreenTaskListener> fullscreenTaskListener,
+    static FullscreenTaskListener<?> provideFullscreenTaskListener(
+            @DynamicOverride Optional<FullscreenTaskListener<?>> fullscreenTaskListener,
+            ShellInit shellInit,
+            ShellTaskOrganizer shellTaskOrganizer,
             SyncTransactionQueue syncQueue,
-            Optional<RecentTasksController> recentTasksOptional) {
+            Optional<RecentTasksController> recentTasksOptional,
+            Optional<WindowDecorViewModel<?>> windowDecorViewModelOptional) {
         if (fullscreenTaskListener.isPresent()) {
             return fullscreenTaskListener.get();
         } else {
-            return new FullscreenTaskListener(syncQueue, recentTasksOptional);
+            return new FullscreenTaskListener(shellInit, shellTaskOrganizer, syncQueue,
+                    recentTasksOptional, windowDecorViewModelOptional);
         }
     }
+
+    //
+    // Window Decoration
+    //
+
+    @BindsOptionalOf
+    abstract WindowDecorViewModel<?> optionalWindowDecorViewModel();
 
     //
     // Unfold transition
@@ -341,15 +369,15 @@ public abstract class WMShellBaseModule {
     // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
     @BindsOptionalOf
     @DynamicOverride
-    abstract FreeformTaskListener<?> optionalFreeformTaskListener();
+    abstract FreeformComponents optionalFreeformComponents();
 
     @WMSingleton
     @Provides
-    static Optional<FreeformTaskListener<?>> provideFreeformTaskListener(
-            @DynamicOverride Optional<FreeformTaskListener<?>> freeformTaskListener,
+    static Optional<FreeformComponents> provideFreeformComponents(
+            @DynamicOverride Optional<FreeformComponents> freeformComponents,
             Context context) {
-        if (FreeformTaskListener.isFreeformEnabled(context)) {
-            return freeformTaskListener;
+        if (FreeformComponents.isFreeformEnabled(context)) {
+            return freeformComponents;
         }
         return Optional.empty();
     }
@@ -361,11 +389,14 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<HideDisplayCutoutController> provideHideDisplayCutoutController(Context context,
-            ShellController shellController, DisplayController displayController,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
+            ShellController shellController,
+            DisplayController displayController,
             @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.ofNullable(
-                HideDisplayCutoutController.create(context, shellController, displayController,
-                        mainExecutor));
+                HideDisplayCutoutController.create(context, shellInit, shellCommandHandler,
+                        shellController, displayController, mainExecutor));
     }
 
     //
@@ -413,8 +444,8 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static PipSurfaceTransactionHelper providePipSurfaceTransactionHelper() {
-        return new PipSurfaceTransactionHelper();
+    static PipSurfaceTransactionHelper providePipSurfaceTransactionHelper(Context context) {
+        return new PipSurfaceTransactionHelper(context);
     }
 
     @WMSingleton
@@ -442,11 +473,14 @@ public abstract class WMShellBaseModule {
     @Provides
     static Optional<RecentTasksController> provideRecentTasksController(
             Context context,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
             TaskStackListenerImpl taskStackListener,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
         return Optional.ofNullable(
-                RecentTasksController.create(context, taskStackListener, mainExecutor));
+                RecentTasksController.create(context, shellInit, shellCommandHandler,
+                        taskStackListener, mainExecutor));
     }
 
     //
@@ -461,12 +495,15 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
-            DisplayController displayController, Context context,
+    static Transitions provideTransitions(Context context,
+            ShellInit shellInit,
+            ShellTaskOrganizer organizer,
+            TransactionPool pool,
+            DisplayController displayController,
             @ShellMainThread ShellExecutor mainExecutor,
             @ShellMainThread Handler mainHandler,
             @ShellAnimationThread ShellExecutor animExecutor) {
-        return new Transitions(organizer, pool, displayController, context, mainExecutor,
+        return new Transitions(context, shellInit, organizer, pool, displayController, mainExecutor,
                 mainHandler, animExecutor);
     }
 
@@ -544,11 +581,13 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static StartingWindowController provideStartingWindowController(Context context,
+            ShellInit shellInit,
+            ShellTaskOrganizer shellTaskOrganizer,
             @ShellSplashscreenThread ShellExecutor splashScreenExecutor,
             StartingWindowTypeAlgorithm startingWindowTypeAlgorithm, IconProvider iconProvider,
             TransactionPool pool) {
-        return new StartingWindowController(context, splashScreenExecutor,
-                startingWindowTypeAlgorithm, iconProvider, pool);
+        return new StartingWindowController(context, shellInit, shellTaskOrganizer,
+                splashScreenExecutor, startingWindowTypeAlgorithm, iconProvider, pool);
     }
 
     // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
@@ -598,8 +637,11 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<ActivityEmbeddingController> provideActivityEmbeddingController(
-            Context context, Transitions transitions) {
-        return Optional.of(new ActivityEmbeddingController(context, transitions));
+            Context context,
+            ShellInit shellInit,
+            Transitions transitions) {
+        return Optional.ofNullable(
+                ActivityEmbeddingController.create(context, shellInit, transitions));
     }
 
     //
@@ -608,29 +650,36 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static ShellInterface provideShellSysuiCallbacks(ShellController shellController) {
+    static ShellInterface provideShellSysuiCallbacks(
+            @ShellCreateTrigger Object createTrigger,
+            ShellController shellController) {
         return shellController.asShell();
     }
 
     @WMSingleton
     @Provides
-    static ShellController provideShellController(@ShellMainThread ShellExecutor mainExecutor) {
-        return new ShellController(mainExecutor);
+    static ShellController provideShellController(ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new ShellController(shellInit, shellCommandHandler, mainExecutor);
     }
 
     //
     // Misc
     //
 
-    @WMSingleton
-    @Provides
-    static ShellInit provideShellInit(ShellInitImpl impl) {
-        return impl.asShellInit();
-    }
+    // Workaround for dynamic overriding with a default implementation, see {@link DynamicOverride}
+    @BindsOptionalOf
+    @ShellCreateTriggerOverride
+    abstract Object provideIndependentShellComponentsToCreateOverride();
 
+    // TODO: Temporarily move dependencies to this instead of ShellInit since that is needed to add
+    // the callback. We will be moving to a different explicit startup mechanism in a follow- up CL.
     @WMSingleton
+    @ShellCreateTrigger
     @Provides
-    static ShellInitImpl provideShellInitImpl(DisplayController displayController,
+    static Object provideIndependentShellComponentsToCreate(
+            DisplayController displayController,
             DisplayImeController displayImeController,
             DisplayInsetsController displayInsetsController,
             DragAndDropController dragAndDropController,
@@ -638,73 +687,31 @@ public abstract class WMShellBaseModule {
             KidsModeTaskOrganizer kidsModeTaskOrganizer,
             Optional<BubbleController> bubblesOptional,
             Optional<SplitScreenController> splitScreenOptional,
+            Optional<Pip> pipOptional,
             Optional<PipTouchHandler> pipTouchHandlerOptional,
-            FullscreenTaskListener fullscreenTaskListener,
+            FullscreenTaskListener<?> fullscreenTaskListener,
             Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<UnfoldTransitionHandler> unfoldTransitionHandler,
-            Optional<FreeformTaskListener<?>> freeformTaskListener,
+            Optional<FreeformComponents> freeformComponents,
             Optional<RecentTasksController> recentTasksOptional,
+            Optional<OneHandedController> oneHandedControllerOptional,
+            Optional<HideDisplayCutoutController> hideDisplayCutoutControllerOptional,
             Optional<ActivityEmbeddingController> activityEmbeddingOptional,
             Transitions transitions,
             StartingWindowController startingWindow,
-            @ShellMainThread ShellExecutor mainExecutor) {
-        return new ShellInitImpl(displayController,
-                displayImeController,
-                displayInsetsController,
-                dragAndDropController,
-                shellTaskOrganizer,
-                kidsModeTaskOrganizer,
-                bubblesOptional,
-                splitScreenOptional,
-                pipTouchHandlerOptional,
-                fullscreenTaskListener,
-                unfoldAnimationController,
-                unfoldTransitionHandler,
-                freeformTaskListener,
-                recentTasksOptional,
-                activityEmbeddingOptional,
-                transitions,
-                startingWindow,
-                mainExecutor);
-    }
-
-    /**
-     * Note, this is only optional because we currently pass this to the SysUI component scope and
-     * for non-primary users, we may inject a null-optional for that dependency.
-     */
-    @WMSingleton
-    @Provides
-    static Optional<ShellCommandHandler> provideShellCommandHandler(ShellCommandHandlerImpl impl) {
-        return Optional.of(impl.asShellCommandHandler());
+            @ShellCreateTriggerOverride Optional<Object> overriddenCreateTrigger) {
+        return new Object();
     }
 
     @WMSingleton
     @Provides
-    static ShellCommandHandlerImpl provideShellCommandHandlerImpl(
-            ShellTaskOrganizer shellTaskOrganizer,
-            KidsModeTaskOrganizer kidsModeTaskOrganizer,
-            Optional<SplitScreenController> splitScreenOptional,
-            Optional<Pip> pipOptional,
-            Optional<OneHandedController> oneHandedOptional,
-            Optional<HideDisplayCutoutController> hideDisplayCutout,
-            Optional<RecentTasksController> recentTasksOptional,
-            @ShellMainThread ShellExecutor mainExecutor) {
-        return new ShellCommandHandlerImpl(shellTaskOrganizer, kidsModeTaskOrganizer,
-                splitScreenOptional, pipOptional, oneHandedOptional, hideDisplayCutout,
-                recentTasksOptional, mainExecutor);
+    static ShellInit provideShellInit(@ShellMainThread ShellExecutor mainExecutor) {
+        return new ShellInit(mainExecutor);
     }
 
     @WMSingleton
     @Provides
-    static Optional<BackAnimationController> provideBackAnimationController(
-            Context context,
-            @ShellMainThread ShellExecutor shellExecutor,
-            @ShellBackgroundThread Handler backgroundHandler
-    ) {
-        if (BackAnimationController.IS_ENABLED) {
-            return Optional.of(
-                    new BackAnimationController(shellExecutor, backgroundHandler, context));
-        }
-        return Optional.empty();
+    static ShellCommandHandler provideShellCommandHandler() {
+        return new ShellCommandHandler();
     }
 }

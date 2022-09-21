@@ -269,6 +269,20 @@ public final class WindowContainerTransaction implements Parcelable {
     }
 
     /**
+     * Sets whether a task should be translucent. When {@code false}, the existing translucent of
+     * the task applies, but when {@code true} the task will be forced to be translucent.
+     * @hide
+     */
+    @NonNull
+    public WindowContainerTransaction setForceTranslucent(
+            @NonNull WindowContainerToken container, boolean forceTranslucent) {
+        Change chg = getOrCreateChange(container.asBinder());
+        chg.mForceTranslucent = forceTranslucent;
+        chg.mChangeMask |= Change.CHANGE_FORCE_TRANSLUCENT;
+        return this;
+    }
+
+    /**
      * Used in conjunction with a shell-transition call (usually finishTransition). This is
      * basically a message to the transition system that a particular task should NOT go into
      * PIP even though it normally would. This is to deal with some edge-case situations where
@@ -670,6 +684,39 @@ public final class WindowContainerTransaction implements Parcelable {
     }
 
     /**
+     * Sets/removes the always on top flag for this {@code windowContainer}. See
+     * {@link com.android.server.wm.ConfigurationContainer#setAlwaysOnTop(boolean)}.
+     * Please note that this method is only intended to be used for a
+     * {@link com.android.server.wm.DisplayArea}.
+     *
+     * <p>
+     *     Setting always on top to {@code True} will also make the {@code windowContainer} to move
+     *     to the top.
+     * </p>
+     * <p>
+     *     Setting always on top to {@code False} will make this {@code windowContainer} to move
+     *     below the other always on top sibling containers.
+     * </p>
+     *
+     * @param windowContainer the container which the flag need to be updated for.
+     * @param alwaysOnTop denotes whether or not always on top flag should be set.
+     * @hide
+     */
+    @NonNull
+    public WindowContainerTransaction setAlwaysOnTop(
+            @NonNull WindowContainerToken windowContainer,
+            boolean alwaysOnTop) {
+        final HierarchyOp hierarchyOp =
+                new HierarchyOp.Builder(
+                        HierarchyOp.HIERARCHY_OP_TYPE_SET_ALWAYS_ON_TOP)
+                        .setContainer(windowContainer.asBinder())
+                        .setAlwaysOnTop(alwaysOnTop)
+                        .build();
+        mHierarchyOps.add(hierarchyOp);
+        return this;
+    }
+
+    /**
      * When this {@link WindowContainerTransaction} failed to finish on the server side, it will
      * trigger callback with this {@param errorCallbackToken}.
      * @param errorCallbackToken    client provided token that will be passed back as parameter in
@@ -821,11 +868,13 @@ public final class WindowContainerTransaction implements Parcelable {
         public static final int CHANGE_BOUNDS_TRANSACTION_RECT = 1 << 4;
         public static final int CHANGE_IGNORE_ORIENTATION_REQUEST = 1 << 5;
         public static final int CHANGE_FORCE_NO_PIP = 1 << 6;
+        public static final int CHANGE_FORCE_TRANSLUCENT = 1 << 7;
 
         private final Configuration mConfiguration = new Configuration();
         private boolean mFocusable = true;
         private boolean mHidden = false;
         private boolean mIgnoreOrientationRequest = false;
+        private boolean mForceTranslucent = false;
 
         private int mChangeMask = 0;
         private @ActivityInfo.Config int mConfigSetMask = 0;
@@ -845,6 +894,7 @@ public final class WindowContainerTransaction implements Parcelable {
             mFocusable = in.readBoolean();
             mHidden = in.readBoolean();
             mIgnoreOrientationRequest = in.readBoolean();
+            mForceTranslucent = in.readBoolean();
             mChangeMask = in.readInt();
             mConfigSetMask = in.readInt();
             mWindowSetMask = in.readInt();
@@ -889,6 +939,9 @@ public final class WindowContainerTransaction implements Parcelable {
             }
             if ((other.mChangeMask & CHANGE_IGNORE_ORIENTATION_REQUEST) != 0) {
                 mIgnoreOrientationRequest = other.mIgnoreOrientationRequest;
+            }
+            if ((other.mChangeMask & CHANGE_FORCE_TRANSLUCENT) != 0) {
+                mForceTranslucent = other.mForceTranslucent;
             }
             mChangeMask |= other.mChangeMask;
             if (other.mActivityWindowingMode >= 0) {
@@ -938,6 +991,15 @@ public final class WindowContainerTransaction implements Parcelable {
                         + "Check CHANGE_IGNORE_ORIENTATION_REQUEST first");
             }
             return mIgnoreOrientationRequest;
+        }
+
+        /** Gets the requested force translucent state. */
+        public boolean getForceTranslucent() {
+            if ((mChangeMask & CHANGE_FORCE_TRANSLUCENT) == 0) {
+                throw new RuntimeException("Force translucent not set. "
+                        + "Check CHANGE_FORCE_TRANSLUCENT first");
+            }
+            return mForceTranslucent;
         }
 
         public int getChangeMask() {
@@ -1017,6 +1079,7 @@ public final class WindowContainerTransaction implements Parcelable {
             dest.writeBoolean(mFocusable);
             dest.writeBoolean(mHidden);
             dest.writeBoolean(mIgnoreOrientationRequest);
+            dest.writeBoolean(mForceTranslucent);
             dest.writeInt(mChangeMask);
             dest.writeInt(mConfigSetMask);
             dest.writeInt(mWindowSetMask);
@@ -1078,6 +1141,7 @@ public final class WindowContainerTransaction implements Parcelable {
         public static final int HIERARCHY_OP_TYPE_ADD_RECT_INSETS_PROVIDER = 16;
         public static final int HIERARCHY_OP_TYPE_REMOVE_INSETS_PROVIDER = 17;
         public static final int HIERARCHY_OP_TYPE_REQUEST_FOCUS_ON_TASK_FRAGMENT = 18;
+        public static final int HIERARCHY_OP_TYPE_SET_ALWAYS_ON_TOP = 19;
 
         // The following key(s) are for use with mLaunchOptions:
         // When launching a task (eg. from recents), this is the taskId to be launched.
@@ -1127,6 +1191,8 @@ public final class WindowContainerTransaction implements Parcelable {
 
         @Nullable
         private ShortcutInfo mShortcutInfo;
+
+        private boolean mAlwaysOnTop;
 
         public static HierarchyOp createForReparent(
                 @NonNull IBinder container, @Nullable IBinder reparent, boolean toTop) {
@@ -1225,6 +1291,7 @@ public final class WindowContainerTransaction implements Parcelable {
             mTaskFragmentCreationOptions = copy.mTaskFragmentCreationOptions;
             mPendingIntent = copy.mPendingIntent;
             mShortcutInfo = copy.mShortcutInfo;
+            mAlwaysOnTop = copy.mAlwaysOnTop;
         }
 
         protected HierarchyOp(Parcel in) {
@@ -1246,6 +1313,7 @@ public final class WindowContainerTransaction implements Parcelable {
             mTaskFragmentCreationOptions = in.readTypedObject(TaskFragmentCreationParams.CREATOR);
             mPendingIntent = in.readTypedObject(PendingIntent.CREATOR);
             mShortcutInfo = in.readTypedObject(ShortcutInfo.CREATOR);
+            mAlwaysOnTop = in.readBoolean();
         }
 
         public int getType() {
@@ -1309,6 +1377,10 @@ public final class WindowContainerTransaction implements Parcelable {
         @Nullable
         public Intent getActivityIntent() {
             return mActivityIntent;
+        }
+
+        public boolean isAlwaysOnTop() {
+            return mAlwaysOnTop;
         }
 
         @Nullable
@@ -1379,6 +1451,9 @@ public final class WindowContainerTransaction implements Parcelable {
                             + " insetsType=" + Arrays.toString(mInsetsTypes) + "}";
                 case HIERARCHY_OP_TYPE_REQUEST_FOCUS_ON_TASK_FRAGMENT:
                     return "{requestFocusOnTaskFragment: container=" + mContainer + "}";
+                case HIERARCHY_OP_TYPE_SET_ALWAYS_ON_TOP:
+                    return "{setAlwaysOnTop: container=" + mContainer
+                            + " alwaysOnTop=" + mAlwaysOnTop + "}";
                 default:
                     return "{mType=" + mType + " container=" + mContainer + " reparent=" + mReparent
                             + " mToTop=" + mToTop
@@ -1408,6 +1483,7 @@ public final class WindowContainerTransaction implements Parcelable {
             dest.writeTypedObject(mTaskFragmentCreationOptions, flags);
             dest.writeTypedObject(mPendingIntent, flags);
             dest.writeTypedObject(mShortcutInfo, flags);
+            dest.writeBoolean(mAlwaysOnTop);
         }
 
         @Override
@@ -1465,6 +1541,8 @@ public final class WindowContainerTransaction implements Parcelable {
 
             @Nullable
             private ShortcutInfo mShortcutInfo;
+
+            private boolean mAlwaysOnTop;
 
             Builder(int type) {
                 mType = type;
@@ -1525,6 +1603,11 @@ public final class WindowContainerTransaction implements Parcelable {
                 return this;
             }
 
+            Builder setAlwaysOnTop(boolean alwaysOnTop) {
+                mAlwaysOnTop = alwaysOnTop;
+                return this;
+            }
+
             Builder setTaskFragmentCreationOptions(
                     @Nullable TaskFragmentCreationParams taskFragmentCreationOptions) {
                 mTaskFragmentCreationOptions = taskFragmentCreationOptions;
@@ -1553,6 +1636,7 @@ public final class WindowContainerTransaction implements Parcelable {
                 hierarchyOp.mLaunchOptions = mLaunchOptions;
                 hierarchyOp.mActivityIntent = mActivityIntent;
                 hierarchyOp.mPendingIntent = mPendingIntent;
+                hierarchyOp.mAlwaysOnTop = mAlwaysOnTop;
                 hierarchyOp.mTaskFragmentCreationOptions = mTaskFragmentCreationOptions;
                 hierarchyOp.mShortcutInfo = mShortcutInfo;
 

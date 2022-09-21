@@ -8065,7 +8065,7 @@ public abstract class PackageManager {
             }
 
             PackageParser.Package pkg = parser.parsePackage(apkFile, 0, false);
-            if ((flagsBits & GET_SIGNATURES) != 0) {
+            if ((flagsBits & GET_SIGNATURES) != 0 || (flagsBits & GET_SIGNING_CERTIFICATES) != 0) {
                 PackageParser.collectCertificates(pkg, false /* skipVerify */);
             }
             return PackageParser.generatePackageInfo(pkg, null, (int) flagsBits, 0, 0, null,
@@ -9473,6 +9473,7 @@ public abstract class PackageManager {
      */
     @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
+    @TestApi
     public abstract void addCrossProfileIntentFilter(@NonNull IntentFilter filter,
             @UserIdInt int sourceUserId, @UserIdInt int targetUserId, int flags);
 
@@ -9485,6 +9486,7 @@ public abstract class PackageManager {
      */
     @SuppressWarnings("HiddenAbstractMethod")
     @UnsupportedAppUsage
+    @TestApi
     public abstract void clearCrossProfileIntentFilters(@UserIdInt int sourceUserId);
 
     /**
@@ -10422,7 +10424,7 @@ public abstract class PackageManager {
     private static final PropertyInvalidatedCache<ApplicationInfoQuery, ApplicationInfo>
             sApplicationInfoCache =
             new PropertyInvalidatedCache<ApplicationInfoQuery, ApplicationInfo>(
-                    16, PermissionManager.CACHE_KEY_PACKAGE_INFO,
+                    32, PermissionManager.CACHE_KEY_PACKAGE_INFO,
                     "getApplicationInfo") {
                 @Override
                 public ApplicationInfo recompute(ApplicationInfoQuery query) {
@@ -10523,7 +10525,7 @@ public abstract class PackageManager {
     private static final PropertyInvalidatedCache<PackageInfoQuery, PackageInfo>
             sPackageInfoCache =
             new PropertyInvalidatedCache<PackageInfoQuery, PackageInfo>(
-                    32, PermissionManager.CACHE_KEY_PACKAGE_INFO,
+                    64, PermissionManager.CACHE_KEY_PACKAGE_INFO,
                     "getPackageInfo") {
                 @Override
                 public PackageInfo recompute(PackageInfoQuery query) {

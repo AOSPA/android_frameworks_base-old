@@ -3552,11 +3552,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final CallerIdentity caller = getCallerIdentity();
         Preconditions.checkCallAuthorization(hasFullCrossUsersPermission(caller, userHandle));
 
-        if (mInjector.getPackageManagerInternal().filterAppAccess(packageName, caller.getUid(),
-                userHandle)) {
-            return false;
-        }
-
         synchronized (getLockObject()) {
             DevicePolicyData policy = getUserData(userHandle);
             final int N = policy.mAdminList.size();
@@ -5791,29 +5786,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @VisibleForTesting
     public void enforceCallerCanRequestDeviceIdAttestation(CallerIdentity caller)
             throws SecurityException {
-        /**
-         *  First check if there's a profile owner because the device could be in COMP mode (where
-         *  there's a device owner and profile owner on the same device).
-         *  If the caller is from the work profile, then it must be the PO or the delegate, and
-         *  it must have the right permission to access device identifiers.
-         */
-        int callerUserId = caller.getUserId();
-        if (hasProfileOwner(callerUserId)) {
-            // Make sure that the caller is the profile owner or delegate.
-            Preconditions.checkCallAuthorization(canInstallCertificates(caller));
-            // Verify that the managed profile is on an organization-owned device (or is affiliated
-            // with the device owner user) and as such the profile owner can access Device IDs.
-            if (isProfileOwnerOfOrganizationOwnedDevice(callerUserId)
-                    || isUserAffiliatedWithDevice(callerUserId)) {
-                return;
-            }
-            throw new SecurityException(
-                    "Profile Owner is not allowed to access Device IDs.");
-        }
-
-        // If not, fall back to the device owner check.
-        Preconditions.checkCallAuthorization(
-                isDefaultDeviceOwner(caller) || isCallerDelegate(caller, DELEGATION_CERT_INSTALL));
+        Preconditions.checkCallAuthorization(hasDeviceIdAccessUnchecked(caller.getPackageName(),
+                caller.getUid()));
     }
 
     @VisibleForTesting
@@ -5861,7 +5835,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final boolean deviceIdAttestationRequired = attestationUtilsFlags != null;
         KeyGenParameterSpec keySpec = parcelableKeySpec.getSpec();
         final String alias = keySpec.getKeystoreAlias();
-
         Preconditions.checkStringNotEmpty(alias, "Empty alias provided");
         Preconditions.checkArgument(
                 !deviceIdAttestationRequired || keySpec.getAttestationChallenge() != null,
@@ -8171,7 +8144,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
 
         final CallerIdentity caller = getCallerIdentity(who);
-        Preconditions.checkCallAuthorization(hasFullCrossUsersPermission(caller, userHandle));
+        Preconditions.checkCallAuthorization(hasFullCrossUsersPermission(caller, userHandle)
+                || isCameraServerUid(caller));
 
         if (parent) {
             Preconditions.checkCallAuthorization(
@@ -8368,6 +8342,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 + PackageManager.FEATURE_DEVICE_ADMIN + " feature.");
     }
 
+    // TODO(b/240562946): Remove owner name from API parameters.
     @Override
     public boolean setDeviceOwner(ComponentName admin, String ownerName, int userId,
             boolean setProfileOwnerOnCurrentUserIfNecessary) {
@@ -8402,7 +8377,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         .write();
             }
 
-            mOwners.setDeviceOwner(admin, ownerName, userId);
+            mOwners.setDeviceOwner(admin, userId);
             mOwners.writeDeviceOwner();
             setDeviceOwnershipSystemPropertyLocked();
 
@@ -8654,6 +8629,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
+    // TODO(b/240562946): Remove api as owner name is not used.
     /**
      * Returns the "name" of the device owner.  It'll work for non-DO users too, but requires
      * MANAGE_USERS.
@@ -8824,6 +8800,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         });
     }
 
+    // TODO(b/240562946): Remove owner name from API parameters.
     @Override
     public boolean setProfileOwner(ComponentName who, String ownerName, int userHandle) {
         if (!mHasFeature) {
@@ -8871,7 +8848,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             // Shutting down backup manager service permanently.
             toggleBackupServiceActive(userHandle, /* makeActive= */ false);
 
-            mOwners.setProfileOwner(who, ownerName, userHandle);
+            mOwners.setProfileOwner(who, userHandle);
             mOwners.writeProfileOwner(userHandle);
             Slogf.i(LOG_TAG, "Profile owner set: " + who + " on user " + userHandle);
 
@@ -9342,6 +9319,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         return who.getPackageName().equals(configPackage);
     }
 
+    // TODO(b/240562946): Remove api as owner name is not used.
     @Override
     public String getProfileOwnerName(int userHandle) {
         if (!mHasFeature) {
@@ -9394,26 +9372,33 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         if (!hasPermission(permission.READ_PHONE_STATE, pid, uid)) {
             return false;
         }
+        return hasDeviceIdAccessUnchecked(packageName, uid);
+    }
 
-        // Allow access to the device owner or delegate cert installer or profile owner of an
-        // affiliated user
+    /**
+     * Check if caller is device owner, delegate cert installer or profile owner of
+     * affiliated user. Or if caller is profile owner for a specified user or delegate cert
+     * installer on an organization-owned device.
+     */
+    private boolean hasDeviceIdAccessUnchecked(String packageName, int uid) {
+        // Is the caller a  device owner, delegate cert installer or profile owner of an
+        // affiliated user.
         ComponentName deviceOwner = getDeviceOwnerComponent(true);
         if (deviceOwner != null && (deviceOwner.getPackageName().equals(packageName)
                 || isCallerDelegate(packageName, uid, DELEGATION_CERT_INSTALL))) {
             return true;
         }
         final int userId = UserHandle.getUserId(uid);
-        // Allow access to the profile owner for the specified user, or delegate cert installer
-        // But only if this is an organization-owned device.
+        // Is the caller the profile owner for the specified user, or delegate cert installer on an
+        // organization-owned device.
         ComponentName profileOwner = getProfileOwnerAsUser(userId);
         final boolean isCallerProfileOwnerOrDelegate = profileOwner != null
                 && (profileOwner.getPackageName().equals(packageName)
-                        || isCallerDelegate(packageName, uid, DELEGATION_CERT_INSTALL));
+                || isCallerDelegate(packageName, uid, DELEGATION_CERT_INSTALL));
         if (isCallerProfileOwnerOrDelegate && (isProfileOwnerOfOrganizationOwnedDevice(userId)
                 || isUserAffiliatedWithDevice(userId))) {
             return true;
         }
-
         return false;
     }
 
@@ -9680,6 +9665,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     private boolean isShellUid(CallerIdentity caller) {
         return UserHandle.isSameApp(caller.getUid(), Process.SHELL_UID);
+    }
+
+    private boolean isCameraServerUid(CallerIdentity caller) {
+        return UserHandle.isSameApp(caller.getUid(), Process.CAMERASERVER_UID);
     }
 
     private @UserIdInt int getCurrentForegroundUserId() {
